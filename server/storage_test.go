@@ -559,6 +559,9 @@ func TestStorageWrite(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AppendRows first call error: %v", err)
 			}
+			if _, err := result.GetResult(ctx); err != nil {
+				t.Fatalf("AppendRows first GetResult: %v", err)
+			}
 
 			iter := bqClient.Dataset(datasetID).Table(tableID).Read(ctx)
 			resultRowCount := countRows(t, iter)
@@ -576,6 +579,9 @@ func TestStorageWrite(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AppendRows second call error: %v", err)
 			}
+			if _, err := result.GetResult(ctx); err != nil {
+				t.Fatalf("AppendRows second GetResult: %v", err)
+			}
 
 			iter = bqClient.Dataset(datasetID).Table(tableID).Read(ctx)
 			resultRowCount = countRows(t, iter)
@@ -592,6 +598,9 @@ func TestStorageWrite(t *testing.T) {
 			result, err = managedStream.AppendRows(ctx, rows, managedwriter.WithOffset(curOffset))
 			if err != nil {
 				t.Fatalf("AppendRows third call error: %v", err)
+			}
+			if _, err := result.GetResult(ctx); err != nil {
+				t.Fatalf("AppendRows third GetResult: %v", err)
 			}
 			results = append(results, result)
 
