@@ -26,6 +26,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           allow-initial-development-versions: true
           changelog-file: CHANGELOG.md
+          force-bump-patch-version: true
       - name: Push CHANGELOG and updated files
         if: steps.semrel.outputs.version != ''
         run: |
