@@ -26,6 +26,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           allow-initial-development-versions: true
           changelog-file: CHANGELOG.md
+      - name: Push CHANGELOG and updated files
+        if: steps.semrel.outputs.version != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update CHANGELOG for ${{ steps.semrel.outputs.version }} [skip ci]"
+            git push origin HEAD:${{ github.event.workflow_run.head_branch }}
+          fi
 
   build-assets:
     name: Build and upload ${{ matrix.asset_name }}
