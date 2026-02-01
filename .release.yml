@@ -1,0 +1,4 @@
+# go-semantic-release config: https://github.com/go-semantic-release/semantic-release
+# Version is derived from conventional commits on the default branch (main/master).
+# Use commit messages like: feat: add X, fix: Y, BREAKING CHANGE: Z
+commitFormat: conventional
