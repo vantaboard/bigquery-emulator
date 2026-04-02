@@ -34,6 +34,8 @@ DOCKER_GO_CACHE_ROOT ?= $(HOME)/.cache/go-zetasql-docker
 test/linux:
 	docker run --rm \
 		-e CGO_ENABLED=1 -e CC=clang -e CXX=clang++ \
+		-e GOPROXY=https://proxy.golang.org,direct \
+		-e GOSUMDB=sum.golang.org \
 		-e CCACHE_DIR=/root/.ccache -e CCACHE_COMPRESS=1 \
 		-e GOWORK=/work/bigquery-emulator/go.work.linked \
 		-v "$(CURDIR)":/work/bigquery-emulator \
