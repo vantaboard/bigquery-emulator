@@ -34,12 +34,14 @@ DOCKER_GO_CACHE_ROOT ?= $(HOME)/.cache/go-zetasql-docker
 test/linux:
 	docker run --rm \
 		-e CGO_ENABLED=1 -e CC=clang -e CXX=clang++ \
+		-e CCACHE_DIR=/root/.ccache -e CCACHE_COMPRESS=1 \
 		-e GOWORK=/work/bigquery-emulator/go.work.linked \
 		-v "$(CURDIR)":/work/bigquery-emulator \
 		-v "$(GO_ZETASQL_ROOT)":/work/go-zetasql \
 		-v "$(GO_ZETASQLITE_ROOT)":/work/go-zetasqlite \
 		-v "$(DOCKER_GO_CACHE_ROOT)/gocache":/root/.cache/go-build \
 		-v "$(DOCKER_GO_CACHE_ROOT)/gomodcache":/go/pkg/mod \
+		-v "$(DOCKER_GO_CACHE_ROOT)/ccache":/root/.ccache \
 		-w /work/bigquery-emulator \
 		$(DOCKER_DEV_IMAGE) \
 		bash -c "go test -race -v ./... -count=1"
