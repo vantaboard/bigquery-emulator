@@ -84,6 +84,21 @@ $ make docker/build-linked
 
 The linked targets opt into `go.work.linked` and the linked Docker build so the slower cross-repo rebuild path is only used when needed.
 
+### Local `go-zetasql` base image (upgrade / CGO cache)
+
+Docker builds use a **pinned Go+clang** base (`GO_ZETASQL_BASE`, default `ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3`). To validate against a **local** toolchain image you built from the `go-zetasql` repo (for example tag `go-zetasql:dev`), override the Makefile variable or pass a build arg:
+
+```console
+$ make docker/build GO_ZETASQL_BASE=go-zetasql:dev
+$ make docker/build-linked GO_ZETASQL_BASE=go-zetasql:dev
+```
+
+Build the `go-zetasql:dev` image first (`make docker/build-dev` in `go-zetasql`). The runtime stage must stay compatible with the linked binary (same glibc/toolchain expectations as the chosen base).
+
+### Sequential test runs
+
+When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-zetasql`, `go-zetasqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared `GOCACHE` (see `go-zetasql` README) for faster host-native runs.
+
 # How to start the standalone server
 
 If you can install the `bigquery-emulator` CLI, you can start the server using the following options.

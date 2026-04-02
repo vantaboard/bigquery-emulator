@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3 AS build
+ARG GO_ZETASQL_BASE=ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3
+FROM ${GO_ZETASQL_BASE} AS build
 
 ARG VERSION
 
@@ -28,7 +29,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOWORK=/work/bigquery-emulator/go.work.linked make emulator/build
 
-FROM ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3 AS emulator
+ARG GO_ZETASQL_BASE=ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3
+FROM ${GO_ZETASQL_BASE} AS emulator
 
 COPY --from=build /work/bigquery-emulator/bigquery-emulator /bin/bigquery-emulator
 
