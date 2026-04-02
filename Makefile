@@ -6,4 +6,7 @@ emulator/build:
 		./cmd/bigquery-emulator
 
 docker/build:
-	docker build -t bigquery-emulator . --build-arg VERSION=${VERSION}
+	docker build -t bigquery-emulator . \
+		--build-arg VERSION=${VERSION} \
+		--build-context go_zetasql=../go-zetasql \
+		--build-context go_zetasqlite=../go-zetasqlite
