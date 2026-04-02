@@ -1,5 +1,5 @@
 VERSION ?= latest
-REVISION := $(shell git rev-parse --short HEAD)
+REVISION := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LINKED_GOWORK := $(CURDIR)/go.work.linked
 
 emulator/build:
