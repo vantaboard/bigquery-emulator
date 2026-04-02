@@ -24,11 +24,11 @@ docker/build-linked:
 		--build-context go_zetasql=../go-zetasql \
 		--build-context go_zetasqlite=../go-zetasqlite
 
-# Same dev image + DOCKER_GO_CACHE_ROOT as ../go-zetasql. Requires sibling checkouts and go.work.linked (build go-zetasql:dev in go-zetasql first).
+# Same dev image + LOCAL_GO_CACHE_ROOT as ../go-zetasql. Requires sibling checkouts and go.work.linked (build go-zetasql:dev in go-zetasql first).
 GO_ZETASQL_ROOT ?= $(abspath $(CURDIR)/../go-zetasql)
 GO_ZETASQLITE_ROOT ?= $(abspath $(CURDIR)/../go-zetasqlite)
 DOCKER_DEV_IMAGE ?= go-zetasql:dev
-DOCKER_GO_CACHE_ROOT ?= $(HOME)/.cache/go-zetasql-docker
+LOCAL_GO_CACHE_ROOT ?= $(HOME)/.cache/go-zetasql
 
 .PHONY: test/linux
 test/linux:
@@ -41,9 +41,9 @@ test/linux:
 		-v "$(CURDIR)":/work/bigquery-emulator \
 		-v "$(GO_ZETASQL_ROOT)":/work/go-zetasql \
 		-v "$(GO_ZETASQLITE_ROOT)":/work/go-zetasqlite \
-		-v "$(DOCKER_GO_CACHE_ROOT)/gocache":/root/.cache/go-build \
-		-v "$(DOCKER_GO_CACHE_ROOT)/gomodcache":/go/pkg/mod \
-		-v "$(DOCKER_GO_CACHE_ROOT)/ccache":/root/.ccache \
+		-v "$(LOCAL_GO_CACHE_ROOT)/gocache":/root/.cache/go-build \
+		-v "$(LOCAL_GO_CACHE_ROOT)/gomodcache":/go/pkg/mod \
+		-v "$(LOCAL_GO_CACHE_ROOT)/ccache":/root/.ccache \
 		-w /work/bigquery-emulator \
 		$(DOCKER_DEV_IMAGE) \
 		bash -c "go test -race -v ./... -count=1"
