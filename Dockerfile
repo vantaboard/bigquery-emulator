@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.7
-FROM ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3 AS build
+# Override when validating a local toolchain, e.g.:
+#   docker build --build-arg GO_ZETASQL_BASE=go-zetasql:dev -t bigquery-emulator .
+# (build ../go-zetasql with tag go-zetasql:dev first — see that repo's Makefile.)
+ARG GO_ZETASQL_BASE=ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3
+FROM ${GO_ZETASQL_BASE} AS build
 
 ARG VERSION
 
@@ -18,7 +22,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     make emulator/build
 
 # Since the binary uses dynamic linking we must use the same base image as the build runtime
-FROM ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3 AS emulator
+ARG GO_ZETASQL_BASE=ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3
+FROM ${GO_ZETASQL_BASE} AS emulator
 
 COPY --from=build /work/bigquery-emulator/bigquery-emulator /bin/bigquery-emulator
 
