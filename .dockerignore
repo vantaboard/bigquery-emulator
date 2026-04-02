@@ -1,2 +1,8 @@
+.cursor/
+.git
+.github
+_examples/
+bin/
 node_modules/
+test/
 .venv/

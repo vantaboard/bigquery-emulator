@@ -118,7 +118,3 @@ require (
 	modernc.org/sqlite v1.37.0
 )
 
-
-replace github.com/goccy/go-zetasql => ../go-zetasql
-
-replace github.com/goccy/go-zetasqlite => ../go-zetasqlite
