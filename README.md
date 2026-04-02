@@ -66,6 +66,24 @@ $ docker pull ghcr.io/Recidiviz/bigquery-emulator:latest
 
 You can also download the darwin(amd64) and linux(amd64) binaries directly from [releases](https://github.com/goccy/bigquery-emulator/releases)
 
+## Development build modes
+
+For normal `bigquery-emulator` work, use the default pinned dependency path so local builds do not pull sibling `go-zetasql` source into every compile:
+
+```console
+$ make emulator/build
+$ make docker/build
+```
+
+If you are actively editing `../go-zetasql` or `../go-zetasqlite`, use the linked-source targets instead:
+
+```console
+$ make emulator/build-linked
+$ make docker/build-linked
+```
+
+The linked targets opt into `go.work.linked` and the linked Docker build so the slower cross-repo rebuild path is only used when needed.
+
 # How to start the standalone server
 
 If you can install the `bigquery-emulator` CLI, you can start the server using the following options.
