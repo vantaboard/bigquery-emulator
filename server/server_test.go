@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -127,6 +128,36 @@ func TestSimpleQuery(t *testing.T) {
 		}
 		if len(row) != 1 || row[0] == nil {
 			t.Fatal("Failed to query null ARRAY")
+		}
+	})
+
+	// End-to-end check for ZetaSQL math builtins wired through go-zetasqlite (e.g. COTH from 2022.02.1+).
+	t.Run("coth_math_function", func(t *testing.T) {
+		query := client.Query("SELECT COTH(1.0) AS c")
+		it, err := query.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var row []bigquery.Value
+		if err := it.Next(&row); err != nil {
+			t.Fatal(err)
+		}
+		if err := it.Next(&row); err != iterator.Done {
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("expected exactly one row")
+		}
+		if len(row) != 1 {
+			t.Fatalf("want 1 column, got %d", len(row))
+		}
+		v, ok := row[0].(float64)
+		if !ok {
+			t.Fatalf("want float64, got %T %v", row[0], row[0])
+		}
+		const want = 1.3130352854993312
+		if math.Abs(v-want) > 1e-9 {
+			t.Fatalf("COTH(1.0) = %v, want %v", v, want)
 		}
 	})
 
