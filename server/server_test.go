@@ -197,6 +197,43 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
+	// Googlesql 2023.04.1→2023.08.1 scalar builtins via go-zetasqlite (PI, ARRAY_FIRST_N, JSON_REMOVE, etc.).
+	t.Run("googlesql_2023_08_builtins", func(t *testing.T) {
+		query := client.Query(`SELECT PI() AS p, ARRAY_FIRST_N([1, 2, 3, 4], 2) AS a, JSON_REMOVE(PARSE_JSON('{"x":1,"y":2}'), '$.x') AS j`)
+		it, err := query.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var row []bigquery.Value
+		if err := it.Next(&row); err != nil {
+			t.Fatal(err)
+		}
+		if err := it.Next(&row); err != iterator.Done {
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("expected exactly one row")
+		}
+		if len(row) != 3 {
+			t.Fatalf("want 3 cols, got %d", len(row))
+		}
+		pv, ok := row[0].(float64)
+		if !ok {
+			t.Fatalf("PI: want float64, got %T", row[0])
+		}
+		if math.Abs(pv-math.Pi) > 1e-12 {
+			t.Fatalf("PI: got %v", pv)
+		}
+		_, ok = row[1].([]bigquery.Value)
+		if !ok {
+			t.Fatalf("ARRAY_FIRST_N: want array, got %T", row[1])
+		}
+		js, ok := row[2].(string)
+		if !ok || js != `{"y":2}` {
+			t.Fatalf("JSON_REMOVE: got %v (%T)", row[2], row[2])
+		}
+	})
+
 	// Regression test for goccy/bigquery-emulator#316
 	t.Run("invalid query", func(t *testing.T) {
 		query := client.Query("SELECT!;")
