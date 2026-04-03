@@ -161,6 +161,42 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
+	// Mirrors googlesql 2023.03.2→2023.04.1 JSON helpers / ConvertJson FLOAT64(JSON, mode) + JsonObject duplicate-key rules.
+	t.Run("json_2023_04_parity", func(t *testing.T) {
+		query := client.Query(`SELECT JSON_OBJECT('k', 1, 'k', 2) AS j, FLOAT64(JSON '9.8', wide_number_mode => 'round') AS v`)
+		it, err := query.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var row []bigquery.Value
+		if err := it.Next(&row); err != nil {
+			t.Fatal(err)
+		}
+		if err := it.Next(&row); err != iterator.Done {
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("expected exactly one row")
+		}
+		if len(row) != 2 {
+			t.Fatalf("want 2 columns, got %d", len(row))
+		}
+		jStr, ok := row[0].(string)
+		if !ok {
+			t.Fatalf("want JSON column as string, got %T %v", row[0], row[0])
+		}
+		if jStr != `{"k":1}` {
+			t.Fatalf("JSON_OBJECT duplicate keys first wins: got %q want {\"k\":1}", jStr)
+		}
+		fv, ok := row[1].(float64)
+		if !ok {
+			t.Fatalf("want float64 velocity, got %T %v", row[1], row[1])
+		}
+		if math.Abs(fv-9.8) > 1e-9 {
+			t.Fatalf("FLOAT64(JSON, 'round'): got %v want 9.8", fv)
+		}
+	})
+
 	// Regression test for goccy/bigquery-emulator#316
 	t.Run("invalid query", func(t *testing.T) {
 		query := client.Query("SELECT!;")
