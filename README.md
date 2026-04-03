@@ -84,6 +84,8 @@ $ make docker/build-linked
 
 The linked targets opt into `go.work.linked` and the linked Docker build so the slower cross-repo rebuild path is only used when needed.
 
+For **repeat** host builds (`emulator/build` or `emulator/build-linked`), use **`CC="ccache clang"`** and **`CXX="ccache clang++"`** (and on **Linux**, **`mold`** on **`PATH`** for faster linking—same idea as [go-zetasql](https://github.com/goccy/go-zetasql#development)), or rely on **`make test/linux`** below for CI-parity compilation inside **`go-zetasql:dev`**.
+
 ### Local `go-zetasql` base image (upgrade / CGO cache)
 
 Docker builds use a **pinned Go+clang** base (`GO_ZETASQL_BASE`, default `ghcr.io/recidiviz/go-zetasql:0.5.5-recidiviz.3`). To validate against a **local** toolchain image you built from the `go-zetasql` repo (for example tag `go-zetasql:dev`), override the Makefile variable or pass a build arg:
@@ -95,9 +97,13 @@ $ make docker/build-linked GO_ZETASQL_BASE=go-zetasql:dev
 
 Build the `go-zetasql:dev` image first (`make docker/build-dev` in `go-zetasql`). The runtime stage must stay compatible with the linked binary (same glibc/toolchain expectations as the chosen base).
 
-### Sequential test runs
+### Sequential test runs and shared caches
 
-When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-zetasql`, `go-zetasqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared `GOCACHE` (see `go-zetasql` README) for faster host-native runs.
+When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-zetasql`, `go-zetasqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GOCACHE`** and **`GOMODCACHE`** (see [go-zetasql README](https://github.com/goccy/go-zetasql#development)) for faster host-native runs.
+
+**`GO_CACHE_ROOT`:** The [Makefile](Makefile) **`make test/linux`** target bind-mounts **`GO_CACHE_ROOT`** (default **`$HOME/.cache/go-zetasql`**) into **`gocache`**, **`gomodcache`**, and **`ccache`** in the container—the same convention as **`go-zetasql`** and **`go-zetasqlite`**. Set **`GO_CACHE_ROOT`** consistently across sibling checkouts so one warm cache serves all three repos.
+
+**Optional warm-up:** Run **`make -C ../go-zetasql docker/warm-cache`** once after a cold cache or toolchain change so the next **`make test/linux`** here pays less compile cost (pre-builds the **`-race`** graph without running tests).
 
 # How to start the standalone server
 
