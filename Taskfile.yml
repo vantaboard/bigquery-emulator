@@ -37,10 +37,22 @@ tasks:
         set -euo pipefail
         source .envrc
         VERSION="${VERSION:-latest}"
-        GO_GOOGLESQL_BASE="${GO_GOOGLESQL_BASE:-ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3}"
+        if [ -n "${GO_GOOGLESQL_BASE:-}" ]; then
+          if [[ "$GO_GOOGLESQL_BASE" =~ ^(.+):([^:]+)$ ]]; then
+            GO_GOOGLESQL_IMAGE="${BASH_REMATCH[1]}"
+            GO_GOOGLESQL_TAG="${BASH_REMATCH[2]}"
+          else
+            echo "task docker:build: GO_GOOGLESQL_BASE must be image:tag (e.g. ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3)" >&2
+            exit 1
+          fi
+        else
+          GO_GOOGLESQL_IMAGE="${GO_GOOGLESQL_IMAGE:-ghcr.io/vantaboard/go-googlesql}"
+          GO_GOOGLESQL_TAG="${GO_GOOGLESQL_TAG:-0.5.5-recidiviz.3}"
+        fi
         docker build -t bigquery-emulator -f Dockerfile.linked . \
           --build-arg VERSION="$VERSION" \
-          --build-arg GO_GOOGLESQL_BASE="$GO_GOOGLESQL_BASE" \
+          --build-arg GO_GOOGLESQL_IMAGE="$GO_GOOGLESQL_IMAGE" \
+          --build-arg GO_GOOGLESQL_TAG="$GO_GOOGLESQL_TAG" \
           --build-context go_googlesql="$GO_GOOGLESQL_ROOT" \
           --build-context go_googlesqlite="$GO_GOOGLESQLITE_ROOT"
 
@@ -58,7 +70,7 @@ tasks:
         task -d "$GO_GOOGLESQL_ROOT" docker:build-dev
 
   test:linux:
-    desc: Run go test -race in go-googlesql:dev (shared GO_CACHE_ROOT)
+    desc: Run go test in go-googlesql:dev (shared GO_CACHE_ROOT; tags match CI; no -race — duplicates with unified-prebuilt CGO link)
     deps: [docker:build-dev-googlesql]
     cmds:
       - |
@@ -66,6 +78,7 @@ tasks:
         source .envrc
         docker run --rm \
           -e CGO_ENABLED=1 -e CC=clang -e CXX=clang++ \
+          -e CGO_LDFLAGS= \
           -e GOPROXY=https://proxy.golang.org,direct \
           -e GOSUMDB=sum.golang.org \
           -e CCACHE_DIR=/root/.ccache -e CCACHE_COMPRESS=1 \
@@ -78,4 +91,4 @@ tasks:
           -v "$GO_CACHE_ROOT/ccache":/root/.ccache \
           -w /work/bigquery-emulator \
           {{.DOCKER_DEV_IMAGE}} \
-          bash -c 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go test -race -v ./... -count=1'
+          bash -c 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go test -tags "$GOOGLESQL_BUILD_TAGS" -v ./... -count=1'

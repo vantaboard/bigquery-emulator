@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
-ARG GO_GOOGLESQL_BASE=ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3
-FROM ${GO_GOOGLESQL_BASE} AS build
+ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
+ARG GO_GOOGLESQL_TAG=0.5.5-recidiviz.3
+FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS build
 
 ARG VERSION
 
@@ -30,8 +31,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     GOWORK=/work/bigquery-emulator/go.work.dev \
     bash -lc 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator'
 
-ARG GO_GOOGLESQL_BASE=ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3
-FROM ${GO_GOOGLESQL_BASE} AS emulator
+ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
+ARG GO_GOOGLESQL_TAG=0.5.5-recidiviz.3
+FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS emulator
 
 COPY --from=build /work/bigquery-emulator/bigquery-emulator /bin/bigquery-emulator
 
