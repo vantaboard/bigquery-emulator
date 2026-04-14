@@ -13,7 +13,7 @@
 #     --ignorefile bigquery-emulator/docker/parent.dockerignore \
 #     -t bigquery-emulator:local .
 
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		clang \
