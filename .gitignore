@@ -28,3 +28,6 @@ __pycache__
 
 # Mac files
 .DS_Store
+
+# Local Go workspace (template: go.work.dev)
+go.work

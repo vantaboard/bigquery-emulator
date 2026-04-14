@@ -1,0 +1,10 @@
+go 1.26.0
+
+use (
+	.
+	../go-googlesqlite
+	../go-googlesql
+)
+
+// Copy to go.work for local development with sibling go-googlesql and go-googlesqlite
+// checkouts (matches replace directives in go.mod).
