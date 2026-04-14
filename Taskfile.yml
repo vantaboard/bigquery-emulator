@@ -49,8 +49,17 @@ tasks:
     cmds:
       - task: docker:build
 
+  docker:build-dev-googlesql:
+    desc: Build go-googlesql:dev in the sibling checkout (required for test:linux)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        task -d "$GO_GOOGLESQL_ROOT" docker:build-dev
+
   test:linux:
     desc: Run go test -race in go-googlesql:dev (shared GO_CACHE_ROOT)
+    deps: [docker:build-dev-googlesql]
     cmds:
       - |
         set -euo pipefail
