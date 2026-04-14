@@ -1,9 +1,13 @@
 {
+  "go.buildTags": "googlesql,googlesql_unified_prebuilt",
+  "go.testTags": "googlesql,googlesql_unified_prebuilt",
   "go.toolsEnvVars": {
     "CGO_ENABLED": "1",
+    "CC": "clang",
     "CXX": "clang++",
-    "GOMAXPROCS": "2",
-    "GOFLAGS": "-p=1",
+    "CGO_CXXFLAGS": "-stdlib=libc++",
+    "CGO_LDFLAGS": "-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++",
+    "CGO_LDFLAGS_ALLOW": "-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\\+\\+",
     "GOCACHE": "${env:HOME}/.cache/go-googlesql/gocache",
     "GOMODCACHE": "${env:HOME}/.cache/go-googlesql/gomodcache"
   }
