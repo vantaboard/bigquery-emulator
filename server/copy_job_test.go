@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/vantaboard/bigquery-emulatorlator/server"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/server"
+	"github.com/vantaboard/bigquery-emulator/types"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )

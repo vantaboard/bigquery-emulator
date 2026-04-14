@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 type Source func(*Server) error

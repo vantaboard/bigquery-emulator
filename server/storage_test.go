@@ -26,7 +26,7 @@ import (
 	"github.com/goccy/go-json"
 	gax "github.com/googleapis/gax-go/v2"
 	goavro "github.com/linkedin/goavro/v2"
-	"github.com/vantaboard/bigquery-emulatorlator/server"
+	"github.com/vantaboard/bigquery-emulator/server"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -36,7 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 var (

@@ -13,11 +13,11 @@ import (
 	"go.uber.org/zap"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 
-	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/logger"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/metadata"
-	internaltypes "github.com/vantaboard/bigquery-emulatorlator/internal/types"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 const ViewQueryEndCutset = ";\n \t"

@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	internaltypes "github.com/vantaboard/bigquery-emulatorlator/internal/types"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 var ErrDuplicatedDataset = errors.New("dataset is already created")

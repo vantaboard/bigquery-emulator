@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	connection2 "github.com/vantaboard/bigquery-emulatorlator/internal/connection"
+	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
-	"github.com/vantaboard/bigquery-emulatorlator/internal/logger"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
 )
 
 func sequentialAccessMiddleware() func(http.Handler) http.Handler {

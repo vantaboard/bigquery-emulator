@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 	"github.com/vantaboard/go-googlesqlite"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 )

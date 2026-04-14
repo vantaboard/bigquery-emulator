@@ -15,9 +15,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gorilla/mux"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/contentdata"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/metadata"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 )
 
 type Server struct {

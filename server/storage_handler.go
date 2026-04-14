@@ -28,10 +28,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
-	"github.com/vantaboard/bigquery-emulatorlator/internal/logger"
-	internaltypes "github.com/vantaboard/bigquery-emulatorlator/internal/types"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 var (

@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
-	"github.com/vantaboard/bigquery-emulatorlator/server"
-	"github.com/vantaboard/bigquery-emulatorlator/types"
+	"github.com/vantaboard/bigquery-emulator/server"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 type option struct {
