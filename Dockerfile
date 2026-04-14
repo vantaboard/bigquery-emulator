@@ -16,8 +16,8 @@
 FROM golang:1.26-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-		clang \
-		mold \
+		clang=1:14.0-55.7~deb12u1 \
+		mold=1.10.1+dfsg-1 \
 	&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -45,8 +45,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-		ca-certificates \
-		libstdc++6 \
+		ca-certificates=20230311+deb12u1 \
+		libstdc++6=12.2.0-14+deb12u1 \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/bigquery-emulator /usr/local/bin/bigquery-emulator
