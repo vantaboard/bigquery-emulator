@@ -21,14 +21,14 @@ jobs:
 
     steps:
     - name: checkout
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@v6
     - name: Resolve go-googlesql version
       id: gsql
       run: |
         v=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
         echo "v=${v}" >> "$GITHUB_OUTPUT"
     - name: Checkout go-googlesql (stack-bootstrap)
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@v6
       with:
         repository: vantaboard/go-googlesql
         ref: ${{ steps.gsql.outputs.v }}
@@ -38,7 +38,7 @@ jobs:
       with:
         version: 3.x
     - name: setup Go ${{ matrix.go-version }}
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
+      uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
         cache: true
@@ -46,9 +46,9 @@ jobs:
       id: meta
       run: |
         echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-    - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+    - uses: rui314/setup-mold@v1
     - name: cache for linux
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+      uses: actions/cache@v4
       if: runner.os == 'Linux'
       with:
         path: |
@@ -58,7 +58,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: cache for macOS
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+      uses: actions/cache@v4
       if: runner.os == 'macOS'
       with:
         path: |
@@ -73,7 +73,7 @@ jobs:
         VERSION: ${{ steps.meta.outputs.VERSION }}
         GO_GOOGLESQL_ROOT: ${{ github.workspace }}/go-googlesql
     - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@b98a3b12e86552593f3e4e577ca8a62aa2f3f22b # v2
+      uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: ${{ matrix.artifact_name }}
