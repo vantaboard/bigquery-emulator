@@ -70,7 +70,7 @@ tasks:
         task -d "$GO_GOOGLESQL_ROOT" docker:build-dev
 
   test:linux:
-    desc: Run go test in go-googlesql:dev (shared GO_CACHE_ROOT; tags match CI; no -race — duplicates with unified-prebuilt CGO link)
+    desc: Run go test in go-googlesql:dev (CI parity; GOOGLESQL_BUILD_TAGS; clear image CGO_LDFLAGS so bootstrap supplies link flags)
     deps: [docker:build-dev-googlesql]
     cmds:
       - |
