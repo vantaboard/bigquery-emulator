@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/goccy/bigquery-emulator/types"
+	"github.com/vantaboard/bigquery-emulatorlator/types"
 	"github.com/vantaboard/go-googlesqlite"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 )
@@ -29,12 +29,12 @@ type (
 	}
 
 	QueryResponse struct {
-		JobReference   *bigqueryv2.JobReference   `json:"jobReference"`
-		Schema         *bigqueryv2.TableSchema    `json:"schema"`
-		Rows           []*TableRow                `json:"rows"`
-		TotalRows      uint64                     `json:"totalRows,string"`
-		JobComplete    bool                       `json:"jobComplete"`
-		TotalBytes     int64                      `json:"-"`
+		JobReference   *bigqueryv2.JobReference     `json:"jobReference"`
+		Schema         *bigqueryv2.TableSchema      `json:"schema"`
+		Rows           []*TableRow                  `json:"rows"`
+		TotalRows      uint64                       `json:"totalRows,string"`
+		JobComplete    bool                         `json:"jobComplete"`
+		TotalBytes     int64                        `json:"-"`
 		ChangedCatalog *googlesqlite.ChangedCatalog `json:"-"`
 	}
 

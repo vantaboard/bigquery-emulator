@@ -2,7 +2,7 @@ version: '2'
 services:
   bigquery-emulator:
     container_name: bigquery
-    image: ghcr.io/goccy/bigquery-emulator:latest
+    image: ghcr.io/vantaboard/bigquery-emulator:latest
     ports:
       - "0.0.0.0:9050:9050"
     volumes:

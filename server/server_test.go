@@ -19,11 +19,11 @@ import (
 	"cloud.google.com/go/civil"
 	"cloud.google.com/go/storage"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
-	"github.com/goccy/bigquery-emulator/server"
-	"github.com/goccy/bigquery-emulator/types"
 	"github.com/goccy/go-json"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/vantaboard/bigquery-emulator/server"
+	"github.com/vantaboard/bigquery-emulator/types"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -230,7 +230,6 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
-	// Regression test for goccy/bigquery-emulator#316
 	t.Run("invalid query", func(t *testing.T) {
 		query := client.Query("SELECT!;")
 		_, err := query.Read(ctx)
@@ -242,7 +241,6 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
-	// Regression test for goccy/bigquery-emulator#316
 	t.Run("invalid query", func(t *testing.T) {
 		ctx := context.Background()
 		client.Dataset("test_ds").Create(ctx, &bigquery.DatasetMetadata{Name: "test_ds"})
@@ -3392,7 +3390,6 @@ func TestQueryWithNumericParameters(t *testing.T) {
 	})
 }
 
-// TestQueryWithNullParameters tests issue #312: https://github.com/goccy/bigquery-emulator/issues/312
 // Verifies that null parameters work correctly in IS NULL conditions.
 // The issue reported that null string parameters in WHERE clauses with
 // "IS NULL OR parameter = value" patterns caused type inference errors.

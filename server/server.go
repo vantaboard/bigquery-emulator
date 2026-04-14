@@ -14,10 +14,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/internal/contentdata"
-	"github.com/goccy/bigquery-emulator/internal/metadata"
 	"github.com/gorilla/mux"
+	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
+	"github.com/vantaboard/bigquery-emulatorlator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulatorlator/internal/metadata"
 )
 
 type Server struct {

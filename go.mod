@@ -1,4 +1,4 @@
-module github.com/goccy/bigquery-emulator
+module github.com/vantaboard/bigquery-emulator
 
 go 1.26.0
 

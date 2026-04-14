@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goccy/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
 
 	"cloud.google.com/go/storage"
 	"github.com/goccy/go-json"
@@ -30,12 +30,12 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/internal/logger"
-	"github.com/goccy/bigquery-emulator/internal/metadata"
-	internaltypes "github.com/goccy/bigquery-emulator/internal/types"
-	"github.com/goccy/bigquery-emulator/types"
 	"github.com/parquet-go/parquet-go"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 func errorResponse(ctx context.Context, w http.ResponseWriter, e *ServerError) {
@@ -297,8 +297,6 @@ func (h *uploadHandler) serveResumable(w http.ResponseWriter, r *http.Request) {
 	// client thinks it's connecting to and use that. This also handles the
 	// case where we're behind a NAT (e.g. in a container), as we don't
 	// otherwise know what our external name is.
-	//
-	// See https://github.com/goccy/bigquery-emulator/issues/160
 	addr := fmt.Sprintf("http://%s", r.Host)
 
 	w.Header().Add(

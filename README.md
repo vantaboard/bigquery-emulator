@@ -64,7 +64,7 @@ You can also download the docker image with the following command
 $ docker pull ghcr.io/Recidiviz/bigquery-emulator:latest
 ```
 
-You can also download the darwin(amd64) and linux(amd64) binaries directly from [releases](https://github.com/goccy/bigquery-emulator/releases)
+You can also download the darwin(amd64) and linux(amd64) binaries directly from [releases](https://github.com/vantaboard/bigquery-emulator/releases)
 
 ## Development build modes
 
@@ -222,7 +222,7 @@ result = client.query(sql).to_dataframe(bqstorage_client=read_client)
 If you use the Go language as a BigQuery client, you can launch the BigQuery emulator on the same process as the testing process.  
 Import `github.com/Recidiviz/bigquery-emulator/server` ( and `github.com/Recidiviz/bigquery-emulator/types` ) and you can use `server.New` API to create the emulator server instance.
 
-See the API reference for more information: https://pkg.go.dev/github.com/goccy/bigquery-emulator
+See the API reference for more information: https://pkg.go.dev/github.com/vantaboard/bigquery-emulator
 
 ```go
 package main

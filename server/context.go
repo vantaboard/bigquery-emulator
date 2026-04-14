@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/internal/metadata"
+	"github.com/vantaboard/bigquery-emulatorlator/internal/connection"
+	"github.com/vantaboard/bigquery-emulatorlator/internal/metadata"
 	"go.uber.org/zap"
 )
 
