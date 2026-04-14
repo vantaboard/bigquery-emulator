@@ -6,7 +6,7 @@ ARG VERSION
 
 WORKDIR /work
 
-COPY go.work.linked ./bigquery-emulator/go.work.linked
+COPY go.work.dev ./bigquery-emulator/go.work.dev
 COPY go.mod go.sum ./bigquery-emulator/
 COPY --from=go_googlesql go.mod ./go-googlesql/go.mod
 COPY --from=go_googlesqlite go.mod go.sum ./go-googlesqlite/
@@ -15,7 +15,7 @@ WORKDIR /work/bigquery-emulator
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOWORK=/work/bigquery-emulator/go.work.linked go mod download
+    GOWORK=/work/bigquery-emulator/go.work.dev go mod download
 
 WORKDIR /work
 
@@ -27,7 +27,7 @@ WORKDIR /work/bigquery-emulator
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOWORK=/work/bigquery-emulator/go.work.linked \
+    GOWORK=/work/bigquery-emulator/go.work.dev \
     bash -lc 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator'
 
 ARG GO_GOOGLESQL_BASE=ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3

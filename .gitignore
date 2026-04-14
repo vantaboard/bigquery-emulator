@@ -31,3 +31,4 @@ __pycache__
 
 # Local Go workspace (template: go.work.dev)
 go.work
+go.work.sum

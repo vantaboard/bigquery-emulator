@@ -79,7 +79,7 @@ $ task emulator:build
 $ task docker:build
 ```
 
-`emulator:build-linked` uses `go.work.linked` (same bootstrap and tags). `docker:build-linked` is an alias for `docker:build` ([`Dockerfile.linked`](Dockerfile.linked) + sibling build contexts).
+`emulator:build-linked` uses `go.work.dev` via `GOWORK` (same bootstrap and tags). `docker:build-linked` is an alias for `docker:build` ([`Dockerfile.linked`](Dockerfile.linked) + sibling build contexts).
 
 For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang++"`** (and on **Linux**, **`mold`** on **`PATH`**), or **`task test:linux`** for CI-parity tests inside **`go-googlesql:dev`**.
 

@@ -22,12 +22,12 @@ tasks:
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
 
   emulator:build-linked:
-    desc: Build using go.work.linked
+    desc: Build using go.work.dev (set GOWORK)
     cmds:
       - |
         set -euo pipefail
         source .envrc
-        export GOWORK="$PWD/go.work.linked"
+        export GOWORK="$PWD/go.work.dev"
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
 
   docker:build:
@@ -60,7 +60,7 @@ tasks:
           -e GOPROXY=https://proxy.golang.org,direct \
           -e GOSUMDB=sum.golang.org \
           -e CCACHE_DIR=/root/.ccache -e CCACHE_COMPRESS=1 \
-          -e GOWORK=/work/bigquery-emulator/go.work.linked \
+          -e GOWORK=/work/bigquery-emulator/go.work.dev \
           -v "$PWD":/work/bigquery-emulator \
           -v "$GO_GOOGLESQL_ROOT":/work/go-googlesql \
           -v "$GO_GOOGLESQLITE_ROOT":/work/go-googlesqlite \
