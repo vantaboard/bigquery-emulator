@@ -1,13 +1,34 @@
 {
+  // CGO_LDFLAGS is set per OS below (GNU ld vs Apple ld). go.toolsEnvVars cannot be scoped by
+  // platform; it carries the shared allowlist and omits CGO_LDFLAGS so gopls is not given Linux-only flags on macOS.
   "go.buildTags": "googlesql,googlesql_unified_prebuilt",
   "go.testTags": "googlesql,googlesql_unified_prebuilt",
-  "go.toolsEnvVars": {
+  "terminal.integrated.env.linux": {
     "CGO_ENABLED": "1",
     "CC": "clang",
     "CXX": "clang++",
     "CGO_CXXFLAGS": "-stdlib=libc++",
     "CGO_LDFLAGS": "-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++",
-    "CGO_LDFLAGS_ALLOW": "-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\\+\\+",
+    "CGO_LDFLAGS_ALLOW": "-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-Wl,-multiply_defined,suppress|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\\+\\+|-Wl,-force_load,.+",
+    "GOCACHE": "${env:HOME}/.cache/go-googlesql/gocache",
+    "GOMODCACHE": "${env:HOME}/.cache/go-googlesql/gomodcache"
+  },
+  "terminal.integrated.env.osx": {
+    "CGO_ENABLED": "1",
+    "CC": "clang",
+    "CXX": "clang++",
+    "CGO_CXXFLAGS": "-stdlib=libc++",
+    "CGO_LDFLAGS": "-Wl,-multiply_defined,suppress -stdlib=libc++",
+    "CGO_LDFLAGS_ALLOW": "-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-Wl,-multiply_defined,suppress|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\\+\\+|-Wl,-force_load,.+",
+    "GOCACHE": "${env:HOME}/.cache/go-googlesql/gocache",
+    "GOMODCACHE": "${env:HOME}/.cache/go-googlesql/gomodcache"
+  },
+  "go.toolsEnvVars": {
+    "CGO_ENABLED": "1",
+    "CC": "clang",
+    "CXX": "clang++",
+    "CGO_CXXFLAGS": "-stdlib=libc++",
+    "CGO_LDFLAGS_ALLOW": "-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-Wl,-multiply_defined,suppress|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\\+\\+|-Wl,-force_load,.+",
     "GOCACHE": "${env:HOME}/.cache/go-googlesql/gocache",
     "GOMODCACHE": "${env:HOME}/.cache/go-googlesql/gomodcache"
   }
