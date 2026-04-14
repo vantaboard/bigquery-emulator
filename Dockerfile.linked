@@ -9,7 +9,10 @@ WORKDIR /work
 
 COPY go.work.dev ./bigquery-emulator/go.work.dev
 COPY go.mod go.sum ./bigquery-emulator/
+# Additional BuildKit contexts (--build-context), not FROM stages.
+# hadolint ignore=DL3022
 COPY --from=go_googlesql go.mod ./go-googlesql/go.mod
+# hadolint ignore=DL3022
 COPY --from=go_googlesqlite go.mod go.sum ./go-googlesqlite/
 
 WORKDIR /work/bigquery-emulator
@@ -20,7 +23,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 WORKDIR /work
 
+# hadolint ignore=DL3022
 COPY --from=go_googlesql . ./go-googlesql
+# hadolint ignore=DL3022
 COPY --from=go_googlesqlite . ./go-googlesqlite
 COPY . ./bigquery-emulator
 
