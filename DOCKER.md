@@ -14,7 +14,7 @@ This uses [`Dockerfile.linked`](Dockerfile.linked), **`GO_GOOGLESQL_BASE`** (def
 
 ## Alternative: parent-directory context (`Dockerfile`)
 
-Your `go.mod` uses `replace` to sibling modules; the classic image is built from a **parent directory** that contains all three repositories:
+Local development uses [`go.work.dev`](go.work.dev) (workspace `replace`, not `go.mod`); the classic image is built from a **parent directory** that contains all three repositories:
 
 ```text
 your-workspace/
@@ -85,4 +85,4 @@ Published versions on the module proxy do not ship prebuilt `.a` archives; the s
 
 ## Why not `docker build` inside only `bigquery-emulator/` without build contexts?
 
-Published versions on the module proxy may not match your `replace`-based workspace; building from the three-repo layout matches `go.mod` and avoids API skew.
+Published versions on the module proxy may not match your local workspace; building from the three-repo layout matches sibling checkouts and avoids API skew.

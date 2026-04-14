@@ -115,7 +115,3 @@ require (
 	modernc.org/memory v1.9.1 // indirect
 	modernc.org/sqlite v1.37.0
 )
-
-replace github.com/vantaboard/go-googlesql => ../go-googlesql
-
-replace github.com/vantaboard/go-googlesqlite => ../go-googlesqlite

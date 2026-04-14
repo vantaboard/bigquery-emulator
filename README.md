@@ -72,7 +72,7 @@ You can also download the darwin(amd64) and linux(amd64) binaries directly from 
 
 **Host linker env:** [direnv](https://direnv.net/) with this repo’s [`.envrc`](.envrc), or [`go-googlesql/scripts/go-googlesql-stack-bootstrap.sh`](https://github.com/vantaboard/go-googlesql/blob/main/scripts/go-googlesql-stack-bootstrap.sh), so **`CGO_LDFLAGS_ALLOW`** / **`CGO_LDFLAGS`** match [`go-googlesql` `Taskfile.yml`](https://github.com/vantaboard/go-googlesql/blob/main/Taskfile.yml).
 
-For normal `bigquery-emulator` work with sibling `replace` checkouts:
+For normal `bigquery-emulator` work with sibling checkouts (use [`go.work.dev`](go.work.dev) via `go.work` or `GOWORK`):
 
 ```console
 $ task emulator:build
