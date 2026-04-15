@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1.6
 #
+# Secondary local-only Docker build: use this when you intentionally build from a
+# parent directory containing all three sibling repos. CI/release should prefer
+# Dockerfile.linked, which matches the stack bootstrap and prebuilt contract directly.
+#
 # BigQuery emulator needs CGO (go-googlesql) and must be built against the same
-# go-googlesql / go-googlesqlite sources as this repo's go.mod replace lines.
+# go-googlesql / go-googlesqlite sources as this repo's go.work.dev sibling replaces.
 #
 # Build from the parent directory that contains all three repos side by side:
 #   go-googlesql/

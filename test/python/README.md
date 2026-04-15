@@ -196,7 +196,7 @@ class TestMyQueries(BigQueryEmulatorTestCase):
 
 ### Environment Variables
 
-- `BIGQUERY_EMULATOR_REPOSITORY`: Docker image repo (default: `ghcr.io/recidiviz/bigquery-emulator`)
+- `BIGQUERY_EMULATOR_REPOSITORY`: Docker image repo (default: `ghcr.io/vantaboard/bigquery-emulator`)
 - `BIGQUERY_EMULATOR_VERSION`: Image version (default: `latest`)
 
 ## Troubleshooting

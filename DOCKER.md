@@ -2,7 +2,7 @@
 
 The emulator links **go-googlesql** (CGO + C++) and **go-googlesqlite** using the default **`googlesql,googlesql_unified_prebuilt`** tags (see [go-googlesql `docs/prebuilt-cgo.md`](https://github.com/vantaboard/go-googlesql/blob/main/docs/prebuilt-cgo.md)).
 
-## Recommended: build from this repo ([`Taskfile.yml`](Taskfile.yml))
+## Primary path: build from this repo ([`Taskfile.yml`](Taskfile.yml))
 
 With sibling checkouts `../go-googlesql` and `../go-googlesqlite`, from **this** directory:
 
@@ -10,11 +10,11 @@ With sibling checkouts `../go-googlesql` and `../go-googlesqlite`, from **this**
 task docker:build
 ```
 
-This uses [`Dockerfile.linked`](Dockerfile.linked), **`GO_GOOGLESQL_BASE`** (default pinned in [`Taskfile.yml`](Taskfile.yml)), and **`docker build --build-context`** so the image matches your local trees. Override paths if needed: `GO_GOOGLESQL_ROOT=... GO_GOOGLESQLITE_ROOT=... task docker:build`.
+This uses [`Dockerfile.linked`](Dockerfile.linked), **`GO_GOOGLESQL_BASE`** (default pinned in [`Taskfile.yml`](Taskfile.yml) to the same `go-googlesql` tag as `go.mod`), and **`docker build --build-context`** so the image matches your local trees. This is the path used by CI/release. Override paths if needed: `GO_GOOGLESQL_ROOT=... GO_GOOGLESQLITE_ROOT=... task docker:build`.
 
-## Alternative: parent-directory context (`Dockerfile`)
+## Secondary local fallback: parent-directory context (`Dockerfile`)
 
-Local development uses [`go.work.dev`](go.work.dev) (workspace `replace`, not `go.mod`); the classic image is built from a **parent directory** that contains all three repositories:
+Local development uses [`go.work.dev`](go.work.dev) (workspace `replace`, not `go.mod`); this fallback image is built from a **parent directory** that contains all three repositories. Keep it for local workspace builds only; do not treat it as the primary CI/release path.
 
 ```text
 your-workspace/

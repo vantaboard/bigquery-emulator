@@ -49,7 +49,7 @@ yarn typecheck
 
 ## Environment Variables
 
-- `BIGQUERY_EMULATOR_REPOSITORY` - Docker repository for the emulator image (default: `ghcr.io/recidiviz/bigquery-emulator`)
+- `BIGQUERY_EMULATOR_REPOSITORY` - Docker repository for the emulator image (default: `ghcr.io/vantaboard/bigquery-emulator`)
 - `BIGQUERY_EMULATOR_VERSION` - Docker image tag (default: `latest`)
 - `VITEST_POOL_ID` - Worker ID for parallel test execution (automatically set by Vitest)
 

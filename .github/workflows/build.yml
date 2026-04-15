@@ -5,7 +5,7 @@ on:
       - v*
 env:
   REGISTRY: ghcr.io
-  REGISTRY_IMAGE: ghcr.io/recidiviz/bigquery-emulator
+  REGISTRY_IMAGE: ghcr.io/vantaboard/bigquery-emulator
 
 jobs:
   # For each platform in the matrix, creates and pushes a platform-compatible Docker image to the registry
@@ -29,6 +29,47 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
+      - name: Resolve stack versions
+        id: ver
+        run: |
+          gsql=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
+          gsqlite=$(awk '/github.com\/vantaboard\/go-googlesqlite /{print $2; exit}' go.mod)
+          echo "gsql=${gsql}" >> "$GITHUB_OUTPUT"
+          echo "gsqlite=${gsqlite}" >> "$GITHUB_OUTPUT"
+      - name: Checkout go-googlesql
+        uses: actions/checkout@v6
+        with:
+          repository: vantaboard/go-googlesql
+          ref: ${{ steps.ver.outputs.gsql }}
+          path: go-googlesql
+      - name: Checkout go-googlesqlite
+        uses: actions/checkout@v6
+        with:
+          repository: vantaboard/go-googlesqlite
+          ref: ${{ steps.ver.outputs.gsqlite }}
+          path: go-googlesqlite
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang
+      - name: Install bazelisk
+        run: |
+          go install github.com/bazelbuild/bazelisk@v1.20.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Default prebuilts (release tarball or Bazel)
+        env:
+          GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+        run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
       - name: setup docker buildx
         uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -42,10 +83,16 @@ jobs:
         id: build
         with:
           context: .
+          file: ./Dockerfile.linked
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           platforms: ${{ matrix.platform }}
+          build-args: |
+            GO_GOOGLESQL_TAG=${{ steps.ver.outputs.gsql }}
+          build-contexts: |
+            go_googlesql=./go-googlesql
+            go_googlesqlite=./go-googlesqlite
           cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.asset_name }}
           cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.asset_name }}
 

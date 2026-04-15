@@ -45,7 +45,7 @@ def get_bq_emulator_grpc_port() -> int:
     return port + pytest_worker_id
 
 
-EMULATOR_IMAGE_REPOSITORY = os.getenv("BIGQUERY_EMULATOR_REPOSITORY", "ghcr.io/recidiviz/bigquery-emulator")
+EMULATOR_IMAGE_REPOSITORY = os.getenv("BIGQUERY_EMULATOR_REPOSITORY", "ghcr.io/vantaboard/bigquery-emulator")
 EMULATOR_VERSION = os.getenv("BIGQUERY_EMULATOR_VERSION", "latest")
 EMULATOR_IMAGE = f"{EMULATOR_IMAGE_REPOSITORY}:{EMULATOR_VERSION}"
 

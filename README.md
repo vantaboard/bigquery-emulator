@@ -1,8 +1,8 @@
-# BigQuery Emulator (Recidiviz fork)
+# BigQuery Emulator (Vantaboard fork)
 
 The BigQuery emulator provides a way to launch a BigQuery server on your local machine for testing and development.
 
-The Recidiviz fork has many features, performance improvements, and bugfixes that are missing from the upstream repository.
+The Vantaboard fork has many features, performance improvements, and bugfixes that are missing from the upstream repository.
 
 # Features
 
@@ -42,29 +42,23 @@ If you want to know which specific features are supported, please see [here](htt
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
 
 # Installation
-If Go is installed, you can install the latest version with the following command
+
+**Prebuilt-first installs:** this emulator depends on [`go-googlesql`](https://github.com/vantaboard/go-googlesql), whose supported default path is **`googlesql` + `googlesql_unified_prebuilt`** with release prebuilts and the shared stack bootstrap env. For local source builds, prefer sibling checkouts of `bigquery-emulator`, `go-googlesql`, and `go-googlesqlite`, then follow the **Development build modes** below instead of a blind `go install`.
+
+You can download the Docker image with:
 
 ```console
-$ go install github.com/Recidiviz/bigquery-emulator/cmd/bigquery-emulator@latest
+$ docker pull ghcr.io/vantaboard/bigquery-emulator:latest
 ```
 
-The BigQuery emulator depends on [go-googlesql](https://github.com/vantaboard/go-googlesql).
-This library takes a very long time to install because it automatically builds the GoogleSQL library during install.
-It may look like it hangs because it does not log anything during the build process, but if the `clang` process is running in the background, it is working fine, so just wait it out.
-Also, for this reason, the following environment variables must be enabled for installation.
+You can also download release binaries directly from [releases](https://github.com/vantaboard/bigquery-emulator/releases).
+
+For local source builds, set up sibling checkouts plus the shared bootstrap env and build with:
 
 ```console
-CGO_ENABLED=1
-CXX=clang++
+$ direnv allow
+$ task emulator:build
 ```
-
-You can also download the docker image with the following command
-
-```console
-$ docker pull ghcr.io/Recidiviz/bigquery-emulator:latest
-```
-
-You can also download the darwin(amd64) and linux(amd64) binaries directly from [releases](https://github.com/vantaboard/bigquery-emulator/releases)
 
 ## Development build modes
 
@@ -79,7 +73,7 @@ $ task emulator:build
 $ task docker:build
 ```
 
-`emulator:build-linked` uses `go.work.dev` via `GOWORK` (same bootstrap and tags). `docker:build-linked` is an alias for `docker:build` ([`Dockerfile.linked`](Dockerfile.linked) + sibling build contexts).
+`emulator:build-linked` uses `go.work.dev` via `GOWORK` (same bootstrap and tags). `docker:build-linked` is an alias for `docker:build`, and [`Dockerfile.linked`](Dockerfile.linked) is the primary Docker path for CI/release and local sibling workspaces.
 
 For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang++"`** (and on **Linux**, **`mold`** on **`PATH`**), or **`task test:linux`** for CI-parity tests inside **`go-googlesql:dev`**.
 
@@ -87,7 +81,7 @@ For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang
 
 ### Local `go-googlesql` base image (upgrade / CGO cache)
 
-Docker builds use a **pinned Go+clang** base (`GO_GOOGLESQL_BASE`, default `ghcr.io/vantaboard/go-googlesql:0.5.5-recidiviz.3`). To validate against a **local** toolchain image you built from the `go-googlesql` repo (for example tag `go-googlesql:dev`), pass env when invoking Task:
+Docker builds use a **pinned Go+clang** base (`GO_GOOGLESQL_BASE`, default `ghcr.io/vantaboard/go-googlesql:v0.5.6`). To validate against a **local** toolchain image you built from the `go-googlesql` repo (for example tag `go-googlesql:dev`), pass env when invoking Task:
 
 ```console
 $ GO_GOOGLESQL_BASE=go-googlesql:dev task docker:build
@@ -98,7 +92,7 @@ Build the `go-googlesql:dev` image first (`task docker:build-dev` in `go-googles
 
 ### Sequential test runs and shared caches
 
-When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-googlesql`, `go-googlesqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GOCACHE`** and **`GOMODCACHE`** (see [go-googlesql README](https://github.com/vantaboard/go-googlesql#development)) for faster host-native runs.
+When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-googlesql`, `go-googlesqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GO_CACHE_ROOT`** (which backs **`GOCACHE`**, **`GOMODCACHE`**, and **`ccache`**) across the sibling checkouts for faster host-native runs.
 
 **`GO_CACHE_ROOT`:** The [Taskfile](Taskfile.yml) **`task test:linux`** target bind-mounts **`GO_CACHE_ROOT`** (default **`$HOME/.cache/go-googlesql`**) into **`gocache`**, **`gomodcache`**, and **`ccache`** in the container—the same convention as **`go-googlesql`** and **`go-googlesqlite`**. Set **`GO_CACHE_ROOT`** consistently across sibling checkouts so one warm cache serves all three repos.
 
@@ -139,7 +133,7 @@ $ ./bigquery-emulator --project=test
 If you want to use docker image to start emulator, specify like the following.
 
 ```console
-$ docker run -it ghcr.io/Recidiviz/bigquery-emulator:latest --project=test
+$ docker run -it ghcr.io/vantaboard/bigquery-emulator:latest --project=test
 ```
 
 ## How to use from bq client
@@ -152,7 +146,7 @@ $ ./bigquery-emulator --project=test --data-from-yaml=./server/testdata/data.yam
 [bigquery-emulator] gRPC server listening at 0.0.0.0:9060
 ```
 
-* `server/testdata/data.yaml` is [here](https://github.com/Recidiviz/bigquery-emulator/blob/main/server/testdata/data.yaml)
+* `server/testdata/data.yaml` is [here](https://github.com/vantaboard/bigquery-emulator/blob/main/server/testdata/data.yaml)
 
 ### 2. Call endpoint from bq client
 
@@ -220,7 +214,7 @@ result = client.query(sql).to_dataframe(bqstorage_client=read_client)
 # Synopsis
 
 If you use the Go language as a BigQuery client, you can launch the BigQuery emulator on the same process as the testing process.  
-Import `github.com/Recidiviz/bigquery-emulator/server` ( and `github.com/Recidiviz/bigquery-emulator/types` ) and you can use `server.New` API to create the emulator server instance.
+Import `github.com/vantaboard/bigquery-emulator/server` (and `github.com/vantaboard/bigquery-emulator/types`) and you can use `server.New` API to create the emulator server instance.
 
 See the API reference for more information: https://pkg.go.dev/github.com/vantaboard/bigquery-emulator
 
@@ -232,8 +226,8 @@ import (
   "fmt"
 
   "cloud.google.com/go/bigquery"
-  "github.com/Recidiviz/bigquery-emulator/server"
-  "github.com/Recidiviz/bigquery-emulator/types"
+  "github.com/vantaboard/bigquery-emulator/server"
+  "github.com/vantaboard/bigquery-emulator/types"
   "google.golang.org/api/iterator"
   "google.golang.org/api/option"
 )

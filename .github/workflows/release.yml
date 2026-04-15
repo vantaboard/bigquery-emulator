@@ -3,6 +3,9 @@ on:
   push:
     tags:
       - v*
+defaults:
+  run:
+    shell: bash
 jobs:
   publish:
     name: Publish for ${{ matrix.os }}
@@ -14,7 +17,7 @@ jobs:
             artifact_name: bigquery-emulator
             asset_name: bigquery-emulator-linux-amd64
             go-version: "1.26.0"
-          - os: macos-latest
+          - os: macos-15-intel
             artifact_name: bigquery-emulator
             asset_name: bigquery-emulator-darwin-amd64
             go-version: "1.26.0"
@@ -22,17 +25,25 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v6
-    - name: Resolve go-googlesql version
-      id: gsql
+    - name: Resolve stack versions
+      id: ver
       run: |
-        v=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
-        echo "v=${v}" >> "$GITHUB_OUTPUT"
-    - name: Checkout go-googlesql (stack-bootstrap)
+        gsql=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
+        gsqlite=$(awk '/github.com\/vantaboard\/go-googlesqlite /{print $2; exit}' go.mod)
+        echo "gsql=${gsql}" >> "$GITHUB_OUTPUT"
+        echo "gsqlite=${gsqlite}" >> "$GITHUB_OUTPUT"
+    - name: Checkout go-googlesql
       uses: actions/checkout@v6
       with:
         repository: vantaboard/go-googlesql
-        ref: ${{ steps.gsql.outputs.v }}
+        ref: ${{ steps.ver.outputs.gsql }}
         path: go-googlesql
+    - name: Checkout go-googlesqlite
+      uses: actions/checkout@v6
+      with:
+        repository: vantaboard/go-googlesqlite
+        ref: ${{ steps.ver.outputs.gsqlite }}
+        path: go-googlesqlite
     - name: Install Task
       uses: arduino/setup-task@v2
       with:
@@ -42,11 +53,26 @@ jobs:
       with:
         go-version: ${{ matrix.go-version }}
         cache: true
+        cache-dependency-path: go.sum
+    - name: Install clang (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends clang
+    - name: Install bazelisk
+      run: |
+        go install github.com/bazelbuild/bazelisk@v1.20.0
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: extract version from tags
       id: meta
       run: |
-        echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+        echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+    - name: Default prebuilts (release tarball or Bazel)
+      env:
+        GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+      run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
     - uses: rui314/setup-mold@v1
+      if: runner.os == 'Linux'
     - name: cache for linux
       uses: actions/cache@v4
       if: runner.os == 'Linux'
@@ -72,6 +98,7 @@ jobs:
       env:
         VERSION: ${{ steps.meta.outputs.VERSION }}
         GO_GOOGLESQL_ROOT: ${{ github.workspace }}/go-googlesql
+        GO_GOOGLESQLITE_ROOT: ${{ github.workspace }}/go-googlesqlite
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:
