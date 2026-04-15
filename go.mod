@@ -17,7 +17,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/parquet-go/parquet-go v0.24.0
-	github.com/vantaboard/go-googlesql v0.5.6
+	github.com/vantaboard/go-googlesql v0.5.8
 	github.com/vantaboard/go-googlesqlite v0.17.3
 	go.uber.org/zap v1.21.0
 	golang.org/x/sync v0.16.0
