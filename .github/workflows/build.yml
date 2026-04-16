@@ -3,6 +3,13 @@ on:
   push:
     tags:
       - v*
+
+# GHCR push requires packages:write on GITHUB_TOKEN. Set at workflow level so every job
+# inherits it (matches GitHub's guidance for publishing images).
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   REGISTRY_IMAGE: ghcr.io/vantaboard/bigquery-emulator
@@ -12,9 +19,6 @@ jobs:
   # and stores all the image digests as Github Actions build output artifacts so that we can referenced them
   # in the `merge-platform-images` job below
   build-image:
-    permissions:
-      contents: read
-      packages: write
     strategy:
       matrix:
         include:
@@ -119,9 +123,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build-image
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
