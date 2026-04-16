@@ -84,7 +84,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/bazel
-          key: ${{ runner.os }}-bazel-googlesql-${{ hashFiles('go-googlesql/internal/cmd/updater/googlesql.ref', 'go-googlesql/internal/cmd/updater/Dockerfile', 'go-googlesql/go.mod', 'go-googlesql/go.sum') }}
+          key: ${{ runner.os }}-bazel-googlesql-${{ hashFiles('go-googlesql/scripts/maint-pins/googlesql.ref', 'go-googlesql/go.mod', 'go-googlesql/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-bazel-googlesql-
       - name: Default prebuilts (release tarball or Bazel)
