@@ -82,6 +82,21 @@ jobs:
         env:
           GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
         run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+      # CGO links ${SRCDIR}/lib/libprotobuf_cgo.a and lib/libgooglesql.a; release tarballs may omit
+      # those symlinks (see go-googlesql ensure_prebuilt_internal_symlinks). Safe on Linux and macOS.
+      - name: Ensure stable prebuilt symlinks (lib/*.a)
+        working-directory: go-googlesql
+        run: |
+          set -euo pipefail
+          ga="$(go env GOOS)_$(go env GOARCH)"
+          p="internal/ccall/go-protobuf/protobuf/lib"
+          if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+            ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+          fi
+          u="internal/ccall/go-googlesql-unified/lib"
+          if [[ -f "$u/$ga/libgooglesql.a" ]]; then
+            ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
+          fi
       - name: Point go.mod at sibling stack checkouts
         # CGO #cgo LDFLAGS use ${SRCDIR} under the resolved module; prebuilts live only in the
         # git checkout, not in the module proxy zip. Replace matches local dev (docs/prebuilt-cgo.md).

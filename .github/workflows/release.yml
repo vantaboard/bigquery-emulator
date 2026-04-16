@@ -71,6 +71,19 @@ jobs:
       env:
         GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+    - name: Ensure stable prebuilt symlinks (lib/*.a)
+      working-directory: go-googlesql
+      run: |
+        set -euo pipefail
+        ga="$(go env GOOS)_$(go env GOARCH)"
+        p="internal/ccall/go-protobuf/protobuf/lib"
+        if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+          ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+        fi
+        u="internal/ccall/go-googlesql-unified/lib"
+        if [[ -f "$u/$ga/libgooglesql.a" ]]; then
+          ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
+        fi
     - name: Point go.mod at sibling stack checkouts
       run: |
         go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
