@@ -84,6 +84,10 @@ jobs:
         if [[ -f "$u/$ga/libgooglesql.a" ]]; then
           ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
         fi
+        if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+          ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+          ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+        fi
     - name: Point go.mod at sibling stack checkouts
       run: |
         go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"

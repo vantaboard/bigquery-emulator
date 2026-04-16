@@ -97,6 +97,10 @@ jobs:
           if [[ -f "$u/$ga/libgooglesql.a" ]]; then
             ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
           fi
+          if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+            ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+            ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+          fi
       - name: Point go.mod at sibling stack checkouts
         # CGO #cgo LDFLAGS use ${SRCDIR} under the resolved module; prebuilts live only in the
         # git checkout, not in the module proxy zip. Replace matches local dev (docs/prebuilt-cgo.md).
