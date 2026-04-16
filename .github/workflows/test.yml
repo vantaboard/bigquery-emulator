@@ -64,8 +64,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
-      - uses: rui314/setup-mold@v1
-        if: runner.os == 'Linux'
+      # Do not install mold: go-googlesql CGO uses -l:libcxx_prebuilt.a (GNU ld verbatim -l:).
+      # mold mishandles that form (library not found: :libcxx_prebuilt.a); default ld.bfd works.
       - name: Install bazelisk
         run: |
           go install github.com/bazelbuild/bazelisk@v1.20.0

@@ -76,8 +76,7 @@ jobs:
         go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
         go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
         go mod download
-    - uses: rui314/setup-mold@v1
-      if: runner.os == 'Linux'
+    # Do not use mold: go-googlesql CGO -l:libcxx_prebuilt.a is incompatible with mold's -l: parsing.
     - name: cache for linux
       uses: actions/cache@v4
       if: runner.os == 'Linux'
