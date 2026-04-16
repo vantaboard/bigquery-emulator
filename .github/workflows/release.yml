@@ -54,11 +54,11 @@ jobs:
         go-version: ${{ matrix.go-version }}
         cache: true
         cache-dependency-path: go.sum
-    - name: Install clang (Linux)
+    - name: Install clang and libc++ (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends clang
+        sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
     - name: Install bazelisk
       run: |
         go install github.com/bazelbuild/bazelisk@v1.20.0

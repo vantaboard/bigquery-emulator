@@ -59,11 +59,11 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: 3.x
-      - name: Install clang (Linux)
+      - name: Install clang and libc++ (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang
+          sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
       - uses: rui314/setup-mold@v1
         if: runner.os == 'Linux'
       - name: Install bazelisk
@@ -139,10 +139,10 @@ jobs:
       uses: arduino/setup-task@v2
       with:
         version: 3.x
-    - name: Install clang
+    - name: Install clang and libc++
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends clang
+        sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
     - name: Install bazelisk
       run: |
         go install github.com/bazelbuild/bazelisk@v1.20.0
@@ -228,10 +228,10 @@ jobs:
       uses: arduino/setup-task@v2
       with:
         version: 3.x
-    - name: Install clang
+    - name: Install clang and libc++
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends clang
+        sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
     - name: Install bazelisk
       run: |
         go install github.com/bazelbuild/bazelisk@v1.20.0
