@@ -71,6 +71,15 @@ jobs:
         run: |
           go install github.com/bazelbuild/bazelisk@v1.20.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      # Bazel 7.x–8.x on macOS default to /private/var/tmp, not ~/.cache/bazel, so actions/cache
+      # would warn on save ("Path ... does not exist"). Align output root with Linux + cache path.
+      - name: macOS Bazel output root (match ~/.cache/bazel cache)
+        if: runner.os == 'macOS'
+        run: echo "BAZELISK_STARTUP_OPTS=--output_user_root=${HOME}/.cache/bazel" >> "$GITHUB_ENV"
+      # Tarball prebuilts skip Bazel entirely; Bazel also only creates ~/.cache/bazel after first run.
+      # Post Cache warns if the path is missing at job end — ensure it exists (match go-googlesql go.yml).
+      - name: Ensure Bazel cache directory exists
+        run: mkdir -p "$HOME/.cache/bazel"
       - name: Cache Bazel
         uses: actions/cache@v4
         with:
