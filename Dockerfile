@@ -38,7 +38,8 @@ ENV CC=clang
 ENV CXX=clang++
 ENV CGO_CXXFLAGS=-stdlib=libc++
 ENV CGO_LDFLAGS_ALLOW="-Wl,--no-gc-sections|-Wl,--allow-multiple-definition|-fuse-ld=mold|-Wl,--whole-archive|-Wl,--no-whole-archive|-Wl,--start-group|-Wl,--end-group|-stdlib=libc\+\+"
-ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -fuse-ld=mold -stdlib=libc++"
+# Do not use mold: unified prebuilt CGO passes -l:libcxx_prebuilt.a; mold mis-parses it (see Dockerfile.linked).
+ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++"
 
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \

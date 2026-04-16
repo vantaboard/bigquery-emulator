@@ -32,6 +32,11 @@ COPY . ./bigquery-emulator
 
 WORKDIR /work/bigquery-emulator
 
+# The go-googlesql base image includes mold; go-googlesql-env.sh adds -fuse-ld=mold when mold
+# exists. mold mishandles CGO -l:libcxx_prebuilt.a (GNU ld -l:FILE). Preset CGO_LDFLAGS so
+# bootstrap keeps GNU ld — same as .github/workflows/test.yml ("Do not install mold").
+ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++"
+
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOWORK=/work/bigquery-emulator/go.work.dev \
