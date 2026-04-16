@@ -187,6 +187,9 @@ jobs:
       env:
         GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+    - name: Free disk space (Docker / BuildKit)
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android
     - name: setup docker buildx
       uses: docker/setup-buildx-action@v3
     - name: build docker image
@@ -276,6 +279,9 @@ jobs:
       env:
         GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+    - name: Free disk space (Docker / BuildKit)
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android
     - name: setup docker buildx
       uses: docker/setup-buildx-action@v3
     - name: build docker image
