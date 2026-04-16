@@ -1,0 +1,94 @@
+version: "3"
+
+# https://taskfile.dev — tasks source `.envrc` (GO_GOOGLESQL_ROOT, GO_GOOGLESQLITE_ROOT, stack-bootstrap).
+
+vars:
+  DOCKER_DEV_IMAGE: go-googlesql:dev
+
+tasks:
+  default:
+    desc: Show common tasks (full list task --list-all)
+    cmds:
+      - |
+        echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
+        echo "Common: task emulator:build | task docker:build | task test:linux"
+
+  emulator:build:
+    desc: Build bigquery-emulator binary (unified prebuilt tags)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+
+  emulator:build-linked:
+    desc: Build using go.work.dev (set GOWORK)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        export GOWORK="$PWD/go.work.dev"
+        go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+
+  docker:build:
+    desc: Dockerfile.linked + sibling build contexts
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        VERSION="${VERSION:-latest}"
+        if [ -n "${GO_GOOGLESQL_BASE:-}" ]; then
+          if [[ "$GO_GOOGLESQL_BASE" =~ ^(.+):([^:]+)$ ]]; then
+            GO_GOOGLESQL_IMAGE="${BASH_REMATCH[1]}"
+            GO_GOOGLESQL_TAG="${BASH_REMATCH[2]}"
+          else
+            echo "task docker:build: GO_GOOGLESQL_BASE must be image:tag (e.g. ghcr.io/vantaboard/go-googlesql:v0.5.6)" >&2
+            exit 1
+          fi
+        else
+          GO_GOOGLESQL_IMAGE="${GO_GOOGLESQL_IMAGE:-ghcr.io/vantaboard/go-googlesql}"
+          GO_GOOGLESQL_TAG="${GO_GOOGLESQL_TAG:-v0.5.6}"
+        fi
+        docker build -t bigquery-emulator -f Dockerfile.linked . \
+          --build-arg VERSION="$VERSION" \
+          --build-arg GO_GOOGLESQL_IMAGE="$GO_GOOGLESQL_IMAGE" \
+          --build-arg GO_GOOGLESQL_TAG="$GO_GOOGLESQL_TAG" \
+          --build-context go_googlesql="$GO_GOOGLESQL_ROOT" \
+          --build-context go_googlesqlite="$GO_GOOGLESQLITE_ROOT"
+
+  docker:build-linked:
+    desc: Alias for docker:build
+    cmds:
+      - task: docker:build
+
+  docker:build-dev-googlesql:
+    desc: Build go-googlesql:dev in the sibling checkout (required for test:linux)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        task -d "$GO_GOOGLESQL_ROOT" docker:build-dev
+
+  test:linux:
+    desc: Run go test in go-googlesql:dev (CI parity; GOOGLESQL_BUILD_TAGS; clear image CGO_LDFLAGS so bootstrap supplies link flags)
+    deps: [docker:build-dev-googlesql]
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        docker run --rm \
+          -e CGO_ENABLED=1 -e CC=clang -e CXX=clang++ \
+          -e CGO_LDFLAGS= \
+          -e GOPROXY=https://proxy.golang.org,direct \
+          -e GOSUMDB=sum.golang.org \
+          -e CCACHE_DIR=/root/.ccache -e CCACHE_COMPRESS=1 \
+          -e GOWORK=/work/bigquery-emulator/go.work.dev \
+          -v "$PWD":/work/bigquery-emulator \
+          -v "$GO_GOOGLESQL_ROOT":/work/go-googlesql \
+          -v "$GO_GOOGLESQLITE_ROOT":/work/go-googlesqlite \
+          -v "$GO_CACHE_ROOT/gocache":/root/.cache/go-build \
+          -v "$GO_CACHE_ROOT/gomodcache":/go/pkg/mod \
+          -v "$GO_CACHE_ROOT/ccache":/root/.ccache \
+          -w /work/bigquery-emulator \
+          {{.DOCKER_DEV_IMAGE}} \
+          bash -c 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go test -tags "$GOOGLESQL_BUILD_TAGS" -v ./... -count=1'

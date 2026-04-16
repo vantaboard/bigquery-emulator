@@ -5,7 +5,7 @@ on:
       - v*
 env:
   REGISTRY: ghcr.io
-  REGISTRY_IMAGE: ghcr.io/recidiviz/bigquery-emulator
+  REGISTRY_IMAGE: ghcr.io/vantaboard/bigquery-emulator
 
 jobs:
   # For each platform in the matrix, creates and pushes a platform-compatible Docker image to the registry
@@ -28,45 +28,76 @@ jobs:
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v6
+      - name: Resolve stack versions
+        id: ver
+        run: |
+          gsql=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
+          gsqlite=$(awk '/github.com\/vantaboard\/go-googlesqlite /{print $2; exit}' go.mod)
+          echo "gsql=${gsql}" >> "$GITHUB_OUTPUT"
+          echo "gsqlite=${gsqlite}" >> "$GITHUB_OUTPUT"
+      - name: Checkout go-googlesql
+        uses: actions/checkout@v6
+        with:
+          repository: vantaboard/go-googlesql
+          ref: ${{ steps.ver.outputs.gsql }}
+          path: go-googlesql
+      - name: Checkout go-googlesqlite
+        uses: actions/checkout@v6
+        with:
+          repository: vantaboard/go-googlesqlite
+          ref: ${{ steps.ver.outputs.gsqlite }}
+          path: go-googlesqlite
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Install Task
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang
+      - name: Install bazelisk
+        run: |
+          go install github.com/bazelbuild/bazelisk@v1.20.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Default prebuilts (release tarball or Bazel)
+        env:
+          GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+        run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+      - name: Free disk space (Docker / BuildKit)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
       - name: setup docker buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: cache for linux
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: runner.os == 'Linux'
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{matrix.asset_name}}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{matrix.asset_name}}-
-      - name: cache for macOS
-        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
-        if: runner.os == 'macOS'
-        with:
-          path: |
-            ~/Library/Caches/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{matrix.asset_name}}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{matrix.asset_name}}
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      - uses: docker/build-push-action@v6
         name: Build and push by digest
         id: build
         with:
           context: .
+          file: ./Dockerfile.linked
           push: true
           tags: ${{ env.REGISTRY_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           platforms: ${{ matrix.platform }}
-          cache-from: type=local,src=~/.cache/go-build
+          build-args: |
+            GO_GOOGLESQL_TAG=${{ steps.ver.outputs.gsql }}
+          build-contexts: |
+            go_googlesql=./go-googlesql
+            go_googlesqlite=./go-googlesqlite
+          cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.asset_name }}
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.asset_name }}
 
       - name: Export digest
         run: |
@@ -75,7 +106,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v4
         with:
           name: digests-${{ matrix.asset_name }}
           path: ${{ runner.temp }}/digests/*
@@ -93,16 +124,16 @@ jobs:
       packages: write
     steps:
       - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -110,7 +141,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |

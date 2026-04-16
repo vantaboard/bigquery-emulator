@@ -1,9 +1,6 @@
 /**
  * Test for empty array handling in REPEATED fields.
- *
- * This test reproduces the issue described in:
- * https://github.com/goccy/bigquery-emulator/issues/137
- *
+ * 
  * When inserting an empty array into a REPEATED field and then querying it back,
  * the Node.js BigQuery client crashes because the emulator returns null instead
  * of an empty array structure.

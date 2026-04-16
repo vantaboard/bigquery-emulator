@@ -20,7 +20,7 @@ export const BQ_EMULATOR_PROJECT_ID = 'bigquery-emulator-test';
 function getEmulatorImage(): string {
   const repository =
     process.env.BIGQUERY_EMULATOR_REPOSITORY ||
-    'ghcr.io/recidiviz/bigquery-emulator';
+    'ghcr.io/vantaboard/bigquery-emulator';
   const version = process.env.BIGQUERY_EMULATOR_VERSION || 'latest';
   return `${repository}:${version}`;
 }

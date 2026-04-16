@@ -14,10 +14,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/internal/contentdata"
-	"github.com/goccy/bigquery-emulator/internal/metadata"
 	"github.com/gorilla/mux"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 )
 
 type Server struct {
@@ -47,7 +47,7 @@ func New(storage Storage) (*Server, error) {
 			return os.Remove(f.Name())
 		}
 	}
-	db, err := sql.Open("zetasqlite", string(storage))
+	db, err := sql.Open("googlesqlite", string(storage))
 	if err != nil {
 		return nil, err
 	}

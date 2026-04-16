@@ -3,6 +3,9 @@ on:
   push:
     tags:
       - v*
+defaults:
+  run:
+    shell: bash
 jobs:
   publish:
     name: Publish for ${{ matrix.os }}
@@ -13,27 +16,86 @@ jobs:
           - os: ubuntu-latest
             artifact_name: bigquery-emulator
             asset_name: bigquery-emulator-linux-amd64
-            go-version: "1.24.0"
-          - os: macos-latest
+            go-version: "1.26.0"
+          - os: macos-15-intel
             artifact_name: bigquery-emulator
             asset_name: bigquery-emulator-darwin-amd64
-            go-version: "1.24.0"
+            go-version: "1.26.0"
 
     steps:
     - name: checkout
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@v6
+    - name: Resolve stack versions
+      id: ver
+      run: |
+        gsql=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
+        gsqlite=$(awk '/github.com\/vantaboard\/go-googlesqlite /{print $2; exit}' go.mod)
+        echo "gsql=${gsql}" >> "$GITHUB_OUTPUT"
+        echo "gsqlite=${gsqlite}" >> "$GITHUB_OUTPUT"
+    - name: Checkout go-googlesql
+      uses: actions/checkout@v6
+      with:
+        repository: vantaboard/go-googlesql
+        ref: ${{ steps.ver.outputs.gsql }}
+        path: go-googlesql
+    - name: Checkout go-googlesqlite
+      uses: actions/checkout@v6
+      with:
+        repository: vantaboard/go-googlesqlite
+        ref: ${{ steps.ver.outputs.gsqlite }}
+        path: go-googlesqlite
     - name: setup Go ${{ matrix.go-version }}
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
+      uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
         cache: true
+        cache-dependency-path: go.sum
+    - name: Install Task
+      run: |
+        go install github.com/go-task/task/v3/cmd/task@latest
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+    - name: Install clang and libc++ (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends clang libc++-dev libc++abi-dev
+    - name: Install bazelisk
+      run: |
+        go install github.com/bazelbuild/bazelisk@v1.20.0
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: extract version from tags
       id: meta
       run: |
-        echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
-    - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+        echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+    - name: Default prebuilts (release tarball or Bazel)
+      env:
+        GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+      run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+    - name: Ensure stable prebuilt symlinks (lib/*.a)
+      working-directory: go-googlesql
+      run: |
+        set -euo pipefail
+        ga="$(go env GOOS)_$(go env GOARCH)"
+        p="internal/ccall/go-protobuf/protobuf/lib"
+        if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+          ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+        fi
+        u="internal/ccall/go-googlesql-unified/lib"
+        if [[ -f "$u/$ga/libgooglesql.a" ]]; then
+          ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
+        fi
+        if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+          ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+          ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+        fi
+    - name: Point go.mod at sibling stack checkouts
+      run: |
+        go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
+        go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
+        go mod download
+    # Do not use mold: go-googlesql CGO -l:libcxx_prebuilt.a is incompatible with mold's -l: parsing.
     - name: cache for linux
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+      uses: actions/cache@v4
       if: runner.os == 'Linux'
       with:
         path: |
@@ -43,7 +105,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: cache for macOS
-      uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+      uses: actions/cache@v4
       if: runner.os == 'macOS'
       with:
         path: |
@@ -53,11 +115,13 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
     - name: build
-      run: make emulator/build
+      run: task emulator:build
       env:
         VERSION: ${{ steps.meta.outputs.VERSION }}
+        GO_GOOGLESQL_ROOT: ${{ github.workspace }}/go-googlesql
+        GO_GOOGLESQLITE_ROOT: ${{ github.workspace }}/go-googlesqlite
     - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@b98a3b12e86552593f3e4e577ca8a62aa2f3f22b # v2
+      uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: ${{ matrix.artifact_name }}

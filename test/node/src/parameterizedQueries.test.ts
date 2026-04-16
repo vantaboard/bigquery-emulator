@@ -348,7 +348,6 @@ describe('Parameterized Queries (Issue #58)', () => {
 
   describe('Issue #234: UNNEST with Array Parameters', () => {
     it('should handle UNNEST with ARRAY<STRING> parameter', async () => {
-      // https://github.com/goccy/bigquery-emulator/issues/234
       // Tests that array parameters work with UNNEST
       const query = `
         SELECT *
@@ -415,7 +414,6 @@ describe('Parameterized Queries (Issue #58)', () => {
 
   describe('Issue #312: Null Parameter Handling', () => {
     it('should handle null string parameter with IS NULL check', async () => {
-      // https://github.com/goccy/bigquery-emulator/issues/312
       // Tests that null parameters work correctly in IS NULL conditions
       const query = `
         SELECT id, name
@@ -546,7 +544,7 @@ describe('Parameterized Queries (Issue #58)', () => {
     it('should handle positional parameter (?) in WHERE clause', async () => {
       // Tests resolution of https://github.com/Recidiviz/bigquery-emulator/issues/69
       // Verifies that positional query parameters work correctly and are not broken by allow_undeclared_parameters.
-      // According to ZetaSQL docs: "When allow_undeclared_parameters is true, no positional parameters may be provided."
+      // According to GoogleSQL docs: "When allow_undeclared_parameters is true, no positional parameters may be provided."
 
       const query = `
         SELECT id, name

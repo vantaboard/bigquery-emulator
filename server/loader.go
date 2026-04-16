@@ -2,8 +2,8 @@ package server
 
 import (
 	"context"
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/types"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 func (s *Server) addProjects(ctx context.Context, projects []*types.Project) error {

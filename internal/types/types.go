@@ -3,8 +3,8 @@ package types
 import (
 	"fmt"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/goccy/bigquery-emulator/types"
-	"github.com/goccy/go-zetasqlite"
+	"github.com/vantaboard/bigquery-emulator/types"
+	"github.com/vantaboard/go-googlesqlite"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 )
 
@@ -29,13 +29,13 @@ type (
 	}
 
 	QueryResponse struct {
-		JobReference   *bigqueryv2.JobReference   `json:"jobReference"`
-		Schema         *bigqueryv2.TableSchema    `json:"schema"`
-		Rows           []*TableRow                `json:"rows"`
-		TotalRows      uint64                     `json:"totalRows,string"`
-		JobComplete    bool                       `json:"jobComplete"`
-		TotalBytes     int64                      `json:"-"`
-		ChangedCatalog *zetasqlite.ChangedCatalog `json:"-"`
+		JobReference   *bigqueryv2.JobReference     `json:"jobReference"`
+		Schema         *bigqueryv2.TableSchema      `json:"schema"`
+		Rows           []*TableRow                  `json:"rows"`
+		TotalRows      uint64                       `json:"totalRows,string"`
+		JobComplete    bool                         `json:"jobComplete"`
+		TotalBytes     int64                        `json:"-"`
+		ChangedCatalog *googlesqlite.ChangedCatalog `json:"-"`
 	}
 
 	TableDataList struct {
@@ -239,7 +239,7 @@ func Format(schema *bigqueryv2.TableSchema, rows []*TableRow, useInt64Timestamp 
 		cells := make([]*TableCell, 0, len(row.F))
 		for colIdx, cell := range row.F {
 			if schema.Fields[colIdx].Type == "TIMESTAMP" && cell.V != nil {
-				t, _ := zetasqlite.TimeFromTimestampValue(cell.V.(string))
+				t, _ := googlesqlite.TimeFromTimestampValue(cell.V.(string))
 				cells = append(cells, &TableCell{
 					V: fmt.Sprint(t.UnixMicro()),
 				})

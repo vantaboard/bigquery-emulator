@@ -20,26 +20,33 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goccy/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
 
 	"cloud.google.com/go/storage"
 	"github.com/goccy/go-json"
-	"github.com/goccy/go-zetasqlite"
+	"github.com/vantaboard/go-googlesqlite"
 	"go.uber.org/zap"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
-	"github.com/goccy/bigquery-emulator/internal/connection"
-	"github.com/goccy/bigquery-emulator/internal/logger"
-	"github.com/goccy/bigquery-emulator/internal/metadata"
-	internaltypes "github.com/goccy/bigquery-emulator/internal/types"
-	"github.com/goccy/bigquery-emulator/types"
 	"github.com/parquet-go/parquet-go"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 func errorResponse(ctx context.Context, w http.ResponseWriter, e *ServerError) {
-	logger.Logger(ctx).WithOptions(zap.AddCallerSkip(1)).Error(string(e.Reason), zap.Error(e))
+	fields := []zap.Field{zap.Error(e)}
+	fields = append(fields, logger.HTTPRequestFields(ctx)...)
+	fields = append(fields, logger.LogFields(ctx)...)
+	fields = append(fields, ResourceLogFields(ctx)...)
+	if err := ctx.Err(); err != nil {
+		fields = append(fields, zap.NamedError("request_context_err", err))
+	}
+	logger.Logger(ctx).WithOptions(zap.AddCallerSkip(1)).Error(string(e.Reason), fields...)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(e.Status)
 	w.Write(e.Response())
@@ -219,6 +226,11 @@ func (h *uploadHandler) serveMultipart(w http.ResponseWriter, r *http.Request) {
 		errorResponse(ctx, w, errInvalid(fmt.Sprintf("failed to decode job: %s", err.Error())))
 		return
 	}
+	ctx = logger.WithLogFields(ctx,
+		zap.String("upload_type", "multipart"),
+		zap.String("upload_step", "insert_job"),
+		zap.String("job_id", job.JobReference.JobId),
+	)
 	uploadJob, err := h.Handle(ctx, &uploadRequest{
 		server:  server,
 		project: project,
@@ -233,6 +245,12 @@ func (h *uploadHandler) serveMultipart(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		errorResponse(ctx, w, errInvalid(fmt.Sprintf("multipart request is invalid: %s", err.Error())))
 		return
+	}
+	ctx = logger.WithLogFields(ctx,
+		zap.String("upload_step", "load_data"),
+	)
+	if c := uploadJob.Content(); c != nil && c.Configuration != nil && c.Configuration.Load != nil {
+		ctx = logger.WithLogFields(ctx, zap.String("source_format", c.Configuration.Load.SourceFormat))
 	}
 	u := &uploadContentHandler{}
 	err = u.Handle(ctx, &uploadContentRequest{
@@ -257,6 +275,11 @@ func (h *uploadHandler) serveResumable(w http.ResponseWriter, r *http.Request) {
 		errorResponse(ctx, w, errInvalid(fmt.Sprintf("failed to decode job: %s", err.Error())))
 		return
 	}
+	ctx = logger.WithLogFields(ctx,
+		zap.String("upload_type", "resumable"),
+		zap.String("upload_step", "create_session"),
+		zap.String("job_id", job.JobReference.JobId),
+	)
 	res, err := h.Handle(ctx, &uploadRequest{
 		server:  server,
 		project: project,
@@ -274,8 +297,6 @@ func (h *uploadHandler) serveResumable(w http.ResponseWriter, r *http.Request) {
 	// client thinks it's connecting to and use that. This also handles the
 	// case where we're behind a NAT (e.g. in a container), as we don't
 	// otherwise know what our external name is.
-	//
-	// See https://github.com/goccy/bigquery-emulator/issues/160
 	addr := fmt.Sprintf("http://%s", r.Host)
 
 	w.Header().Add(
@@ -305,7 +326,10 @@ func (h *uploadHandler) Handle(ctx context.Context, r *uploadRequest) (*metadata
 	defer tx.RollbackIfNotCommitted()
 	job := metadata.NewJob(r.server.metaRepo, r.project.ID, r.job.JobReference.JobId, r.job.ToJob(), nil, nil)
 	if err := r.project.AddJob(ctx, tx.Tx(), job); err != nil {
-		return nil, fmt.Errorf("failed to add job: %w", err)
+		return nil, fmt.Errorf(
+			"persist load job metadata (project_id=%s job_id=%s): %w",
+			r.project.ID, job.ID, err,
+		)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit job: %w", err)
@@ -343,6 +367,14 @@ func (h *uploadContentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	if job == nil {
 		errorResponse(ctx, w, errJobInternalError(fmt.Sprintf("job %s not found", jobID)))
 		return
+	}
+	ctx = logger.WithLogFields(ctx,
+		zap.String("upload_type", "resumable"),
+		zap.String("upload_step", "load_data"),
+		zap.String("job_id", job.ID),
+	)
+	if c := job.Content(); c != nil && c.Configuration != nil && c.Configuration.Load != nil {
+		ctx = logger.WithLogFields(ctx, zap.String("source_format", c.Configuration.Load.SourceFormat))
 	}
 	if err := h.Handle(ctx, &uploadContentRequest{
 		server:  server,
@@ -1021,10 +1053,20 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 		}
 		decoder := json.NewDecoder(r.reader)
 		decoder.UseNumber()
+		recordNum := 0
 		for decoder.More() {
+			recordNum++
 			d := make(map[string]interface{})
 			if err := decoder.Decode(&d); err != nil {
-				return err
+				return fmt.Errorf(
+					"decode NDJSON record %d (sourceFormat=%s, job_id=%s, destination=%s.%s): %w",
+					recordNum,
+					load.SourceFormat,
+					r.job.ID,
+					tableRef.DatasetId,
+					tableRef.TableId,
+					err,
+				)
 			}
 			h.normalizeColumnNameForJSONData(columnMap, d)
 			data = append(data, d)
@@ -2215,7 +2257,7 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 	return job, nil
 }
 
-func syncCatalog(ctx context.Context, server *Server, cat *zetasqlite.ChangedCatalog) error {
+func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
 	for _, table := range cat.Table.Added {
 		if err := addTableMetadata(ctx, server, table); err != nil {
 			return err
@@ -2229,7 +2271,7 @@ func syncCatalog(ctx context.Context, server *Server, cat *zetasqlite.ChangedCat
 	return nil
 }
 
-func addTableMetadata(ctx context.Context, server *Server, spec *zetasqlite.TableSpec) error {
+func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
 	if len(spec.NamePath) != 3 {
 		return fmt.Errorf("unexpected table name path: %v", spec.NamePath)
 	}
@@ -2249,11 +2291,11 @@ func addTableMetadata(ctx context.Context, server *Server, spec *zetasqlite.Tabl
 	}
 	fields := make([]*bigqueryv2.TableFieldSchema, 0, len(spec.Columns))
 	for _, column := range spec.Columns {
-		zetasqlType, err := column.Type.ToZetaSQLType()
+		googlesqlType, err := column.Type.ToGoogleSQLType()
 		if err != nil {
 			return err
 		}
-		fields = append(fields, types.TableFieldSchemaFromZetaSQLType(column.Name, zetasqlType))
+		fields = append(fields, types.TableFieldSchemaFromType(column.Name, googlesqlType))
 	}
 	conn := connectionFromContext(ctx).ConfigureScope(projectID, datasetID)
 	tx, err := conn.Begin(ctx)
@@ -2283,7 +2325,7 @@ func addTableMetadata(ctx context.Context, server *Server, spec *zetasqlite.Tabl
 	return nil
 }
 
-func deleteTableMetadata(ctx context.Context, server *Server, spec *zetasqlite.TableSpec) error {
+func deleteTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
 	if len(spec.NamePath) != 3 {
 		return fmt.Errorf("unexpected table name path: %v", spec.NamePath)
 	}

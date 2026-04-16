@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/goccy/bigquery-emulator/types"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 func TestIsNullValue(t *testing.T) {

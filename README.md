@@ -1,8 +1,8 @@
-# BigQuery Emulator (Recidiviz fork)
+# BigQuery Emulator (Vantaboard fork)
 
 The BigQuery emulator provides a way to launch a BigQuery server on your local machine for testing and development.
 
-The Recidiviz fork has many features, performance improvements, and bugfixes that are missing from the upstream repository.
+The Vantaboard fork has many features, performance improvements, and bugfixes that are missing from the upstream repository.
 
 # Features
 
@@ -35,36 +35,68 @@ For example, it has the following features.
 - Templated Argument Function
 - JavaScript UDF
 
-If you want to know which specific features are supported, please see [here](https://github.com/Recidiviz/go-zetasqlite#status)
+If you want to know which specific features are supported, please see [here](https://github.com/vantaboard/go-googlesqlite#status)
 
 # Sponsor 
 
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
 
 # Installation
-If Go is installed, you can install the latest version with the following command
+
+**Prebuilt-first installs:** this emulator depends on [`go-googlesql`](https://github.com/vantaboard/go-googlesql), whose supported default path is **`googlesql` + `googlesql_unified_prebuilt`** with release prebuilts and the shared stack bootstrap env. For local source builds, prefer sibling checkouts of `bigquery-emulator`, `go-googlesql`, and `go-googlesqlite`, then follow the **Development build modes** below instead of a blind `go install`.
+
+You can download the Docker image with:
 
 ```console
-$ go install github.com/Recidiviz/bigquery-emulator/cmd/bigquery-emulator@latest
+$ docker pull ghcr.io/vantaboard/bigquery-emulator:latest
 ```
 
-The BigQuery emulator depends on [go-zetasql](https://github.com/goccy/go-zetasql).
-This library takes a very long time to install because it automatically builds the ZetaSQL library during install.
-It may look like it hangs because it does not log anything during the build process, but if the `clang` process is running in the background, it is working fine, so just wait it out.
-Also, for this reason, the following environment variables must be enabled for installation.
+You can also download release binaries directly from [releases](https://github.com/vantaboard/bigquery-emulator/releases).
+
+For local source builds, set up sibling checkouts plus the shared bootstrap env and build with:
 
 ```console
-CGO_ENABLED=1
-CXX=clang++
+$ direnv allow
+$ task emulator:build
 ```
 
-You can also download the docker image with the following command
+## Development build modes
+
+**Default: unified prebuilt stack (`googlesql` + `googlesql_unified_prebuilt`):** Native archives, release tarball **`go-googlesql-prebuilts-default-linux_amd64-<tag>.tar.gz`**, and downstream checklist live in [`go-googlesql` `docs/prebuilt-cgo.md`](https://github.com/vantaboard/go-googlesql/blob/main/docs/prebuilt-cgo.md). When you bump `github.com/vantaboard/go-googlesql`, use the **same** Git tag for the Go module, any prebuilt tarball you unpack, and [`docs/stack-release-policy.md`](https://github.com/vantaboard/go-googlesql/blob/main/docs/stack-release-policy.md).
+
+**Host linker env:** [direnv](https://direnv.net/) with this repo’s [`.envrc`](.envrc), or [`go-googlesql/scripts/go-googlesql-stack-bootstrap.sh`](https://github.com/vantaboard/go-googlesql/blob/main/scripts/go-googlesql-stack-bootstrap.sh), so **`CGO_LDFLAGS_ALLOW`** / **`CGO_LDFLAGS`** match [`go-googlesql` `Taskfile.yml`](https://github.com/vantaboard/go-googlesql/blob/main/Taskfile.yml).
+
+For normal `bigquery-emulator` work with sibling checkouts (use [`go.work.dev`](go.work.dev) via `go.work` or `GOWORK`):
 
 ```console
-$ docker pull ghcr.io/Recidiviz/bigquery-emulator:latest
+$ task emulator:build
+$ task docker:build
 ```
 
-You can also download the darwin(amd64) and linux(amd64) binaries directly from [releases](https://github.com/goccy/bigquery-emulator/releases)
+`emulator:build-linked` uses `go.work.dev` via `GOWORK` (same bootstrap and tags). `docker:build-linked` is an alias for `docker:build`, and [`Dockerfile.linked`](Dockerfile.linked) is the primary Docker path for CI/release and local sibling workspaces.
+
+For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang++"`** (and on **Linux**, **`mold`** on **`PATH`**), or **`task test:linux`** for CI-parity tests inside **`go-googlesql:dev`**.
+
+**CI:** [`.github/workflows/test.yml`](.github/workflows/test.yml) checks out **`vantaboard/go-googlesql`** and **`vantaboard/go-googlesqlite`** at the pinned **`go.mod`** versions beside this repo, runs **`ci-download-or-build-default-prebuilts.sh`** on **`go-googlesql`**, then **`task emulator:build`** and **`go test`** with [`go-googlesql-stack-bootstrap.sh`](https://github.com/vantaboard/go-googlesql/blob/main/scripts/go-googlesql-stack-bootstrap.sh) so the default **`googlesql,googlesql_unified_prebuilt`** link path matches local sibling development.
+
+### Local `go-googlesql` base image (upgrade / CGO cache)
+
+Docker builds use a **pinned Go+clang** base (`GO_GOOGLESQL_BASE`, default `ghcr.io/vantaboard/go-googlesql:v0.5.6`). To validate against a **local** toolchain image you built from the `go-googlesql` repo (for example tag `go-googlesql:dev`), pass env when invoking Task:
+
+```console
+$ GO_GOOGLESQL_BASE=go-googlesql:dev task docker:build
+$ GO_GOOGLESQL_BASE=go-googlesql:dev task docker:build-linked
+```
+
+Build the `go-googlesql:dev` image first (`task docker:build-dev` in `go-googlesql`). The runtime stage must stay compatible with the linked binary (same glibc/toolchain expectations as the chosen base).
+
+### Sequential test runs and shared caches
+
+When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-googlesql`, `go-googlesqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GO_CACHE_ROOT`** (which backs **`GOCACHE`**, **`GOMODCACHE`**, and **`ccache`**) across the sibling checkouts for faster host-native runs.
+
+**`GO_CACHE_ROOT`:** The [Taskfile](Taskfile.yml) **`task test:linux`** target bind-mounts **`GO_CACHE_ROOT`** (default **`$HOME/.cache/go-googlesql`**) into **`gocache`**, **`gomodcache`**, and **`ccache`** in the container—the same convention as **`go-googlesql`** and **`go-googlesqlite`**. Set **`GO_CACHE_ROOT`** consistently across sibling checkouts so one warm cache serves all three repos.
+
+**Optional warm-up:** Run **`task -d ../go-googlesql docker:warm-cache`** once after a cold cache or toolchain change so the next **`task test:linux`** here pays less compile cost (pre-builds the **`-race`** graph without running tests).
 
 # How to start the standalone server
 
@@ -101,7 +133,7 @@ $ ./bigquery-emulator --project=test
 If you want to use docker image to start emulator, specify like the following.
 
 ```console
-$ docker run -it ghcr.io/Recidiviz/bigquery-emulator:latest --project=test
+$ docker run -it ghcr.io/vantaboard/bigquery-emulator:latest --project=test
 ```
 
 ## How to use from bq client
@@ -114,7 +146,7 @@ $ ./bigquery-emulator --project=test --data-from-yaml=./server/testdata/data.yam
 [bigquery-emulator] gRPC server listening at 0.0.0.0:9060
 ```
 
-* `server/testdata/data.yaml` is [here](https://github.com/Recidiviz/bigquery-emulator/blob/main/server/testdata/data.yaml)
+* `server/testdata/data.yaml` is [here](https://github.com/vantaboard/bigquery-emulator/blob/main/server/testdata/data.yaml)
 
 ### 2. Call endpoint from bq client
 
@@ -182,9 +214,9 @@ result = client.query(sql).to_dataframe(bqstorage_client=read_client)
 # Synopsis
 
 If you use the Go language as a BigQuery client, you can launch the BigQuery emulator on the same process as the testing process.  
-Import `github.com/Recidiviz/bigquery-emulator/server` ( and `github.com/Recidiviz/bigquery-emulator/types` ) and you can use `server.New` API to create the emulator server instance.
+Import `github.com/vantaboard/bigquery-emulator/server` (and `github.com/vantaboard/bigquery-emulator/types`) and you can use `server.New` API to create the emulator server instance.
 
-See the API reference for more information: https://pkg.go.dev/github.com/goccy/bigquery-emulator
+See the API reference for more information: https://pkg.go.dev/github.com/vantaboard/bigquery-emulator
 
 ```go
 package main
@@ -194,8 +226,8 @@ import (
   "fmt"
 
   "cloud.google.com/go/bigquery"
-  "github.com/Recidiviz/bigquery-emulator/server"
-  "github.com/Recidiviz/bigquery-emulator/types"
+  "github.com/vantaboard/bigquery-emulator/server"
+  "github.com/vantaboard/bigquery-emulator/types"
   "google.golang.org/api/iterator"
   "google.golang.org/api/option"
 )
@@ -244,13 +276,13 @@ func main() {
 
 # Debugging
 
-If you have specified a database file when starting `bigquery-emulator`, you can check the status of the database by using the `zetasqlite-cli` tool. See [here](https://github.com/Recidiviz/go-zetasqlite/tree/main/cmd/zetasqlite-cli#readme) for details.
+If you have specified a database file when starting `bigquery-emulator`, you can check the status of the database by using the `googlesqlite-cli` tool. See [here](https://github.com/vantaboard/go-googlesqlite/tree/main/cmd/googlesqlite-cli#readme) for details.
 
 # How it works
 
 ## BigQuery Emulator Architecture Overview
 
-After receiving a query, `go-zetasqlite` parses and analyzes the input query using `google/zetasql`. 
+After receiving a query, `go-googlesqlite` parses and analyzes the input query using `google/googlesql`. 
 Query metadata objects are extracted from the AST, then transformed into a SQLite-compatible query.
 The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to access the SQLite Database.
 
@@ -260,7 +292,7 @@ The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to acce
 ## Type Conversion Flow
 
 BigQuery has a number of types that do not exist in SQLite (e.g. ARRAY and STRUCT).
-In order to handle them in SQLite, `go-zetasqlite` encodes all types except `INT64` / `FLOAT64` / `BOOL` with the type information and data combination.
+In order to handle them in SQLite, `go-googlesqlite` encodes all types except `INT64` / `FLOAT64` / `BOOL` with the type information and data combination.
 When using the encoded data, the data is decoded via a custom function registered with driver before use.
 
 <img width="600px" src="https://user-images.githubusercontent.com/209884/196145033-aa032878-7e01-4ec7-9a23-b174b87e1a24.png"></img>

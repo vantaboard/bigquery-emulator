@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/goccy/bigquery-emulator/server"
-	"github.com/goccy/bigquery-emulator/types"
 	"github.com/jessevdk/go-flags"
+	"github.com/vantaboard/bigquery-emulator/server"
+	"github.com/vantaboard/bigquery-emulator/types"
 )
 
 type option struct {

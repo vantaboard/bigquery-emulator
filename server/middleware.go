@@ -4,16 +4,17 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	connection2 "github.com/goccy/bigquery-emulator/internal/connection"
 	"net/http"
 	"runtime"
 	"sync"
 	"time"
 
+	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
+
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
-	"github.com/goccy/bigquery-emulator/internal/logger"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
 )
 
 func sequentialAccessMiddleware() func(http.Handler) http.Handler {
@@ -33,6 +34,7 @@ func recoveryMiddleware(s *Server) func(http.Handler) http.Handler {
 			defer func() {
 				if err := recover(); err != nil {
 					ctx := logger.WithLogger(r.Context(), s.logger)
+					ctx = logger.WithHTTPRequest(ctx, r)
 					errorResponse(ctx, w, errInternalError(fmt.Sprintf("%+v", err)))
 					var frame int = 1
 					for {
@@ -55,7 +57,9 @@ func loggerMiddleware(s *Server) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			next.ServeHTTP(w, r.WithContext(logger.WithLogger(ctx, s.logger)))
+			ctx = logger.WithLogger(ctx, s.logger)
+			ctx = logger.WithHTTPRequest(ctx, r)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -179,7 +183,7 @@ func withConnectionMiddleware() func(http.Handler) http.Handler {
 					w,
 					r.WithContext(ctx),
 				)
-				
+
 				return nil
 			})
 			if err != nil {

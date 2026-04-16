@@ -1,6 +1,7 @@
 package types
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -8,7 +9,7 @@ import (
 )
 
 func TypeValidation(fl validator.FieldLevel) bool {
-	return Type(fl.Field().String()).ZetaSQLTypeKind().String() != ""
+	return Type(fl.Field().String()).TypeKind().String() != ""
 }
 
 func ModeValidation(fl validator.FieldLevel) bool {
@@ -41,6 +42,8 @@ type FieldValidationError struct {
 // ValidateDataAgainstSchema validates that all fields in the data exist in the schema.
 // It returns a list of validation errors, one per row that has an unknown field.
 // Only one unknown field is reported per row (matching BigQuery's behavior).
+// Field names are checked in lexicographic order so the reported unknown field is stable
+// (Go map iteration order is not defined).
 func ValidateDataAgainstSchema(schema *bigqueryv2.TableSchema, data Data) []FieldValidationError {
 	schemaFields := make(map[string]bool)
 	for _, f := range schema.Fields {
@@ -49,7 +52,12 @@ func ValidateDataAgainstSchema(schema *bigqueryv2.TableSchema, data Data) []Fiel
 
 	var errors []FieldValidationError
 	for rowIdx, row := range data {
-		for fieldName := range row {
+		keys := make([]string, 0, len(row))
+		for k := range row {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, fieldName := range keys {
 			if !schemaFields[fieldName] {
 				errors = append(errors, FieldValidationError{
 					RowIndex:  rowIdx,

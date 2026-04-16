@@ -165,13 +165,11 @@ QUALIFY ROW_NUMBER() OVER (ORDER BY b DESC) = 1;
 
     def test_array_first_null(self) -> None:
         self.run_query_test(
-            f"SELECT GENERATE_DATE_ARRAY(NULL, NULL, INTERVAL 1 DAY) AS result",
+            "SELECT GENERATE_DATE_ARRAY(NULL, NULL, INTERVAL 1 DAY) AS result",
             expected_result=[{"result": []}],
         )
 
     def test_delete_and_recreate_table(self) -> None:
-        """Test that confirms https://github.com/goccy/bigquery-emulator/issues/16 has
-        been resolved."""
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         schema = [
             bigquery.SchemaField(
@@ -221,8 +219,6 @@ QUALIFY ROW_NUMBER() OVER (ORDER BY b DESC) = 1;
         )
 
     def test_create_two_tables_same_name_different_dataset(self) -> None:
-        """Test that confirms https://github.com/goccy/bigquery-emulator/issues/18 has
-        been resolved."""
         address_1 = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         schema_1 = [
             bigquery.SchemaField(
@@ -334,7 +330,6 @@ QUALIFY ROW_NUMBER() OVER (ORDER BY b DESC) = 1;
         )
 
     def test_query_min_max_dates_with_partition(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/31."""
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         self.create_mock_table(
             address,
@@ -380,7 +375,6 @@ QUALIFY ROW_NUMBER() OVER (ORDER BY b DESC) = 1;
         )
 
     def test_query_min_with_parition(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/19."""
         self.run_query_test(
             """SELECT MIN(a) OVER (PARTITION BY b) AS min_a
 FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
@@ -388,7 +382,6 @@ FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
         )
 
     def test_query_max_with_parition(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/19."""
         self.run_query_test(
             """SELECT MAX(a) OVER (PARTITION BY b) AS max_a
 FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
@@ -396,7 +389,6 @@ FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
         )
 
     def test_query_count_with_parition(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/19."""
         self.run_query_test(
             """SELECT COUNT(a) OVER (PARTITION BY b) AS count_a
 FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
@@ -418,7 +410,6 @@ FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
         )
 
     def test_array_type(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/20."""
         query = "SELECT [1, 2, 3] as a;"
         self.run_query_test(
             query,
@@ -432,21 +423,18 @@ FROM UNNEST([STRUCT(1 AS a, 2 AS b)]);""",
         )
 
     def test_safe_parse_date_invalid(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/149."""
         self.run_query_test(
             """SELECT SAFE.PARSE_DATE("%m/%d/%Y", "2008-12-25") as a;""",
             expected_result=[{"a": None}],
         )
 
     def test_safe_parse_date_on_julian_date(self) -> None:
-        """Tests resolution of goccy/go-zetasqlite#196"""
         self.run_query_test(
             """SELECT SAFE.PARSE_DATE('%y%j', '85001') AS a;""",
             expected_result=[{"a": date(1985, 1, 1)}],
         )
 
     def test_array_to_json(self) -> None:
-        # Tests resolution to https://github.com/goccy/bigquery-emulator/issues/24.
         query = "SELECT TO_JSON([1, 2, 3]) as a;"
         self.run_query_test(
             query,
@@ -579,7 +567,6 @@ GROUP BY b;
             expected_result=[{"a_list": [1, 3], "b": 2}],
         )
 
-    # TODO(https://github.com/goccy/bigquery-emulator/issues/34): File task for this
     def test_array_agg_ignore_nulls(self) -> None:
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         self.create_mock_table(
@@ -612,10 +599,6 @@ GROUP BY b;
         )
 
     def test_json_load_rows_into_table(self) -> None:
-        """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/286 loading a mock table with a JSON
-        column and using JSON_TYPE, JSON_QUERY, and JSON_VALUE query functions to inspect the JSON elements.
-        """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         self.create_mock_table(
             address=address,
@@ -676,7 +659,6 @@ GROUP BY b;
             self.load_rows_into_table(address, data=[{"a": "202-06-06"}])
 
     def test_array_agg_with_nulls(self) -> None:
-        """Tests fix for https://github.com/goccy/bigquery-emulator/issues/33"""
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         self.create_mock_table(
             address,
@@ -711,7 +693,6 @@ GROUP BY b;
             )
 
     def test_null_in_unnest(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/30."""
         query = """
 SELECT a
 FROM UNNEST([
@@ -724,7 +705,6 @@ FROM UNNEST([
         )
 
     def test_date_in_unnest(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/30."""
         query = """
 SELECT a
 FROM UNNEST([
@@ -737,15 +717,12 @@ FROM UNNEST([
         )
 
     def test_cast_datetime_as_string(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/175."""
         self.run_query_test(
             """SELECT CAST(DATETIME(1987, 1, 25, 0, 0, 0) AS STRING)""",
             expected_result=[{"$col1": "1987-01-25 00:00:00"}],
         )
 
     def test_cast_datetime_as_string_with_format(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/175."""
-        # TODO(goccy/bigquery-emulator#175): Change expected result to "SUNDAY, JANUARY 25 1987 AT 12:00:00" when fixed.
         self.run_query_test(
             """SELECT CAST(DATETIME(1987, 1, 25, 0, 0, 0) AS STRING FORMAT 'DAY"," MONTH DD YYYY "AT" HH":"MI":"SS')""",
             expected_result=[{"$col1": "1987-01-25 00:00:00"}],
@@ -1063,8 +1040,6 @@ FROM UNNEST([
                 assert False, "Unsupported format"
 
     def test_timestamp_min_max(self) -> None:
-        """Tests resolution of https://github.com/goccy/go-zetasqlite/issues/132
-        and https://github.com/goccy/bigquery-emulator/issues/262"""
         self.run_query_test(
             """SELECT TIMESTAMP '0001-01-01 00:00:00.000000+00', TIMESTAMP '9999-12-31 23:59:59.999999+00'""",
             expected_result=[
@@ -1165,8 +1140,7 @@ FROM UNNEST([
         )
 
     def test_table_metadata_timestamp_format(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/432
-
+        """
         Table metadata timestamps (creationTime, lastModifiedTime) should be in
         Unix milliseconds (13 digits), not Unix seconds (10 digits), to match
         the real BigQuery API behavior.
@@ -1296,9 +1270,6 @@ FROM UNNEST([
         )
 
     def test_insert_unknown_fields_valid_row(self) -> None:
-        """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/421
-        """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
         self.create_mock_table(
             address,
@@ -1324,7 +1295,6 @@ FROM UNNEST([
 
     def test_insert_unknown_fields_one_bad_field(self) -> None:
         """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/421
         Test that inserting a row with one unknown field returns an error with the field name.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1367,7 +1337,6 @@ FROM UNNEST([
 
     def test_insert_unknown_fields_multiple_bad_fields(self) -> None:
         """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/421
         Test that inserting a row with multiple unknown fields returns an error with one field.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1405,7 +1374,6 @@ FROM UNNEST([
 
     def test_insert_unknown_fields_multiple_bad_rows(self) -> None:
         """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/421
         Test that inserting multiple bad rows returns errors for all of them.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1445,8 +1413,6 @@ FROM UNNEST([
 
     def test_insert_unknown_fields_mixed_valid_and_invalid(self) -> None:
         """
-        Tests resolution of https://github.com/goccy/bigquery-emulator/issues/421
-
         Test inserting mix of valid and invalid rows.
         Invalid rows should have 'invalid' errors with field location.
         Valid rows should have 'stopped' errors when other rows fail.
@@ -1528,8 +1494,7 @@ FROM UNNEST([
         )
 
     def test_unnest_with_array_parameter(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/234
-
+        """
         Tests that array parameters work correctly with UNNEST operations.
         The issue reported that UNNEST with parameterized arrays failed with
         "Values referenced in UNNEST must be arrays" error.
@@ -1559,8 +1524,7 @@ FROM UNNEST([
         )
 
     def test_unnest_with_int_array_parameter(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/234
-
+        """
         Tests UNNEST with integer array parameters.
         """
         query = """
@@ -1588,8 +1552,7 @@ FROM UNNEST([
         )
 
     def test_unnest_array_parameter_with_join(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/234
-
+        """
         Tests UNNEST with array parameters in a JOIN operation.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1638,8 +1601,7 @@ FROM UNNEST([
         )
 
     def test_null_parameter_with_is_null_check(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/312
-
+        """
         Tests that null parameters work correctly in IS NULL conditions.
         The issue reported that null string parameters in WHERE clauses with
         "IS NULL OR parameter = value" patterns caused type inference errors.
@@ -1694,8 +1656,7 @@ FROM UNNEST([
         )
 
     def test_null_parameter_with_specific_value(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/312
-
+        """
         Tests that the same query works with both null and non-null parameter values.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1746,8 +1707,7 @@ FROM UNNEST([
         )
 
     def test_null_numeric_parameter(self) -> None:
-        """Tests resolution of https://github.com/goccy/bigquery-emulator/issues/312
-
+        """
         Tests that null numeric parameters work correctly.
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id=_TABLE_1)
@@ -1804,7 +1764,7 @@ FROM UNNEST([
         Tests that positional query parameters (?) work correctly and are not broken
         by allow_undeclared_parameters mode. The issue reported that v0.6.6-recidiviz.3.5
         broke positional parameters because allow_undeclared_parameters was enabled globally.
-        According to ZetaSQL docs: "When allow_undeclared_parameters is true, no positional
+        According to GoogleSQL docs: "When allow_undeclared_parameters is true, no positional
         parameters may be provided."
         """
         address = BigQueryAddress(dataset_id=_DATASET_1, table_id="positional_params_test")

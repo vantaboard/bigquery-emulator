@@ -1,0 +1,74 @@
+# syntax=docker/dockerfile:1.7
+# Primary Docker build for CI/release and local sibling workspaces.
+ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
+ARG GO_GOOGLESQL_TAG=v0.5.6
+FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS build
+
+ARG VERSION
+
+WORKDIR /work
+
+COPY go.work.dev ./bigquery-emulator/go.work.dev
+COPY go.mod go.sum ./bigquery-emulator/
+# Additional BuildKit contexts (--build-context), not FROM stages.
+# hadolint ignore=DL3022
+COPY --from=go_googlesql go.mod ./go-googlesql/go.mod
+# hadolint ignore=DL3022
+COPY --from=go_googlesqlite go.mod go.sum ./go-googlesqlite/
+
+WORKDIR /work/bigquery-emulator
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOWORK=/work/bigquery-emulator/go.work.dev go mod download
+
+WORKDIR /work
+
+# hadolint ignore=DL3022
+COPY --from=go_googlesql . ./go-googlesql
+# hadolint ignore=DL3022
+COPY --from=go_googlesqlite . ./go-googlesqlite
+COPY . ./bigquery-emulator
+
+WORKDIR /work/bigquery-emulator
+
+# The go-googlesql base image includes mold; go-googlesql-env.sh adds -fuse-ld=mold when mold
+# exists. mold mishandles CGO -l:libcxx_prebuilt.a (GNU ld -l:FILE). Preset CGO_LDFLAGS so
+# bootstrap keeps GNU ld — same as .github/workflows/test.yml ("Do not install mold").
+ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++"
+
+# Release tarballs / checkouts often ship arch-specific *.a under lib/<GOOS_GOARCH>/ only.
+# CGO uses -L.../lib -l:libcxx_prebuilt.a; create stable symlinks (see .github/workflows/test.yml).
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOWORK=/work/bigquery-emulator/go.work.dev \
+    bash -s <<'EOF'
+set -euo pipefail
+cd /work/go-googlesql
+ga="$(go env GOOS)_$(go env GOARCH)"
+p="internal/ccall/go-protobuf/protobuf/lib"
+if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+  ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+fi
+u="internal/ccall/go-googlesql-unified/lib"
+if [[ -f "$u/$ga/libgooglesql.a" ]]; then
+  ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
+fi
+if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+  ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+  ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+fi
+cd /work/bigquery-emulator
+source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh
+go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+EOF
+
+ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
+ARG GO_GOOGLESQL_TAG=v0.5.6
+FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS emulator
+
+COPY --from=build /work/bigquery-emulator/bigquery-emulator /bin/bigquery-emulator
+
+WORKDIR /work
+
+ENTRYPOINT ["/bin/bigquery-emulator"]
