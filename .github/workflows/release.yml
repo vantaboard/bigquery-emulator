@@ -71,6 +71,11 @@ jobs:
       env:
         GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+    - name: Point go.mod at sibling stack checkouts
+      run: |
+        go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
+        go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
+        go mod download
     - uses: rui314/setup-mold@v1
       if: runner.os == 'Linux'
     - name: cache for linux

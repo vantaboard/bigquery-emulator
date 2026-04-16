@@ -82,6 +82,13 @@ jobs:
         env:
           GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
         run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+      - name: Point go.mod at sibling stack checkouts
+        # CGO #cgo LDFLAGS use ${SRCDIR} under the resolved module; prebuilts live only in the
+        # git checkout, not in the module proxy zip. Replace matches local dev (docs/prebuilt-cgo.md).
+        working-directory: bigquery-emulator
+        run: |
+          go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
+          go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
       - name: Download modules
         working-directory: bigquery-emulator
         run: go mod download
