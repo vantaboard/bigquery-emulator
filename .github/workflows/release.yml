@@ -44,16 +44,16 @@ jobs:
         repository: vantaboard/go-googlesqlite
         ref: ${{ steps.ver.outputs.gsqlite }}
         path: go-googlesqlite
-    - name: Install Task
-      uses: arduino/setup-task@v2
-      with:
-        version: 3.x
     - name: setup Go ${{ matrix.go-version }}
       uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
         cache: true
         cache-dependency-path: go.sum
+    - name: Install Task
+      run: |
+        go install github.com/go-task/task/v3/cmd/task@latest
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: Install clang and libc++ (Linux)
       if: runner.os == 'Linux'
       run: |

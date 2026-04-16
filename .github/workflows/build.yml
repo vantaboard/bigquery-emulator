@@ -55,9 +55,9 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Install clang
         run: |
           sudo apt-get update
