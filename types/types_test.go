@@ -81,6 +81,10 @@ func TestValidateDataAgainstSchema(t *testing.T) {
 		if len(errors) != 1 {
 			t.Errorf("expected exactly 1 error (one per row), got %d", len(errors))
 		}
+		// Lexicographically first unknown field is reported.
+		if len(errors) == 1 && errors[0].FieldName != "bad1" {
+			t.Errorf("expected first unknown field bad1, got %q", errors[0].FieldName)
+		}
 	})
 
 	t.Run("empty data", func(t *testing.T) {
