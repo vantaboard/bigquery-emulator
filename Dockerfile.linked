@@ -42,24 +42,26 @@ ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=li
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOWORK=/work/bigquery-emulator/go.work.dev \
-    bash -lc 'set -euo pipefail
-      cd /work/go-googlesql
-      ga="$(go env GOOS)_$(go env GOARCH)"
-      p="internal/ccall/go-protobuf/protobuf/lib"
-      if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
-        ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
-      fi
-      u="internal/ccall/go-googlesql-unified/lib"
-      if [[ -f "$u/$ga/libgooglesql.a" ]]; then
-        ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
-      fi
-      if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
-        ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
-        ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
-      fi
-      cd /work/bigquery-emulator
-      source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh
-      go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator'
+    bash -s <<'EOF'
+set -euo pipefail
+cd /work/go-googlesql
+ga="$(go env GOOS)_$(go env GOARCH)"
+p="internal/ccall/go-protobuf/protobuf/lib"
+if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+  ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+fi
+u="internal/ccall/go-googlesql-unified/lib"
+if [[ -f "$u/$ga/libgooglesql.a" ]]; then
+  ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
+fi
+if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+  ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+  ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+fi
+cd /work/bigquery-emulator
+source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh
+go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+EOF
 
 ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
 ARG GO_GOOGLESQL_TAG=v0.5.6
