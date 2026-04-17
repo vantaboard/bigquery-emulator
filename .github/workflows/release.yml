@@ -84,10 +84,18 @@ jobs:
           ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
           ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
         fi
+    # Repo root is ${{ github.workspace }}; go.mod uses ../go-googlesql/lib/* for local siblings.
+    # From workspace root, ../go-googlesql is the parent directory — wrong for Actions (checkouts are
+    # workspace/go-googlesql). Override nested lib modules with absolute paths (see go-googlesqlite CI).
     - name: Point go.mod at sibling stack checkouts
       run: |
-        go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
+        set -euo pipefail
+        R="${{ github.workspace }}/go-googlesql"
+        go mod edit -replace "github.com/vantaboard/go-googlesql=${R}"
         go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
+        for m in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64; do
+          go mod edit -replace "github.com/vantaboard/go-googlesql/lib/${m}=${R}/lib/${m}"
+        done
         go mod download
     # Do not use mold: go-googlesql CGO -l:libcxx_prebuilt.a is incompatible with mold's -l: parsing.
     - name: cache for linux

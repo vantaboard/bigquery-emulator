@@ -108,11 +108,16 @@ jobs:
           fi
       - name: Point go.mod at sibling stack checkouts
         # CGO #cgo LDFLAGS use ${SRCDIR} under the resolved module; prebuilts live only in the
-        # git checkout, not in the module proxy zip. Replace matches local dev (docs/prebuilt-cgo.md).
+        # git checkout, not in the module proxy zip. Root + nested lib/* replaces (absolute paths).
         working-directory: bigquery-emulator
         run: |
-          go mod edit -replace "github.com/vantaboard/go-googlesql=${{ github.workspace }}/go-googlesql"
+          set -euo pipefail
+          R="${{ github.workspace }}/go-googlesql"
+          go mod edit -replace "github.com/vantaboard/go-googlesql=${R}"
           go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
+          for m in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64; do
+            go mod edit -replace "github.com/vantaboard/go-googlesql/lib/${m}=${R}/lib/${m}"
+          done
       - name: Download modules
         working-directory: bigquery-emulator
         run: go mod download
