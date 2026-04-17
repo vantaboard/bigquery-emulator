@@ -30,6 +30,14 @@ COPY --from=go_googlesql . ./go-googlesql
 COPY --from=go_googlesqlite . ./go-googlesqlite
 COPY . ./bigquery-emulator
 
+# Same idea as go-googlesql/Dockerfile `release`: download prebuilts inside the build so they match
+# buildx --platform. Host-side scripts follow the *runner* arch and forced linux/arm64 onto
+# ubuntu-24.04-arm (unnecessary; those runners also hit GHCR GITHUB_TOKEN edge cases).
+ARG GO_GOOGLESQL_TAG
+WORKDIR /work/go-googlesql
+RUN --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 go run ./cmd/googlesql-prebuilts setup -out /work/go-googlesql -tag "${GO_GOOGLESQL_TAG}" -layout mod
+
 WORKDIR /work/bigquery-emulator
 
 # The go-googlesql base image includes mold; go-googlesql-env.sh adds -fuse-ld=mold when mold
