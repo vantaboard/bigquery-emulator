@@ -45,27 +45,13 @@ WORKDIR /work/bigquery-emulator
 # bootstrap keeps GNU ld — same as .github/workflows/test.yml ("Do not install mold").
 ENV CGO_LDFLAGS="-Wl,--no-gc-sections -Wl,--allow-multiple-definition -stdlib=libc++"
 
-# Release tarballs / checkouts often ship arch-specific *.a under lib/<GOOS_GOARCH>/ only.
-# CGO uses -L.../lib -l:libcxx_prebuilt.a; create stable symlinks (see .github/workflows/test.yml).
+# Mod-layout prebuilts live under lib/${GOOS}-${GOARCH}/; linking uses lib/*/prebuilt.go when the
+# main package imports it (cmd/bigquery-emulator/cgo_googlesql_prebuilt_link_* per GOOS/GOARCH).
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOWORK=/work/bigquery-emulator/go.work.dev \
     bash -s <<'EOF'
 set -euo pipefail
-cd /work/go-googlesql
-ga="$(go env GOOS)_$(go env GOARCH)"
-p="internal/ccall/go-protobuf/protobuf/lib"
-if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
-  ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
-fi
-u="internal/ccall/go-googlesql-unified/lib"
-if [[ -f "$u/$ga/libgooglesql.a" ]]; then
-  ln -sfn "$ga/libgooglesql.a" "$u/libgooglesql.a"
-fi
-if [[ "$(go env GOOS)" == "linux" ]] && [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
-  ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
-  ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
-fi
 cd /work/bigquery-emulator
 source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh
 go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator

@@ -7,4 +7,4 @@ replace github.com/vantaboard/go-googlesql => ../go-googlesql
 replace github.com/vantaboard/go-googlesqlite => ../go-googlesqlite
 
 // Copy to go.work for local development with sibling go-googlesql and go-googlesqlite checkouts.
-// Replace lives here (not in go.mod); `go mod` / CI without a workspace resolve released module versions.
+// Nested `lib/*` modules: see `replace` in go.mod (sibling layout; Docker copies ../go-googlesql).

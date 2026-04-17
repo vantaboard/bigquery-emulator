@@ -18,6 +18,10 @@ require (
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/parquet-go/parquet-go v0.24.0
 	github.com/vantaboard/go-googlesql v0.5.8
+	github.com/vantaboard/go-googlesql/lib/darwin-amd64 v0.0.0
+	github.com/vantaboard/go-googlesql/lib/darwin-arm64 v0.0.0
+	github.com/vantaboard/go-googlesql/lib/linux-amd64 v0.0.0
+	github.com/vantaboard/go-googlesql/lib/linux-arm64 v0.0.0
 	github.com/vantaboard/go-googlesqlite v0.21.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/sync v0.16.0
@@ -114,4 +118,12 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.9.1 // indirect
 	modernc.org/sqlite v1.37.0
+)
+
+// Nested lib modules are separate module roots; resolve via sibling checkout (Docker/CI/workspace).
+replace (
+	github.com/vantaboard/go-googlesql/lib/darwin-amd64 => ../go-googlesql/lib/darwin-amd64
+	github.com/vantaboard/go-googlesql/lib/darwin-arm64 => ../go-googlesql/lib/darwin-arm64
+	github.com/vantaboard/go-googlesql/lib/linux-amd64 => ../go-googlesql/lib/linux-amd64
+	github.com/vantaboard/go-googlesql/lib/linux-arm64 => ../go-googlesql/lib/linux-arm64
 )
