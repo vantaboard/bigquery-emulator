@@ -4,6 +4,14 @@ on:
     tags:
       - v*
 
+# Job-level `permissions` replaces the default token scopes entirely. build-push-action v6 emits
+# provenance attestations by default; omitting id-token/attestations caused GHCR write_package denials.
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
 env:
   REGISTRY: ghcr.io
   # Must match the repo that runs the workflow: fork jobs cannot push to another org's GHCR.
@@ -26,9 +34,6 @@ jobs:
             asset_name: bigquery-emulator-linux-arm64
             platform: linux/arm64
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v6
       - name: Resolve stack versions
@@ -97,9 +102,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build-image
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Download digests
         uses: actions/download-artifact@v8
