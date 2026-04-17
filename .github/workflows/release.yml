@@ -27,22 +27,18 @@ jobs:
       uses: actions/checkout@v6
     - name: Resolve stack versions
       id: ver
-      run: |
-        gsql=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' go.mod)
-        gsqlite=$(awk '/github.com\/vantaboard\/go-googlesqlite /{print $2; exit}' go.mod)
-        echo "gsql=${gsql}" >> "$GITHUB_OUTPUT"
-        echo "gsqlite=${gsqlite}" >> "$GITHUB_OUTPUT"
+      run: bash scripts/ci-resolve-stack-refs.sh go.mod
     - name: Checkout go-googlesql
       uses: actions/checkout@v6
       with:
         repository: vantaboard/go-googlesql
-        ref: ${{ steps.ver.outputs.gsql }}
+        ref: ${{ steps.ver.outputs.gsql_ref }}
         path: go-googlesql
     - name: Checkout go-googlesqlite
       uses: actions/checkout@v6
       with:
         repository: vantaboard/go-googlesqlite
-        ref: ${{ steps.ver.outputs.gsqlite }}
+        ref: ${{ steps.ver.outputs.gsqlite_ref }}
         path: go-googlesqlite
     - name: setup Go ${{ matrix.go-version }}
       uses: actions/setup-go@v6
