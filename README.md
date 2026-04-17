@@ -287,20 +287,39 @@ Query metadata objects are extracted from the AST, then transformed into a SQLit
 The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to access the SQLite Database.
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'background':'#ffffff','mainBkg':'#ffffff','clusterBkg':'#ffffff','lineColor':'#1f2328','arrowheadColor':'#1f2328','primaryTextColor':'#1f2328','primaryBorderColor':'#d0d7de','clusterBorder':'#d0d7de','edgeLabelBackground':'#ffffff','edgeLabelColor':'#1f2328','secondaryBkg':'#f6f8fa','tertiaryColor':'#f6f8fa'}}}%%
+---
+config:
+  theme: base
+  themeVariables:
+    background: '#ffffff'
+    mainBkg: '#ffffff'
+    clusterBkg: '#ffffff'
+    lineColor: '#1f2328'
+    arrowheadColor: '#1f2328'
+    primaryTextColor: '#1f2328'
+    primaryBorderColor: '#d0d7de'
+    clusterBorder: '#d0d7de'
+    edgeLabelBackground: '#ffffff'
+    edgeLabelColor: '#1f2328'
+    secondaryBkg: '#f6f8fa'
+    tertiaryColor: '#f6f8fa'
+    darkMode: false
+---
 flowchart TD
-  subgraph clientLayer [Clients]
-    direction LR
-    bqCli[bq CLI]
-    sdks["BigQuery client SDKs (Go, Python, Java, …)"]
-  end
-  bigqueryEmu["bigquery-emulator<br/>BigQuery REST API"]
-  googlesqlite["go-googlesqlite<br/>• Parses and analyzes GoogleSQL with go-googlesql<br/>• Generates and runs SQLite via modernc.org/sqlite (database/sql)"]
-  sqliteDb[(SQLite<br/>storage or :memory:)]
+  subgraph diagramRoot [" "]
+    subgraph clientLayer [Clients]
+      direction LR
+      bqCli[bq CLI]
+      sdks["BigQuery client SDKs (Go, Python, Java, …)"]
+    end
+    bigqueryEmu["bigquery-emulator<br/>BigQuery REST API"]
+    googlesqlite["go-googlesqlite<br/>• Parses and analyzes GoogleSQL with go-googlesql<br/>• Generates and runs SQLite via modernc.org/sqlite (database/sql)"]
+    sqliteDb[(SQLite<br/>storage or :memory:)]
 
-  clientLayer -->|"HTTP (BigQuery API)"| bigqueryEmu
-  bigqueryEmu -->|"Jobs / queries as GoogleSQL strings"| googlesqlite
-  googlesqlite -->|"Execute"| sqliteDb
+    clientLayer -->|"HTTP (BigQuery API)"| bigqueryEmu
+    bigqueryEmu -->|"Jobs / queries as GoogleSQL strings"| googlesqlite
+    googlesqlite -->|"Execute"| sqliteDb
+  end
 ```
 
 
@@ -311,38 +330,57 @@ In order to handle them in SQLite, `go-googlesqlite` encodes all types except `I
 When using the encoded data, the data is decoded via a custom function registered with driver before use.
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'background':'#ffffff','mainBkg':'#ffffff','clusterBkg':'#ffffff','lineColor':'#1f2328','arrowheadColor':'#1f2328','primaryTextColor':'#1f2328','primaryBorderColor':'#d0d7de','clusterBorder':'#d0d7de','edgeLabelBackground':'#ffffff','edgeLabelColor':'#1f2328','secondaryBkg':'#f6f8fa','tertiaryColor':'#f6f8fa'}}}%%
+---
+config:
+  theme: base
+  themeVariables:
+    background: '#ffffff'
+    mainBkg: '#ffffff'
+    clusterBkg: '#ffffff'
+    lineColor: '#1f2328'
+    arrowheadColor: '#1f2328'
+    primaryTextColor: '#1f2328'
+    primaryBorderColor: '#d0d7de'
+    clusterBorder: '#d0d7de'
+    edgeLabelBackground: '#ffffff'
+    edgeLabelColor: '#1f2328'
+    secondaryBkg: '#f6f8fa'
+    tertiaryColor: '#f6f8fa'
+    darkMode: false
+---
 flowchart TD
-  subgraph inputs [Application]
-    lit[Literal values in SQL]
-    par[Bound parameters]
-  end
-
-  subgraph ggl [go-googlesqlite]
-    enc[Encode with type metadata]
-    dec[Decode driver.Rows rows]
-  end
-
-  subgraph mod [modernc.org/sqlite]
-    subgraph udf [Custom function]
-      da[Decode SQL arguments]
-      log[Logic]
-      er[Encode return value]
+  subgraph diagramRoot [" "]
+    subgraph inputs [Application]
+      lit[Literal values in SQL]
+      par[Bound parameters]
     end
+
+    subgraph ggl [go-googlesqlite]
+      enc[Encode with type metadata]
+      dec[Decode driver.Rows rows]
+    end
+
+    subgraph mod [modernc.org/sqlite]
+      subgraph udf [Custom function]
+        da[Decode SQL arguments]
+        udfLogic[Logic]
+        er[Encode return value]
+      end
+    end
+
+    sq[(SQLite)]
+    clientOut[Decoded values to client]
+
+    lit --> enc
+    par --> enc
+    enc -->|store| sq
+    sq -->|load rows| dec
+    dec --> clientOut
+
+    sq -->|load| da
+    da --> udfLogic --> er
+    er -->|store| sq
   end
-
-  sq[(SQLite)]
-  clientOut[Decoded values to client]
-
-  lit --> enc
-  par --> enc
-  enc -->|store| sq
-  sq -->|load rows| dec
-  dec --> clientOut
-
-  sq -->|load| da
-  da --> log --> er
-  er -->|store| sq
 ```
 
 
