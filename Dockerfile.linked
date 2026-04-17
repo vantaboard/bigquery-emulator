@@ -67,6 +67,10 @@ ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
 ARG GO_GOOGLESQL_TAG=v0.5.6
 FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS emulator
 
+# GHCR links the package to this repo for GITHUB_TOKEN pushes; set in CI via IMAGE_SOURCE.
+ARG IMAGE_SOURCE=""
+LABEL org.opencontainers.image.source="${IMAGE_SOURCE}"
+
 COPY --from=build /work/bigquery-emulator/bigquery-emulator /bin/bigquery-emulator
 
 WORKDIR /work

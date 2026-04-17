@@ -4,11 +4,15 @@ on:
     tags:
       - v*
 
-# GHCR push requires packages:write on GITHUB_TOKEN. Set at workflow level so every job
-# inherits it (matches GitHub's guidance for publishing images).
+# GHCR push: packages:write + provenance defaults on public repos need attestations/id-token.
+# If push fails with write_package on an existing package, delete the orphaned package on GHCR
+# or open Packages → bigquery-emulator → Package settings → Manage Actions access and grant
+# this repository Write access.
 permissions:
   contents: read
   packages: write
+  attestations: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -32,6 +36,11 @@ jobs:
             asset_name: bigquery-emulator-linux-arm64
             platform: linux/arm64
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - name: Resolve stack versions
@@ -98,6 +107,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             GO_GOOGLESQL_TAG=${{ steps.ver.outputs.gsql }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
           build-contexts: |
             go_googlesql=./go-googlesql
             go_googlesqlite=./go-googlesqlite
@@ -124,6 +134,11 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build-image
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
