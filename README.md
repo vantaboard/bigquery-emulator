@@ -1,4 +1,4 @@
-# BigQuery Emulator (Vantaboard fork)
+# BigQuery Emulator
 
 The BigQuery emulator provides a way to launch a BigQuery server on your local machine for testing and development.
 
@@ -286,7 +286,22 @@ After receiving a query, `go-googlesqlite` parses and analyzes the input query u
 Query metadata objects are extracted from the AST, then transformed into a SQLite-compatible query.
 The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to access the SQLite Database.
 
-<img width="600px" src="https://user-images.githubusercontent.com/209884/196145011-e35c2df4-5f5d-43ce-b7df-08cd130b5d31.png"></img>
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'background':'#f6f8fa','lineColor':'#24292f','primaryTextColor':'#24292f','primaryBorderColor':'#d0d7de','clusterBkg':'#ffffff','clusterBorder':'#d0d7de','arrowheadColor':'#24292f'}}}%%
+flowchart TD
+  subgraph clientLayer [Clients]
+    direction LR
+    bqCli[bq CLI]
+    sdks["BigQuery client SDKs (Go, Python, Java, …)"]
+  end
+  bigqueryEmu["bigquery-emulator<br/>BigQuery REST API"]
+  googlesqlite["go-googlesqlite<br/>• Parses and analyzes GoogleSQL with go-googlesql<br/>• Generates and runs SQLite via modernc.org/sqlite (database/sql)"]
+  sqliteDb[(SQLite<br/>storage or :memory:)]
+
+  clientLayer -->|"HTTP (BigQuery API)"| bigqueryEmu
+  bigqueryEmu -->|"Jobs / queries as GoogleSQL strings"| googlesqlite
+  googlesqlite -->|"Execute"| sqliteDb
+```
 
 
 ## Type Conversion Flow
@@ -295,7 +310,40 @@ BigQuery has a number of types that do not exist in SQLite (e.g. ARRAY and STRUC
 In order to handle them in SQLite, `go-googlesqlite` encodes all types except `INT64` / `FLOAT64` / `BOOL` with the type information and data combination.
 When using the encoded data, the data is decoded via a custom function registered with driver before use.
 
-<img width="600px" src="https://user-images.githubusercontent.com/209884/196145033-aa032878-7e01-4ec7-9a23-b174b87e1a24.png"></img>
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'background':'#f6f8fa','lineColor':'#24292f','primaryTextColor':'#24292f','primaryBorderColor':'#d0d7de','clusterBkg':'#ffffff','clusterBorder':'#d0d7de','arrowheadColor':'#24292f'}}}%%
+flowchart TD
+  subgraph inputs [Application]
+    lit[Literal values in SQL]
+    par[Bound parameters]
+  end
+
+  subgraph ggl [go-googlesqlite]
+    enc[Encode with type metadata]
+    dec[Decode driver.Rows rows]
+  end
+
+  subgraph mod [modernc.org/sqlite]
+    subgraph udf [Custom function]
+      da[Decode SQL arguments]
+      log[Logic]
+      er[Encode return value]
+    end
+  end
+
+  sq[(SQLite)]
+  clientOut[Decoded values to client]
+
+  lit --> enc
+  par --> enc
+  enc -->|store| sq
+  sq -->|load rows| dec
+  dec --> clientOut
+
+  sq -->|load| da
+  da --> log --> er
+  er -->|store| sq
+```
 
 
 # Reference
