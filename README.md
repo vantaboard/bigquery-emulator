@@ -81,7 +81,7 @@ For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang
 
 ### Local `go-googlesql` base image (upgrade / CGO cache)
 
-Docker builds use a **pinned Go+clang** base (`GO_GOOGLESQL_BASE`, default `ghcr.io/vantaboard/go-googlesql:v0.5.6`). To validate against a **local** toolchain image you built from the `go-googlesql` repo (for example tag `go-googlesql:dev`), pass env when invoking Task:
+Docker builds use a **pinned Go+clang** base (`GO_GOOGLESQL_BASE`, default `ghcr.io/vantaboard/go-googlesql:v0.5.10`). To validate against a **local** toolchain image you built from the `go-googlesql` repo (for example tag `go-googlesql:dev`), pass env when invoking Task:
 
 ```console
 $ GO_GOOGLESQL_BASE=go-googlesql:dev task docker:build

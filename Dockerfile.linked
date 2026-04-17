@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Primary Docker build for CI/release and local sibling workspaces.
 ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
-ARG GO_GOOGLESQL_TAG=v0.5.6
+ARG GO_GOOGLESQL_TAG=v0.5.10
 FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS build
 
 ARG VERSION
@@ -58,7 +58,7 @@ go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emula
 EOF
 
 ARG GO_GOOGLESQL_IMAGE=ghcr.io/vantaboard/go-googlesql
-ARG GO_GOOGLESQL_TAG=v0.5.6
+ARG GO_GOOGLESQL_TAG=v0.5.10
 FROM ${GO_GOOGLESQL_IMAGE}:${GO_GOOGLESQL_TAG} AS emulator
 
 # GHCR links the package to this repo for GITHUB_TOKEN pushes; set in CI via IMAGE_SOURCE.
