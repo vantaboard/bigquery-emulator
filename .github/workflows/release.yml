@@ -69,7 +69,7 @@ jobs:
         echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
     - name: Default prebuilts (release tarball or Bazel)
       env:
-        GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+        GO_GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
     - name: Ensure stable prebuilt symlinks (lib/*.a)
       working-directory: go-googlesql

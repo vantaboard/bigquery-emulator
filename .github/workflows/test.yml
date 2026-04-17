@@ -90,7 +90,7 @@ jobs:
       - name: Default prebuilts (release tarball or Bazel)
         working-directory: ${{ github.workspace }}
         env:
-          GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+          GO_GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
         run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
       # CGO links ${SRCDIR}/lib/libprotobuf_cgo.a and lib/libgooglesql.a; release tarballs may omit
       # those symlinks (see go-googlesql ensure_prebuilt_internal_symlinks). Safe on Linux and macOS.
@@ -185,7 +185,7 @@ jobs:
         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: Default prebuilts (release tarball or Bazel)
       env:
-        GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+        GO_GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
     - name: Free disk space (Docker / BuildKit)
       run: |
@@ -277,7 +277,7 @@ jobs:
         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: Default prebuilts (release tarball or Bazel)
       env:
-        GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+        GO_GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
       run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
     - name: Free disk space (Docker / BuildKit)
       run: |
