@@ -10,11 +10,12 @@ WORKDIR /work
 
 COPY go.work.dev ./bigquery-emulator/go.work.dev
 COPY go.mod go.sum ./bigquery-emulator/
-# Additional BuildKit contexts (--build-context), not FROM stages.
+# Full sibling trees must exist before `go mod download`: root go.mod `replace`s nested
+# `lib/*` modules to ../go-googlesql/lib/... (each needs go.mod on disk).
 # hadolint ignore=DL3022
-COPY --from=go_googlesql go.mod ./go-googlesql/go.mod
+COPY --from=go_googlesql . ./go-googlesql
 # hadolint ignore=DL3022
-COPY --from=go_googlesqlite go.mod go.sum ./go-googlesqlite/
+COPY --from=go_googlesqlite . ./go-googlesqlite
 
 WORKDIR /work/bigquery-emulator
 
@@ -24,10 +25,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 WORKDIR /work
 
-# hadolint ignore=DL3022
-COPY --from=go_googlesql . ./go-googlesql
-# hadolint ignore=DL3022
-COPY --from=go_googlesqlite . ./go-googlesqlite
 COPY . ./bigquery-emulator
 
 # Same idea as go-googlesql/Dockerfile `release`: download prebuilts inside the build so they match
