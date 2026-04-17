@@ -307,8 +307,9 @@ config:
 ---
 flowchart TD
   subgraph diagramRoot [" "]
+    direction TB
     subgraph clientLayer [Clients]
-      direction LR
+      direction TB
       bqCli[bq CLI]
       sdks["BigQuery client SDKs (Go, Python, Java, …)"]
     end
@@ -350,18 +351,23 @@ config:
 ---
 flowchart TD
   subgraph diagramRoot [" "]
+    direction TB
     subgraph inputs [Application]
+      direction TB
       lit[Literal values in SQL]
       par[Bound parameters]
     end
 
     subgraph ggl [go-googlesqlite]
+      direction TB
       enc[Encode with type metadata]
       dec[Decode driver.Rows rows]
     end
 
     subgraph mod [modernc.org/sqlite]
+      direction TB
       subgraph udf [Custom function]
+        direction TB
         da[Decode SQL arguments]
         udfLogic[Logic]
         er[Encode return value]
