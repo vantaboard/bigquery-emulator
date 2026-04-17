@@ -32,7 +32,7 @@ COPY . ./bigquery-emulator
 
 # Same idea as go-googlesql/Dockerfile `release`: download prebuilts inside the build so they match
 # buildx --platform. Host-side scripts follow the *runner* arch and forced linux/arm64 onto
-# ubuntu-24.04-arm (unnecessary; those runners also hit GHCR GITHUB_TOKEN edge cases).
+# ubuntu-24.04-arm (unnecessary). CI uses ubuntu-latest + QEMU for linux/arm64.
 ARG GO_GOOGLESQL_TAG
 WORKDIR /work/go-googlesql
 RUN --mount=type=cache,target=/go/pkg/mod \
