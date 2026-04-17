@@ -287,7 +287,7 @@ Query metadata objects are extracted from the AST, then transformed into a SQLit
 The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to access the SQLite Database.
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'background':'#f6f8fa','lineColor':'#24292f','primaryTextColor':'#24292f','primaryBorderColor':'#d0d7de','clusterBkg':'#ffffff','clusterBorder':'#d0d7de','arrowheadColor':'#24292f'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'background':'#ffffff','mainBkg':'#ffffff','clusterBkg':'#ffffff','lineColor':'#1f2328','arrowheadColor':'#1f2328','primaryTextColor':'#1f2328','primaryBorderColor':'#d0d7de','clusterBorder':'#d0d7de','edgeLabelBackground':'#ffffff','edgeLabelColor':'#1f2328','secondaryBkg':'#f6f8fa','tertiaryColor':'#f6f8fa'}}}%%
 flowchart TD
   subgraph clientLayer [Clients]
     direction LR
@@ -311,7 +311,7 @@ In order to handle them in SQLite, `go-googlesqlite` encodes all types except `I
 When using the encoded data, the data is decoded via a custom function registered with driver before use.
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {'background':'#f6f8fa','lineColor':'#24292f','primaryTextColor':'#24292f','primaryBorderColor':'#d0d7de','clusterBkg':'#ffffff','clusterBorder':'#d0d7de','arrowheadColor':'#24292f'}}}%%
+%%{init: {'theme':'base', 'themeVariables': {'background':'#ffffff','mainBkg':'#ffffff','clusterBkg':'#ffffff','lineColor':'#1f2328','arrowheadColor':'#1f2328','primaryTextColor':'#1f2328','primaryBorderColor':'#d0d7de','clusterBorder':'#d0d7de','edgeLabelBackground':'#ffffff','edgeLabelColor':'#1f2328','secondaryBkg':'#f6f8fa','tertiaryColor':'#f6f8fa'}}}%%
 flowchart TD
   subgraph inputs [Application]
     lit[Literal values in SQL]
