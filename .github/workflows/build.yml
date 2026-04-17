@@ -12,7 +12,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  REGISTRY_IMAGE: ghcr.io/vantaboard/bigquery-emulator
+  # Must match the repo that runs the workflow: fork jobs cannot push to another org's GHCR.
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/bigquery-emulator
 
 jobs:
   # For each platform in the matrix, creates and pushes a platform-compatible Docker image to the registry
@@ -72,7 +73,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Default prebuilts (release tarball or Bazel)
         env:
-          GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
+          GO_GOOGLESQL_VERSION: ${{ steps.ver.outputs.gsql }}
         run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
       - name: Free disk space (Docker / BuildKit)
         run: |
