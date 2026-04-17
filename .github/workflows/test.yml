@@ -187,9 +187,9 @@ jobs:
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android
     - name: setup docker buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
     - name: build docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         file: ./Dockerfile.linked
@@ -275,9 +275,9 @@ jobs:
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android
     - name: setup docker buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
     - name: build docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         file: ./Dockerfile.linked
