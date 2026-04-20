@@ -2258,13 +2258,14 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 }
 
 func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
-	for _, table := range cat.Table.Added {
-		if err := addTableMetadata(ctx, server, table); err != nil {
+	// Apply deletions before inserts so replace-like DDL (or delete+add pairs) never hit duplicate metadata.
+	for _, table := range cat.Table.Deleted {
+		if err := deleteTableMetadata(ctx, server, table); err != nil {
 			return err
 		}
 	}
-	for _, table := range cat.Table.Deleted {
-		if err := deleteTableMetadata(ctx, server, table); err != nil {
+	for _, table := range cat.Table.Added {
+		if err := addTableMetadata(ctx, server, table); err != nil {
 			return err
 		}
 	}
@@ -2288,6 +2289,18 @@ func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.Ta
 	}
 	if dataset == nil {
 		return fmt.Errorf("dataset %s is not found", datasetID)
+	}
+	// CREATE OR REPLACE VIEW (and similar DDL) updates googlesqlite's SQLite catalog in place, but the
+	// ChangedCatalog hook only records Added (see go-googlesqlite conn.addTable). Without removing the
+	// prior metadata row first, createTableMetadata hits ErrDuplicatedTable — "duplicate: table X: table is already created".
+	existing, err := dataset.Table(ctx, tableID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := deleteTableMetadata(ctx, server, spec); err != nil {
+			return fmt.Errorf("replace metadata for %s.%s.%s: %w", projectID, datasetID, tableID, err)
+		}
 	}
 	fields := make([]*bigqueryv2.TableFieldSchema, 0, len(spec.Columns))
 	for _, column := range spec.Columns {
