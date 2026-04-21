@@ -96,6 +96,8 @@ const CELL_PREVIEW_MAX_LINES = 5;
 
 let editorResizeObserver = null;
 let jsonResizeObserver = null;
+let workspaceLayoutObserver = null;
+let workspaceLayoutRaf = null;
 
 document.addEventListener("DOMContentLoaded", async function() {
     loadUiPreferences();
@@ -115,6 +117,13 @@ document.addEventListener("DOMContentLoaded", async function() {
     } else {
         switchTab("info");
     }
+
+    // Re-apply layout after first paint when shell dimensions are stable (avoids
+    // clamp/sidebar bounds using clientWidth 0 and matches CSS after media queries).
+    requestAnimationFrame(() => {
+        applyUiLayout(false);
+        requestAnimationFrame(() => applyUiLayout(false));
+    });
 });
 
 function getParamsFromUrl() {
@@ -237,6 +246,19 @@ function setupEventListeners() {
 function setupResizeObservers() {
     if (typeof ResizeObserver !== "function") {
         return;
+    }
+
+    workspaceLayoutObserver = new ResizeObserver(() => {
+        if (workspaceLayoutRaf) {
+            return;
+        }
+        workspaceLayoutRaf = window.requestAnimationFrame(() => {
+            workspaceLayoutRaf = null;
+            applyUiLayout(false);
+        });
+    });
+    if (elements.workspaceShell) {
+        workspaceLayoutObserver.observe(elements.workspaceShell);
     }
 
     editorResizeObserver = new ResizeObserver(() => {
@@ -1019,7 +1041,10 @@ function saveUiPreferences() {
 }
 
 function getSidebarWidthBounds() {
-    const shellWidth = elements.workspaceShell?.clientWidth || window.innerWidth;
+    let shellWidth = elements.workspaceShell?.clientWidth || 0;
+    if (shellWidth < 2) {
+        shellWidth = window.innerWidth || 0;
+    }
     return {
         min: UI_LIMITS.minSidebarWidth,
         max: Math.min(UI_LIMITS.maxSidebarWidth, Math.max(UI_LIMITS.minSidebarWidth, shellWidth - 320))

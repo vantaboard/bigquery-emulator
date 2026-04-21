@@ -535,7 +535,11 @@ button {
     color: #fff !important;
 }
 
-@media (max-width: 991.98px) {
+/* Stack resources above main only on narrow viewports. Using 767.98px (Bootstrap md)
+   avoids treating ~900–991px windows as "mobile": at 991px the old rule made the
+   resources row full-width and hid the horizontal splitter, which looked like a bug
+   and could flip near the breakpoint (scrollbar, zoom, initial layout). */
+@media (max-width: 767.98px) {
     .workspace-shell,
     .workspace-shell.sidebar-collapsed {
         grid-template-columns: 1fr;
