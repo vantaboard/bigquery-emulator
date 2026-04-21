@@ -85,6 +85,8 @@ export function ExplorerPage() {
     const [ui, setUi] = useState<UiPrefs>(() => loadUiPrefs());
 
     const debounceUrl = useRef<ReturnType<typeof setTimeout> | null>(null);
+    /** Project/dataset/table last applied from the URL — only clear query results when this triple changes. */
+    const lastUrlTableKeyRef = useRef<string | null>(null);
 
     const syncUrl = useCallback(
         (next: {
@@ -189,12 +191,16 @@ export function ExplorerPage() {
             setExpandedDatasets((prev) => (prev.includes(dk) ? prev : [...prev, dk]));
 
             const q = st.query.trim() ? st.query : defaultSql(st.project, st.dataset, st.table);
+            const tableKey = `${st.project}/${st.dataset}/${st.table}`;
+            if (lastUrlTableKeyRef.current !== tableKey) {
+                lastUrlTableKeyRef.current = tableKey;
+                setQueryResult(null);
+            }
             setCurrentProject(st.project);
             setCurrentDataset(st.dataset);
             setCurrentTable(st.table);
             setActiveTab(st.results);
             setSql(q);
-            setQueryResult(null);
         })();
 
         return () => {
