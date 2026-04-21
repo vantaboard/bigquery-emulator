@@ -2,9 +2,8 @@
 
 ## Prerequisites
 
-- BigQuery emulator reachable from the API process (`BIGQUERY_EMULATOR_HOST`, e.g. `localhost:9050` or `bigquery:9050` in Compose).
-- Explorer API running (`bq-explorer-api` from the `bigquery-emulator` repo, default port **8000**).
-- UI dev server or static build; browser calls **`/api/*`** (proxied in dev, or nginx in Docker).
+- **`bigquery-emulator`** running with HTTP on **9050** (or your chosen `--port`); **`/api/*`** is served by the same process.
+- UI dev server or static build; browser calls **`/api/*`** (Vite proxy or nginx in Docker).
 
 ## Smoke tests
 
@@ -17,8 +16,7 @@
 
 ## Docker
 
-- `docker compose up` exposes the UI on **8080** (nginx) and proxies **`/api`** to **`host.docker.internal:8000`** (run **`bq-explorer-api`** on the host; see the UI README).
-- The BigQuery emulator container publishes **9050** to the host so the API can use **`BIGQUERY_EMULATOR_HOST=localhost:9050`**.
+- `docker compose up` exposes the UI on **8080** (nginx) and proxies **`/api`** to **`http://bigquery:9050`** inside the Compose network.
 
 ## Regression notes
 

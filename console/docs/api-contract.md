@@ -1,8 +1,8 @@
 # BigQuery Emulator UI — HTTP API contract
 
-The React UI talks to a **separate backend**: run `go run ./cmd/bq-explorer-api` from the [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) repository (same environment variables as the legacy UI server). This UI repo does not embed Go.
+The React UI talks to the **`/api/*` JSON routes** served by [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) on the **same HTTP port** as the BigQuery REST API (see `internal/explorerapi`). This UI repo does not embed Go.
 
-Base URL is configured via `VITE_API_URL` (empty string means same origin in production; in dev, Vite proxies `/api` to the explorer API).
+Base URL is configured via `VITE_API_URL` (empty string means same origin in production; in dev, Vite proxies `/api` to **`VITE_PROXY_TARGET`**, default `http://127.0.0.1:9050`).
 
 ## Endpoints
 

@@ -2,7 +2,7 @@
 
 React + TypeScript web UI for exploring BigQuery (emulator or real), modeled after a slim [Vite](https://vitejs.dev/) + [TanStack Query](https://tanstack.com/query) setup similar to internal Prospero web apps.
 
-There is **no Go code in this repository**. The HTTP API lives in the [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) repo as **`cmd/bq-explorer-api`**.
+There is **no Go code in this repository**. The JSON API is served by [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) under **`/api/*`** on the **same port** as the BigQuery REST API (default **9050**).
 
 ## Features
 
@@ -17,21 +17,18 @@ See [docs/api-contract.md](./docs/api-contract.md) and [docs/rollout-checklist.m
 ## Prerequisites
 
 - **Node.js 22+** and npm
-- A running **BigQuery emulator** or Google BigQuery credentials for real data
-- The **explorer API** binary from `bigquery-emulator` (see below)
+- A running **bigquery-emulator** (or real BigQuery with credentials) exposing **`/api`** on the HTTP port you configure
 
-## Run the explorer API
+## Run the emulator (API + BigQuery)
 
-From a checkout of **`bigquery-emulator`** that builds cleanly on your machine (same `go.mod` / sibling libs as that project):
+From a checkout of **`bigquery-emulator`** that builds on your machine:
 
 ```bash
-cd /path/to/bigquery-emulator
-export BIGQUERY_EMULATOR_HOST=localhost:9050
-# optional: ALLOW_EMULATOR_PROJECT_ADMIN=true
-go run ./cmd/bq-explorer-api
+./bigquery-emulator --port 9050
+# or: go run ./cmd/bigquery-emulator --port 9050
 ```
 
-Default API port is **8000**.
+The explorer JSON API is available at **`http://127.0.0.1:9050/api/...`** alongside **`/bigquery/v2/...`**.
 
 ## Run the UI (development)
 
@@ -42,7 +39,7 @@ cp .env.example .env   # optional: tune VITE_PROXY_TARGET
 npm run dev
 ```
 
-[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/api`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:8000`).
+[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/api`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:9050`).
 
 ## Production build
 
@@ -55,20 +52,18 @@ For a static build that talks to the API on another origin, set **`VITE_API_URL`
 
 ## Docker
 
-`docker compose up` starts the **goccy** emulator and an **nginx** container on **8080** that proxies **`/api`** to **`host.docker.internal:8000`**. Run **`bq-explorer-api`** on the **host** on port **8000** so the UI can reach it.
+`docker compose up` runs the **goccy** emulator as **`bigquery`** and the static UI (**`bq-ui`**) on **8080**. Nginx proxies **`/api`** to **`http://bigquery:9050`** (same container as the merged explorer API).
 
-For the Vantaboard emulator image, keep using **`docker-compose.local.yaml`** to override the `bigquery` service, then start the API on the host as above with `BIGQUERY_EMULATOR_HOST=localhost:9050`.
+For the Vantaboard emulator image, use **`docker-compose.local.yaml`** to override the `bigquery` service.
 
-## Environment (API)
-
-The explorer process uses the same variables as the legacy UI server, including:
+## Environment (explorer API in bigquery-emulator)
 
 | Variable | Purpose |
 |----------|---------|
-| `BIGQUERY_EMULATOR_HOST` | e.g. `localhost:9050` (no scheme) |
+| `BIGQUERY_EMULATOR_HOST` | If unset, the emulator sets loopback + `--port` for the embedded explorer client; override to aim at another endpoint |
 | `BIGQUERY_PROJECT_IDS` / `BIGQUERY_PROJECT_IDS_MODE` | Optional project list merge/override |
 | `ALLOW_EMULATOR_PROJECT_ADMIN` | `true` to allow `POST /api/emulator/projects` |
-| `PORT` | API listen port (default `8000`) |
+| `PORT` | Only used by the **standalone** explorer binary (removed); merged API uses **`--port`** on the main emulator |
 
 ## Development scripts
 
