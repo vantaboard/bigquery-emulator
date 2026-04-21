@@ -2269,6 +2269,61 @@ func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedC
 			return err
 		}
 	}
+	if cat.Dataset != nil {
+		for _, ds := range cat.Dataset.Added {
+			if err := addDatasetMetadataFromSchemaDDL(ctx, server, ds); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref googlesqlite.DatasetRef) error {
+	project, err := server.metaRepo.FindProject(ctx, ref.ProjectID)
+	if err != nil {
+		return err
+	}
+	if project == nil {
+		return fmt.Errorf("project %s is not found", ref.ProjectID)
+	}
+	existing, err := project.Dataset(ctx, ref.DatasetID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		if ref.IfNotExists {
+			return nil
+		}
+		if ref.OrReplace {
+			return nil
+		}
+		return fmt.Errorf("Already Exists: Dataset %s:%s", ref.ProjectID, ref.DatasetID)
+	}
+	conn := connectionFromContext(ctx).ConfigureScope(ref.ProjectID, ref.DatasetID)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction for CREATE SCHEMA metadata: %w", err)
+	}
+	defer tx.RollbackIfNotCommitted()
+	dataset := metadata.NewDataset(
+		server.metaRepo,
+		ref.ProjectID,
+		ref.DatasetID,
+		&bigqueryv2.Dataset{
+			Id: fmt.Sprintf("%s:%s", ref.ProjectID, ref.DatasetID),
+			DatasetReference: &bigqueryv2.DatasetReference{
+				ProjectId: ref.ProjectID,
+				DatasetId: ref.DatasetID,
+			},
+		},
+	)
+	if err := project.AddDataset(ctx, tx.Tx(), dataset); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 	return nil
 }
 
