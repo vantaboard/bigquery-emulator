@@ -2280,12 +2280,22 @@ func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedC
 }
 
 func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref googlesqlite.DatasetRef) error {
-	project, err := server.metaRepo.FindProject(ctx, ref.ProjectID)
+	conn := connectionFromContext(ctx).ConfigureScope(ref.ProjectID, ref.DatasetID)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction for CREATE SCHEMA metadata: %w", err)
+	}
+	defer tx.RollbackIfNotCommitted()
+
+	if err := server.metaRepo.AddProjectIfNotExists(ctx, tx.Tx(), metadata.NewProject(server.metaRepo, ref.ProjectID)); err != nil {
+		return err
+	}
+	project, err := server.metaRepo.FindProjectWithConn(ctx, tx.Tx(), ref.ProjectID)
 	if err != nil {
 		return err
 	}
 	if project == nil {
-		return fmt.Errorf("project %s is not found", ref.ProjectID)
+		return fmt.Errorf("project %s not found after AddProjectIfNotExists", ref.ProjectID)
 	}
 	existing, err := project.Dataset(ctx, ref.DatasetID)
 	if err != nil {
@@ -2300,12 +2310,6 @@ func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref go
 		}
 		return fmt.Errorf("Already Exists: Dataset %s:%s", ref.ProjectID, ref.DatasetID)
 	}
-	conn := connectionFromContext(ctx).ConfigureScope(ref.ProjectID, ref.DatasetID)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start transaction for CREATE SCHEMA metadata: %w", err)
-	}
-	defer tx.RollbackIfNotCommitted()
 	dataset := metadata.NewDataset(
 		server.metaRepo,
 		ref.ProjectID,
