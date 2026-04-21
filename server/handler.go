@@ -2473,6 +2473,37 @@ func (h *jobsInsertHandler) insertQueryJobAsync(ctx context.Context, r *jobsInse
 	return job, nil
 }
 
+// asyncJobHeartbeatInterval returns the interval for [runAsyncJobHeartbeat], or 0 to disable.
+// BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: unset defaults to 30 seconds; "0" disables; positive N uses N seconds.
+func asyncJobHeartbeatInterval() time.Duration {
+	s := strings.TrimSpace(os.Getenv("BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS"))
+	if s == "" {
+		return 30 * time.Second
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
+}
+
+func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobID string, start time.Time, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			log.Info("async query job still running",
+				"project_id", projectID,
+				"job_id", jobID,
+				"elapsed_sec", int(time.Since(start).Seconds()),
+			)
+		}
+	}
+}
+
 // executeAsyncQueryJob runs the query and persists the final job state (worker entrypoint).
 func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Server, projectID string, job *bigqueryv2.Job) (err error) {
 	project := metadata.NewProject(srv.metaRepo, projectID)
@@ -2491,6 +2522,12 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 			"err", err,
 		)
 	}()
+
+	heartbeatCtx, stopHeartbeat := context.WithCancel(ctx)
+	defer stopHeartbeat()
+	if d := asyncJobHeartbeatInterval(); d > 0 {
+		go runAsyncJobHeartbeat(heartbeatCtx, srv.logger, projectID, job.JobReference.JobId, wallStart, d)
+	}
 
 	startTime := time.Now()
 	if job.Statistics != nil && job.Statistics.CreationTime != 0 {

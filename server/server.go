@@ -94,6 +94,7 @@ func WithConnectionPoolSize(n int) ServerOption {
 // Environment:
 //   - BQ_EMULATOR_POOL_SIZE: positive integer pool size (sqlite connections).
 //   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
+//   - BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: async query progress logs every N seconds at INFO (default 30; 0 disables).
 func New(storage Storage, opts ...ServerOption) (*Server, error) {
 	cfg := serverConfig{poolSize: defaultConnectionPoolSize}
 	if v := os.Getenv("BQ_EMULATOR_POOL_SIZE"); v != "" {
