@@ -32,3 +32,6 @@ __pycache__
 # Local Go workspace — copy sibling template: cp go.work.dev go.work
 go.work
 go.work.sum
+
+# air (github.com/air-verse/air) build + logs
+tmp/

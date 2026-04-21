@@ -11,8 +11,20 @@ tasks:
     cmds:
       - |
         echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
-        echo "Common: task emulator:build | task test:prebuilt | task docker:build | task test:linux"
+        echo "Common: task emulator:build | task test:prebuilt | task dev:air | task docker:build | task test:linux"
         echo "Local sibling go-googlesqlite: cp go.work.dev go.work  (go.work is gitignored)"
+
+  dev:air:
+    desc: Live rebuild/restart with air (go install github.com/air-verse/air@latest; edit .air.toml args_bin)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        if ! command -v air >/dev/null 2>&1; then
+          echo "Install air: go install github.com/air-verse/air@latest" >&2
+          exit 1
+        fi
+        exec air -c .air.toml
 
   emulator:build:
     desc: Build bigquery-emulator binary (unified prebuilt tags). Uses ./go.work if present, else GOWORK=off
