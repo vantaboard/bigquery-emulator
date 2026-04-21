@@ -145,7 +145,9 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 				[]slog.Attr{slog.String("query", r.URL.RawQuery)},
 				bigQueryRESTAccessAttrs(r.Method, r.URL.Path)...,
 			)
-			logger.Logger(r.Context()).Info(
+			logger.Logger(r.Context()).LogAttrs(
+				r.Context(),
+				slog.LevelInfo,
 				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 				startAttrs...,
 			)
@@ -168,7 +170,9 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 			}
 			extras.mu.Unlock()
 
-			logger.Logger(r.Context()).Info(
+			logger.Logger(r.Context()).LogAttrs(
+				r.Context(),
+				slog.LevelInfo,
 				fmt.Sprintf("%s %s completed", r.Method, r.URL.Path),
 				doneAttrs...,
 			)
