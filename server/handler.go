@@ -2511,7 +2511,7 @@ func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobI
 				slog.String("project_id", projectID),
 				slog.String("job_id", jobID),
 				slog.Int("elapsed_sec", int(time.Since(start).Seconds())),
-				slog.String("hint", "worker runs until contentRepo.Query and destination write complete; at DEBUG, jobs.getQueryResults completed lines include job_sql_preview and poll starts are DEBUG"),
+				slog.String("hint", "worker runs until contentRepo.Query and destination write complete; access log job_sql_preview is truncated (BQ_EMULATOR_ACCESS_LOG_SQL_PREVIEW_MAX, default 256)"),
 			)
 		}
 	}
@@ -2533,6 +2533,11 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		"job_id", job.JobReference.JobId,
 	)
 	var jobQueryErr error
+	var (
+		phaseQueryMS, phaseWriteMS int64
+		phaseHasWrite              bool
+		lastResponse               *internaltypes.QueryResponse
+	)
 	defer func() {
 		elapsed := time.Since(wallStart).Milliseconds()
 		if err != nil {
@@ -2552,12 +2557,20 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 				"outcome", "error",
 			)
 		} else {
-			srv.logger.Info("async query job completed",
-				"project_id", projectID,
-				"job_id", job.JobReference.JobId,
-				"elapsed_ms", elapsed,
-				"outcome", "ok",
-			)
+			completed := []slog.Attr{
+				slog.String("project_id", projectID),
+				slog.String("job_id", job.JobReference.JobId),
+				slog.Int64("elapsed_ms", elapsed),
+				slog.String("outcome", "ok"),
+				slog.Int64("content_query_ms", phaseQueryMS),
+			}
+			if phaseHasWrite {
+				completed = append(completed, slog.Int64("destination_write_ms", phaseWriteMS))
+			}
+			if lastResponse != nil && lastResponse.CTASInPlace {
+				completed = append(completed, slog.Bool("ctas_in_place", true))
+			}
+			srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query job completed", completed...)
 		}
 	}()
 
@@ -2588,16 +2601,29 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		}
 		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query executing (content query + row materialization)", preAttrs...)
 
+		var response *internaltypes.QueryResponse
+		var jobErr error
 		queryPhaseStart := time.Now()
-		response, jobErr := srv.contentRepo.Query(
-			ctx,
-			tx,
-			projectID,
-			"",
-			job.Configuration.Query.Query,
-			job.Configuration.Query.QueryParameters,
-		)
+		if hasDestinationTable && contentdata.IsCTASQuery(querySQL) {
+			response, jobErr = srv.contentRepo.QueryCTASInPlace(
+				ctx, tx, projectID, "",
+				job.Configuration.Query.DestinationTable,
+				job.Configuration.Query.Query,
+				job.Configuration.Query.QueryParameters,
+			)
+		} else {
+			response, jobErr = srv.contentRepo.Query(
+				ctx,
+				tx,
+				projectID,
+				"",
+				job.Configuration.Query.Query,
+				job.Configuration.Query.QueryParameters,
+			)
+		}
 		queryElapsedMs := time.Since(queryPhaseStart).Milliseconds()
+		lastResponse = response
+		phaseQueryMS = queryElapsedMs
 		jobQueryErr = jobErr
 
 		finishAttrs := []slog.Attr{
@@ -2632,19 +2658,31 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 					return fmt.Errorf("failed to find destination table: %w", err)
 				}
 				destinationTableExists := destinationTable != nil
-				if !destinationTableExists {
-					_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
-					if serr != nil {
-						return serr
+				if response == nil || !response.CTASInPlace {
+					if !destinationTableExists {
+						_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+						if serr != nil {
+							return serr
+						}
+						serverErr := srv.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+						if serverErr != nil {
+							return fmt.Errorf("failed to create table: %w", serverErr)
+						}
 					}
-					serverErr := srv.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
-					if serverErr != nil {
-						return fmt.Errorf("failed to create table: %w", serverErr)
+					if err := srv.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
+						return fmt.Errorf("failed to add table data: %w", err)
 					}
-				}
-
-				if err := srv.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
-					return fmt.Errorf("failed to add table data: %w", err)
+				} else {
+					if !destinationTableExists {
+						_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+						if serr != nil {
+							return serr
+						}
+					}
+					srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write skipped (CTAS in place)",
+						slog.String("project_id", projectID),
+						slog.String("job_id", job.JobReference.JobId),
+					)
 				}
 			} else if response != nil && response.TotalRows > 0 {
 				wroteDestination = true
@@ -2653,11 +2691,15 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 				}
 			}
 			if wroteDestination {
-				srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write done",
-					slog.String("project_id", projectID),
-					slog.String("job_id", job.JobReference.JobId),
-					slog.Int64("elapsed_ms", time.Since(writeStart).Milliseconds()),
-				)
+				phaseWriteMS = time.Since(writeStart).Milliseconds()
+				phaseHasWrite = true
+				if response == nil || !response.CTASInPlace {
+					srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write done",
+						slog.String("project_id", projectID),
+						slog.String("job_id", job.JobReference.JobId),
+						slog.Int64("elapsed_ms", phaseWriteMS),
+					)
+				}
 			}
 		}
 
@@ -2685,7 +2727,7 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		var totalBytes int64
 		if response != nil {
 			totalBytes = response.TotalBytes
-			if jobErr == nil && response.ChangedCatalog.Changed() {
+			if jobErr == nil && response.ChangedCatalog != nil && response.ChangedCatalog.Changed() {
 				postSync = response.ChangedCatalog
 			}
 		}

@@ -238,7 +238,8 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 				doneAttrs = append(doneAttrs, slog.Uint64("total_rows", *extras.totalRows))
 			}
 			if extras.jobSQLPreview != nil {
-				doneAttrs = append(doneAttrs, slog.String("job_sql_preview", *extras.jobSQLPreview))
+				p := truncateStringForAccessLog(*extras.jobSQLPreview, accessLogSQLPreviewMax())
+				doneAttrs = append(doneAttrs, slog.String("job_sql_preview", p))
 			}
 			if extras.jobDestination != nil {
 				doneAttrs = append(doneAttrs, slog.String("job_destination", *extras.jobDestination))

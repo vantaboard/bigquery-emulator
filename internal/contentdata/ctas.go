@@ -1,0 +1,195 @@
+package contentdata
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/vantaboard/go-googlesqlite"
+	bigqueryv2 "google.golang.org/api/bigquery/v2"
+
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/logger"
+	internaltypes "github.com/vantaboard/bigquery-emulator/internal/types"
+	"github.com/vantaboard/bigquery-emulator/types"
+	"log/slog"
+)
+
+// ctasQueryRegexp matches BigQuery-style CREATE (OR REPLACE) TABLE ... AS ... statements.
+// Excludes OR REPLACE VIEW, CREATE FUNCTION, etc., by requiring "table" after optional OR REPLACE.
+var (
+	ctasQueryRegexp  = regexp.MustCompile(`(?is)\A\s*create(\s+or\s+replace)?\s+table\s+`)
+	asSelectCTASRegexp = regexp.MustCompile(`(?is)\bas\s*(\(|\s*select)`)
+)
+
+// IsCTASQuery returns true for CREATE [OR REPLACE] TABLE ... AS (SELECT|...
+func IsCTASQuery(q string) bool {
+	s := strings.TrimSpace(q)
+	if s == "" {
+		return false
+	}
+	if !ctasQueryRegexp.MatchString(s) {
+		return false
+	}
+	low := strings.ToLower(s)
+	if strings.HasPrefix(low, "create view") || strings.HasPrefix(low, "create materialized") {
+		return false
+	}
+	return asSelectCTASRegexp.MatchString(s)
+}
+
+func namePathEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func findTableSpecInChangedCatalog(
+	cc *googlesqlite.ChangedCatalog, projectID, datasetID, tableID string,
+) *googlesqlite.TableSpec {
+	want := []string{projectID, datasetID, tableID}
+	if cc == nil || cc.Table == nil {
+		return nil
+	}
+	for _, t := range cc.Table.Added {
+		if t != nil && namePathEqual(t.NamePath, want) {
+			return t
+		}
+	}
+	for _, t := range cc.Table.Updated {
+		if t != nil && namePathEqual(t.NamePath, want) {
+			return t
+		}
+	}
+	return nil
+}
+
+func tableSpecToBqSchema(spec *googlesqlite.TableSpec) (*bigqueryv2.TableSchema, error) {
+	if spec == nil {
+		return nil, fmt.Errorf("table spec is nil")
+	}
+	fields := make([]*bigqueryv2.TableFieldSchema, 0, len(spec.Columns))
+	for _, col := range spec.Columns {
+		googlesqlType, err := col.Type.ToGoogleSQLType()
+		if err != nil {
+			return nil, fmt.Errorf("column %s: %w", col.Name, err)
+		}
+		fields = append(fields, types.TableFieldSchemaFromType(col.Name, googlesqlType))
+	}
+	return &bigqueryv2.TableSchema{Fields: fields}, nil
+}
+
+// QueryCTASInPlace runs a CREATE (OR REPLACE) TABLE ... AS ... statement with Exec, avoiding
+// row-by-row materialization into Go. The destination table is filled by the engine; callers
+// must not re-insert. Returns CTASInPlace on the response.
+func (r *Repository) QueryCTASInPlace(
+	ctx context.Context,
+	tx *connection.Tx,
+	projectID, datasetID string,
+	dest *bigqueryv2.TableReference,
+	query string,
+	params []*bigqueryv2.QueryParameter,
+) (*internaltypes.QueryResponse, error) {
+	if dest == nil {
+		return nil, fmt.Errorf("destination table is nil")
+	}
+	if !IsCTASQuery(query) {
+		return nil, fmt.Errorf("not a CTAS query")
+	}
+
+	tx.SetProjectAndDataset(projectID, datasetID)
+	if err := tx.ContentRepoMode(); err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.MetadataRepoMode()
+	}()
+
+	ctx = googlesqlite.WithLogger(ctx, logger.Logger(ctx))
+
+	values := []interface{}{}
+	for _, param := range params {
+		value, err := r.queryParameterValueToGoValue(param.ParameterValue)
+		if err != nil {
+			return nil, err
+		}
+		if param.Name != "" {
+			values = append(values, sql.Named(param.Name, value))
+		} else {
+			values = append(values, value)
+		}
+	}
+
+	logger.Logger(ctx).LogAttrs(
+		ctx,
+		slog.LevelDebug,
+		"content query CTAS in-place (Exec)",
+		slog.String("query", truncateQueryForLog(query, 2048)),
+	)
+
+	if err := tx.Conn().Raw(func(c interface{}) error {
+		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+		if !ok {
+			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+		}
+		googlesqliteConn.SetQueryParameters(params)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to setup connection: %w", err)
+	}
+
+	result, err := tx.Tx().ExecContext(ctx, query, values...)
+	if err != nil {
+		return nil, err
+	}
+
+	changedCatalog, err := googlesqlite.ChangedCatalogFromResult(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get changed catalog: %w", err)
+	}
+	spec := findTableSpecInChangedCatalog(
+		changedCatalog,
+		dest.ProjectId,
+		dest.DatasetId,
+		dest.TableId,
+	)
+	if spec == nil {
+		return nil, fmt.Errorf(
+			"CTAS completed but destination table spec not in changed catalog: %s.%s.%s",
+			dest.ProjectId, dest.DatasetId, dest.TableId,
+		)
+	}
+
+	schema, err := tableSpecToBqSchema(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	tpath := r.tablePath(dest.ProjectId, dest.DatasetId, dest.TableId)
+	countQuery := fmt.Sprintf("SELECT COUNT(1) AS c FROM `%s`", tpath)
+	var totalRows int64
+	if err := tx.Tx().QueryRowContext(ctx, countQuery).Scan(&totalRows); err != nil {
+		return nil, fmt.Errorf("row count for CTAS table: %w", err)
+	}
+	if totalRows < 0 {
+		totalRows = 0
+	}
+
+	return &internaltypes.QueryResponse{
+		Schema:         schema,
+		TotalRows:      uint64(totalRows),
+		JobComplete:    true,
+		Rows:           nil,
+		TotalBytes:     0,
+		ChangedCatalog: changedCatalog,
+		CTASInPlace:    true,
+	}, nil
+}

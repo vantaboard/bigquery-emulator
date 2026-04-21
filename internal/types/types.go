@@ -36,6 +36,9 @@ type (
 		JobComplete    bool                         `json:"jobComplete"`
 		TotalBytes     int64                        `json:"-"`
 		ChangedCatalog *googlesqlite.ChangedCatalog `json:"-"`
+		// CTASInPlace is set when a CREATE [OR REPLACE] TABLE ... AS job wrote rows only via
+		// googlesqlite execution; the emulator must not run CreateTable+AddTableData for the dest.
+		CTASInPlace bool `json:"-"`
 	}
 
 	TableDataList struct {

@@ -467,6 +467,56 @@ func (r *Repository) CreateOrReplaceTable(ctx context.Context, tx *connection.Tx
 	return nil
 }
 
+// max_INSERT_bound_parameters is below SQLite's default SQLITE_MAX_VARIABLE_NUMBER (often 999)
+// so each batched multi-row INSERT stays within bound limits.
+const maxINSERTBoundParameters = 900
+
+func (r *Repository) addTableDataRowValues(columns []*types.Column, data map[string]interface{}) ([]interface{}, error) {
+	values := make([]interface{}, 0, len(columns))
+	for _, column := range columns {
+		if value, found := data[column.Name]; found {
+			isTimestampColumn := column.Type == types.TIMESTAMP
+			isJsonColumn := column.Type == types.JSON
+			isBytesColumn := column.Type == types.BYTES
+			inputString, isInputString := value.(string)
+
+			if isInputString && isTimestampColumn {
+				parsedTimestamp, err := googlesqlite.TimeFromTimestampValue(inputString)
+				if err == nil {
+					values = append(values, parsedTimestamp)
+					continue
+				}
+			}
+
+			if isInputString && isJsonColumn {
+				var jsonValue interface{}
+				if err := json.Unmarshal([]byte(inputString), &jsonValue); err != nil {
+					return nil, fmt.Errorf("failed to unmarshal json value [%s]: %w", inputString, err)
+				}
+				values = append(values, jsonValue)
+				continue
+			}
+
+			if isInputString && isBytesColumn {
+				if inputString == "" {
+					values = append(values, []byte{})
+					continue
+				}
+				decoded, err := base64.StdEncoding.DecodeString(inputString)
+				if err != nil {
+					return nil, fmt.Errorf("failed to decode base64 bytes: %v - %w", inputString, err)
+				}
+				values = append(values, decoded)
+				continue
+			}
+			values = append(values, value)
+		} else {
+			values = append(values, nil)
+		}
+	}
+	return values, nil
+}
+
 func (r *Repository) AddTableData(ctx context.Context, tx *connection.Tx, projectID, datasetID string, table *types.Table, overwrite bool) error {
 	if len(table.Data) == 0 {
 		return nil
@@ -479,87 +529,63 @@ func (r *Repository) AddTableData(ctx context.Context, tx *connection.Tx, projec
 		_ = tx.MetadataRepoMode()
 	}()
 
-	placeholders := make([]string, 0, len(table.Columns))
-	columnsWithEscape := make([]string, 0, len(table.Columns))
+	nCol := len(table.Columns)
+	if nCol == 0 {
+		return fmt.Errorf("add table data: no columns")
+	}
+	perRowPlaceholders := make([]string, 0, nCol)
+	columnsWithEscape := make([]string, 0, nCol)
 	for _, column := range table.Columns {
-		placeholders = append(placeholders, "?")
+		perRowPlaceholders = append(perRowPlaceholders, "?")
 		columnsWithEscape = append(columnsWithEscape, fmt.Sprintf("`%s`", column.Name))
 	}
-	query := fmt.Sprintf(
-		"INSERT `%s` (%s) VALUES (%s)",
-		r.tablePath(projectID, datasetID, table.ID),
-		strings.Join(columnsWithEscape, ","),
-		strings.Join(placeholders, ","),
-	)
+	tablePath := r.tablePath(projectID, datasetID, table.ID)
+	rowValuePattern := "(" + strings.Join(perRowPlaceholders, ",") + ")"
+
+	rowsPerBatch := maxINSERTBoundParameters / nCol
+	if rowsPerBatch < 1 {
+		rowsPerBatch = 1
+	}
 
 	if overwrite {
 		_, err := tx.Tx().ExecContext(ctx, fmt.Sprintf(
 			"DELETE FROM `%s` WHERE true",
-			r.tablePath(projectID, datasetID, table.ID),
+			tablePath,
 		))
 		if err != nil {
 			return fmt.Errorf("failed to truncate table: %w", err)
 		}
 	}
 
-	stmt, err := tx.Tx().PrepareContext(ctx, query)
-	if err != nil {
-		return err
-	}
-
-	for _, data := range table.Data {
-		values := make([]interface{}, 0, len(table.Columns))
-		for _, column := range table.Columns {
-			if value, found := data[column.Name]; found {
-				isTimestampColumn := column.Type == types.TIMESTAMP
-				isJsonColumn := column.Type == types.JSON
-				isBytesColumn := column.Type == types.BYTES
-				inputString, isInputString := value.(string)
-
-				if isInputString && isTimestampColumn {
-					parsedTimestamp, err := googlesqlite.TimeFromTimestampValue(inputString)
-					// If we could parse the timestamp, use it when inserting, otherwise fallback to the supplied value
-					if err == nil {
-						values = append(values, parsedTimestamp)
-						continue
-					}
-				}
-
-				if isInputString && isJsonColumn {
-					var jsonValue interface{}
-					if err := json.Unmarshal([]byte(inputString), &jsonValue); err != nil {
-						return fmt.Errorf("failed to unmarshal json value [%s]: %w", inputString, err)
-					}
-					values = append(values, jsonValue)
-					continue
-				}
-
-				if isInputString && isBytesColumn {
-					if inputString == "" {
-						values = append(values, []byte{})
-						continue
-					}
-
-					decoded, err := base64.StdEncoding.DecodeString(inputString)
-					if err != nil {
-						return fmt.Errorf("failed to decode base64 bytes: %v - %w", inputString, err)
-					}
-
-					values = append(values, decoded)
-					continue
-				}
-
-				values = append(values, value)
-			} else {
-				values = append(values, nil)
-			}
+	for batchStart := 0; batchStart < len(table.Data); batchStart += rowsPerBatch {
+		batchEnd := batchStart + rowsPerBatch
+		if batchEnd > len(table.Data) {
+			batchEnd = len(table.Data)
 		}
-
-		if _, err := stmt.ExecContext(ctx, values...); err != nil {
+		batch := table.Data[batchStart:batchEnd]
+		nr := len(batch)
+		rowsPart := make([]string, 0, nr)
+		for i := 0; i < nr; i++ {
+			rowsPart = append(rowsPart, rowValuePattern)
+		}
+		query := fmt.Sprintf(
+			"INSERT `%s` (%s) VALUES %s",
+			tablePath,
+			strings.Join(columnsWithEscape, ","),
+			strings.Join(rowsPart, ","),
+		)
+		flat := make([]interface{}, 0, nr*nCol)
+		for _, data := range batch {
+			rowVals, err := r.addTableDataRowValues(table.Columns, data)
+			if err != nil {
+				return err
+			}
+			flat = append(flat, rowVals...)
+		}
+		if _, err := tx.Tx().ExecContext(ctx, query, flat...); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
