@@ -3,10 +3,12 @@ package explorerapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -22,6 +24,25 @@ type BigQueryClient struct {
 	projectID    string
 	emulatorHost string
 	httpClient   *http.Client
+
+	mu           sync.Mutex
+	extraClients map[string]*bigquery.Client
+}
+
+// newBigQueryClientCore creates a BigQuery client for projectID using the same rules as NewBigQueryClient.
+func newBigQueryClientCore(ctx context.Context, projectID, emulatorHost string) (*bigquery.Client, error) {
+	if emulatorHost != "" {
+		endpoint := fmt.Sprintf("http://%s/bigquery/v2/", emulatorHost)
+		return bigquery.NewClient(ctx, projectID,
+			option.WithEndpoint(endpoint),
+			option.WithoutAuthentication(),
+		)
+	}
+	credentialsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if credentialsPath != "" {
+		return bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(credentialsPath))
+	}
+	return bigquery.NewClient(ctx, projectID)
 }
 
 // NewBigQueryClient creates a new BigQuery client.
@@ -40,24 +61,7 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 		projectID = "emulator-project"
 	}
 
-	var client *bigquery.Client
-	var err error
-
-	if emulatorHost != "" {
-		endpoint := fmt.Sprintf("http://%s/bigquery/v2/", emulatorHost)
-		client, err = bigquery.NewClient(ctx, projectID,
-			option.WithEndpoint(endpoint),
-			option.WithoutAuthentication(),
-		)
-	} else {
-		credentialsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		if credentialsPath != "" {
-			client, err = bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(credentialsPath))
-		} else {
-			client, err = bigquery.NewClient(ctx, projectID)
-		}
-	}
-
+	client, err := newBigQueryClientCore(ctx, projectID, emulatorHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create BigQuery client: %v", err)
 	}
@@ -67,7 +71,37 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 		projectID:    projectID,
 		emulatorHost: emulatorHost,
 		httpClient:   httpClient,
+		extraClients: make(map[string]*bigquery.Client),
 	}, nil
+}
+
+// clientForProject returns a client whose project ID matches the BigQuery jobs.insert path.
+// projectID may be empty; the emulator is queried for known projects when appropriate.
+func (bq *BigQueryClient) clientForProject(ctx context.Context, projectID string) (*bigquery.Client, error) {
+	pid := strings.TrimSpace(projectID)
+	if pid == "" && bq.emulatorHost != "" {
+		if ids, err := FetchProjectIDsFromEmulator(ctx, bq.httpClient, bq.emulatorHost); err == nil && len(ids) > 0 {
+			pid = ids[0]
+		}
+	}
+	if pid == "" {
+		pid = bq.projectID
+	}
+	if pid == bq.projectID {
+		return bq.client, nil
+	}
+
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+	if c, ok := bq.extraClients[pid]; ok {
+		return c, nil
+	}
+	c, err := newBigQueryClientCore(ctx, pid, bq.emulatorHost)
+	if err != nil {
+		return nil, err
+	}
+	bq.extraClients[pid] = c
+	return c, nil
 }
 
 // GetProjects lists available projects (multi-project when using a compatible emulator).
@@ -250,7 +284,8 @@ func (bq *BigQueryClient) GetTableSchema(c *gin.Context) {
 
 // QueryRequest represents a query request body.
 type QueryRequest struct {
-	Query string `json:"query" binding:"required"`
+	Query     string `json:"query" binding:"required"`
+	ProjectID string `json:"project_id"`
 }
 
 // QueryResponse represents a query response.
@@ -269,7 +304,12 @@ func (bq *BigQueryClient) RunQuery(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	it, err := bq.client.Query(request.Query).Read(ctx)
+	client, err := bq.clientForProject(ctx, request.ProjectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("BigQuery client: %v", err)})
+		return
+	}
+	it, err := client.Query(request.Query).Read(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Query execution error: %v", err)})
 		return
@@ -408,5 +448,17 @@ func formatBigQueryValue(v interface{}) interface{} {
 
 // Close closes the BigQuery client.
 func (bq *BigQueryClient) Close() error {
-	return bq.client.Close()
+	var errs []error
+	if err := bq.client.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	bq.mu.Lock()
+	for _, c := range bq.extraClients {
+		if err := c.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	bq.extraClients = nil
+	bq.mu.Unlock()
+	return errors.Join(errs...)
 }
