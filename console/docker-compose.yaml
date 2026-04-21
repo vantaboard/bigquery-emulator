@@ -10,11 +10,14 @@ services:
       - ./data:/data
     command: --project=local-project --data-from-yaml=/data/data.yaml
 
+  # Static UI + nginx. Proxies /api to the explorer API on the host (port 8000).
+  # Start the API separately from the bigquery-emulator repo:
+  #   cd ../bigquery-emulator && BIGQUERY_EMULATOR_HOST=localhost:9050 go run ./cmd/bq-explorer-api
   bq-ui:
     build: .
     ports:
-      - "8000:8000"
-    environment:
-      - BIGQUERY_EMULATOR_HOST=bigquery:9050
+      - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - bigquery

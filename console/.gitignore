@@ -32,6 +32,8 @@ vendor/
 # Build artifacts
 /dist
 /build
+node_modules/
+
 
 # Air live reload (github.com/air-verse/air)
 tmp/

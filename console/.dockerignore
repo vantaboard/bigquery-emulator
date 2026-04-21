@@ -32,6 +32,7 @@ vendor/
 # Build artifacts
 /dist
 /build
+node_modules/
 
 # Data directories
 /data

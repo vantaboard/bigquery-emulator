@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light dark;
+  --bq-bg: #0f1419;
+  --bq-surface: #1a2332;
+  --bq-border: #2d3a4d;
+  --bq-accent: #3b82f6;
+  --bq-text: #e8eef7;
+  --bq-muted: #94a3b8;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--bq-bg);
+  color: var(--bq-text);
+}
+
+#root {
+  min-height: 100vh;
+}
