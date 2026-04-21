@@ -19,6 +19,8 @@ tasks:
       - |
         set -euo pipefail
         source .envrc
+        # Avoid picking up a parent go.work (e.g. meta-repo) that omits this module.
+        export GOWORK=off
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
 
   emulator:build-linked:
