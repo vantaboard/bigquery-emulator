@@ -9,7 +9,7 @@ services:
       - '.:/work'
     working_dir: /work
     command: |
-      --project=test --data-from-yaml=/work/data.yaml
+      --data-from-yaml=/work/data.yaml
   app:
     container_name: app
     build: .

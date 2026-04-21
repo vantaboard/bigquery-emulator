@@ -108,8 +108,8 @@ Usage:
   bigquery-emulator [OPTIONS]
 
 Application Options:
-      --project=        specify the project name
-      --dataset=        specify the dataset name
+      --project=        [deprecated: use POST /emulator/v1/projects to create projects] optional seed project at startup
+      --dataset=        optional seed dataset (only with --project)
       --port=           specify the http port number. this port used by bigquery api (default: 9050)
       --grpc-port=      specify the grpc port number. this port used by bigquery storage api (default: 9060)
       --log-level=      specify the log level (debug/info/warn/error) (default: error)
@@ -122,18 +122,27 @@ Help Options:
   -h, --help            Show this help message
 ```
 
-Start the server by specifying the project name
+Projects are created through the emulator-only HTTP API (not part of the BigQuery REST surface): **`POST /emulator/v1/projects`** with JSON body `{"id":"<project-id>"}`. The **`--project`** flag and **`BIGQUERY_EMULATOR_PROJECT`** environment variable are **deprecated** (they only seed an empty project at startup); prefer the API.
+
+Start the server with no initial project:
 
 ```console
-$ ./bigquery-emulator --project=test
+$ ./bigquery-emulator
 [bigquery-emulator] REST server listening at 0.0.0.0:9050
 [bigquery-emulator] gRPC server listening at 0.0.0.0:9060
 ```
 
-If you want to use docker image to start emulator, specify like the following.
+Create a project (example uses [curl](https://curl.se/)):
 
 ```console
-$ docker run -it ghcr.io/vantaboard/bigquery-emulator:latest --project=test
+$ curl -sS -X POST http://127.0.0.1:9050/emulator/v1/projects -H 'Content-Type: application/json' -d '{"id":"test"}'
+{"id":"test"}
+```
+
+If you want to use docker image to start emulator:
+
+```console
+$ docker run -it -p 9050:9050 -p 9060:9060 ghcr.io/vantaboard/bigquery-emulator:latest
 ```
 
 ## How to use from bq client
@@ -141,10 +150,12 @@ $ docker run -it ghcr.io/vantaboard/bigquery-emulator:latest --project=test
 ### 1. Start the standalone server
 
 ```console
-$ ./bigquery-emulator --project=test --data-from-yaml=./server/testdata/data.yaml
+$ ./bigquery-emulator --data-from-yaml=./server/testdata/data.yaml
 [bigquery-emulator] REST server listening at 0.0.0.0:9050
 [bigquery-emulator] gRPC server listening at 0.0.0.0:9060
 ```
+
+The YAML defines projects (see `projects:` in the file), so **`--project`** is not needed.
 
 * `server/testdata/data.yaml` is [here](https://github.com/vantaboard/bigquery-emulator/blob/main/server/testdata/data.yaml)
 
@@ -167,10 +178,13 @@ $ bq --api http://0.0.0.0:9050 query --project_id=test "SELECT * FROM dataset1.t
 ### 1. Start the standalone server
 
 ```console
-$ ./bigquery-emulator --project=test --dataset=dataset1
+$ ./bigquery-emulator
+# Then create project `test` and dataset `dataset1` via the API / client libraries (see below).
 [bigquery-emulator] REST server listening at 0.0.0.0:9050
 [bigquery-emulator] gRPC server listening at 0.0.0.0:9060
 ```
+
+Alternatively, the deprecated **`--project=test --dataset=dataset1`** still seeds an empty project and dataset at startup.
 
 ### 2. Call endpoint from python client
 

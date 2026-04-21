@@ -1,5 +1,5 @@
 # Live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest)
-# Set BIGQUERY_EMULATOR_PROJECT in .env (env_files below), or add "--project", "<id>" to args_bin.
+# Optional: BIGQUERY_EMULATOR_PROJECT / --project (deprecated; prefer POST /emulator/v1/projects).
 
 root = "."
 tmp_dir = "tmp/air"
@@ -12,7 +12,7 @@ pre_cmd = []
 cmd = "bash scripts/air-build.sh"
 bin = "tmp/air/bigquery-emulator"
 entrypoint = ["./tmp/air/bigquery-emulator"]
-# Project ID: use .env (BIGQUERY_EMULATOR_PROJECT) or extend this list with "--project", "<id>".
+# Seed project (deprecated): .env BIGQUERY_EMULATOR_PROJECT or args_bin "--project", "<id>".
 args_bin = ["--log-level", "debug", "--database", ".bqdata"]
 include_ext = ["go", "mod", "sum"]
 exclude_dir = ["tmp", "vendor", ".git", ".bqdata", "internal/cmd/generator"]

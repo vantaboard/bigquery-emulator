@@ -43,18 +43,16 @@ If your Docker CLI supports `docker build --ignorefile …` (BuildKit 0.11+), yo
 
 ## Run
 
-Default flags listen on all interfaces (HTTP **9050**, gRPC **9060**) with project `dev` and dataset `local`:
+Default flags listen on all interfaces (HTTP **9050**, gRPC **9060**). Create projects at runtime with **`POST /emulator/v1/projects`** and JSON body `{"id":"<project-id>"}`. The **`--project`** / **`BIGQUERY_EMULATOR_PROJECT`** and **`--dataset`** / **`BIGQUERY_EMULATOR_DATASET`** flags are **deprecated** (optional seed only).
 
 ```bash
 docker run --rm -p 9050:9050 -p 9060:9060 bigquery-emulator:local
 ```
 
-Override project, dataset, or ports:
+Override ports or logging:
 
 ```bash
 docker run --rm -p 8080:8080 -p 9090:9090 bigquery-emulator:local \
-  --project=my-gcp-project \
-  --dataset=analytics \
   --host=0.0.0.0 \
   --port=8080 \
   --grpc-port=9090 \
@@ -67,17 +65,17 @@ Persist the SQLite backing store (default is a temp file) by mounting a file and
 
 ```bash
 docker run --rm -p 9050:9050 -v bqemu-data:/data bigquery-emulator:local \
-  --project=dev --dataset=local --database=/data/emulator.db
+  --database=/data/emulator.db
 ```
 
 Use in-memory storage:
 
 ```bash
 docker run --rm -p 9050:9050 bigquery-emulator:local \
-  --project=dev --dataset=local --database=:memory:
+  --database=:memory:
 ```
 
-Environment variables (see `--help`) mirror the long flags, e.g. `BIGQUERY_EMULATOR_PROJECT`, `BIGQUERY_EMULATOR_DATASET`.
+Environment variables (see `--help`) mirror the long flags, e.g. `BIGQUERY_EMULATOR_PROJECT` (deprecated), `BIGQUERY_EMULATOR_DATASET`.
 
 ## Why not plain `docker build .` without `Dockerfile.linked`?
 

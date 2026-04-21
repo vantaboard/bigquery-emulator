@@ -14,9 +14,11 @@ import (
 	"github.com/vantaboard/bigquery-emulator/types"
 )
 
+const emulatorProjectsAPI = "/emulator/v1/projects"
+
 type option struct {
-	Project      string           `description:"specify the project name" long:"project" env:"BIGQUERY_EMULATOR_PROJECT"`
-	Dataset      string           `description:"specify the dataset name" long:"dataset" env:"BIGQUERY_EMULATOR_DATASET"`
+	Project      string           `description:"[deprecated: use POST /emulator/v1/projects to create projects] optional seed project at startup" long:"project" env:"BIGQUERY_EMULATOR_PROJECT"`
+	Dataset      string           `description:"optional seed dataset (only with --project)" long:"dataset" env:"BIGQUERY_EMULATOR_DATASET"`
 	Host         string           `description:"specify the host" long:"host" default:"0.0.0.0"`
 	HTTPPort     uint16           `description:"specify the http port number. this port used by bigquery api" long:"port" default:"9050"`
 	GRPCPort     uint16           `description:"specify the grpc port number. this port used by bigquery storage api" long:"grpc-port" default:"9060"`
@@ -76,8 +78,11 @@ func runServer(args []string, opt option) error {
 		fmt.Fprintf(os.Stdout, "version: %s (%s)\n", version, revision)
 		return nil
 	}
-	if opt.Project == "" {
-		return fmt.Errorf("the required flag --project was not specified")
+	if opt.Dataset != "" && opt.Project == "" {
+		return fmt.Errorf("--dataset requires --project, or omit both and create a project with POST %s (JSON: {\"id\":\"<project-id>\"})", emulatorProjectsAPI)
+	}
+	if opt.Project != "" {
+		fmt.Fprintf(os.Stderr, "[bigquery-emulator] deprecated: --project and BIGQUERY_EMULATOR_PROJECT are deprecated; create projects with POST %s (JSON body: {\"id\":\"<project-id>\"}). This option will be removed in a future release.\n", emulatorProjectsAPI)
 	}
 	var db server.Storage
 	if opt.Database == ":memory:" {
@@ -87,19 +92,21 @@ func runServer(args []string, opt option) error {
 	} else {
 		db = server.Storage(fmt.Sprintf("file:%s?cache=shared", opt.Database))
 	}
-	project := types.NewProject(opt.Project)
-	if opt.Dataset != "" {
-		project.Datasets = append(project.Datasets, types.NewDataset(opt.Dataset))
-	}
 	bqServer, err := server.New(db)
 	if err != nil {
 		return err
 	}
-	if err := bqServer.SetProject(project.ID); err != nil {
-		return err
-	}
-	if err := bqServer.Load(server.StructSource(project)); err != nil {
-		return err
+	if opt.Project != "" {
+		project := types.NewProject(opt.Project)
+		if opt.Dataset != "" {
+			project.Datasets = append(project.Datasets, types.NewDataset(opt.Dataset))
+		}
+		if err := bqServer.SetProject(project.ID); err != nil {
+			return err
+		}
+		if err := bqServer.Load(server.StructSource(project)); err != nil {
+			return err
+		}
 	}
 	if err := bqServer.SetLogLevel(opt.LogLevel); err != nil {
 		return err

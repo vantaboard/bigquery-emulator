@@ -60,5 +60,5 @@ EXPOSE 9050 9060
 
 ENTRYPOINT ["/usr/local/bin/bigquery-emulator"]
 
-# --project is required; override at `docker run` time.
-CMD ["--project=dev", "--dataset=local", "--host=0.0.0.0", "--port=9050", "--grpc-port=9060", "--log-level=info"]
+# Create projects at runtime: POST /emulator/v1/projects with body {"id":"<project-id>"}.
+CMD ["--host=0.0.0.0", "--port=9050", "--grpc-port=9060", "--log-level=info"]
