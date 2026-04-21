@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -35,8 +34,6 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 	if projectID == "" && emulatorHost != "" {
 		if ids, err := FetchProjectIDsFromEmulator(ctx, httpClient, emulatorHost); err == nil && len(ids) > 0 {
 			projectID = ids[0]
-		} else if err != nil {
-			log.Printf("bq-explorer-api: could not discover default project from emulator: %v", err)
 		}
 	}
 	if projectID == "" {
@@ -81,9 +78,6 @@ func (bq *BigQueryClient) GetProjects(c *gin.Context) {
 		ids, err = FetchProjectIDsFromEmulator(c.Request.Context(), bq.httpClient, bq.emulatorHost)
 	}
 	if err != nil || len(ids) == 0 {
-		if err != nil {
-			log.Printf("bq-explorer-api: project discovery failed: %v", err)
-		}
 		ids = []string{bq.projectID}
 	} else {
 		ids = ApplyProjectIDListEnv(ids, bq.projectID)
