@@ -44,12 +44,12 @@ tasks:
             GO_GOOGLESQL_IMAGE="${BASH_REMATCH[1]}"
             GO_GOOGLESQL_TAG="${BASH_REMATCH[2]}"
           else
-            echo "task docker:build: GO_GOOGLESQL_BASE must be image:tag (e.g. ghcr.io/vantaboard/go-googlesql:v0.5.10)" >&2
+            echo "task docker:build: GO_GOOGLESQL_BASE must be image:tag (e.g. ghcr.io/vantaboard/go-googlesql:v0.5.12)" >&2
             exit 1
           fi
         else
           GO_GOOGLESQL_IMAGE="${GO_GOOGLESQL_IMAGE:-ghcr.io/vantaboard/go-googlesql}"
-          GO_GOOGLESQL_TAG="${GO_GOOGLESQL_TAG:-v0.5.10}"
+          GO_GOOGLESQL_TAG="${GO_GOOGLESQL_TAG:-v0.5.12}"
         fi
         docker build -t bigquery-emulator -f Dockerfile.linked . \
           --build-arg VERSION="$VERSION" \

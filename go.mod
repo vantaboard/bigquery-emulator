@@ -17,12 +17,12 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/parquet-go/parquet-go v0.24.0
-	github.com/vantaboard/go-googlesql v0.5.10
-	github.com/vantaboard/go-googlesql/lib/darwin-amd64 v0.5.10
-	github.com/vantaboard/go-googlesql/lib/darwin-arm64 v0.5.10
-	github.com/vantaboard/go-googlesql/lib/linux-amd64 v0.5.10
-	github.com/vantaboard/go-googlesql/lib/linux-arm64 v0.5.10
-	github.com/vantaboard/go-googlesqlite v0.21.2
+	github.com/vantaboard/go-googlesql v0.5.12
+	github.com/vantaboard/go-googlesql/lib/darwin-amd64 v0.5.11
+	github.com/vantaboard/go-googlesql/lib/darwin-arm64 v0.5.11
+	github.com/vantaboard/go-googlesql/lib/linux-amd64 v0.5.11
+	github.com/vantaboard/go-googlesql/lib/linux-arm64 v0.5.11
+	github.com/vantaboard/go-googlesqlite v0.21.3
 	go.uber.org/zap v1.21.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/api v0.230.0
@@ -48,7 +48,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
-	github.com/vantaboard/go-googlesql/lib/windows-amd64 v0.5.10 // indirect
+	github.com/vantaboard/go-googlesql/lib/windows-amd64 v0.5.11 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.36.0 // indirect
