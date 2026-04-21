@@ -59,7 +59,9 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
+		api.GET("/config", bqClient.GetConfig)
 		api.GET("/projects", bqClient.GetProjects)
+		api.POST("/emulator/projects", bqClient.CreateEmulatorProject)
 		api.GET("/projects/:project_id/datasets", bqClient.GetDatasets)
 		api.GET("/projects/:project_id/datasets/:dataset_id/tables", bqClient.GetTables)
 		api.GET("/projects/:project_id/datasets/:dataset_id/tables/:table_id/schema", bqClient.GetTableSchema)

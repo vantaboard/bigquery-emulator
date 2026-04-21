@@ -54,6 +54,14 @@
                     <div class="tree-view">
                         <ul id="projectTree" class="tree"></ul>
                     </div>
+                    <div id="emulatorAdminPanel" class="border-top px-3 py-2" hidden>
+                        <label class="form-label small mb-1" for="newProjectIdInput">Add emulator project</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="newProjectIdInput" class="form-control" placeholder="project-id" autocomplete="off" aria-label="New project id">
+                            <button type="button" id="addEmulatorProjectBtn" class="btn btn-outline-primary btn-sm">Add</button>
+                        </div>
+                        <p id="emulatorAdminError" class="text-danger small mb-0 mt-1" hidden></p>
+                    </div>
                 </div>
             </aside>
 

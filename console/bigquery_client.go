@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -17,14 +19,26 @@ import (
 
 // BigQueryClient handles interactions with BigQuery
 type BigQueryClient struct {
-	client    *bigquery.Client
-	projectID string
+	client       *bigquery.Client
+	projectID    string
+	emulatorHost string
+	httpClient   *http.Client
 }
 
 // NewBigQueryClient creates a new BigQuery client
 func NewBigQueryClient() (*BigQueryClient, error) {
 	ctx := context.Background()
-	projectID := os.Getenv("BIGQUERY_PROJECT_ID")
+	emulatorHost := normalizeEmulatorHost(os.Getenv("BIGQUERY_EMULATOR_HOST"))
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+
+	projectID := strings.TrimSpace(os.Getenv("BIGQUERY_PROJECT_ID"))
+	if projectID == "" && emulatorHost != "" {
+		if ids, err := fetchProjectIDsFromEmulator(ctx, httpClient, emulatorHost); err == nil && len(ids) > 0 {
+			projectID = ids[0]
+		} else if err != nil {
+			log.Printf("bigquery-emulator-ui: could not discover default project from emulator: %v", err)
+		}
+	}
 	if projectID == "" {
 		projectID = "emulator-project"
 	}
@@ -32,7 +46,7 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 	var client *bigquery.Client
 	var err error
 
-	if emulatorHost := os.Getenv("BIGQUERY_EMULATOR_HOST"); emulatorHost != "" {
+	if emulatorHost != "" {
 		endpoint := fmt.Sprintf("http://%s/bigquery/v2/", emulatorHost)
 		client, err = bigquery.NewClient(ctx, projectID,
 			option.WithEndpoint(endpoint),
@@ -52,14 +66,63 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 	}
 
 	return &BigQueryClient{
-		client:    client,
-		projectID: projectID,
+		client:       client,
+		projectID:    projectID,
+		emulatorHost: emulatorHost,
+		httpClient:   httpClient,
 	}, nil
 }
 
-// GetProjects lists available projects
+// GetProjects lists available projects (multi-project when using a compatible emulator).
 func (bq *BigQueryClient) GetProjects(c *gin.Context) {
-	c.JSON(http.StatusOK, []string{bq.projectID})
+	var ids []string
+	var err error
+	if bq.emulatorHost != "" {
+		ids, err = fetchProjectIDsFromEmulator(c.Request.Context(), bq.httpClient, bq.emulatorHost)
+	}
+	if err != nil || len(ids) == 0 {
+		if err != nil {
+			log.Printf("bigquery-emulator-ui: project discovery failed: %v", err)
+		}
+		ids = []string{bq.projectID}
+	} else {
+		ids = applyProjectIDListEnv(ids, bq.projectID)
+	}
+	if len(ids) == 0 {
+		ids = []string{bq.projectID}
+	}
+	c.JSON(http.StatusOK, ids)
+}
+
+// GetConfig exposes UI feature flags (e.g. emulator admin API).
+func (bq *BigQueryClient) GetConfig(c *gin.Context) {
+	allow := os.Getenv("ALLOW_EMULATOR_PROJECT_ADMIN") == "true" && bq.emulatorHost != ""
+	c.JSON(http.StatusOK, gin.H{"allowEmulatorProjectAdmin": allow})
+}
+
+// CreateEmulatorProject proxies POST to the emulator's /emulator/v1/projects (Vantaboard fork).
+func (bq *BigQueryClient) CreateEmulatorProject(c *gin.Context) {
+	if os.Getenv("ALLOW_EMULATOR_PROJECT_ADMIN") != "true" || bq.emulatorHost == "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "emulator project admin is disabled"})
+		return
+	}
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	id := strings.TrimSpace(body.ID)
+	if !validateProjectIDForPath(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project id"})
+		return
+	}
+	if err := postEmulatorCreateProject(c.Request.Context(), bq.httpClient, bq.emulatorHost, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"id": id})
 }
 
 // GetDatasets lists datasets in a project

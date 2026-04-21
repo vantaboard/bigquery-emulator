@@ -17,10 +17,19 @@ This project serves as a user-friendly web interface for the BigQuery emulator, 
 ## Features
 
 - Connect to BigQuery emulator or real BigQuery service
-- Browse projects, datasets, and tables
+- Browse projects, datasets, and tables (multiple projects when the emulator exposes them; see below)
 - View table schemas
 - Execute queries and get results
 - Simple, responsive web interface
+- Optional: add projects at runtime against a compatible emulator (`ALLOW_EMULATOR_PROJECT_ADMIN=true`)
+
+### Upstream goccy vs Vantaboard fork
+
+The default `docker-compose.yaml` uses **`ghcr.io/goccy/bigquery-emulator`**, which may not implement the same multi-project discovery or emulator-only HTTP routes as the **[Vantaboard fork](https://github.com/vantaboard/bigquery-emulator)** (`ghcr.io/vantaboard/bigquery-emulator`).
+
+This UI discovers projects by calling **`GET /emulator/v1/projects`** (JSON array of project ids) when available, and falls back to **`GET /bigquery/v2/projects`**.
+
+For local development against the Vantaboard image, use **`docker-compose.local.yaml`** (see [Docker Execution](#docker-execution)).
 
 ## Installation
 
@@ -45,8 +54,14 @@ This project serves as a user-friendly web interface for the BigQuery emulator, 
 3. Create a `.env` file to override defaults (optional):
    ```
    BIGQUERY_EMULATOR_HOST=localhost:9050
+   BIGQUERY_PROJECT_IDS=extra-proj,another-proj
+   BIGQUERY_PROJECT_IDS_MODE=
+   ALLOW_EMULATOR_PROJECT_ADMIN=false
    PORT=8000
    ```
+
+   - **`BIGQUERY_PROJECT_IDS`**: Optional comma-separated list. With **`BIGQUERY_PROJECT_IDS_MODE=override`**, this list replaces discovered projects (if empty, the configured default project is used). Otherwise, these ids are merged with the list returned by the emulator.
+   - **`ALLOW_EMULATOR_PROJECT_ADMIN`**: Set to **`true`** to enable **`POST /api/emulator/projects`** and the sidebar “Add emulator project” control (proxies to the emulator’s **`POST /emulator/v1/projects`**). Only use on trusted local emulators.
 
 4. Build the application:
    ```bash
@@ -80,6 +95,20 @@ BIGQUERY_EMULATOR_HOST=localhost:9050 ./bigquery-emulator-ui
 By default, the UI server runs on port 8000. Access it at http://localhost:8000
 
 ### Docker Execution
+
+#### Vantaboard emulator (recommended for multi-project)
+
+From this repository directory, run the base compose file plus the local override so the **`bigquery`** service uses the Vantaboard image:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.local.yaml up
+```
+
+Ports **9050** (HTTP) and **9060** are published as in the base file. The UI service **`bq-ui`** should set **`BIGQUERY_EMULATOR_HOST=bigquery:9050`** (already in `docker-compose.yaml`).
+
+To build the emulator from a **sibling** source tree instead of pulling the image, see the comments in [`docker-compose.local.yaml`](docker-compose.local.yaml) (requires the full stack context described in the **bigquery-emulator** repo, e.g. `Dockerfile.linked`).
+
+#### Default compose (goccy image)
 
 If you already have a BigQuery emulator running, you can use this UI with it:
 
@@ -115,8 +144,28 @@ Access the UI at http://localhost:8000
 
 You can customize the Docker environment by modifying the docker-compose.yaml file or by creating a .env file with the following variables:
 
-- `BIGQUERY_EMULATOR_HOST`: The BigQuery emulator host and port (default: "localhost:9050")
+- `BIGQUERY_EMULATOR_HOST`: Host and port of the emulator (**`bigquery:9050`** inside Compose; **`localhost:9050`** when the UI runs on your machine and the emulator publishes **9050**).
+- `BIGQUERY_PROJECT_IDS` / `BIGQUERY_PROJECT_IDS_MODE`: Optional project list merge or override (see above).
+- `ALLOW_EMULATOR_PROJECT_ADMIN`: Set **`true`** only for trusted local emulators to enable add-project UI and API.
 - `PORT`: The port for the UI server (default: 8000)
+
+### Running the UI on the host against a local emulator
+
+With the emulator listening on **localhost:9050**:
+
+```bash
+BIGQUERY_EMULATOR_HOST=localhost:9050 go run .
+```
+
+Open **http://localhost:8000**. The resource tree lists all projects returned by the emulator (when supported).
+
+### Verification (multi-project)
+
+1. Start a Vantaboard-based emulator (e.g. `docker compose -f docker-compose.yaml -f docker-compose.local.yaml up`).
+2. Ensure at least two projects exist (seed data with two projects, or add one with  
+   `curl -sS -X POST "http://localhost:9050/emulator/v1/projects" -H "Content-Type: application/json" -d '{"id":"second-project"}'`).
+3. Open the UI and confirm **`GET /api/projects`** (via the sidebar tree) lists both projects and that datasets load per project when expanded.
+4. With **`ALLOW_EMULATOR_PROJECT_ADMIN=true`**, use the sidebar “Add emulator project” or **`POST /api/emulator/projects`** with body `{"id":"..."}` and confirm the list refreshes.
 
 ## Development
 

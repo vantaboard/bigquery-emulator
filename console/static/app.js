@@ -22,6 +22,7 @@ const state = {
     resultRenderFrame: null,
     resultRenderToken: 0,
     urlUpdateDebounceTimer: null,
+    allowEmulatorProjectAdmin: false,
     ui: {
         sidebarWidth: 340,
         editorHeight: 300,
@@ -68,7 +69,11 @@ const elements = {
     tableLocation: document.getElementById("tableLocation"),
     tableCreated: document.getElementById("tableCreated"),
     tableModified: document.getElementById("tableModified"),
-    shareBtn: document.getElementById("shareBtn")
+    shareBtn: document.getElementById("shareBtn"),
+    emulatorAdminPanel: document.getElementById("emulatorAdminPanel"),
+    newProjectIdInput: document.getElementById("newProjectIdInput"),
+    addEmulatorProjectBtn: document.getElementById("addEmulatorProjectBtn"),
+    emulatorAdminError: document.getElementById("emulatorAdminError")
 };
 
 const UI_STORAGE_KEY = "bigqueryExplorerUILayout";
@@ -101,6 +106,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     renderTableInfo();
     renderQueryResults();
 
+    await loadConfig();
     await loadProjects();
 
     const params = getParamsFromUrl();
@@ -201,6 +207,18 @@ function setupEventListeners() {
     elements.toggleEditorBtn.addEventListener("click", toggleEditorCollapsed);
     elements.shareBtn.addEventListener("click", shareLink);
 
+    if (elements.addEmulatorProjectBtn) {
+        elements.addEmulatorProjectBtn.addEventListener("click", addEmulatorProject);
+    }
+    if (elements.newProjectIdInput) {
+        elements.newProjectIdInput.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") {
+                ev.preventDefault();
+                addEmulatorProject();
+            }
+        });
+    }
+
     elements.infoTab.addEventListener("click", () => switchTab("info"));
     elements.resultsTab.addEventListener("click", () => switchTab("results"));
     elements.jsonTab.addEventListener("click", () => switchTab("json"));
@@ -271,6 +289,46 @@ function setTabState(button, panel, isActive) {
     button.setAttribute("aria-selected", String(isActive));
     panel.hidden = !isActive;
     panel.setAttribute("aria-hidden", String(!isActive));
+}
+
+async function loadConfig() {
+    try {
+        const response = await axios.get("/api/config");
+        state.allowEmulatorProjectAdmin = !!response.data.allowEmulatorProjectAdmin;
+    } catch (error) {
+        state.allowEmulatorProjectAdmin = false;
+    }
+    updateEmulatorAdminPanel();
+}
+
+function updateEmulatorAdminPanel() {
+    if (!elements.emulatorAdminPanel) {
+        return;
+    }
+    elements.emulatorAdminPanel.hidden = !state.allowEmulatorProjectAdmin;
+}
+
+async function addEmulatorProject() {
+    if (!elements.newProjectIdInput || !elements.emulatorAdminError) {
+        return;
+    }
+    const id = elements.newProjectIdInput.value.trim();
+    if (!id) {
+        return;
+    }
+    elements.emulatorAdminError.hidden = true;
+    try {
+        await axios.post("/api/emulator/projects", { id });
+        elements.newProjectIdInput.value = "";
+        await loadProjects();
+    } catch (error) {
+        const msg =
+            (error.response && error.response.data && error.response.data.error) ||
+            error.message ||
+            "Failed to add project";
+        elements.emulatorAdminError.textContent = msg;
+        elements.emulatorAdminError.hidden = false;
+    }
 }
 
 async function loadProjects() {
