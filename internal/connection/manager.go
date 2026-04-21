@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/vantaboard/go-googlesqlite"
 )
@@ -16,14 +18,15 @@ const (
 )
 
 type Manager struct {
-	db        *sql.DB
-	queries   []string
-	connPool  []*ManagedConnection
-	connChan  chan *ManagedConnection
-	poolSize  int
-	mu        sync.Mutex
-	closeOnce sync.Once
-	closed    bool
+	db                   *sql.DB
+	queries              []string
+	connPool             []*ManagedConnection
+	connChan             chan *ManagedConnection
+	poolSize             int
+	mu                   sync.Mutex
+	closeOnce            sync.Once
+	closed               bool
+	preparedQueryStrings []string // copy for rebuilding conns after context-cancel invalidation
 
 	// Map transactions to their connection cache for prepared statement retrieval
 	txConnMap map[*sql.Tx]*ManagedConnection
@@ -252,6 +255,10 @@ func (m *Manager) GetStatement(ctx context.Context, tx *sql.Tx, name string) (*s
 }
 
 func (m *Manager) PrepareQueries(queries []string) error {
+	m.mu.Lock()
+	m.preparedQueryStrings = append([]string(nil), queries...)
+	m.mu.Unlock()
+
 	for _, conn := range m.connPool {
 		// Prepare specified SQLite queries for this connection
 		ctx := googlesqlite.WithQueryFormattingDisabled(context.Background())
@@ -266,12 +273,68 @@ func (m *Manager) PrepareQueries(queries []string) error {
 	return nil
 }
 
+// releaseConnAfterUse returns a pooled connection after a request. If the underlying
+// *sql.Conn was closed (e.g. because the HTTP request context was canceled while a
+// query was running), database/sql leaves it unusable; we replace the sqlite Conn and
+// re-prepare statements so the pool does not hand out dead connections.
+func (m *Manager) releaseConnAfterUse(conn *ManagedConnection) {
+	if m.closed || conn == nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return
+	}
+	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.googlesqliteConnection.PingContext(pingCtx); err != nil {
+		if rebErr := m.rebindManagedConnection(conn); rebErr != nil {
+			log.Printf("bigquery-emulator: failed to rebind dead pooled connection: %v (ping err: %v)", rebErr, err)
+		}
+	}
+	m.connChan <- conn
+}
+
+func (m *Manager) rebindManagedConnection(mc *ManagedConnection) error {
+	m.mu.Lock()
+	queries := m.preparedQueryStrings
+	m.mu.Unlock()
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	for _, stmt := range mc.stmts {
+		_ = stmt.Close()
+	}
+	mc.stmts = make(map[string]*sql.Stmt)
+	if mc.googlesqliteConnection != nil {
+		_ = mc.googlesqliteConnection.Close()
+	}
+	newConn, err := m.db.Conn(context.Background())
+	if err != nil {
+		return fmt.Errorf("db.Conn: %w", err)
+	}
+	mc.googlesqliteConnection = newConn
+	mc.ProjectID = ""
+	mc.DatasetID = ""
+
+	prepCtx := googlesqlite.WithQueryFormattingDisabled(context.Background())
+	for _, query := range queries {
+		stmt, err := mc.googlesqliteConnection.PrepareContext(prepCtx, query)
+		if err != nil {
+			return fmt.Errorf("prepare %q: %w", query, err)
+		}
+		mc.stmts[query] = stmt
+	}
+	return nil
+}
+
 func (m *Manager) WithManagedConnection(ctx context.Context, fn func(ctx context.Context, conn *ManagedConnection) error) error {
+	if m.closed {
+		return fmt.Errorf("repository is closed")
+	}
 	select {
 	case conn := <-m.connChan:
-		defer func() {
-			m.connChan <- conn
-		}()
+		defer m.releaseConnAfterUse(conn)
 
 		return fn(ctx, conn)
 
@@ -316,9 +379,7 @@ func WithManagedConnection[T any](m *Manager, ctx context.Context,
 
 	select {
 	case conn := <-m.connChan:
-		defer func() {
-			m.connChan <- conn
-		}()
+		defer m.releaseConnAfterUse(conn)
 
 		return fn(ctx, conn)
 
