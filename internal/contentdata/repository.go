@@ -22,6 +22,13 @@ import (
 
 const ViewQueryEndCutset = ";\n \t"
 
+func truncateQueryForLog(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
 type Repository struct {
 	db *sql.DB
 }
@@ -193,9 +200,9 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		}
 	}
 	fields := []*bigqueryv2.TableFieldSchema{}
-	logger.Logger(ctx).Info(
+	logger.Logger(ctx).Debug(
 		"content query",
-		slog.String("query", query),
+		slog.String("query", truncateQueryForLog(query, 2048)),
 		slog.Any("values", values),
 	)
 	// We must pass the query parameters to googlesqlite so the analyzer uses the proper typings

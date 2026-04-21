@@ -1664,12 +1664,11 @@ type jobsGetQueryResultsRequest struct {
 }
 
 func (h *jobsGetQueryResultsHandler) Handle(ctx context.Context, r *jobsGetQueryResultsRequest) (*internaltypes.GetQueryResultsResponse, error) {
-	j, err := r.server.findJobUsingRequestConnection(ctx, r.project.ID, r.job.ID)
-	if err != nil {
-		return nil, err
-	}
+	// Job was already loaded by withJobMiddleware via findJobUsingRequestConnection;
+	// reloading here duplicated work and doubled DEBUG logs on every poll.
+	j := r.job
 	if j == nil {
-		return nil, fmt.Errorf("job %s not found", r.job.ID)
+		return nil, fmt.Errorf("job is nil")
 	}
 	if !j.IsTerminal() {
 		return &internaltypes.GetQueryResultsResponse{

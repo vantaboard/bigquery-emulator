@@ -204,11 +204,13 @@ func (s *Server) findJobUsingRequestConnection(ctx context.Context, projectID, j
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.logger.Debug("findJobUsingRequestConnection",
-		"project_id", projectID,
-		"job_id", jobID,
-		"elapsed_ms", time.Since(start).Milliseconds(),
-	)
+	if elapsed := time.Since(start); elapsed >= 5*time.Millisecond {
+		s.logger.Debug("findJobUsingRequestConnection slow",
+			"project_id", projectID,
+			"job_id", jobID,
+			"elapsed_ms", elapsed.Milliseconds(),
+		)
+	}
 	return job, nil
 }
 
