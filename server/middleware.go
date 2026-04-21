@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -18,23 +17,6 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/internal/logger"
 )
-
-func sequentialAccessMiddleware() func(http.Handler) http.Handler {
-	var mu sync.Mutex
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Explorer UI API (/api/*) calls back into this server via the BigQuery HTTP client; do not
-			// hold the global sequential lock across those nested requests (deadlock with self-calls).
-			if strings.HasPrefix(r.URL.Path, explorerapi.APIPrefix) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 
 func recoveryMiddleware(s *Server) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

@@ -346,11 +346,13 @@ func (r *Repository) findJobs(ctx context.Context, tx *sql.Tx, projectID string,
 				return nil, fmt.Errorf("failed to decode metadata content %s: %w", metadata, err)
 			}
 		}
-		var response internaltypes.QueryResponse
+		var respPtr *internaltypes.QueryResponse
 		if len(result) > 0 {
+			var response internaltypes.QueryResponse
 			if err := json.Unmarshal([]byte(result), &response); err != nil {
 				return nil, fmt.Errorf("failed to decode job response %s: %w", result, err)
 			}
+			respPtr = &response
 		}
 		var resErr error
 		if jobErr != "" {
@@ -358,7 +360,7 @@ func (r *Repository) findJobs(ctx context.Context, tx *sql.Tx, projectID string,
 		}
 		jobs = append(
 			jobs,
-			NewJob(r, projectID, jobID, &content, &response, resErr),
+			NewJob(r, projectID, jobID, &content, respPtr, resErr),
 		)
 	}
 
@@ -397,11 +399,13 @@ func (r *Repository) FindJobsInProject(ctx context.Context, pID string) ([]*Job,
 					return nil, fmt.Errorf("failed to decode metadata content %s: %w", metadata, err)
 				}
 			}
-			var response internaltypes.QueryResponse
+			var respPtr *internaltypes.QueryResponse
 			if len(result) > 0 {
+				var response internaltypes.QueryResponse
 				if err := json.Unmarshal([]byte(result), &response); err != nil {
 					return nil, fmt.Errorf("failed to decode job response %s: %w", result, err)
 				}
+				respPtr = &response
 			}
 			var resErr error
 			if jobErr != "" {
@@ -409,7 +413,7 @@ func (r *Repository) FindJobsInProject(ctx context.Context, pID string) ([]*Job,
 			}
 			jobs = append(
 				jobs,
-				NewJob(r, projectID, jobID, &content, &response, resErr),
+				NewJob(r, projectID, jobID, &content, respPtr, resErr),
 			)
 		}
 		return jobs, nil
@@ -421,9 +425,13 @@ func (r *Repository) AddJob(ctx context.Context, tx *sql.Tx, job *Job) error {
 	if err != nil {
 		return err
 	}
-	result, err := json.Marshal(job.response)
-	if err != nil {
-		return err
+	var resultStr string
+	if job.response != nil {
+		result, err := json.Marshal(job.response)
+		if err != nil {
+			return err
+		}
+		resultStr = string(result)
 	}
 	var jobErr string
 	if job.err != nil {
@@ -433,7 +441,7 @@ func (r *Repository) AddJob(ctx context.Context, tx *sql.Tx, job *Job) error {
 		"id":        job.ID,
 		"projectID": job.ProjectID,
 		"metadata":  string(metadata),
-		"result":    string(result),
+		"result":    resultStr,
 		"error":     jobErr,
 	})
 }
@@ -443,9 +451,13 @@ func (r *Repository) UpdateJob(ctx context.Context, tx *sql.Tx, job *Job) error 
 	if err != nil {
 		return err
 	}
-	result, err := json.Marshal(job.response)
-	if err != nil {
-		return err
+	var resultStr string
+	if job.response != nil {
+		result, err := json.Marshal(job.response)
+		if err != nil {
+			return err
+		}
+		resultStr = string(result)
 	}
 	var jobErr string
 	if job.err != nil {
@@ -455,7 +467,7 @@ func (r *Repository) UpdateJob(ctx context.Context, tx *sql.Tx, job *Job) error 
 		"id":        job.ID,
 		"projectID": job.ProjectID,
 		"metadata":  string(metadata),
-		"result":    string(result),
+		"result":    resultStr,
 		"error":     jobErr,
 	})
 }

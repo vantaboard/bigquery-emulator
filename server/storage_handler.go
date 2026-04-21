@@ -157,8 +157,17 @@ func (s *storageReadServer) ReadRows(req *storagepb.ReadRowsRequest, stream stor
 	if status == nil {
 		return fmt.Errorf("failed to find stream status from %s", req.ReadStream)
 	}
-	ctx := context.Background()
+	ctx := stream.Context()
 	ctx = logger.WithLogger(ctx, s.server.logger)
+
+	if s.server.storageReadSem != nil {
+		select {
+		case s.server.storageReadSem <- struct{}{}:
+			defer func() { <-s.server.storageReadSem }()
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 
 	response, err := s.query(ctx, status)
 	if err != nil {

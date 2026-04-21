@@ -30,6 +30,9 @@ type Server struct {
 	connMgr         *connection.Manager
 	metaRepo        *metadata.Repository
 	contentRepo     *contentdata.Repository
+	queryExec       *JobExecutor
+	heavyQuerySem   chan struct{}
+	storageReadSem  chan struct{}
 	fileCleanup     func() error
 	explorerCleanup func() error
 	httpServer      *http.Server
@@ -70,7 +73,7 @@ func New(storage Storage) (*Server, error) {
 	}
 	server.logger = zap.NewNop()
 
-	connectionManager, err := connection.NewManager(context.Background(), db)
+	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolSize(defaultConnectionPoolSize))
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +84,11 @@ func New(storage Storage) (*Server, error) {
 	}
 	server.metaRepo = metaRepo
 	server.contentRepo = contentdata.NewRepository(db)
+
+	server.queryExec = newJobExecutor(server, defaultQueryWorkers, defaultQueryQueueDepth)
+	registerQueryJobCanceller(server.queryExec)
+	server.heavyQuerySem = make(chan struct{}, defaultQueryWorkers)
+	server.storageReadSem = make(chan struct{}, defaultStorageReadSlots)
 
 	r := mux.NewRouter()
 	for _, handler := range handlers {
@@ -101,7 +109,6 @@ func New(storage Storage) (*Server, error) {
 	r.PathPrefix(explorerapi.APIPrefix).Handler(explorerHandler)
 
 	r.PathPrefix("/").Handler(&defaultHandler{})
-	r.Use(sequentialAccessMiddleware())
 	r.Use(recoveryMiddleware(server))
 	r.Use(loggerMiddleware(server))
 	r.Use(accessLogMiddleware())
@@ -126,9 +133,18 @@ func (s *Server) Close() error {
 			}
 		}
 	}()
+	if s.queryExec != nil {
+		s.queryExec.Stop()
+	}
+	registerQueryJobCanceller(nil)
 	if s.explorerCleanup != nil {
 		if err := s.explorerCleanup(); err != nil {
 			log.Printf("failed to close explorer api client: %s", err.Error())
+		}
+	}
+	if s.connMgr != nil {
+		if err := s.connMgr.Close(); err != nil {
+			log.Printf("failed to close connection manager: %s", err.Error())
 		}
 	}
 	if err := s.db.Close(); err != nil {

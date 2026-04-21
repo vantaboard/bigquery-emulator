@@ -1624,7 +1624,10 @@ type jobsGetRequest struct {
 
 func (h *jobsGetHandler) Handle(ctx context.Context, r *jobsGetRequest) (*bigqueryv2.Job, error) {
 	content := *r.job.Content()
-	content.Status = &bigqueryv2.JobStatus{State: "DONE"}
+	// Load jobs and older metadata may omit status; cloud.google.com/go/bigquery Job.Wait expects a non-nil Status.
+	if content.Status == nil {
+		content.Status = &bigqueryv2.JobStatus{State: "DONE"}
+	}
 	return &content, nil
 }
 
@@ -1656,9 +1659,36 @@ type jobsGetQueryResultsRequest struct {
 }
 
 func (h *jobsGetQueryResultsHandler) Handle(ctx context.Context, r *jobsGetQueryResultsRequest) (*internaltypes.GetQueryResultsResponse, error) {
-	response, err := r.job.Wait(ctx)
+	j, err := r.project.Job(ctx, r.job.ID)
 	if err != nil {
 		return nil, err
+	}
+	if j == nil {
+		return nil, fmt.Errorf("job %s not found", r.job.ID)
+	}
+	if !j.IsTerminal() {
+		return &internaltypes.GetQueryResultsResponse{
+			JobReference: &bigqueryv2.JobReference{
+				ProjectId: r.project.ID,
+				JobId:     r.job.ID,
+			},
+			JobComplete: false,
+			TotalRows:   0,
+		}, nil
+	}
+	if err := j.Err(); err != nil {
+		return nil, err
+	}
+	response := j.Response()
+	if response == nil {
+		return &internaltypes.GetQueryResultsResponse{
+			JobReference: &bigqueryv2.JobReference{
+				ProjectId: r.project.ID,
+				JobId:     r.job.ID,
+			},
+			JobComplete: true,
+			TotalRows:   0,
+		}, nil
 	}
 	rows := internaltypes.Format(response.Schema, response.Rows, r.useInt64Timestamp)
 
@@ -2236,6 +2266,15 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 
 		return nil, fmt.Errorf("unspecified job configuration query")
 	}
+	if job.Configuration.DryRun {
+		return h.insertQueryJobDryRun(ctx, r)
+	}
+	return h.insertQueryJobAsync(ctx, r)
+}
+
+// insertQueryJobDryRun runs a query job in-process without persisting results (transaction rolled back).
+func (h *jobsInsertHandler) insertQueryJobDryRun(ctx context.Context, r *jobsInsertRequest) (*bigqueryv2.Job, error) {
+	job := r.job
 	conn := connectionFromContext(ctx).ConfigureScope(r.project.ID, "")
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -2292,7 +2331,7 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 			if err := r.server.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
 				return nil, fmt.Errorf("failed to add table data: %w", err)
 			}
-		} else if response.TotalRows > 0 {
+		} else if response != nil && response.TotalRows > 0 {
 			if err := h.addQueryResultToDynamicDestinationTable(ctx, tx, r, response); err != nil {
 				return nil, fmt.Errorf("failed to add query result to dynamic destination table: %w", err)
 			}
@@ -2344,18 +2383,217 @@ func (h *jobsInsertHandler) Handle(ctx context.Context, r *jobsInsertRequest) (*
 	); err != nil {
 		return nil, fmt.Errorf("failed to add job: %w", err)
 	}
-	if !job.Configuration.DryRun {
-		if err := tx.Commit(); err != nil {
-			return nil, fmt.Errorf("failed to commit job: %w", err)
+	// Dry run: deliberate rollback (no persistence).
+	return job, nil
+}
+
+func (h *jobsInsertHandler) insertQueryJobAsync(ctx context.Context, r *jobsInsertRequest) (*bigqueryv2.Job, error) {
+	job := r.job
+	if job.JobReference == nil {
+		job.JobReference = &bigqueryv2.JobReference{
+			ProjectId: r.project.ID,
+			JobId:     randomID(),
 		}
-		if response != nil && response.ChangedCatalog.Changed() {
-			if err := syncCatalog(ctx, r.server, response.ChangedCatalog); err != nil {
-				return nil, err
-			}
-		}
+	} else if job.JobReference.JobId == "" {
+		job.JobReference.JobId = randomID()
+	}
+	startTime := time.Now()
+	job.Kind = "bigquery#job"
+	job.Configuration.JobType = "QUERY"
+	job.Configuration.Query.Priority = "INTERACTIVE"
+	job.Status = &bigqueryv2.JobStatus{State: "RUNNING"}
+	job.Statistics = &bigqueryv2.JobStatistics{
+		CreationTime: startTime.Unix(),
+		StartTime:    startTime.Unix(),
+	}
+	httpAddr := "localhost"
+	if r.server.httpServer != nil && r.server.httpServer.Addr != "" {
+		httpAddr = r.server.httpServer.Addr
+	}
+	job.SelfLink = fmt.Sprintf(
+		"http://%s/bigquery/v2/projects/%s/jobs/%s",
+		httpAddr,
+		r.project.ID,
+		job.JobReference.JobId,
+	)
+
+	metaJob := metadata.NewJob(
+		r.server.metaRepo,
+		r.project.ID,
+		job.JobReference.JobId,
+		job,
+		nil,
+		nil,
+	)
+	conn := connectionFromContext(ctx).ConfigureScope(r.project.ID, "")
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	if err := r.project.AddJob(ctx, tx.Tx(), metaJob); err != nil {
+		return nil, fmt.Errorf("failed to add job: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit job: %w", err)
+	}
+	if r.server.queryExec == nil {
+		return nil, fmt.Errorf("query job executor is not initialized")
+	}
+	if err := r.server.queryExec.Submit(r.project.ID, job); err != nil {
+		_ = markJobSubmitFailed(context.Background(), r.server, r.project.ID, job.JobReference.JobId, err)
+		return nil, fmt.Errorf("failed to schedule query job: %w", err)
+	}
+	return job, nil
+}
+
+// executeAsyncQueryJob runs the query and persists the final job state (worker entrypoint).
+func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Server, projectID string, job *bigqueryv2.Job) error {
+	project := metadata.NewProject(srv.metaRepo, projectID)
+	hasDestinationTable := job.Configuration.Query.DestinationTable != nil
+
+	startTime := time.Now()
+	if job.Statistics != nil && job.Statistics.CreationTime != 0 {
+		startTime = time.Unix(job.Statistics.CreationTime, 0)
 	}
 
-	return job, nil
+	var postSync *googlesqlite.ChangedCatalog
+
+	err := srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+		tx.SetProjectAndDataset(projectID, "")
+
+		response, jobErr := srv.contentRepo.Query(
+			ctx,
+			tx,
+			projectID,
+			"",
+			job.Configuration.Query.Query,
+			job.Configuration.Query.QueryParameters,
+		)
+		endTime := time.Now()
+
+		if jobErr == nil {
+			r := &jobsInsertRequest{server: srv, project: project, job: job}
+			if hasDestinationTable {
+				tableRef := job.Configuration.Query.DestinationTable
+				tableDef, err := h.tableDefFromQueryResponse(tableRef.TableId, response)
+				if err != nil {
+					return err
+				}
+				destinationDataset, err := srv.metaRepo.FindDatasetWithConnection(ctx, tx.Tx(), tableRef.ProjectId, tableRef.DatasetId)
+				if err != nil {
+					return fmt.Errorf("failed to find destination dataset: %s, err: %s", tableRef.DatasetId, err)
+				}
+				destinationTable, err := srv.metaRepo.FindTableWithConnection(ctx, tx.Tx(), destinationDataset.ProjectID, destinationDataset.ID, tableRef.TableId)
+				if err != nil {
+					return fmt.Errorf("failed to find destination table: %w", err)
+				}
+				destinationTableExists := destinationTable != nil
+				if !destinationTableExists {
+					_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+					if serr != nil {
+						return serr
+					}
+					serverErr := srv.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+					if serverErr != nil {
+						return fmt.Errorf("failed to create table: %w", serverErr)
+					}
+				}
+
+				if err := srv.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
+					return fmt.Errorf("failed to add table data: %w", err)
+				}
+			} else if response != nil && response.TotalRows > 0 {
+				if err := h.addQueryResultToDynamicDestinationTable(ctx, tx, r, response); err != nil {
+					return fmt.Errorf("failed to add query result to dynamic destination table: %w", err)
+				}
+			}
+		}
+
+		httpAddr := "localhost"
+		if srv.httpServer != nil && srv.httpServer.Addr != "" {
+			httpAddr = srv.httpServer.Addr
+		}
+		job.SelfLink = fmt.Sprintf(
+			"http://%s/bigquery/v2/projects/%s/jobs/%s",
+			httpAddr,
+			projectID,
+			job.JobReference.JobId,
+		)
+
+		status := &bigqueryv2.JobStatus{State: "DONE"}
+		if jobErr != nil {
+			internalErr := errJobInternalError(jobErr.Error())
+			status.ErrorResult = internalErr.ErrorProto()
+			status.Errors = []*bigqueryv2.ErrorProto{internalErr.ErrorProto()}
+		}
+		job.Status = status
+
+		var totalBytes int64
+		if response != nil {
+			totalBytes = response.TotalBytes
+			if jobErr == nil && response.ChangedCatalog.Changed() {
+				postSync = response.ChangedCatalog
+			}
+		}
+		job.Statistics = &bigqueryv2.JobStatistics{
+			Query: &bigqueryv2.JobStatistics2{
+				CacheHit:            false,
+				StatementType:       "SELECT",
+				TotalBytesBilled:    totalBytes,
+				TotalBytesProcessed: totalBytes,
+			},
+			CreationTime:        startTime.Unix(),
+			StartTime:           startTime.Unix(),
+			EndTime:             endTime.Unix(),
+			TotalBytesProcessed: totalBytes,
+		}
+
+		metaJob := metadata.NewJob(srv.metaRepo, projectID, job.JobReference.JobId, job, response, jobErr)
+		if err := srv.metaRepo.UpdateJob(ctx, tx.Tx(), metaJob); err != nil {
+			return fmt.Errorf("failed to update job: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if postSync != nil {
+		if err := syncCatalog(ctx, srv, postSync); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func markJobSubmitFailed(ctx context.Context, srv *Server, projectID, jobID string, scheduleErr error) error {
+	j, err := srv.metaRepo.FindJob(ctx, projectID, jobID)
+	if err != nil || j == nil || j.Content() == nil {
+		return err
+	}
+	content := j.Content()
+	internalErr := errJobInternalError(fmt.Sprintf("failed to schedule job: %v", scheduleErr))
+	content.Status = &bigqueryv2.JobStatus{
+		State:       "DONE",
+		ErrorResult: internalErr.ErrorProto(),
+		Errors:      []*bigqueryv2.ErrorProto{internalErr.ErrorProto()},
+	}
+	now := time.Now().Unix()
+	if content.Statistics == nil {
+		content.Statistics = &bigqueryv2.JobStatistics{}
+	}
+	content.Statistics.EndTime = now
+	metaJob := metadata.NewJob(srv.metaRepo, projectID, jobID, content, nil, scheduleErr)
+	return srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+		tx.SetProjectAndDataset(projectID, "")
+		if err := tx.MetadataRepoMode(); err != nil {
+			return err
+		}
+		return srv.metaRepo.UpdateJob(ctx, tx.Tx(), metaJob)
+	})
 }
 
 func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
@@ -2381,52 +2619,46 @@ func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedC
 }
 
 func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref googlesqlite.DatasetRef) error {
-	conn := connectionFromContext(ctx).ConfigureScope(ref.ProjectID, ref.DatasetID)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start transaction for CREATE SCHEMA metadata: %w", err)
-	}
-	defer tx.RollbackIfNotCommitted()
+	return server.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+		tx.SetProjectAndDataset(ref.ProjectID, ref.DatasetID)
+		if err := tx.MetadataRepoMode(); err != nil {
+			return fmt.Errorf("failed to start transaction for CREATE SCHEMA metadata: %w", err)
+		}
 
-	project, err := server.metaRepo.FindProjectWithConn(ctx, tx.Tx(), ref.ProjectID)
-	if err != nil {
-		return err
-	}
-	if project == nil {
-		return &projectMetadataNotFoundError{ProjectID: ref.ProjectID}
-	}
-	existing, err := project.Dataset(ctx, ref.DatasetID)
-	if err != nil {
-		return err
-	}
-	if existing != nil {
-		if ref.IfNotExists {
-			return nil
+		project, err := server.metaRepo.FindProjectWithConn(ctx, tx.Tx(), ref.ProjectID)
+		if err != nil {
+			return err
 		}
-		if ref.OrReplace {
-			return nil
+		if project == nil {
+			return &projectMetadataNotFoundError{ProjectID: ref.ProjectID}
 		}
-		return fmt.Errorf("Already Exists: Dataset %s:%s", ref.ProjectID, ref.DatasetID)
-	}
-	dataset := metadata.NewDataset(
-		server.metaRepo,
-		ref.ProjectID,
-		ref.DatasetID,
-		&bigqueryv2.Dataset{
-			Id: fmt.Sprintf("%s:%s", ref.ProjectID, ref.DatasetID),
-			DatasetReference: &bigqueryv2.DatasetReference{
-				ProjectId: ref.ProjectID,
-				DatasetId: ref.DatasetID,
+		existing, err := project.Dataset(ctx, ref.DatasetID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			if ref.IfNotExists {
+				return nil
+			}
+			if ref.OrReplace {
+				return nil
+			}
+			return fmt.Errorf("Already Exists: Dataset %s:%s", ref.ProjectID, ref.DatasetID)
+		}
+		dataset := metadata.NewDataset(
+			server.metaRepo,
+			ref.ProjectID,
+			ref.DatasetID,
+			&bigqueryv2.Dataset{
+				Id: fmt.Sprintf("%s:%s", ref.ProjectID, ref.DatasetID),
+				DatasetReference: &bigqueryv2.DatasetReference{
+					ProjectId: ref.ProjectID,
+					DatasetId: ref.DatasetID,
+				},
 			},
-		},
-	)
-	if err := project.AddDataset(ctx, tx.Tx(), dataset); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+		)
+		return project.AddDataset(ctx, tx.Tx(), dataset)
+	})
 }
 
 func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
@@ -2467,32 +2699,29 @@ func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.Ta
 		}
 		fields = append(fields, types.TableFieldSchemaFromType(column.Name, googlesqlType))
 	}
-	conn := connectionFromContext(ctx).ConfigureScope(projectID, datasetID)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.RollbackIfNotCommitted()
-	table := &bigqueryv2.Table{
-		TableReference: &bigqueryv2.TableReference{
-			ProjectId: projectID,
-			DatasetId: datasetID,
-			TableId:   tableID,
-		},
-		Schema: &bigqueryv2.TableSchema{Fields: fields},
-	}
-	if spec.IsView {
-		table.View = &bigqueryv2.ViewDefinition{
-			Query: spec.Query,
+	return server.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+		tx.SetProjectAndDataset(projectID, datasetID)
+		if err := tx.MetadataRepoMode(); err != nil {
+			return err
 		}
-	}
-	if _, err := createTableMetadata(ctx, tx, server, project, dataset, table); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+		table := &bigqueryv2.Table{
+			TableReference: &bigqueryv2.TableReference{
+				ProjectId: projectID,
+				DatasetId: datasetID,
+				TableId:   tableID,
+			},
+			Schema: &bigqueryv2.TableSchema{Fields: fields},
+		}
+		if spec.IsView {
+			table.View = &bigqueryv2.ViewDefinition{
+				Query: spec.Query,
+			}
+		}
+		if _, serr := createTableMetadata(ctx, tx, server, project, dataset, table); serr != nil {
+			return serr
+		}
+		return nil
+	})
 }
 
 func deleteTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
@@ -2517,19 +2746,13 @@ func deleteTableMetadata(ctx context.Context, server *Server, spec *googlesqlite
 	if err != nil {
 		return err
 	}
-	conn := connectionFromContext(ctx).ConfigureScope(projectID, datasetID)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.RollbackIfNotCommitted()
-	if err := table.Delete(ctx, tx.Tx()); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return server.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+		tx.SetProjectAndDataset(projectID, datasetID)
+		if err := tx.MetadataRepoMode(); err != nil {
+			return err
+		}
+		return table.Delete(ctx, tx.Tx())
+	})
 }
 
 func (h *jobsInsertHandler) addQueryResultToDynamicDestinationTable(ctx context.Context, tx *connection.Tx, r *jobsInsertRequest, response *internaltypes.QueryResponse) error {
@@ -2620,6 +2843,15 @@ func (h *jobsQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	server := serverFromContext(ctx)
 	project := projectFromContext(ctx)
+	if server.heavyQuerySem != nil {
+		select {
+		case server.heavyQuerySem <- struct{}{}:
+			defer func() { <-server.heavyQuerySem }()
+		case <-ctx.Done():
+			errorResponse(ctx, w, errInternalError(ctx.Err().Error()))
+			return
+		}
+	}
 	var req flexibleQueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(ctx, w, errInvalid(err.Error()))

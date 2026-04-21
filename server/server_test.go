@@ -994,7 +994,11 @@ func TestDirectDDL(t *testing.T) {
 	}
 	defer client.Close()
 	tableName := fmt.Sprintf("%s.%s.%s", projectID, datasetID, tableID)
-	if _, err := client.Query(fmt.Sprintf("CREATE TABLE %s(name STRING)", tableName)).Run(ctx); err != nil {
+	createJob, err := client.Query(fmt.Sprintf("CREATE TABLE %s(name STRING)", tableName)).Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := createJob.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tableIter := client.Dataset(datasetID).Tables(ctx)
@@ -1010,7 +1014,11 @@ func TestDirectDDL(t *testing.T) {
 	if table.TableID != tableID {
 		t.Fatalf("failed to get table. got table-id is %s", table.TableID)
 	}
-	if _, err := client.Query(`DROP TABLE test.dataset1.foo`).Run(ctx); err != nil {
+	dropJob, err := client.Query(`DROP TABLE test.dataset1.foo`).Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dropJob.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tableIter = client.Dataset(datasetID).Tables(ctx)
@@ -3851,12 +3859,11 @@ func TestWriteDisposition(t *testing.T) {
 		DatasetID: "dataset1",
 		TableID:   "existing_table",
 	}
-	_, err = query.Run(ctx)
+	truncateJob, err := query.Run(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = job.Wait(ctx)
-	if err != nil {
+	if _, err := truncateJob.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4002,6 +4009,11 @@ func TestQueryWithoutDestinationTable(t *testing.T) {
 	if _, err := job.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Async completion updates job metadata (e.g. dynamic destination); reload so Config() matches API.
+	job, err = client.JobFromID(ctx, job.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	config, err := job.Config()
 	if err != nil {
@@ -4053,6 +4065,10 @@ func TestQueryWithoutDestinationTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := job2.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+	job2, err = client.JobFromID(ctx, job2.ID())
+	if err != nil {
 		t.Fatal(err)
 	}
 

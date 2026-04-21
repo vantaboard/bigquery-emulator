@@ -17,12 +17,24 @@ const (
 	DefaultPoolSize = 5
 )
 
+// ManagerOption configures [NewManager].
+type ManagerOption func(*Manager)
+
+// WithPoolSize sets the number of pooled sqlite connections (must be > 0).
+func WithPoolSize(n int) ManagerOption {
+	return func(m *Manager) {
+		if n > 0 {
+			m.poolSize = n
+		}
+	}
+}
+
 type Manager struct {
 	db                   *sql.DB
 	queries              []string
 	connPool             []*ManagedConnection
 	connChan             chan *ManagedConnection
-	poolSize             int
+	poolSize             int // 0 until NewManager assigns
 	mu                   sync.Mutex
 	closeOnce            sync.Once
 	closed               bool
@@ -33,20 +45,30 @@ type Manager struct {
 	txMu      sync.RWMutex
 }
 
-func NewManager(ctx context.Context, db *sql.DB) (*Manager, error) {
-	poolSize := DefaultPoolSize
+func NewManager(ctx context.Context, db *sql.DB, opts ...ManagerOption) (*Manager, error) {
 	db.SetConnMaxLifetime(-1) // Keep connections alive
 	db.SetConnMaxIdleTime(-1)
 
-	connChan := make(chan *ManagedConnection, poolSize)
-	connPool := make([]*ManagedConnection, poolSize)
-
 	manager := &Manager{
 		db:        db,
-		connPool:  connPool,
-		connChan:  connChan,
+		poolSize:  DefaultPoolSize,
 		txConnMap: make(map[*sql.Tx]*ManagedConnection),
 	}
+	for _, o := range opts {
+		if o != nil {
+			o(manager)
+		}
+	}
+	poolSize := manager.poolSize
+	if poolSize <= 0 {
+		poolSize = DefaultPoolSize
+		manager.poolSize = poolSize
+	}
+
+	connChan := make(chan *ManagedConnection, poolSize)
+	connPool := make([]*ManagedConnection, poolSize)
+	manager.connPool = connPool
+	manager.connChan = connChan
 
 	// Warm pool with managed connections
 	for i := 0; i < poolSize; i++ {

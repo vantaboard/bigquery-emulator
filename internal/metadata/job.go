@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -39,39 +40,82 @@ func (j *Job) SetResult(ctx context.Context, tx *sql.Tx, response *internaltypes
 	return nil
 }
 
+// IsTerminal reports whether the job has finished (success, failure, or cancel).
+func (j *Job) IsTerminal() bool {
+	if j == nil {
+		return false
+	}
+	if j.err != nil {
+		return true
+	}
+	if j.content != nil && j.content.Status != nil {
+		switch j.content.Status.State {
+		case "DONE":
+			return true
+		}
+	}
+	return false
+}
+
+// Response returns the query response when the job completed successfully.
+func (j *Job) Response() *internaltypes.QueryResponse {
+	if j == nil {
+		return nil
+	}
+	return j.response
+}
+
+// Err returns a terminal error for the job, if any.
+func (j *Job) Err() error {
+	if j == nil {
+		return nil
+	}
+	return j.err
+}
+
 func (j *Job) Content() *bigqueryv2.Job {
 	return j.content
 }
 
 func (j *Job) Wait(ctx context.Context) (*internaltypes.QueryResponse, error) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	if j.response != nil || j.err != nil {
-		return j.response, j.err
-	}
-
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		foundJob, err := j.repo.FindJob(ctx, j.ProjectID, j.ID)
+		if err != nil {
+			return nil, err
+		}
+		if foundJob == nil {
+			return nil, fmt.Errorf("job %s not found in project %s", j.ID, j.ProjectID)
+		}
+		if foundJob.IsTerminal() {
+			return foundJob.response, foundJob.err
+		}
 		select {
 		case <-ticker.C:
-			foundJob, err := j.repo.FindJob(ctx, j.ProjectID, j.ID)
-			if err != nil {
-				return nil, err
-			}
-			if foundJob != nil {
-				return foundJob.response, foundJob.err
-			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 }
 
+// JobCanceller cancels in-flight async query jobs (registered by the server).
+type JobCanceller interface {
+	CancelQueryJob(projectID, jobID string) error
+}
+
+// QueryJobCanceller is set during server startup.
+var QueryJobCanceller JobCanceller
+
 func (j *Job) Cancel(ctx context.Context) error {
-	// TODO: job needs to be able to rollback
-	return nil
+	_ = ctx
+	if QueryJobCanceller == nil {
+		return errors.New("job cancellation is not available")
+	}
+	return QueryJobCanceller.CancelQueryJob(j.ProjectID, j.ID)
 }
 
 func (j *Job) Insert(ctx context.Context, tx *sql.Tx) error {
