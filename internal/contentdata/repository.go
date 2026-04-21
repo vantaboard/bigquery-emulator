@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/vantaboard/go-googlesqlite"
@@ -21,6 +22,11 @@ import (
 )
 
 const ViewQueryEndCutset = ";\n \t"
+
+const (
+	queryFetchProgressRows     = 100_000
+	queryFetchProgressInterval = 10 * time.Second
+)
 
 func truncateQueryForLog(s string, max int) string {
 	if max <= 0 || len(s) <= max {
@@ -253,7 +259,18 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		totalBytes int64
 		result     = [][]interface{}{}
 	)
+	loopStart := time.Now()
+	lastProgressLog := loopStart
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
+		if rowCount%queryFetchProgressRows == 0 || time.Since(lastProgressLog) >= queryFetchProgressInterval {
+			logger.Logger(ctx).LogAttrs(ctx, slog.LevelDebug, "query_fetch_progress",
+				slog.Uint64("rows_so_far", uint64(rowCount)),
+				slog.Int64("elapsed_ms", time.Since(loopStart).Milliseconds()),
+			)
+			lastProgressLog = time.Now()
+		}
 		values := make([]interface{}, 0, len(columnTypes))
 		for i := 0; i < len(columnTypes); i++ {
 			var v interface{}

@@ -135,6 +135,20 @@ func bigQueryRESTAccessAttrs(method, rawPath string) []slog.Attr {
 	return attrs
 }
 
+// accessLogCompletedLevel demotes noisy jobs.getQueryResults poll completions while jobComplete is false.
+func accessLogCompletedLevel(method, rawPath string, extras *accessLogExtras) slog.Level {
+	if extras == nil || extras.jobComplete == nil || *extras.jobComplete {
+		return slog.LevelInfo
+	}
+	path := strings.TrimPrefix(rawPath, "/bigquery/v2")
+	path = strings.Trim(path, "/")
+	segs := strings.Split(path, "/")
+	if len(segs) >= 4 && segs[0] == "projects" && segs[2] == "queries" && method == http.MethodGet {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
+}
+
 func accessLogMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +186,7 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 
 			logger.Logger(r.Context()).LogAttrs(
 				r.Context(),
-				slog.LevelInfo,
+				accessLogCompletedLevel(r.Method, r.URL.Path, extras),
 				fmt.Sprintf("%s %s completed", r.Method, r.URL.Path),
 				doneAttrs...,
 			)

@@ -2492,6 +2492,13 @@ func asyncJobHeartbeatInterval() time.Duration {
 	return time.Duration(n) * time.Second
 }
 
+func truncateAsyncJobQueryForLog(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
 func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobID string, start time.Time, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -2500,10 +2507,11 @@ func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobI
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			log.Info("async query job still running",
-				"project_id", projectID,
-				"job_id", jobID,
-				"elapsed_sec", int(time.Since(start).Seconds()),
+			log.LogAttrs(ctx, slog.LevelInfo, "async query job still running",
+				slog.String("project_id", projectID),
+				slog.String("job_id", jobID),
+				slog.Int("elapsed_sec", int(time.Since(start).Seconds())),
+				slog.String("hint", "worker runs until contentRepo.Query and destination write complete; set log level DEBUG for query_fetch_progress and jobs.getQueryResults poll detail"),
 			)
 		}
 	}
@@ -2512,7 +2520,12 @@ func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobI
 // executeAsyncQueryJob runs the query and persists the final job state (worker entrypoint).
 func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Server, projectID string, job *bigqueryv2.Job) (err error) {
 	project := metadata.NewProject(srv.metaRepo, projectID)
-	hasDestinationTable := job.Configuration.Query.DestinationTable != nil
+	hasDestinationTable := job.Configuration != nil && job.Configuration.Query != nil && job.Configuration.Query.DestinationTable != nil
+
+	querySQL := ""
+	if job.Configuration != nil && job.Configuration.Query != nil {
+		querySQL = job.Configuration.Query.Query
+	}
 
 	wallStart := time.Now()
 	srv.logger.Debug("async query job start",
@@ -2564,6 +2577,18 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 	err = srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
 		tx.SetProjectAndDataset(projectID, "")
 
+		preAttrs := []slog.Attr{
+			slog.String("project_id", projectID),
+			slog.String("job_id", job.JobReference.JobId),
+			slog.String("query_preview", truncateAsyncJobQueryForLog(querySQL, 256)),
+		}
+		if hasDestinationTable {
+			dt := job.Configuration.Query.DestinationTable
+			preAttrs = append(preAttrs, slog.String("destination", fmt.Sprintf("%s.%s.%s", dt.ProjectId, dt.DatasetId, dt.TableId)))
+		}
+		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query executing (content query + row materialization)", preAttrs...)
+
+		queryPhaseStart := time.Now()
 		response, jobErr := srv.contentRepo.Query(
 			ctx,
 			tx,
@@ -2572,12 +2597,27 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 			job.Configuration.Query.Query,
 			job.Configuration.Query.QueryParameters,
 		)
+		queryElapsedMs := time.Since(queryPhaseStart).Milliseconds()
 		jobQueryErr = jobErr
-		endTime := time.Now()
+
+		finishAttrs := []slog.Attr{
+			slog.String("project_id", projectID),
+			slog.String("job_id", job.JobReference.JobId),
+			slog.Int64("elapsed_ms", queryElapsedMs),
+		}
+		if response != nil {
+			finishAttrs = append(finishAttrs, slog.Uint64("result_rows", response.TotalRows))
+		}
+		willWrite := jobErr == nil && (hasDestinationTable || (response != nil && response.TotalRows > 0))
+		finishAttrs = append(finishAttrs, slog.Bool("destination_write", willWrite))
+		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query content query finished", finishAttrs...)
 
 		if jobErr == nil {
+			writeStart := time.Now()
+			wroteDestination := false
 			r := &jobsInsertRequest{server: srv, project: project, job: job}
 			if hasDestinationTable {
+				wroteDestination = true
 				tableRef := job.Configuration.Query.DestinationTable
 				tableDef, err := h.tableDefFromQueryResponse(tableRef.TableId, response)
 				if err != nil {
@@ -2607,11 +2647,21 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 					return fmt.Errorf("failed to add table data: %w", err)
 				}
 			} else if response != nil && response.TotalRows > 0 {
+				wroteDestination = true
 				if err := h.addQueryResultToDynamicDestinationTable(ctx, tx, r, response); err != nil {
 					return fmt.Errorf("failed to add query result to dynamic destination table: %w", err)
 				}
 			}
+			if wroteDestination {
+				srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write done",
+					slog.String("project_id", projectID),
+					slog.String("job_id", job.JobReference.JobId),
+					slog.Int64("elapsed_ms", time.Since(writeStart).Milliseconds()),
+				)
+			}
 		}
+
+		endTime := time.Now()
 
 		httpAddr := "localhost"
 		if srv.httpServer != nil && srv.httpServer.Addr != "" {
