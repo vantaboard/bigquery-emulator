@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -51,6 +52,22 @@ func (s *Server) rebuildLogger() {
 	s.logger = slog.New(h)
 }
 
+// storageWithSQLiteDefaults appends modernc.org/sqlite URI parameters so native SQLite pragmas
+// run at open time (not via googlesqlite Exec, which only accepts GoogleSQL).
+// WAL lets readers (job polls, table GETs) proceed while an async worker holds a long CTAS write.
+func storageWithSQLiteDefaults(s Storage) Storage {
+	str := string(s)
+	if strings.Contains(str, "_pragma=") && strings.Contains(str, "journal_mode") {
+		return s
+	}
+	sep := "?"
+	if strings.Contains(str, "?") {
+		sep = "&"
+	}
+	// See modernc.org/sqlite applyQueryParams: _pragma values are executed as "pragma "+v
+	return Storage(str + sep + "_pragma=journal_mode%3DWAL&_pragma=busy_timeout%3D30000")
+}
+
 func New(storage Storage) (*Server, error) {
 	server := &Server{storage: storage}
 	if storage == TempStorage {
@@ -64,6 +81,9 @@ func New(storage Storage) (*Server, error) {
 			return os.Remove(f.Name())
 		}
 	}
+	storage = storageWithSQLiteDefaults(storage)
+	server.storage = storage
+
 	db, err := sql.Open("googlesqlite", string(storage))
 	if err != nil {
 		return nil, err
