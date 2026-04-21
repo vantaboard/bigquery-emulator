@@ -260,6 +260,10 @@ func (h *uploadHandler) serveMultipart(w http.ResponseWriter, r *http.Request) {
 		reader:  p,
 	})
 	if err != nil {
+		if se := serverErrorFromUploadLoadDestination(err); se != nil {
+			errorResponse(ctx, w, se)
+			return
+		}
 		errorResponse(ctx, w, errInternalError(err.Error()))
 		return
 	}
@@ -382,6 +386,10 @@ func (h *uploadContentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		job:     job,
 		reader:  r.Body,
 	}); err != nil {
+		if se := serverErrorFromUploadLoadDestination(err); se != nil {
+			errorResponse(ctx, w, se)
+			return
+		}
 		errorResponse(ctx, w, errJobInternalError(err.Error()))
 		return
 	}
@@ -891,16 +899,33 @@ func convertCSVValue(value string, colType types.Type) (interface{}, error) {
 	}
 }
 
-// ensureProjectAndDatasetForLoad ensures metadata exists for a load job destination.
-// The upload API is scoped to r.project (URL), but DestinationTable may name another project;
-// dataset may be missing until CREATE_IF_NEEDED creates it.
-func ensureProjectAndDatasetForLoad(
+// loadDestinationDatasetNotFoundError indicates the load job's destination dataset
+// is missing from metadata. Upload handlers translate this to HTTP 404.
+type loadDestinationDatasetNotFoundError struct {
+	ProjectID string
+	DatasetID string
+}
+
+func (e *loadDestinationDatasetNotFoundError) Error() string {
+	return fmt.Sprintf("dataset %s is not found", e.DatasetID)
+}
+
+func serverErrorFromUploadLoadDestination(err error) *ServerError {
+	var nd *loadDestinationDatasetNotFoundError
+	if errors.As(err, &nd) {
+		return errNotFound(nd.Error())
+	}
+	return nil
+}
+
+// ensureProjectForLoadDestination ensures the destination project row exists (create if missing).
+// The dataset must already exist in metadata; otherwise [loadDestinationDatasetNotFoundError] is returned.
+func ensureProjectForLoadDestination(
 	ctx context.Context,
 	server *Server,
 	urlProject *metadata.Project,
 	destProjectID string,
 	datasetID string,
-	createDisposition string,
 ) (*metadata.Project, *metadata.Dataset, error) {
 	if destProjectID == "" {
 		destProjectID = urlProject.ID
@@ -935,37 +960,8 @@ func ensureProjectAndDatasetForLoad(
 	if err != nil {
 		return nil, nil, err
 	}
-	if dataset != nil {
-		return destProject, dataset, nil
-	}
-	if createDisposition == "CREATE_NEVER" {
-		return nil, nil, fmt.Errorf("dataset %s:%s is not found", destProjectID, datasetID)
-	}
-	conn := connectionFromContext(ctx).ConfigureScope(destProjectID, datasetID)
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("begin tx for dataset create: %w", err)
-	}
-	defer tx.RollbackIfNotCommitted()
-	dsBody := &bigqueryv2.Dataset{
-		Id: fmt.Sprintf("%s:%s", destProjectID, datasetID),
-		DatasetReference: &bigqueryv2.DatasetReference{
-			ProjectId: destProjectID,
-			DatasetId: datasetID,
-		},
-	}
-	if err := destProject.AddDataset(ctx, tx.Tx(), metadata.NewDataset(server.metaRepo, destProjectID, datasetID, dsBody)); err != nil {
-		return nil, nil, fmt.Errorf("create dataset for load: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, nil, err
-	}
-	dataset, err = destProject.Dataset(ctx, datasetID)
-	if err != nil {
-		return nil, nil, err
-	}
 	if dataset == nil {
-		return nil, nil, fmt.Errorf("dataset %s:%s missing after create", destProjectID, datasetID)
+		return nil, nil, &loadDestinationDatasetNotFoundError{ProjectID: destProjectID, DatasetID: datasetID}
 	}
 	return destProject, dataset, nil
 }
@@ -986,8 +982,8 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 	}
 	tableRef.ProjectId = destProjectID
 
-	destProject, dataset, err := ensureProjectAndDatasetForLoad(
-		ctx, r.server, r.project, destProjectID, tableRef.DatasetId, load.CreateDisposition,
+	destProject, dataset, err := ensureProjectForLoadDestination(
+		ctx, r.server, r.project, destProjectID, tableRef.DatasetId,
 	)
 	if err != nil {
 		return err
