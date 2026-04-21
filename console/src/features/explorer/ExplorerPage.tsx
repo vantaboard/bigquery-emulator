@@ -136,7 +136,7 @@ export function ExplorerPage() {
     });
 
     const runMutation = useMutation({
-        mutationFn: (q: string) => explorerQueries.runQuery(q),
+        mutationFn: ({ q, projectId }: { q: string; projectId: string }) => explorerQueries.runQuery(q, projectId),
     });
 
     const applySelection = useCallback(
@@ -237,7 +237,7 @@ export function ExplorerPage() {
         const project = currentProject;
         const dataset = currentDataset;
         const table = currentTable;
-        runMutation.mutate(q, {
+        runMutation.mutate({ q, projectId: project }, {
             onSuccess: (data) => {
                 setQueryResult(data);
                 setActiveTab('results');

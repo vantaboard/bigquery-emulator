@@ -13,6 +13,7 @@ export const explorerQueries = {
         apiClient.get<TableMetadata>(
             `/api/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}/tables/${encodeURIComponent(tableId)}/schema`,
         ),
-    runQuery: (query: string) => apiClient.post<QueryResponse>('/api/query', { query }),
+    runQuery: (query: string, projectId: string) =>
+        apiClient.post<QueryResponse>('/api/query', { query, project_id: projectId }),
     createEmulatorProject: (id: string) => apiClient.post<{ id: string }>('/api/emulator/projects', { id }),
 };
