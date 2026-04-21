@@ -363,7 +363,7 @@ func (h *uploadContentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	jobID := uploadID[0]
-	job, err := project.Job(ctx, jobID)
+	job, err := server.findJobUsingRequestConnection(ctx, project.ID, jobID)
 	if err != nil {
 		errorResponse(ctx, w, errJobInternalError(err.Error()))
 		return
@@ -1659,7 +1659,7 @@ type jobsGetQueryResultsRequest struct {
 }
 
 func (h *jobsGetQueryResultsHandler) Handle(ctx context.Context, r *jobsGetQueryResultsRequest) (*internaltypes.GetQueryResultsResponse, error) {
-	j, err := r.project.Job(ctx, r.job.ID)
+	j, err := r.server.findJobUsingRequestConnection(ctx, r.project.ID, r.job.ID)
 	if err != nil {
 		return nil, err
 	}

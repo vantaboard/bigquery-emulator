@@ -176,6 +176,31 @@ func (s *Server) SetProject(id string) error {
 	return nil
 }
 
+// findJobUsingRequestConnection loads job metadata using only the HTTP request's
+// pooled connection. project.Job uses FindJob, which acquires a second pool
+// connection; nested holds can exhaust the pool and deadlock while an async query
+// worker also holds a connection (polls then block until the query finishes).
+func (s *Server) findJobUsingRequestConnection(ctx context.Context, projectID, jobID string) (*metadata.Job, error) {
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(projectID, "")
+	job, err := s.metaRepo.FindJobWithConn(ctx, tx.Tx(), projectID, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 type LogLevel string
 
 const (

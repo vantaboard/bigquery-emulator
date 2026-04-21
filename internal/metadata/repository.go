@@ -299,18 +299,23 @@ func (r *Repository) DeleteProject(ctx context.Context, tx *sql.Tx, project *Pro
 
 func (r *Repository) FindJob(ctx context.Context, projectID, jobID string) (*Job, error) {
 	return connection.ExecuteWithTransaction(r.manager, ctx, func(ctx context.Context, tx *sql.Tx) (*Job, error) {
-		jobs, err := r.findJobs(ctx, tx, projectID, []string{jobID})
-		if err != nil {
-			return nil, err
-		}
-		if len(jobs) != 1 {
-			return nil, nil
-		}
-		if jobs[0].ID != jobID {
-			return nil, nil
-		}
-		return jobs[0], nil
+		return r.FindJobWithConn(ctx, tx, projectID, jobID)
 	})
+}
+
+// FindJobWithConn loads a job using an existing transaction (same pooled connection).
+func (r *Repository) FindJobWithConn(ctx context.Context, tx *sql.Tx, projectID, jobID string) (*Job, error) {
+	jobs, err := r.findJobs(ctx, tx, projectID, []string{jobID})
+	if err != nil {
+		return nil, err
+	}
+	if len(jobs) != 1 {
+		return nil, nil
+	}
+	if jobs[0].ID != jobID {
+		return nil, nil
+	}
+	return jobs[0], nil
 }
 
 func (r *Repository) findJobs(ctx context.Context, tx *sql.Tx, projectID string, jobIDs []string) ([]*Job, error) {

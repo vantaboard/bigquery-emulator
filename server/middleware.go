@@ -255,7 +255,8 @@ func withJobMiddleware() func(http.Handler) http.Handler {
 			jobID, exists := jobIDFromParams(params)
 			if exists {
 				project := projectFromContext(ctx)
-				job, err := project.Job(ctx, jobID)
+				srv := serverFromContext(ctx)
+				job, err := srv.findJobUsingRequestConnection(ctx, project.ID, jobID)
 				if err != nil {
 					errorResponse(ctx, w, errInternalError(fmt.Sprintf("error finding job %s: %s", jobID, err)))
 					return
