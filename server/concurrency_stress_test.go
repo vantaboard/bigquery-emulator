@@ -5,9 +5,10 @@
 // [connection.SnapshotConnMetrics] to confirm pool acquisition wait (channel) vs time in handlers.
 // Poll responses are classified (e.g. http_500, net_timeout) via stressPollQueryGETTag.
 //
-// Capacity: default server pool is defaultQueryWorkers + httpConnectionHeadroom (20). stressWorkers=12
-// with one async job yields at most 13 concurrent pool users for that scenario—below default pool.
-// Override with BQ_EMULATOR_POOL_SIZE or [server.WithConnectionPoolSize] if raising stressWorkers.
+// Capacity: default elastic pool ceiling scales with CPU (see [connection.PoolBoundsFromResources]);
+// typical desktops land near 20+ connections. stressWorkers=12 with one async job yields at most
+// 13 concurrent pool users for that scenario. Override with BQ_EMULATOR_POOL_SIZE (fixed) or
+// BQ_EMULATOR_POOL_MAX / [server.WithConnectionPoolSize] if raising stressWorkers.
 //
 // Threshold: stressMaxErrRate allows a small fraction of failures so CI stays stable. Residual errors
 // are typically http_500 from SQLite contention or handlers, not multi-second pool waits (metrics

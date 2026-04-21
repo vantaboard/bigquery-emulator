@@ -6,101 +6,227 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/vantaboard/go-googlesqlite"
 )
 
 const (
-	// DefaultPoolSize is the default number of pre-initialized connections in the pool.
-	// This balances between connection reuse and resource usage.
+	// DefaultPoolSize is used only when legacy callers omit options (see NewManager).
 	DefaultPoolSize = 5
 )
 
 // ManagerOption configures [NewManager].
-type ManagerOption func(*Manager)
+type ManagerOption func(*PoolConfig)
 
-// WithPoolSize sets the number of pooled sqlite connections (must be > 0).
+// WithPoolSize sets a fixed pool size (disables elastic growth and autoscale loop).
 func WithPoolSize(n int) ManagerOption {
-	return func(m *Manager) {
+	return func(cfg *PoolConfig) {
 		if n > 0 {
-			m.poolSize = n
+			cfg.FixedSize = n
+			cfg.PoolMin = n
+			cfg.PoolMaxHard = n
+			cfg.AutoscaleLoop = false
 		}
+	}
+}
+
+// WithElasticPool overrides computed bounds (tests or advanced tuning).
+func WithElasticPool(poolMin, poolMaxHard int, autoscaleLoop bool) ManagerOption {
+	return func(cfg *PoolConfig) {
+		cfg.FixedSize = 0
+		cfg.PoolMin = poolMin
+		cfg.PoolMaxHard = poolMaxHard
+		cfg.AutoscaleLoop = autoscaleLoop
+	}
+}
+
+// WithPoolConfig replaces the merged [PoolConfig] (use after [PoolConfigFromEnv] in the caller if needed).
+func WithPoolConfig(cfg PoolConfig) ManagerOption {
+	return func(dst *PoolConfig) {
+		*dst = cfg
 	}
 }
 
 type Manager struct {
-	db                   *sql.DB
-	queries              []string
-	connPool             []*ManagedConnection
-	connChan             chan *ManagedConnection
-	poolSize             int // 0 until NewManager assigns
-	mu                   sync.Mutex
-	closeOnce            sync.Once
-	closed               bool
-	preparedQueryStrings []string // copy for rebuilding conns after context-cancel invalidation
+	db *sql.DB
 
-	// Map transactions to their connection cache for prepared statement retrieval
+	preparedQueryStrings []string
+
+	mu       sync.Mutex
+	allConns []*ManagedConnection
+	idleCh   chan *ManagedConnection
+	live     int
+
+	poolMin     int
+	poolMaxHard int
+	currentMax  atomic.Int32
+
+	closeOnce sync.Once
+	closed    bool
+
+	autosMu     sync.Mutex
+	lastRaiseAt time.Time
+
 	txConnMap map[*sql.Tx]*ManagedConnection
 	txMu      sync.RWMutex
 }
 
+// NewManager creates a connection manager. Options merge with [PoolConfigFromEnv] unless you pass
+// only [WithPoolSize] / [WithElasticPool] after defaults.
 func NewManager(ctx context.Context, db *sql.DB, opts ...ManagerOption) (*Manager, error) {
 	db.SetConnMaxLifetime(-1) // Keep connections alive
 	db.SetConnMaxIdleTime(-1)
 
-	manager := &Manager{
-		db:        db,
-		poolSize:  DefaultPoolSize,
-		txConnMap: make(map[*sql.Tx]*ManagedConnection),
-	}
+	cfg := PoolConfigFromEnv()
 	for _, o := range opts {
 		if o != nil {
-			o(manager)
+			o(&cfg)
 		}
 	}
-	poolSize := manager.poolSize
-	if poolSize <= 0 {
-		poolSize = DefaultPoolSize
-		manager.poolSize = poolSize
+
+	poolMin := cfg.PoolMin
+	poolMaxHard := cfg.PoolMaxHard
+	if cfg.FixedSize > 0 {
+		poolMin = cfg.FixedSize
+		poolMaxHard = cfg.FixedSize
+	}
+	if poolMin <= 0 {
+		poolMin = DefaultPoolSize
+	}
+	if poolMaxHard < poolMin {
+		poolMaxHard = poolMin
 	}
 
-	connChan := make(chan *ManagedConnection, poolSize)
-	connPool := make([]*ManagedConnection, poolSize)
-	manager.connPool = connPool
-	manager.connChan = connChan
+	manager := &Manager{
+		db:        db,
+		idleCh:    make(chan *ManagedConnection, poolMaxHard),
+		poolMin:   poolMin,
+		poolMaxHard: poolMaxHard,
+		txConnMap: make(map[*sql.Tx]*ManagedConnection),
+	}
+	manager.currentMax.Store(int32(poolMaxHard))
 
-	// Warm pool with managed connections
-	for i := 0; i < poolSize; i++ {
-		conn, err := db.Conn(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create connection %d: %w", i, err)
+	for i := 0; i < poolMin; i++ {
+		if err := manager.createConnAndIdle(ctx); err != nil {
+			_ = manager.Close()
+			return nil, fmt.Errorf("failed to warm pool connection %d: %w", i, err)
 		}
-
-		managedConnection := &ManagedConnection{
-			googlesqliteConnection: conn,
-			stmts:                make(map[string]*sql.Stmt),
-			queries:              []string{},
-			manager:              manager,
-		}
-
-		connPool[i] = managedConnection
-		connChan <- managedConnection
 	}
 
 	return manager, nil
 }
 
-// Close gracefully shuts down the repository
+func (m *Manager) createConnAndIdle(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return fmt.Errorf("repository is closed")
+	}
+	c, err := m.createConnLocked(ctx)
+	if err != nil {
+		return err
+	}
+	select {
+	case m.idleCh <- c:
+		return nil
+	default:
+		m.removeConnLocked(c)
+		_ = c.Close()
+		return fmt.Errorf("idle channel full (poolMaxHard=%d)", m.poolMaxHard)
+	}
+}
+
+func (m *Manager) createConnLocked(ctx context.Context) (*ManagedConnection, error) {
+	sc, err := m.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	mc := &ManagedConnection{
+		googlesqliteConnection: sc,
+		stmts:                  make(map[string]*sql.Stmt),
+		manager:                m,
+	}
+	m.allConns = append(m.allConns, mc)
+	m.live++
+	if len(m.preparedQueryStrings) > 0 {
+		if err := m.prepareQueriesOnConnLocked(mc, m.preparedQueryStrings); err != nil {
+			m.removeConnLocked(mc)
+			_ = mc.Close()
+			return nil, err
+		}
+	}
+	return mc, nil
+}
+
+func (m *Manager) removeConnLocked(conn *ManagedConnection) {
+	for i, c := range m.allConns {
+		if c == conn {
+			m.allConns = append(m.allConns[:i], m.allConns[i+1:]...)
+			m.live--
+			return
+		}
+	}
+}
+
+// PoolMaxHard returns the configured hard ceiling for live connections.
+func (m *Manager) PoolMaxHard() int {
+	return m.poolMaxHard
+}
+
+// PoolMin returns the configured minimum warm connections.
+func (m *Manager) PoolMin() int {
+	return m.poolMin
+}
+
+// CurrentMax returns the soft cap (may be lowered by autoscale).
+func (m *Manager) CurrentMax() int {
+	return int(m.currentMax.Load())
+}
+
+// SetCurrentMax sets the soft cap for live connections and evicts idle connections above the target.
+func (m *Manager) SetCurrentMax(newMax int) {
+	if newMax < m.poolMin {
+		newMax = m.poolMin
+	}
+	if newMax > m.poolMaxHard {
+		newMax = m.poolMaxHard
+	}
+	m.currentMax.Store(int32(newMax))
+	m.evictIdleConnectionsToTarget(newMax)
+}
+
+func (m *Manager) evictIdleConnectionsToTarget(targetLive int) {
+	for {
+		m.mu.Lock()
+		if m.live <= targetLive {
+			m.mu.Unlock()
+			return
+		}
+		m.mu.Unlock()
+		select {
+		case c := <-m.idleCh:
+			m.mu.Lock()
+			m.removeConnLocked(c)
+			m.mu.Unlock()
+			_ = c.Close()
+		default:
+			return
+		}
+	}
+}
+
+// Close gracefully shuts down the repository.
 func (m *Manager) Close() (err error) {
 	m.closeOnce.Do(func() {
 		m.mu.Lock()
-		defer m.mu.Unlock()
-
 		m.closed = true
-		close(m.connChan)
+		conns := append([]*ManagedConnection(nil), m.allConns...)
+		m.allConns = nil
+		m.mu.Unlock()
 
-		for _, conn := range m.connPool {
+		for _, conn := range conns {
 			if closeErr := conn.Close(); closeErr != nil && err == nil {
 				err = closeErr
 			}
@@ -193,12 +319,12 @@ func (t *Tx) ContentRepoMode() error {
 
 type ManagedConnection struct {
 	googlesqliteConnection *sql.Conn
-	stmts                map[string]*sql.Stmt
-	queries              []string
-	mu                   sync.RWMutex
-	manager              *Manager // immutable after construction, safe for concurrent reads
-	ProjectID            string
-	DatasetID            string
+	stmts                  map[string]*sql.Stmt
+	queries                []string
+	mu                     sync.RWMutex
+	manager                *Manager // immutable after construction, safe for concurrent reads
+	ProjectID              string
+	DatasetID              string
 }
 
 func (c *ManagedConnection) GetStmt(name string) (*sql.Stmt, error) {
@@ -276,20 +402,27 @@ func (m *Manager) GetStatement(ctx context.Context, tx *sql.Tx, name string) (*s
 	return tx.PrepareContext(ctx, name)
 }
 
+func (m *Manager) prepareQueriesOnConnLocked(conn *ManagedConnection, queries []string) error {
+	ctx := googlesqlite.WithQueryFormattingDisabled(context.Background())
+	for _, query := range queries {
+		stmt, err := conn.googlesqliteConnection.PrepareContext(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to prepare statement %s: %w", query, err)
+		}
+		conn.stmts[query] = stmt
+	}
+	return nil
+}
+
 func (m *Manager) PrepareQueries(queries []string) error {
 	m.mu.Lock()
 	m.preparedQueryStrings = append([]string(nil), queries...)
+	conns := append([]*ManagedConnection(nil), m.allConns...)
 	m.mu.Unlock()
 
-	for _, conn := range m.connPool {
-		// Prepare specified SQLite queries for this connection
-		ctx := googlesqlite.WithQueryFormattingDisabled(context.Background())
-		for _, query := range queries {
-			stmt, err := conn.googlesqliteConnection.PrepareContext(ctx, query)
-			if err != nil {
-				return fmt.Errorf("failed to prepare statement %s: %w", query, err)
-			}
-			conn.stmts[query] = stmt
+	for _, conn := range conns {
+		if err := m.prepareQueriesOnConnLocked(conn, queries); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -300,10 +433,7 @@ func (m *Manager) PrepareQueries(queries []string) error {
 // query was running), database/sql leaves it unusable; we replace the sqlite Conn and
 // re-prepare statements so the pool does not hand out dead connections.
 func (m *Manager) releaseConnAfterUse(conn *ManagedConnection) {
-	if m.closed || conn == nil {
-		if conn != nil {
-			_ = conn.Close()
-		}
+	if conn == nil {
 		return
 	}
 	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -316,7 +446,30 @@ func (m *Manager) releaseConnAfterUse(conn *ManagedConnection) {
 			)
 		}
 	}
-	m.connChan <- conn
+
+	m.mu.Lock()
+	if m.closed {
+		m.removeConnLocked(conn)
+		m.mu.Unlock()
+		_ = conn.Close()
+		return
+	}
+	if m.live > int(m.currentMax.Load()) {
+		m.removeConnLocked(conn)
+		m.mu.Unlock()
+		_ = conn.Close()
+		return
+	}
+	m.mu.Unlock()
+
+	select {
+	case m.idleCh <- conn:
+	default:
+		m.mu.Lock()
+		m.removeConnLocked(conn)
+		m.mu.Unlock()
+		_ = conn.Close()
+	}
 }
 
 func (m *Manager) rebindManagedConnection(mc *ManagedConnection) error {
@@ -342,45 +495,76 @@ func (m *Manager) rebindManagedConnection(mc *ManagedConnection) error {
 	mc.ProjectID = ""
 	mc.DatasetID = ""
 
-	prepCtx := googlesqlite.WithQueryFormattingDisabled(context.Background())
-	for _, query := range queries {
-		stmt, err := mc.googlesqliteConnection.PrepareContext(prepCtx, query)
-		if err != nil {
-			return fmt.Errorf("prepare %q: %w", query, err)
+	return m.prepareQueriesOnConnLocked(mc, queries)
+}
+
+func (m *Manager) acquireConn(ctx context.Context) (*ManagedConnection, error) {
+	waitStart := time.Now()
+	for {
+		m.mu.Lock()
+		closed := m.closed
+		m.mu.Unlock()
+		if closed {
+			return nil, fmt.Errorf("repository is closed")
 		}
-		mc.stmts[query] = stmt
+
+		select {
+		case c := <-m.idleCh:
+			if connMetricsEnabled() {
+				recordConnAcquireSuccess(time.Since(waitStart))
+			}
+			return c, nil
+		default:
+		}
+
+		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("repository is closed")
+		}
+		if m.live < int(m.currentMax.Load()) {
+			c, err := m.createConnLocked(ctx)
+			if err != nil {
+				m.mu.Unlock()
+				return nil, err
+			}
+			m.mu.Unlock()
+			if connMetricsEnabled() {
+				recordConnAcquireSuccess(time.Since(waitStart))
+			}
+			return c, nil
+		}
+		m.mu.Unlock()
+
+		select {
+		case c := <-m.idleCh:
+			if connMetricsEnabled() {
+				recordConnAcquireSuccess(time.Since(waitStart))
+			}
+			return c, nil
+		case <-ctx.Done():
+			if connMetricsEnabled() {
+				recordConnAcquireCanceled()
+			}
+			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
+		}
 	}
-	return nil
 }
 
 func (m *Manager) WithManagedConnection(ctx context.Context, fn func(ctx context.Context, conn *ManagedConnection) error) error {
-	if m.closed {
-		return fmt.Errorf("repository is closed")
-	}
-	metrics := connMetricsEnabled()
-	waitStart := time.Now()
-	select {
-	case conn := <-m.connChan:
-		wait := time.Since(waitStart)
-		if metrics {
-			recordConnAcquireSuccess(wait)
-		}
-		defer m.releaseConnAfterUse(conn)
-
-		if !metrics {
-			return fn(ctx, conn)
-		}
-		t0 := time.Now()
-		err := fn(ctx, conn)
-		recordConnFnHold(time.Since(t0))
+	conn, err := m.acquireConn(ctx)
+	if err != nil {
 		return err
-
-	case <-ctx.Done():
-		if metrics {
-			recordConnAcquireCanceled()
-		}
-		return fmt.Errorf("context cancelled: %w", ctx.Err())
 	}
+	defer m.releaseConnAfterUse(conn)
+
+	if !connMetricsEnabled() {
+		return fn(ctx, conn)
+	}
+	t0 := time.Now()
+	err = fn(ctx, conn)
+	recordConnFnHold(time.Since(t0))
+	return err
 }
 
 func (m *Manager) ExecuteWithTransaction(ctx context.Context, fn func(ctx context.Context, tx *Tx) error) error {
@@ -413,34 +597,19 @@ func WithManagedConnection[T any](m *Manager, ctx context.Context,
 
 	var zero T
 
-	if m.closed {
-		return zero, fmt.Errorf("repository is closed")
+	conn, err := m.acquireConn(ctx)
+	if err != nil {
+		return zero, err
 	}
+	defer m.releaseConnAfterUse(conn)
 
-	metrics := connMetricsEnabled()
-	waitStart := time.Now()
-	select {
-	case conn := <-m.connChan:
-		wait := time.Since(waitStart)
-		if metrics {
-			recordConnAcquireSuccess(wait)
-		}
-		defer m.releaseConnAfterUse(conn)
-
-		if !metrics {
-			return fn(ctx, conn)
-		}
-		t0 := time.Now()
-		v, err := fn(ctx, conn)
-		recordConnFnHold(time.Since(t0))
-		return v, err
-
-	case <-ctx.Done():
-		if metrics {
-			recordConnAcquireCanceled()
-		}
-		return zero, fmt.Errorf("context cancelled: %w", ctx.Err())
+	if !connMetricsEnabled() {
+		return fn(ctx, conn)
 	}
+	t0 := time.Now()
+	v, err := fn(ctx, conn)
+	recordConnFnHold(time.Since(t0))
+	return v, err
 }
 
 // ExecuteWithTransaction is a convenience wrapper for executing a function with a transaction

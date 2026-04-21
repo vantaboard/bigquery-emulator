@@ -13,17 +13,11 @@ import (
 )
 
 const (
-	defaultQueryWorkers      = 4
-	defaultQueryQueueDepth   = 64
-	defaultStorageReadSlots  = 8
-	// httpConnectionHeadroom is extra pooled connections for concurrent REST clients
-	// (GetQueryResults polls, metadata GETs) while the pool also serves async workers.
-	// Worst-case simultaneous holds: up to defaultQueryWorkers long-running async jobs +
-	// concurrent HTTP handlers, each holding one pooled connection via withConnectionMiddleware.
-	httpConnectionHeadroom = 16
-	// defaultConnectionPoolSize must be >= defaultQueryWorkers + typical concurrent HTTP
-	// (Dataform-style parallelism). See also BQ_EMULATOR_POOL_SIZE.
-	defaultConnectionPoolSize = defaultQueryWorkers + httpConnectionHeadroom
+	defaultQueryWorkers     = 4
+	defaultQueryQueueDepth  = 64
+	defaultStorageReadSlots = 8
+	// Connection pool sizing is handled by connection.PoolConfigFromEnv (elastic bounds from CPU/cgroup,
+	// BQ_EMULATOR_POOL_*, or fixed BQ_EMULATOR_POOL_SIZE).
 )
 
 // JobExecutor runs async BigQuery query jobs with bounded concurrency.

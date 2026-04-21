@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,22 +22,23 @@ import (
 )
 
 type Server struct {
-	Handler         http.Handler
-	storage         Storage
-	db              *sql.DB
-	logLevel        *slog.LevelVar
-	logFormat       LogFormat
-	logger          *slog.Logger
-	connMgr         *connection.Manager
-	metaRepo        *metadata.Repository
-	contentRepo     *contentdata.Repository
-	queryExec       *JobExecutor
-	heavyQuerySem   chan struct{}
-	storageReadSem  chan struct{}
-	fileCleanup     func() error
-	explorerCleanup func() error
-	httpServer      *http.Server
-	grpcServer      *grpc.Server
+	Handler           http.Handler
+	storage           Storage
+	db                *sql.DB
+	logLevel          *slog.LevelVar
+	logFormat         LogFormat
+	logger            *slog.Logger
+	connMgr           *connection.Manager
+	metaRepo          *metadata.Repository
+	contentRepo       *contentdata.Repository
+	queryExec         *JobExecutor
+	heavyQuerySem     chan struct{}
+	storageReadSem    chan struct{}
+	fileCleanup       func() error
+	explorerCleanup   func() error
+	autoscaleCancel   context.CancelFunc
+	httpServer        *http.Server
+	grpcServer        *grpc.Server
 }
 
 func (s *Server) rebuildLogger() {
@@ -70,38 +70,33 @@ func storageWithSQLiteDefaults(s Storage) Storage {
 }
 
 type serverConfig struct {
-	poolSize int
+	poolOverride int
 }
 
 // ServerOption configures [New].
 type ServerOption func(*serverConfig) error
 
-// WithConnectionPoolSize sets the number of pooled sqlite connections used by REST handlers
-// and async jobs. When unset, the default is defaultQueryWorkers + httpConnectionHeadroom
-// (see [defaultConnectionPoolSize] in job_executor.go).
+// WithConnectionPoolSize sets a fixed pooled sqlite connection count (disables elastic autoscaling).
+// When unset, [connection.PoolConfigFromEnv] applies (see Environment on [New]).
 func WithConnectionPoolSize(n int) ServerOption {
 	return func(c *serverConfig) error {
 		if n > 0 {
-			c.poolSize = n
+			c.poolOverride = n
 		}
 		return nil
 	}
 }
 
-// New builds a Server. Optional [ServerOption] values override BQ_EMULATOR_POOL_SIZE, which
-// overrides the default pool size.
+// New builds a Server.
 //
 // Environment:
-//   - BQ_EMULATOR_POOL_SIZE: positive integer pool size (sqlite connections).
+//   - BQ_EMULATOR_POOL_SIZE: fixed pool size (disables elastic pool).
+//   - BQ_EMULATOR_POOL_MIN / BQ_EMULATOR_POOL_MAX: optional clamps when using elastic pool.
+//   - BQ_EMULATOR_POOL_AUTOSCALE=0: disable background pool cap tuning (elastic mode only).
 //   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
 //   - BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: async query progress logs every N seconds at INFO (default 30; 0 disables).
 func New(storage Storage, opts ...ServerOption) (*Server, error) {
-	cfg := serverConfig{poolSize: defaultConnectionPoolSize}
-	if v := os.Getenv("BQ_EMULATOR_POOL_SIZE"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.poolSize = n
-		}
-	}
+	cfg := serverConfig{}
 	for _, o := range opts {
 		if o == nil {
 			continue
@@ -134,17 +129,29 @@ func New(storage Storage, opts ...ServerOption) (*Server, error) {
 	db.SetConnMaxLifetime(1<<63 - 1)
 	server.db = db
 
+	poolCfg := connection.PoolConfigFromEnv()
+	if cfg.poolOverride > 0 {
+		connection.WithPoolSize(cfg.poolOverride)(&poolCfg)
+	}
+	db.SetMaxOpenConns(poolCfg.PoolMaxHard)
+
 	lv := new(slog.LevelVar)
 	lv.Set(slog.LevelError)
 	server.logLevel = lv
 	server.logFormat = LogFormatConsole
 	server.rebuildLogger()
 
-	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolSize(cfg.poolSize))
+	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolConfig(poolCfg))
 	if err != nil {
 		return nil, err
 	}
 	server.connMgr = connectionManager
+
+	if poolCfg.AutoscaleLoop && poolCfg.PoolMin < poolCfg.PoolMaxHard && poolCfg.FixedSize == 0 {
+		ascCtx, ascCancel := context.WithCancel(context.Background())
+		server.autoscaleCancel = ascCancel
+		connection.StartAutoscaleLoop(ascCtx, connectionManager, 0)
+	}
 	metaRepo, err := metadata.NewRepository(db, connectionManager)
 	if err != nil {
 		return nil, err
@@ -200,6 +207,9 @@ func (s *Server) Close() error {
 			}
 		}
 	}()
+	if s.autoscaleCancel != nil {
+		s.autoscaleCancel()
+	}
 	if s.queryExec != nil {
 		s.queryExec.Stop()
 	}
