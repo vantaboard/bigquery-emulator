@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -59,18 +60,117 @@ func loggerMiddleware(s *Server) func(http.Handler) http.Handler {
 	}
 }
 
+// accessLogExtrasKey carries per-request fields from handlers back to [accessLogMiddleware]
+// without relying on the outer *http.Request context (middleware stacks replace r.Context).
+type accessLogExtrasKey struct{}
+
+// accessLogExtras is mutated by handlers (e.g. jobs.getQueryResults) for richer completion logs.
+type accessLogExtras struct {
+	mu sync.Mutex
+	// jobs.getQueryResults response (optional)
+	jobComplete *bool
+	totalRows   *uint64
+}
+
+func (e *accessLogExtras) recordGetQueryResults(jobComplete bool, totalRows uint64) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	jc := jobComplete
+	e.jobComplete = &jc
+	tr := totalRows
+	e.totalRows = &tr
+}
+
+// bigQueryRESTAccessAttrs labels common BigQuery REST paths so access logs state the RPC, not only the URL.
+func bigQueryRESTAccessAttrs(method, rawPath string) []slog.Attr {
+	path := strings.TrimPrefix(rawPath, "/bigquery/v2")
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return nil
+	}
+	segs := strings.Split(path, "/")
+	if len(segs) < 2 || segs[0] != "projects" {
+		return nil
+	}
+	projectID := segs[1]
+	attrs := []slog.Attr{slog.String("project_id", projectID)}
+	switch {
+	case len(segs) >= 4 && segs[2] == "queries" && method == http.MethodGet:
+		attrs = append(attrs,
+			slog.String("bq_operation", "jobs.getQueryResults"),
+			slog.String("job_id", segs[3]),
+			slog.String("bq_op_hint", "poll async query job; JSON includes jobComplete, totalRows, rows"),
+		)
+	case len(segs) >= 4 && segs[2] == "jobs" && method == http.MethodGet:
+		attrs = append(attrs,
+			slog.String("bq_operation", "jobs.get"),
+			slog.String("job_id", segs[3]),
+			slog.String("bq_op_hint", "fetch job metadata; JSON includes status.state"),
+		)
+	case len(segs) == 3 && segs[2] == "jobs" && method == http.MethodPost:
+		attrs = append(attrs,
+			slog.String("bq_operation", "jobs.insert"),
+			slog.String("bq_op_hint", "submit load/extract/query job"),
+		)
+	case len(segs) == 3 && segs[2] == "datasets" && method == http.MethodGet:
+		attrs = append(attrs,
+			slog.String("bq_operation", "datasets.list"),
+			slog.String("bq_op_hint", "list datasets in project"),
+		)
+	case len(segs) >= 4 && segs[2] == "datasets" && method == http.MethodGet && len(segs) == 4:
+		attrs = append(attrs,
+			slog.String("bq_operation", "datasets.get"),
+			slog.String("dataset_id", segs[3]),
+		)
+	case len(segs) >= 6 && segs[2] == "datasets" && segs[4] == "tables" && method == http.MethodGet:
+		attrs = append(attrs,
+			slog.String("bq_operation", "tables.get"),
+			slog.String("dataset_id", segs[3]),
+			slog.String("table_id", segs[5]),
+		)
+	}
+	return attrs
+}
+
 func accessLogMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			extras := &accessLogExtras{}
+			r = r.WithContext(context.WithValue(r.Context(), accessLogExtrasKey{}, extras))
+
+			startAttrs := append(
+				[]slog.Attr{slog.String("query", r.URL.RawQuery)},
+				bigQueryRESTAccessAttrs(r.Method, r.URL.Path)...,
+			)
 			logger.Logger(r.Context()).Info(
 				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-				slog.String("query", r.URL.RawQuery),
+				startAttrs...,
 			)
 			start := time.Now()
 			next.ServeHTTP(w, r)
+
+			doneAttrs := append(
+				[]slog.Attr{
+					slog.String("query", r.URL.RawQuery),
+					slog.Duration("duration", time.Since(start)),
+				},
+				bigQueryRESTAccessAttrs(r.Method, r.URL.Path)...,
+			)
+			extras.mu.Lock()
+			if extras.jobComplete != nil {
+				doneAttrs = append(doneAttrs, slog.Bool("job_complete", *extras.jobComplete))
+			}
+			if extras.totalRows != nil {
+				doneAttrs = append(doneAttrs, slog.Uint64("total_rows", *extras.totalRows))
+			}
+			extras.mu.Unlock()
+
 			logger.Logger(r.Context()).Info(
 				fmt.Sprintf("%s %s completed", r.Method, r.URL.Path),
-				slog.Duration("duration", time.Since(start)),
+				doneAttrs...,
 			)
 		})
 	}

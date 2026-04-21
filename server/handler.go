@@ -1666,6 +1666,11 @@ func (h *jobsGetQueryResultsHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		errorResponse(ctx, w, errJobInternalError(err.Error()))
 		return
 	}
+	if v := ctx.Value(accessLogExtrasKey{}); v != nil {
+		if ex, ok := v.(*accessLogExtras); ok && ex != nil && res != nil {
+			ex.recordGetQueryResults(res.JobComplete, res.TotalRows)
+		}
+	}
 	encodeResponse(ctx, w, res)
 }
 
