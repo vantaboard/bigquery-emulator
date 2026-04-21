@@ -33,3 +33,7 @@ vendor/
 /dist
 /build
 
+# Air live reload (github.com/air-verse/air)
+tmp/
+air.log
+

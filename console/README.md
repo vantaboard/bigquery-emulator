@@ -37,6 +37,7 @@ For local development against the Vantaboard image, use **`docker-compose.local.
 
 - Go 1.23+
 - Docker and Docker Compose (for containerized setup)
+- Optional: [Air](https://github.com/air-verse/air) for live rebuilds during development (`go install github.com/air-verse/air@latest`)
 
 ### Local Installation
 
@@ -169,11 +170,21 @@ Open **http://localhost:8000**. The resource tree lists all projects returned by
 
 ## Development
 
-To run in development mode with hot reloading:
+Run the server as usual:
 
 ```bash
 go run . --project=your-project-id --emulator=localhost:9050
 ```
+
+### Live reload (Air)
+
+The repo includes [`.air.toml`](.air.toml). After installing Air (`go install github.com/air-verse/air@latest`), run from the repository root:
+
+```bash
+air
+```
+
+Air rebuilds and restarts the process when **`.go`** files or files under **`static/`** (`html`, `js`, `css`) change. Optional variables in **`.env`** are picked up on each restart (see `env_files` in `.air.toml`). Build output and logs go under **`tmp/air/`**; **`air.log`** is gitignored.
 
 ## CI/CD Pipeline
 
