@@ -18,6 +18,9 @@ import (
 	"google.golang.org/api/option"
 )
 
+// ErrNoEmulatorProjects is returned when BIGQUERY_EMULATOR_HOST is set but the emulator reports no projects.
+var ErrNoEmulatorProjects = errors.New("no BigQuery projects in emulator")
+
 // BigQueryClient handles interactions with BigQuery for the explorer API.
 type BigQueryClient struct {
 	client       *bigquery.Client
@@ -25,8 +28,25 @@ type BigQueryClient struct {
 	emulatorHost string
 	httpClient   *http.Client
 
-	mu           sync.Mutex
-	extraClients map[string]*bigquery.Client
+	mu                sync.Mutex
+	defaultClientOnce sync.Once
+	defaultClientErr  error
+	extraClients      map[string]*bigquery.Client
+}
+
+func gcpProjectIDFromEnv() string {
+	if id := strings.TrimSpace(os.Getenv("GOOGLE_CLOUD_PROJECT")); id != "" {
+		return id
+	}
+	return strings.TrimSpace(os.Getenv("GCLOUD_PROJECT"))
+}
+
+func writeExplorerClientError(c *gin.Context, err error) {
+	if errors.Is(err, ErrNoEmulatorProjects) {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 
 // newBigQueryClientCore creates a BigQuery client for projectID using the same rules as NewBigQueryClient.
@@ -46,22 +66,28 @@ func newBigQueryClientCore(ctx context.Context, projectID, emulatorHost string) 
 }
 
 // NewBigQueryClient creates a new BigQuery client.
+// When BIGQUERY_EMULATOR_HOST is set, the default *bigquery.Client is created lazily on first use
+// so project discovery can run after the HTTP server is listening. When the host is not set,
+// GOOGLE_CLOUD_PROJECT or GCLOUD_PROJECT must identify the GCP project.
 func NewBigQueryClient() (*BigQueryClient, error) {
 	ctx := context.Background()
 	emulatorHost := NormalizeEmulatorHost(os.Getenv("BIGQUERY_EMULATOR_HOST"))
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 
-	projectID := strings.TrimSpace(os.Getenv("BIGQUERY_PROJECT_ID"))
-	if projectID == "" && emulatorHost != "" {
-		if ids, err := FetchProjectIDsFromEmulator(ctx, httpClient, emulatorHost); err == nil && len(ids) > 0 {
-			projectID = ids[0]
-		}
-	}
-	if projectID == "" {
-		projectID = "emulator-project"
+	if emulatorHost != "" {
+		return &BigQueryClient{
+			emulatorHost: emulatorHost,
+			httpClient:   httpClient,
+			extraClients: make(map[string]*bigquery.Client),
+		}, nil
 	}
 
-	client, err := newBigQueryClientCore(ctx, projectID, emulatorHost)
+	projectID := gcpProjectIDFromEnv()
+	if projectID == "" {
+		return nil, fmt.Errorf("explorer API: set GOOGLE_CLOUD_PROJECT or GCLOUD_PROJECT when BIGQUERY_EMULATOR_HOST is not set")
+	}
+
+	client, err := newBigQueryClientCore(ctx, projectID, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create BigQuery client: %v", err)
 	}
@@ -75,19 +101,47 @@ func NewBigQueryClient() (*BigQueryClient, error) {
 	}, nil
 }
 
+// ensureDefaultClient resolves the default project and client when using the emulator (lazy init).
+func (bq *BigQueryClient) ensureDefaultClient(ctx context.Context) error {
+	if bq.emulatorHost == "" {
+		return nil
+	}
+	bq.defaultClientOnce.Do(func() {
+		ids, err := FetchProjectIDsFromEmulator(ctx, bq.httpClient, bq.emulatorHost)
+		if err != nil {
+			bq.defaultClientErr = fmt.Errorf("discover emulator projects: %w", err)
+			return
+		}
+		if len(ids) == 0 {
+			bq.defaultClientErr = ErrNoEmulatorProjects
+			return
+		}
+		pid := ids[0]
+		c, err := newBigQueryClientCore(ctx, pid, bq.emulatorHost)
+		if err != nil {
+			bq.defaultClientErr = fmt.Errorf("failed to create BigQuery client: %v", err)
+			return
+		}
+		bq.client = c
+		bq.projectID = pid
+	})
+	return bq.defaultClientErr
+}
+
 // clientForProject returns a client whose project ID matches the BigQuery jobs.insert path.
-// projectID may be empty; the emulator is queried for known projects when appropriate.
+// projectID may be empty; the default project is resolved via ensureDefaultClient when using the emulator.
 func (bq *BigQueryClient) clientForProject(ctx context.Context, projectID string) (*bigquery.Client, error) {
 	pid := strings.TrimSpace(projectID)
-	if pid == "" && bq.emulatorHost != "" {
-		if ids, err := FetchProjectIDsFromEmulator(ctx, bq.httpClient, bq.emulatorHost); err == nil && len(ids) > 0 {
-			pid = ids[0]
-		}
-	}
 	if pid == "" {
+		if err := bq.ensureDefaultClient(ctx); err != nil {
+			return nil, err
+		}
 		pid = bq.projectID
 	}
 	if pid == bq.projectID {
+		if err := bq.ensureDefaultClient(ctx); err != nil {
+			return nil, err
+		}
 		return bq.client, nil
 	}
 
@@ -106,18 +160,34 @@ func (bq *BigQueryClient) clientForProject(ctx context.Context, projectID string
 
 // GetProjects lists available projects (multi-project when using a compatible emulator).
 func (bq *BigQueryClient) GetProjects(c *gin.Context) {
-	var ids []string
-	var err error
+	ctx := c.Request.Context()
 	if bq.emulatorHost != "" {
-		ids, err = FetchProjectIDsFromEmulator(c.Request.Context(), bq.httpClient, bq.emulatorHost)
-	}
-	if err != nil || len(ids) == 0 {
-		ids = []string{bq.projectID}
-	} else {
+		ids, err := FetchProjectIDsFromEmulator(ctx, bq.httpClient, bq.emulatorHost)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		if len(ids) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": ErrNoEmulatorProjects.Error()})
+			return
+		}
 		ids = ApplyProjectIDListEnv(ids, bq.projectID)
+		if len(ids) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no BigQuery projects match BIGQUERY_PROJECT_IDS filter"})
+			return
+		}
+		c.JSON(http.StatusOK, ids)
+		return
 	}
+
+	if err := bq.ensureDefaultClient(ctx); err != nil {
+		writeExplorerClientError(c, err)
+		return
+	}
+	ids := ApplyProjectIDListEnv([]string{bq.projectID}, bq.projectID)
 	if len(ids) == 0 {
-		ids = []string{bq.projectID}
+		c.JSON(http.StatusNotFound, gin.H{"error": "no BigQuery project configured"})
+		return
 	}
 	c.JSON(http.StatusOK, ids)
 }
@@ -158,6 +228,11 @@ func (bq *BigQueryClient) GetDatasets(c *gin.Context) {
 	projectID := c.Param("project_id")
 	ctx := context.Background()
 
+	if err := bq.ensureDefaultClient(ctx); err != nil {
+		writeExplorerClientError(c, err)
+		return
+	}
+
 	datasets := []string{}
 	it := bq.client.Datasets(ctx)
 	it.ProjectID = projectID
@@ -182,6 +257,11 @@ func (bq *BigQueryClient) GetTables(c *gin.Context) {
 	projectID := c.Param("project_id")
 	datasetID := c.Param("dataset_id")
 	ctx := context.Background()
+
+	if err := bq.ensureDefaultClient(ctx); err != nil {
+		writeExplorerClientError(c, err)
+		return
+	}
 
 	var dataset *bigquery.Dataset
 	if projectID != "" && projectID != bq.projectID {
@@ -234,6 +314,11 @@ func (bq *BigQueryClient) GetTableSchema(c *gin.Context) {
 	datasetID := c.Param("dataset_id")
 	tableID := c.Param("table_id")
 	ctx := context.Background()
+
+	if err := bq.ensureDefaultClient(ctx); err != nil {
+		writeExplorerClientError(c, err)
+		return
+	}
 
 	var tableRef *bigquery.Table
 	if projectID != "" && projectID != bq.projectID {
@@ -306,7 +391,7 @@ func (bq *BigQueryClient) RunQuery(c *gin.Context) {
 	ctx := context.Background()
 	client, err := bq.clientForProject(ctx, request.ProjectID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("BigQuery client: %v", err)})
+		writeExplorerClientError(c, fmt.Errorf("BigQuery client: %w", err))
 		return
 	}
 	it, err := client.Query(request.Query).Read(ctx)
@@ -449,8 +534,10 @@ func formatBigQueryValue(v interface{}) interface{} {
 // Close closes the BigQuery client.
 func (bq *BigQueryClient) Close() error {
 	var errs []error
-	if err := bq.client.Close(); err != nil {
-		errs = append(errs, err)
+	if bq.client != nil {
+		if err := bq.client.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	bq.mu.Lock()
 	for _, c := range bq.extraClients {
