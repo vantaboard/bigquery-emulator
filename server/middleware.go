@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/explorerapi"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
@@ -21,6 +23,12 @@ func sequentialAccessMiddleware() func(http.Handler) http.Handler {
 	var mu sync.Mutex
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Explorer UI API (/api/*) calls back into this server via the BigQuery HTTP client; do not
+			// hold the global sequential lock across those nested requests (deadlock with self-calls).
+			if strings.HasPrefix(r.URL.Path, explorerapi.APIPrefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			next.ServeHTTP(w, r)
@@ -173,6 +181,13 @@ func routineIDFromParams(params map[string]string) (string, bool) {
 func withConnectionMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Explorer /api routes use the cloud.google.com/go/bigquery client over HTTP to this server,
+			// not the managed sqlite connection used by BigQuery REST handlers.
+			if strings.HasPrefix(r.URL.Path, explorerapi.APIPrefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			ctx := r.Context()
 
 			server := serverFromContext(ctx)

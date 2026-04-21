@@ -41,15 +41,13 @@ If you want to know which specific features are supported, please see [here](htt
 
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
 
-## Explorer HTTP API (`bq-explorer-api`)
+## Explorer HTTP API (`/api` for bigquery-emulator-ui)
 
-The [bigquery-emulator-ui](https://github.com/filipecaixeta/bigquery-emulator-ui) project is a React UI that calls a small HTTP API served by this repository:
+The [bigquery-emulator-ui](https://github.com/filipecaixeta/bigquery-emulator-ui) React app calls JSON endpoints under **`/api/*`** on the **same HTTP port** as the BigQuery REST API (the **`--port`** listener, default **9050**). They are implemented in **`internal/explorerapi`** and registered by the main **`bigquery-emulator`** binary—no separate sidecar process.
 
-```console
-$ BIGQUERY_EMULATOR_HOST=localhost:9050 BIGQUERY_PROJECT_ID=my-project go run ./cmd/bq-explorer-api
-```
+If **`BIGQUERY_EMULATOR_HOST`** is not set, the emulator sets it to the REST listen address on loopback (e.g. `127.0.0.1:9050`) so the embedded explorer client can reach this server via the Go BigQuery client. Point **`BIGQUERY_EMULATOR_HOST`** at another host if you want the explorer UI to use a different BigQuery endpoint.
 
-It exposes the same JSON routes as before under **`/api/*`** (see the UI repo’s `docs/api-contract.md`). Build and run from a checkout that satisfies this module’s `go.mod` (including sibling `go-googlesql` lib replacements used by the main emulator).
+See the UI repository’s `docs/api-contract.md` for route shapes.
 
 # Installation
 

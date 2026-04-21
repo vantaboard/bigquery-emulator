@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -92,6 +93,17 @@ func runServer(args []string, opt option) error {
 	} else {
 		db = server.Storage(fmt.Sprintf("file:%s?cache=shared", opt.Database))
 	}
+
+	// Default loopback for the merged explorer UI API (internal/explorerapi), which uses the Go
+	// BigQuery client against this same process. Override with BIGQUERY_EMULATOR_HOST to point elsewhere.
+	if os.Getenv("BIGQUERY_EMULATOR_HOST") == "" {
+		host := opt.Host
+		if host == "0.0.0.0" || host == "[::]" {
+			host = "127.0.0.1"
+		}
+		os.Setenv("BIGQUERY_EMULATOR_HOST", net.JoinHostPort(host, fmt.Sprintf("%d", opt.HTTPPort)))
+	}
+
 	bqServer, err := server.New(db)
 	if err != nil {
 		return err

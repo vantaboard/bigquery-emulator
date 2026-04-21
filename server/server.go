@@ -17,21 +17,23 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
 	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/explorerapi"
 	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 )
 
 type Server struct {
-	Handler      http.Handler
-	storage      Storage
-	db           *sql.DB
-	loggerConfig *zap.Config
-	logger       *zap.Logger
-	connMgr      *connection.Manager
-	metaRepo     *metadata.Repository
-	contentRepo  *contentdata.Repository
-	fileCleanup  func() error
-	httpServer   *http.Server
-	grpcServer   *grpc.Server
+	Handler         http.Handler
+	storage         Storage
+	db              *sql.DB
+	loggerConfig    *zap.Config
+	logger          *zap.Logger
+	connMgr         *connection.Manager
+	metaRepo        *metadata.Repository
+	contentRepo     *contentdata.Repository
+	fileCleanup     func() error
+	explorerCleanup func() error
+	httpServer      *http.Server
+	grpcServer      *grpc.Server
 }
 
 func New(storage Storage) (*Server, error) {
@@ -90,6 +92,14 @@ func New(storage Storage) (*Server, error) {
 	r.Handle(uploadAPIEndpoint, &uploadHandler{}).Methods("POST")
 	r.Handle(uploadAPIEndpoint, &uploadContentHandler{}).Methods("PUT")
 	registerEmulatorProjectRoutes(r, server)
+
+	explorerHandler, explorerCleanup, err := explorerapi.NewHTTPHandler()
+	if err != nil {
+		return nil, fmt.Errorf("explorer api: %w", err)
+	}
+	server.explorerCleanup = explorerCleanup
+	r.PathPrefix(explorerapi.APIPrefix).Handler(explorerHandler)
+
 	r.PathPrefix("/").Handler(&defaultHandler{})
 	r.Use(sequentialAccessMiddleware())
 	r.Use(recoveryMiddleware(server))
@@ -116,6 +126,11 @@ func (s *Server) Close() error {
 			}
 		}
 	}()
+	if s.explorerCleanup != nil {
+		if err := s.explorerCleanup(); err != nil {
+			log.Printf("failed to close explorer api client: %s", err.Error())
+		}
+	}
 	if err := s.db.Close(); err != nil {
 		log.Printf("failed to close database: %s", err.Error())
 		return err
