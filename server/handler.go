@@ -891,6 +891,85 @@ func convertCSVValue(value string, colType types.Type) (interface{}, error) {
 	}
 }
 
+// ensureProjectAndDatasetForLoad ensures metadata exists for a load job destination.
+// The upload API is scoped to r.project (URL), but DestinationTable may name another project;
+// dataset may be missing until CREATE_IF_NEEDED creates it.
+func ensureProjectAndDatasetForLoad(
+	ctx context.Context,
+	server *Server,
+	urlProject *metadata.Project,
+	destProjectID string,
+	datasetID string,
+	createDisposition string,
+) (*metadata.Project, *metadata.Dataset, error) {
+	if destProjectID == "" {
+		destProjectID = urlProject.ID
+	}
+	destProject, err := server.metaRepo.FindProject(ctx, destProjectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if destProject == nil {
+		conn := connectionFromContext(ctx).ConfigureScope(destProjectID, "")
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("begin tx for project create: %w", err)
+		}
+		defer tx.RollbackIfNotCommitted()
+		if err := server.metaRepo.AddProjectIfNotExists(ctx, tx.Tx(), metadata.NewProject(server.metaRepo, destProjectID)); err != nil {
+			return nil, nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, nil, err
+		}
+		destProject, err = server.metaRepo.FindProject(ctx, destProjectID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if destProject == nil {
+			return nil, nil, fmt.Errorf("project %s not found after create", destProjectID)
+		}
+	}
+
+	dataset, err := destProject.Dataset(ctx, datasetID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if dataset != nil {
+		return destProject, dataset, nil
+	}
+	if createDisposition == "CREATE_NEVER" {
+		return nil, nil, fmt.Errorf("dataset %s:%s is not found", destProjectID, datasetID)
+	}
+	conn := connectionFromContext(ctx).ConfigureScope(destProjectID, datasetID)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin tx for dataset create: %w", err)
+	}
+	defer tx.RollbackIfNotCommitted()
+	dsBody := &bigqueryv2.Dataset{
+		Id: fmt.Sprintf("%s:%s", destProjectID, datasetID),
+		DatasetReference: &bigqueryv2.DatasetReference{
+			ProjectId: destProjectID,
+			DatasetId: datasetID,
+		},
+	}
+	if err := destProject.AddDataset(ctx, tx.Tx(), metadata.NewDataset(server.metaRepo, destProjectID, datasetID, dsBody)); err != nil {
+		return nil, nil, fmt.Errorf("create dataset for load: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	dataset, err = destProject.Dataset(ctx, datasetID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if dataset == nil {
+		return nil, nil, fmt.Errorf("dataset %s:%s missing after create", destProjectID, datasetID)
+	}
+	return destProject, dataset, nil
+}
+
 func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentRequest) error {
 	content := r.job.Content()
 	if content == nil || content.Configuration == nil || content.Configuration.Load == nil {
@@ -898,7 +977,18 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 	}
 	load := content.Configuration.Load
 	tableRef := load.DestinationTable
-	dataset, err := r.project.Dataset(ctx, tableRef.DatasetId)
+	if tableRef == nil {
+		return fmt.Errorf("load job missing destination table")
+	}
+	destProjectID := tableRef.ProjectId
+	if destProjectID == "" {
+		destProjectID = r.project.ID
+	}
+	tableRef.ProjectId = destProjectID
+
+	destProject, dataset, err := ensureProjectAndDatasetForLoad(
+		ctx, r.server, r.project, destProjectID, tableRef.DatasetId, load.CreateDisposition,
+	)
 	if err != nil {
 		return err
 	}
@@ -934,7 +1024,7 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 		}
 		if _, err := (&tablesInsertHandler{}).Handle(ctx, &tablesInsertRequest{
 			server:  r.server,
-			project: r.project,
+			project: destProject,
 			dataset: dataset,
 			table: &bigqueryv2.Table{
 				Schema:         load.Schema,
