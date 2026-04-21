@@ -128,5 +128,4 @@ replace (
 	github.com/vantaboard/go-googlesql/lib/linux-amd64 => ../go-googlesql/lib/linux-amd64
 	github.com/vantaboard/go-googlesql/lib/linux-arm64 => ../go-googlesql/lib/linux-arm64
 	github.com/vantaboard/go-googlesql/lib/windows-amd64 => ../go-googlesql/lib/windows-amd64
-	github.com/vantaboard/go-googlesqlite => ../go-googlesqlite
 )

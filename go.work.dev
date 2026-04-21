@@ -2,9 +2,7 @@ go 1.26.0
 
 use .
 
-replace github.com/vantaboard/go-googlesql => ../go-googlesql
-
 replace github.com/vantaboard/go-googlesqlite => ../go-googlesqlite
 
-// Copy to go.work for local development with sibling go-googlesql and go-googlesqlite checkouts.
-// Nested `lib/*` modules: see `replace` in go.mod (sibling layout; Docker copies ../go-googlesql).
+// Copy to go.work for local development with a sibling go-googlesqlite checkout.
+// Keeps go.mod free of a go-googlesqlite replace so published consumers stay on semver.

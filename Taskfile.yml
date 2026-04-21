@@ -11,17 +11,30 @@ tasks:
     cmds:
       - |
         echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
-        echo "Common: task emulator:build | task docker:build | task test:linux"
+        echo "Common: task emulator:build | task test:prebuilt | task docker:build | task test:linux"
+        echo "Local sibling go-googlesqlite: cp go.work.dev go.work  (go.work is gitignored)"
 
   emulator:build:
-    desc: Build bigquery-emulator binary (unified prebuilt tags)
+    desc: Build bigquery-emulator binary (unified prebuilt tags). Uses ./go.work if present, else GOWORK=off
     cmds:
       - |
         set -euo pipefail
         source .envrc
-        # Avoid picking up a parent go.work (e.g. meta-repo) that omits this module.
-        export GOWORK=off
+        if [ -f go.work ]; then export GOWORK="$PWD/go.work"
+        else export GOWORK=off
+        fi
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+
+  test:prebuilt:
+    desc: Host go test ./... (same tags as emulator:build). Uses ./go.work if present, else GOWORK=off
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        if [ -f go.work ]; then export GOWORK="$PWD/go.work"
+        else export GOWORK=off
+        fi
+        go test -tags "$GOOGLESQL_BUILD_TAGS" -p 1 -count=1 ./...
 
   emulator:build-linked:
     desc: Build using go.work.dev (set GOWORK)

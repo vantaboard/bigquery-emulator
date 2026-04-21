@@ -29,6 +29,6 @@ __pycache__
 # Mac files
 .DS_Store
 
-# Local Go workspace (template: go.work.dev)
+# Local Go workspace — copy sibling template: cp go.work.dev go.work
 go.work
 go.work.sum
