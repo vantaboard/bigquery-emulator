@@ -1,6 +1,6 @@
 module github.com/vantaboard/bigquery-emulator
 
-go 1.26.2
+go 1.26.0
 
 require (
 	cloud.google.com/go/bigquery v1.66.2
