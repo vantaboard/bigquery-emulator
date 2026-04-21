@@ -41,6 +41,16 @@ If you want to know which specific features are supported, please see [here](htt
 
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
 
+## Explorer HTTP API (`bq-explorer-api`)
+
+The [bigquery-emulator-ui](https://github.com/filipecaixeta/bigquery-emulator-ui) project is a React UI that calls a small HTTP API served by this repository:
+
+```console
+$ BIGQUERY_EMULATOR_HOST=localhost:9050 BIGQUERY_PROJECT_ID=my-project go run ./cmd/bq-explorer-api
+```
+
+It exposes the same JSON routes as before under **`/api/*`** (see the UI repo’s `docs/api-contract.md`). Build and run from a checkout that satisfies this module’s `go.mod` (including sibling `go-googlesql` lib replacements used by the main emulator).
+
 # Installation
 
 **Prebuilt-first installs:** this emulator depends on [`go-googlesql`](https://github.com/vantaboard/go-googlesql), whose supported default path is **`googlesql` + `googlesql_unified_prebuilt`** with release prebuilts and the shared stack bootstrap env. For local source builds, prefer sibling checkouts of `bigquery-emulator`, `go-googlesql`, and `go-googlesqlite`, then follow the **Development build modes** below instead of a blind `go install`.
