@@ -94,7 +94,7 @@ func jobAccessLogQueryFields(content *bigqueryv2.Job) (preview string, destinati
 	}
 	q := content.Configuration.Query.Query
 	if q != "" {
-		preview = truncateAsyncJobQueryForLog(q, 512)
+		preview = q
 	}
 	if dt := content.Configuration.Query.DestinationTable; dt != nil {
 		destination = fmt.Sprintf("%s.%s.%s", dt.ProjectId, dt.DatasetId, dt.TableId)
