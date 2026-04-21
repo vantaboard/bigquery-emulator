@@ -910,16 +910,49 @@ func (e *loadDestinationDatasetNotFoundError) Error() string {
 	return fmt.Sprintf("dataset %s is not found", e.DatasetID)
 }
 
+// loadDestinationProjectNotFoundError indicates the load job's destination project
+// is missing from metadata. Upload handlers translate this to HTTP 404.
+type loadDestinationProjectNotFoundError struct {
+	ProjectID string
+}
+
+func (e *loadDestinationProjectNotFoundError) Error() string {
+	return fmt.Sprintf("project %s is not found", e.ProjectID)
+}
+
+// projectMetadataNotFoundError is returned when CREATE SCHEMA DDL targets a project
+// that has no metadata row. Query/job handlers map this to HTTP 404.
+type projectMetadataNotFoundError struct {
+	ProjectID string
+}
+
+func (e *projectMetadataNotFoundError) Error() string {
+	return fmt.Sprintf("project %s is not found", e.ProjectID)
+}
+
 func serverErrorFromUploadLoadDestination(err error) *ServerError {
 	var nd *loadDestinationDatasetNotFoundError
 	if errors.As(err, &nd) {
 		return errNotFound(nd.Error())
 	}
+	var np *loadDestinationProjectNotFoundError
+	if errors.As(err, &np) {
+		return errNotFound(np.Error())
+	}
 	return nil
 }
 
-// ensureProjectForLoadDestination ensures the destination project row exists (create if missing).
-// The dataset must already exist in metadata; otherwise [loadDestinationDatasetNotFoundError] is returned.
+func serverErrorFromSyncCatalog(err error) *ServerError {
+	var p *projectMetadataNotFoundError
+	if errors.As(err, &p) {
+		return errNotFound(p.Error())
+	}
+	return errInvalidQuery(err.Error())
+}
+
+// ensureProjectForLoadDestination resolves the destination project and dataset for a load job.
+// If the project or dataset row is missing from metadata, a typed error is returned
+// that upload handlers translate to HTTP 404.
 func ensureProjectForLoadDestination(
 	ctx context.Context,
 	server *Server,
@@ -935,25 +968,7 @@ func ensureProjectForLoadDestination(
 		return nil, nil, err
 	}
 	if destProject == nil {
-		conn := connectionFromContext(ctx).ConfigureScope(destProjectID, "")
-		tx, err := conn.Begin(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("begin tx for project create: %w", err)
-		}
-		defer tx.RollbackIfNotCommitted()
-		if err := server.metaRepo.AddProjectIfNotExists(ctx, tx.Tx(), metadata.NewProject(server.metaRepo, destProjectID)); err != nil {
-			return nil, nil, err
-		}
-		if err := tx.Commit(); err != nil {
-			return nil, nil, err
-		}
-		destProject, err = server.metaRepo.FindProject(ctx, destProjectID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if destProject == nil {
-			return nil, nil, fmt.Errorf("project %s not found after create", destProjectID)
-		}
+		return nil, nil, &loadDestinationProjectNotFoundError{ProjectID: destProjectID}
 	}
 
 	dataset, err := destProject.Dataset(ctx, datasetID)
@@ -1682,7 +1697,7 @@ func (h *jobsInsertHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		job:     &job.Job,
 	})
 	if err != nil {
-		errorResponse(ctx, w, errInvalidQuery(err.Error()))
+		errorResponse(ctx, w, serverErrorFromSyncCatalog(err))
 		return
 	}
 	encodeResponse(ctx, w, res)
@@ -2373,15 +2388,12 @@ func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref go
 	}
 	defer tx.RollbackIfNotCommitted()
 
-	if err := server.metaRepo.AddProjectIfNotExists(ctx, tx.Tx(), metadata.NewProject(server.metaRepo, ref.ProjectID)); err != nil {
-		return err
-	}
 	project, err := server.metaRepo.FindProjectWithConn(ctx, tx.Tx(), ref.ProjectID)
 	if err != nil {
 		return err
 	}
 	if project == nil {
-		return fmt.Errorf("project %s not found after AddProjectIfNotExists", ref.ProjectID)
+		return &projectMetadataNotFoundError{ProjectID: ref.ProjectID}
 	}
 	existing, err := project.Dataset(ctx, ref.DatasetID)
 	if err != nil {
@@ -2625,7 +2637,7 @@ func (h *jobsQueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		useInt64Timestamp: useInt64Timestamp,
 	})
 	if err != nil {
-		errorResponse(ctx, w, errInvalidQuery(err.Error()))
+		errorResponse(ctx, w, serverErrorFromSyncCatalog(err))
 		return
 	}
 	encodeResponse(ctx, w, res)
