@@ -2511,7 +2511,7 @@ func runAsyncJobHeartbeat(ctx context.Context, log *slog.Logger, projectID, jobI
 				slog.String("project_id", projectID),
 				slog.String("job_id", jobID),
 				slog.Int("elapsed_sec", int(time.Since(start).Seconds())),
-				slog.String("hint", "worker runs until contentRepo.Query and destination write complete; set log level DEBUG for query_fetch_progress and jobs.getQueryResults poll detail"),
+				slog.String("hint", "worker runs until contentRepo.Query and destination write complete; at DEBUG, jobs.getQueryResults completed lines include job_sql_preview and poll starts are DEBUG"),
 			)
 		}
 	}

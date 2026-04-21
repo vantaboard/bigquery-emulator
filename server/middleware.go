@@ -15,6 +15,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 
 	"github.com/gorilla/mux"
+	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"log/slog"
 
 	"github.com/vantaboard/bigquery-emulator/internal/logger"
@@ -70,6 +71,9 @@ type accessLogExtras struct {
 	// jobs.getQueryResults response (optional)
 	jobComplete *bool
 	totalRows   *uint64
+	// Populated in withJobMiddleware for job-scoped routes (query preview for poll correlation).
+	jobSQLPreview  *string
+	jobDestination *string
 }
 
 func (e *accessLogExtras) recordGetQueryResults(jobComplete bool, totalRows uint64) {
@@ -82,6 +86,57 @@ func (e *accessLogExtras) recordGetQueryResults(jobComplete bool, totalRows uint
 	e.jobComplete = &jc
 	tr := totalRows
 	e.totalRows = &tr
+}
+
+func jobAccessLogQueryFields(content *bigqueryv2.Job) (preview string, destination string) {
+	if content == nil || content.Configuration == nil || content.Configuration.Query == nil {
+		return "", ""
+	}
+	q := content.Configuration.Query.Query
+	if q != "" {
+		preview = truncateAsyncJobQueryForLog(q, 512)
+	}
+	if dt := content.Configuration.Query.DestinationTable; dt != nil {
+		destination = fmt.Sprintf("%s.%s.%s", dt.ProjectId, dt.DatasetId, dt.TableId)
+	}
+	return preview, destination
+}
+
+func recordJobQueryIntoAccessLogExtras(ctx context.Context, job *metadata.Job) {
+	if job == nil {
+		return
+	}
+	v := ctx.Value(accessLogExtrasKey{})
+	ex, ok := v.(*accessLogExtras)
+	if !ok || ex == nil {
+		return
+	}
+	preview, dest := jobAccessLogQueryFields(job.Content())
+	if preview == "" && dest == "" {
+		return
+	}
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	if preview != "" {
+		p := preview
+		ex.jobSQLPreview = &p
+	}
+	if dest != "" {
+		d := dest
+		ex.jobDestination = &d
+	}
+}
+
+// accessLogStartLevel demotes high-frequency jobs.getQueryResults request starts to DEBUG (SQL preview
+// appears on the matching "completed" line after withJobMiddleware runs).
+func accessLogStartLevel(method, rawPath string) slog.Level {
+	path := strings.TrimPrefix(rawPath, "/bigquery/v2")
+	path = strings.Trim(path, "/")
+	segs := strings.Split(path, "/")
+	if len(segs) >= 4 && segs[0] == "projects" && segs[2] == "queries" && method == http.MethodGet {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
 }
 
 // bigQueryRESTAccessAttrs labels common BigQuery REST paths so access logs state the RPC, not only the URL.
@@ -161,7 +216,7 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 			)
 			logger.Logger(r.Context()).LogAttrs(
 				r.Context(),
-				slog.LevelInfo,
+				accessLogStartLevel(r.Method, r.URL.Path),
 				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 				startAttrs...,
 			)
@@ -181,6 +236,12 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 			}
 			if extras.totalRows != nil {
 				doneAttrs = append(doneAttrs, slog.Uint64("total_rows", *extras.totalRows))
+			}
+			if extras.jobSQLPreview != nil {
+				doneAttrs = append(doneAttrs, slog.String("job_sql_preview", *extras.jobSQLPreview))
+			}
+			if extras.jobDestination != nil {
+				doneAttrs = append(doneAttrs, slog.String("job_destination", *extras.jobDestination))
 			}
 			extras.mu.Unlock()
 
@@ -401,6 +462,7 @@ func withJobMiddleware() func(http.Handler) http.Handler {
 				// withProjectMiddleware may have already loaded the job in one tx with the project.
 				if v := ctx.Value(jobKey{}); v != nil {
 					if j, ok := v.(*metadata.Job); ok && j != nil {
+						recordJobQueryIntoAccessLogExtras(ctx, j)
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
@@ -417,6 +479,7 @@ func withJobMiddleware() func(http.Handler) http.Handler {
 					return
 				}
 				ctx = withJob(ctx, job)
+				recordJobQueryIntoAccessLogExtras(ctx, job)
 			}
 			next.ServeHTTP(
 				w,
