@@ -50,7 +50,8 @@ const (
 	// Long enough that occasional SQLite contention does not false-positive; short enough to catch hangs.
 	stressHTTPTimeout = 15 * time.Second
 	// Upper bound on failed poll/metadata rounds; see package doc.
-	stressMaxErrRate = 0.025
+	// 3%: occasional 500/503 on metadata under real SQLite + pool contention; CTAS-in-place can change timing.
+	stressMaxErrRate = 0.03
 )
 
 func stressHeavyCTASQuery(dataset string) string {

@@ -29,6 +29,16 @@ func TestIsCTASQuery(t *testing.T) {
 			"select 1",
 			false,
 		},
+		{
+			"create table with columns not CTAS",
+			"create table d.t (x int64, y string)",
+			false,
+		},
+		{
+			"invalid sql",
+			"this is not valid sql ~~~",
+			false,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
+	"sync"
 
+	"github.com/vantaboard/go-googlesql"
+	"github.com/vantaboard/go-googlesql/ast"
 	"github.com/vantaboard/go-googlesqlite"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 
@@ -17,27 +19,30 @@ import (
 	"log/slog"
 )
 
-// ctasQueryRegexp matches BigQuery-style CREATE (OR REPLACE) TABLE ... AS ... statements.
-// Excludes OR REPLACE VIEW, CREATE FUNCTION, etc., by requiring "table" after optional OR REPLACE.
-var (
-	ctasQueryRegexp  = regexp.MustCompile(`(?is)\A\s*create(\s+or\s+replace)?\s+table\s+`)
-	asSelectCTASRegexp = regexp.MustCompile(`(?is)\bas\s*(\(|\s*select)`)
-)
+// ctasQueryParserOptions returns parser options for lightweight classification of SQL text.
+// A single default instance is enough for [IsCTASQuery] (read-only use by [googlesql.ParseStatement]).
+var ctasQueryParserOptions = sync.OnceValue(func() *googlesql.ParserOptions {
+	return googlesql.NewParserOptions()
+})
 
-// IsCTASQuery returns true for CREATE [OR REPLACE] TABLE ... AS (SELECT|...
+// IsCTASQuery returns true when the statement is parsed as a CREATE (OR REPLACE) TABLE
+// with an AS <query> clause (CTAS), using the GoogleSQL parser from go-googlesql. On parse
+// failure or other statement kinds, it returns false.
 func IsCTASQuery(q string) bool {
 	s := strings.TrimSpace(q)
 	if s == "" {
 		return false
 	}
-	if !ctasQueryRegexp.MatchString(s) {
+	stmt, err := googlesql.ParseStatement(s, ctasQueryParserOptions())
+	if err != nil {
 		return false
 	}
-	low := strings.ToLower(s)
-	if strings.HasPrefix(low, "create view") || strings.HasPrefix(low, "create materialized") {
+	ct, ok := stmt.(*ast.CreateTableStatementNode)
+	if !ok {
 		return false
 	}
-	return asSelectCTASRegexp.MatchString(s)
+	// Table DDL without AS <query> is still CreateTableStatementNode but Query() is nil.
+	return ct.Query() != nil
 }
 
 func namePathEqual(a, b []string) bool {
