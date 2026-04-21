@@ -25,7 +25,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/goccy/go-json"
 	"github.com/vantaboard/go-googlesqlite"
-	"go.uber.org/zap"
+	"log/slog"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -39,14 +39,19 @@ import (
 )
 
 func errorResponse(ctx context.Context, w http.ResponseWriter, e *ServerError) {
-	fields := []zap.Field{zap.Error(e)}
-	fields = append(fields, logger.HTTPRequestFields(ctx)...)
-	fields = append(fields, logger.LogFields(ctx)...)
-	fields = append(fields, ResourceLogFields(ctx)...)
-	if err := ctx.Err(); err != nil {
-		fields = append(fields, zap.NamedError("request_context_err", err))
+	attrs := []slog.Attr{
+		slog.String("reason", string(e.Reason)),
+		slog.String("message", e.Message),
+		slog.String("location", e.Location),
+		slog.Any("err", e),
 	}
-	logger.Logger(ctx).WithOptions(zap.AddCallerSkip(1)).Error(string(e.Reason), fields...)
+	attrs = append(attrs, logger.HTTPRequestAttrs(ctx)...)
+	attrs = append(attrs, logger.LogFields(ctx)...)
+	attrs = append(attrs, ResourceLogAttrs(ctx)...)
+	if err := ctx.Err(); err != nil {
+		attrs = append(attrs, slog.Any("request_context_err", err))
+	}
+	logger.Logger(ctx).LogAttrs(ctx, slog.LevelError, string(e.Reason), attrs...)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(e.Status)
 	w.Write(e.Response())
@@ -227,9 +232,9 @@ func (h *uploadHandler) serveMultipart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx = logger.WithLogFields(ctx,
-		zap.String("upload_type", "multipart"),
-		zap.String("upload_step", "insert_job"),
-		zap.String("job_id", job.JobReference.JobId),
+		slog.String("upload_type", "multipart"),
+		slog.String("upload_step", "insert_job"),
+		slog.String("job_id", job.JobReference.JobId),
 	)
 	uploadJob, err := h.Handle(ctx, &uploadRequest{
 		server:  server,
@@ -247,10 +252,10 @@ func (h *uploadHandler) serveMultipart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx = logger.WithLogFields(ctx,
-		zap.String("upload_step", "load_data"),
+		slog.String("upload_step", "load_data"),
 	)
 	if c := uploadJob.Content(); c != nil && c.Configuration != nil && c.Configuration.Load != nil {
-		ctx = logger.WithLogFields(ctx, zap.String("source_format", c.Configuration.Load.SourceFormat))
+		ctx = logger.WithLogFields(ctx, slog.String("source_format", c.Configuration.Load.SourceFormat))
 	}
 	u := &uploadContentHandler{}
 	err = u.Handle(ctx, &uploadContentRequest{
@@ -280,9 +285,9 @@ func (h *uploadHandler) serveResumable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx = logger.WithLogFields(ctx,
-		zap.String("upload_type", "resumable"),
-		zap.String("upload_step", "create_session"),
-		zap.String("job_id", job.JobReference.JobId),
+		slog.String("upload_type", "resumable"),
+		slog.String("upload_step", "create_session"),
+		slog.String("job_id", job.JobReference.JobId),
 	)
 	res, err := h.Handle(ctx, &uploadRequest{
 		server:  server,
@@ -373,12 +378,12 @@ func (h *uploadContentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	ctx = logger.WithLogFields(ctx,
-		zap.String("upload_type", "resumable"),
-		zap.String("upload_step", "load_data"),
-		zap.String("job_id", job.ID),
+		slog.String("upload_type", "resumable"),
+		slog.String("upload_step", "load_data"),
+		slog.String("job_id", job.ID),
 	)
 	if c := job.Content(); c != nil && c.Configuration != nil && c.Configuration.Load != nil {
-		ctx = logger.WithLogFields(ctx, zap.String("source_format", c.Configuration.Load.SourceFormat))
+		ctx = logger.WithLogFields(ctx, slog.String("source_format", c.Configuration.Load.SourceFormat))
 	}
 	if err := h.Handle(ctx, &uploadContentRequest{
 		server:  server,
@@ -2447,13 +2452,32 @@ func (h *jobsInsertHandler) insertQueryJobAsync(ctx context.Context, r *jobsInse
 		_ = markJobSubmitFailed(context.Background(), r.server, r.project.ID, job.JobReference.JobId, err)
 		return nil, fmt.Errorf("failed to schedule query job: %w", err)
 	}
+	logger.Logger(ctx).Debug("query job submitted",
+		"project_id", r.project.ID,
+		"job_id", job.JobReference.JobId,
+		"elapsed_ms", time.Since(startTime).Milliseconds(),
+	)
 	return job, nil
 }
 
 // executeAsyncQueryJob runs the query and persists the final job state (worker entrypoint).
-func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Server, projectID string, job *bigqueryv2.Job) error {
+func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Server, projectID string, job *bigqueryv2.Job) (err error) {
 	project := metadata.NewProject(srv.metaRepo, projectID)
 	hasDestinationTable := job.Configuration.Query.DestinationTable != nil
+
+	wallStart := time.Now()
+	srv.logger.Debug("async query job start",
+		"project_id", projectID,
+		"job_id", job.JobReference.JobId,
+	)
+	defer func() {
+		srv.logger.Debug("async query job done",
+			"project_id", projectID,
+			"job_id", job.JobReference.JobId,
+			"elapsed_ms", time.Since(wallStart).Milliseconds(),
+			"err", err,
+		)
+	}()
 
 	startTime := time.Now()
 	if job.Statistics != nil && job.Statistics.CreationTime != 0 {
@@ -2462,7 +2486,7 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 
 	var postSync *googlesqlite.ChangedCatalog
 
-	err := srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+	err = srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
 		tx.SetProjectAndDataset(projectID, "")
 
 		response, jobErr := srv.contentRepo.Query(

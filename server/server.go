@@ -4,13 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
@@ -25,8 +24,9 @@ type Server struct {
 	Handler         http.Handler
 	storage         Storage
 	db              *sql.DB
-	loggerConfig    *zap.Config
-	logger          *zap.Logger
+	logLevel        *slog.LevelVar
+	logFormat       LogFormat
+	logger          *slog.Logger
 	connMgr         *connection.Manager
 	metaRepo        *metadata.Repository
 	contentRepo     *contentdata.Repository
@@ -37,6 +37,18 @@ type Server struct {
 	explorerCleanup func() error
 	httpServer      *http.Server
 	grpcServer      *grpc.Server
+}
+
+func (s *Server) rebuildLogger() {
+	opts := &slog.HandlerOptions{Level: s.logLevel}
+	var h slog.Handler
+	switch s.logFormat {
+	case LogFormatJSON:
+		h = slog.NewJSONHandler(os.Stderr, opts)
+	default:
+		h = slog.NewTextHandler(os.Stderr, opts)
+	}
+	s.logger = slog.New(h)
 }
 
 func New(storage Storage) (*Server, error) {
@@ -59,19 +71,12 @@ func New(storage Storage) (*Server, error) {
 	db.SetConnMaxIdleTime(-1)
 	db.SetConnMaxLifetime(1<<63 - 1)
 	server.db = db
-	server.loggerConfig = &zap.Config{
-		Level:             zap.NewAtomicLevelAt(zap.ErrorLevel),
-		Development:       false,
-		Encoding:          "console",
-		DisableStacktrace: true,
-		EncoderConfig:     zap.NewDevelopmentEncoderConfig(),
-		OutputPaths:       []string{"stderr"},
-		ErrorOutputPaths:  []string{"stderr"},
-	}
-	if _, err := server.loggerConfig.Build(); err != nil {
-		return nil, fmt.Errorf("invalid default logger config: %w", err)
-	}
-	server.logger = zap.NewNop()
+
+	lv := new(slog.LevelVar)
+	lv.Set(slog.LevelError)
+	server.logLevel = lv
+	server.logFormat = LogFormatConsole
+	server.rebuildLogger()
 
 	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolSize(defaultConnectionPoolSize))
 	if err != nil {
@@ -129,7 +134,7 @@ func (s *Server) Close() error {
 	defer func() {
 		if s.fileCleanup != nil {
 			if err := s.fileCleanup(); err != nil {
-				log.Printf("failed to cleanup file: %s", err.Error())
+				s.logger.Error("failed to cleanup file", "err", err)
 			}
 		}
 	}()
@@ -139,16 +144,16 @@ func (s *Server) Close() error {
 	registerQueryJobCanceller(nil)
 	if s.explorerCleanup != nil {
 		if err := s.explorerCleanup(); err != nil {
-			log.Printf("failed to close explorer api client: %s", err.Error())
+			s.logger.Error("failed to close explorer api client", "err", err)
 		}
 	}
 	if s.connMgr != nil {
 		if err := s.connMgr.Close(); err != nil {
-			log.Printf("failed to close connection manager: %s", err.Error())
+			s.logger.Error("failed to close connection manager", "err", err)
 		}
 	}
 	if err := s.db.Close(); err != nil {
-		log.Printf("failed to close database: %s", err.Error())
+		s.logger.Error("failed to close database", "err", err)
 		return err
 	}
 	return nil
@@ -181,6 +186,7 @@ func (s *Server) SetProject(id string) error {
 // connection; nested holds can exhaust the pool and deadlock while an async query
 // worker also holds a connection (polls then block until the query finishes).
 func (s *Server) findJobUsingRequestConnection(ctx context.Context, projectID, jobID string) (*metadata.Job, error) {
+	start := time.Now()
 	mc := connectionFromContext(ctx)
 	tx, err := mc.Begin(ctx)
 	if err != nil {
@@ -198,6 +204,11 @@ func (s *Server) findJobUsingRequestConnection(ctx context.Context, projectID, j
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.logger.Debug("findJobUsingRequestConnection",
+		"project_id", projectID,
+		"job_id", jobID,
+		"elapsed_ms", time.Since(start).Milliseconds(),
+	)
 	return job, nil
 }
 
@@ -213,27 +224,22 @@ const (
 )
 
 func (s *Server) SetLogLevel(level LogLevel) error {
-	var atomicLevel zap.AtomicLevel
+	var lv slog.Level
 	switch level {
 	case LogLevelDebug:
-		atomicLevel = zap.NewAtomicLevelAt(zap.DebugLevel)
+		lv = slog.LevelDebug
 	case LogLevelInfo:
-		atomicLevel = zap.NewAtomicLevelAt(zap.InfoLevel)
+		lv = slog.LevelInfo
 	case LogLevelWarn:
-		atomicLevel = zap.NewAtomicLevelAt(zap.WarnLevel)
+		lv = slog.LevelWarn
 	case LogLevelError:
-		atomicLevel = zap.NewAtomicLevelAt(zap.ErrorLevel)
+		lv = slog.LevelError
 	case LogLevelFatal:
-		atomicLevel = zap.NewAtomicLevelAt(zap.FatalLevel)
+		lv = slog.LevelError
 	default:
 		return fmt.Errorf("unexpected log level %s", level)
 	}
-	s.loggerConfig.Level = atomicLevel
-	logger, err := s.loggerConfig.Build()
-	if err != nil {
-		return err
-	}
-	s.logger = logger
+	s.logLevel.Set(lv)
 	return nil
 }
 
@@ -246,18 +252,12 @@ const (
 
 func (s *Server) SetLogFormat(format LogFormat) error {
 	switch format {
-	case LogFormatConsole:
-		s.loggerConfig.Encoding = "console"
-	case LogFormatJSON:
-		s.loggerConfig.Encoding = "json"
+	case LogFormatConsole, LogFormatJSON:
+		s.logFormat = format
 	default:
 		return fmt.Errorf("unexpected log format %s", format)
 	}
-	logger, err := s.loggerConfig.Build()
-	if err != nil {
-		return err
-	}
-	s.logger = logger
+	s.rebuildLogger()
 	return nil
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/internal/explorerapi"
 
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
+	"log/slog"
 
 	"github.com/vantaboard/bigquery-emulator/internal/logger"
 )
@@ -32,7 +32,11 @@ func recoveryMiddleware(s *Server) func(http.Handler) http.Handler {
 						if !ok {
 							break
 						}
-						s.logger.Error(fmt.Sprintf("%d: %v:%d", frame, file, line))
+						s.logger.Error("panic stack frame",
+							slog.Int("frame", frame),
+							slog.String("file", file),
+							slog.Int("line", line),
+						)
 						frame++
 					}
 					return
@@ -59,12 +63,13 @@ func accessLogMiddleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger.Logger(r.Context()).Info(
 				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-				zap.String("query", r.URL.RawQuery),
+				slog.String("query", r.URL.RawQuery),
 			)
 			start := time.Now()
 			next.ServeHTTP(w, r)
 			logger.Logger(r.Context()).Info(
-				fmt.Sprintf("%s %s took %v", r.Method, r.URL.Path, time.Since(start)),
+				fmt.Sprintf("%s %s completed", r.Method, r.URL.Path),
+				slog.Duration("duration", time.Since(start)),
 			)
 		})
 	}

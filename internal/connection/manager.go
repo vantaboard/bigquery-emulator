@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -310,7 +310,10 @@ func (m *Manager) releaseConnAfterUse(conn *ManagedConnection) {
 	defer cancel()
 	if err := conn.googlesqliteConnection.PingContext(pingCtx); err != nil {
 		if rebErr := m.rebindManagedConnection(conn); rebErr != nil {
-			log.Printf("bigquery-emulator: failed to rebind dead pooled connection: %v (ping err: %v)", rebErr, err)
+			slog.Error("failed to rebind dead pooled connection",
+				slog.Any("rebind_err", rebErr),
+				slog.Any("ping_err", err),
+			)
 		}
 	}
 	m.connChan <- conn

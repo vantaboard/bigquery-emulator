@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/goccy/go-json"
@@ -125,7 +124,11 @@ func (e *JobExecutor) runQueryJob(w *queryJobWork) {
 
 	h := &jobsInsertHandler{}
 	if err := h.executeAsyncQueryJob(workCtx, e.server, w.projectID, w.job); err != nil {
-		log.Printf("bigquery-emulator: async query job %s/%s: %v", w.projectID, w.job.JobReference.JobId, err)
+		e.server.logger.Error("async query job failed",
+			"project_id", w.projectID,
+			"job_id", w.job.JobReference.JobId,
+			"err", err,
+		)
 	}
 }
 

@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 
 	"github.com/goccy/go-json"
 	"github.com/vantaboard/go-googlesqlite"
-	"go.uber.org/zap"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -178,6 +178,8 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		_ = tx.MetadataRepoMode()
 	}()
 
+	ctx = googlesqlite.WithLogger(ctx, logger.Logger(ctx))
+
 	values := []interface{}{}
 	for _, param := range params {
 		value, err := r.queryParameterValueToGoValue(param.ParameterValue)
@@ -192,9 +194,9 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 	}
 	fields := []*bigqueryv2.TableFieldSchema{}
 	logger.Logger(ctx).Info(
-		"",
-		zap.String("query", query),
-		zap.Any("values", values),
+		"content query",
+		slog.String("query", query),
+		slog.Any("values", values),
 	)
 	// We must pass the query parameters to googlesqlite so the analyzer uses the proper typings
 	if err := tx.Conn().Raw(func(c interface{}) error {
@@ -281,7 +283,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan rows: %w", err)
 	}
-	logger.Logger(ctx).Debug("query result", zap.Any("rows", result))
+	logger.Logger(ctx).Debug("query result", slog.Any("rows", result))
 	return &internaltypes.QueryResponse{
 		Schema: &bigqueryv2.TableSchema{
 			Fields: fields,
@@ -548,7 +550,7 @@ func (r *Repository) DeleteTables(ctx context.Context, tx *connection.Tx, projec
 
 	for _, table := range tables {
 		tablePath := r.tablePath(projectID, datasetID, table.ID)
-		logger.Logger(ctx).Debug("delete table", zap.String("table", tablePath))
+		logger.Logger(ctx).Debug("delete table", slog.String("table", tablePath))
 		tableContent, err := table.Content()
 		if err != nil {
 			return fmt.Errorf("failed to delete table %s: %w", tablePath, err)
