@@ -25,10 +25,10 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/goccy/go-json"
 	"github.com/vantaboard/go-googlesqlite"
-	"log/slog"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"log/slog"
 
 	"github.com/parquet-go/parquet-go"
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -2514,13 +2514,33 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		"project_id", projectID,
 		"job_id", job.JobReference.JobId,
 	)
+	var jobQueryErr error
 	defer func() {
-		srv.logger.Debug("async query job done",
-			"project_id", projectID,
-			"job_id", job.JobReference.JobId,
-			"elapsed_ms", time.Since(wallStart).Milliseconds(),
-			"err", err,
-		)
+		elapsed := time.Since(wallStart).Milliseconds()
+		if err != nil {
+			srv.logger.Error("async query job failed",
+				"project_id", projectID,
+				"job_id", job.JobReference.JobId,
+				"elapsed_ms", elapsed,
+				"err", err,
+			)
+			return
+		}
+		if jobQueryErr != nil {
+			srv.logger.Info("async query job completed",
+				"project_id", projectID,
+				"job_id", job.JobReference.JobId,
+				"elapsed_ms", elapsed,
+				"outcome", "error",
+			)
+		} else {
+			srv.logger.Info("async query job completed",
+				"project_id", projectID,
+				"job_id", job.JobReference.JobId,
+				"elapsed_ms", elapsed,
+				"outcome", "ok",
+			)
+		}
 	}()
 
 	heartbeatCtx, stopHeartbeat := context.WithCancel(ctx)
@@ -2547,6 +2567,7 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 			job.Configuration.Query.Query,
 			job.Configuration.Query.QueryParameters,
 		)
+		jobQueryErr = jobErr
 		endTime := time.Now()
 
 		if jobErr == nil {

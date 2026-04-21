@@ -22,11 +22,11 @@ const (
 
 // JobExecutor runs async BigQuery query jobs with bounded concurrency.
 type JobExecutor struct {
-	server  *Server
-	queue   chan *queryJobWork
-	ctx     context.Context
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
+	server   *Server
+	queue    chan *queryJobWork
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
 	stopOnce sync.Once
 
 	mu        sync.Mutex
@@ -124,13 +124,7 @@ func (e *JobExecutor) runQueryJob(w *queryJobWork) {
 	}()
 
 	h := &jobsInsertHandler{}
-	if err := h.executeAsyncQueryJob(workCtx, e.server, w.projectID, w.job); err != nil {
-		e.server.logger.Error("async query job failed",
-			"project_id", w.projectID,
-			"job_id", w.job.JobReference.JobId,
-			"err", err,
-		)
-	}
+	_ = h.executeAsyncQueryJob(workCtx, e.server, w.projectID, w.job)
 }
 
 // CancelQueryJob implements [metadata.JobCanceller].
