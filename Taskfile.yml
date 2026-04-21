@@ -15,7 +15,7 @@ tasks:
         echo "Local sibling go-googlesqlite: cp go.work.dev go.work  (go.work is gitignored)"
 
   dev:air:
-    desc: Live rebuild/restart with air (go install github.com/air-verse/air@latest; edit .air.toml args_bin)
+    desc: Live rebuild/restart with air (logs in tmp/air/air.log; go install github.com/air-verse/air@latest; edit .air.toml args_bin)
     cmds:
       - |
         set -euo pipefail

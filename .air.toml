@@ -1,4 +1,5 @@
-# Live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest)
+# Live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest).
+# Build/run log file (air watcher output): tmp/air/air.log
 # Optional: BIGQUERY_EMULATOR_PROJECT / --project (deprecated; prefer POST /emulator/v1/projects).
 
 root = "."
@@ -22,7 +23,7 @@ delay = 300
 stop_on_error = true
 send_interrupt = true
 kill_delay = "500ms"
-log = "air.log"
+log = "tmp/air/air.log"
 
 [log]
 time = false
