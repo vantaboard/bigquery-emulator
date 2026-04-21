@@ -11,6 +11,7 @@ import (
 
 	connection2 "github.com/vantaboard/bigquery-emulator/internal/connection"
 	"github.com/vantaboard/bigquery-emulator/internal/explorerapi"
+	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 
 	"github.com/gorilla/mux"
 	"log/slog"
@@ -204,18 +205,38 @@ func withProjectMiddleware() func(http.Handler) http.Handler {
 			params := mux.Vars(r)
 			projectID, exists := projectIDFromParams(params)
 			if exists {
-				server := serverFromContext(ctx)
-				project, err := server.metaRepo.FindProject(ctx, projectID)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					fmt.Fprintln(w, err)
-					return
+				srv := serverFromContext(ctx)
+				jobID, jobInPath := jobIDFromParams(params)
+				if jobInPath {
+					project, job, err := srv.findProjectAndJobUsingRequestConnection(ctx, projectID, jobID)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						fmt.Fprintln(w, err)
+						return
+					}
+					if project == nil {
+						errorResponse(ctx, w, errNotFound(fmt.Sprintf("project %s is not found", projectID)))
+						return
+					}
+					ctx = withProject(ctx, project)
+					if job == nil {
+						errorResponse(ctx, w, errNotFound(fmt.Sprintf("job %s is not found", jobID)))
+						return
+					}
+					ctx = withJob(ctx, job)
+				} else {
+					project, err := srv.findProjectUsingRequestConnection(ctx, projectID)
+					if err != nil {
+						w.WriteHeader(http.StatusInternalServerError)
+						fmt.Fprintln(w, err)
+						return
+					}
+					if project == nil {
+						errorResponse(ctx, w, errNotFound(fmt.Sprintf("project %s is not found", projectID)))
+						return
+					}
+					ctx = withProject(ctx, project)
 				}
-				if project == nil {
-					errorResponse(ctx, w, errNotFound(fmt.Sprintf("project %s is not found", projectID)))
-					return
-				}
-				ctx = withProject(ctx, project)
 			}
 			next.ServeHTTP(
 				w,
@@ -259,6 +280,13 @@ func withJobMiddleware() func(http.Handler) http.Handler {
 			params := mux.Vars(r)
 			jobID, exists := jobIDFromParams(params)
 			if exists {
+				// withProjectMiddleware may have already loaded the job in one tx with the project.
+				if v := ctx.Value(jobKey{}); v != nil {
+					if j, ok := v.(*metadata.Job); ok && j != nil {
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
 				project := projectFromContext(ctx)
 				srv := serverFromContext(ctx)
 				job, err := srv.findJobUsingRequestConnection(ctx, project.ID, jobID)
@@ -289,8 +317,8 @@ func withTableMiddleware() func(http.Handler) http.Handler {
 			if exists {
 				project := projectFromContext(ctx)
 				dataset := datasetFromContext(ctx)
-				server := serverFromContext(ctx)
-				table, err := server.metaRepo.FindTable(ctx, project.ID, dataset.ID, tableID)
+				srv := serverFromContext(ctx)
+				table, err := srv.findTableUsingRequestConnection(ctx, project.ID, dataset.ID, tableID)
 				if err != nil {
 					errorResponse(ctx, w, errInternalError(fmt.Sprintf("could not fetch table %s: %s", tableID, err)))
 					return

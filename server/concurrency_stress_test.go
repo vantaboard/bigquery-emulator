@@ -2,8 +2,10 @@ package server_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/vantaboard/bigquery-emulator/internal/connection"
 	"github.com/vantaboard/bigquery-emulator/server"
 	"github.com/vantaboard/bigquery-emulator/types"
 	"google.golang.org/api/option"
@@ -20,17 +23,20 @@ import (
 // stressCrossJoin* controls how heavy the async CTAS is. The goal is a job that stays RUNNING
 // long enough to overlap with concurrent readers (exposes SQLite / pool issues if they regress).
 // Tune up if your machine finishes too fast; tune down if CI times out.
+//
+// Intended load vs pool: default pool is defaultQueryWorkers + httpConnectionHeadroom (20).
+// stressWorkers=12 plus one long async job uses up to 13 pooled connections at once (below 20).
 const (
 	stressCrossJoinOuter  = 6000
 	stressCrossJoinInner  = 350 // ~2.1M pairs
-	stressWorkers         = 12 // near default pool size (12) to stress acquisition
+	stressWorkers         = 12
 	stressDuration        = 5 * time.Second
 	stressIterationDelay  = 2 * time.Millisecond // avoid tight spin that can starve or trip rebind
 	stabilizeAfterRunning = 150 * time.Millisecond
 	// Long enough that occasional SQLite contention does not false-positive; short enough to catch hangs.
 	stressHTTPTimeout = 15 * time.Second
-	// Under heavy concurrent polls, localhost + SQLite can still see occasional timeouts; cap avoids flaky CI.
-	stressMaxErrRate = 0.05
+	// Residual http_500 under heavy poll + async CTAS (SQLite / handler errors) varies by machine; keep below 3%.
+	stressMaxErrRate = 0.02
 )
 
 func stressHeavyCTASQuery(dataset string) string {
@@ -52,6 +58,9 @@ func TestStress_AsyncQueryDoesNotBlockConcurrentReaders(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in -short")
 	}
+
+	t.Setenv("BQ_EMULATOR_CONN_METRICS", "1")
+	connection.ResetConnMetrics()
 
 	ctx := context.Background()
 	bqServer, err := server.New(server.TempStorage)
@@ -126,6 +135,8 @@ running:
 		okCount  atomic.Uint64
 		errCount atomic.Uint64
 	)
+	var pollMu sync.Mutex
+	pollCounts := make(map[string]int64)
 	stressCtx, cancelStress := context.WithTimeout(ctx, stressDuration)
 	defer cancelStress()
 
@@ -140,7 +151,11 @@ running:
 					return
 				default:
 				}
-				if ok, _ := stressPollQueryGET(httpClient, base, projectID, jobID); ok {
+				tag := stressPollQueryGETTag(httpClient, base, projectID, jobID)
+				pollMu.Lock()
+				pollCounts[tag]++
+				pollMu.Unlock()
+				if tag == "ok" {
 					okCount.Add(1)
 				} else {
 					errCount.Add(1)
@@ -153,7 +168,15 @@ running:
 
 	ok := okCount.Load()
 	bad := errCount.Load()
-	t.Logf("stress complete: ok=%d err=%d (workers=%d duration=%s)", ok, bad, stressWorkers, stressDuration)
+	t.Logf("stress complete: ok=%d err=%d (workers=%d duration=%s) poll_tags=%v",
+		ok, bad, stressWorkers, stressDuration, pollCountsSnapshot(pollCounts))
+
+	m := connection.SnapshotConnMetrics()
+	if m.AcquireCount > 0 {
+		avgWait := time.Duration(uint64(m.TotalAcquireWait) / m.AcquireCount)
+		t.Logf("connection metrics: acquire_wait_total=%s fn_hold_total=%s acquires=%d acquire_canceled=%d avg_acquire_wait=%s",
+			m.TotalAcquireWait, m.TotalFnHold, m.AcquireCount, m.AcquireCanceled, avgWait)
+	}
 
 	total := ok + bad
 	if total == 0 {
@@ -169,7 +192,8 @@ running:
 		t.Fatalf("expected many successful polls, got ok=%d", ok)
 	}
 	if bad > 0 {
-		t.Logf("note: %d poll errors (%.3f%%) within %.1f%% allowance", bad, 100*errRate, 100*stressMaxErrRate)
+		t.Logf("note: %d poll errors (%.3f%%) within %.2f%% allowance; tags=%v",
+			bad, 100*errRate, 100*stressMaxErrRate, pollCountsSnapshot(pollCounts))
 	}
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 10*time.Minute)
@@ -187,23 +211,46 @@ running:
 	}
 }
 
-// stressPollQueryGET is one GetQueryResults poll (primary Dataform wait loop). 200 while running/done.
-func stressPollQueryGET(hc *http.Client, base, projectID, jobID string) (ok bool, detail string) {
+func pollCountsSnapshot(m map[string]int64) map[string]int64 {
+	out := make(map[string]int64, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+// stressPollQueryGETTag is one GetQueryResults poll (Dataform wait loop). Returns "ok" on HTTP 200.
+func stressPollQueryGETTag(hc *http.Client, base, projectID, jobID string) string {
 	u := fmt.Sprintf("%s/bigquery/v2/projects/%s/queries/%s?location=US&prettyPrint=false", base, projectID, jobID)
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return false, fmt.Sprintf("NewRequest: %v", err)
+		return "new_request"
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return false, err.Error()
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return "net_timeout"
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "net_deadline"
+		}
+		return "net_other"
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode == http.StatusInternalServerError {
-		return false, fmt.Sprintf("status %d", resp.StatusCode)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return "ok"
+	case http.StatusInternalServerError:
+		return "http_500"
+	case http.StatusServiceUnavailable:
+		return "http_503"
+	case http.StatusBadGateway:
+		return "http_502"
+	default:
+		return fmt.Sprintf("http_%d", resp.StatusCode)
 	}
-	return true, ""
 }
 
 // TestStress_MetadataGETsDuringLongAsyncQuery runs dataset + table metadata GETs concurrent with a
@@ -212,6 +259,10 @@ func TestStress_MetadataGETsDuringLongAsyncQuery(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in -short")
 	}
+
+	t.Setenv("BQ_EMULATOR_CONN_METRICS", "1")
+	connection.ResetConnMetrics()
+
 	ctx := context.Background()
 	bqServer, err := server.New(server.TempStorage)
 	if err != nil {
@@ -258,9 +309,15 @@ func TestStress_MetadataGETsDuringLongAsyncQuery(t *testing.T) {
 	hc := &http.Client{Timeout: stressHTTPTimeout}
 	base := strings.TrimRight(ts.URL, "/")
 	var okN, badN atomic.Uint64
+	metaTags := make(map[string]int64)
+	var metaMu sync.Mutex
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
-		if stressMetadataGET(hc, base, projectID, datasetID) {
+		tag, ok := stressMetadataRoundTag(hc, base, projectID, datasetID)
+		metaMu.Lock()
+		metaTags[tag]++
+		metaMu.Unlock()
+		if ok {
 			okN.Add(1)
 		} else {
 			badN.Add(1)
@@ -269,29 +326,58 @@ func TestStress_MetadataGETsDuringLongAsyncQuery(t *testing.T) {
 	}
 	ok := okN.Load()
 	bad := badN.Load()
-	t.Logf("metadata stress ok=%d err=%d", ok, bad)
+	m := connection.SnapshotConnMetrics()
+	if m.AcquireCount > 0 {
+		avgWait := time.Duration(uint64(m.TotalAcquireWait) / m.AcquireCount)
+		t.Logf("metadata conn metrics: acquire_wait_total=%s fn_hold_total=%s acquires=%d avg_wait=%s",
+			m.TotalAcquireWait, m.TotalFnHold, m.AcquireCount, avgWait)
+	}
+	t.Logf("metadata stress ok=%d err=%d tags=%v", ok, bad, pollCountsSnapshot(metaTags))
 	if bad > 0 && float64(bad)/float64(ok+bad) > stressMaxErrRate {
 		t.Fatalf("metadata GET failures: %d of %d", bad, ok+bad)
 	}
 }
 
-func stressMetadataGET(hc *http.Client, base, projectID, datasetID string) bool {
-	paths := []string{
-		fmt.Sprintf("%s/bigquery/v2/projects/%s/datasets?prettyPrint=false", base, projectID),
-		fmt.Sprintf("%s/bigquery/v2/projects/%s/datasets/%s/tables/missing_xyz?prettyPrint=false", base, projectID, datasetID),
+// stressMetadataRoundTag does datasets list + missing-table GET. ok if both succeed and no 500;
+// 404 on missing table is success. tag classifies the first failure in the round.
+func stressMetadataRoundTag(hc *http.Client, base, projectID, datasetID string) (tag string, ok bool) {
+	paths := []struct {
+		path string
+		note string
+	}{
+		{fmt.Sprintf("%s/bigquery/v2/projects/%s/datasets?prettyPrint=false", base, projectID), "datasets_list"},
+		{fmt.Sprintf("%s/bigquery/v2/projects/%s/datasets/%s/tables/missing_xyz?prettyPrint=false", base, projectID, datasetID), "missing_table"},
 	}
-	for _, u := range paths {
-		resp, err := hc.Get(u)
+	for _, p := range paths {
+		resp, err := hc.Get(p.path)
 		if err != nil {
-			return false
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				return p.note + "/net_timeout", false
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return p.note + "/net_deadline", false
+			}
+			return p.note + "/net_other", false
 		}
 		_, _ = io.Copy(io.Discard, resp.Body)
+		sc := resp.StatusCode
 		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusInternalServerError {
-			return false
+		if sc == http.StatusInternalServerError {
+			return p.note + "/http_500", false
+		}
+		switch p.note {
+		case "datasets_list":
+			if sc != http.StatusOK {
+				return fmt.Sprintf("datasets_list/http_%d", sc), false
+			}
+		case "missing_table":
+			if sc != http.StatusNotFound {
+				return fmt.Sprintf("missing_table/http_%d", sc), false
+			}
 		}
 	}
-	return true
+	return "ok", true
 }
 
 // BenchmarkPollQueryResultsWhileJobRunning measures single-request latency for GetQueryResults-style

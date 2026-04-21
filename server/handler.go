@@ -1439,11 +1439,25 @@ type datasetsListRequest struct {
 }
 
 func (h *datasetsListHandler) Handle(ctx context.Context, r *datasetsListRequest) (*bigqueryv2.DatasetList, error) {
-	datasetsRes := []*bigqueryv2.DatasetListDatasets{}
-	datasets, err := r.server.metaRepo.FindDatasetsInProject(ctx, r.project.ID)
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(r.project.ID, "")
+	datasets, err := r.server.metaRepo.FindDatasetsInProjectWithConn(ctx, tx.Tx(), r.project.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	datasetsRes := []*bigqueryv2.DatasetListDatasets{}
 	for _, dataset := range datasets {
 		content := dataset.Content()
 		datasetsRes = append(datasetsRes, &bigqueryv2.DatasetListDatasets{
@@ -2843,11 +2857,25 @@ type jobsListRequest struct {
 }
 
 func (h *jobsListHandler) Handle(ctx context.Context, r *jobsListRequest) (*bigqueryv2.JobList, error) {
-	jobsList := []*bigqueryv2.JobListJobs{}
-	jobs, err := r.project.FetchJobs(ctx)
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(r.project.ID, "")
+	jobs, err := r.server.metaRepo.FindJobsInProjectWithConn(ctx, tx.Tx(), r.project.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	jobsList := []*bigqueryv2.JobListJobs{}
 	for _, job := range jobs {
 		content := job.Content()
 		jobsList = append(jobsList, &bigqueryv2.JobListJobs{

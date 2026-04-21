@@ -357,13 +357,28 @@ func (m *Manager) WithManagedConnection(ctx context.Context, fn func(ctx context
 	if m.closed {
 		return fmt.Errorf("repository is closed")
 	}
+	metrics := connMetricsEnabled()
+	waitStart := time.Now()
 	select {
 	case conn := <-m.connChan:
+		wait := time.Since(waitStart)
+		if metrics {
+			recordConnAcquireSuccess(wait)
+		}
 		defer m.releaseConnAfterUse(conn)
 
-		return fn(ctx, conn)
+		if !metrics {
+			return fn(ctx, conn)
+		}
+		t0 := time.Now()
+		err := fn(ctx, conn)
+		recordConnFnHold(time.Since(t0))
+		return err
 
 	case <-ctx.Done():
+		if metrics {
+			recordConnAcquireCanceled()
+		}
 		return fmt.Errorf("context cancelled: %w", ctx.Err())
 	}
 }
@@ -402,13 +417,28 @@ func WithManagedConnection[T any](m *Manager, ctx context.Context,
 		return zero, fmt.Errorf("repository is closed")
 	}
 
+	metrics := connMetricsEnabled()
+	waitStart := time.Now()
 	select {
 	case conn := <-m.connChan:
+		wait := time.Since(waitStart)
+		if metrics {
+			recordConnAcquireSuccess(wait)
+		}
 		defer m.releaseConnAfterUse(conn)
 
-		return fn(ctx, conn)
+		if !metrics {
+			return fn(ctx, conn)
+		}
+		t0 := time.Now()
+		v, err := fn(ctx, conn)
+		recordConnFnHold(time.Since(t0))
+		return v, err
 
 	case <-ctx.Done():
+		if metrics {
+			recordConnAcquireCanceled()
+		}
 		return zero, fmt.Errorf("context cancelled: %w", ctx.Err())
 	}
 }

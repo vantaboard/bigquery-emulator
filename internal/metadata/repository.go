@@ -372,56 +372,61 @@ func (r *Repository) findJobs(ctx context.Context, tx *sql.Tx, projectID string,
 	return jobs, nil
 }
 
+// FindJobsInProjectWithConn lists jobs using an existing transaction (same pooled connection as the HTTP request).
+func (r *Repository) FindJobsInProjectWithConn(ctx context.Context, tx *sql.Tx, pID string) ([]*Job, error) {
+	stmt, err := r.manager.GetStatement(ctx, tx, StmtFindJobsInProject)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := stmt.QueryContext(
+		ctx,
+		sql.Named("projectID", pID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	jobs := []*Job{}
+	for rows.Next() {
+		var (
+			jobID     string
+			projectID string
+			metadata  string
+			result    string
+			jobErr    string
+		)
+		if err := rows.Scan(&jobID, &projectID, &metadata, &result, &jobErr); err != nil {
+			return nil, err
+		}
+		var content bigqueryv2.Job
+		if len(metadata) > 0 {
+			if err := json.Unmarshal([]byte(metadata), &content); err != nil {
+				return nil, fmt.Errorf("failed to decode metadata content %s: %w", metadata, err)
+			}
+		}
+		var respPtr *internaltypes.QueryResponse
+		if len(result) > 0 {
+			var response internaltypes.QueryResponse
+			if err := json.Unmarshal([]byte(result), &response); err != nil {
+				return nil, fmt.Errorf("failed to decode job response %s: %w", result, err)
+			}
+			respPtr = &response
+		}
+		var resErr error
+		if jobErr != "" {
+			resErr = errors.New(jobErr)
+		}
+		jobs = append(
+			jobs,
+			NewJob(r, projectID, jobID, &content, respPtr, resErr),
+		)
+	}
+	return jobs, nil
+}
+
 func (r *Repository) FindJobsInProject(ctx context.Context, pID string) ([]*Job, error) {
 	return connection.ExecuteWithTransaction(r.manager, ctx, func(ctx context.Context, tx *sql.Tx) ([]*Job, error) {
-		stmt, err := r.manager.GetStatement(ctx, tx, StmtFindJobsInProject)
-		if err != nil {
-			return nil, err
-		}
-		rows, err := stmt.QueryContext(
-			ctx,
-			sql.Named("projectID", pID),
-		)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		jobs := []*Job{}
-		for rows.Next() {
-			var (
-				jobID     string
-				projectID string
-				metadata  string
-				result    string
-				jobErr    string
-			)
-			if err := rows.Scan(&jobID, &projectID, &metadata, &result, &jobErr); err != nil {
-				return nil, err
-			}
-			var content bigqueryv2.Job
-			if len(metadata) > 0 {
-				if err := json.Unmarshal([]byte(metadata), &content); err != nil {
-					return nil, fmt.Errorf("failed to decode metadata content %s: %w", metadata, err)
-				}
-			}
-			var respPtr *internaltypes.QueryResponse
-			if len(result) > 0 {
-				var response internaltypes.QueryResponse
-				if err := json.Unmarshal([]byte(result), &response); err != nil {
-					return nil, fmt.Errorf("failed to decode job response %s: %w", result, err)
-				}
-				respPtr = &response
-			}
-			var resErr error
-			if jobErr != "" {
-				resErr = errors.New(jobErr)
-			}
-			jobs = append(
-				jobs,
-				NewJob(r, projectID, jobID, &content, respPtr, resErr),
-			)
-		}
-		return jobs, nil
+		return r.FindJobsInProjectWithConn(ctx, tx, pID)
 	})
 }
 
@@ -484,36 +489,41 @@ func (r *Repository) DeleteJob(ctx context.Context, tx *sql.Tx, job *Job) error 
 	})
 }
 
-func (r *Repository) FindDatasetsInProject(ctx context.Context, projectID string) ([]*Dataset, error) {
-	return connection.ExecuteWithTransaction(r.manager, ctx, func(ctx context.Context, tx *sql.Tx) ([]*Dataset, error) {
-		rows, err := tx.QueryContext(ctx,
-			"SELECT id, metadata FROM datasets WHERE projectID = @projectID",
-			sql.Named("projectID", projectID),
+// FindDatasetsInProjectWithConn lists datasets using an existing transaction (same pooled connection as the HTTP request).
+func (r *Repository) FindDatasetsInProjectWithConn(ctx context.Context, tx *sql.Tx, projectID string) ([]*Dataset, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT id, metadata FROM datasets WHERE projectID = @projectID",
+		sql.Named("projectID", projectID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	datasets := []*Dataset{}
+	for rows.Next() {
+		var (
+			datasetID string
+			metadata  string
 		)
-		if err != nil {
+		if err := rows.Scan(&datasetID, &metadata); err != nil {
 			return nil, err
 		}
-		defer rows.Close()
-
-		datasets := []*Dataset{}
-		for rows.Next() {
-			var (
-				datasetID string
-				metadata  string
-			)
-			if err := rows.Scan(&datasetID, &metadata); err != nil {
-				return nil, err
-			}
-			var content bigqueryv2.Dataset
-			if err := json.Unmarshal([]byte(metadata), &content); err != nil {
-				return nil, err
-			}
-			datasets = append(
-				datasets,
-				NewDataset(r, projectID, datasetID, &content),
-			)
+		var content bigqueryv2.Dataset
+		if err := json.Unmarshal([]byte(metadata), &content); err != nil {
+			return nil, err
 		}
-		return datasets, nil
+		datasets = append(
+			datasets,
+			NewDataset(r, projectID, datasetID, &content),
+		)
+	}
+	return datasets, nil
+}
+
+func (r *Repository) FindDatasetsInProject(ctx context.Context, projectID string) ([]*Dataset, error) {
+	return connection.ExecuteWithTransaction(r.manager, ctx, func(ctx context.Context, tx *sql.Tx) ([]*Dataset, error) {
+		return r.FindDatasetsInProjectWithConn(ctx, tx, projectID)
 	})
 }
 

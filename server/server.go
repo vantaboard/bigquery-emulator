@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,7 +69,47 @@ func storageWithSQLiteDefaults(s Storage) Storage {
 	return Storage(str + sep + "_pragma=journal_mode%3DWAL&_pragma=busy_timeout%3D30000")
 }
 
-func New(storage Storage) (*Server, error) {
+type serverConfig struct {
+	poolSize int
+}
+
+// ServerOption configures [New].
+type ServerOption func(*serverConfig) error
+
+// WithConnectionPoolSize sets the number of pooled sqlite connections used by REST handlers
+// and async jobs. When unset, the default is defaultQueryWorkers + httpConnectionHeadroom
+// (see [defaultConnectionPoolSize] in job_executor.go).
+func WithConnectionPoolSize(n int) ServerOption {
+	return func(c *serverConfig) error {
+		if n > 0 {
+			c.poolSize = n
+		}
+		return nil
+	}
+}
+
+// New builds a Server. Optional [ServerOption] values override BQ_EMULATOR_POOL_SIZE, which
+// overrides the default pool size.
+//
+// Environment:
+//   - BQ_EMULATOR_POOL_SIZE: positive integer pool size (sqlite connections).
+//   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
+func New(storage Storage, opts ...ServerOption) (*Server, error) {
+	cfg := serverConfig{poolSize: defaultConnectionPoolSize}
+	if v := os.Getenv("BQ_EMULATOR_POOL_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.poolSize = n
+		}
+	}
+	for _, o := range opts {
+		if o == nil {
+			continue
+		}
+		if err := o(&cfg); err != nil {
+			return nil, err
+		}
+	}
+
 	server := &Server{storage: storage}
 	if storage == TempStorage {
 		f, err := os.CreateTemp("", "")
@@ -98,7 +139,7 @@ func New(storage Storage) (*Server, error) {
 	server.logFormat = LogFormatConsole
 	server.rebuildLogger()
 
-	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolSize(defaultConnectionPoolSize))
+	connectionManager, err := connection.NewManager(context.Background(), db, connection.WithPoolSize(cfg.poolSize))
 	if err != nil {
 		return nil, err
 	}
@@ -199,6 +240,102 @@ func (s *Server) SetProject(id string) error {
 		return err
 	}
 	return nil
+}
+
+// findProjectUsingRequestConnection loads project metadata using only the HTTP request's
+// pooled connection. metaRepo.FindProject would nest ExecuteWithTransaction and acquire a
+// second connection while withConnectionMiddleware still holds the first.
+func (s *Server) findProjectUsingRequestConnection(ctx context.Context, projectID string) (*metadata.Project, error) {
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(projectID, "")
+	project, err := s.metaRepo.FindProjectWithConn(ctx, tx.Tx(), projectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return project, nil
+}
+
+// findDatasetUsingRequestConnection loads dataset metadata using only the HTTP request connection.
+func (s *Server) findDatasetUsingRequestConnection(ctx context.Context, projectID, datasetID string) (*metadata.Dataset, error) {
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(projectID, "")
+	ds, err := s.metaRepo.FindDatasetWithConnection(ctx, tx.Tx(), projectID, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return ds, nil
+}
+
+// findTableUsingRequestConnection loads table metadata using only the HTTP request connection.
+func (s *Server) findTableUsingRequestConnection(ctx context.Context, projectID, datasetID, tableID string) (*metadata.Table, error) {
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, err
+	}
+	tx.SetProjectAndDataset(projectID, datasetID)
+	tbl, err := s.metaRepo.FindTableWithConnection(ctx, tx.Tx(), projectID, datasetID, tableID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return tbl, nil
+}
+
+// findProjectAndJobUsingRequestConnection loads project and job in a single transaction on the
+// request connection. Calling findProject then findJob separately runs two transactions and was
+// observed to increase errors under concurrent polls plus async work.
+func (s *Server) findProjectAndJobUsingRequestConnection(ctx context.Context, projectID, jobID string) (*metadata.Project, *metadata.Job, error) {
+	mc := connectionFromContext(ctx)
+	tx, err := mc.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.RollbackIfNotCommitted()
+	if err := tx.MetadataRepoMode(); err != nil {
+		return nil, nil, err
+	}
+	tx.SetProjectAndDataset(projectID, "")
+	project, err := s.metaRepo.FindProjectWithConn(ctx, tx.Tx(), projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	job, err := s.metaRepo.FindJobWithConn(ctx, tx.Tx(), projectID, jobID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	return project, job, nil
 }
 
 // findJobUsingRequestConnection loads job metadata using only the HTTP request's
