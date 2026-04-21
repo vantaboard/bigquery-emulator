@@ -1,5 +1,5 @@
 # Live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest).
-# Build/run log file (air watcher output): tmp/air/air.log
+# Air watcher log: tmp/air/air.log. Emulator structured logs (HTTP, queries): tmp/air/emulator.log
 # Optional: BIGQUERY_EMULATOR_PROJECT / --project (deprecated; prefer POST /emulator/v1/projects).
 
 root = "."
@@ -14,7 +14,7 @@ cmd = "bash scripts/air-build.sh"
 bin = "tmp/air/bigquery-emulator"
 entrypoint = ["./tmp/air/bigquery-emulator"]
 # Seed project (deprecated): .env BIGQUERY_EMULATOR_PROJECT or args_bin "--project", "<id>".
-args_bin = ["--log-level", "debug", "--database", ".bqdata"]
+args_bin = ["--log-level", "debug", "--database", ".bqdata", "--log-file", "tmp/air/emulator.log"]
 include_ext = ["go", "mod", "sum"]
 exclude_dir = ["tmp", "vendor", ".git", ".bqdata", "internal/cmd/generator"]
 exclude_regex = ["_test\\.go"]

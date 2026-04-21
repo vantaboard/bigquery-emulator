@@ -25,6 +25,7 @@ type option struct {
 	GRPCPort     uint16           `description:"specify the grpc port number. this port used by bigquery storage api" long:"grpc-port" default:"9060"`
 	LogLevel     server.LogLevel  `description:"specify the log level (debug/info/warn/error)" long:"log-level" default:"error"`
 	LogFormat    server.LogFormat `description:"specify the log format (console/json)" long:"log-format" default:"console"`
+	LogFile      string           `description:"append structured logs to this file (still logs to stderr)" long:"log-file" env:"BIGQUERY_EMULATOR_LOG_FILE"`
 	Database     string           `description:"specify the database file, use :memory: for in-memory storage. if not specified, it will be a temp file" long:"database"`
 	DataFromYAML string           `description:"specify the path to the YAML file that contains the initial data" long:"data-from-yaml"`
 	DataFromJSON string           `description:"specify the path to the JSON file that contains the initial data (faster for large, multi-megabyte files)" long:"data-from-json"`
@@ -125,6 +126,11 @@ func runServer(args []string, opt option) error {
 	}
 	if err := bqServer.SetLogFormat(opt.LogFormat); err != nil {
 		return err
+	}
+	if opt.LogFile != "" {
+		if err := bqServer.SetLogFile(opt.LogFile); err != nil {
+			return err
+		}
 	}
 	if opt.DataFromYAML != "" {
 		if err := bqServer.Load(server.YAMLSource(opt.DataFromYAML)); err != nil {

@@ -122,6 +122,7 @@ Application Options:
       --grpc-port=      specify the grpc port number. this port used by bigquery storage api (default: 9060)
       --log-level=      specify the log level (debug/info/warn/error) (default: error)
       --log-format=     specify the log format (console/json) (default: console)
+      --log-file=       append structured logs to this file (still logs to stderr); env BIGQUERY_EMULATOR_LOG_FILE
       --database=       specify the database file if required. if not specified, it will be on memory
       --data-from-yaml= specify the path to the YAML file that contains the initial data
   -v, --version         print version

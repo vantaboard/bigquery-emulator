@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -27,6 +28,7 @@ type Server struct {
 	db                *sql.DB
 	logLevel          *slog.LevelVar
 	logFormat         LogFormat
+	logFile           *os.File
 	logger            *slog.Logger
 	connMgr           *connection.Manager
 	metaRepo          *metadata.Repository
@@ -43,14 +45,40 @@ type Server struct {
 
 func (s *Server) rebuildLogger() {
 	opts := &slog.HandlerOptions{Level: s.logLevel}
+	w := io.Writer(os.Stderr)
+	if s.logFile != nil {
+		w = io.MultiWriter(os.Stderr, s.logFile)
+	}
 	var h slog.Handler
 	switch s.logFormat {
 	case LogFormatJSON:
-		h = slog.NewJSONHandler(os.Stderr, opts)
+		h = slog.NewJSONHandler(w, opts)
 	default:
-		h = slog.NewTextHandler(os.Stderr, opts)
+		h = slog.NewTextHandler(w, opts)
 	}
 	s.logger = slog.New(h)
+}
+
+// SetLogFile appends structured logs to path in addition to stderr. Pass "" to
+// stop writing to a file and close any previously opened file.
+func (s *Server) SetLogFile(path string) error {
+	if s.logFile != nil {
+		if err := s.logFile.Close(); err != nil {
+			return fmt.Errorf("close previous log file: %w", err)
+		}
+		s.logFile = nil
+	}
+	if path == "" {
+		s.rebuildLogger()
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open log file: %w", err)
+	}
+	s.logFile = f
+	s.rebuildLogger()
+	return nil
 }
 
 // storageWithSQLiteDefaults appends modernc.org/sqlite URI parameters so native SQLite pragmas
@@ -200,6 +228,14 @@ func New(storage Storage, opts ...ServerOption) (*Server, error) {
 }
 
 func (s *Server) Close() error {
+	defer func() {
+		if s.logFile != nil {
+			if err := s.logFile.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "[bigquery-emulator] failed to close log file: %v\n", err)
+			}
+			s.logFile = nil
+		}
+	}()
 	defer func() {
 		if s.fileCleanup != nil {
 			if err := s.fileCleanup(); err != nil {
