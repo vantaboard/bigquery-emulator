@@ -2550,11 +2550,17 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 			return
 		}
 		if jobQueryErr != nil {
-			srv.logger.Info("async query job completed",
-				"project_id", projectID,
-				"job_id", job.JobReference.JobId,
-				"elapsed_ms", elapsed,
-				"outcome", "error",
+			errMsg := jobQueryErr.Error()
+			const errLogMax = 8192
+			if len(errMsg) > errLogMax {
+				errMsg = errMsg[:errLogMax] + "… (truncated)"
+			}
+			srv.logger.LogAttrs(ctx, slog.LevelError, "async query job completed",
+				slog.String("project_id", projectID),
+				slog.String("job_id", job.JobReference.JobId),
+				slog.Int64("elapsed_ms", elapsed),
+				slog.String("outcome", "error"),
+				slog.String("err", errMsg),
 			)
 		} else {
 			completed := []slog.Attr{
@@ -2636,6 +2642,13 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		}
 		willWrite := jobErr == nil && (hasDestinationTable || (response != nil && response.TotalRows > 0))
 		finishAttrs = append(finishAttrs, slog.Bool("destination_write", willWrite))
+		if jobErr != nil {
+			em := jobErr.Error()
+			if len(em) > 4096 {
+				em = em[:4096] + "… (truncated)"
+			}
+			finishAttrs = append(finishAttrs, slog.String("err", em))
+		}
 		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query content query finished", finishAttrs...)
 
 		if jobErr == nil {
