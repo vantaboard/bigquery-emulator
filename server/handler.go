@@ -2754,9 +2754,15 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		return err
 	}
 	if postSync != nil {
+		syncStart := time.Now()
 		if err := syncCatalog(ctx, srv, postSync); err != nil {
 			return err
 		}
+		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query catalog sync done",
+			slog.String("project_id", projectID),
+			slog.String("job_id", job.JobReference.JobId),
+			slog.Int64("metadata_sync_ms", time.Since(syncStart).Milliseconds()),
+		)
 	}
 	return nil
 }
@@ -2788,6 +2794,9 @@ func markJobSubmitFailed(ctx context.Context, srv *Server, projectID, jobID stri
 	})
 }
 
+// syncCatalog is invoked after the main async job transaction commits. Wall time is logged
+// as metadata_sync_ms in [jobsInsertHandler.executeAsyncQueryJob] to separate metadata work
+// from query execution and destination writes.
 func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
 	// Apply deletions before inserts so replace-like DDL (or delete+add pairs) never hit duplicate metadata.
 	for _, table := range cat.Table.Deleted {

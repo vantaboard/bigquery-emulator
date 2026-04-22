@@ -72,6 +72,39 @@ func harnessCTASSQL(datasetID, tableID string, outer, inner int) string {
 	)
 }
 
+// harnessManyRowCTASSQL returns a CTAS that materializes n output rows (one column "c") for stress
+// that differs from the aggregate cross-join harness.
+func harnessManyRowCTASSQL(datasetID, tableID string, n int) string {
+	return fmt.Sprintf(
+		"CREATE TABLE `%s.%s` AS "+
+			"SELECT x AS c FROM UNNEST(GENERATE_ARRAY(1, %d)) x",
+		datasetID, tableID, n,
+	)
+}
+
+func harnessReadTableCount(ctx context.Context, client *bigquery.Client, datasetID, tableID string) (int64, error) {
+	q := client.Query(fmt.Sprintf("SELECT COUNT(*) AS cnt FROM `%s.%s`", datasetID, tableID))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var row []bigquery.Value
+	if err := it.Next(&row); err != nil {
+		return 0, err
+	}
+	if err := it.Next(&row); err != iterator.Done {
+		return 0, fmt.Errorf("expected one row for COUNT(*)")
+	}
+	switch v := row[0].(type) {
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	default:
+		return 0, fmt.Errorf("unexpected count type %T", row[0])
+	}
+}
+
 func harnessRunQuery(
 	ctx context.Context,
 	endpoint, projectID, sql string,
@@ -184,6 +217,75 @@ func TestHarness_CTAS_JobWait_Smoke(t *testing.T) {
 	})
 }
 
+// TestHarness_CTAS_JobWait_Smoke_ManyRows writes a multi-row result (not a single aggregate row).
+func TestHarness_CTAS_JobWait_Smoke_ManyRows(t *testing.T) {
+	ctx := context.Background()
+	const n = 200
+	bqServer, err := server.New(server.TempStorage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := types.NewProject(harnessProjectID, types.NewDataset(harnessDatasetID))
+	if err := bqServer.Load(server.StructSource(project)); err != nil {
+		t.Fatal(err)
+	}
+	ts := bqServer.TestServer()
+	client, err := bigquery.NewClient(ctx, harnessProjectID, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+	if err != nil {
+		ts.Close()
+		_ = bqServer.Stop(ctx)
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	t.Cleanup(func() {
+		ts.Close()
+		_ = bqServer.Stop(context.Background())
+	})
+
+	t.Run("materialize", func(t *testing.T) {
+		const tableID = "harness_smoke_rows_m"
+		sql := harnessManyRowCTASSQL(harnessDatasetID, tableID, n)
+		job, err := harnessRunQuery(ctx, ts.URL, harnessProjectID, sql, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := job.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err := harnessReadTableCount(ctx, client, harnessDatasetID, tableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != int64(n) {
+			t.Fatalf("row count: got %d want %d", got, n)
+		}
+	})
+	t.Run("in_place", func(t *testing.T) {
+		const tableID = "harness_smoke_rows_p"
+		sql := harnessManyRowCTASSQL(harnessDatasetID, tableID, n)
+		dst := &bigquery.Table{
+			ProjectID: harnessProjectID,
+			DatasetID: harnessDatasetID,
+			TableID:   tableID,
+		}
+		job, err := harnessRunQuery(ctx, ts.URL, harnessProjectID, sql, dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := job.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err := harnessReadTableCount(ctx, client, harnessDatasetID, tableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != int64(n) {
+			t.Fatalf("row count: got %d want %d", got, n)
+		}
+	})
+}
+
 func TestHarness_CTAS_JobWait_Cost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping cost harness in -short; run full tests or set BQ_HARNESS_OUTER/INNER for local tuning")
@@ -191,7 +293,6 @@ func TestHarness_CTAS_JobWait_Cost(t *testing.T) {
 
 	ctx := context.Background()
 	t.Setenv("BQ_EMULATOR_CONN_METRICS", "1")
-	connection.ResetConnMetrics()
 
 	outer, inner := harnessDimsFromEnv(200, 20)
 	memOn := os.Getenv("BQ_HARNESS_MEM") == "1"
@@ -256,22 +357,29 @@ func TestHarness_CTAS_JobWait_Cost(t *testing.T) {
 	}
 
 	t.Run("materialize_no_api_destination", func(t *testing.T) {
+		connection.ResetConnMetrics()
 		run(t, "materialize", "harness_cost_m", nil)
+		m := connection.SnapshotConnMetrics()
+		if m.AcquireCount > 0 {
+			avgWait := time.Duration(uint64(m.TotalAcquireWait) / m.AcquireCount)
+			t.Logf("materialize: conn acquire_wait_total=%s fn_hold_total=%s acquires=%d acquire_canceled=%d avg_acquire_wait=%s",
+				m.TotalAcquireWait, m.TotalFnHold, m.AcquireCount, m.AcquireCanceled, avgWait)
+		}
 	})
 	t.Run("in_place_with_api_destination", func(t *testing.T) {
+		connection.ResetConnMetrics()
 		run(t, "in_place", "harness_cost_p", &bigquery.Table{
 			ProjectID: harnessProjectID,
 			DatasetID: harnessDatasetID,
 			TableID:   "harness_cost_p",
 		})
+		m := connection.SnapshotConnMetrics()
+		if m.AcquireCount > 0 {
+			avgWait := time.Duration(uint64(m.TotalAcquireWait) / m.AcquireCount)
+			t.Logf("in_place: conn acquire_wait_total=%s fn_hold_total=%s acquires=%d acquire_canceled=%d avg_acquire_wait=%s",
+				m.TotalAcquireWait, m.TotalFnHold, m.AcquireCount, m.AcquireCanceled, avgWait)
+		}
 	})
-
-	m := connection.SnapshotConnMetrics()
-	if m.AcquireCount > 0 {
-		avgWait := time.Duration(uint64(m.TotalAcquireWait) / m.AcquireCount)
-		t.Logf("connection metrics: acquire_wait_total=%s fn_hold_total=%s acquires=%d acquire_canceled=%d avg_acquire_wait=%s",
-			m.TotalAcquireWait, m.TotalFnHold, m.AcquireCount, m.AcquireCanceled, avgWait)
-	}
 }
 
 var benchCTASTableSeq atomic.Uint64

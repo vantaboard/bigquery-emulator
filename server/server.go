@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -23,24 +24,24 @@ import (
 )
 
 type Server struct {
-	Handler           http.Handler
-	storage           Storage
-	db                *sql.DB
-	logLevel          *slog.LevelVar
-	logFormat         LogFormat
-	logFile           *os.File
-	logger            *slog.Logger
-	connMgr           *connection.Manager
-	metaRepo          *metadata.Repository
-	contentRepo       *contentdata.Repository
-	queryExec         *JobExecutor
-	heavyQuerySem     chan struct{}
-	storageReadSem    chan struct{}
-	fileCleanup       func() error
-	explorerCleanup   func() error
-	autoscaleCancel   context.CancelFunc
-	httpServer        *http.Server
-	grpcServer        *grpc.Server
+	Handler         http.Handler
+	storage         Storage
+	db              *sql.DB
+	logLevel        *slog.LevelVar
+	logFormat       LogFormat
+	logFile         *os.File
+	logger          *slog.Logger
+	connMgr         *connection.Manager
+	metaRepo        *metadata.Repository
+	contentRepo     *contentdata.Repository
+	queryExec       *JobExecutor
+	heavyQuerySem   chan struct{}
+	storageReadSem  chan struct{}
+	fileCleanup     func() error
+	explorerCleanup func() error
+	autoscaleCancel context.CancelFunc
+	httpServer      *http.Server
+	grpcServer      *grpc.Server
 }
 
 func (s *Server) rebuildLogger() {
@@ -84,17 +85,50 @@ func (s *Server) SetLogFile(path string) error {
 // storageWithSQLiteDefaults appends modernc.org/sqlite URI parameters so native SQLite pragmas
 // run at open time (not via googlesqlite Exec, which only accepts GoogleSQL).
 // WAL lets readers (job polls, table GETs) proceed while an async worker holds a long CTAS write.
+//
+// Optional env (each adds one URI _pragma= segment when set, for A/B of long single-write jobs):
+//   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS (e.g. NORMAL, OFF)
+//   - BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE (e.g. MEMORY, DEFAULT)
+//   - BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE (e.g. -64000, or positive page count)
 func storageWithSQLiteDefaults(s Storage) Storage {
 	str := string(s)
 	if strings.Contains(str, "_pragma=") && strings.Contains(str, "journal_mode") {
-		return s
+		return storageAppendOptionalPragmasFromEnv(s)
 	}
 	sep := "?"
 	if strings.Contains(str, "?") {
 		sep = "&"
 	}
 	// See modernc.org/sqlite applyQueryParams: _pragma values are executed as "pragma "+v
-	return Storage(str + sep + "_pragma=journal_mode%3DWAL&_pragma=busy_timeout%3D30000")
+	return storageAppendOptionalPragmasFromEnv(Storage(str + sep + "_pragma=journal_mode%3DWAL&_pragma=busy_timeout%3D30000"))
+}
+
+// storageAppendOptionalPragmasFromEnv appends & _pragma=... for optional tuning env vars.
+// Values are url-encoded; modernc decodes the fragment as the pragma argument after "pragma ".
+func storageAppendOptionalPragmasFromEnv(s Storage) Storage {
+	type pair struct {
+		env, pragma string
+	}
+	pairs := []pair{
+		{"BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS", "synchronous="},
+		{"BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE", "temp_store="},
+		{"BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE", "cache_size="},
+	}
+	out := string(s)
+	for _, p := range pairs {
+		v := os.Getenv(p.env)
+		if v == "" {
+			continue
+		}
+		pragmaArg := p.pragma + v
+		sep := "?"
+		if strings.Contains(out, "?") {
+			sep = "&"
+		}
+		// Use QueryEscape so "=" becomes "%3D" in the URI value (same style as the built-in journal_mode pragma).
+		out = out + sep + "_pragma=" + url.QueryEscape(pragmaArg)
+	}
+	return Storage(out)
 }
 
 type serverConfig struct {
@@ -123,6 +157,9 @@ func WithConnectionPoolSize(n int) ServerOption {
 //   - BQ_EMULATOR_POOL_AUTOSCALE=0: disable background pool cap tuning (elastic mode only).
 //   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
 //   - BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: async query progress logs every N seconds at INFO (default 30; 0 disables).
+//   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS, BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE, BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE:
+//     optional [storageWithSQLiteDefaults] open-time tuning for long single-write jobs.
+//   - BQ_EMULATOR_CTAS_INPLACE_FORCE_COUNT=1: always run a SELECT COUNT(1) after in-place CTAS (see [contentdata.QueryCTASInPlace]).
 func New(storage Storage, opts ...ServerOption) (*Server, error) {
 	cfg := serverConfig{}
 	for _, o := range opts {

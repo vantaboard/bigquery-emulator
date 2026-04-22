@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/vantaboard/go-googlesql"
 	"github.com/vantaboard/go-googlesql/ast"
@@ -151,11 +153,16 @@ func (r *Repository) QueryCTASInPlace(
 		return nil, fmt.Errorf("failed to setup connection: %w", err)
 	}
 
+	execStart := time.Now()
 	result, err := tx.Tx().ExecContext(ctx, query, values...)
+	execMS := time.Since(execStart).Milliseconds()
 	if err != nil {
 		return nil, err
 	}
 
+	rowsAff, rowsAffErr := result.RowsAffected()
+
+	buildStart := time.Now()
 	changedCatalog, err := googlesqlite.ChangedCatalogFromResult(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed catalog: %w", err)
@@ -177,15 +184,41 @@ func (r *Repository) QueryCTASInPlace(
 	if err != nil {
 		return nil, err
 	}
+	schemaMS := time.Since(buildStart).Milliseconds()
 
+	forceCount := os.Getenv("BQ_EMULATOR_CTAS_INPLACE_FORCE_COUNT") == "1"
 	tpath := r.tablePath(dest.ProjectId, dest.DatasetId, dest.TableId)
-	countQuery := fmt.Sprintf("SELECT COUNT(1) AS c FROM `%s`", tpath)
 	var totalRows int64
-	if err := tx.Tx().QueryRowContext(ctx, countQuery).Scan(&totalRows); err != nil {
-		return nil, fmt.Errorf("row count for CTAS table: %w", err)
+	var countMS int64
+	rowCountSource := "count_query"
+	if !forceCount && rowsAffErr == nil && rowsAff > 0 {
+		totalRows = rowsAff
+		rowCountSource = "rows_affected"
+	} else {
+		countStart := time.Now()
+		countQuery := fmt.Sprintf("SELECT COUNT(1) AS c FROM `%s`", tpath)
+		if err := tx.Tx().QueryRowContext(ctx, countQuery).Scan(&totalRows); err != nil {
+			return nil, fmt.Errorf("row count for CTAS table: %w", err)
+		}
+		countMS = time.Since(countStart).Milliseconds()
 	}
 	if totalRows < 0 {
 		totalRows = 0
+	}
+
+	if logger.Logger(ctx) != nil {
+		attrs := []slog.Attr{
+			slog.String("destination", fmt.Sprintf("%s.%s.%s", dest.ProjectId, dest.DatasetId, dest.TableId)),
+			slog.Int64("exec_ms", execMS),
+			slog.Int64("schema_extract_ms", schemaMS),
+			slog.String("row_count_source", rowCountSource),
+			slog.Int64("row_count_ms", countMS),
+		}
+		attrs = append(attrs, slog.Int64("rows_affected", rowsAff), slog.Int64("total_rows", totalRows))
+		if rowsAffErr != nil {
+			attrs = append(attrs, slog.String("rows_affected_err", rowsAffErr.Error()))
+		}
+		logger.Logger(ctx).LogAttrs(ctx, slog.LevelInfo, "CTAS in-place phase timings", attrs...)
 	}
 
 	return &internaltypes.QueryResponse{
