@@ -20,6 +20,11 @@
 -- 3) PIVOT / UNPIVOT: supported in googlesqlite (go-googlesqlite/query_test.go). Example shape:
 -- WITH q_sales AS (SELECT 'item' product, 10 s, 'Q1' quarter)
 -- SELECT * FROM q_sales PIVOT(SUM(s) FOR quarter IN ('Q1', 'Q2'));
+--
+-- 4) Optional: GROUP BY over the *large* `heavy` CTE (very slow vs minimal CTAS; use to stress
+--    hash-aggregate on huge joins). For default automated tortoise, harnessTortoiseRichCTASSQL uses
+--    a small UNNEST for `bucketed` so wall time is dominated by the same cross join as the minimal
+--    tortoise, not a second O(N) pass over N = OUTER*INNER.
 
 CREATE TABLE `YOUR_DATASET.your_table_rich` AS
 WITH
@@ -32,8 +37,8 @@ WITH
     CROSS JOIN UNNEST(GENERATE_ARRAY(1, 300)) b
   ),
   bucketed AS (
-    SELECT MOD(a, 3) AS bucket, COUNT(*) AS n
-    FROM heavy
+    SELECT MOD(x, 3) AS bucket, COUNT(*) AS n
+    FROM UNNEST(GENERATE_ARRAY(1, 99)) x
     GROUP BY 1
     HAVING COUNT(*) > 0
   ),

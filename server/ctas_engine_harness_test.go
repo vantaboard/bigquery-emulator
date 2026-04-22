@@ -25,6 +25,7 @@
 // Benchmarks (skipped under -short):
 //
 //	go test -tags "$GOOGLESQL_BUILD_TAGS" -bench BenchmarkCTAS_JobWait -benchtime 1s ./server/...
+//	go test -tags "$GOOGLESQL_BUILD_TAGS" -bench BenchmarkCTAS_Rich_JobWait -benchtime 1s ./server/...
 package server_test
 
 import (
@@ -78,8 +79,13 @@ func harnessCTASSQL(datasetID, tableID string, outer, inner int) string {
 // HAVING, window+filter via subquery (QUALIFY is avoided: it prevents [contentdata.IsCTASQuery] on the
 // outer CreateTable+Query in current googlesql), and pivot-style / unpivot-style branches via CASE+GROUP
 // and UNION) around the same tunable cross-join "heavy" stage as [harnessCTASSQL]. The final row has
-// column c = outer*inner. True QUALIFY/PIVOT/UNPIVOT for BigQuery are documented in
-// [../testfixtures/long_ctas_tortoise_rich.sql] (copy-paste / manual runs).
+// column c = outer*inner.
+//
+// The "heavy" CTE is the same cardinality stress as the minimal tortoise. GROUP BY / HAVING / window
+// stages use a *small* UNNEST bucket so the rich harness does not add a second full scan + hash-aggregate
+// over millions of rows (which dominated wall time and hid other features). A BigQuery-faithful GROUP BY
+// over the large heavy table is documented in [../testfixtures/long_ctas_tortoise_rich.sql] for manual
+// / engine work.
 func harnessTortoiseRichCTASSQL(datasetID, tableID string, outer, inner int) string {
 	return fmt.Sprintf(
 		"CREATE TABLE `%s.%s` AS "+
@@ -88,7 +94,7 @@ func harnessTortoiseRichCTASSQL(datasetID, tableID string, outer, inner int) str
 			"), heavy AS ( "+
 			"SELECT a, b FROM UNNEST(GENERATE_ARRAY(1, %d)) a CROSS JOIN UNNEST(GENERATE_ARRAY(1, %d)) b "+
 			"), bucketed AS ( "+
-			"SELECT MOD(a, 3) AS bucket, COUNT(*) AS n FROM heavy GROUP BY 1 HAVING COUNT(*) > 0 "+
+			"SELECT MOD(x, 3) AS bucket, COUNT(*) AS n FROM UNNEST(GENERATE_ARRAY(1, 99)) x GROUP BY 1 HAVING COUNT(*) > 0 "+
 			"), bucket_qualified AS ( "+
 			"SELECT bucket, n FROM ( "+
 			"SELECT bucket, n, ROW_NUMBER() OVER (ORDER BY n DESC) AS rn FROM bucketed "+
@@ -556,6 +562,71 @@ func BenchmarkCTAS_JobWait(b *testing.B) {
 			n := benchCTASTableSeq.Add(1)
 			tableID := fmt.Sprintf("hb_p_%d", n)
 			sql := harnessCTASSQL(harnessDatasetID, tableID, outer, inner)
+			dst := &bigquery.Table{
+				ProjectID: harnessProjectID,
+				DatasetID: harnessDatasetID,
+				TableID:   tableID,
+			}
+			b.StartTimer()
+
+			job, err := harnessRunQuery(ctx, ts.URL, harnessProjectID, sql, dst)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if _, err := job.Wait(ctx); err != nil {
+				b.Fatal(err)
+			}
+			b.StopTimer()
+
+			got, err := harnessReadCountC(ctx, client, harnessDatasetID, tableID)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if got != want {
+				b.Fatalf("c: got %d want %d", got, want)
+			}
+		}
+	})
+}
+
+// BenchmarkCTAS_Rich_JobWait is like [BenchmarkCTAS_JobWait] but uses [harnessTortoiseRichCTASSQL].
+// Tune with BQ_HARNESS_OUTER/INNER (via [harnessDimsFromEnv]) to match [TestTortoise_LongCTAS_Rich] load.
+func BenchmarkCTAS_Rich_JobWait(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping in -short")
+	}
+	ctx := context.Background()
+	outer, inner := harnessDimsFromEnv(120, 15)
+	want := int64(outer * inner)
+
+	bqServer, err := server.New(server.TempStorage)
+	if err != nil {
+		b.Fatal(err)
+	}
+	project := types.NewProject(harnessProjectID, types.NewDataset(harnessDatasetID))
+	if err := bqServer.Load(server.StructSource(project)); err != nil {
+		b.Fatal(err)
+	}
+	ts := bqServer.TestServer()
+	client, err := bigquery.NewClient(ctx, harnessProjectID, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+	if err != nil {
+		ts.Close()
+		_ = bqServer.Stop(ctx)
+		b.Fatal(err)
+	}
+	defer client.Close()
+
+	b.Cleanup(func() {
+		ts.Close()
+		_ = bqServer.Stop(context.Background())
+	})
+
+	b.Run("in_place_with_api_destination", func(b *testing.B) {
+		for range b.N {
+			b.StopTimer()
+			n := benchCTASTableSeq.Add(1)
+			tableID := fmt.Sprintf("hb_rich_p_%d", n)
+			sql := harnessTortoiseRichCTASSQL(harnessDatasetID, tableID, outer, inner)
 			dst := &bigquery.Table{
 				ProjectID: harnessProjectID,
 				DatasetID: harnessDatasetID,
