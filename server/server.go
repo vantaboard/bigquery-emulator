@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
 	"github.com/vantaboard/bigquery-emulator/internal/contentdata"
+	"github.com/vantaboard/bigquery-emulator/internal/execution"
 	"github.com/vantaboard/bigquery-emulator/internal/explorerapi"
 	"github.com/vantaboard/bigquery-emulator/internal/metadata"
 )
@@ -134,11 +135,24 @@ func storageAppendOptionalPragmasFromEnv(s Storage) Storage {
 }
 
 type serverConfig struct {
-	poolOverride int
+	poolOverride     int
+	executionBackend execution.Backend
 }
 
 // ServerOption configures [New].
 type ServerOption func(*serverConfig) error
+
+// WithExecutionBackend selects the go-googlesqlite physical engine (default SQLite).
+// DuckDB requires building this binary with -tags duckdb (and typically duckdb_use_lib + libduckdb).
+func WithExecutionBackend(b execution.Backend) ServerOption {
+	return func(c *serverConfig) error {
+		if b != execution.BackendSQLite && b != execution.BackendDuckDB {
+			return fmt.Errorf("execution backend must be %q or %q", execution.BackendSQLite, execution.BackendDuckDB)
+		}
+		c.executionBackend = b
+		return nil
+	}
+}
 
 // WithConnectionPoolSize sets a fixed pooled sqlite connection count (disables elastic autoscaling).
 // When unset, [connection.PoolConfigFromEnv] applies (see Environment on [New]).
@@ -154,13 +168,14 @@ func WithConnectionPoolSize(n int) ServerOption {
 // New builds a Server.
 //
 // Environment:
+//   - BQ_EMULATOR_EXECUTION_BACKEND: sqlite (default) or duckdb; same as --execution-backend (DuckDB needs -tags duckdb binary).
 //   - BQ_EMULATOR_POOL_SIZE: fixed pool size (disables elastic pool).
 //   - BQ_EMULATOR_POOL_MIN / BQ_EMULATOR_POOL_MAX: optional clamps when using elastic pool.
 //   - BQ_EMULATOR_POOL_AUTOSCALE=0: disable background pool cap tuning (elastic mode only).
 //   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
 //   - BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: async query progress logs every N seconds at INFO (default 30; 0 disables).
 //   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS, BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE, BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE, BQ_EMULATOR_SQLITE_PRAGMA_MMAP_SIZE:
-//     optional [storageWithSQLiteDefaults] open-time tuning for long single-write jobs.
+//     optional [storageWithSQLiteDefaults] open-time tuning for long single-write jobs (SQLite backend only).
 //   - BQ_EMULATOR_CTAS_INPLACE_FORCE_COUNT=1: always run a SELECT COUNT(1) after in-place CTAS (see [contentdata.QueryCTASInPlace]).
 func New(storage Storage, opts ...ServerOption) (*Server, error) {
 	cfg := serverConfig{}
@@ -172,28 +187,64 @@ func New(storage Storage, opts ...ServerOption) (*Server, error) {
 			return nil, err
 		}
 	}
+	backend := cfg.executionBackend
+	if backend == "" {
+		backend = execution.BackendSQLite
+	}
 
 	server := &Server{storage: storage}
 	if storage == TempStorage {
-		f, err := os.CreateTemp("", "")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create temporary file: %w", err)
-		}
-		storage = Storage(fmt.Sprintf("file:%s?cache=shared", f.Name()))
-		server.storage = storage
-		server.fileCleanup = func() error {
-			return os.Remove(f.Name())
+		switch backend {
+		case execution.BackendDuckDB:
+			// DuckDB rejects an empty pre-created file; reserve a path and let duckdb-go create the database.
+			f, err := os.CreateTemp("", "bq-emulator-*.duckdb")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create temporary file: %w", err)
+			}
+			path := f.Name()
+			if err := f.Close(); err != nil {
+				_ = os.Remove(path)
+				return nil, fmt.Errorf("failed to close temp file: %w", err)
+			}
+			if err := os.Remove(path); err != nil {
+				return nil, fmt.Errorf("failed to remove temp file for duckdb: %w", err)
+			}
+			storage = Storage(path)
+			server.storage = storage
+			server.fileCleanup = func() error {
+				return os.Remove(path)
+			}
+		default:
+			f, err := os.CreateTemp("", "")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create temporary file: %w", err)
+			}
+			storage = Storage(fmt.Sprintf("file:%s?cache=shared", f.Name()))
+			server.storage = storage
+			server.fileCleanup = func() error {
+				return os.Remove(f.Name())
+			}
 		}
 	}
-	storage = storageWithSQLiteDefaults(storage)
-	server.storage = storage
+	if backend == execution.BackendSQLite {
+		storage = storageWithSQLiteDefaults(storage)
+		server.storage = storage
+	}
 
-	db, err := sql.Open("googlesqlite", string(storage))
+	db, err := openExecutionDB(backend, storage)
 	if err != nil {
 		return nil, err
 	}
-	db.SetConnMaxIdleTime(-1)
-	db.SetConnMaxLifetime(1<<63 - 1)
+	switch backend {
+	case execution.BackendDuckDB:
+		// Outer database/sql pool: align with go-googlesqlite inner DuckDB pool (see OpenSQLBackend).
+		db.SetMaxIdleConns(0)
+		db.SetConnMaxIdleTime(0)
+		db.SetConnMaxLifetime(-1)
+	case execution.BackendSQLite:
+		db.SetConnMaxIdleTime(-1)
+		db.SetConnMaxLifetime(1<<63 - 1)
+	}
 	server.db = db
 
 	poolCfg := connection.PoolConfigFromEnv()
@@ -219,7 +270,7 @@ func New(storage Storage, opts ...ServerOption) (*Server, error) {
 		server.autoscaleCancel = ascCancel
 		connection.StartAutoscaleLoop(ascCtx, connectionManager, 0)
 	}
-	metaRepo, err := metadata.NewRepository(db, connectionManager)
+	metaRepo, err := metadata.NewRepository(db, connectionManager, backend)
 	if err != nil {
 		return nil, err
 	}

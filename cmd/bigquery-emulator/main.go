@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
+	"github.com/vantaboard/bigquery-emulator/internal/execution"
 	"github.com/vantaboard/bigquery-emulator/server"
 	"github.com/vantaboard/bigquery-emulator/types"
 )
@@ -29,6 +30,7 @@ type option struct {
 	Database     string           `description:"specify the database file, use :memory: for in-memory storage. if not specified, it will be a temp file" long:"database"`
 	DataFromYAML string           `description:"specify the path to the YAML file that contains the initial data" long:"data-from-yaml"`
 	DataFromJSON string           `description:"specify the path to the JSON file that contains the initial data (faster for large, multi-megabyte files)" long:"data-from-json"`
+	ExecBackend  string           `description:"physical SQL engine: sqlite (default) or duckdb (requires binary built with -tags duckdb)" long:"execution-backend" env:"BQ_EMULATOR_EXECUTION_BACKEND" default:"sqlite"`
 	Version      bool             `description:"print version" long:"version" short:"v"`
 }
 
@@ -105,7 +107,12 @@ func runServer(args []string, opt option) error {
 		os.Setenv("BIGQUERY_EMULATOR_HOST", net.JoinHostPort(host, fmt.Sprintf("%d", opt.HTTPPort)))
 	}
 
-	bqServer, err := server.New(db)
+	backend, err := execution.ParseBackend(opt.ExecBackend)
+	if err != nil {
+		return err
+	}
+
+	bqServer, err := server.New(db, server.WithExecutionBackend(backend))
 	if err != nil {
 		return err
 	}

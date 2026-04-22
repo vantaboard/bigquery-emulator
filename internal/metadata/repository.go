@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
+	"github.com/vantaboard/bigquery-emulator/internal/execution"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -68,6 +71,7 @@ CREATE TABLE IF NOT EXISTS routines (
 
 type Repository struct {
 	manager *connection.Manager
+	backend execution.Backend
 }
 
 const (
@@ -126,7 +130,10 @@ var preparedStatements = []string{
 	StmtUpdateDataset,
 }
 
-func NewRepository(db *sql.DB, manager *connection.Manager) (*Repository, error) {
+func NewRepository(db *sql.DB, manager *connection.Manager, backend execution.Backend) (*Repository, error) {
+	if backend == "" {
+		backend = execution.BackendSQLite
+	}
 	err := manager.ExecuteWithTransaction(context.Background(), func(ctx context.Context, tx *connection.Tx) error {
 		for _, ddl := range schemata {
 			if _, err := tx.Tx().ExecContext(ctx, ddl); err != nil {
@@ -150,7 +157,26 @@ func NewRepository(db *sql.DB, manager *connection.Manager) (*Repository, error)
 
 	return &Repository{
 		manager: manager,
+		backend: backend,
 	}, nil
+}
+
+func isDuplicatePrimaryKey(err error, b execution.Backend) bool {
+	if err == nil {
+		return false
+	}
+	if b == execution.BackendSQLite {
+		var sqliteError *sqlite.Error
+		if errors.As(err, &sqliteError) {
+			return sqliteError.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
+		}
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "duplicate key") ||
+		strings.Contains(msg, "primary key constraint") ||
+		strings.Contains(msg, "constraint violation")
 }
 
 func (r *Repository) ProjectFromData(data *types.Project) (*Project, []*Dataset, []*Job) {
@@ -618,11 +644,8 @@ func (r *Repository) AddDataset(ctx context.Context, tx *sql.Tx, dataset *Datase
 	})
 
 	if err != nil {
-		var sqliteError *sqlite.Error
-		if errors.As(errors.Unwrap(err), &sqliteError) {
-			if sqliteError.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
-				return fmt.Errorf("dataset %s: %w", dataset.ID, ErrDuplicatedDataset)
-			}
+		if isDuplicatePrimaryKey(err, r.backend) {
+			return fmt.Errorf("dataset %s: %w", dataset.ID, ErrDuplicatedDataset)
 		}
 		return err
 	}

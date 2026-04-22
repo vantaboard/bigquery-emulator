@@ -1,0 +1,104 @@
+# Optional: DuckDB execution backend smoke test (not a default merge gate).
+# Manual: Actions -> "DuckDB emulator smoke" -> Run workflow. Pin matches go-googlesqlite gates (DUCKDB_VERSION=1.5.2).
+name: DuckDB emulator smoke
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CGO_ENABLED: "1"
+  CC: clang
+  CXX: clang++
+  DUCKDB_VERSION: "1.5.2"
+
+jobs:
+  smoke:
+    name: TestServer_DuckDBExecutionBackendSmoke (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout bigquery-emulator
+        uses: actions/checkout@v6
+        with:
+          path: bigquery-emulator
+      - name: Resolve go-googlesql version
+        id: gsql
+        run: |
+          v=$(awk '/github.com\/vantaboard\/go-googlesql /{print $2; exit}' bigquery-emulator/go.mod)
+          echo "v=${v}" >> "$GITHUB_OUTPUT"
+      - name: Checkout go-googlesql
+        uses: actions/checkout@v6
+        with:
+          repository: vantaboard/go-googlesql
+          ref: ${{ steps.gsql.outputs.v }}
+          path: go-googlesql
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+          cache-dependency-path: bigquery-emulator/go.sum
+      - name: Install Task
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install C/C++ toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang build-essential libc++-dev libc++abi-dev curl unzip
+      - name: Install bazelisk
+        run: |
+          go install github.com/bazelbuild/bazelisk@v1.20.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Ensure Bazel cache directory exists
+        run: mkdir -p "$HOME/.cache/bazel"
+      - name: Default prebuilts
+        working-directory: ${{ github.workspace }}
+        env:
+          GO_GOOGLESQL_VERSION: ${{ steps.gsql.outputs.v }}
+        run: bash go-googlesql/scripts/ci-download-or-build-default-prebuilts.sh go-googlesql
+      - name: Ensure prebuilt lib symlinks
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          R="${{ github.workspace }}/go-googlesql"
+          ga="$(go env GOOS)_$(go env GOARCH)"
+          p="$R/internal/ccall/go-protobuf/protobuf/lib"
+          u="$R/internal/ccall/go-googlesql-unified/lib"
+          if [[ -f "$p/$ga/libprotobuf_cgo.a" ]]; then
+            ln -sfn "$ga/libprotobuf_cgo.a" "$p/libprotobuf_cgo.a"
+          fi
+          for f in "$u/$ga"/libgooglesql_*.a; do
+            [[ -e "$f" ]] || continue
+            ln -sfn "$ga/$(basename "$f")" "$u/$(basename "$f")"
+          done
+          if [[ -f "$u/$ga/unified_archives_link_order.txt" ]]; then
+            ln -sfn "$ga/unified_archives_link_order.txt" "$u/unified_archives_link_order.txt"
+          fi
+          if [[ -f "$p/$ga/libcxx_prebuilt.a" ]]; then
+            ln -sfn "$ga/libcxx_prebuilt.a" "$p/libcxx_prebuilt.a"
+            ln -sfn "$ga/libcxxabi_prebuilt.a" "$p/libcxxabi_prebuilt.a"
+          fi
+      - name: Download libduckdb (linux-amd64)
+        run: |
+          set -euo pipefail
+          ver="${DUCKDB_VERSION}"
+          curl -fsSL -o /tmp/duckdb.zip "https://github.com/duckdb/duckdb/releases/download/v${ver}/libduckdb-linux-amd64.zip"
+          unzip -q /tmp/duckdb.zip -d /tmp/duckdb-extract
+          echo "DUCKDB_LIB_DIR=/tmp/duckdb-extract" >> "$GITHUB_ENV"
+      - name: Go test (DuckDB smoke)
+        working-directory: ${{ github.workspace }}/bigquery-emulator
+        env:
+          GO_GOOGLESQL_ROOT: ${{ github.workspace }}/go-googlesql
+          GOWORK: "off"
+          DUCKDB_LIB_DIR: /tmp/duckdb-extract
+        run: |
+          set -euo pipefail
+          source "$GO_GOOGLESQL_ROOT/scripts/go-googlesql-stack-bootstrap.sh"
+          export CGO_LDFLAGS="${CGO_LDFLAGS} -lduckdb -L${DUCKDB_LIB_DIR}"
+          export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+          TAGS="${GOOGLESQL_BUILD_TAGS},duckdb,duckdb_use_lib"
+          go test -tags "${TAGS}" -p 1 -count=1 -run TestServer_DuckDBExecutionBackendSmoke ./server/...

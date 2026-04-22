@@ -37,9 +37,16 @@ For example, it has the following features.
 
 If you want to know which specific features are supported, please see [here](https://github.com/vantaboard/go-googlesqlite#status)
 
-## DuckDB execution layer (go-googlesqlite)
+## DuckDB execution backend (optional)
 
-The emulator today opens **`database/sql`** with the **`googlesqlite`** driver and a SQLite DSN (see [`server/server.go`](server/server.go)). [`go-googlesqlite`](https://github.com/vantaboard/go-googlesqlite) also ships a **`googlesqlduck`** driver and dual-backend tests; wiring the emulator to DuckDB would require abstracting connection setup beyond `*googlesqlite.GoogleSQLiteConn` (e.g. [`internal/contentdata/repository.go`](internal/contentdata/repository.go) `getConnection`). Until then, use **`task test:duckdb-lib`** in `go-googlesqlite` and the optional GitHub Actions workflow **`.github/workflows/duckdb-lib.yml`** for DuckDB parity gates.
+By default the emulator uses **`googlesqlite`** (SQLite). You can select **`googlesqlduck`** (DuckDB via [go-googlesqlite](https://github.com/vantaboard/go-googlesqlite)) with:
+
+- **CLI:** `--execution-backend=duckdb`
+- **Env:** `BQ_EMULATOR_EXECUTION_BACKEND=duckdb` (also bound to the flag)
+
+The DuckDB driver is only registered when the binary is built with **`-tags duckdb`** (and usually **`duckdb_use_lib`** plus a pinned **`libduckdb`** on the loader path; see [go-googlesqlite `docs/duckdb-parity-gates.md`](https://github.com/vantaboard/go-googlesqlite/blob/main/docs/duckdb-parity-gates.md)). Use **`task emulator:build-duck`** and **`task test:duckdb-backend`** in this repo after setting **`DUCKDB_LIB_DIR`**.
+
+SQLite-specific URI pragmas ([`storageWithSQLiteDefaults`](server/server.go)) are **not** applied for DuckDB. With `--execution-backend=duckdb`, **temporary database files** are created by deleting a reserved path first so DuckDB can initialize a valid file (unlike SQLite empty `CreateTemp` files). TEMP tables, MERGE scratch tables, and pooling interact differently with DuckDB; see [go-googlesqlite `docs/duckdb-phase3-phase4-followon.md`](https://github.com/vantaboard/go-googlesqlite/blob/main/docs/duckdb-phase3-phase4-followon.md). Raw metadata SQL uses the same go-googlesqlite pipeline as queries (including `@` named parameters rewritten for DuckDB when formatting is disabled).
 
 # Sponsor 
 
