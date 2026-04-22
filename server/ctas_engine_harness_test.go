@@ -15,7 +15,8 @@
 //	BQ_HARNESS_OUTER / BQ_HARNESS_INNER — cross-join sizes (Cartesian product = outer*inner rows counted).
 //	BQ_EMULATOR_CONN_METRICS=1 — pool metrics (see internal/connection).
 //	BQ_HARNESS_MEM=1 — log runtime.MemStats delta after job Wait (cost test only).
-//	Very long opt-in: BQ_TORTOISE=1 — TestTortoise_LongCTAS_InPlace, testfixtures/long_ctas_tortoise.sql.
+//	Very long opt-in: BQ_TORTOISE=1 — TestTortoise_LongCTAS_InPlace; BQ_TORTOISE=1 and BQ_TORTOISE_RICH=1 —
+//	TestTortoise_LongCTAS_Rich. Fixture SQL: testfixtures/long_ctas_tortoise.sql, testfixtures/long_ctas_tortoise_rich.sql.
 //
 // Run smoke + cost tests:
 //
@@ -69,6 +70,42 @@ func harnessCTASSQL(datasetID, tableID string, outer, inner int) string {
 		"CREATE TABLE `%s.%s` AS "+
 			"SELECT COUNT(*) AS c FROM UNNEST(GENERATE_ARRAY(1, %d)) a "+
 			"CROSS JOIN UNNEST(GENERATE_ARRAY(1, %d)) b",
+		datasetID, tableID, outer, inner,
+	)
+}
+
+// harnessTortoiseRichCTASSQL is a CTAS with multiple CTEs (including an unused CTE, GROUP BY,
+// HAVING, window+filter via subquery (QUALIFY is avoided: it prevents [contentdata.IsCTASQuery] on the
+// outer CreateTable+Query in current googlesql), and pivot-style / unpivot-style branches via CASE+GROUP
+// and UNION) around the same tunable cross-join "heavy" stage as [harnessCTASSQL]. The final row has
+// column c = outer*inner. True QUALIFY/PIVOT/UNPIVOT for BigQuery are documented in
+// [../testfixtures/long_ctas_tortoise_rich.sql] (copy-paste / manual runs).
+func harnessTortoiseRichCTASSQL(datasetID, tableID string, outer, inner int) string {
+	return fmt.Sprintf(
+		"CREATE TABLE `%s.%s` AS "+
+			"WITH dead_cte AS ( "+
+			"SELECT 999 AS never_used, 'unused' AS marker "+
+			"), heavy AS ( "+
+			"SELECT a, b FROM UNNEST(GENERATE_ARRAY(1, %d)) a CROSS JOIN UNNEST(GENERATE_ARRAY(1, %d)) b "+
+			"), bucketed AS ( "+
+			"SELECT MOD(a, 3) AS bucket, COUNT(*) AS n FROM heavy GROUP BY 1 HAVING COUNT(*) > 0 "+
+			"), bucket_qualified AS ( "+
+			"SELECT bucket, n FROM ( "+
+			"SELECT bucket, n, ROW_NUMBER() OVER (ORDER BY n DESC) AS rn FROM bucketed "+
+			") z WHERE z.rn <= 3 "+
+			"), q_sales AS ( "+
+			"SELECT 'item' AS product, 10 AS s, 'Q1' AS quarter UNION ALL SELECT 'item', 20, 'Q2' "+
+			"), pivotish AS ( "+
+			"SELECT product, SUM(CASE quarter WHEN 'Q1' THEN s END) AS q1, "+
+			"SUM(CASE quarter WHEN 'Q2' THEN s END) AS q2 FROM q_sales GROUP BY product "+
+			"), unpivish AS ( "+
+			"SELECT v AS val, t AS qname FROM ( "+
+			"SELECT q1 AS v, 'Q1' AS t FROM pivotish UNION ALL SELECT q2, 'Q2' FROM pivotish "+
+			") "+
+			") "+
+			"SELECT (SELECT COUNT(*) AS cnt FROM heavy) + "+
+			"0 * COALESCE((SELECT MAX(n) FROM bucket_qualified), 0) + "+
+			"0 * COALESCE((SELECT MAX(val) FROM unpivish), 0) AS c",
 		datasetID, tableID, outer, inner,
 	)
 }
@@ -214,6 +251,77 @@ func TestHarness_CTAS_JobWait_Smoke(t *testing.T) {
 		}
 		if got != want {
 			t.Fatalf("c: got %d want %d (outer=%d inner=%d)", got, want, outer, inner)
+		}
+	})
+}
+
+// TestHarness_CTAS_Rich_JobWait_Smoke is the "tortoise rich" query ([harnessTortoiseRichCTASSQL]) at a
+// tiny size so CI exercises multi-CTEs, window+filter, pivot-style and in-place and materialize paths.
+func TestHarness_CTAS_Rich_JobWait_Smoke(t *testing.T) {
+	ctx := context.Background()
+	const outer, inner = 5, 5
+	want := int64(outer * inner)
+
+	bqServer, err := server.New(server.TempStorage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := types.NewProject(harnessProjectID, types.NewDataset(harnessDatasetID))
+	if err := bqServer.Load(server.StructSource(project)); err != nil {
+		t.Fatal(err)
+	}
+	ts := bqServer.TestServer()
+	client, err := bigquery.NewClient(ctx, harnessProjectID, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+	if err != nil {
+		ts.Close()
+		_ = bqServer.Stop(ctx)
+		t.Fatal(err)
+	}
+	defer client.Close()
+	t.Cleanup(func() {
+		ts.Close()
+		_ = bqServer.Stop(context.Background())
+	})
+
+	t.Run("materialize_no_api_destination", func(t *testing.T) {
+		const tableID = "harness_rich_m"
+		sql := harnessTortoiseRichCTASSQL(harnessDatasetID, tableID, outer, inner)
+		job, err := harnessRunQuery(ctx, ts.URL, harnessProjectID, sql, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := job.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err := harnessReadCountC(ctx, client, harnessDatasetID, tableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("c: got %d want %d (rich CTAS materialize)", got, want)
+		}
+	})
+	t.Run("in_place_with_api_destination", func(t *testing.T) {
+		const tableID = "harness_rich_p"
+		sql := harnessTortoiseRichCTASSQL(harnessDatasetID, tableID, outer, inner)
+		dst := &bigquery.Table{
+			ProjectID: harnessProjectID,
+			DatasetID: harnessDatasetID,
+			TableID:   tableID,
+		}
+		job, err := harnessRunQuery(ctx, ts.URL, harnessProjectID, sql, dst)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := job.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err := harnessReadCountC(ctx, client, harnessDatasetID, tableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("c: got %d want %d (rich CTAS in-place)", got, want)
 		}
 	})
 }

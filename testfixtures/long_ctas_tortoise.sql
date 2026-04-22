@@ -8,6 +8,9 @@
 -- materialize path and the same query can be orders of magnitude slower.
 --
 -- Tuning: increase OUTER and INNER to stress the engine (e.g. 6000, 350 ≈ 2.1M pairs).
+-- Richer Dataform-style CTAS (CTEs, GROUP BY, pivot-ish branches): see
+-- long_ctas_tortoise_rich.sql in this directory. The in-repo Go harness is
+-- harnessTortoiseRichCTASSQL in server/ctas_engine_harness_test.go (tunable; same in-place Dst rule).
 --
 -- Replace YOUR_DATASET and your_table. Use the project/dataset your client sends.
 CREATE TABLE `YOUR_DATASET.your_table` AS
