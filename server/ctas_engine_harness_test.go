@@ -15,6 +15,7 @@
 //	BQ_HARNESS_OUTER / BQ_HARNESS_INNER — cross-join sizes (Cartesian product = outer*inner rows counted).
 //	BQ_EMULATOR_CONN_METRICS=1 — pool metrics (see internal/connection).
 //	BQ_HARNESS_MEM=1 — log runtime.MemStats delta after job Wait (cost test only).
+//	Very long opt-in: BQ_TORTOISE=1 — TestTortoise_LongCTAS_InPlace, testfixtures/long_ctas_tortoise.sql.
 //
 // Run smoke + cost tests:
 //

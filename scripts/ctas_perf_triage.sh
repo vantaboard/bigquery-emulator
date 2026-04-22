@@ -2,10 +2,15 @@
 # CTAS performance triage: extract timing fields from an emulator log and print a one-line conclusion.
 # See the "Next steps: CTAS still too slow" plan. Works with slog key=value (text) lines.
 # Run the binary with --log-level info (or debug) so CTAS in-place and async query lines are present.
-# Example: grep "job_id=YOUR" emulator.log | ./scripts/ctas_perf_triage.sh
+#
+# If logs mix multiple jobs, set JOB_ID to the full value after job_id= (e.g. dataform-uuid) so
+# this script only analyzes matching lines. Example:
+#   JOB_ID=dataform-3ae91caf-bf99-4743-be49-d3daee2c5a6b ./scripts/ctas_perf_triage.sh tmp/air/emulator.log
+# Or: grep "job_id=YOUR" emulator.log | ./scripts/ctas_perf_triage.sh
 #
 # Usage:
 #   ./scripts/ctas_perf_triage.sh emulator.log
+#   JOB_ID=dataform-... ./scripts/ctas_perf_triage.sh emulator.log
 #   grep "job_id=abc" emulator.log | ./scripts/ctas_perf_triage.sh
 #
 set -euo pipefail
@@ -16,13 +21,30 @@ if [ "$LOG" = "-" ] && [ -t 0 ]; then
   exit 2
 fi
 
+# Normalize log to a temp file, optionally filtered by JOB_ID=...
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+if [ "$LOG" = "-" ]; then
+  if [ -n "${JOB_ID:-}" ]; then
+    grep -F "job_id=${JOB_ID}" >"$TMP" || true
+  else
+    cat >"$TMP"
+  fi
+else
+  if [ -n "${JOB_ID:-}" ]; then
+    grep -F "job_id=${JOB_ID}" -- "$LOG" >"$TMP" || true
+  else
+    cat -- "$LOG" >"$TMP"
+  fi
+fi
+
 pick() {
   # args: key (grep line in $LINE)
   local _k="$1"
   echo "$LINE" | grep -oE "${_k}=[^ ]+" 2>/dev/null | head -1 | cut -d= -f2- || true
 }
 
-LINE=$(grep "CTAS in-place phase timings" "$LOG" 2>/dev/null | tail -1 || true)
+LINE=$(grep "CTAS in-place phase timings" "$TMP" 2>/dev/null | tail -1 || true)
 ex=$(pick "exec_ms")
 sch=$(pick "schema_extract_ms")
 rcm=$(pick "row_count_ms")
@@ -30,14 +52,14 @@ rcs=$(pick "row_count_source")
 ra=$(pick "rows_affected")
 dest=$(pick "destination")
 
-LINE=$(grep "async query content query finished" "$LOG" 2>/dev/null | tail -1 || true)
+LINE=$(grep "async query content query finished" "$TMP" 2>/dev/null | tail -1 || true)
 cqfin=$(pick "elapsed_ms")
 
-LINE=$(grep "async query catalog sync done" "$LOG" 2>/dev/null | tail -1 || true)
+LINE=$(grep "async query catalog sync done" "$TMP" 2>/dev/null | tail -1 || true)
 # breakdown lines may follow same job — take last
 ms=$(pick "metadata_sync_ms")
 
-LINE=$(grep "async query job completed" "$LOG" 2>/dev/null | grep "outcome" | tail -1 || true)
+LINE=$(grep "async query job completed" "$TMP" 2>/dev/null | grep "outcome" | tail -1 || true)
 # Some logs use key=value; ok
 jobe=$(pick "elapsed_ms")
 cqj=$(pick "content_query_ms")
