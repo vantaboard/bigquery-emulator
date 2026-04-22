@@ -59,17 +59,35 @@ tasks:
           exit 1
         fi
         export CGO_ENABLED=1
-        export CGO_LDFLAGS="${CGO_LDFLAGS} -lduckdb -L${DUCKDB_LIB_DIR}"
-        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
-          export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}:${LD_LIBRARY_PATH}"
+        # Embed a runpath so ./bigquery-emulator-duck finds DuckDB without LD_LIBRARY_PATH,
+        # and copy the shared library next to the binary (same directory as $ORIGIN).
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+          DUCK_SHLIB="libduckdb.dylib"
+          export CGO_LDFLAGS="${CGO_LDFLAGS} -lduckdb -L${DUCKDB_LIB_DIR} -Wl,-rpath,@executable_path"
+          if [ -n "${DYLD_LIBRARY_PATH:-}" ]; then
+            export DYLD_LIBRARY_PATH="${DUCKDB_LIB_DIR}:${DYLD_LIBRARY_PATH}"
+          else
+            export DYLD_LIBRARY_PATH="${DUCKDB_LIB_DIR}"
+          fi
         else
-          export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}"
+          DUCK_SHLIB="libduckdb.so"
+          export CGO_LDFLAGS="${CGO_LDFLAGS} -lduckdb -L${DUCKDB_LIB_DIR} -Wl,-rpath,\$ORIGIN"
+          if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+            export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}:${LD_LIBRARY_PATH}"
+          else
+            export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}"
+          fi
+        fi
+        if [ ! -f "${DUCKDB_LIB_DIR}/${DUCK_SHLIB}" ]; then
+          echo "Missing ${DUCKDB_LIB_DIR}/${DUCK_SHLIB} (wrong DUCKDB_LIB_DIR or platform zip?)" >&2
+          exit 1
         fi
         if [ -f go.work ]; then export GOWORK="$PWD/go.work"
         else export GOWORK=off
         fi
         TAGS="${GOOGLESQL_BUILD_TAGS},duckdb,duckdb_use_lib"
         go build -tags "${TAGS}" -o bigquery-emulator-duck ./cmd/bigquery-emulator
+        cp -f "${DUCKDB_LIB_DIR}/${DUCK_SHLIB}" .
 
   test:duckdb-backend:
     desc: DuckDB execution smoke test (DUCKDB_LIB_DIR, CGO_LDFLAGS -lduckdb; tags duckdb,duckdb_use_lib)
