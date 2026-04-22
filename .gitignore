@@ -23,7 +23,7 @@ __pycache__
 # JetBrains IDE
 .idea
 
-# Local direnv overrides (optional; see .envrc)
+# Local direnv overrides — copy from .envrc.local.example; never commit secrets or machine paths
 .envrc.local
 
 # Mac files
