@@ -50,6 +50,8 @@ The DuckDB driver is only registered when the binary is built with **`-tags duck
 
 SQLite-specific URI pragmas ([`storageWithSQLiteDefaults`](server/server.go)) are **not** applied for DuckDB. With `--execution-backend=duckdb`, **temporary database files** are created by deleting a reserved path first so DuckDB can initialize a valid file (unlike SQLite empty `CreateTemp` files). TEMP tables, MERGE scratch tables, and pooling interact differently with DuckDB; see [go-googlesqlite `docs/duckdb-phase3-phase4-followon.md`](https://github.com/vantaboard/go-googlesqlite/blob/main/docs/duckdb-phase3-phase4-followon.md). Raw metadata SQL uses the same go-googlesqlite pipeline as queries (including `@` named parameters rewritten for DuckDB when formatting is disabled).
 
+**Execution DB vs SQLite:** Do not point DuckDB at a file produced by the SQLite backend; use a separate path or delete the old file. If you see DuckDB **`Conversion Error: invalid timestamp`** on catalog sync after upgrading **go-googlesqlite**, remove the execution database file (or only the `googlesqlite_catalog` table) so the catalog can be recreated.
+
 # Sponsor 
 
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
