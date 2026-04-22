@@ -37,6 +37,10 @@ For example, it has the following features.
 
 If you want to know which specific features are supported, please see [here](https://github.com/vantaboard/go-googlesqlite#status)
 
+## DuckDB execution layer (go-googlesqlite)
+
+The emulator today opens **`database/sql`** with the **`googlesqlite`** driver and a SQLite DSN (see [`server/server.go`](server/server.go)). [`go-googlesqlite`](https://github.com/vantaboard/go-googlesqlite) also ships a **`googlesqlduck`** driver and dual-backend tests; wiring the emulator to DuckDB would require abstracting connection setup beyond `*googlesqlite.GoogleSQLiteConn` (e.g. [`internal/contentdata/repository.go`](internal/contentdata/repository.go) `getConnection`). Until then, use **`task test:duckdb-lib`** in `go-googlesqlite` and the optional GitHub Actions workflow **`.github/workflows/duckdb-lib.yml`** for DuckDB parity gates.
+
 # Sponsor 
 
 If this project is of useful to you or your team, consider sponsoring the original creator [@goccy](https://github.com/goccy)
