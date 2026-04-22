@@ -90,6 +90,7 @@ func (s *Server) SetLogFile(path string) error {
 //   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS (e.g. NORMAL, OFF)
 //   - BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE (e.g. MEMORY, DEFAULT)
 //   - BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE (e.g. -64000, or positive page count)
+//   - BQ_EMULATOR_SQLITE_PRAGMA_MMAP_SIZE (e.g. 268435456 for 256 MiB) — I/O bound workloads only
 func storageWithSQLiteDefaults(s Storage) Storage {
 	str := string(s)
 	if strings.Contains(str, "_pragma=") && strings.Contains(str, "journal_mode") {
@@ -113,6 +114,7 @@ func storageAppendOptionalPragmasFromEnv(s Storage) Storage {
 		{"BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS", "synchronous="},
 		{"BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE", "temp_store="},
 		{"BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE", "cache_size="},
+		{"BQ_EMULATOR_SQLITE_PRAGMA_MMAP_SIZE", "mmap_size="},
 	}
 	out := string(s)
 	for _, p := range pairs {
@@ -157,7 +159,7 @@ func WithConnectionPoolSize(n int) ServerOption {
 //   - BQ_EMULATOR_POOL_AUTOSCALE=0: disable background pool cap tuning (elastic mode only).
 //   - BQ_EMULATOR_CONN_METRICS=1: enable timing in [connection.SnapshotConnMetrics] (see that package).
 //   - BQ_EMULATOR_ASYNC_JOB_HEARTBEAT_SECS: async query progress logs every N seconds at INFO (default 30; 0 disables).
-//   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS, BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE, BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE:
+//   - BQ_EMULATOR_SQLITE_PRAGMA_SYNCHRONOUS, BQ_EMULATOR_SQLITE_PRAGMA_TEMP_STORE, BQ_EMULATOR_SQLITE_PRAGMA_CACHE_SIZE, BQ_EMULATOR_SQLITE_PRAGMA_MMAP_SIZE:
 //     optional [storageWithSQLiteDefaults] open-time tuning for long single-write jobs.
 //   - BQ_EMULATOR_CTAS_INPLACE_FORCE_COUNT=1: always run a SELECT COUNT(1) after in-place CTAS (see [contentdata.QueryCTASInPlace]).
 func New(storage Storage, opts ...ServerOption) (*Server, error) {

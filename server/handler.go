@@ -2798,17 +2798,43 @@ func markJobSubmitFailed(ctx context.Context, srv *Server, projectID, jobID stri
 // as metadata_sync_ms in [jobsInsertHandler.executeAsyncQueryJob] to separate metadata work
 // from query execution and destination writes.
 func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
+	if cat == nil {
+		return nil
+	}
+
+	tableDelN, tableAddN, tableUpN, dsAddN, fnAddN, fnDelN := 0, 0, 0, 0, 0, 0
+	if cat.Table != nil {
+		tableDelN, tableAddN, tableUpN = len(cat.Table.Deleted), len(cat.Table.Added), len(cat.Table.Updated)
+	}
+	if cat.Dataset != nil {
+		dsAddN = len(cat.Dataset.Added)
+	}
+	if cat.Function != nil {
+		fnAddN, fnDelN = len(cat.Function.Added), len(cat.Function.Deleted)
+	}
+
 	// Apply deletions before inserts so replace-like DDL (or delete+add pairs) never hit duplicate metadata.
-	for _, table := range cat.Table.Deleted {
-		if err := deleteTableMetadata(ctx, server, table); err != nil {
-			return err
+	t0 := time.Now()
+	if cat.Table != nil {
+		for _, table := range cat.Table.Deleted {
+			if err := deleteTableMetadata(ctx, server, table); err != nil {
+				return err
+			}
 		}
 	}
-	for _, table := range cat.Table.Added {
-		if err := addTableMetadata(ctx, server, table); err != nil {
-			return err
+	deleteMS := time.Since(t0).Milliseconds()
+
+	t1 := time.Now()
+	if cat.Table != nil {
+		for _, table := range cat.Table.Added {
+			if err := addTableMetadata(ctx, server, table); err != nil {
+				return err
+			}
 		}
 	}
+	addMS := time.Since(t1).Milliseconds()
+
+	t2 := time.Now()
 	if cat.Dataset != nil {
 		for _, ds := range cat.Dataset.Added {
 			if err := addDatasetMetadataFromSchemaDDL(ctx, server, ds); err != nil {
@@ -2816,6 +2842,21 @@ func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedC
 			}
 		}
 	}
+	datasetMS := time.Since(t2).Milliseconds()
+
+	attrs := []slog.Attr{
+		slog.Int("table_deleted_n", tableDelN),
+		slog.Int("table_added_n", tableAddN),
+		slog.Int("table_updated_n", tableUpN),
+		slog.Int("dataset_added_n", dsAddN),
+		slog.Int("function_added_n", fnAddN),
+		slog.Int("function_deleted_n", fnDelN),
+		slog.Int64("metadata_delete_ms", deleteMS),
+		slog.Int64("metadata_add_table_ms", addMS),
+		slog.Int64("metadata_add_dataset_ms", datasetMS),
+	}
+	server.logger.LogAttrs(ctx, slog.LevelInfo, "async query catalog sync breakdown", attrs...)
+
 	return nil
 }
 
