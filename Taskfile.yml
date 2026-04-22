@@ -49,11 +49,22 @@ tasks:
         go test -tags "$GOOGLESQL_BUILD_TAGS" -p 1 -count=1 ./...
 
   emulator:build-duck:
-    desc: Build emulator with googlesqlduck (tags duckdb,duckdb_use_lib; set DUCKDB_LIB_DIR and loader path)
+    desc: Build emulator with googlesqlduck (tags duckdb,duckdb_use_lib; requires DUCKDB_LIB_DIR with libduckdb)
     cmds:
       - |
         set -euo pipefail
         source .envrc
+        if [ -z "${DUCKDB_LIB_DIR:-}" ]; then
+          echo "Set DUCKDB_LIB_DIR to the directory containing libduckdb.so (same as task test:duckdb-backend)" >&2
+          exit 1
+        fi
+        export CGO_ENABLED=1
+        export CGO_LDFLAGS="${CGO_LDFLAGS} -lduckdb -L${DUCKDB_LIB_DIR}"
+        if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+          export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}:${LD_LIBRARY_PATH}"
+        else
+          export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}"
+        fi
         if [ -f go.work ]; then export GOWORK="$PWD/go.work"
         else export GOWORK=off
         fi
