@@ -71,10 +71,6 @@ const (
 	discoveryAPIEndpoint    = "/discovery/v1/apis/bigquery/v2/rest"
 	newDiscoveryAPIEndpoint = "/$discovery/rest"
 	uploadAPIEndpoint       = "/upload/bigquery/v2/projects/{projectId}/jobs"
-	// asyncJobContentSavepoint wraps the async content query so a failed execution backend
-	// statement does not leave the outer sql.Tx unusable for persisting job metadata (DuckDB:
-	// "Current transaction is aborted").
-	asyncJobContentSavepoint = "googlesqlite_async_job_content"
 )
 
 //go:embed resources/discovery.json
@@ -2597,6 +2593,11 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 
 	var postSync *googlesqlite.ChangedCatalog
 
+	// Content queries run through the GoogleSQL analyzer; SAVEPOINT/ROLLBACK TO are not valid
+	// GoogleSQL and cannot be issued on the googlesqlite driver. When the content query fails,
+	// DuckDB may abort the transaction, so we roll back the whole tx and persist job metadata
+	// in a second transaction (see jobQueryErr branch after ExecuteWithTransaction).
+
 	err = srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
 		tx.SetProjectAndDataset(projectID, "")
 
@@ -2614,9 +2615,6 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		var response *internaltypes.QueryResponse
 		var jobErr error
 		queryPhaseStart := time.Now()
-		if _, spErr := tx.Tx().ExecContext(ctx, "SAVEPOINT "+asyncJobContentSavepoint); spErr != nil {
-			return fmt.Errorf("async job savepoint: %w", spErr)
-		}
 		if hasDestinationTable && contentdata.IsCTASQuery(querySQL) {
 			response, jobErr = srv.contentRepo.QueryCTASInPlace(
 				ctx, tx, projectID, "",
@@ -2633,15 +2631,6 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 				job.Configuration.Query.Query,
 				job.Configuration.Query.QueryParameters,
 			)
-		}
-		if jobErr != nil {
-			if _, rbErr := tx.Tx().ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+asyncJobContentSavepoint); rbErr != nil {
-				return fmt.Errorf("%w (rollback to savepoint after failed query: %v)", jobErr, rbErr)
-			}
-		} else {
-			if _, relErr := tx.Tx().ExecContext(ctx, "RELEASE SAVEPOINT "+asyncJobContentSavepoint); relErr != nil {
-				return fmt.Errorf("async job release savepoint: %w", relErr)
-			}
 		}
 		queryElapsedMs := time.Since(queryPhaseStart).Milliseconds()
 		lastResponse = response
@@ -2667,68 +2656,70 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		}
 		srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query content query finished", finishAttrs...)
 
-		if jobErr == nil {
-			writeStart := time.Now()
-			wroteDestination := false
-			r := &jobsInsertRequest{server: srv, project: project, job: job}
-			if hasDestinationTable {
-				wroteDestination = true
-				tableRef := job.Configuration.Query.DestinationTable
-				tableDef, err := h.tableDefFromQueryResponse(tableRef.TableId, response)
-				if err != nil {
-					return err
-				}
-				destinationDataset, err := srv.metaRepo.FindDatasetWithConnection(ctx, tx.Tx(), tableRef.ProjectId, tableRef.DatasetId)
-				if err != nil {
-					return fmt.Errorf("failed to find destination dataset: %s, err: %s", tableRef.DatasetId, err)
-				}
-				destinationTable, err := srv.metaRepo.FindTableWithConnection(ctx, tx.Tx(), destinationDataset.ProjectID, destinationDataset.ID, tableRef.TableId)
-				if err != nil {
-					return fmt.Errorf("failed to find destination table: %w", err)
-				}
-				destinationTableExists := destinationTable != nil
-				if response == nil || !response.CTASInPlace {
-					if !destinationTableExists {
-						_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
-						if serr != nil {
-							return serr
-						}
-						serverErr := srv.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
-						if serverErr != nil {
-							return fmt.Errorf("failed to create table: %w", serverErr)
-						}
-					}
-					if err := srv.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
-						return fmt.Errorf("failed to add table data: %w", err)
-					}
-				} else {
-					if !destinationTableExists {
-						_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
-						if serr != nil {
-							return serr
-						}
-					}
-					srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write skipped (CTAS in place)",
-						slog.String("project_id", projectID),
-						slog.String("job_id", job.JobReference.JobId),
-					)
-				}
-			} else if response != nil && response.TotalRows > 0 {
-				wroteDestination = true
-				if err := h.addQueryResultToDynamicDestinationTable(ctx, tx, r, response); err != nil {
-					return fmt.Errorf("failed to add query result to dynamic destination table: %w", err)
-				}
+		if jobErr != nil {
+			return jobErr
+		}
+
+		writeStart := time.Now()
+		wroteDestination := false
+		r := &jobsInsertRequest{server: srv, project: project, job: job}
+		if hasDestinationTable {
+			wroteDestination = true
+			tableRef := job.Configuration.Query.DestinationTable
+			tableDef, err := h.tableDefFromQueryResponse(tableRef.TableId, response)
+			if err != nil {
+				return err
 			}
-			if wroteDestination {
-				phaseWriteMS = time.Since(writeStart).Milliseconds()
-				phaseHasWrite = true
-				if response == nil || !response.CTASInPlace {
-					srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write done",
-						slog.String("project_id", projectID),
-						slog.String("job_id", job.JobReference.JobId),
-						slog.Int64("elapsed_ms", phaseWriteMS),
-					)
+			destinationDataset, err := srv.metaRepo.FindDatasetWithConnection(ctx, tx.Tx(), tableRef.ProjectId, tableRef.DatasetId)
+			if err != nil {
+				return fmt.Errorf("failed to find destination dataset: %s, err: %s", tableRef.DatasetId, err)
+			}
+			destinationTable, err := srv.metaRepo.FindTableWithConnection(ctx, tx.Tx(), destinationDataset.ProjectID, destinationDataset.ID, tableRef.TableId)
+			if err != nil {
+				return fmt.Errorf("failed to find destination table: %w", err)
+			}
+			destinationTableExists := destinationTable != nil
+			if response == nil || !response.CTASInPlace {
+				if !destinationTableExists {
+					_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+					if serr != nil {
+						return serr
+					}
+					serverErr := srv.contentRepo.CreateTable(ctx, tx, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+					if serverErr != nil {
+						return fmt.Errorf("failed to create table: %w", serverErr)
+					}
 				}
+				if err := srv.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, job.Configuration.Query.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
+					return fmt.Errorf("failed to add table data: %w", err)
+				}
+			} else {
+				if !destinationTableExists {
+					_, serr := createTableMetadata(ctx, tx, srv, project, destinationDataset, tableDef.ToBigqueryV2(project.ID, tableRef.DatasetId))
+					if serr != nil {
+						return serr
+					}
+				}
+				srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write skipped (CTAS in place)",
+					slog.String("project_id", projectID),
+					slog.String("job_id", job.JobReference.JobId),
+				)
+			}
+		} else if response != nil && response.TotalRows > 0 {
+			wroteDestination = true
+			if err := h.addQueryResultToDynamicDestinationTable(ctx, tx, r, response); err != nil {
+				return fmt.Errorf("failed to add query result to dynamic destination table: %w", err)
+			}
+		}
+		if wroteDestination {
+			phaseWriteMS = time.Since(writeStart).Milliseconds()
+			phaseHasWrite = true
+			if response == nil || !response.CTASInPlace {
+				srv.logger.LogAttrs(ctx, slog.LevelInfo, "async query destination write done",
+					slog.String("project_id", projectID),
+					slog.String("job_id", job.JobReference.JobId),
+					slog.Int64("elapsed_ms", phaseWriteMS),
+				)
 			}
 		}
 
@@ -2745,18 +2736,12 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 			job.JobReference.JobId,
 		)
 
-		status := &bigqueryv2.JobStatus{State: "DONE"}
-		if jobErr != nil {
-			internalErr := errJobInternalError(jobErr.Error())
-			status.ErrorResult = internalErr.ErrorProto()
-			status.Errors = []*bigqueryv2.ErrorProto{internalErr.ErrorProto()}
-		}
-		job.Status = status
+		job.Status = &bigqueryv2.JobStatus{State: "DONE"}
 
 		var totalBytes int64
 		if response != nil {
 			totalBytes = response.TotalBytes
-			if jobErr == nil && response.ChangedCatalog != nil && response.ChangedCatalog.Changed() {
+			if response.ChangedCatalog != nil && response.ChangedCatalog.Changed() {
 				postSync = response.ChangedCatalog
 			}
 		}
@@ -2779,6 +2764,55 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		}
 		return nil
 	})
+	if jobQueryErr != nil {
+		persistErr := srv.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
+			tx.SetProjectAndDataset(projectID, "")
+			if err := tx.MetadataRepoMode(); err != nil {
+				return err
+			}
+			endTime := time.Now()
+			httpAddr := "localhost"
+			if srv.httpServer != nil && srv.httpServer.Addr != "" {
+				httpAddr = srv.httpServer.Addr
+			}
+			job.SelfLink = fmt.Sprintf(
+				"http://%s/bigquery/v2/projects/%s/jobs/%s",
+				httpAddr,
+				projectID,
+				job.JobReference.JobId,
+			)
+			status := &bigqueryv2.JobStatus{State: "DONE"}
+			internalErr := errJobInternalError(jobQueryErr.Error())
+			status.ErrorResult = internalErr.ErrorProto()
+			status.Errors = []*bigqueryv2.ErrorProto{internalErr.ErrorProto()}
+			job.Status = status
+			var totalBytes int64
+			if lastResponse != nil {
+				totalBytes = lastResponse.TotalBytes
+			}
+			job.Statistics = &bigqueryv2.JobStatistics{
+				Query: &bigqueryv2.JobStatistics2{
+					CacheHit:            false,
+					StatementType:       "SELECT",
+					TotalBytesBilled:    totalBytes,
+					TotalBytesProcessed: totalBytes,
+				},
+				CreationTime:        startTime.Unix(),
+				StartTime:           startTime.Unix(),
+				EndTime:             endTime.Unix(),
+				TotalBytesProcessed: totalBytes,
+			}
+			metaJob := metadata.NewJob(srv.metaRepo, projectID, job.JobReference.JobId, job, lastResponse, jobQueryErr)
+			if err := srv.metaRepo.UpdateJob(ctx, tx.Tx(), metaJob); err != nil {
+				return fmt.Errorf("failed to update job: %w", err)
+			}
+			return nil
+		})
+		if persistErr != nil {
+			return persistErr
+		}
+		return nil
+	}
 	if err != nil {
 		return err
 	}
