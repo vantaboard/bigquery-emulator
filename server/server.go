@@ -84,7 +84,7 @@ func (s *Server) SetLogFile(path string) error {
 }
 
 // storageWithSQLiteDefaults appends modernc.org/sqlite URI parameters so native SQLite pragmas
-// run at open time (not via googlesqlite Exec, which only accepts GoogleSQL).
+// run at open time (not via googlesqlengine Exec, which only accepts GoogleSQL).
 // WAL lets readers (job polls, table GETs) proceed while an async worker holds a long CTAS write.
 //
 // Optional env (each adds one URI _pragma= segment when set, for A/B of long single-write jobs):
@@ -142,7 +142,7 @@ type serverConfig struct {
 // ServerOption configures [New].
 type ServerOption func(*serverConfig) error
 
-// WithExecutionBackend selects the go-googlesqlite physical engine (default SQLite).
+// WithExecutionBackend selects the go-googlesql-engine physical engine (default SQLite).
 // DuckDB requires building this binary with -tags duckdb (and typically duckdb_use_lib + libduckdb).
 func WithExecutionBackend(b execution.Backend) ServerOption {
 	return func(c *serverConfig) error {
@@ -237,7 +237,7 @@ func New(storage Storage, opts ...ServerOption) (*Server, error) {
 	}
 	switch backend {
 	case execution.BackendDuckDB:
-		// Outer database/sql pool: align with go-googlesqlite inner DuckDB pool (see OpenSQLBackend).
+		// Outer database/sql pool: align with go-googlesql-engine inner DuckDB pool (see OpenSQLBackend).
 		db.SetMaxIdleConns(0)
 		db.SetConnMaxIdleTime(0)
 		db.SetConnMaxLifetime(-1)

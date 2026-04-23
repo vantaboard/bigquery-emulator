@@ -24,7 +24,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/goccy/go-json"
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -2591,10 +2591,10 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		startTime = time.Unix(job.Statistics.CreationTime, 0)
 	}
 
-	var postSync *googlesqlite.ChangedCatalog
+	var postSync *googlesqlengine.ChangedCatalog
 
 	// Content queries run through the GoogleSQL analyzer; SAVEPOINT/ROLLBACK TO are not valid
-	// GoogleSQL and cannot be issued on the googlesqlite driver. When the content query fails,
+	// GoogleSQL and cannot be issued on the googlesqlengine driver. When the content query fails,
 	// DuckDB may abort the transaction, so we roll back the whole tx and persist job metadata
 	// in a second transaction (see jobQueryErr branch after ExecuteWithTransaction).
 
@@ -2860,7 +2860,7 @@ func markJobSubmitFailed(ctx context.Context, srv *Server, projectID, jobID stri
 // syncCatalog is invoked after the main async job transaction commits. Wall time is logged
 // as metadata_sync_ms in [jobsInsertHandler.executeAsyncQueryJob] to separate metadata work
 // from query execution and destination writes.
-func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedCatalog) error {
+func syncCatalog(ctx context.Context, server *Server, cat *googlesqlengine.ChangedCatalog) error {
 	if cat == nil {
 		return nil
 	}
@@ -2923,7 +2923,7 @@ func syncCatalog(ctx context.Context, server *Server, cat *googlesqlite.ChangedC
 	return nil
 }
 
-func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref googlesqlite.DatasetRef) error {
+func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref googlesqlengine.DatasetRef) error {
 	return server.connMgr.ExecuteWithTransaction(ctx, func(ctx context.Context, tx *connection.Tx) error {
 		tx.SetProjectAndDataset(ref.ProjectID, ref.DatasetID)
 		if err := tx.MetadataRepoMode(); err != nil {
@@ -2966,7 +2966,7 @@ func addDatasetMetadataFromSchemaDDL(ctx context.Context, server *Server, ref go
 	})
 }
 
-func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
+func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlengine.TableSpec) error {
 	if len(spec.NamePath) != 3 {
 		return fmt.Errorf("unexpected table name path: %v", spec.NamePath)
 	}
@@ -2984,8 +2984,8 @@ func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.Ta
 	if dataset == nil {
 		return fmt.Errorf("dataset %s is not found", datasetID)
 	}
-	// CREATE OR REPLACE VIEW (and similar DDL) updates googlesqlite's SQLite catalog in place, but the
-	// ChangedCatalog hook only records Added (see go-googlesqlite conn.addTable). Without removing the
+	// CREATE OR REPLACE VIEW (and similar DDL) updates googlesqlengine's SQLite catalog in place, but the
+	// ChangedCatalog hook only records Added (see go-googlesql-engine conn.addTable). Without removing the
 	// prior metadata row first, createTableMetadata hits ErrDuplicatedTable — "duplicate: table X: table is already created".
 	existing, err := dataset.Table(ctx, tableID)
 	if err != nil {
@@ -3029,7 +3029,7 @@ func addTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.Ta
 	})
 }
 
-func deleteTableMetadata(ctx context.Context, server *Server, spec *googlesqlite.TableSpec) error {
+func deleteTableMetadata(ctx context.Context, server *Server, spec *googlesqlengine.TableSpec) error {
 	if len(spec.NamePath) != 3 {
 		return fmt.Errorf("unexpected table name path: %v", spec.NamePath)
 	}

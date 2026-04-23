@@ -35,22 +35,22 @@ For example, it has the following features.
 - Templated Argument Function
 - JavaScript UDF
 
-If you want to know which specific features are supported, please see [here](https://github.com/vantaboard/go-googlesqlite#status)
+If you want to know which specific features are supported, please see [here](https://github.com/vantaboard/go-googlesql-engine#status)
 
 ## DuckDB execution backend (optional)
 
-By default the emulator uses **`googlesqlite`** (SQLite). You can select **`googlesqlduck`** (DuckDB via [go-googlesqlite](https://github.com/vantaboard/go-googlesqlite)) with:
+By default the emulator uses **`googlesqlengine`** (SQLite). You can select **`googlesqlengineduck`** (DuckDB via [go-googlesql-engine](https://github.com/vantaboard/go-googlesql-engine)) with:
 
 - **CLI:** `--execution-backend=duckdb`
 - **Env:** `BQ_EMULATOR_EXECUTION_BACKEND=duckdb` (also bound to the flag)
 
-The DuckDB driver is only registered when the binary is built with **`-tags duckdb`** (and usually **`duckdb_use_lib`** plus a pinned **`libduckdb`**; see [go-googlesqlite `docs/duckdb-parity-gates.md`](https://github.com/vantaboard/go-googlesqlite/blob/main/docs/duckdb-parity-gates.md)). Use **`task emulator:build-duck`** and **`task test:duckdb-backend`** in this repo after setting **`DUCKDB_LIB_DIR`**.
+The DuckDB driver is only registered when the binary is built with **`-tags duckdb`** (and usually **`duckdb_use_lib`** plus a pinned **`libduckdb`**; see [go-googlesql-engine `docs/duckdb-parity-gates.md`](https://github.com/vantaboard/go-googlesql-engine/blob/main/docs/duckdb-parity-gates.md)). Use **`task emulator:build-duck`** and **`task test:duckdb-backend`** in this repo after setting **`DUCKDB_LIB_DIR`**.
 
 **Running `bigquery-emulator-duck`:** `task emulator:build-duck` copies **`libduckdb.so`** (Linux) or **`libduckdb.dylib`** (macOS) into the same directory as the binary and links with a runpath (`$ORIGIN` / `@executable_path`), so **`./bigquery-emulator-duck`** usually works without **`LD_LIBRARY_PATH`**. If you built the binary yourself with plain `go build`, set **`LD_LIBRARY_PATH`** (Linux) or **`DYLD_LIBRARY_PATH`** (macOS) to the directory that contains the DuckDB shared library, or keep that `.so` / `.dylib` next to the executable.
 
-SQLite-specific URI pragmas ([`storageWithSQLiteDefaults`](server/server.go)) are **not** applied for DuckDB. With `--execution-backend=duckdb`, **temporary database files** are created by deleting a reserved path first so DuckDB can initialize a valid file (unlike SQLite empty `CreateTemp` files). TEMP tables, MERGE scratch tables, and pooling interact differently with DuckDB; see [go-googlesqlite `docs/duckdb-phase3-phase4-followon.md`](https://github.com/vantaboard/go-googlesqlite/blob/main/docs/duckdb-phase3-phase4-followon.md). Raw metadata SQL uses the same go-googlesqlite pipeline as queries (including `@` named parameters rewritten for DuckDB when formatting is disabled).
+SQLite-specific URI pragmas ([`storageWithSQLiteDefaults`](server/server.go)) are **not** applied for DuckDB. With `--execution-backend=duckdb`, **temporary database files** are created by deleting a reserved path first so DuckDB can initialize a valid file (unlike SQLite empty `CreateTemp` files). TEMP tables, MERGE scratch tables, and pooling interact differently with DuckDB; see [go-googlesql-engine `docs/duckdb-phase3-phase4-followon.md`](https://github.com/vantaboard/go-googlesql-engine/blob/main/docs/duckdb-phase3-phase4-followon.md). Raw metadata SQL uses the same go-googlesql-engine pipeline as queries (including `@` named parameters rewritten for DuckDB when formatting is disabled).
 
-**Execution DB vs SQLite:** Do not point DuckDB at a file produced by the SQLite backend; use a separate path or delete the old file. If you see DuckDB **`Conversion Error: invalid timestamp`** on catalog sync after upgrading **go-googlesqlite**, remove the execution database file (or only the `googlesqlite_catalog` table) so the catalog can be recreated.
+**Execution DB vs SQLite:** Do not point DuckDB at a file produced by the SQLite backend; use a separate path or delete the old file. If you see DuckDB **`Conversion Error: invalid timestamp`** on catalog sync after upgrading **go-googlesql-engine**, remove the execution database file (or only the `googlesqlengine_catalog` table) so the catalog can be recreated.
 
 # Sponsor 
 
@@ -66,7 +66,7 @@ See the UI repository’s `docs/api-contract.md` for route shapes.
 
 # Installation
 
-**Prebuilt-first installs:** this emulator depends on [`go-googlesql`](https://github.com/vantaboard/go-googlesql), whose supported default path is **`googlesql` + `googlesql_unified_prebuilt`** with release prebuilts and the shared stack bootstrap env. For local source builds, prefer sibling checkouts of `bigquery-emulator`, `go-googlesql`, and `go-googlesqlite`, then follow the **Development build modes** below instead of a blind `go install`.
+**Prebuilt-first installs:** this emulator depends on [`go-googlesql`](https://github.com/vantaboard/go-googlesql), whose supported default path is **`googlesql` + `googlesql_unified_prebuilt`** with release prebuilts and the shared stack bootstrap env. For local source builds, prefer sibling checkouts of `bigquery-emulator`, `go-googlesql`, and `go-googlesql-engine`, then follow the **Development build modes** below instead of a blind `go install`.
 
 You can download the Docker image with:
 
@@ -100,7 +100,7 @@ $ task docker:build
 
 For **repeat** host builds, use **`CC="ccache clang"`** and **`CXX="ccache clang++"`** (and on **Linux**, **`mold`** on **`PATH`**), or **`task test:linux`** for CI-parity tests inside **`go-googlesql:dev`**.
 
-**CI:** [`.github/workflows/test.yml`](.github/workflows/test.yml) checks out **`vantaboard/go-googlesql`** and **`vantaboard/go-googlesqlite`** at the pinned **`go.mod`** versions beside this repo, runs **`ci-download-or-build-default-prebuilts.sh`** on **`go-googlesql`**, then **`task emulator:build`** and **`go test`** with [`go-googlesql-stack-bootstrap.sh`](https://github.com/vantaboard/go-googlesql/blob/main/scripts/go-googlesql-stack-bootstrap.sh) so the default upstream **mod_platform** prebuilt path matches local sibling development.
+**CI:** [`.github/workflows/test.yml`](.github/workflows/test.yml) checks out **`vantaboard/go-googlesql`** and **`vantaboard/go-googlesql-engine`** at the pinned **`go.mod`** versions beside this repo, runs **`ci-download-or-build-default-prebuilts.sh`** on **`go-googlesql`**, then **`task emulator:build`** and **`go test`** with [`go-googlesql-stack-bootstrap.sh`](https://github.com/vantaboard/go-googlesql/blob/main/scripts/go-googlesql-stack-bootstrap.sh) so the default upstream **mod_platform** prebuilt path matches local sibling development.
 
 ### Local `go-googlesql` base image (upgrade / CGO cache)
 
@@ -115,9 +115,9 @@ Build the `go-googlesql:dev` image first (`task docker:build-dev` in `go-googles
 
 ### Sequential test runs and shared caches
 
-When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-googlesql`, `go-googlesqlite`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GO_CACHE_ROOT`** (which backs **`GOCACHE`**, **`GOMODCACHE`**, and **`ccache`**) across the sibling checkouts for faster host-native runs.
+When testing the full stack locally, run heavy **`go test` / Docker builds sequentially** across `go-googlesql`, `go-googlesql-engine`, and `bigquery-emulator` so parallel CGO compiles do not exhaust memory. Reuse a shared **`GO_CACHE_ROOT`** (which backs **`GOCACHE`**, **`GOMODCACHE`**, and **`ccache`**) across the sibling checkouts for faster host-native runs.
 
-**`GO_CACHE_ROOT`:** The [Taskfile](Taskfile.yml) **`task test:linux`** target bind-mounts **`GO_CACHE_ROOT`** (default **`$HOME/.cache/go-googlesql`**) into **`gocache`**, **`gomodcache`**, and **`ccache`** in the container—the same convention as **`go-googlesql`** and **`go-googlesqlite`**. Set **`GO_CACHE_ROOT`** consistently across sibling checkouts so one warm cache serves all three repos.
+**`GO_CACHE_ROOT`:** The [Taskfile](Taskfile.yml) **`task test:linux`** target bind-mounts **`GO_CACHE_ROOT`** (default **`$HOME/.cache/go-googlesql`**) into **`gocache`**, **`gomodcache`**, and **`ccache`** in the container—the same convention as **`go-googlesql`** and **`go-googlesql-engine`**. Set **`GO_CACHE_ROOT`** consistently across sibling checkouts so one warm cache serves all three repos.
 
 **Optional warm-up:** Run **`task -d ../go-googlesql docker:warm-cache`** once after a cold cache or toolchain change so the next **`task test:linux`** here pays less compile cost (pre-builds the **`-race`** graph without running tests).
 
@@ -314,13 +314,13 @@ func main() {
 
 # Debugging
 
-If you have specified a database file when starting `bigquery-emulator`, you can check the status of the database by using the `googlesqlite-cli` tool. See [here](https://github.com/vantaboard/go-googlesqlite/tree/main/cmd/googlesqlite-cli#readme) for details.
+If you have specified a database file when starting `bigquery-emulator`, you can check the status of the database by using the `googlesqlengine-cli` tool. See [here](https://github.com/vantaboard/go-googlesql-engine/tree/main/cmd/googlesqlengine-cli#readme) for details.
 
 # How it works
 
 ## BigQuery Emulator Architecture Overview
 
-After receiving a query, `go-googlesqlite` parses and analyzes the input query using `google/googlesql`. 
+After receiving a query, `go-googlesql-engine` parses and analyzes the input query using `google/googlesql`. 
 Query metadata objects are extracted from the AST, then transformed into a SQLite-compatible query.
 The [modernc.org/sqlite](https://modernc.org/sqlite) driver is then used to access the SQLite Database.
 
@@ -352,12 +352,12 @@ flowchart TD
       sdks["BigQuery client SDKs (Go, Python, Java, …)"]
     end
     bigqueryEmu["bigquery-emulator<br/>BigQuery REST API"]
-    googlesqlite["go-googlesqlite<br/>• Parses and analyzes GoogleSQL with go-googlesql<br/>• Generates and runs SQLite via modernc.org/sqlite (database/sql)"]
+    googlesqlengine["go-googlesql-engine<br/>• Parses and analyzes GoogleSQL with go-googlesql<br/>• Generates and runs SQLite via modernc.org/sqlite (database/sql)"]
     sqliteDb[(SQLite<br/>storage or :memory:)]
 
     clientLayer -->|"HTTP (BigQuery API)"| bigqueryEmu
-    bigqueryEmu -->|"Jobs / queries as GoogleSQL strings"| googlesqlite
-    googlesqlite -->|"Execute"| sqliteDb
+    bigqueryEmu -->|"Jobs / queries as GoogleSQL strings"| googlesqlengine
+    googlesqlengine -->|"Execute"| sqliteDb
   end
 ```
 
@@ -365,7 +365,7 @@ flowchart TD
 ## Type Conversion Flow
 
 BigQuery has a number of types that do not exist in SQLite (e.g. ARRAY and STRUCT).
-In order to handle them in SQLite, `go-googlesqlite` encodes all types except `INT64` / `FLOAT64` / `BOOL` with the type information and data combination.
+In order to handle them in SQLite, `go-googlesql-engine` encodes all types except `INT64` / `FLOAT64` / `BOOL` with the type information and data combination.
 When using the encoded data, the data is decoded via a custom function registered with driver before use.
 
 ```mermaid
@@ -396,7 +396,7 @@ flowchart TD
       par[Bound parameters]
     end
 
-    subgraph ggl [go-googlesqlite]
+    subgraph ggl [go-googlesql-engine]
       direction TB
       enc[Encode with type metadata]
       dec[Decode driver.Rows rows]

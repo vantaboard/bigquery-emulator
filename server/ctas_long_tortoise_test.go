@@ -5,23 +5,26 @@
 //
 // Set BQ_TORTOISE=1 to run the minimal tortoise, or BQ_TORTOISE=1 and BQ_TORTOISE_RICH=1 for
 // [TestTortoise_LongCTAS_Rich]. For large local runs, use a wall clock cap on the test process, e.g.
+//
 //	go test -timeout 30m -tags "$GOOGLESQL_BUILD_TAGS" -run 'TestTortoise_Long' -v ./server/...
 //
 //	BQ_TORTOISE_OUTER / BQ_TORTOISE_INNER — default 5000, 300 (1.5M join pairs; minutes on some machines; stress scale e.g. 6000*350)
 //	BQ_TORTOISE_PRAGMAS=1 — after baseline, a second subtest with BQ_EMULATOR_SQLITE_PRAGMA_* to compare
 //
 // Triage: run the emulator with --log-level info, then filter one job and run:
+//
 //	grep "job_id=YOUR" emulator.log | ./scripts/ctas_perf_triage.sh
 //	JOB_ID=dataform-... ./scripts/ctas_perf_triage.sh path/to/emulator.log
+//
 // Compare exec_ms vs row_count_ms vs metadata_sync (script prints a branch hint).
-// If exec_ms dominates, tune SQLite (server/server.go) or profile go-googlesqlite; reduce OUTER*INNER for pipeline SLA.
+// If exec_ms dominates, tune SQLite (server/server.go) or profile go-googlesql-engine; reduce OUTER*INNER for pipeline SLA.
 //
 // 60% reduction reference (harnessTortoiseRichCTASSQL at BQ_TORTOISE_OUTER=6000, BQ_TORTOISE_INNER=350, same host):
 // before: aggregating "heavy" in bucketed (GROUP BY over the full join) made rich ~10x slower than minimal;
 // after: bucketed uses a small UNNEST for GROUP BY/HAVING, so c still comes from COUNT(heavy) only — median
 // TestTortoise_LongCTAS_Rich job_wait dropped from ~3.5s to ~1.2s (target was >=60% vs that baseline). For a
 // multi-megabyte pass over "heavy" for GROUP BY, see testfixtures/long_ctas_tortoise_rich.sql comments.
-// Engine-only bench: go-googlesqlite/BenchmarkCTAS_RichTortoiseExec; emulator+HTTP: [BenchmarkCTAS_Rich_JobWait].
+// Engine-only bench: go-googlesql-engine/BenchmarkCTAS_RichTortoiseExec; emulator+HTTP: [BenchmarkCTAS_Rich_JobWait].
 package server_test
 
 import (

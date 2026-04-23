@@ -1,16 +1,16 @@
 # Docker image (local build)
 
-The emulator links **go-googlesql** (CGO + C++) and **go-googlesqlite** using the default **`googlesql,googlesql_unified_prebuilt`** tags (see [go-googlesql `docs/prebuilt-cgo.md`](https://github.com/vantaboard/go-googlesql/blob/main/docs/prebuilt-cgo.md)).
+The emulator links **go-googlesql** (CGO + C++) and **go-googlesql-engine** using the default **`googlesql,googlesql_unified_prebuilt`** tags (see [go-googlesql `docs/prebuilt-cgo.md`](https://github.com/vantaboard/go-googlesql/blob/main/docs/prebuilt-cgo.md)).
 
 ## Primary path: build from this repo ([`Taskfile.yml`](Taskfile.yml))
 
-With sibling checkouts `../go-googlesql` and `../go-googlesqlite`, from **this** directory:
+With sibling checkouts `../go-googlesql` and `../go-googlesql-engine`, from **this** directory:
 
 ```bash
 task docker:build
 ```
 
-This uses [`Dockerfile.linked`](Dockerfile.linked), **`GO_GOOGLESQL_BASE`** (default pinned in [`Taskfile.yml`](Taskfile.yml) to the same `go-googlesql` tag as `go.mod`), and **`docker build --build-context`** so the image matches your local trees. This is the path used by CI/release. Override paths if needed: `GO_GOOGLESQL_ROOT=... GO_GOOGLESQLITE_ROOT=... task docker:build`.
+This uses [`Dockerfile.linked`](Dockerfile.linked), **`GO_GOOGLESQL_BASE`** (default pinned in [`Taskfile.yml`](Taskfile.yml) to the same `go-googlesql` tag as `go.mod`), and **`docker build --build-context`** so the image matches your local trees. This is the path used by CI/release. Override paths if needed: `GO_GOOGLESQL_ROOT=... GO_GOOGLESQL_ENGINE_ROOT=... task docker:build`.
 
 ## Secondary local fallback: parent-directory context (`Dockerfile`)
 
@@ -19,7 +19,7 @@ Local development uses [`go.work.dev`](go.work.dev) (workspace `replace`, not `g
 ```text
 your-workspace/
   go-googlesql/
-  go-googlesqlite/
+  go-googlesql-engine/
   bigquery-emulator/    ← this repo
 ```
 
@@ -31,7 +31,7 @@ From the **parent** directory (e.g. `~/Code` if your clones live there):
    ./bigquery-emulator/docker/prep-context.sh
    ```
 
-   This writes `../.dockerignore` relative to `bigquery-emulator` (the directory that contains `go-googlesql`, `go-googlesqlite`, and `bigquery-emulator`). It refuses to overwrite an existing `.dockerignore` that differs; merge by hand or remove the file first.
+   This writes `../.dockerignore` relative to `bigquery-emulator` (the directory that contains `go-googlesql`, `go-googlesql-engine`, and `bigquery-emulator`). It refuses to overwrite an existing `.dockerignore` that differs; merge by hand or remove the file first.
 
 2. **Build the image:**
 

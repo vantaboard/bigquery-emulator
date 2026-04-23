@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-json"
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 )
 
@@ -105,7 +105,7 @@ func (t *AVROType) CastValue(v string) (interface{}, error) {
 	case FieldTime:
 		return parseTime(v)
 	case FieldTimestamp:
-		return googlesqlite.TimeFromTimestampValue(v)
+		return googlesqlengine.TimeFromTimestampValue(v)
 	}
 	return v, nil
 }
@@ -168,7 +168,7 @@ func (t *AVROType) AVROPrimitiveValue(v string) (interface{}, error) {
 		return micros, nil
 	case FieldTimestamp:
 		// Timestamp is encoded as long (microseconds since Unix epoch)
-		t, err := googlesqlite.TimeFromTimestampValue(v)
+		t, err := googlesqlengine.TimeFromTimestampValue(v)
 		if err != nil {
 			return nil, err
 		}

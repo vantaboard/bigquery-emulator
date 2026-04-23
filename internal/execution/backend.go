@@ -1,4 +1,4 @@
-// Package execution identifies the physical SQL engine used by go-googlesqlite (SQLite vs DuckDB).
+// Package execution identifies the physical SQL engine used by go-googlesql-engine (SQLite vs DuckDB).
 package execution
 
 import (
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Backend selects which database/sql driver name the emulator opens (googlesqlite vs googlesqlduck).
+// Backend selects which database/sql driver name the emulator opens (googlesqlengine vs googlesqlengineduck).
 type Backend string
 
 const (

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-json"
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -54,17 +54,17 @@ func (r *Repository) getConnection(ctx context.Context, projectID, datasetID str
 		return nil, fmt.Errorf("failed to get connection: %w", err)
 	}
 	if err := conn.Raw(func(c interface{}) error {
-		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+		googlesqlengineConn, ok := c.(*googlesqlengine.GoogleSQLEngineConn)
 		if !ok {
-			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+			return fmt.Errorf("failed to get GoogleSQLEngineConn from %T", c)
 		}
 		if datasetID == "" {
-			_ = googlesqliteConn.SetNamePath([]string{projectID})
+			_ = googlesqlengineConn.SetNamePath([]string{projectID})
 		} else {
-			_ = googlesqliteConn.SetNamePath([]string{projectID, datasetID})
+			_ = googlesqlengineConn.SetNamePath([]string{projectID, datasetID})
 		}
 		const maxNamePath = 3 // projectID and datasetID and tableID
-		googlesqliteConn.SetMaxNamePath(maxNamePath)
+		googlesqlengineConn.SetMaxNamePath(maxNamePath)
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to setup connection: %w", err)
@@ -120,7 +120,7 @@ func (r *Repository) CreateTable(ctx context.Context, tx *connection.Tx, table *
 }
 
 func getSchemaFromResult(result sql.Result) (*bigqueryv2.TableSchema, error) {
-	changedCatalog, err := googlesqlite.ChangedCatalogFromResult(result)
+	changedCatalog, err := googlesqlengine.ChangedCatalogFromResult(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed catalog: %w", err)
 	}
@@ -191,7 +191,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		_ = tx.MetadataRepoMode()
 	}()
 
-	ctx = googlesqlite.WithLogger(ctx, logger.Logger(ctx))
+	ctx = googlesqlengine.WithLogger(ctx, logger.Logger(ctx))
 
 	values := []interface{}{}
 	for _, param := range params {
@@ -211,13 +211,13 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		slog.String("query", truncateQueryForLog(query, 2048)),
 		slog.Any("values", values),
 	)
-	// We must pass the query parameters to googlesqlite so the analyzer uses the proper typings
+	// We must pass the query parameters to googlesqlengine so the analyzer uses the proper typings
 	if err := tx.Conn().Raw(func(c interface{}) error {
-		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+		googlesqlengineConn, ok := c.(*googlesqlengine.GoogleSQLEngineConn)
 		if !ok {
-			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+			return fmt.Errorf("failed to get GoogleSQLEngineConn from %T", c)
 		}
-		googlesqliteConn.SetQueryParameters(params)
+		googlesqlengineConn.SetQueryParameters(params)
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to setup connection: %w", err)
@@ -227,7 +227,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		return nil, err
 	}
 	defer rows.Close()
-	changedCatalog, err := googlesqlite.ChangedCatalogFromRows(rows)
+	changedCatalog, err := googlesqlengine.ChangedCatalogFromRows(rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed catalog: %w", err)
 	}
@@ -244,7 +244,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		return nil, fmt.Errorf("failed to get column types: %w", err)
 	}
 	for i := 0; i < len(columnTypes); i++ {
-		typ, err := googlesqlite.UnmarshalDatabaseTypeName(columnTypes[i].DatabaseTypeName())
+		typ, err := googlesqlengine.UnmarshalDatabaseTypeName(columnTypes[i].DatabaseTypeName())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get type from database type name: %w", err)
 		}
@@ -356,7 +356,7 @@ func (r *Repository) queryParameterValueToGoValue(value *bigqueryv2.QueryParamet
 	return value.Value, nil
 }
 
-// googlesqlite returns map[string]interface{} value as struct value, also returns []interface{} value as array value.
+// googlesqlengine returns map[string]interface{} value as struct value, also returns []interface{} value as array value.
 // we need to convert them to specifically TableRow and TableCell type.
 // schema provides the field ordering for struct types to ensure deterministic field order.
 func (r *Repository) convertValueToCell(value interface{}, schema *bigqueryv2.TableFieldSchema) (*internaltypes.TableCell, error) {
@@ -481,7 +481,7 @@ func (r *Repository) addTableDataRowValues(columns []*types.Column, data map[str
 			inputString, isInputString := value.(string)
 
 			if isInputString && isTimestampColumn {
-				parsedTimestamp, err := googlesqlite.TimeFromTimestampValue(inputString)
+				parsedTimestamp, err := googlesqlengine.TimeFromTimestampValue(inputString)
 				if err == nil {
 					values = append(values, parsedTimestamp)
 					continue

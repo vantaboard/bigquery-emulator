@@ -5,11 +5,11 @@
 # Dockerfile.linked, which matches the stack bootstrap and prebuilt contract directly.
 #
 # BigQuery emulator needs CGO (go-googlesql) and must be built against the same
-# go-googlesql / go-googlesqlite sources as this repo's go.work.dev sibling replaces.
+# go-googlesql / go-googlesql-engine sources as this repo's go.work.dev sibling replaces.
 #
 # Build from the parent directory that contains all three repos side by side:
 #   go-googlesql/
-#   go-googlesqlite/
+#   go-googlesql-engine/
 #   bigquery-emulator/
 #
 #   cd /path/to/parent
@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 
 COPY go-googlesql /src/go-googlesql
-COPY go-googlesqlite /src/go-googlesqlite
+COPY go-googlesql-engine /src/go-googlesql-engine
 COPY bigquery-emulator /src/bigquery-emulator
 
 WORKDIR /src/bigquery-emulator

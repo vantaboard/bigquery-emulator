@@ -1,6 +1,6 @@
 version: "3"
 
-# https://taskfile.dev — tasks source `.envrc` (GO_GOOGLESQL_ROOT, GO_GOOGLESQLITE_ROOT, stack-bootstrap).
+# https://taskfile.dev — tasks source `.envrc` (GO_GOOGLESQL_ROOT, GO_GOOGLESQL_ENGINE_ROOT, stack-bootstrap).
 
 vars:
   DOCKER_DEV_IMAGE: go-googlesql:dev
@@ -12,7 +12,7 @@ tasks:
       - |
         echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
         echo "Common: task emulator:build | task emulator:build-duck | task test:prebuilt | task test:duckdb-backend | task dev:air | task dev:air-duck | task docker:build | task test:linux"
-        echo "Local sibling go-googlesqlite: cp go.work.dev go.work  (go.work is gitignored)"
+        echo "Local sibling go-googlesql-engine: cp go.work.dev go.work  (go.work is gitignored)"
 
   dev:air:
     desc: Live rebuild/restart with air — SQLite binary (air tmp/air/air.log; emulator tmp/air/emulator.log; go install github.com/air-verse/air@latest; edit .air.toml args_bin)
@@ -65,7 +65,7 @@ tasks:
         go test -tags "$GOOGLESQL_BUILD_TAGS" -p 1 -count=1 ./...
 
   emulator:build-duck:
-    desc: Build emulator with googlesqlduck (tags duckdb,duckdb_use_lib; requires DUCKDB_LIB_DIR with libduckdb)
+    desc: Build emulator with googlesqlengineduck (tags duckdb,duckdb_use_lib; requires DUCKDB_LIB_DIR with libduckdb)
     cmds:
       - |
         set -euo pipefail
@@ -161,7 +161,7 @@ tasks:
           --build-arg GO_GOOGLESQL_IMAGE="$GO_GOOGLESQL_IMAGE" \
           --build-arg GO_GOOGLESQL_TAG="$GO_GOOGLESQL_TAG" \
           --build-context go_googlesql="$GO_GOOGLESQL_ROOT" \
-          --build-context go_googlesqlite="$GO_GOOGLESQLITE_ROOT"
+          --build-context go_googlesql_engine="$GO_GOOGLESQL_ENGINE_ROOT"
 
   docker:build-linked:
     desc: Alias for docker:build
@@ -192,7 +192,7 @@ tasks:
           -e GOWORK=/work/bigquery-emulator/go.work.dev \
           -v "$PWD":/work/bigquery-emulator \
           -v "$GO_GOOGLESQL_ROOT":/work/go-googlesql \
-          -v "$GO_GOOGLESQLITE_ROOT":/work/go-googlesqlite \
+          -v "$GO_GOOGLESQL_ENGINE_ROOT":/work/go-googlesql-engine \
           -v "$GO_CACHE_ROOT/gocache":/root/.cache/go-build \
           -v "$GO_CACHE_ROOT/gomodcache":/go/pkg/mod \
           -v "$GO_CACHE_ROOT/ccache":/root/.ccache \

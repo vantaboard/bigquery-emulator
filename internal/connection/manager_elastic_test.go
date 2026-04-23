@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/vantaboard/go-googlesqlite"
+	_ "github.com/vantaboard/go-googlesql-engine"
 )
 
 func TestElasticPoolGrowsToMax(t *testing.T) {
-	db, err := sql.Open("googlesqlite", ":memory:")
+	db, err := sql.Open("googlesqlengine", ":memory:")
 	if err != nil {
 		t.Skip(err)
 	}
@@ -39,7 +39,7 @@ func TestElasticPoolGrowsToMax(t *testing.T) {
 }
 
 func TestSetCurrentMaxEvictsIdle(t *testing.T) {
-	db, err := sql.Open("googlesqlite", ":memory:")
+	db, err := sql.Open("googlesqlengine", ":memory:")
 	if err != nil {
 		t.Skip(err)
 	}

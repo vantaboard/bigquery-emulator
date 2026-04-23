@@ -45,12 +45,12 @@ jobs:
           repository: vantaboard/go-googlesql
           ref: ${{ steps.ver.outputs.gsql_ref }}
           path: go-googlesql
-      - name: Checkout go-googlesqlite
+      - name: Checkout go-googlesql-engine
         uses: actions/checkout@v6
         with:
-          repository: vantaboard/go-googlesqlite
-          ref: ${{ steps.ver.outputs.gsqlite_ref }}
-          path: go-googlesqlite
+          repository: vantaboard/go-googlesql-engine
+          ref: ${{ steps.ver.outputs.gsqlengine_ref }}
+          path: go-googlesql-engine
       # GitHub-hosted macOS runners have no Docker daemon; use Linux + QEMU for arm64.
       - name: Set up QEMU
         if: matrix.platform == 'linux/arm64'
@@ -78,7 +78,7 @@ jobs:
             IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
           build-contexts: |
             go_googlesql=./go-googlesql
-            go_googlesqlite=./go-googlesqlite
+            go_googlesql_engine=./go-googlesql-engine
           cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.asset_name }}
           cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.asset_name }}
 

@@ -4,7 +4,7 @@
 //     Uses [contentdata.Repository.Query] (row materialization + destination write / AddTableData).
 //
 //  2. In-place: same CTAS SQL plus Dst set to the table being created.
-//     Uses [contentdata.Repository.QueryCTASInPlace] (googlesqlite Exec). At debug log level, look for
+//     Uses [contentdata.Repository.QueryCTASInPlace] (googlesqlengine Exec). At debug log level, look for
 //     "content query CTAS in-place (Exec)" in internal/contentdata/ctas.go.
 //
 // A plain SELECT with only Dst and no CREATE TABLE in the query string does NOT use the in-place path;

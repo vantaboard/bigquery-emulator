@@ -10,7 +10,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/internal/execution"
 	"github.com/vantaboard/bigquery-emulator/server"
 	"github.com/vantaboard/bigquery-emulator/types"
-	_ "github.com/vantaboard/go-googlesqlite"
+	_ "github.com/vantaboard/go-googlesql-engine"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )

@@ -8,7 +8,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/internal/execution"
 )
 
-const googlesqlDuckDriverName = "googlesqlduck"
+const googlesqlDuckDriverName = "googlesqlengineduck"
 
 func duckDriverRegistered() bool {
 	for _, d := range sql.Drivers() {
@@ -45,7 +45,7 @@ func openExecutionDB(b execution.Backend, storage Storage) (*sql.DB, error) {
 	switch b {
 	case execution.BackendSQLite:
 		dsn := string(storageWithSQLiteDefaults(storage))
-		return sql.Open("googlesqlite", dsn)
+		return sql.Open("googlesqlengine", dsn)
 	case execution.BackendDuckDB:
 		if !duckDriverRegistered() {
 			return nil, fmt.Errorf(

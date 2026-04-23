@@ -127,7 +127,7 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
-	// End-to-end check for  math builtins wired through go-googlesqlite (e.g. COTH from 2022.02.1+).
+	// End-to-end check for  math builtins wired through go-googlesql-engine (e.g. COTH from 2022.02.1+).
 	t.Run("coth_math_function", func(t *testing.T) {
 		query := client.Query("SELECT COTH(1.0) AS c")
 		it, err := query.Read(ctx)
@@ -193,7 +193,7 @@ func TestSimpleQuery(t *testing.T) {
 		}
 	})
 
-	// Googlesql 2023.04.1→2023.08.1 scalar builtins via go-googlesqlite (PI, ARRAY_FIRST_N, JSON_REMOVE, etc.).
+	// Googlesql 2023.04.1→2023.08.1 scalar builtins via go-googlesql-engine (PI, ARRAY_FIRST_N, JSON_REMOVE, etc.).
 	t.Run("googlesql_2023_08_builtins", func(t *testing.T) {
 		query := client.Query(`SELECT PI() AS p, ARRAY_FIRST_N([1, 2, 3, 4], 2) AS a, JSON_REMOVE(PARSE_JSON('{"x":1,"y":2}'), '$.x') AS j`)
 		it, err := query.Read(ctx)

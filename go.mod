@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/bigquery v1.76.0
 	cloud.google.com/go/storage v1.62.1
 	github.com/GoogleCloudPlatform/golang-samples/bigquery v0.0.0-20221115172052-07ffb99455e8
-	github.com/apache/arrow-go/v18 v18.4.1
+	github.com/apache/arrow-go/v18 v18.5.1
 	github.com/fsouza/fake-gcs-server v1.43.0
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
@@ -20,11 +20,11 @@ require (
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/parquet-go/parquet-go v0.29.0
 	github.com/vantaboard/go-googlesql v0.5.13
+	github.com/vantaboard/go-googlesql-engine v0.21.3
 	github.com/vantaboard/go-googlesql/lib/darwin-amd64 v0.5.13
 	github.com/vantaboard/go-googlesql/lib/darwin-arm64 v0.5.13
 	github.com/vantaboard/go-googlesql/lib/linux-amd64 v0.5.13
 	github.com/vantaboard/go-googlesql/lib/linux-arm64 v0.5.13
-	github.com/vantaboard/go-googlesqlite v0.21.3
 	golang.org/x/sync v0.20.0
 	google.golang.org/api v0.276.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529
@@ -48,11 +48,19 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cncf/xds/go v0.0.0-20251210132809-ee656c7534f5 // indirect
+	github.com/duckdb/duckdb-go-bindings v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-amd64 v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/darwin-arm64 v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go-bindings/lib/windows-amd64 v0.10502.0 // indirect
+	github.com/duckdb/duckdb-go/v2 v2.10502.0 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.36.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -96,24 +104,24 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/google/flatbuffers v25.2.10+incompatible // indirect
+	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/xattr v0.4.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
+	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
@@ -121,7 +129,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
+	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
@@ -140,10 +148,10 @@ require (
 
 // Nested lib modules are separate module roots; resolve via sibling checkout (Docker/CI/workspace).
 replace (
+	github.com/vantaboard/go-googlesql-engine => ../go-googlesql-engine
 	github.com/vantaboard/go-googlesql/lib/darwin-amd64 => ../go-googlesql/lib/darwin-amd64
 	github.com/vantaboard/go-googlesql/lib/darwin-arm64 => ../go-googlesql/lib/darwin-arm64
 	github.com/vantaboard/go-googlesql/lib/linux-amd64 => ../go-googlesql/lib/linux-amd64
 	github.com/vantaboard/go-googlesql/lib/linux-arm64 => ../go-googlesql/lib/linux-arm64
 	github.com/vantaboard/go-googlesql/lib/windows-amd64 => ../go-googlesql/lib/windows-amd64
-	github.com/vantaboard/go-googlesqlite => ../go-googlesqlite
 )

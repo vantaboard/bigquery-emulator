@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 )
 
 const (
@@ -100,11 +100,11 @@ func NewManager(ctx context.Context, db *sql.DB, opts ...ManagerOption) (*Manage
 	}
 
 	manager := &Manager{
-		db:        db,
-		idleCh:    make(chan *ManagedConnection, poolMaxHard),
-		poolMin:   poolMin,
+		db:          db,
+		idleCh:      make(chan *ManagedConnection, poolMaxHard),
+		poolMin:     poolMin,
 		poolMaxHard: poolMaxHard,
-		txConnMap: make(map[*sql.Tx]*ManagedConnection),
+		txConnMap:   make(map[*sql.Tx]*ManagedConnection),
 	}
 	manager.currentMax.Store(int32(poolMaxHard))
 
@@ -144,9 +144,9 @@ func (m *Manager) createConnLocked(ctx context.Context) (*ManagedConnection, err
 		return nil, err
 	}
 	mc := &ManagedConnection{
-		googlesqliteConnection: sc,
-		stmts:                  make(map[string]*sql.Stmt),
-		manager:                m,
+		googlesqlengineConnection: sc,
+		stmts:                     make(map[string]*sql.Stmt),
+		manager:                   m,
 	}
 	m.allConns = append(m.allConns, mc)
 	m.live++
@@ -284,12 +284,12 @@ func (t *Tx) SetProjectAndDataset(projectID, datasetID string) {
 }
 
 func (t *Tx) MetadataRepoMode() error {
-	if err := t.conn.googlesqliteConnection.Raw(func(c interface{}) error {
-		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+	if err := t.conn.googlesqlengineConnection.Raw(func(c interface{}) error {
+		googlesqlengineConn, ok := c.(*googlesqlengine.GoogleSQLEngineConn)
 		if !ok {
-			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+			return fmt.Errorf("failed to get GoogleSQLEngineConn from %T", c)
 		}
-		_ = googlesqliteConn.SetNamePath([]string{})
+		_ = googlesqlengineConn.SetNamePath([]string{})
 		return nil
 	}); err != nil {
 		return fmt.Errorf("failed to setup connection: %w", err)
@@ -298,18 +298,18 @@ func (t *Tx) MetadataRepoMode() error {
 }
 
 func (t *Tx) ContentRepoMode() error {
-	if err := t.conn.googlesqliteConnection.Raw(func(c interface{}) error {
-		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+	if err := t.conn.googlesqlengineConnection.Raw(func(c interface{}) error {
+		googlesqlengineConn, ok := c.(*googlesqlengine.GoogleSQLEngineConn)
 		if !ok {
-			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+			return fmt.Errorf("failed to get GoogleSQLEngineConn from %T", c)
 		}
 		if t.conn.DatasetID == "" {
-			_ = googlesqliteConn.SetNamePath([]string{t.conn.ProjectID})
+			_ = googlesqlengineConn.SetNamePath([]string{t.conn.ProjectID})
 		} else {
-			_ = googlesqliteConn.SetNamePath([]string{t.conn.ProjectID, t.conn.DatasetID})
+			_ = googlesqlengineConn.SetNamePath([]string{t.conn.ProjectID, t.conn.DatasetID})
 		}
 		const maxNamePath = 3 // projectID and datasetID and tableID
-		googlesqliteConn.SetMaxNamePath(maxNamePath)
+		googlesqlengineConn.SetMaxNamePath(maxNamePath)
 		return nil
 	}); err != nil {
 		return fmt.Errorf("failed to setup connection: %w", err)
@@ -318,13 +318,13 @@ func (t *Tx) ContentRepoMode() error {
 }
 
 type ManagedConnection struct {
-	googlesqliteConnection *sql.Conn
-	stmts                  map[string]*sql.Stmt
-	queries                []string
-	mu                     sync.RWMutex
-	manager                *Manager // immutable after construction, safe for concurrent reads
-	ProjectID              string
-	DatasetID              string
+	googlesqlengineConnection *sql.Conn
+	stmts                     map[string]*sql.Stmt
+	queries                   []string
+	mu                        sync.RWMutex
+	manager                   *Manager // immutable after construction, safe for concurrent reads
+	ProjectID                 string
+	DatasetID                 string
 }
 
 func (c *ManagedConnection) GetStmt(name string) (*sql.Stmt, error) {
@@ -347,7 +347,7 @@ func (c *ManagedConnection) Close() (err error) {
 			err = closeErr
 		}
 	}
-	if closeErr := c.googlesqliteConnection.Close(); closeErr != nil && err == nil {
+	if closeErr := c.googlesqlengineConnection.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}
 	return
@@ -361,11 +361,11 @@ func (c *ManagedConnection) ConfigureScope(projectID, datasetID string) *Managed
 
 // Raw executes the given function with the underlying ite connection.
 func (c *ManagedConnection) Raw(fn func(interface{}) error) error {
-	return c.googlesqliteConnection.Raw(fn)
+	return c.googlesqlengineConnection.Raw(fn)
 }
 
 func (c *ManagedConnection) Begin(ctx context.Context) (*Tx, error) {
-	tx, err := c.googlesqliteConnection.BeginTx(ctx, nil)
+	tx, err := c.googlesqlengineConnection.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -398,14 +398,14 @@ func (m *Manager) GetStatement(ctx context.Context, tx *sql.Tx, name string) (*s
 	}
 
 	// Transaction was created externally, prepare statement on the fly (this ideally never happens)
-	ctx = googlesqlite.WithQueryFormattingDisabled(ctx)
+	ctx = googlesqlengine.WithQueryFormattingDisabled(ctx)
 	return tx.PrepareContext(ctx, name)
 }
 
 func (m *Manager) prepareQueriesOnConnLocked(conn *ManagedConnection, queries []string) error {
-	ctx := googlesqlite.WithQueryFormattingDisabled(context.Background())
+	ctx := googlesqlengine.WithQueryFormattingDisabled(context.Background())
 	for _, query := range queries {
-		stmt, err := conn.googlesqliteConnection.PrepareContext(ctx, query)
+		stmt, err := conn.googlesqlengineConnection.PrepareContext(ctx, query)
 		if err != nil {
 			return fmt.Errorf("failed to prepare statement %s: %w", query, err)
 		}
@@ -438,7 +438,7 @@ func (m *Manager) releaseConnAfterUse(conn *ManagedConnection) {
 	}
 	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := conn.googlesqliteConnection.PingContext(pingCtx); err != nil {
+	if err := conn.googlesqlengineConnection.PingContext(pingCtx); err != nil {
 		if rebErr := m.rebindManagedConnection(conn); rebErr != nil {
 			slog.Error("failed to rebind dead pooled connection",
 				slog.Any("rebind_err", rebErr),
@@ -484,14 +484,14 @@ func (m *Manager) rebindManagedConnection(mc *ManagedConnection) error {
 		_ = stmt.Close()
 	}
 	mc.stmts = make(map[string]*sql.Stmt)
-	if mc.googlesqliteConnection != nil {
-		_ = mc.googlesqliteConnection.Close()
+	if mc.googlesqlengineConnection != nil {
+		_ = mc.googlesqlengineConnection.Close()
 	}
 	newConn, err := m.db.Conn(context.Background())
 	if err != nil {
 		return fmt.Errorf("db.Conn: %w", err)
 	}
-	mc.googlesqliteConnection = newConn
+	mc.googlesqlengineConnection = newConn
 	mc.ProjectID = ""
 	mc.DatasetID = ""
 

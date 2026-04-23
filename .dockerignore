@@ -11,7 +11,7 @@ test/
 # already passes them via --build-context; omitting them here avoids sending ~1GB+ twice
 # and keeps COPY . ./bigquery-emulator from duplicating trees (GitHub Actions disk limits).
 go-googlesql/
-go-googlesqlite/
+go-googlesql-engine/
 
 # Local artifacts (root binary from `go build -o bigquery-emulator`, not cmd/bigquery-emulator/)
 /.bqdata/

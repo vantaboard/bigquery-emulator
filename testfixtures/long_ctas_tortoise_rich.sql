@@ -6,7 +6,7 @@
 -- instead of QUALIFY on the final CreateTable+Query, because QUALIFY in the outer select breaks
 -- IsCTASQuery (handler would fall back to Query + bad destination schema).
 --
--- For raw BigQuery or googlesqlite CLI experiments, the forms below are valid. Replace placeholders.
+-- For raw BigQuery or googlesqlengine CLI experiments, the forms below are valid. Replace placeholders.
 
 -- 1) Minimal "heavy" (same as long_ctas_tortoise.sql)
 -- CREATE TABLE `YOUR_DATASET.your_table` AS
@@ -17,7 +17,7 @@
 -- 2) QUALIFY (BigQuery) — often clearer than wrapping ROW_NUMBER; see note above re: emulator + Dst.
 -- WITH heavy AS (SELECT 1) SELECT 1;  -- (template only)
 
--- 3) PIVOT / UNPIVOT: supported in googlesqlite (go-googlesqlite/query_test.go). Example shape:
+-- 3) PIVOT / UNPIVOT: supported in googlesqlengine (go-googlesql-engine/query_test.go). Example shape:
 -- WITH q_sales AS (SELECT 'item' product, 10 s, 'Q1' quarter)
 -- SELECT * FROM q_sales PIVOT(SUM(s) FOR quarter IN ('Q1', 'Q2'));
 --

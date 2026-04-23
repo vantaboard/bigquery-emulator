@@ -1,5 +1,5 @@
 # Optional: DuckDB execution backend smoke test (not a default merge gate).
-# Manual: Actions -> "DuckDB emulator smoke" -> Run workflow. Pin matches go-googlesqlite gates (DUCKDB_VERSION=1.5.2).
+# Manual: Actions -> "DuckDB emulator smoke" -> Run workflow. Pin matches go-googlesql-engine gates (DUCKDB_VERSION=1.5.2).
 name: DuckDB emulator smoke
 on:
   workflow_dispatch:

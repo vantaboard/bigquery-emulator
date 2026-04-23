@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/vantaboard/bigquery-emulator/types"
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 )
 
@@ -29,15 +29,15 @@ type (
 	}
 
 	QueryResponse struct {
-		JobReference   *bigqueryv2.JobReference     `json:"jobReference"`
-		Schema         *bigqueryv2.TableSchema      `json:"schema"`
-		Rows           []*TableRow                  `json:"rows"`
-		TotalRows      uint64                       `json:"totalRows,string"`
-		JobComplete    bool                         `json:"jobComplete"`
-		TotalBytes     int64                        `json:"-"`
-		ChangedCatalog *googlesqlite.ChangedCatalog `json:"-"`
+		JobReference   *bigqueryv2.JobReference        `json:"jobReference"`
+		Schema         *bigqueryv2.TableSchema         `json:"schema"`
+		Rows           []*TableRow                     `json:"rows"`
+		TotalRows      uint64                          `json:"totalRows,string"`
+		JobComplete    bool                            `json:"jobComplete"`
+		TotalBytes     int64                           `json:"-"`
+		ChangedCatalog *googlesqlengine.ChangedCatalog `json:"-"`
 		// CTASInPlace is set when a CREATE [OR REPLACE] TABLE ... AS job wrote rows only via
-		// googlesqlite execution; the emulator must not run CreateTable+AddTableData for the dest.
+		// googlesqlengine execution; the emulator must not run CreateTable+AddTableData for the dest.
 		CTASInPlace bool `json:"-"`
 	}
 
@@ -242,7 +242,7 @@ func Format(schema *bigqueryv2.TableSchema, rows []*TableRow, useInt64Timestamp 
 		cells := make([]*TableCell, 0, len(row.F))
 		for colIdx, cell := range row.F {
 			if schema.Fields[colIdx].Type == "TIMESTAMP" && cell.V != nil {
-				t, _ := googlesqlite.TimeFromTimestampValue(cell.V.(string))
+				t, _ := googlesqlengine.TimeFromTimestampValue(cell.V.(string))
 				cells = append(cells, &TableCell{
 					V: fmt.Sprint(t.UnixMicro()),
 				})

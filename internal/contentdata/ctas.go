@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/vantaboard/go-googlesql"
+	"github.com/vantaboard/go-googlesql-engine"
 	"github.com/vantaboard/go-googlesql/ast"
-	"github.com/vantaboard/go-googlesqlite"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 
 	"github.com/vantaboard/bigquery-emulator/internal/connection"
@@ -60,8 +60,8 @@ func namePathEqual(a, b []string) bool {
 }
 
 func findTableSpecInChangedCatalog(
-	cc *googlesqlite.ChangedCatalog, projectID, datasetID, tableID string,
-) *googlesqlite.TableSpec {
+	cc *googlesqlengine.ChangedCatalog, projectID, datasetID, tableID string,
+) *googlesqlengine.TableSpec {
 	want := []string{projectID, datasetID, tableID}
 	if cc == nil || cc.Table == nil {
 		return nil
@@ -79,7 +79,7 @@ func findTableSpecInChangedCatalog(
 	return nil
 }
 
-func tableSpecToBqSchema(spec *googlesqlite.TableSpec) (*bigqueryv2.TableSchema, error) {
+func tableSpecToBqSchema(spec *googlesqlengine.TableSpec) (*bigqueryv2.TableSchema, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("table spec is nil")
 	}
@@ -120,7 +120,7 @@ func (r *Repository) QueryCTASInPlace(
 		_ = tx.MetadataRepoMode()
 	}()
 
-	ctx = googlesqlite.WithLogger(ctx, logger.Logger(ctx))
+	ctx = googlesqlengine.WithLogger(ctx, logger.Logger(ctx))
 
 	values := []interface{}{}
 	for _, param := range params {
@@ -143,11 +143,11 @@ func (r *Repository) QueryCTASInPlace(
 	)
 
 	if err := tx.Conn().Raw(func(c interface{}) error {
-		googlesqliteConn, ok := c.(*googlesqlite.GoogleSQLiteConn)
+		googlesqlengineConn, ok := c.(*googlesqlengine.GoogleSQLEngineConn)
 		if !ok {
-			return fmt.Errorf("failed to get GoogleSQLiteConn from %T", c)
+			return fmt.Errorf("failed to get GoogleSQLEngineConn from %T", c)
 		}
-		googlesqliteConn.SetQueryParameters(params)
+		googlesqlengineConn.SetQueryParameters(params)
 		return nil
 	}); err != nil {
 		return nil, fmt.Errorf("failed to setup connection: %w", err)
@@ -163,7 +163,7 @@ func (r *Repository) QueryCTASInPlace(
 	rowsAff, rowsAffErr := result.RowsAffected()
 
 	buildStart := time.Now()
-	changedCatalog, err := googlesqlite.ChangedCatalogFromResult(result)
+	changedCatalog, err := googlesqlengine.ChangedCatalogFromResult(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get changed catalog: %w", err)
 	}

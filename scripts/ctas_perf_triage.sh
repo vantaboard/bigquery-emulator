@@ -89,7 +89,7 @@ done
 echo "Largest among exec / row_count / metadata_sync / content_query (approx): ${best:-?} = ${bestv} ms"
 case "${best}" in
   exec_ms)
-    echo "Conclusion: engine-bound (Exec path dominates) — next: query rewrite, SQLite pragmas, pprof in go-googlesqlite (Branch A)."
+    echo "Conclusion: engine-bound (Exec path dominates) — next: query rewrite, SQLite pragmas, pprof in go-googlesql-engine (Branch A)."
     ;;
   row_count_ms)
     echo "Conclusion: second scan for row count — check RowsAffected for CTAS; BQ_EMULATOR_CTAS_INPLACE_FORCE_COUNT, driver fix (Branch B)."

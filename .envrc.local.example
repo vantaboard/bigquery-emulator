@@ -6,17 +6,17 @@
 #   direnv allow
 #
 # .envrc sources this after stack bootstrap, so GO_GOOGLESQL_ROOT and
-# GO_GOOGLESQLITE_ROOT are already set unless you override them below.
+# GO_GOOGLESQL_ENGINE_ROOT are already set unless you override them below.
 
 # --- DuckDB (optional) ---
 # Unpacked libduckdb from https://github.com/duckdb/duckdb/releases (same layout as CI).
 # Uncomment and set for task emulator:build-duck / task test:duckdb-backend.
-#export DUCKDB_LIB_DIR="${GO_GOOGLESQLITE_ROOT}/.duckdb-lib/v1.5.2/linux-amd64"
+#export DUCKDB_LIB_DIR="${GO_GOOGLESQL_ENGINE_ROOT}/.duckdb-lib/v1.5.2/linux-amd64"
 
 # --- Sibling repo roots (optional) ---
-# Uncomment if go-googlesql / go-googlesqlite are not ../go-googlesql and ../go-googlesqlite.
+# Uncomment if go-googlesql / go-googlesql-engine are not ../go-googlesql and ../go-googlesql-engine.
 #export GO_GOOGLESQL_ROOT="/path/to/go-googlesql"
-#export GO_GOOGLESQLITE_ROOT="/path/to/go-googlesqlite"
+#export GO_GOOGLESQL_ENGINE_ROOT="/path/to/go-googlesql-engine"
 
 # --- Cache overrides (optional) ---
 # Match go-googlesql README if you share artifacts across the stack.

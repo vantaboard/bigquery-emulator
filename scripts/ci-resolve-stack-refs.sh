@@ -9,15 +9,15 @@ if [[ -z "${GITHUB_OUTPUT:-}" ]]; then
 	exit 1
 fi
 gsql=$(awk '$1=="github.com/vantaboard/go-googlesql" && $2 ~ /^v[0-9]/ {print $2; exit}' "$MOD")
-gsqlite=$(awk '$1=="github.com/vantaboard/go-googlesqlite" && $2 ~ /^v[0-9]/ {print $2; exit}' "$MOD")
-if [[ -z "$gsql" || -z "$gsqlite" ]]; then
-	echo "error: require semver tags for github.com/vantaboard/go-googlesql and go-googlesqlite in $MOD" >&2
+gsqlengine=$(awk '$1=="github.com/vantaboard/go-googlesql-engine" && $2 ~ /^v[0-9]/ {print $2; exit}' "$MOD")
+if [[ -z "$gsql" || -z "$gsqlengine" ]]; then
+	echo "error: require semver tags for github.com/vantaboard/go-googlesql and go-googlesql-engine in $MOD" >&2
 	exit 1
 fi
 {
 	echo "gsql=${gsql}"
-	echo "gsqlite=${gsqlite}"
+	echo "gsqlengine=${gsqlengine}"
 	echo "gsql_ref=refs/tags/${gsql}"
-	echo "gsqlite_ref=refs/tags/${gsqlite}"
+	echo "gsqlengine_ref=refs/tags/${gsqlengine}"
 } >>"$GITHUB_OUTPUT"
-echo "stack: go-googlesql@${gsql} go-googlesqlite@${gsqlite}"
+echo "stack: go-googlesql@${gsql} go-googlesql-engine@${gsqlengine}"

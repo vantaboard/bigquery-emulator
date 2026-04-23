@@ -42,12 +42,12 @@ jobs:
         repository: vantaboard/go-googlesql
         ref: ${{ steps.ver.outputs.gsql_ref }}
         path: go-googlesql
-    - name: Checkout go-googlesqlite
+    - name: Checkout go-googlesql-engine
       uses: actions/checkout@v6
       with:
-        repository: vantaboard/go-googlesqlite
-        ref: ${{ steps.ver.outputs.gsqlite_ref }}
-        path: go-googlesqlite
+        repository: vantaboard/go-googlesql-engine
+        ref: ${{ steps.ver.outputs.gsqlengine_ref }}
+        path: go-googlesql-engine
     - name: setup Go ${{ matrix.go-version }}
       uses: actions/setup-go@v6
       with:
@@ -94,13 +94,13 @@ jobs:
         fi
     # Repo root is ${{ github.workspace }}; go.mod uses ../go-googlesql/lib/* for local siblings.
     # From workspace root, ../go-googlesql is the parent directory — wrong for Actions (checkouts are
-    # workspace/go-googlesql). Override nested lib modules with absolute paths (see go-googlesqlite CI).
+    # workspace/go-googlesql). Override nested lib modules with absolute paths (see go-googlesql-engine CI).
     - name: Point go.mod at sibling stack checkouts
       run: |
         set -euo pipefail
         R="${{ github.workspace }}/go-googlesql"
         go mod edit -replace "github.com/vantaboard/go-googlesql=${R}"
-        go mod edit -replace "github.com/vantaboard/go-googlesqlite=${{ github.workspace }}/go-googlesqlite"
+        go mod edit -replace "github.com/vantaboard/go-googlesql-engine=${{ github.workspace }}/go-googlesql-engine"
         for m in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 windows-amd64; do
           go mod edit -replace "github.com/vantaboard/go-googlesql/lib/${m}=${R}/lib/${m}"
         done
@@ -131,7 +131,7 @@ jobs:
       env:
         VERSION: ${{ steps.meta.outputs.VERSION }}
         GO_GOOGLESQL_ROOT: ${{ github.workspace }}/go-googlesql
-        GO_GOOGLESQLITE_ROOT: ${{ github.workspace }}/go-googlesqlite
+        GO_GOOGLESQL_ENGINE_ROOT: ${{ github.workspace }}/go-googlesql-engine
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v2
       with:

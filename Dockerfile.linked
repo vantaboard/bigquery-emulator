@@ -15,7 +15,7 @@ COPY go.mod go.sum ./bigquery-emulator/
 # hadolint ignore=DL3022
 COPY --from=go_googlesql . ./go-googlesql
 # hadolint ignore=DL3022
-COPY --from=go_googlesqlite . ./go-googlesqlite
+COPY --from=go_googlesql_engine . ./go-googlesql-engine
 
 WORKDIR /work/bigquery-emulator
 

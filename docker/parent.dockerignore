@@ -1,6 +1,6 @@
 # Use with: docker build -f bigquery-emulator/Dockerfile \
 #   --ignorefile bigquery-emulator/docker/parent.dockerignore -t bigquery-emulator:local .
-# Context: parent directory containing go-googlesql, go-googlesqlite, bigquery-emulator.
+# Context: parent directory containing go-googlesql, go-googlesql-engine, bigquery-emulator.
 #
 # Recommended: always pass --ignorefile. Without it, Docker may fail to read
 # root-owned Bazel/cache dirs under go-googlesql (permission denied).

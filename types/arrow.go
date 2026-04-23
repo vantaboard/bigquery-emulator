@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/decimal256"
-	"github.com/vantaboard/go-googlesqlite"
+	"github.com/vantaboard/go-googlesql-engine"
 	bigqueryv2 "google.golang.org/api/bigquery/v2"
 	"math/big"
 	"strconv"
@@ -182,7 +182,7 @@ func AppendValueToARROWBuilder(ptrv *string, builder array.Builder) error {
 			}
 			t = parsed
 		} else {
-			parsed, err := googlesqlite.TimeFromTimestampValue(v)
+			parsed, err := googlesqlengine.TimeFromTimestampValue(v)
 			if err != nil {
 				return err
 			}
