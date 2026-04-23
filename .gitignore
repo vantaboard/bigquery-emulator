@@ -40,3 +40,4 @@ tmp/
 .bqdata
 .bqdata.wal
 /bigquery-emulator-duck
+bigquery-emulator-duck.log

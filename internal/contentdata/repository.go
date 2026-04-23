@@ -183,6 +183,7 @@ func (r *Repository) encodeSchemaField(field *bigqueryv2.TableFieldSchema) strin
 }
 
 func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, datasetID, query string, params []*bigqueryv2.QueryParameter) (*internaltypes.QueryResponse, error) {
+	phase0 := time.Now()
 	tx.SetProjectAndDataset(projectID, datasetID)
 	if err := tx.ContentRepoMode(); err != nil {
 		return nil, err
@@ -222,7 +223,12 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 	}); err != nil {
 		return nil, fmt.Errorf("failed to setup connection: %w", err)
 	}
+	// pre_query_context: parameter binding, driver state; physical SQL analysis + render + DuckDB
+	// open happen inside the next call (not split here).
+	preQueryContext := time.Since(phase0)
+	execT0 := time.Now()
 	rows, err := tx.Tx().QueryContext(ctx, query, values...)
+	queryContextDur := time.Since(execT0)
 	if err != nil {
 		return nil, err
 	}
@@ -240,9 +246,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		return nil, fmt.Errorf("failed to get column types: %w", err)
 	}
 	tableRows := []*internaltypes.TableRow{}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get column types: %w", err)
-	}
+	schemaT0 := time.Now()
 	for i := 0; i < len(columnTypes); i++ {
 		typ, err := googlesqlengine.UnmarshalDatabaseTypeName(columnTypes[i].DatabaseTypeName())
 		if err != nil {
@@ -254,6 +258,7 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 		}
 		fields = append(fields, types.TableFieldSchemaFromType(colNames[i], googlesqlType))
 	}
+	schemaDecodeDur := time.Since(schemaT0)
 
 	var (
 		totalBytes int64
@@ -307,6 +312,14 @@ func (r *Repository) Query(ctx context.Context, tx *connection.Tx, projectID, da
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan rows: %w", err)
 	}
+	materializeDur := time.Since(loopStart)
+	logger.Logger(ctx).LogAttrs(ctx, slog.LevelDebug, "content_query_phases",
+		slog.Int64("pre_query_context_ms", preQueryContext.Milliseconds()),
+		slog.Int64("query_context_ms", queryContextDur.Milliseconds()),
+		slog.Int64("result_schema_decode_ms", schemaDecodeDur.Milliseconds()),
+		slog.Int64("row_materialize_ms", materializeDur.Milliseconds()),
+		slog.Int("row_count", rowCount),
+	)
 	logger.Logger(ctx).Debug("query result", slog.Any("rows", result))
 	return &internaltypes.QueryResponse{
 		Schema: &bigqueryv2.TableSchema{

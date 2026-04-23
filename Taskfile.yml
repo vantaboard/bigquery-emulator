@@ -11,7 +11,7 @@ tasks:
     cmds:
       - |
         echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
-        echo "Common: task emulator:build | task emulator:build-duck | task test:prebuilt | task test:duckdb-backend | task dev:air | task dev:air-duck | task docker:build | task test:linux"
+        echo "Common: task emulator:build | task emulator:build-duck | task test:prebuilt | task test:duckdb-backend | task dev:air | task dev:air-duck | task profile:duck-long-query | task docker:build | task test:linux"
         echo "Local sibling go-googlesql-engine: cp go.work.dev go.work  (go.work is gitignored)"
 
   dev:air:
@@ -52,6 +52,14 @@ tasks:
         else export GOWORK=off
         fi
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
+
+  profile:duck-long-query:
+    desc: Pointers to docs/duckdb-long-query-profiling.md and scripts/duckdb-long-query-profile-sampling.sh (long reads, EXPLAIN ANALYZE before, pprof)
+    cmds:
+      - |
+        set -euo pipefail
+        echo "Long DuckDB read profiling: docs/duckdb-long-query-profiling.md"
+        echo "Sampling script:   ${PWD}/scripts/duckdb-long-query-profile-sampling.sh"
 
   test:prebuilt:
     desc: Host go test ./... (-short skips stress/long tests). Same tags as emulator:build; uses ./go.work if present, else GOWORK=off
