@@ -1,0 +1,26 @@
+---
+description: Prefer Taskfile (task) over bare go test for verification so CGO, tags, and caches match direnv.
+alwaysApply: true
+---
+
+# Prefer `task` over bare `go test`
+
+When verifying Go builds or tests in this stack, **do not suggest or run bare `go test`** if the repository root has a **`Taskfile.yml`**. Use **[Task](https://taskfile.dev)** so **`source .envrc`** runs (correct **CGO**, **`GOOGLESQL_BUILD_TAGS`**, **`GOWORK`**, caches).
+
+## This repository (`bigquery-emulator`)
+
+- Typical: **`task test:prebuilt`** (short suite), **`task test:duckdb-backend`** when DuckDB / engine integration changed.
+- Discover: **`task --list-all`**.
+
+## Sibling `go-googlesql`
+
+- Typical: **`task test:local`** with optional **`TESTPKG`** / **`GO_TEST_FLAGS`**.
+
+## Repositories without a Taskfile (e.g. `go-googlesql-engine`)
+
+Prefer **`task`** from here or **`go-googlesql`** for stack-level verification. If only **`go test`** is possible, **`source .envrc`** in this repo first.
+
+## Anti-patterns
+
+- **`go test ./...`** without sourcing **`.envrc`** — breaks unified-prebuilt tags and CGO.
+- Hand-copying env vars into one-off commands — use **`task`** instead.
