@@ -71,6 +71,10 @@ const (
 	discoveryAPIEndpoint    = "/discovery/v1/apis/bigquery/v2/rest"
 	newDiscoveryAPIEndpoint = "/$discovery/rest"
 	uploadAPIEndpoint       = "/upload/bigquery/v2/projects/{projectId}/jobs"
+	// asyncJobContentSavepoint wraps the async content query so a failed execution backend
+	// statement does not leave the outer sql.Tx unusable for persisting job metadata (DuckDB:
+	// "Current transaction is aborted").
+	asyncJobContentSavepoint = "googlesqlite_async_job_content"
 )
 
 //go:embed resources/discovery.json
@@ -2610,6 +2614,9 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 		var response *internaltypes.QueryResponse
 		var jobErr error
 		queryPhaseStart := time.Now()
+		if _, spErr := tx.Tx().ExecContext(ctx, "SAVEPOINT "+asyncJobContentSavepoint); spErr != nil {
+			return fmt.Errorf("async job savepoint: %w", spErr)
+		}
 		if hasDestinationTable && contentdata.IsCTASQuery(querySQL) {
 			response, jobErr = srv.contentRepo.QueryCTASInPlace(
 				ctx, tx, projectID, "",
@@ -2626,6 +2633,15 @@ func (h *jobsInsertHandler) executeAsyncQueryJob(ctx context.Context, srv *Serve
 				job.Configuration.Query.Query,
 				job.Configuration.Query.QueryParameters,
 			)
+		}
+		if jobErr != nil {
+			if _, rbErr := tx.Tx().ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+asyncJobContentSavepoint); rbErr != nil {
+				return fmt.Errorf("%w (rollback to savepoint after failed query: %v)", jobErr, rbErr)
+			}
+		} else {
+			if _, relErr := tx.Tx().ExecContext(ctx, "RELEASE SAVEPOINT "+asyncJobContentSavepoint); relErr != nil {
+				return fmt.Errorf("async job release savepoint: %w", relErr)
+			}
 		}
 		queryElapsedMs := time.Since(queryPhaseStart).Milliseconds()
 		lastResponse = response
