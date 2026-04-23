@@ -21,11 +21,9 @@ func isMissingDDLObjectMessage(msg string) bool {
 	if strings.Contains(msg, "no such table") {
 		return true
 	}
-	if strings.Contains(msg, "Catalog Error") && strings.Contains(msg, "does not exist") {
-		return true
-	}
-	// go-googlesql-engine: DROP succeeded or table already gone but catalog key mismatch — treat as absent.
-	if strings.Contains(msg, "failed to find table spec from map") {
+	// DuckDB missing table — require this shape so we do not treat arbitrary Catalog Error text
+	// (or wrong DROP identifiers) as HTTP 404 while the physical table still exists.
+	if strings.Contains(msg, "Table with name") && strings.Contains(msg, "does not exist") {
 		return true
 	}
 	return false

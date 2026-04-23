@@ -15,7 +15,7 @@ func TestIsMissingDDLObjectError(t *testing.T) {
 		t.Fatal("expected sqlite missing table")
 	}
 	internal := fmt.Errorf("failed to find table spec from map")
-	if !IsMissingDDLObjectError(internal) {
-		t.Fatal("missing table spec map entry should map to not-found style handling for API clients")
+	if IsMissingDDLObjectError(internal) {
+		t.Fatal("catalog map miss must not map to HTTP 404 (avoid rollback + ghost physical tables)")
 	}
 }
