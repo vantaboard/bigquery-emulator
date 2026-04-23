@@ -3955,6 +3955,10 @@ func (h *tablesDeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		dataset: dataset,
 		table:   table,
 	}); err != nil {
+		if contentdata.IsMissingDDLObjectError(err) {
+			errorResponse(ctx, w, errNotFound(fmt.Sprintf("table %s is not found", table.ID)))
+			return
+		}
 		errorResponse(ctx, w, errInternalError(err.Error()))
 	}
 }
