@@ -54,7 +54,7 @@ tasks:
         go build -tags "$GOOGLESQL_BUILD_TAGS" -o bigquery-emulator ./cmd/bigquery-emulator
 
   test:prebuilt:
-    desc: Host go test ./... (same tags as emulator:build). Uses ./go.work if present, else GOWORK=off
+    desc: Host go test ./... (-short skips stress/long tests). Same tags as emulator:build; uses ./go.work if present, else GOWORK=off
     cmds:
       - |
         set -euo pipefail
@@ -62,7 +62,7 @@ tasks:
         if [ -f go.work ]; then export GOWORK="$PWD/go.work"
         else export GOWORK=off
         fi
-        go test -tags "$GOOGLESQL_BUILD_TAGS" -p 1 -count=1 ./...
+        go test -short -tags "$GOOGLESQL_BUILD_TAGS" -p 1 -count=1 ./...
 
   emulator:build-duck:
     desc: Build emulator with googlesqlengineduck (tags duckdb,duckdb_use_lib; requires DUCKDB_LIB_DIR with libduckdb)
@@ -126,7 +126,7 @@ tasks:
           export LD_LIBRARY_PATH="${DUCKDB_LIB_DIR}"
         fi
         TAGS="${GOOGLESQL_BUILD_TAGS},duckdb,duckdb_use_lib"
-        go test -tags "${TAGS}" -p 1 -count=1 -run TestServer_DuckDBExecutionBackendSmoke ./server/...
+        go test -short -tags "${TAGS}" -p 1 -count=1 -run TestServer_DuckDBExecutionBackendSmoke ./server/...
 
   emulator:build-linked:
     desc: Build using go.work.dev (set GOWORK)
@@ -177,7 +177,7 @@ tasks:
         task -d "$GO_GOOGLESQL_ROOT" docker:build-dev
 
   test:linux:
-    desc: Run go test in go-googlesql:dev (CI parity; GOOGLESQL_BUILD_TAGS; clear image CGO_LDFLAGS so bootstrap supplies link flags)
+    desc: Run go test in go-googlesql:dev (-short skips stress/long tests; CI parity; GOOGLESQL_BUILD_TAGS; clear image CGO_LDFLAGS so bootstrap supplies link flags)
     deps: [docker:build-dev-googlesql]
     cmds:
       - |
@@ -198,4 +198,4 @@ tasks:
           -v "$GO_CACHE_ROOT/ccache":/root/.ccache \
           -w /work/bigquery-emulator \
           {{.DOCKER_DEV_IMAGE}} \
-          bash -c 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go test -tags "$GOOGLESQL_BUILD_TAGS" -v ./... -count=1'
+          bash -c 'set -euo pipefail; source /work/go-googlesql/scripts/go-googlesql-stack-bootstrap.sh; go test -short -tags "$GOOGLESQL_BUILD_TAGS" -v ./... -count=1'
