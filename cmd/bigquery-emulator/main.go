@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
 	"github.com/vantaboard/bigquery-emulator/internal/execution"
 	"github.com/vantaboard/bigquery-emulator/server"
 	"github.com/vantaboard/bigquery-emulator/types"
+	"github.com/vantaboard/go-googlesql-engine/pprofserver"
 )
 
 const emulatorProjectsAPI = "/emulator/v1/projects"
@@ -31,7 +33,13 @@ type option struct {
 	DataFromYAML string           `description:"specify the path to the YAML file that contains the initial data" long:"data-from-yaml"`
 	DataFromJSON string           `description:"specify the path to the JSON file that contains the initial data (faster for large, multi-megabyte files)" long:"data-from-json"`
 	ExecBackend  string           `description:"physical SQL engine: sqlite (default) or duckdb (requires binary built with -tags duckdb)" long:"execution-backend" env:"BQ_EMULATOR_EXECUTION_BACKEND" default:"sqlite"`
-	Version      bool             `description:"print version" long:"version" short:"v"`
+	PprofAddr    string           `description:"if non-empty, serve net/http/pprof on this listen address (e.g. 127.0.0.1:6060) for heap/CPU/mutex/block profiles" long:"pprof-addr" env:"BIGQUERY_EMULATOR_PPROF_ADDR"`
+	// The following set process env for go-googlesql-engine before any SQL connection pool opens. See engine env GOOGLESQL_ENGINE_* in duckdb_explain.go.
+	DuckExplainAnalyze  string `description:"DuckDB only: go-googlesql-engine GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE (off|before|after) for read queries; pair with pprof" long:"duck-explain-analyze" env:"BQ_EMULATOR_DUCK_EXPLAIN_ANALYZE"`
+	DuckExplainLog      bool   `description:"DuckDB only: set GOOGLESQL_ENGINE_DUCK_EXPLAIN_LOG=1 (EXPLAIN without ANALYZE before DML/CTAS)" long:"duck-explain-log" env:"BQ_EMULATOR_DUCK_EXPLAIN_LOG"`
+	LogSQLCorrelation   bool   `description:"set GOOGLESQL_ENGINE_LOG_SQL_CORRELATION=1 (correlation_id on physical SQL logs for heap pairing)" long:"log-sql-correlation" env:"BQ_EMULATOR_LOG_SQL_CORRELATION"`
+	DuckExplainMaxBytes string `description:"set GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE_MAX_BYTES (default 262144)" long:"duck-explain-max-bytes" env:"BQ_EMULATOR_DUCK_EXPLAIN_MAX_BYTES"`
+	Version             bool   `description:"print version" long:"version" short:"v"`
 }
 
 type exitCode int
@@ -81,6 +89,15 @@ func runServer(args []string, opt option) error {
 	if opt.Version {
 		fmt.Fprintf(os.Stdout, "version: %s (%s)\n", version, revision)
 		return nil
+	}
+	applyEmulatorToEngineSQLProfilingEnv(opt)
+	pprofAddr := strings.TrimSpace(opt.PprofAddr)
+	if pprofAddr == "" {
+		pprofAddr = strings.TrimSpace(os.Getenv("GOOGLESQL_ENGINE_PPROF_ADDR"))
+	}
+	if pprofAddr != "" {
+		pprofserver.Start(pprofAddr)
+		fmt.Fprintf(os.Stdout, "[bigquery-emulator] pprof: http://%s/debug/pprof/ (heap: /debug/pprof/heap)\n", pprofAddr)
 	}
 	if opt.Dataset != "" && opt.Project == "" {
 		return fmt.Errorf("--dataset requires --project, or omit both and create a project with POST %s (JSON: {\"id\":\"<project-id>\"})", emulatorProjectsAPI)
@@ -183,4 +200,21 @@ func runServer(args []string, opt option) error {
 	}
 
 	return nil
+}
+
+// applyEmulatorToEngineSQLProfilingEnv sets go-googlesql-engine env vars (see internal/duckdb_explain.go)
+// before the first database driver connection is created.
+func applyEmulatorToEngineSQLProfilingEnv(opt option) {
+	if v := strings.TrimSpace(opt.DuckExplainAnalyze); v != "" {
+		_ = os.Setenv("GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE", v)
+	}
+	if opt.DuckExplainLog {
+		_ = os.Setenv("GOOGLESQL_ENGINE_DUCK_EXPLAIN_LOG", "1")
+	}
+	if opt.LogSQLCorrelation {
+		_ = os.Setenv("GOOGLESQL_ENGINE_LOG_SQL_CORRELATION", "1")
+	}
+	if v := strings.TrimSpace(opt.DuckExplainMaxBytes); v != "" {
+		_ = os.Setenv("GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE_MAX_BYTES", v)
+	}
 }
