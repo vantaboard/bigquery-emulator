@@ -35,3 +35,8 @@ go.work.sum
 
 # air (github.com/air-verse/air) build + logs
 tmp/
+
+# Local emulator state / ad-hoc binary names (not shipped)
+.bqdata
+.bqdata.wal
+/bigquery-emulator-duck
