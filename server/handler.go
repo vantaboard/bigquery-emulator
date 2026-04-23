@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/csv"
@@ -1013,25 +1012,18 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 		return err
 	}
 
-	// For CSV with autodetect, we need to read the file first to detect schema
-	var csvRecords [][]string
-	if load.SourceFormat == "CSV" {
-		csvRecords, err = csv.NewReader(r.reader).ReadAll()
-		if err != nil {
-			return fmt.Errorf("failed to read csv: %w", err)
-		}
-		if len(csvRecords) == 0 {
-			return fmt.Errorf("failed to find csv header")
-		}
+	payloadFile, cleanupPayload, err := spoolUploadPayloadToTempFile(r.reader)
+	if err != nil {
+		return err
+	}
+	defer cleanupPayload()
 
-		// If autodetect is enabled and no schema provided, detect schema from CSV
-		if load.Autodetect && (load.Schema == nil || len(load.Schema.Fields) == 0) {
-			detectedSchema, err := h.detectSchema(csvRecords, load.SkipLeadingRows)
-			if err != nil {
-				return fmt.Errorf("failed to detect schema: %w", err)
-			}
-			load.Schema = detectedSchema
+	if load.SourceFormat == "CSV" && load.Autodetect && (load.Schema == nil || len(load.Schema.Fields) == 0) {
+		detectedSchema, err := h.probeCSVForAutodetect(payloadFile, load)
+		if err != nil {
+			return fmt.Errorf("failed to detect schema: %w", err)
 		}
+		load.Schema = detectedSchema
 	}
 
 	if table == nil {
@@ -1059,139 +1051,26 @@ func (h *uploadContentHandler) Handle(ctx context.Context, r *uploadContentReque
 	if err != nil {
 		return err
 	}
-	columnToType := map[string]types.Type{}
-	for _, field := range tableContent.Schema.Fields {
-		columnToType[field.Name] = types.Type(field.Type)
-	}
 
 	sourceFormat := load.SourceFormat
-	columns := []*types.Column{}
-	data := types.Data{}
-	switch sourceFormat {
-	case "CSV":
-		// csvRecords already populated above
-		if len(csvRecords) == 1 {
-			return nil // Only header, no data
-		}
-		header := csvRecords[0]
-		var ignoreHeader bool
-		for _, col := range header {
-			if _, exists := columnToType[col]; !exists {
-				ignoreHeader = true
-				break
-			}
-			columns = append(columns, &types.Column{
-				Name: col,
-				Type: columnToType[col],
-			})
-		}
-		if ignoreHeader {
-			columns = []*types.Column{}
-			for _, field := range tableContent.Schema.Fields {
-				columns = append(columns, &types.Column{
-					Name: field.Name,
-					Type: types.Type(field.Type),
-				})
-			}
-		}
-
-		// Determine data rows, respecting SkipLeadingRows
-		// SkipLeadingRows includes the header row, so we only skip additional
-		// rows if SkipLeadingRows > 1 (header already extracted as row 0)
-		dataRows := csvRecords[1:]
-		if load.SkipLeadingRows > 1 {
-			skip := int(load.SkipLeadingRows) - 1 // -1 because header is already handled
-			if skip < len(dataRows) {
-				dataRows = dataRows[skip:]
-			}
-		}
-
-		for _, record := range dataRows {
-			rowData := map[string]interface{}{}
-			if len(record) != len(columns) {
-				return fmt.Errorf("invalid column number: found broken row data: %v", record)
-			}
-			for i := 0; i < len(record); i++ {
-				colData := record[i]
-				// Convert value based on column type
-				converted, err := convertCSVValue(colData, columns[i].Type)
-				if err != nil {
-					return fmt.Errorf("failed to convert value %q for column %s: %w", colData, columns[i].Name, err)
-				}
-				rowData[columns[i].Name] = converted
-			}
-			data = append(data, rowData)
-		}
-	case "PARQUET":
-		b, err := io.ReadAll(r.reader)
-		if err != nil {
-			return err
-		}
-		reader := parquet.NewReader(bytes.NewReader(b))
-		defer reader.Close()
-
-		for _, f := range load.Schema.Fields {
-			columns = append(columns, &types.Column{
-				Name: f.Name,
-				Type: types.Type(f.Type),
-			})
-		}
-
-		for i := 0; i < int(reader.NumRows()); i++ {
-			var rowData interface{}
-			err := reader.Read(&rowData)
-			if err != nil {
-				return err
-			}
-
-			data = append(data, rowData.(map[string]interface{}))
-		}
-	case "NEWLINE_DELIMITED_JSON":
-		for _, f := range tableContent.Schema.Fields {
-			columns = append(columns, &types.Column{
-				Name: f.Name,
-				Type: types.Type(f.Type),
-			})
-		}
-		columnMap := map[string]*types.Column{}
-		for _, col := range columns {
-			columnMap[col.Name] = col
-		}
-		decoder := json.NewDecoder(r.reader)
-		decoder.UseNumber()
-		recordNum := 0
-		for decoder.More() {
-			recordNum++
-			d := make(map[string]interface{})
-			if err := decoder.Decode(&d); err != nil {
-				return fmt.Errorf(
-					"decode NDJSON record %d (sourceFormat=%s, job_id=%s, destination=%s.%s): %w",
-					recordNum,
-					load.SourceFormat,
-					r.job.ID,
-					tableRef.DatasetId,
-					tableRef.TableId,
-					err,
-				)
-			}
-			h.normalizeColumnNameForJSONData(columnMap, d)
-			data = append(data, d)
-		}
-	default:
-		return fmt.Errorf("not support sourceFormat: %s", sourceFormat)
-	}
-	tableDef := &types.Table{
-		ID:      tableRef.TableId,
-		Columns: columns,
-		Data:    data,
-	}
 	conn := connectionFromContext(ctx).ConfigureScope(tableRef.ProjectId, tableRef.DatasetId)
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.RollbackIfNotCommitted()
-	if err := r.server.contentRepo.AddTableData(ctx, tx, tableRef.ProjectId, tableRef.DatasetId, tableDef, load.WriteDisposition == "WRITE_TRUNCATE"); err != nil {
+
+	switch sourceFormat {
+	case "CSV":
+		err = h.streamCSVIntoTable(ctx, tx, r, payloadFile, load, tableContent, tableRef)
+	case "PARQUET":
+		err = h.streamParquetIntoTable(ctx, tx, r, payloadFile, load, tableRef)
+	case "NEWLINE_DELIMITED_JSON":
+		err = h.streamNDJSONIntoTable(ctx, tx, r, payloadFile, tableContent, tableRef, load)
+	default:
+		err = fmt.Errorf("not support sourceFormat: %s", sourceFormat)
+	}
+	if err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
