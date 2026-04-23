@@ -1,0 +1,40 @@
+# DuckDB live reload: `task dev:air-duck` (requires DUCKDB_LIB_DIR, same as task emulator:build-duck).
+# Watcher log: tmp/air/air.log. Emulator logs: tmp/air/emulator.log
+
+root = "."
+tmp_dir = "tmp/air"
+
+env_files = [".env"]
+
+[build]
+pre_cmd = []
+cmd = "bash scripts/air-build-duck.sh"
+bin = "tmp/air/bigquery-emulator-duck"
+entrypoint = ["./tmp/air/bigquery-emulator-duck"]
+args_bin = ["--log-level", "debug", "--database", ".bqdata", "--log-file", "tmp/air/emulator.log", "--execution-backend", "duckdb"]
+include_ext = ["go", "mod", "sum"]
+exclude_dir = ["tmp", "vendor", ".git", ".bqdata", "internal/cmd/generator"]
+exclude_regex = ["_test\\.go"]
+exclude_unchanged = false
+delay = 300
+stop_on_error = true
+send_interrupt = true
+kill_delay = "500ms"
+log = "tmp/air/air.log"
+
+[log]
+time = false
+main_only = false
+
+[color]
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+clean_on_exit = false
+
+[screen]
+clear_on_rebuild = true
+keep_scroll = true

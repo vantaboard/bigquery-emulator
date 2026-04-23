@@ -1,4 +1,5 @@
-# Live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest).
+# SQLite live reload: `task dev:air` (requires: go install github.com/air-verse/air@latest).
+# DuckDB live reload: `task dev:air-duck` (needs DUCKDB_LIB_DIR; uses .air.duck.toml).
 # Air watcher log: tmp/air/air.log. Emulator structured logs (HTTP, queries): tmp/air/emulator.log
 # Optional: BIGQUERY_EMULATOR_PROJECT / --project (deprecated; prefer POST /emulator/v1/projects).
 

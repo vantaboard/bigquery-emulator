@@ -11,11 +11,11 @@ tasks:
     cmds:
       - |
         echo "bigquery-emulator — https://taskfile.dev (task --list-all)"
-        echo "Common: task emulator:build | task emulator:build-duck | task test:prebuilt | task test:duckdb-backend | task dev:air | task docker:build | task test:linux"
+        echo "Common: task emulator:build | task emulator:build-duck | task test:prebuilt | task test:duckdb-backend | task dev:air | task dev:air-duck | task docker:build | task test:linux"
         echo "Local sibling go-googlesqlite: cp go.work.dev go.work  (go.work is gitignored)"
 
   dev:air:
-    desc: Live rebuild/restart with air (air tmp/air/air.log; emulator tmp/air/emulator.log; go install github.com/air-verse/air@latest; edit .air.toml args_bin)
+    desc: Live rebuild/restart with air — SQLite binary (air tmp/air/air.log; emulator tmp/air/emulator.log; go install github.com/air-verse/air@latest; edit .air.toml args_bin)
     cmds:
       - |
         set -euo pipefail
@@ -25,6 +25,22 @@ tasks:
           exit 1
         fi
         exec air -c .air.toml
+
+  dev:air-duck:
+    desc: Live rebuild/restart with air — DuckDB binary (DUCKDB_LIB_DIR; .air.duck.toml; copies libduckdb into tmp/air)
+    cmds:
+      - |
+        set -euo pipefail
+        source .envrc
+        if [[ -z "${DUCKDB_LIB_DIR:-}" ]]; then
+          echo "Set DUCKDB_LIB_DIR (e.g. .envrc.local). Same as task emulator:build-duck." >&2
+          exit 1
+        fi
+        if ! command -v air >/dev/null 2>&1; then
+          echo "Install air: go install github.com/air-verse/air@latest" >&2
+          exit 1
+        fi
+        exec air -c .air.duck.toml
 
   emulator:build:
     desc: Build bigquery-emulator binary (unified prebuilt tags). Uses ./go.work if present, else GOWORK=off
