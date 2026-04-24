@@ -2,9 +2,8 @@ go 1.26.0
 
 use .
 
-replace github.com/vantaboard/go-googlesqlite => ../go-googlesqlite
 replace github.com/vantaboard/go-googlesql-engine => ../go-googlesql-engine
 
 // Copy to go.work for local development (go.work is gitignored):
 //   cp go.work.dev go.work && go work sync
-// Requires sibling repos: ../go-googlesqlite and ../go-googlesql-engine
+// Requires sibling repo: ../go-googlesql-engine
