@@ -1,69 +1,27 @@
-# Profiling long-running DuckDB (read) queries
+# Long DuckDB queries: wall clock vs heap profiling
 
-Use this to separate **Go-side SQL generation** (heap / CPU in `strings.Builder` and the engine) from **DuckDB execution** (wall time in `execute_pending` / CGO).
+## Wall clock (A/B)
 
-## 1. Get DuckDB `EXPLAIN ANALYZE` *before* execution
+For steady-state **execution time** on DuckDB reads, set **`--duck-explain-analyze=off`** (or leave unset / empty). Modes **`before`** and **`after`** set `GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE` in go-googlesql-engine and run **extra** `EXPLAIN` / `EXPLAIN ANALYZE` around the main query, which can roughly **double** DuckDB work when you are trying to measure wall time.
 
-For long read queries, `after` only logs after the query finishes. Use `before` so the plan is emitted at the start.
+Use **`before`** or **`after`** when you need an execution plan or analyze timing for its own sake, not as a baseline for raw query speed.
 
-```bash
-export GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE=before
-# Optional: log physical SQL with a correlation id for one statement
-export GOOGLESQL_ENGINE_LOG_SQL_CORRELATION=1
-```
+## Heap / SQL size (pprof)
 
-Or use the emulator flag (rebuild the binary if the flag is missing):
+1. Start the emulator with a pprof listen address, e.g. **`--pprof-addr=127.0.0.1:6060`**.
+2. While a long query runs, poll heap profiles with [`scripts/pprof-heap-poll.sh`](../scripts/pprof-heap-poll.sh) (see script header for `PPROF`, `INTERVAL`, `OUT`).
+3. Compare **before/after** codegen or engine changes, for the **same** workload and env:
 
-```text
---duck-explain-analyze=before
---log-sql-correlation
-```
+   ```bash
+   go tool pprof -top -inuse_space /path/to/heap-*.pb.gz
+   ```
 
-## 2. Pair with heap / CPU profiles
+   Inspect hot frames such as `strings.(*Builder).WriteString` and paths through `formatSQLFragment` / `WriteSql` if physical SQL string building dominates.
 
-With the default pprof sidecar (see `cmd/bigquery-emulator` / `--pprof-addr`):
+4. Optional: set **`--log-sql-correlation`** so physical SQL logs include a **correlation_id** that lines up with pprof samples for a given read.
 
-```bash
-# while the query is running
-curl -sS 'http://127.0.0.1:6060/debug/pprof/heap?debug=1' -o /tmp/heap.txt
-curl -sS 'http://127.0.0.1:6060/debug/pprof/goroutine?debug=2' -o /tmp/goroutine.txt
-```
+## Verification checklist (Springs-style jobs)
 
-To analyze offline (replace `/path/to/bigquery-emulator-duck` with your built binary if using profile proto):
-
-```bash
-go tool pprof -text -nodecount=30 /path/to/binary /tmp/heap.pb.gz
-```
-
-## 3. Match logs to one statement
-
-Use `--log-file` (or your process manager) and find the first `correlation_id=...` for the heavy query in the physical SQL / explain lines.
-
-## 4. Re-run the same query after code changes
-
-Compare:
-
-- Wall time and `content_query_phases` debug log fields (`pre_query_context_ms`, `query_context_ms`, `row_materialize_ms`) in `contentdata.Query`
-- `alloc_space` hot spots in heap profile (`strings.Builder`, `WriteQuotedIdent`, `BinaryExpression`, etc.)
-- DuckDB `EXPLAIN ANALYZE` plan (dominant operators)
-
-## 5. Script
-
-See `scripts/duckdb-long-query-profile-sampling.sh` for curl snippets you can copy.
-
-## 6. Checklist: re-profile after a change (same query)
-
-1. Rebuild the DuckDB emulator binary if you added flags (`task emulator:build-duck` or your air config).
-2. Run with, for example:
-
-```text
-./bigquery-emulator-duck --database .bqdata --log-file ./bigquery-emulator-duck.log \
-  --pprof-addr=127.0.0.1:6060 \
-  --duck-explain-analyze=before \
-  --log-sql-correlation
-```
-
-3. Note the `correlation_id` on the first physical SQL line for your statement, then take heap/goroutine samples while the query runs (see section 2).
-4. Compare **debug** line `content_query_phases` (`pre_query_context_ms`, `query_context_ms`, `row_materialize_ms`) before vs after, plus `go tool pprof` alloc space and the `EXPLAIN ANALYZE` plan.
-
-`task profile:duck-long-query` prints paths to this doc and the sampling script.
+- Same query, data volume, and emulator flags except the variable under test.
+- **Flat** in-use `WriteString` or total in-use heap lower on mid-query heap samples after UNNEST/struct codegen fixes.
+- Shorter or bounded **`googlesqlengine physical sql`** line length in logs when `GOOGLESQL_ENGINE_LOG_PHYSICAL_SQL=1` (truncated; use correlation + DuckDB for full SQL if needed).

@@ -77,6 +77,8 @@ docker run --rm -p 9050:9050 bigquery-emulator:local \
 
 Environment variables (see `--help`) mirror the long flags, e.g. `BIGQUERY_EMULATOR_PROJECT` (deprecated), `BIGQUERY_EMULATOR_DATASET`.
 
+Long DuckDB reads: **wall clock vs `EXPLAIN ANALYZE`**, pprof, and verification are documented in [`docs/duckdb-long-query-profiling.md`](docs/duckdb-long-query-profiling.md).
+
 ## Why not plain `docker build .` without `Dockerfile.linked`?
 
 Published versions on the module proxy do not ship prebuilt `.a` archives; the supported stack uses sibling **`go-googlesql`** sources (with prebuilts) plus **`go-googlesql-stack-bootstrap.sh`**-compatible env at link time. [`Taskfile.yml`](Taskfile.yml) `docker:build` encodes that layout.

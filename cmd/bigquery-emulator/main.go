@@ -35,7 +35,7 @@ type option struct {
 	ExecBackend  string           `description:"physical SQL engine: sqlite (default) or duckdb (requires binary built with -tags duckdb)" long:"execution-backend" env:"BQ_EMULATOR_EXECUTION_BACKEND" default:"sqlite"`
 	PprofAddr    string           `description:"if non-empty, serve net/http/pprof on this listen address (e.g. 127.0.0.1:6060) for heap/CPU/mutex/block profiles" long:"pprof-addr" env:"BIGQUERY_EMULATOR_PPROF_ADDR"`
 	// The following set process env for go-googlesql-engine before any SQL connection pool opens. See engine env GOOGLESQL_ENGINE_* in duckdb_explain.go.
-	DuckExplainAnalyze  string `description:"DuckDB only: go-googlesql-engine GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE (off|before|after) for read queries; pair with pprof" long:"duck-explain-analyze" env:"BQ_EMULATOR_DUCK_EXPLAIN_ANALYZE"`
+	DuckExplainAnalyze  string `description:"DuckDB only: GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE (off|before|after). Use off for wall-clock A/B; before/after add EXPLAIN work. Heap: --pprof-addr + scripts/pprof-heap-poll.sh" long:"duck-explain-analyze" env:"BQ_EMULATOR_DUCK_EXPLAIN_ANALYZE"`
 	DuckExplainLog      bool   `description:"DuckDB only: set GOOGLESQL_ENGINE_DUCK_EXPLAIN_LOG=1 (EXPLAIN without ANALYZE before DML/CTAS)" long:"duck-explain-log" env:"BQ_EMULATOR_DUCK_EXPLAIN_LOG"`
 	LogSQLCorrelation   bool   `description:"set GOOGLESQL_ENGINE_LOG_SQL_CORRELATION=1 (correlation_id on physical SQL logs for heap pairing)" long:"log-sql-correlation" env:"BQ_EMULATOR_LOG_SQL_CORRELATION"`
 	DuckExplainMaxBytes string `description:"set GOOGLESQL_ENGINE_DUCK_EXPLAIN_ANALYZE_MAX_BYTES (default 262144)" long:"duck-explain-max-bytes" env:"BQ_EMULATOR_DUCK_EXPLAIN_MAX_BYTES"`
