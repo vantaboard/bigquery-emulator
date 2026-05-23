@@ -77,31 +77,65 @@ Goal: every BigQuery REST endpoint we plan to support has a route registered
 and returns a structurally-valid (possibly empty) response or `501 Not
 Implemented`. No SQL execution yet. Useful for client-library smoke tests.
 
-- ✅ `GET  /` health check
-- ⏳ Project routes
-  - `GET    /bigquery/v2/projects`
-  - `GET    /bigquery/v2/projects/{projectId}`
-- ⏳ Dataset routes (`bigquery.datasets.*`)
+The canonical, always-up-to-date mapping from BigQuery v2 REST endpoints
+to the handlers in this repo lives in [`docs/REST_API.md`](./docs/REST_API.md);
+that document is cross-referenced against the upstream documentation under
+[`docs/bigquery/docs/reference/rest/v2/`](./docs/bigquery/docs/reference/rest/v2/).
+
+- ✅ Health checks (`GET /`, `GET /healthz`) — emulator-only, not part of the
+  public BigQuery API
+- ✅ Project routes
+  - `GET /bigquery/v2/projects` (`projects.list`)
+  - `GET /bigquery/v2/projects/{projectId}/serviceAccount`
+    (`projects.getServiceAccount`) — note: there is **no**
+    `GET /bigquery/v2/projects/{projectId}` endpoint in the public API
+- ✅ Dataset routes (`bigquery.datasets.*`)
+  - list / get / insert / patch / update / delete / undelete
+  - `datasets.undelete` is `POST .../datasets/{datasetId}:undelete` (AIP-136
+    custom method); dispatched on the trailing `:undelete` because Go's
+    mux can't match a literal segment after a wildcard
+- ✅ Table routes (`bigquery.tables.*`)
   - list / get / insert / patch / update / delete
-- ⏳ Table routes (`bigquery.tables.*`)
-  - list / get / insert / patch / update / delete
-- ⏳ Job routes (`bigquery.jobs.*`)
-  - `POST /bigquery/v2/projects/{projectId}/jobs` (insert)
-  - `GET  /bigquery/v2/projects/{projectId}/jobs/{jobId}`
-  - `GET  /bigquery/v2/projects/{projectId}/jobs` (list)
+  - IAM: `getIamPolicy`, `setIamPolicy`, `testIamPermissions` — all three
+    are `POST .../tables/{tableId}:operation` custom methods, dispatched
+    the same way as `datasets.undelete`
+- ✅ Tabledata routes (`bigquery.tabledata.*`)
+  - `GET .../tables/{tableId}/data` (`tabledata.list`)
+  - `POST .../tables/{tableId}/insertAll` (`tabledata.insertAll`)
+- ✅ Job routes (`bigquery.jobs.*`)
+  - `GET /bigquery/v2/projects/{projectId}/jobs` (`jobs.list`)
+  - `POST /bigquery/v2/projects/{projectId}/jobs` (`jobs.insert`, metadata)
+  - `POST /upload/bigquery/v2/projects/{projectId}/jobs` (`jobs.insert`,
+    media upload — multipart/resumable per the upstream
+    [`api-uploads.md`](./docs/bigquery/docs/reference/api-uploads.md))
+  - `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` (`jobs.get`)
   - `POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel`
-- ⏳ Query routes
+    (`jobs.cancel`)
+  - `DELETE /bigquery/v2/projects/{projectId}/jobs/{jobId}/delete`
+    (`jobs.delete`) — the literal `/delete` suffix is the upstream URL
+    template, not a typo
+- ✅ Query routes
   - `POST /bigquery/v2/projects/{projectId}/queries` (`jobs.query`)
-  - `GET  /bigquery/v2/projects/{projectId}/queries/{jobId}`
+  - `GET /bigquery/v2/projects/{projectId}/queries/{jobId}`
     (`jobs.getQueryResults`)
-- ⏳ Tabledata
-  - `GET  /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data`
-  - `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll`
 - ⏳ Discovery doc
   - `GET /discovery/v1/apis/bigquery/v2/rest`
-- ⏳ JSON error envelope matches BigQuery shape (`{"error": {"code", "message",
-  "errors": [...]}}`)
-- ⏳ Authn middleware: parse but ignore bearer tokens (emulator-style)
+- ✅ JSON error envelope matches the documented BigQuery shape
+  (`{"error": {"code", "message", "status", "errors": [...]}}`); see
+  [`docs/bigquery/docs/error-messages.md`](./docs/bigquery/docs/error-messages.md)
+  for the canonical sample response and reason codes
+- ⏳ Authn middleware: parse but ignore bearer tokens (emulator-style),
+  honor `BIGQUERY_EMULATOR_HOST` env-var conventions
+- ⏳ SQL dialect posture: BigQuery's `useLegacySql` field defaults to
+  `true` on the wire, but the emulator only supports GoogleSQL. Reject
+  `useLegacySql=true` with HTTP 400 + `reason: invalidQuery`; treat
+  unset and `false` as GoogleSQL
+- ⏳ Result wire encoding follows
+  [`StandardSqlDataType.TypeKind`](./docs/bigquery/docs/reference/rest/v2/StandardSqlDataType.md)
+  exactly: `INT64`/`NUMERIC`/`BIGNUMERIC` are decimal strings, `FLOAT64`
+  is JSON number with `"NaN"`/`"Infinity"` sentinels, `BYTES` is base64,
+  `TIMESTAMP`/`DATE`/`TIME`/`DATETIME` are RFC 3339, `STRUCT` is a
+  positional list, etc.
 
 ## Phase 2 - Internal gRPC contract (Go <-> C++)
 

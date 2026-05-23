@@ -1,4 +1,4 @@
-# go-googlesql — Claude Code instructions
+# bigquery-emulator — Claude Code instructions
 
 # Auto-Commit Workflow
 

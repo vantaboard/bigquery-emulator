@@ -4,9 +4,12 @@ A locally-runnable emulator of Google Cloud BigQuery, intended for local
 development and integration testing of applications that target the
 BigQuery REST API.
 
-> **Status:** very early scaffold. The Go REST gateway boots and answers a
-> health probe. The C++ engine is a placeholder. See [`ROADMAP.md`](./ROADMAP.md)
-> for what is implemented and what is planned.
+> **Status:** very early scaffold. The Go REST gateway boots, answers a
+> health probe, and registers every documented BigQuery v2 REST endpoint
+> as a 501 stub. The C++ engine is a placeholder. See
+> [`ROADMAP.md`](./ROADMAP.md) for the phased plan and
+> [`docs/REST_API.md`](./docs/REST_API.md) for the per-endpoint mapping
+> and current status.
 
 ## Architecture
 
@@ -67,9 +70,15 @@ bigquery-emulator/
   BUILD.bazel           # Bazel root (planned)
   MODULE.bazel          # Bzlmod root (planned)
   go.mod / go.sum       # Go module
+  docs/                 # Documentation
+    REST_API.md           # Endpoint -> handler mapping (read this when
+                          # debugging a specific BigQuery REST call)
+    bigquery/             # Vendored copy of the upstream BigQuery docs
+                          # corpus, used as the source of truth when
+                          # verifying request/response shapes
   ROADMAP.md            # Phased plan (read this first)
   README.md
-  LICENSE               # Apache-2.0
+  LICENSE               # MIT
 ```
 
 ## Quickstart
@@ -100,19 +109,47 @@ task run           # run gateway, which spawns the engine
 
 ## Pointing client libraries at the emulator
 
-Once Phase 1 is complete, BigQuery client libraries can be pointed at the
-emulator using the standard endpoint override. For the Go client:
+Two equivalent ways to redirect a BigQuery client at the emulator:
 
-```go
-client, err := bigquery.NewClient(ctx, "test-project",
-    option.WithEndpoint("http://localhost:9050"),
-    option.WithoutAuthentication(),
-)
-```
+1. **Endpoint override** (works in every official client). In Go:
 
-Python (`google-cloud-bigquery`), Java, and Node.js clients all support the
-analogous endpoint override. We will document each one as we get the
-relevant smoke tests passing in Phase 8.
+   ```go
+   client, err := bigquery.NewClient(ctx, "test-project",
+       option.WithEndpoint("http://localhost:9050"),
+       option.WithoutAuthentication(),
+   )
+   ```
+
+2. **`BIGQUERY_EMULATOR_HOST` environment variable** (mirrors the
+   `STORAGE_EMULATOR_HOST` and `SPANNER_EMULATOR_HOST` conventions used by
+   other Google emulators):
+
+   ```bash
+   export BIGQUERY_EMULATOR_HOST=localhost:9050
+   ```
+
+Bearer tokens in `Authorization` headers are accepted but never
+validated, identical to `cloud-spanner-emulator`'s posture. The full
+upstream auth model (ADC, service-account keys, OAuth scopes) documented
+under [`docs/bigquery/docs/authentication.md`](./docs/bigquery/docs/authentication.md)
+is intentionally **not** modeled.
+
+### SQL dialect
+
+BigQuery's `useLegacySql` field defaults to `true` on the wire (older
+clients still rely on this). The emulator only supports GoogleSQL,
+because the engine is GoogleSQL's analyzer + reference impl. The query
+handlers will:
+
+- Treat `useLegacySql` unset or `false` as GoogleSQL.
+- Reject `useLegacySql=true` with HTTP 400 + `reason: invalidQuery`.
+
+If you're using the official Go client, explicitly set
+`Query.UseLegacySQL = false` to be safe.
+
+Python (`google-cloud-bigquery`), Java, and Node.js clients all support
+the analogous endpoint override. We document each one as the relevant
+smoke tests pass in Phase 8.
 
 ## Why C++ for the engine
 
