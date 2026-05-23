@@ -4,10 +4,10 @@ overview: "Phase 0a: multi-stage Dockerfile and devcontainer for reproducible lo
 todos:
   - id: dockerfile
     content: "Add Dockerfile multi-stage: build gateway_main (Go 1.25+), build emulator_main (CMake/clang), final image ships both + LICENSE"
-    status: pending
+    status: completed
   - id: devcontainer
     content: "Add .devcontainer/devcontainer.json: task, go, cmake, clang; forward ports 9050 and 9060"
-    status: pending
+    status: completed
 isProject: false
 ---
 
