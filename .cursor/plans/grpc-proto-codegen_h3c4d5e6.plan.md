@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: protoc-cpp
     content: "Add CMake rule for C++ grpc stubs; link grpc++ in CMakeLists.txt"
-    status: pending
+    status: completed
 isProject: false
 ---
 

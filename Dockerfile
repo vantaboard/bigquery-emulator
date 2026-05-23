@@ -57,6 +57,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         cmake \
         make \
         ninja-build \
+        pkg-config \
+        libprotobuf-dev \
+        protobuf-compiler \
+        libgrpc++-dev \
+        libgrpc-dev \
+        protobuf-compiler-grpc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -82,6 +88,9 @@ FROM debian:${DEBIAN_VERSION}-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         libstdc++6 \
+        libprotobuf32 \
+        libgrpc++1.51 \
+        libgrpc29 \
     && rm -rf /var/lib/apt/lists/*
 
 # Real binaries live under /opt; the shim at /gateway_main wraps the

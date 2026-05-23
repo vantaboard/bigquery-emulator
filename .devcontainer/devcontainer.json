@@ -13,7 +13,7 @@
         }
     },
     "onCreateCommand": {
-        "install-cpp-toolchain": "sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake clang ninja-build libstdc++-12-dev",
+        "install-cpp-toolchain": "sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake clang ninja-build libstdc++-12-dev pkg-config libprotobuf-dev protobuf-compiler libgrpc++-dev libgrpc-dev protobuf-compiler-grpc",
         "install-task": "sudo sh -c \"curl -fsSL https://taskfile.dev/install.sh | sh -s -- -d -b /usr/local/bin\""
     },
     "forwardPorts": [

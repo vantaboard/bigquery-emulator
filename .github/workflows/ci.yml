@@ -52,7 +52,12 @@ jobs:
             clang \
             cmake \
             make \
-            ninja-build
+            ninja-build \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
 
       - name: go vet
         run: go vet ./...
