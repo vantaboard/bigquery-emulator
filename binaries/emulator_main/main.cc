@@ -45,8 +45,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  std::fprintf(stderr, "[emulator_main] BigQuery emulator engine listening at %s\n",
-               host_port.c_str());
+  std::fprintf(stderr,
+               "[emulator_main] BigQuery emulator engine listening on %s:%d\n",
+               server->host().c_str(), server->port());
 
   server->WaitForShutdown();
   return EXIT_SUCCESS;

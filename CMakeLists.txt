@@ -115,6 +115,8 @@ target_link_libraries(enginepb_cc
 # ---------------------------------------------------------------------------
 
 add_library(frontend_server STATIC
+  frontend/handlers/catalog.cc
+  frontend/handlers/query.cc
   frontend/server/server.cc
 )
 target_include_directories(frontend_server PUBLIC ${CMAKE_SOURCE_DIR})
