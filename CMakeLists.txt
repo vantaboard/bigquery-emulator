@@ -199,6 +199,42 @@ target_link_libraries(backend_storage_memory
 )
 
 # ---------------------------------------------------------------------------
+# Engine implementations (Phase 3c scaffolds, real wiring in Phase 5)
+#
+# Each concrete `Engine` lives in its own static library so the CLI can
+# pick one at link time via `--engine`. Today both impls return
+# UNIMPLEMENTED on every Engine method; the libraries exist so the
+# binary, the factory, and (later) the conformance harness can already
+# bind against the real types.
+# ---------------------------------------------------------------------------
+
+add_library(backend_engine_reference_impl STATIC
+  backend/engine/reference_impl/reference_impl_engine.cc
+)
+target_include_directories(backend_engine_reference_impl
+  PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_engine_reference_impl
+  PUBLIC
+    backend_engine
+    backend_storage
+    absl::status
+    absl::statusor
+)
+
+add_library(backend_engine_duckdb STATIC
+  backend/engine/duckdb/duckdb_engine.cc
+)
+target_include_directories(backend_engine_duckdb
+  PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_engine_duckdb
+  PUBLIC
+    backend_engine
+    backend_storage
+    absl::status
+    absl::statusor
+)
+
+# ---------------------------------------------------------------------------
 # Engine front-door + binary
 # ---------------------------------------------------------------------------
 
@@ -210,10 +246,22 @@ add_library(frontend_server STATIC
 target_include_directories(frontend_server PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(frontend_server PUBLIC enginepb_cc backend_engine)
 
+# emulator_main links every backend library it can construct at CLI
+# parse time: the schema/storage interface stack, the in-memory storage
+# impl (only `--storage` value wired today), and both engine scaffolds.
+# Phase 5+ adds the DuckDB storage library here once it exists.
 add_executable(emulator_main
   binaries/emulator_main/main.cc
 )
-target_link_libraries(emulator_main PRIVATE frontend_server)
+target_link_libraries(emulator_main
+  PRIVATE
+    frontend_server
+    backend_engine_reference_impl
+    backend_engine_duckdb
+    backend_storage_memory
+    backend_storage
+    backend_schema
+)
 
 # ---------------------------------------------------------------------------
 # Unit tests

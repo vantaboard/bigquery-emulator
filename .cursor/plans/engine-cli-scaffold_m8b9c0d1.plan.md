@@ -4,13 +4,13 @@ overview: "Phase 3c: engine scaffolds, CLI flags, CMake targets."
 todos:
   - id: engine-scaffolds
     content: "Add reference_impl_engine and duckdb_engine returning UNIMPLEMENTED for all Engine methods"
-    status: pending
+    status: completed
   - id: cli-flags
     content: "Add --engine, --storage, --profile=ci|dev flags to emulator_main; wire factory"
-    status: pending
+    status: completed
   - id: cmake-targets
     content: "Update CMakeLists.txt linking backend/storage/memory, schema, engine into emulator_main"
-    status: pending
+    status: completed
 isProject: false
 ---
 
