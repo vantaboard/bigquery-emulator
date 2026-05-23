@@ -58,6 +58,14 @@ find_package(Protobuf REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+# Abseil ships with the gRPC packages on every distro we support and
+# is already a transitive runtime dep through gRPC::grpc++; we depend
+# on it directly for absl::Status / absl::StatusOr in the
+# backend/{schema,storage,engine} interfaces, so request the targets
+# explicitly so the linker resolves them even on stripped-down
+# installations.
+find_package(absl CONFIG REQUIRED)
+
 set(PROTO_SOURCE_DIR ${CMAKE_SOURCE_DIR}/proto)
 set(PROTO_GEN_DIR ${CMAKE_BINARY_DIR}/generated/proto)
 file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
@@ -111,6 +119,62 @@ target_link_libraries(enginepb_cc
 )
 
 # ---------------------------------------------------------------------------
+# Backend interfaces (Phase 3a)
+#
+# Three libraries that mirror the directory layout under backend/:
+#   * backend_schema:  proto FieldSchema <-> internal ColumnSchema
+#                      conversions plus the engine-agnostic schema
+#                      types every storage backend speaks.
+#   * backend_storage: Storage abstract interface (CreateDataset,
+#                      DropTable, AppendRows, ScanRows, ...) plus the
+#                      `Value` cell representation. NO engine-specific
+#                      types in any signature (see ROADMAP).
+#   * backend_engine:  Engine abstract interface (Analyze, DryRun,
+#                      ExecuteQuery). Concrete impls land in Phase 5.
+#
+# Phase 3b's `InMemoryStorage`, Phase 3c's CLI scaffold and Phase 5's
+# engine implementations link against these libraries.
+# ---------------------------------------------------------------------------
+
+add_library(backend_schema STATIC
+  backend/schema/schema.cc
+)
+target_include_directories(backend_schema PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_schema
+  PUBLIC
+    enginepb_cc
+    absl::status
+    absl::statusor
+    absl::strings
+)
+
+add_library(backend_storage STATIC
+  backend/storage/storage.cc
+)
+target_include_directories(backend_storage PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_storage
+  PUBLIC
+    backend_schema
+    absl::status
+    absl::statusor
+    absl::strings
+    absl::span
+)
+
+add_library(backend_engine STATIC
+  backend/engine/engine.cc
+)
+target_include_directories(backend_engine PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_engine
+  PUBLIC
+    backend_schema
+    backend_storage
+    absl::status
+    absl::statusor
+    absl::strings
+)
+
+# ---------------------------------------------------------------------------
 # Engine front-door + binary
 # ---------------------------------------------------------------------------
 
@@ -120,7 +184,7 @@ add_library(frontend_server STATIC
   frontend/server/server.cc
 )
 target_include_directories(frontend_server PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(frontend_server PUBLIC enginepb_cc)
+target_link_libraries(frontend_server PUBLIC enginepb_cc backend_engine)
 
 add_executable(emulator_main
   binaries/emulator_main/main.cc
