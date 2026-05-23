@@ -4,13 +4,13 @@ overview: "Phase 2b: real gRPC server with health check and Catalog/Query UNIMPL
 todos:
   - id: health-service
     content: "Implement grpc.health.v1.Health; Check returns SERVING when listening"
-    status: pending
+    status: completed
   - id: catalog-query-stubs
     content: "Add catalog.cc and query.cc returning UNIMPLEMENTED for every rpc"
-    status: pending
+    status: completed
   - id: real-grpc-server
     content: "Replace StubServer with grpc::ServerBuilder; register Catalog, Query, Health"
-    status: pending
+    status: completed
 isProject: false
 ---
 
