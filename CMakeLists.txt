@@ -175,6 +175,30 @@ target_link_libraries(backend_engine
 )
 
 # ---------------------------------------------------------------------------
+# Storage implementations (Phase 3b+)
+#
+# Concrete Storage backends each get their own library so callers can
+# link in only the ones they need (the CLI in Phase 3c picks per the
+# `--storage` flag; the test binary just links the memory store).
+# ---------------------------------------------------------------------------
+
+add_library(backend_storage_memory STATIC
+  backend/storage/memory/in_memory_storage.cc
+)
+target_include_directories(backend_storage_memory PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_storage_memory
+  PUBLIC
+    backend_schema
+    backend_storage
+    absl::base
+    absl::status
+    absl::statusor
+    absl::strings
+    absl::synchronization
+    absl::span
+)
+
+# ---------------------------------------------------------------------------
 # Engine front-door + binary
 # ---------------------------------------------------------------------------
 
@@ -190,3 +214,64 @@ add_executable(emulator_main
   binaries/emulator_main/main.cc
 )
 target_link_libraries(emulator_main PRIVATE frontend_server)
+
+# ---------------------------------------------------------------------------
+# Unit tests
+#
+# `task ci:run` invokes `cmake --build build-out` (no target), which
+# walks every target in this file — so the test executable is built
+# alongside emulator_main and `ctest --test-dir build-out` picks it up
+# without an explicit build step.
+#
+# GoogleTest is pulled in via FetchContent because no Linux distro
+# packages it in a stable spot; the upstream tarball is small (~1MB)
+# and the build is cached under build-out/_deps after the first cmake
+# configure. Set BIGQUERY_EMULATOR_BUILD_TESTS=OFF at configure time to
+# skip if you're cross-compiling or working offline.
+# ---------------------------------------------------------------------------
+
+option(BIGQUERY_EMULATOR_BUILD_TESTS
+  "Build the C++ unit tests (requires GoogleTest, fetched via FetchContent)"
+  ON)
+
+if(BIGQUERY_EMULATOR_BUILD_TESTS)
+  include(FetchContent)
+  # Pin to a stable release so the build is reproducible. v1.15.2 is the
+  # current LTS at the time of this commit; bump deliberately.
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz
+    URL_HASH SHA256=7b42b4d6ed48810c5362c265a17faebe90dc2373c885e5216439d37927f02926
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  # GoogleTest's CMake defaults to building shared CRTs on MSVC; we
+  # don't care on Linux but the option name is the same and forcing it
+  # OFF keeps our static-link story consistent on every host.
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  enable_testing()
+
+  add_executable(in_memory_storage_test
+    backend/storage/memory/in_memory_storage_test.cc
+  )
+  target_link_libraries(in_memory_storage_test
+    PRIVATE
+      backend_storage_memory
+      backend_storage
+      backend_schema
+      absl::status
+      absl::statusor
+      absl::strings
+      GTest::gtest
+      GTest::gmock
+      GTest::gtest_main
+  )
+  # Register the whole binary as one ctest entry so `ctest -R
+  # in_memory_storage` matches; the GoogleTest binary still reports
+  # per-TEST results inside itself, which is what we want for CI logs.
+  add_test(
+    NAME in_memory_storage_test
+    COMMAND in_memory_storage_test
+  )
+endif()
