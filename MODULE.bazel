@@ -1,0 +1,9 @@
+# Bzlmod root for bigquery-emulator. Empty in Phase 0 -- Phase 2 of
+# ROADMAP.md will add module() and bazel_dep() lines for googlesql,
+# protobuf, gRPC, abseil, and rules_go (matching the toolchain
+# cloud-spanner-emulator builds against).
+
+module(
+    name = "bigquery_emulator",
+    version = "0.0.0",
+)

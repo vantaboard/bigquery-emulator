@@ -1,0 +1,36 @@
+# Reference clone (kept locally for design reference, never checked in)
+cloud-spanner-emulator/
+
+# Build outputs
+/bin/
+/build-out/
+/out/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Bazel
+bazel-*
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile.cmake
+
+# Go
+*.test
+*.prof
+coverage.out
+vendor/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

@@ -1,0 +1,164 @@
+// Copyright 2026 BigQuery Emulator Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// emulator.proto is the internal contract between the Go REST gateway and
+// the C++ engine. It is intentionally minimal: the gateway owns the
+// public-facing BigQuery REST shape, and only forwards the bits that
+// actually need GoogleSQL to do their job.
+//
+// This file is not generated to anything yet. Phase 2 of ROADMAP.md will
+// add `buf` / `protoc` invocations to the build.
+
+syntax = "proto3";
+
+package bigquery_emulator.v1;
+
+option go_package = "github.com/brighten-tompkins/bigquery-emulator/gateway/enginepb;enginepb";
+
+// ---------------------------------------------------------------------------
+// Catalog service
+//
+// The Go gateway is the source of truth for the BigQuery resource model
+// (projects -> datasets -> tables). It tells the engine about catalog
+// changes so the engine can resolve names during analysis and find rows
+// during execution.
+// ---------------------------------------------------------------------------
+
+service Catalog {
+  rpc RegisterDataset(RegisterDatasetRequest) returns (RegisterDatasetResponse);
+  rpc DropDataset(DropDatasetRequest) returns (DropDatasetResponse);
+
+  rpc RegisterTable(RegisterTableRequest) returns (RegisterTableResponse);
+  rpc DropTable(DropTableRequest) returns (DropTableResponse);
+
+  rpc DescribeTable(DescribeTableRequest) returns (DescribeTableResponse);
+}
+
+message DatasetRef {
+  string project_id = 1;
+  string dataset_id = 2;
+}
+
+message TableRef {
+  string project_id = 1;
+  string dataset_id = 2;
+  string table_id = 3;
+}
+
+message FieldSchema {
+  string name = 1;
+  // BigQuery type names: STRING, INT64, FLOAT64, BOOL, TIMESTAMP, DATE,
+  // TIME, DATETIME, GEOGRAPHY, BYTES, NUMERIC, BIGNUMERIC, JSON, STRUCT,
+  // ARRAY, ...
+  string type = 2;
+  // NULLABLE | REQUIRED | REPEATED. Empty defaults to NULLABLE.
+  string mode = 3;
+  string description = 4;
+  repeated FieldSchema fields = 5;  // for STRUCT/RECORD.
+}
+
+message TableSchema {
+  repeated FieldSchema fields = 1;
+}
+
+message RegisterDatasetRequest {
+  DatasetRef dataset = 1;
+  string location = 2;
+}
+message RegisterDatasetResponse {}
+
+message DropDatasetRequest {
+  DatasetRef dataset = 1;
+  bool delete_contents = 2;
+}
+message DropDatasetResponse {}
+
+message RegisterTableRequest {
+  TableRef table = 1;
+  TableSchema schema = 2;
+}
+message RegisterTableResponse {}
+
+message DropTableRequest {
+  TableRef table = 1;
+}
+message DropTableResponse {}
+
+message DescribeTableRequest {
+  TableRef table = 1;
+}
+message DescribeTableResponse {
+  TableSchema schema = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Query service
+//
+// The gateway forwards `bigquery.jobs.query` and the query-config branch of
+// `bigquery.jobs.insert` here. The engine returns a streamed sequence of
+// rows; the gateway is responsible for paginating them out to the BigQuery
+// REST client.
+// ---------------------------------------------------------------------------
+
+service Query {
+  rpc DryRun(QueryRequest) returns (DryRunResponse);
+  rpc ExecuteQuery(QueryRequest) returns (stream QueryResultRow);
+}
+
+message QueryRequest {
+  string project_id = 1;
+  // Default dataset for unqualified table references.
+  string default_dataset_id = 2;
+  string sql = 3;
+  // Optional: query parameters keyed by name. Positional parameters use
+  // an empty key (BigQuery's @0, @1, ... convention is unrolled here).
+  map<string, QueryParameter> parameters = 4;
+  bool use_legacy_sql = 5;
+}
+
+message QueryParameter {
+  string type_kind = 1;   // googlesql TypeKind name (e.g. INT64, STRING).
+  string value_json = 2;  // JSON-encoded literal value.
+}
+
+message DryRunResponse {
+  TableSchema schema = 1;
+  int64 estimated_bytes_processed = 2;
+}
+
+message QueryResultRow {
+  // First message in the stream carries the schema; subsequent messages
+  // carry rows. Either `schema` or `cells` is set, not both.
+  TableSchema schema = 1;
+  repeated Cell cells = 2;
+}
+
+message Cell {
+  // Wire shape: either `string_value`, `null_value`, `array`, or `struct`
+  // is set. Mirrors googlesql::Value's flavor of variant.
+  oneof value {
+    string string_value = 1;
+    bool null_value = 2;
+    Array array = 3;
+    Struct struct_value = 4;
+  }
+}
+
+message Array {
+  repeated Cell elements = 1;
+}
+
+message Struct {
+  repeated Cell fields = 1;
+}
