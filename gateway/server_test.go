@@ -14,7 +14,7 @@ import (
 //
 // Cross-reference docs/REST_API.md when adding new routes here.
 func TestRouteTable(t *testing.T) {
-	srv := NewServer(Options{})
+	srv := NewServer(Options{}, nil)
 
 	cases := []struct {
 		name   string
@@ -85,7 +85,7 @@ func TestRouteTable(t *testing.T) {
 // BigQuery-shaped 404 (not a 501) when a client invokes an unknown
 // custom method on a dataset or table resource.
 func TestUnknownColonOpReturns404(t *testing.T) {
-	srv := NewServer(Options{})
+	srv := NewServer(Options{}, nil)
 	cases := []string{
 		"/bigquery/v2/projects/p/datasets/d:nosuchop",
 		"/bigquery/v2/projects/p/datasets/d/tables/t:nosuchop",
@@ -104,7 +104,7 @@ func TestUnknownColonOpReturns404(t *testing.T) {
 // `GET /bigquery/v2/projects/{projectId}` route that an early scaffold
 // registered. There is no such endpoint in the public BigQuery API.
 func TestRemovedProjectGetIs404(t *testing.T) {
-	srv := NewServer(Options{})
+	srv := NewServer(Options{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/bigquery/v2/projects/p", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
@@ -118,7 +118,7 @@ func TestRemovedProjectGetIs404(t *testing.T) {
 // BigQuery client always sends a bearer token, so a 401 here would
 // force every client to special-case the emulator.
 func TestBearerTokenIsNotRejected(t *testing.T) {
-	srv := NewServer(Options{})
+	srv := NewServer(Options{}, nil)
 
 	cases := []struct {
 		name  string
@@ -149,7 +149,7 @@ func TestBearerTokenIsNotRejected(t *testing.T) {
 // real document (kind=discovery#restDescription) rather than the 501
 // stub it used to. This is the route library clients hit at startup.
 func TestDiscoveryReturnsOK(t *testing.T) {
-	srv := NewServer(Options{})
+	srv := NewServer(Options{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

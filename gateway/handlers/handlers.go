@@ -13,12 +13,27 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
 // Dependencies bundles everything a handler might need to reach (engine
-// gRPC client, in-memory catalog, logger, etc.). For now it is empty and
-// will grow as Phase 2+ wires in real backends.
-type Dependencies struct{}
+// gRPC client, in-memory catalog, logger, etc.). It grows as the gateway
+// wires in real backends.
+//
+// Catalog and Query are the engine-side gRPC clients defined in
+// proto/emulator.proto; both are nil when the gateway is started with
+// --engine_binary="" (Phase 1 / unit-test mode) and handlers must
+// nil-check before dispatching to them.
+type Dependencies struct {
+	// Catalog is the gRPC client used by datasets/tables/tabledata
+	// handlers to mirror catalog mutations into the engine.
+	Catalog enginepb.CatalogClient
+
+	// Query is the gRPC client used by jobs.query and the query branch
+	// of jobs.insert to forward SQL execution to the engine.
+	Query enginepb.QueryClient
+}
 
 // Health is a trivial liveness endpoint useful for `docker-compose`
 // health checks and CI smoke tests.

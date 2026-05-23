@@ -20,7 +20,17 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 )
+
+// engineReadyTimeout bounds how long Gateway.Run will wait for the engine
+// subprocess's gRPC health service to report SERVING before giving up.
+// 30s is generous: a debug build of the engine takes <1s to bind and
+// flip to SERVING on a developer laptop, but CI cold-starts and
+// container builds sometimes spend 5-10s in linker/loader before main()
+// runs.
+const engineReadyTimeout = 30 * time.Second
 
 // Options configures the gateway.
 type Options struct {
@@ -52,6 +62,10 @@ type Gateway struct {
 	opts       Options
 	engine     *exec.Cmd
 	engineDone chan struct{}
+
+	// engineClient is the long-lived gRPC channel to the engine
+	// subprocess. nil when EngineBinary is empty (Phase 1 stub mode).
+	engineClient *engine.Client
 }
 
 // New constructs a Gateway. Run actually starts it.
@@ -68,7 +82,7 @@ func (g *Gateway) Run() error {
 
 	srv := &http.Server{
 		Addr:              g.opts.HTTPAddress,
-		Handler:           NewServer(g.opts),
+		Handler:           NewServer(g.opts, g.engineClient),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -136,15 +150,44 @@ func (g *Gateway) startEngine() error {
 		}
 	}()
 
-	// TODO(phase 2): replace this sleep with a real grpc.health.v1 probe
-	// against the engine's gRPC port once the engine actually serves it.
-	if err := waitForEngine(g.opts.EngineAddress, 10*time.Second); err != nil {
+	if err := g.connectAndWaitForEngine(); err != nil {
 		return err
 	}
 	return nil
 }
 
+// connectAndWaitForEngine dials the engine's gRPC port and polls
+// grpc.health.v1.Health.Check until it reports SERVING (or
+// engineReadyTimeout fires). Replaces the Phase 1 sleep-and-pray stub
+// with a real readiness probe so the gateway's HTTP listener never
+// accepts traffic before the engine is actually able to answer it.
+//
+// Stores the live *engine.Client on the receiver for the lifetime of
+// the gateway; the connection is reused for every business RPC and torn
+// down by stopEngine.
+func (g *Gateway) connectAndWaitForEngine() error {
+	client, err := engine.Dial(g.opts.EngineAddress)
+	if err != nil {
+		return fmt.Errorf("dial engine at %s: %w", g.opts.EngineAddress, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), engineReadyTimeout)
+	defer cancel()
+
+	if err := client.WaitForReady(ctx); err != nil {
+		_ = client.Close()
+		return fmt.Errorf("wait for engine ready at %s: %w", g.opts.EngineAddress, err)
+	}
+	g.engineClient = client
+	log.Printf("Engine gRPC at %s reported SERVING", g.opts.EngineAddress)
+	return nil
+}
+
 func (g *Gateway) stopEngine() {
+	if g.engineClient != nil {
+		_ = g.engineClient.Close()
+		g.engineClient = nil
+	}
 	if g.engine == nil || g.engine.Process == nil {
 		return
 	}
@@ -155,14 +198,4 @@ func (g *Gateway) stopEngine() {
 		_ = g.engine.Process.Kill()
 		<-g.engineDone
 	}
-}
-
-// waitForEngine polls until the engine's gRPC port is reachable. Currently
-// a placeholder that just gives the subprocess a moment to start; Phase 2
-// will replace this with a proper grpc.health.v1 probe.
-func waitForEngine(address string, timeout time.Duration) error {
-	_ = address
-	_ = timeout
-	time.Sleep(200 * time.Millisecond)
-	return nil
 }

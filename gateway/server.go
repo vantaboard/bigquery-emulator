@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
@@ -28,9 +29,18 @@ import (
 // expressed directly in net/http's mux pattern syntax, which requires
 // every wildcard segment to end with `}`. For those, we register the
 // parent path and dispatch on the trailing `:op` inside the handler.
-func NewServer(opts Options) http.Handler {
+func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mux := http.NewServeMux()
 	deps := handlers.Dependencies{}
+	if eng != nil {
+		// Engine subprocess is wired up; surface the gRPC clients to
+		// handlers. When eng is nil (Phase 1 / unit tests / `task
+		// emulator:run` with --engine_binary=""), Dependencies stays
+		// zero-valued and handlers fall back to their NotImplemented
+		// stubs.
+		deps.Catalog = eng.Catalog
+		deps.Query = eng.Query
+	}
 
 	mux.HandleFunc("GET /{$}", handlers.Health)
 	mux.HandleFunc("GET /healthz", handlers.Health)
