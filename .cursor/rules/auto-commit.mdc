@@ -97,13 +97,15 @@ Use this for: removed or renamed APIs, changed function signatures, schema or co
    - **All from this context:** Stage the whole file: `git add <file>`.
    - **Mixed contexts:** Stage in chunks: `git add -p <file>` and stage only the hunks for this commit.
 3. Stage only the related files or hunks (see **Staging in Chunks** above).
-4. Commit with a descriptive message.
-5. Repeat for any remaining unrelated changes (other files or other hunks in the same file).
+4. **Pre-commit lint:** Before `git commit`, apply **Pre-commit lint gate** (`.cursor/rules/pre-commit-lint.mdc`): run `task lint:fix` then `task lint:run` when that rule says to, and fix or skip per that rule’s exceptions.
+5. Commit with a descriptive message.
+6. Repeat for any remaining unrelated changes (other files or other hunks in the same file).
 
 **Command pattern (whole files):**
 
 ```bash
 git add path/to/related/file1.go path/to/related/file2.go
+# Pre-commit lint gate: see .cursor/rules/pre-commit-lint.mdc (task lint:fix && task lint:run when applicable)
 git commit -m "type(scope): description"
 ```
 
@@ -112,6 +114,7 @@ git commit -m "type(scope): description"
 ```bash
 git add -p path/to/file_with_mixed_edits.go
 # then interactively: y for hunks to include, n to skip, s to split, q to quit
+# Pre-commit lint gate: see .cursor/rules/pre-commit-lint.mdc (task lint:fix && task lint:run when applicable)
 git commit -m "type(scope): description"
 ```
 
