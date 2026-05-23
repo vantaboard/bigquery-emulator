@@ -4,10 +4,10 @@ overview: "Phase 3d: pin and vendor libduckdb for CMake build."
 todos:
   - id: vendor-duckdb
     content: "Add third_party/duckdb via pinned tarball or submodule; CMake FetchContent; document VERSION pin"
-    status: pending
+    status: completed
   - id: cmake-duckdb-link
     content: "Wire DuckDB into CMakeLists.txt as optional target; CI builds with duckdb enabled"
-    status: pending
+    status: completed
 isProject: false
 ---
 
