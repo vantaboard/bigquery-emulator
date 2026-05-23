@@ -16,6 +16,16 @@ deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
 [spanner]: https://github.com/GoogleCloudPlatform/cloud-spanner-emulator
 
+## Execution plans
+
+For subagent-driven implementation, the roadmap is split into 14 bite-sized
+plans under [`.cursor/plans/`](.cursor/plans/). Start with the index:
+
+- [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — dependency graph, wave sequencing, subagent template
+
+Each plan maps to one ROADMAP phase (or a logical slice of a phase) and includes
+filled-in todos, key files, verification commands, and done criteria.
+
 ## Pluggable engine and storage
 
 The C++ side is structured around two narrow interfaces so the heavy
