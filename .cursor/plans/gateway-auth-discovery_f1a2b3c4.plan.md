@@ -4,10 +4,10 @@ overview: "Phase 1a: auth middleware and discovery document so client libraries 
 todos:
   - id: auth-middleware
     content: "Add gateway/middleware/auth.go: parse Authorization if present, never reject; attach synthetic principal to context"
-    status: pending
+    status: completed
   - id: discovery-doc
     content: "Implement GET /discovery/v1/apis/bigquery/v2/rest: minimal static JSON listing routed methods per docs/REST_API.md"
-    status: pending
+    status: completed
 isProject: false
 ---
 
