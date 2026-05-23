@@ -4,13 +4,13 @@ overview: "Phase 1b: reject useLegacySql=true, add tests, update docs."
 todos:
   - id: use-legacy-sql
     content: "In queries.go QueryRun: if useLegacySql==true return HTTP 400 invalidQuery before engine"
-    status: pending
+    status: completed
   - id: use-legacy-sql-test
     content: "Add queries_test.go: useLegacySql=true rejected; false/unset passthrough to 501"
-    status: pending
+    status: completed
   - id: emulator-host-doc
     content: "Verify README BIGQUERY_EMULATOR_HOST; update docs/REST_API.md auth section"
-    status: pending
+    status: completed
 isProject: false
 ---
 

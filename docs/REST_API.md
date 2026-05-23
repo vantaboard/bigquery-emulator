@@ -156,10 +156,14 @@ subset of the table in the upstream
 
 BigQuery's wire field `useLegacySql` defaults to `true` (legacy SQL).
 The emulator only supports GoogleSQL because the engine is GoogleSQL's
-own analyzer + reference impl. The query handlers will:
+own analyzer + reference impl. The
+[`jobs.query`](../gateway/handlers/queries.go) handler:
 
-- Treat `useLegacySql` unset or `false` as GoogleSQL (the supported case).
-- Reject `useLegacySql=true` with HTTP 400 and `reason: invalidQuery`.
+- Treats `useLegacySql` unset or `false` as GoogleSQL (the supported
+  case).
+- Rejects `useLegacySql=true` with HTTP 400 and `reason: invalidQuery`
+  before any engine work, returning the standard
+  [error envelope](#error-envelope).
 
 Document this clearly to clients that default to legacy via older Go
 client library versions: pass `option.WithEndpoint(...)` together with
@@ -207,15 +211,16 @@ RPC reference under [`docs/bigquery/docs/reference/storage/rpc/`][storagerpc].
 ## Authentication posture
 
 The emulator follows `cloud-spanner-emulator`'s posture: it parses but
-ignores bearer tokens and the `BIGQUERY_EMULATOR_HOST` environment
-variable is the canonical client-library override. Concretely, code
+ignores bearer tokens, and the `BIGQUERY_EMULATOR_HOST` environment
+variable is the canonical client-library override (mirroring
+`STORAGE_EMULATOR_HOST` and `SPANNER_EMULATOR_HOST`). Concretely, code
 that targets BigQuery normally:
 
 ```go
 client, err := bigquery.NewClient(ctx, "test-project")
 ```
 
-is redirected at the emulator with one of:
+is redirected at the emulator with either:
 
 ```go
 client, err := bigquery.NewClient(ctx, "test-project",
@@ -225,21 +230,31 @@ client, err := bigquery.NewClient(ctx, "test-project",
 ```
 
 or by setting `BIGQUERY_EMULATOR_HOST=localhost:9050` in the
-environment, mirroring `STORAGE_EMULATOR_HOST` and
-`SPANNER_EMULATOR_HOST` conventions.
+environment. The README's
+[Quickstart](../README.md#pointing-client-libraries-at-the-emulator)
+documents both forms for end users; this file documents the server-side
+posture.
+
+Every request passes through
+[`gateway/middleware/auth.go::WithAuth`][authmw], which:
+
+- Parses the `Authorization` header when present (RFC 6750 `Bearer`
+  tokens have the scheme stripped; other schemes are stored verbatim).
+- Attaches a synthetic [`Principal`][authmw] to the request context
+  with `Email = "emulator@bigquery.local"`, regardless of what the
+  client sent.
+- Never short-circuits the response — well-formed, malformed, and
+  absent `Authorization` headers are all served identically. The
+  emulator never returns 401.
+
+Handlers that need to know whether the client tried to authenticate
+read the principal via `middleware.PrincipalFromContext` and inspect
+the `Anonymous` and `Bearer` fields.
 
 The full upstream auth model (ADC, service-account keys, IAM scopes) is
 documented under
 [`docs/bigquery/docs/authentication.md`][auth] and is intentionally
 **not** modeled by the emulator.
-
-Concretely, every request passes through
-[`gateway/middleware/auth.go::WithAuth`][authmw], which parses the
-`Authorization` header if present and attaches a synthetic
-[`Principal`][authmw] to the request context. The middleware never
-short-circuits: bearer tokens (well-formed or not) always pass through,
-and handlers that need to know whether the client tried to authenticate
-can read the principal via `middleware.PrincipalFromContext`.
 
 [authmw]: ../gateway/middleware/auth.go
 
