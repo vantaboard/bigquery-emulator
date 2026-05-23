@@ -221,6 +221,38 @@ target_link_libraries(backend_storage_memory
     absl::span
 )
 
+# Persistent, file-backed Storage. Opens a DuckDB catalog under
+# `--data_dir`, lays datasets out as on-disk subdirectories + DuckDB
+# schemas, and parks per-table BigQuery metadata in a JSON sidecar.
+# Built unconditionally; without libduckdb the constructor returns
+# UNIMPLEMENTED so the binary still links cleanly.
+add_library(backend_storage_duckdb STATIC
+  backend/storage/duckdb/duckdb_storage.cc
+)
+target_include_directories(backend_storage_duckdb PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(backend_storage_duckdb
+  PUBLIC
+    backend_schema
+    backend_storage
+    enginepb_cc
+    absl::base
+    absl::status
+    absl::statusor
+    absl::strings
+    absl::synchronization
+    absl::span
+)
+if(BIGQUERY_EMULATOR_ENABLE_DUCKDB)
+  # PUBLIC link so emulator_main inherits libduckdb.so as a runtime
+  # dependency without each downstream target restating it. The compile
+  # definition is what gates the DuckDB-specific code in the .cc; with
+  # the option OFF the storage scaffold compiles back to a stub that
+  # returns UNIMPLEMENTED from Open().
+  target_link_libraries(backend_storage_duckdb PUBLIC duckdb::duckdb)
+  target_compile_definitions(backend_storage_duckdb
+    PUBLIC BIGQUERY_EMULATOR_HAS_DUCKDB=1)
+endif()
+
 # ---------------------------------------------------------------------------
 # Engine implementations (Phase 3c scaffolds, real wiring in Phase 5)
 #
@@ -293,6 +325,7 @@ target_link_libraries(emulator_main
     backend_engine_reference_impl
     backend_engine_duckdb
     backend_storage_memory
+    backend_storage_duckdb
     backend_storage
     backend_schema
 )

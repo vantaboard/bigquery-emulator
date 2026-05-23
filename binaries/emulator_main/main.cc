@@ -5,12 +5,14 @@
 // for the Go gateway to call into. The Go gateway spawns this binary on
 // startup; the binary blocks until the gateway terminates it.
 //
-// Phase 3c status: this binary parses the CLI surface (`--host_port`,
-// `--engine`, `--storage`, `--profile`, `--help`), instantiates the
-// chosen storage backend and engine through a factory, and hands them
-// to the gRPC front door. Both engine implementations are currently
-// scaffolds that return `UNIMPLEMENTED`; Phase 5 wires the real
-// `googlesql::reference_impl` and DuckDB transpiler paths.
+// Phase 3c+ status: this binary parses the CLI surface (`--host_port`,
+// `--engine`, `--storage`, `--profile`, `--data_dir`, `--help`),
+// instantiates the chosen storage backend and engine through a
+// factory, and hands them to the gRPC front door. `--storage=duckdb`
+// opens a persistent catalog under `--data_dir` (Phase 3e); both
+// engine implementations are still scaffolds that return
+// `UNIMPLEMENTED`. Phase 5 wires the real `googlesql::reference_impl`
+// and DuckDB transpiler paths.
 
 #include <cstdio>
 #include <cstdlib>
@@ -23,6 +25,7 @@
 #include "backend/engine/duckdb/duckdb_engine.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/reference_impl/reference_impl_engine.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
 #include "frontend/server/server.h"
@@ -38,8 +41,8 @@ enum class EngineKind {
 };
 
 // Selectable storage backends. Memory is volatile and CI-friendly;
-// DuckDB-backed persistent storage lands in a later plan and is
-// rejected by the factory for now.
+// DuckDB is the persistent file store rooted at `--data_dir` (see
+// `DuckDBStorage::Open` for the on-disk layout).
 enum class StorageKind {
   kMemory,
   kDuckDB,
@@ -56,15 +59,38 @@ enum class ProfileKind {
   kDev,
 };
 
+// Default `--data_dir` when `--storage=duckdb` is selected without an
+// explicit data_dir. Mirrors what cloud-spanner-emulator does for its
+// persistent-store directory: a stable, user-scoped path under $HOME.
+// Resolved lazily because $HOME is process-environment state.
+std::string DefaultDataDir() {
+  const char* home = std::getenv("HOME");
+  if (home == nullptr || *home == '\0') {
+    // No HOME (e.g. running inside a stripped container). Fall back to
+    // a working-directory-relative path so the binary still starts;
+    // callers should set --data_dir explicitly when this matters.
+    return "./.bigquery-emulator";
+  }
+  std::string out(home);
+  if (out.empty() || out.back() != '/') out.push_back('/');
+  out.append(".bigquery-emulator");
+  return out;
+}
+
 struct Flags {
   std::string host_port = "localhost:9060";
   EngineKind engine = EngineKind::kReferenceImpl;
   StorageKind storage = StorageKind::kMemory;
   ProfileKind profile = ProfileKind::kUnset;
+  // Persistent-store root used by `--storage=duckdb`. The default is
+  // `$HOME/.bigquery-emulator`; users override via `--data_dir=PATH`.
+  // Ignored when `--storage=memory`.
+  std::string data_dir;
   // Set by --engine / --storage on the command line so the profile
   // shorthand never overrides an explicit flag.
   bool engine_explicit = false;
   bool storage_explicit = false;
+  bool data_dir_explicit = false;
   bool help = false;
 };
 
@@ -97,8 +123,9 @@ void PrintUsage(std::FILE* out, const char* argv0) {
                "                                            CI-friendly\n"
                "                            duckdb          Parquet/Arrow\n"
                "                                            on disk via\n"
-               "                                            DuckDB (not\n"
-               "                                            yet wired)\n"
+               "                                            DuckDB; opens\n"
+               "                                            a catalog at\n"
+               "                                            --data_dir\n"
                "                          default: memory\n"
                "\n"
                "  --profile=KIND          shorthand for the two common\n"
@@ -109,6 +136,11 @@ void PrintUsage(std::FILE* out, const char* argv0) {
                "                            dev             duckdb + duckdb\n"
                "                          Explicit --engine / --storage\n"
                "                          flags win over --profile.\n"
+               "\n"
+               "  --data_dir=PATH         persistent-store root used by\n"
+               "                          --storage=duckdb; ignored when\n"
+               "                          --storage=memory.\n"
+               "                          default: $HOME/.bigquery-emulator\n"
                "\n"
                "  --help, -h              print this message and exit\n",
                argv0);
@@ -232,29 +264,44 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
       flags.profile = *kind;
       continue;
     }
+    if (MatchStringFlag(argc, argv, &i, "data_dir", &value)) {
+      flags.data_dir = value;
+      flags.data_dir_explicit = true;
+      continue;
+    }
     return absl::InvalidArgumentError(
         std::string("unknown flag: ") + std::string(arg));
   }
   auto status = ApplyProfile(&flags);
   if (!status.ok()) return status;
+  // Fill in the default data_dir only after profile resolution so the
+  // user's explicit --data_dir always wins. We defer the lookup to
+  // here (rather than the Flags initializer) because $HOME is process
+  // state, not a constant.
+  if (!flags.data_dir_explicit) {
+    flags.data_dir = DefaultDataDir();
+  }
   return flags;
 }
 
-// Storage factory. DuckDB storage is reserved for the next plan
-// (`duckdb-storage-core_o0d1e2f3`); until then the binary refuses to
-// start with --storage=duckdb so users get a clear error instead of a
-// silent fallback.
+// Storage factory. `--storage=memory` is volatile and CI-friendly;
+// `--storage=duckdb` opens a persistent DuckDB catalog under
+// `data_dir` (see `DuckDBStorage::Open` for the on-disk layout).
 absl::StatusOr<std::unique_ptr<
     bigquery_emulator::backend::storage::Storage>>
-CreateStorage(StorageKind kind) {
+CreateStorage(StorageKind kind, const std::string& data_dir) {
   switch (kind) {
     case StorageKind::kMemory:
       return std::unique_ptr<bigquery_emulator::backend::storage::Storage>(
           new bigquery_emulator::backend::storage::memory::InMemoryStorage());
-    case StorageKind::kDuckDB:
-      return absl::UnimplementedError(
-          "--storage=duckdb is not implemented yet "
-          "(ROADMAP Phase 3: duckdb-storage-core)");
+    case StorageKind::kDuckDB: {
+      auto store_or =
+          bigquery_emulator::backend::storage::duckdb::DuckDBStorage::Open(
+              data_dir);
+      if (!store_or.ok()) return store_or.status();
+      return std::unique_ptr<bigquery_emulator::backend::storage::Storage>(
+          std::move(*store_or));
+    }
   }
   return absl::InternalError("CreateStorage: unreachable storage kind");
 }
@@ -294,7 +341,7 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
-  auto storage = CreateStorage(flags.storage);
+  auto storage = CreateStorage(flags.storage, flags.data_dir);
   if (!storage.ok()) {
     std::fprintf(stderr, "[emulator_main] failed to create storage: %s\n",
                  std::string(storage.status().message()).c_str());
@@ -310,10 +357,19 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  std::fprintf(stderr,
-               "[emulator_main] starting engine=%s storage=%s host_port=%s\n",
-               EngineName(flags.engine), StorageName(flags.storage),
-               flags.host_port.c_str());
+  if (flags.storage == StorageKind::kDuckDB) {
+    std::fprintf(stderr,
+                 "[emulator_main] starting engine=%s storage=%s "
+                 "data_dir=%s host_port=%s\n",
+                 EngineName(flags.engine), StorageName(flags.storage),
+                 flags.data_dir.c_str(), flags.host_port.c_str());
+  } else {
+    std::fprintf(stderr,
+                 "[emulator_main] starting engine=%s storage=%s "
+                 "host_port=%s\n",
+                 EngineName(flags.engine), StorageName(flags.storage),
+                 flags.host_port.c_str());
+  }
 
   bigquery_emulator::frontend::Server::Options options;
   options.server_address = flags.host_port;
