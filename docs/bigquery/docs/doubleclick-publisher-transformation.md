@@ -1,0 +1,48 @@
+# Google Ad Manager report transformation
+
+When your Google Ad Manager (formerly known as DoubleClick for Publishers) data
+transfer files are transferred to BigQuery, the files are
+transformed into the following BigQuery tables and views.
+
+When you view the tables and views in BigQuery, the value for
+<var translate="no">network_code</var> is your Google Ad Manager network code.
+
+| **Google Ad Manager file** | **BigQuery table(s)** | **BigQuery view(s)** |
+|---|---|---|
+| **Data Transfer files** |   |   |
+| [NetworkRequests NetworkBackfillRequests](https://support.google.com/admanager/answer/1733124) | p_NetworkRequests_<var translate="no">network_code</var> p_NetworkBackfillRequests_<var translate="no">network_code</var> | NetworkRequests_<var translate="no">network_code</var> NetworkBackfillRequests_<var translate="no">network_code</var> |
+| [NetworkCodeServes NetworkBackfillCodeServes](https://support.google.com/admanager/answer/1733124) | p_NetworkCodeServes p_NetworkBackfillCodeServes_<var translate="no">network_code</var> | NetworkCodeServes NetworkBackfillCodeServes_<var translate="no">network_code</var> |
+| [NetworkImpressions NetworkBackfillImpressions](https://support.google.com/admanager/answer/1733124) | p_NetworkImpressions_<var translate="no">network_code</var> p_NetworkBackfillImpressions_<var translate="no">network_code</var> | NetworkImpressions_<var translate="no">network_code</var> NetworkBackfillImpressions_<var translate="no">network_code</var> |
+| [NetworkClicks NetworkBackfillClicks](https://support.google.com/admanager/answer/1733124) | p_NetworkClicks_<var translate="no">network_code</var> p_NetworkBackfillClicks_<var translate="no">network_code</var> | NetworkClicks_<var translate="no">network_code</var> NetworkBackfillClicks_<var translate="no">network_code</var> |
+| [NetworkActiveViews NetworkBackfillActiveViews](https://support.google.com/admanager/answer/1733124) | p_NetworkActiveViews_<var translate="no">network_code</var> p_NetworkBackfillActiveViews_<var translate="no">network_code</var> | NetworkActiveViews_<var translate="no">network_code</var> NetworkBackfillActiveViews_<var translate="no">network_code</var> |
+| [NetworkBackfillBids](https://support.google.com/admanager/answer/1733124) | p_NetworkBackfillBids_<var translate="no">network_code</var> | NetworkBackfillBids_<var translate="no">network_code</var> |
+| [NetworkVideoConversions NetworkBackfillVideoConversions](https://support.google.com/admanager/answer/1733124) | p_NetworkVideoConversions_<var translate="no">network_code</var> p_NetworkBackfillVideoConversions_<var translate="no">network_code</var> | NetworkVideoConversions_<var translate="no">network_code</var> NetworkBackfillVideoConversions_<var translate="no">network_code</var> |
+| [NetworkRichMediaConversions NetworkBackfillRichMediaConversions](https://support.google.com/admanager/answer/1733124) | p_NetworkRichMediaConversions_<var translate="no">network_code</var> p_NetworkBackfillRichMediaConversions_<var translate="no">network_code</var> | NetworkRichMediaConversions_<var translate="no">network_code</var> NetworkBackfillRichMediaConversions_<var translate="no">network_code</var> |
+| [NetworkActivities](https://support.google.com/admanager/answer/1733124) | p_NetworkActivities_<var translate="no">network_code</var> | NetworkActivities_<var translate="no">network_code</var> |
+| **Match Tables** |   |   |
+| [AdCategory](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableAdCategory_<var translate="no">network_code</var> | MatchTableAdCategory_<var translate="no">network_code</var> |
+| [AdUnit](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableAdUnit_<var translate="no">network_code</var> | MatchTableAdUnit_<var translate="no">network_code</var> |
+| [AudienceSegment](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableAudienceSegment_<var translate="no">network_code</var> | MatchTableAudienceSegment_<var translate="no">network_code</var> |
+| [AudienceSegmentCategory](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableAudienceSegmentCategory_<var translate="no">network_code</var> | MatchTableAudienceSegmentCategory_<var translate="no">network_code</var> |
+| [BandwidthGroup](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableBandwidthGroup_<var translate="no">network_code</var> | MatchTableBandwidthGroup_<var translate="no">network_code</var> |
+| [Browser](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableBrowser_<var translate="no">network_code</var> | MatchTableBrowser_<var translate="no">network_code</var> |
+| [BrowserLanguage](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableBrowserLanguage_<var translate="no">network_code</var> | MatchTableBrowserLanguage_<var translate="no">network_code</var> |
+| [Company](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableCompany_<var translate="no">network_code</var> | MatchTableCompany_<var translate="no">network_code</var> |
+| [DeviceCapability](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableDeviceCapability_<var translate="no">network_code</var> | MatchTableDeviceCapability_<var translate="no">network_code</var> |
+| [DeviceCategory](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableDeviceCategory_<var translate="no">network_code</var> | MatchTableDeviceCategory_<var translate="no">network_code</var> |
+| [DeviceManufacturer](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableDeviceManufacturer_<var translate="no">network_code</var> | MatchTableDeviceManufacturer_<var translate="no">network_code</var> |
+| [ExchangeRate](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) (deprecated) | - | - |
+| [GeoTarget](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableGeoTarget_<var translate="no">network_code</var> | MatchTableGeoTarget_<var translate="no">network_code</var> |
+| [LineItem](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableLineItem_<var translate="no">network_code</var> | MatchTableLineItem_<var translate="no">network_code</var> |
+| [MobileCarrier](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableMobileCarrier_<var translate="no">network_code</var> | MatchTableMobileCarrier_<var translate="no">network_code</var> |
+| [MobileDevice](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableMobileDevice_<var translate="no">network_code</var> | MatchTableMobileDevice_<var translate="no">network_code</var> |
+| [MobileDeviceSubmodel](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableMobileDeviceSubmodel_<var translate="no">network_code</var> | MatchTableMobileDeviceSubmodel_<var translate="no">network_code</var> |
+| [OperatingSystem](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableOperatingSystem_<var translate="no">network_code</var> | MatchTableOperatingSystem_<var translate="no">network_code</var> |
+| [OperatingSystemVersion](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableOperatingSystemVersion_<var translate="no">network_code</var> | MatchTableOperatingSystemVersion_<var translate="no">network_code</var> |
+| [Order](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableOrder_<var translate="no">network_code</var> | MatchTableOrder_<var translate="no">network_code</var> |
+| [Placement](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTablePlacement_<var translate="no">network_code</var> | MatchTablePlacement_<var translate="no">network_code</var> |
+| [ProgrammaticBuyer](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableProgrammaticBuyer_<var translate="no">network_code</var> | MatchTableProgrammaticBuyer_<var translate="no">network_code</var> |
+| [ProposalRetractionReason](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableProposalRetractionReason_<var translate="no">network_code</var> | MatchTableProposalRetractionReason_<var translate="no">network_code</var> |
+| [ThirdPartyCompany](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableThirdPartyCompany_<var translate="no">network_code</var> | MatchTableThirdPartyCompany_<var translate="no">network_code</var> |
+| [TimeZone](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableTimeZone_<var translate="no">network_code</var> | MatchTableTimeZone_<var translate="no">network_code</var> |
+| [User](https://developers.google.com/doubleclick-publishers/docs/pqlreference#matchtables) | p_MatchTableUser_<var translate="no">network_code</var> | MatchTableUser_<var translate="no">network_code</var> |

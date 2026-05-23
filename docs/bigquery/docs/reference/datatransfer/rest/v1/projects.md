@@ -1,0 +1,48 @@
+# REST Resource: projects.transferConfigs
+
+- [Resource: TransferConfig](https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs#TransferConfig)
+  - [JSON representation](https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs#TransferConfig.SCHEMA_REPRESENTATION)
+- [Methods](https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs#METHODS_SUMMARY)
+
+## Resource: TransferConfig
+
+Represents a data transfer configuration. A transfer configuration contains all metadata needed to perform a data transfer. For example, `destinationDatasetId` specifies where data should be stored. When a new transfer configuration is created, the specified `destinationDatasetId` is created when needed and shared with the appropriate data source service account.
+
+| JSON representation |
+|---|
+| ``` { "name": string, "displayName": string, "dataSourceId": string, "params": { object }, "schedule": string, "scheduleOptions": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ScheduleOptions`) }, "scheduleOptionsV2": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ScheduleOptionsV2`) }, "dataRefreshWindowDays": integer, "disabled": boolean, "updateTime": string, "nextRunTime": string, "state": enum (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/TransferState`), "userId": string, "datasetRegion": string, "notificationPubsubTopic": string, "emailPreferences": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/EmailPreferences`) }, "encryptionConfiguration": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.EncryptionConfiguration`) }, "error": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/Status`) }, "managedTableType": enum (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ManagedTableType`), // Union field `destination` can be only one of the following: "destinationDatasetId": string // End of list of possible types for union field `destination`. "ownerInfo": { object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.UserInfo`) } } ``` |
+
+| Fields ||
+|---|---|
+| `name` | `string` Identifier. The resource name of the transfer config. Transfer config names have the form either `projects/{projectId}/locations/{region}/transferConfigs/{configId}` or `projects/{projectId}/transferConfigs/{configId}`, where `configId` is usually a UUID, even though it is not guaranteed or required. The name is ignored when creating a transfer config. |
+| `displayName` | `string` User specified display name for the data transfer. |
+| `dataSourceId` | `string` Data source ID. This cannot be changed once data transfer is created. The full list of available data source IDs can be returned through an API call: <https://cloud.google.com/bigquery-transfer/docs/reference/datatransfer/rest/v1/projects.locations.dataSources/list> |
+| `params` | ``object (`https://protobuf.dev/reference/protobuf/google.protobuf#struct` format)`` Parameters specific to each data source. For more information see the bq tab in the 'Setting up a data transfer' section for each data source. For example the parameters for Cloud Storage transfers are listed here: <https://cloud.google.com/bigquery-transfer/docs/cloud-storage-transfer#bq> |
+| `schedule` | `string` Data transfer schedule. If the data source does not support a custom schedule, this should be empty. If it is empty, the default value for the data source will be used. The specified times are in UTC. Examples of valid format: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`. See more explanation about the format here: <https://cloud.google.com/appengine/docs/flexible/python/scheduling-jobs-with-cron-yaml#the_schedule_format> NOTE: The minimum interval time between recurring transfers depends on the data source; refer to the documentation for your data source. |
+| `scheduleOptions` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ScheduleOptions`)`` Options customizing the data transfer schedule. |
+| `scheduleOptionsV2` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ScheduleOptionsV2`)`` Options customizing different types of data transfer schedule. This field replaces "schedule" and "scheduleOptions" fields. ScheduleOptionsV2 cannot be used together with ScheduleOptions/Schedule. |
+| `dataRefreshWindowDays` | `integer` The number of days to look back to automatically refresh the data. For example, if `dataRefreshWindowDays = 10`, then every day BigQuery reingests data for \[today-10, today-1\], rather than ingesting data for just \[today-1\]. Only valid if the data source supports the feature. Set the value to 0 to use the default value. |
+| `disabled` | `boolean` Is this config disabled. When set to true, no runs will be scheduled for this transfer config. |
+| `updateTime` | ``string (`https://protobuf.dev/reference/protobuf/google.protobuf#timestamp` format)`` Output only. Data transfer modification time. Ignored by server on input. |
+| `nextRunTime` | ``string (`https://protobuf.dev/reference/protobuf/google.protobuf#timestamp` format)`` Output only. Next time when data transfer will run. |
+| `state` | ``enum (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/TransferState`)`` Output only. State of the most recently updated transfer run. |
+| `userId` | `string (https://developers.google.com/discovery/v1/type-format format)` Deprecated. Unique ID of the user on whose behalf transfer is done. |
+| `datasetRegion` | `string` Output only. Region in which BigQuery dataset is located. |
+| `notificationPubsubTopic` | `string` Pub/Sub topic where notifications will be sent after transfer runs associated with this transfer config finish. The format for specifying a pubsub topic is: `projects/{projectId}/topics/{topic_id}` |
+| `emailPreferences` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/EmailPreferences`)`` Email notifications will be sent according to these preferences to the email address of the user who owns this transfer config. |
+| `encryptionConfiguration` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.EncryptionConfiguration`)`` The encryption configuration part. Currently, it is only used for the optional KMS key name. The BigQuery service account of your project must be granted permissions to use the key. Read methods will return the key name applied in effect. Write methods will apply the key if it is present, or otherwise try to apply project default keys if it is absent. |
+| `error` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/Status`)`` Output only. Error code with detailed information about reason of the latest config failure. |
+| `managedTableType` | ``enum (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.ManagedTableType`)`` The classification of the destination table. |
+| Union field `destination`. The destination of the transfer config. `destination` can be only one of the following: ||
+| `destinationDatasetId` | `string` The BigQuery target dataset id. |
+| `ownerInfo` | ``object (`https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.locations.transferConfigs#TransferConfig.UserInfo`)`` Output only. Information about the user whose credentials are used to transfer data. Populated only for `transferConfigs.get` requests. In case the user information is not available, this field will not be populated. |
+
+| ## Methods ||
+|---|---|
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/create` | Creates a new data transfer configuration. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/delete` | Deletes a data transfer configuration, including any associated transfer runs and logs. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/get` | Returns information about a data transfer config. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/list` | Returns information about all transfer configs owned by a project in the specified location. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/patch` | Updates a data transfer configuration. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/scheduleRuns (deprecated)` | Creates transfer runs for a time range \[start_time, end_time\]. |
+| ### `https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rest/v1/projects.transferConfigs/startManualRuns` | Manually initiates transfer runs. |
