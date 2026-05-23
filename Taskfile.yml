@@ -2,17 +2,25 @@ version: "3"
 
 # Common dev tasks for the BigQuery emulator. Run `task --list` to see
 # everything that's available. Most tasks are intentionally thin wrappers
-# around `go` and `cmake` so they stay easy to read.
+# around `go`, `cmake`, `docker`, and the project-pinned tools listed in
+# mise.toml so they stay easy to read.
 
 vars:
   BIN_DIR: "{{.ROOT_DIR}}/bin"
+  TMP_DIR: "{{.ROOT_DIR}}/tmp"
   HTTP_PORT: "9050"
+  GRPC_PORT: "9060"
+  DOCKER_IMAGE: "bigquery-emulator:dev"
 
 tasks:
   default:
     desc: Show the task list.
     cmds:
       - task --list
+
+  # ---------------------------------------------------------------------------
+  # Build / run
+  # ---------------------------------------------------------------------------
 
   build:
     desc: Build the Go gateway. (C++ engine build is wired up via cmake or bazel.)
@@ -37,7 +45,16 @@ tasks:
     deps: [build, build:engine]
     cmds:
       - cp build-out/emulator_main {{.BIN_DIR}}/emulator_main
-      - "{{.BIN_DIR}}/gateway_main --engine_binary={{.BIN_DIR}}/emulator_main --http_port={{.HTTP_PORT}} --log_requests"
+      - "{{.BIN_DIR}}/gateway_main --engine_binary={{.BIN_DIR}}/emulator_main --http_port={{.HTTP_PORT}} --grpc_port={{.GRPC_PORT}} --log_requests"
+
+  dev:
+    desc: Hot-reload the Go gateway via air (config in .air.toml). Engine subprocess stays disabled.
+    cmds:
+      - air
+
+  # ---------------------------------------------------------------------------
+  # Test / lint
+  # ---------------------------------------------------------------------------
 
   test:
     desc: Run all Go tests.
@@ -55,16 +72,31 @@ tasks:
       - gofmt -s -w .
 
   lint:fix:
-    desc: Apply auto-fixable lints. Currently just `gofmt -s -w` and `go vet`.
+    desc: Apply auto-fixable lints (gofmt -s -w + go vet). Fast pre-commit gate.
     cmds:
       - task: fmt
       - task: vet
 
   lint:run:
-    desc: Run lints in check-only mode (no fixes). Used by the pre-commit gate.
+    desc: Run lints in check-only mode (gofmt + go vet). Used by the pre-commit gate.
     cmds:
       - test -z "$(gofmt -s -l .)" || (echo 'gofmt would reformat:' && gofmt -s -l . && exit 1)
       - go vet ./...
+
+  lint:go:
+    desc: Run golangci-lint with the project's .golangci.yml (slow, full check).
+    cmds:
+      - golangci-lint run ./...
+
+  lint:go:fix:
+    desc: Run golangci-lint with --fix to apply formatters and auto-fixable linters.
+    cmds:
+      - golangci-lint run --fix ./...
+
+  lint:shell:
+    desc: Run shellcheck over shell scripts under docker/.
+    cmds:
+      - shellcheck docker/*.sh
 
   ci:run:
     desc: Run the same checks CI runs (go vet, go test, build engine, build gateway).
@@ -74,7 +106,31 @@ tasks:
       - task: build:engine
       - task: build
 
+  # ---------------------------------------------------------------------------
+  # Docker
+  # ---------------------------------------------------------------------------
+
+  docker:build:
+    desc: Build the runtime Docker image with both binaries.
+    cmds:
+      - docker build -t {{.DOCKER_IMAGE}} .
+
+  docker:run:
+    desc: Run the Docker image, publishing the REST gateway and engine gRPC port.
+    deps: [docker:build]
+    cmds:
+      - docker run --rm -p {{.HTTP_PORT}}:{{.HTTP_PORT}} -p {{.GRPC_PORT}}:{{.GRPC_PORT}} {{.DOCKER_IMAGE}}
+
+  # ---------------------------------------------------------------------------
+  # Tooling / housekeeping
+  # ---------------------------------------------------------------------------
+
+  tools:install:
+    desc: Materialize every tool pinned in mise.toml (fresh-clone bootstrap).
+    cmds:
+      - mise install
+
   clean:
     desc: Remove build artifacts.
     cmds:
-      - rm -rf {{.BIN_DIR}} build-out
+      - rm -rf {{.BIN_DIR}} {{.TMP_DIR}} build-out

@@ -1,0 +1,24 @@
+# Hot-reload config for `task dev`. Watches the Go side of the gateway
+# and rebuilds + restarts it; the C++ engine subprocess is left disabled
+# (matches `task run`), so this is only useful while Phase 2 wiring is
+# being scaffolded. Build artifacts land in ./tmp/ and are .gitignored.
+
+root    = "."
+tmp_dir = "tmp"
+
+[build]
+cmd            = "go build -o ./tmp/gateway_main ./binaries/gateway_main"
+bin            = "./tmp/gateway_main"
+full_bin       = "./tmp/gateway_main --engine_binary= --http_port=9050 --log_requests"
+include_ext    = ["go"]
+include_dir    = ["binaries/gateway_main", "gateway", "proto"]
+exclude_dir    = ["bin", "build-out", "tmp", "docs", ".cursor", "cloud-spanner-emulator"]
+stop_on_error  = true
+send_interrupt = true
+kill_delay     = "1s"
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true

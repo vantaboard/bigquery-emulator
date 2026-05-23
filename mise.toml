@@ -1,0 +1,49 @@
+# Project-pinned toolchain for the BigQuery emulator. `mise install` (or
+# `task tools:install`) materializes every entry under [tools] for a
+# fresh checkout; the [env] block plus `.envrc` propagate the resulting
+# PATH and the project's well-known env vars into the developer's shell
+# via direnv. Keep tool versions in sync with the Dockerfile and the CI
+# workflow under .github/workflows/ci.yml.
+
+[tools]
+# Shell and dev-loop tooling.
+direnv = "2.37.1"
+task   = "3.50.0"
+air    = "1.65.1"          # Hot-reload runner used by `task dev`.
+
+# Go side (REST gateway).
+go            = "1.26.0"
+golangci-lint = "2.12.2"   # Driven by .golangci.yml; surfaced via `task lint:go`.
+
+# C++ side (engine). Pinned here so a fresh clone gets the same toolchain
+# CI uses without a separate apt-get dance; the Dockerfile still installs
+# its own copies inside the build images so container builds stay hermetic.
+cmake = "4.3.3"
+ninja = "1.13.2"
+
+# Internal gRPC contract (proto/emulator.proto). protoc handles raw
+# codegen today; buf is the front-end we'll switch to once Phase 2 lands
+# the generation step.
+protoc = "35.0"
+buf    = "1.69.0"
+
+# Miscellaneous.
+gcloud     = "568.0.0"     # For poking real BigQuery while debugging parity.
+shellcheck = "0.11.0"      # Used by `task lint:shell` on docker/*.sh.
+
+[env]
+# Put the project's `bin/` (where `task build`, `go install`, etc. all
+# deposit binaries) on PATH so freshly built `gateway_main` /
+# `emulator_main` are callable from anywhere in the worktree without a
+# full path.
+_.path = ["./bin"]
+
+# Funnel `go install` output into the same bin/ so the PATH entry above
+# picks installed tools up automatically.
+GOBIN = "{{config_root}}/bin"
+
+# Default endpoint override for any BigQuery client started from this
+# shell. Matches the BIGQUERY_EMULATOR_HOST convention shared with
+# STORAGE_EMULATOR_HOST / SPANNER_EMULATOR_HOST. Unset it (or override
+# at the command line) when you need to talk to real BigQuery.
+BIGQUERY_EMULATOR_HOST = "localhost:9050"

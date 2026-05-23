@@ -5,6 +5,7 @@ cloud-spanner-emulator/
 /bin/
 /build-out/
 /out/
+/tmp/
 *.o
 *.obj
 *.a
