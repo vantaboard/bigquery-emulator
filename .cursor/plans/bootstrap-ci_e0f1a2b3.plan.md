@@ -4,13 +4,13 @@ overview: "Phase 0b: GitHub Actions CI, local task ci:run, and README docker qui
 todos:
   - id: ci-workflow
     content: "Add .github/workflows/ci.yml: matrix linux/amd64+arm64; go vet, go test ./..., cmake build emulator_main, go build gateway"
-    status: pending
+    status: completed
   - id: taskfile-ci
     content: "Add task ci:run to Taskfile.yml mirroring CI steps"
-    status: pending
+    status: completed
   - id: readme-docker
     content: "Document docker build/run in README Quickstart"
-    status: pending
+    status: completed
 isProject: false
 ---
 
