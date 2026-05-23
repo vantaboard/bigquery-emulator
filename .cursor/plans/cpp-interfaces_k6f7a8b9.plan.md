@@ -4,13 +4,13 @@ overview: "Phase 3a: Storage and Engine C++ interfaces plus internal schema type
 todos:
   - id: storage-interface
     content: "Replace storage.h with Storage abstract class: CreateDataset, DropDataset, CreateTable, DropTable, GetSchema, AppendRows, ScanRows"
-    status: pending
+    status: completed
   - id: engine-interface
     content: "Add backend/engine/engine.h: Analyze, DryRun, ExecuteQuery against resolved AST + catalog"
-    status: pending
+    status: completed
   - id: schema-types
     content: "Add backend/schema/schema.h: proto FieldSchema ↔ internal ColumnType conversions"
-    status: pending
+    status: completed
 isProject: false
 ---
 
