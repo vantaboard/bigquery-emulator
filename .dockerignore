@@ -1,0 +1,60 @@
+# Keep the docker build context small. Anything not needed by the
+# Dockerfile's COPY directives belongs here.
+
+# Reference clone of cloud-spanner-emulator (kept locally for design
+# reference; never shipped).
+cloud-spanner-emulator/
+
+# Build outputs
+bin/
+build-out/
+out/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Bazel
+bazel-*
+
+# CMake out-of-source caches in the source tree.
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile.cmake
+
+# Go test/profile artifacts.
+*.test
+*.prof
+coverage.out
+vendor/
+
+# Editor / OS noise.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Repo metadata not needed inside the image.
+.git/
+.github/
+.cursor/
+
+# User-managed dev-environment files (mise/direnv). These are
+# intentionally untracked by git and have no business in the image.
+.envrc
+mise.toml
+mise2
+
+# Docs are not needed at build time.
+docs/
+
+# The Dockerfile and devcontainer config don't need to be inside the
+# image they produce.
+Dockerfile
+.dockerignore
+.devcontainer/
