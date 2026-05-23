@@ -4,10 +4,10 @@ overview: "Phase 3b: InMemoryStorage implementation and unit test."
 todos:
   - id: memory-storage
     content: "Implement backend/storage/memory/in_memory_storage.{h,cc}: thread-safe dataset→table→rows map"
-    status: pending
+    status: completed
   - id: memory-storage-test
     content: "Add in_memory_storage_test.cc: create table, append 3 rows, scan back, verify schema"
-    status: pending
+    status: completed
 isProject: false
 ---
 
