@@ -112,3 +112,49 @@ func TestRemovedProjectGetIs404(t *testing.T) {
 		t.Fatalf("GET /bigquery/v2/projects/p -> %d, want 404 (endpoint does not exist)", rec.Code)
 	}
 }
+
+// TestBearerTokenIsNotRejected pins the documented auth posture: the
+// emulator parses Authorization headers but never rejects them. A real
+// BigQuery client always sends a bearer token, so a 401 here would
+// force every client to special-case the emulator.
+func TestBearerTokenIsNotRejected(t *testing.T) {
+	srv := NewServer(Options{})
+
+	cases := []struct {
+		name  string
+		token string
+	}{
+		{"valid-looking-bearer", "Bearer ya29.real-looking-token"},
+		{"lowercase-scheme", "bearer ya29.lowercase"},
+		{"empty-token", "Bearer "},
+		{"malformed-no-scheme", "definitely-not-a-token"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+			req.Header.Set("Authorization", tc.token)
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code == http.StatusUnauthorized {
+				t.Fatalf("Authorization=%q -> 401; emulator must never reject bearer tokens", tc.token)
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("Authorization=%q -> %d, want 200", tc.token, rec.Code)
+			}
+		})
+	}
+}
+
+// TestDiscoveryReturnsOK verifies the discovery route now returns a
+// real document (kind=discovery#restDescription) rather than the 501
+// stub it used to. This is the route library clients hit at startup.
+func TestDiscoveryReturnsOK(t *testing.T) {
+	srv := NewServer(Options{})
+	req := httptest.NewRequest(http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}

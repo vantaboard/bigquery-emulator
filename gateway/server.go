@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
+	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
 
 // NewServer returns the HTTP handler tree implementing the BigQuery REST
@@ -35,7 +36,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("GET /healthz", handlers.Health)
 	mux.HandleFunc("/", handlers.NotFound)
 
-	mux.HandleFunc("GET /discovery/v1/apis/bigquery/v2/rest", handlers.NotImplemented)
+	mux.HandleFunc("GET /discovery/v1/apis/bigquery/v2/rest", handlers.Discovery(deps))
 
 	mux.HandleFunc("GET /bigquery/v2/projects", handlers.ProjectList(deps))
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/serviceAccount", handlers.ProjectGetServiceAccount(deps))
@@ -76,10 +77,15 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/queries", handlers.QueryRun(deps))
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/queries/{jobId}", handlers.QueryGetResults(deps))
 
+	// Auth middleware always runs: it parses (but never validates) the
+	// Authorization header and attaches a synthetic principal to the
+	// request context. Per docs/REST_API.md and ROADMAP.md Phase 1,
+	// the emulator must never 401, so this is permissive by design.
+	var handler http.Handler = middleware.WithAuth(mux)
 	if opts.LogRequests {
-		return loggingMiddleware(mux)
+		handler = loggingMiddleware(handler)
 	}
-	return mux
+	return handler
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

@@ -95,7 +95,7 @@ the upstream URL template, see
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| Discovery doc | `GET /discovery/v1/apis/bigquery/v2/rest` | todo | none |
+| Discovery doc | `GET /discovery/v1/apis/bigquery/v2/rest` | wired | [`gateway/handlers/discovery.go::Discovery`][discovery] |
 | Health (emulator-only) | `GET /` and `GET /healthz` | done | [`gateway/handlers/handlers.go::Health`][handlers] |
 
 [projects]: ../gateway/handlers/projects.go
@@ -104,6 +104,7 @@ the upstream URL template, see
 [jobs]: ../gateway/handlers/jobs.go
 [queries]: ../gateway/handlers/queries.go
 [handlers]: ../gateway/handlers/handlers.go
+[discovery]: ../gateway/handlers/discovery.go
 
 ## Routing notes (Go specifics)
 
@@ -231,5 +232,15 @@ The full upstream auth model (ADC, service-account keys, IAM scopes) is
 documented under
 [`docs/bigquery/docs/authentication.md`][auth] and is intentionally
 **not** modeled by the emulator.
+
+Concretely, every request passes through
+[`gateway/middleware/auth.go::WithAuth`][authmw], which parses the
+`Authorization` header if present and attaches a synthetic
+[`Principal`][authmw] to the request context. The middleware never
+short-circuits: bearer tokens (well-formed or not) always pass through,
+and handlers that need to know whether the client tried to authenticate
+can read the principal via `middleware.PrincipalFromContext`.
+
+[authmw]: ../gateway/middleware/auth.go
 
 [auth]: ./bigquery/docs/authentication.md
