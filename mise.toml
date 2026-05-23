@@ -9,7 +9,7 @@
 # Shell and dev-loop tooling.
 direnv = "2.37.1"
 task   = "3.50.0"
-air    = "1.65.1"          # Hot-reload runner used by `task dev`.
+air    = "1.65.1"          # Hot-reload runner used by `task emulator:watch`.
 
 # Go side (REST gateway).
 go            = "1.26.0"
@@ -32,8 +32,8 @@ gcloud     = "568.0.0"     # For poking real BigQuery while debugging parity.
 shellcheck = "0.11.0"      # Used by `task lint:shell` on docker/*.sh.
 
 [env]
-# Put the project's `bin/` (where `task build`, `go install`, etc. all
-# deposit binaries) on PATH so freshly built `gateway_main` /
+# Put the project's `bin/` (where `task emulator:build`, `go install`,
+# etc. all deposit binaries) on PATH so freshly built `gateway_main` /
 # `emulator_main` are callable from anywhere in the worktree without a
 # full path.
 _.path = ["./bin"]

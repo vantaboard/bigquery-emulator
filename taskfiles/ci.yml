@@ -1,0 +1,19 @@
+# Local mirror of .github/workflows/ci.yml. Keep these in sync: anything
+# that runs in CI should also run via `task ci:run`, and vice versa.
+#
+# Usage: task ci (or task ci:run)
+version: "3"
+
+tasks:
+  default:
+    desc: Run the same checks CI runs (lint:run, test, emulator:build-engine, emulator:build)
+    cmds:
+      - task: run
+
+  run:
+    desc: Full CI gate (lint:run, test, emulator:build-engine, emulator:build)
+    cmds:
+      - task: :lint:run
+      - task: :test:run
+      - task: :emulator:build-engine
+      - task: :emulator:build

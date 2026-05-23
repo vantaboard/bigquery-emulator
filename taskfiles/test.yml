@@ -1,0 +1,36 @@
+# Go tests for the gateway. Override TESTPKG to scope to a single
+# package (e.g. TESTPKG=./gateway/handlers/... task test:run) and
+# GO_TEST_FLAGS to pass extra flags (-run, -v, etc.).
+#
+# Usage: task test (or task test:run), task test:race
+version: "3"
+
+vars:
+  TESTPKG: "./..."
+  GO_TEST_FLAGS: ""
+
+tasks:
+  default:
+    desc: Run every Go test (go test ./...)
+    cmds:
+      - task: run
+
+  run:
+    desc: go test for every package under the gateway
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go test {{.TESTPKG}} -count=1 {{.GO_TEST_FLAGS}}
+
+  race:
+    desc: go test -race for every package under the gateway
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go test -race {{.TESTPKG}} -count=1 {{.GO_TEST_FLAGS}}

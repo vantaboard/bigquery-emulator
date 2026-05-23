@@ -1,0 +1,88 @@
+# Build, run, and hot-reload the BigQuery emulator. Mirrors the
+# cloud-spanner-emulator gateway_main / emulator_main split: `build`
+# compiles the Go gateway, `build-engine` compiles the C++ engine via
+# CMake, and `build-all` materializes both halves into ./bin so the
+# spawn-engine code path has something to exec.
+#
+# Usage: task emulator:run (gateway alone, engine subprocess disabled),
+#        task emulator:run-full (both halves), task emulator:watch (air).
+version: "3"
+
+vars:
+  EMULATOR_HTTP_PORT:
+    sh: echo "${EMULATOR_HTTP_PORT:-9050}"
+  EMULATOR_GRPC_PORT:
+    sh: echo "${EMULATOR_GRPC_PORT:-9060}"
+
+tasks:
+  default:
+    desc: Build and run the gateway (engine subprocess disabled until Phase 2)
+    cmds:
+      - task: run
+
+  build:
+    aliases: [build-gateway]
+    desc: Build the Go gateway (gateway_main) into ./bin
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        mkdir -p bin
+        go build -o ./bin/gateway_main ./binaries/gateway_main
+
+  build-engine:
+    desc: Build the C++ engine (emulator_main) via CMake into build-out/
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        cmake -S . -B build-out -DCMAKE_BUILD_TYPE=Release
+        cmake --build build-out --target emulator_main -j
+
+  build-all:
+    desc: Build both halves (gateway + engine) and stage the engine in ./bin
+    deps: [build, build-engine]
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        mkdir -p bin
+        cp build-out/emulator_main ./bin/emulator_main
+
+  run:
+    aliases: [start]
+    desc: Build and run the gateway with the engine subprocess disabled (Phase 1 stub)
+    deps: [build]
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        ./bin/gateway_main \
+          --engine_binary= \
+          --http_port={{.EMULATOR_HTTP_PORT}} \
+          --log_requests
+
+  run-full:
+    desc: Build both halves and run the gateway with the engine subprocess attached
+    deps: [build-all]
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        ./bin/gateway_main \
+          --engine_binary=./bin/emulator_main \
+          --http_port={{.EMULATOR_HTTP_PORT}} \
+          --grpc_port={{.EMULATOR_GRPC_PORT}} \
+          --log_requests
+
+  watch:
+    aliases: [dev]
+    desc: Hot-reload the gateway via air (see .air.toml). Engine subprocess stays disabled.
+    cmds:
+      - air

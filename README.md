@@ -103,9 +103,12 @@ When the C++ side starts being implemented (Phase 2 onward), the default
 flow becomes:
 
 ```bash
-task build         # build both gateway_main and emulator_main
-task run           # run gateway, which spawns the engine
+task emulator:build-all   # build both gateway_main and emulator_main
+task emulator:run-full    # run gateway, which spawns the engine
 ```
+
+Run `task --list` for the full set of namespaces (`emulator:`, `lint:`,
+`test:`, `docker:`, `ci:`, `tools:`).
 
 ### Docker
 

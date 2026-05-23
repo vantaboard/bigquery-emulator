@@ -1,0 +1,81 @@
+# Linters: fast pre-commit gate (gofmt + go vet), full golangci-lint
+# pass driven by .golangci.yml, and shellcheck over docker/*.sh.
+#
+# Usage: task lint:run (fast gate, used by the auto-commit workflow)
+#        task lint:fix (apply gofmt + re-run vet)
+#        task lint:go  / task lint:go-fix (full golangci-lint pass)
+#        task lint:shell (shellcheck on docker/*.sh)
+#
+# The fast gate is kept separate from the full golangci-lint pass so the
+# auto-commit pre-commit hook (.cursor/rules/pre-commit-lint.mdc) stays
+# snappy and the existing pre-existing golangci-lint findings do not
+# block every commit; once those are cleared, fold lint:go into lint:run.
+version: "3"
+
+tasks:
+  default:
+    desc: Run the fast pre-commit gate (same as lint:run)
+    cmds:
+      - task: run
+
+  run:
+    aliases: [check]
+    desc: Fast pre-commit gate (gofmt + go vet). Used by the auto-commit workflow.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        if [ -n "$(gofmt -s -l .)" ]; then
+          echo 'gofmt would reformat:' >&2
+          gofmt -s -l . >&2
+          exit 1
+        fi
+        go vet ./...
+
+  fix:
+    desc: Apply auto-fixable lints from the fast gate (gofmt -s -w + go vet)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        gofmt -s -w .
+        go vet ./...
+
+  go:
+    desc: Run golangci-lint with the project's .golangci.yml (slow, full check)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        golangci-lint run ./...
+
+  go-fix:
+    desc: Run golangci-lint --fix to apply formatters and auto-fixable linters
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        golangci-lint run --fix ./...
+
+  shell:
+    desc: ShellCheck shell scripts under docker/
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        shopt -s nullglob
+        scripts=(docker/*.sh)
+        if [ ${#scripts[@]} -eq 0 ]; then
+          echo "lint:shell: no shell scripts found under docker/" >&2
+          exit 0
+        fi
+        shellcheck "${scripts[@]}"

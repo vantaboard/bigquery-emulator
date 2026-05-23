@@ -1,0 +1,39 @@
+# Build and run the runtime Docker image. The multi-stage Dockerfile
+# ships both the Go gateway and the C++ engine and is what `task ci:run`
+# / the GHCR release path eventually consume.
+#
+# Usage: task docker:build, task docker:run
+version: "3"
+
+vars:
+  DOCKER_IMAGE: "bigquery-emulator:dev"
+  EMULATOR_HTTP_PORT:
+    sh: echo "${EMULATOR_HTTP_PORT:-9050}"
+  EMULATOR_GRPC_PORT:
+    sh: echo "${EMULATOR_GRPC_PORT:-9060}"
+
+tasks:
+  default:
+    desc: Build the runtime Docker image (same as docker:build)
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the runtime image with both binaries (tag {{.DOCKER_IMAGE}})
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker build -t {{.DOCKER_IMAGE}} .
+
+  run:
+    desc: Run the image and publish the REST gateway + engine gRPC ports
+    deps: [build]
+    cmds:
+      - |
+        set -eo pipefail
+        docker run --rm \
+          -p {{.EMULATOR_HTTP_PORT}}:{{.EMULATOR_HTTP_PORT}} \
+          -p {{.EMULATOR_GRPC_PORT}}:{{.EMULATOR_GRPC_PORT}} \
+          {{.DOCKER_IMAGE}}
