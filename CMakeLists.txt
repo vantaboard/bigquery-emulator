@@ -66,6 +66,29 @@ find_package(Threads REQUIRED)
 # installations.
 find_package(absl CONFIG REQUIRED)
 
+# ---------------------------------------------------------------------------
+# Vendored DuckDB (Phase 3d, plan vendor-duckdb)
+#
+# Pulls libduckdb v1.5.3 in as the imported target `duckdb::duckdb`.
+# The fetch + hash pin live in `third_party/duckdb/`; see that
+# directory's VERSION + README for the rationale (prebuilt tarball
+# instead of from-source) and the bump procedure.
+#
+# The flag is on by default so `task ci:run` builds the same shape
+# the published Docker image will, but flipping it OFF still produces
+# a working `emulator_main` — the DuckDB engine scaffold and the
+# upcoming DuckDBStorage scaffold both compile without DuckDB
+# headers and degrade to UNIMPLEMENTED at runtime.
+# ---------------------------------------------------------------------------
+
+option(BIGQUERY_EMULATOR_ENABLE_DUCKDB
+  "Vendor libduckdb and link it into backend_engine_duckdb / backend_storage_duckdb"
+  ON)
+
+if(BIGQUERY_EMULATOR_ENABLE_DUCKDB)
+  add_subdirectory(third_party/duckdb)
+endif()
+
 set(PROTO_SOURCE_DIR ${CMAKE_SOURCE_DIR}/proto)
 set(PROTO_GEN_DIR ${CMAKE_BINARY_DIR}/generated/proto)
 file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
@@ -233,6 +256,17 @@ target_link_libraries(backend_engine_duckdb
     absl::status
     absl::statusor
 )
+if(BIGQUERY_EMULATOR_ENABLE_DUCKDB)
+  # PUBLIC link so emulator_main inherits libduckdb.so as a runtime
+  # dependency without each downstream target having to re-state it.
+  # The compile definition is what gates the DuckDB-specific code in
+  # `duckdb_engine.cc`; flipping the option OFF strips the .so from
+  # the link line and the scaffold compiles back to its no-DuckDB
+  # form.
+  target_link_libraries(backend_engine_duckdb PUBLIC duckdb::duckdb)
+  target_compile_definitions(backend_engine_duckdb
+    PUBLIC BIGQUERY_EMULATOR_HAS_DUCKDB=1)
+endif()
 
 # ---------------------------------------------------------------------------
 # Engine front-door + binary

@@ -7,12 +7,39 @@
 #include "backend/engine/engine.h"
 #include "backend/storage/storage.h"
 
+#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
+#include "duckdb.h"
+#endif
+
 namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace duckdb {
 
-DuckDBEngine::DuckDBEngine(storage::Storage* storage) : storage_(storage) {}
+namespace {
+
+// Returns the DuckDB C-API library version string when the build has
+// linked libduckdb, or a stub when it hasn't. Beyond a sanity check,
+// this also forces the linker to keep libduckdb.so on the DT_NEEDED
+// list under `--as-needed` (otherwise the engine wouldn't reference
+// any DuckDB symbol until Phase 5.B and the .so would be dropped from
+// the final binary).
+const char* DuckDBLibraryVersionOrStub() {
+#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
+  return ::duckdb_library_version();
+#else
+  return "<duckdb-disabled>";
+#endif
+}
+
+}  // namespace
+
+DuckDBEngine::DuckDBEngine(storage::Storage* storage) : storage_(storage) {
+  // Pulls the DuckDB symbol into the link line; the value itself is
+  // discarded today, Phase 5.B will surface it on /healthz / debug
+  // logs once the transpiler lands.
+  (void)DuckDBLibraryVersionOrStub();
+}
 
 DuckDBEngine::~DuckDBEngine() = default;
 
