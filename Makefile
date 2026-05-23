@@ -4,7 +4,7 @@
 BIN_DIR  := bin
 HTTP_PORT ?= 9050
 
-.PHONY: all build build-engine run run-full test vet fmt lint clean
+.PHONY: all build build-engine run run-full test vet fmt lint clean proto proto-install proto-lint
 
 all: build
 
@@ -35,6 +35,16 @@ fmt:
 lint:
 	@test -z "$$(gofmt -s -l .)" || (echo 'gofmt would reformat:' && gofmt -s -l . && exit 1)
 	go vet ./...
+
+proto-install:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+proto: proto-install
+	buf generate
+
+proto-lint:
+	buf lint
 
 clean:
 	rm -rf $(BIN_DIR) build-out

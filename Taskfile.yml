@@ -14,6 +14,7 @@ includes:
   docker: ./taskfiles/docker.yml
   ci: ./taskfiles/ci.yml
   tools: ./taskfiles/tools.yml
+  proto: ./taskfiles/proto.yml
 
 tasks:
   default:

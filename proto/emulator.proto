@@ -3,14 +3,24 @@
 // public-facing BigQuery REST shape, and only forwards the bits that
 // actually need GoogleSQL to do their job.
 //
-// This file is not generated to anything yet. Phase 2 of ROADMAP.md will
-// add `buf` / `protoc` invocations to the build.
+// Code generation is wired up via buf (see ../buf.gen.yaml) for the Go
+// side and via CMake (see ../CMakeLists.txt) for the C++ side. The Go
+// stubs land in gateway/enginepb/ and are checked in so `go build`
+// works without an extra codegen step; the C++ stubs are generated
+// fresh into the CMake build tree.
 
 syntax = "proto3";
 
 package bigquery_emulator.v1;
 
+// Generated artifacts:
+//   - Go:  github.com/vantaboard/bigquery-emulator/gateway/enginepb
+//   - C++: namespace bigquery_emulator::v1 (derived from `package` above).
 option go_package = "github.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb";
+
+// Use arenas for the C++ codegen path; gives us per-RPC bump-allocator
+// behavior for the engine without changing any .proto definitions.
+option cc_enable_arenas = true;
 
 // ---------------------------------------------------------------------------
 // Catalog service

@@ -1,0 +1,32 @@
+# Code generation pipeline for proto/emulator.proto. Run via
+# `task proto:gen` (which calls `buf generate`).
+#
+# Plugins are pinned to local binaries materialized by `task proto:install`
+# (which `go install`s them into ./bin via GOBIN). Keeping them local
+# avoids buf's remote plugin service round-trip and guarantees codegen
+# works in air-gapped CI runners.
+#
+# Output paths line up with the imports already declared in the proto:
+#   - go_package -> gateway/enginepb
+# The C++ stubs are generated separately by CMake (see CMakeLists.txt);
+# keeping the two codegen paths independent matches the Spanner emulator
+# split where Go is built with the Go toolchain and C++ is built with
+# its native build system.
+version: v2
+
+managed:
+  enabled: false
+
+plugins:
+  - local: protoc-gen-go
+    out: gateway/enginepb
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: gateway/enginepb
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false
+
+inputs:
+  - directory: proto

@@ -1,0 +1,68 @@
+# Code generation for the internal gRPC contract (proto/emulator.proto).
+#
+# Go bindings under gateway/enginepb/ are produced by `buf generate`
+# using the local protoc-gen-go and protoc-gen-go-grpc plugins
+# (installed into ./bin via `go install`). C++ bindings are produced
+# separately by CMake (see CMakeLists.txt) and never land in the source
+# tree.
+#
+# Usage:
+#   task proto:install   # one-shot: install the buf plugins
+#   task proto:gen       # regenerate gateway/enginepb/
+#   task proto:lint      # buf lint
+#   task proto:breaking  # buf breaking against origin/main
+#   task proto:clean     # nuke generated Go files
+version: "3"
+
+tasks:
+  default:
+    desc: Regenerate the Go bindings (same as proto:gen)
+    cmds:
+      - task: gen
+
+  install:
+    desc: Install protoc-gen-go + protoc-gen-go-grpc into ./bin (idempotent)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+  gen:
+    desc: Regenerate Go bindings under gateway/enginepb/ from proto/emulator.proto
+    deps: [install]
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        buf generate
+
+  lint:
+    desc: Lint proto/emulator.proto against buf.yaml's STANDARD ruleset
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        buf lint
+
+  breaking:
+    desc: Detect breaking changes against origin/main (use before bumping the proto)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        buf breaking --against '.git#branch=origin/main'
+
+  clean:
+    desc: Remove generated Go bindings under gateway/enginepb/
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        rm -f gateway/enginepb/emulator.pb.go gateway/enginepb/emulator_grpc.pb.go

@@ -4,10 +4,10 @@ overview: "Phase 2a: finalize proto/emulator.proto and generate Go + C++ gRPC bi
 todos:
   - id: proto-finalize
     content: "Review proto/emulator.proto; consistent go_package and C++ package names"
-    status: pending
+    status: completed
   - id: buf-or-protoc-go
     content: "Add buf.gen.yaml or Makefile target generating gateway/enginepb/ from proto"
-    status: pending
+    status: completed
   - id: protoc-cpp
     content: "Add CMake rule for C++ grpc stubs; link grpc++ in CMakeLists.txt"
     status: pending
