@@ -107,6 +107,36 @@ task build         # build both gateway_main and emulator_main
 task run           # run gateway, which spawns the engine
 ```
 
+### Docker
+
+The repo ships a multi-stage [`Dockerfile`](./Dockerfile) that builds
+both the Go gateway and the C++ engine and packages them into a single
+runtime image (mirrors the `gcr.io/cloud-spanner-emulator/emulator`
+layout). A `docker/gateway_main.sh` shim injects `--hostname=0.0.0.0`
+inside the container so the published port is reachable from the host
+without forcing every caller to remember the flag.
+
+```bash
+# Build the image. Tag whatever you like; `bigquery-emulator:dev` here.
+docker build -t bigquery-emulator:dev .
+
+# Run it. Publish the REST gateway (9050) and, optionally, the internal
+# engine gRPC port (9060) for debugging.
+docker run --rm -p 9050:9050 -p 9060:9060 bigquery-emulator:dev
+
+# In another shell, hit the REST surface on the host:
+curl -sS http://localhost:9050/
+curl -sS http://localhost:9050/bigquery/v2/projects/test/datasets
+```
+
+To override container defaults, pass extra flags after the image name —
+they are forwarded to `gateway_main`:
+
+```bash
+docker run --rm -p 9050:9050 bigquery-emulator:dev \
+    --log_requests --hostname=0.0.0.0 --http_port=9050
+```
+
 ## Pointing client libraries at the emulator
 
 Two equivalent ways to redirect a BigQuery client at the emulator:
