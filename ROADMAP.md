@@ -18,13 +18,14 @@ deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
 ## Execution plans
 
-For subagent-driven implementation, the roadmap is split into 14 bite-sized
-plans under [`.cursor/plans/`](.cursor/plans/). Start with the index:
+For subagent-driven implementation, the roadmap is split into **46 small
+plans** under [`.cursor/plans/`](.cursor/plans/) (~3 todos each, one session
+per plan). Start with the index:
 
-- [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — dependency graph, wave sequencing, subagent template
+- [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — full catalog, dependency graph, subagent template
 
-Each plan maps to one ROADMAP phase (or a logical slice of a phase) and includes
-filled-in todos, key files, verification commands, and done criteria.
+Each plan maps to a slice of a ROADMAP phase and includes filled-in todos,
+verification commands, and done criteria.
 
 ## Pluggable engine and storage
 

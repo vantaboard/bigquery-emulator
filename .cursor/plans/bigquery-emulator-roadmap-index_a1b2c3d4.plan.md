@@ -1,163 +1,231 @@
 ---
 name: bigquery-emulator-roadmap-index
-overview: "Umbrella index for the bigquery-emulator implementation roadmap. Sequences 14 sub-plans (Phases 0–9 of ROADMAP.md) into bite-sized chunks sized for one subagent session each. Run plans in dependency order; parallelize only where the graph allows."
+overview: "Umbrella index for bigquery-emulator. Sequences 46 small sub-plans (Phases 0–9) for one subagent session each. All plans are size S."
 todos:
-  - id: run-00-bootstrap-ci
-    content: "Run bootstrap-ci-docker_e0f1a2b3.plan.md (Dockerfile + devcontainer + CI matrix)"
+  - id: run-00-bootstrap-docker
+    content: "Run bootstrap-docker_a0b1c2d3.plan.md"
     status: pending
-  - id: run-01-gateway-polish
-    content: "Run gateway-polish_c4d5e6f7.plan.md (discovery doc, auth middleware, useLegacySql rejection)"
+  - id: run-01-bootstrap-ci
+    content: "Run bootstrap-ci_e0f1a2b3.plan.md"
     status: pending
-  - id: run-02-grpc-contract
-    content: "Run grpc-contract-go-cpp_8a9b0c1d.plan.md (proto codegen, health check, waitForReady)"
+  - id: run-02-gateway-auth-discovery
+    content: "Run gateway-auth-discovery_f1a2b3c4.plan.md"
     status: pending
-  - id: run-03-cpp-interfaces-memory
-    content: "Run cpp-interfaces-memory-storage_2e3f4a5b.plan.md (Storage/Engine interfaces, InMemoryStorage, schema)"
+  - id: run-03-gateway-legacy-sql
+    content: "Run gateway-legacy-sql_g2b3c4d5.plan.md"
     status: pending
-  - id: run-04-duckdb-storage
-    content: "Run duckdb-persistent-storage_6c7d8e9f.plan.md (vendor libduckdb, DuckDBStorage, DDL→Parquet mapping)"
+  - id: run-04-grpc-proto-codegen
+    content: "Run grpc-proto-codegen_h3c4d5e6.plan.md"
     status: pending
-  - id: run-05-catalog-tabledata
-    content: "Run catalog-grpc-tabledata-e2e_1a2b3c4d.plan.md (Catalog gRPC handlers, insertAll/list E2E)"
+  - id: run-05-grpc-cpp-server
+    content: "Run grpc-cpp-server_i4d5e6f7.plan.md"
     status: pending
-  - id: run-06-query-analysis
-    content: "Run query-analysis-dryrun_5e6f7a8b.plan.md (googlesql::Analyzer, dryRun E2E)"
+  - id: run-06-grpc-gateway-client
+    content: "Run grpc-gateway-client_j5e6f7a8.plan.md"
     status: pending
-  - id: run-07-ref-impl-exec
-    content: "Run reference-impl-execution_9c0d1e2f.plan.md (reference_impl Evaluator, SELECT E2E, wire marshaling)"
+  - id: run-07-cpp-interfaces
+    content: "Run cpp-interfaces_k6f7a8b9.plan.md"
     status: pending
-  - id: run-08-duckdb-transpiler-core
-    content: "Run duckdb-transpiler-core_3a4b5c6d.plan.md (AST visitor, type lowering, basic SELECT/JOIN/GROUP BY)"
+  - id: run-08-memory-storage
+    content: "Run memory-storage_l7a8b9c0.plan.md"
     status: pending
-  - id: run-09-duckdb-transpiler-advanced
-    content: "Run duckdb-transpiler-advanced_7e8f9a0b.plan.md (STRUCT, UNNEST, builtins, Arrow→REST rows)"
+  - id: run-09-engine-cli-scaffold
+    content: "Run engine-cli-scaffold_m8b9c0d1.plan.md"
     status: pending
-  - id: run-10-dml-ddl
-    content: "Run dml-ddl-statements_b1c2d3e4.plan.md (INSERT/UPDATE/DELETE/MERGE, CREATE/DROP TABLE)"
+  - id: run-10-vendor-duckdb
+    content: "Run vendor-duckdb_n9c0d1e2.plan.md"
     status: pending
-  - id: run-11-storage-read-api
-    content: "Run storage-read-api_f5a6b7c8.plan.md (BigQueryRead gRPC, Arrow fast path)"
+  - id: run-11-duckdb-storage-core
+    content: "Run duckdb-storage-core_o0d1e2f3.plan.md"
     status: pending
-  - id: run-12-conformance
-    content: "Run conformance-harness_d9e0f1a2.plan.md (Go/Python client smoke, GoogleSQL .test corpus)"
+  - id: run-12-duckdb-storage-ddl
+    content: "Run duckdb-storage-ddl_p1e2f3a4.plan.md"
     status: pending
-  - id: run-13-distribution
-    content: "Run distribution-release_4b5c6d7e.plan.md (Docker image, release binaries, docs)"
+  - id: run-13-catalog-grpc-cpp
+    content: "Run catalog-grpc-cpp_q2f3a4b5.plan.md"
+    status: pending
+  - id: run-14-catalog-rest-go
+    content: "Run catalog-rest-go_r3a4b5c6.plan.md"
+    status: pending
+  - id: run-15-projects-stubs
+    content: "Run projects-stubs_s4b5c6d7.plan.md"
+    status: pending
+  - id: run-16-tabledata-e2e
+    content: "Run tabledata-e2e_t5c6d7e8.plan.md"
+    status: pending
+  - id: run-17-googlesql-vendor-catalog
+    content: "Run googlesql-vendor-catalog_u6d7e8f9.plan.md"
+    status: pending
+  - id: run-18-dryrun-cpp-rpc
+    content: "Run dryrun-cpp-rpc_v7e8f9a0.plan.md"
+    status: pending
+  - id: run-19-dryrun-gateway-e2e
+    content: "Run dryrun-gateway-e2e_w8f9a0b1.plan.md"
+    status: pending
+  - id: run-20-ref-impl-adapter
+    content: "Run ref-impl-adapter_x9a0b1c2.plan.md"
+    status: pending
+  - id: run-21-execute-query-stream
+    content: "Run execute-query-stream_y0b1c2d3.plan.md"
+    status: pending
+  - id: run-22-wire-marshal-go
+    content: "Run wire-marshal-go_z1c2d3e4.plan.md"
+    status: pending
+  - id: run-23-jobs-query-handler
+    content: "Run jobs-query-handler_a2d3e4f5.plan.md"
+    status: pending
+  - id: run-24-query-select-e2e
+    content: "Run query-select-e2e_b3e4f5a6.plan.md"
+    status: pending
+  - id: run-25-transpiler-skeleton
+    content: "Run transpiler-skeleton_c4f5a6b7.plan.md"
+    status: pending
+  - id: run-26-transpiler-emit-scans
+    content: "Run transpiler-emit-scans_d5a6b7c8.plan.md"
+    status: pending
+  - id: run-27-transpiler-emit-join-agg
+    content: "Run transpiler-emit-join-agg_e6b7c8d9.plan.md"
+    status: pending
+  - id: run-28-duckdb-engine-exec
+    content: "Run duckdb-engine-exec_f7c8d9e0.plan.md"
+    status: pending
+  - id: run-29-transpiler-struct-unnest
+    content: "Run transpiler-struct-unnest_a8d9e0f1.plan.md"
+    status: pending
+  - id: run-30-transpiler-functions-window
+    content: "Run transpiler-functions-window_b9e0f1a2.plan.md"
+    status: pending
+  - id: run-31-duckdb-arrow-pipeline
+    content: "Run duckdb-arrow-pipeline_c0f1a2b3.plan.md"
+    status: pending
+  - id: run-32-duckdb-parity-e2e
+    content: "Run duckdb-parity-e2e_d1a2b3c4.plan.md"
+    status: pending
+  - id: run-33-dml-insert
+    content: "Run dml-insert-e2e_e2b3c4d5.plan.md"
+    status: pending
+  - id: run-34-dml-update-delete
+    content: "Run dml-update-delete_f3c4d5e6.plan.md"
+    status: pending
+  - id: run-35-ddl-statements
+    content: "Run ddl-statements_g4d5e6f7.plan.md"
+    status: pending
+  - id: run-36-dml-ddl-e2e
+    content: "Run dml-ddl-e2e_h5e6f7a8.plan.md"
+    status: pending
+  - id: run-37-storage-read-proto
+    content: "Run storage-read-proto_i6f7a8b9.plan.md"
+    status: pending
+  - id: run-38-storage-read-rows
+    content: "Run storage-read-rows_j7a8b9c0.plan.md"
+    status: pending
+  - id: run-39-storage-read-gateway-e2e
+    content: "Run storage-read-gateway_e2e_k8b9c0d1.plan.md"
+    status: pending
+  - id: run-40-conformance-fixtures-runner
+    content: "Run conformance-fixtures-runner_l9c0d1e2.plan.md"
+    status: pending
+  - id: run-41-conformance-diff-ci
+    content: "Run conformance-diff-ci_m0d1e2f3.plan.md"
+    status: pending
+  - id: run-42-conformance-seed-docs
+    content: "Run conformance-seed-docs_n1e2f3a4.plan.md"
+    status: pending
+  - id: run-43-docker-compose-smoke
+    content: "Run docker-compose-smoke_o2f3a4b5.plan.md"
+    status: pending
+  - id: run-44-goreleaser-release
+    content: "Run goreleaser-release_p3a4b5c6.plan.md"
+    status: pending
+  - id: run-45-profile-docs-version
+    content: "Run profile-docs-version_q4b5c6d7.plan.md"
     status: pending
 isProject: false
 ---
 
 # BigQuery emulator — roadmap plan index
 
-This index sequences the work in [ROADMAP.md](../../ROADMAP.md) into 14 sub-plans under `.cursor/plans/`. Each sub-plan is sized for **one subagent invocation** with minimal context: read the plan file, the linked docs, and the files named in the plan — not the whole repo.
+46 **small** sub-plans under `.cursor/plans/`. Each plan has ≤3 todos and fits one subagent session.
 
-## Already landed (do not re-do)
+## Already landed
 
-- Phase 0 scaffold: `gateway_main`, `emulator_main` stubs, route table, `proto/emulator.proto` v0 sketch, Taskfile/Makefile/CMake
-- Phase 1 route wiring: all BigQuery v2 REST endpoints registered as 501 stubs ([docs/REST_API.md](../../docs/REST_API.md))
-- Pluggable architecture documented in ROADMAP (Reference Impl + DuckDB engines; In-Memory + DuckDB storage)
+- Phase 0 scaffold + Phase 1 route wiring (501 stubs)
+- [docs/REST_API.md](../../docs/REST_API.md)
 
-## Plan catalog
+## Plan catalog (all S)
 
-| # | Plan file | ROADMAP phase | Est. scope |
-|---|-----------|---------------|------------|
-| 00 | [bootstrap-ci-docker_e0f1a2b3.plan.md](bootstrap-ci-docker_e0f1a2b3.plan.md) | Phase 0 (remainder) | S |
-| 01 | [gateway-polish_c4d5e6f7.plan.md](gateway-polish_c4d5e6f7.plan.md) | Phase 1 (remainder) | S |
-| 02 | [grpc-contract-go-cpp_8a9b0c1d.plan.md](grpc-contract-go-cpp_8a9b0c1d.plan.md) | Phase 2 | M |
-| 03 | [cpp-interfaces-memory-storage_2e3f4a5b.plan.md](cpp-interfaces-memory-storage_2e3f4a5b.plan.md) | Phase 3 (part 1) | M |
-| 04 | [duckdb-persistent-storage_6c7d8e9f.plan.md](duckdb-persistent-storage_6c7d8e9f.plan.md) | Phase 3 (part 2) | L |
-| 05 | [catalog-grpc-tabledata-e2e_1a2b3c4d.plan.md](catalog-grpc-tabledata-e2e_1a2b3c4d.plan.md) | Phase 3 (part 3) | M |
-| 06 | [query-analysis-dryrun_5e6f7a8b.plan.md](query-analysis-dryrun_5e6f7a8b.plan.md) | Phase 4 | M |
-| 07 | [reference-impl-execution_9c0d1e2f.plan.md](reference-impl-execution_9c0d1e2f.plan.md) | Phase 5.A | L |
-| 08 | [duckdb-transpiler-core_3a4b5c6d.plan.md](duckdb-transpiler-core_3a4b5c6d.plan.md) | Phase 5.B (part 1) | L |
-| 09 | [duckdb-transpiler-advanced_7e8f9a0b.plan.md](duckdb-transpiler-advanced_7e8f9a0b.plan.md) | Phase 5.B (part 2) | L |
-| 10 | [dml-ddl-statements_b1c2d3e4.plan.md](dml-ddl-statements_b1c2d3e4.plan.md) | Phase 6 | M |
-| 11 | [storage-read-api_f5a6b7c8.plan.md](storage-read-api_f5a6b7c8.plan.md) | Phase 7 | M |
-| 12 | [conformance-harness_d9e0f1a2.plan.md](conformance-harness_d9e0f1a2.plan.md) | Phase 8 | M |
-| 13 | [distribution-release_4b5c6d7e.plan.md](distribution-release_4b5c6d7e.plan.md) | Phase 9 | S |
+| # | Plan | Phase |
+|---|------|-------|
+| 00 | [bootstrap-docker_a0b1c2d3](bootstrap-docker_a0b1c2d3.plan.md) | Phase 0a |
+| 01 | [bootstrap-ci_e0f1a2b3](bootstrap-ci_e0f1a2b3.plan.md) | Phase 0b |
+| 02 | [gateway-auth-discovery_f1a2b3c4](gateway-auth-discovery_f1a2b3c4.plan.md) | Phase 1a |
+| 03 | [gateway-legacy-sql_g2b3c4d5](gateway-legacy-sql_g2b3c4d5.plan.md) | Phase 1b |
+| 04 | [grpc-proto-codegen_h3c4d5e6](grpc-proto-codegen_h3c4d5e6.plan.md) | Phase 2a |
+| 05 | [grpc-cpp-server_i4d5e6f7](grpc-cpp-server_i4d5e6f7.plan.md) | Phase 2b |
+| 06 | [grpc-gateway-client_j5e6f7a8](grpc-gateway-client_j5e6f7a8.plan.md) | Phase 2c |
+| 07 | [cpp-interfaces_k6f7a8b9](cpp-interfaces_k6f7a8b9.plan.md) | Phase 3a |
+| 08 | [memory-storage_l7a8b9c0](memory-storage_l7a8b9c0.plan.md) | Phase 3b |
+| 09 | [engine-cli-scaffold_m8b9c0d1](engine-cli-scaffold_m8b9c0d1.plan.md) | Phase 3c |
+| 10 | [vendor-duckdb_n9c0d1e2](vendor-duckdb_n9c0d1e2.plan.md) | Phase 3d |
+| 11 | [duckdb-storage-core_o0d1e2f3](duckdb-storage-core_o0d1e2f3.plan.md) | Phase 3e |
+| 12 | [duckdb-storage-ddl_p1e2f3a4](duckdb-storage-ddl_p1e2f3a4.plan.md) | Phase 3f |
+| 13 | [catalog-grpc-cpp_q2f3a4b5](catalog-grpc-cpp_q2f3a4b5.plan.md) | Phase 3g |
+| 14 | [catalog-rest-go_r3a4b5c6](catalog-rest-go_r3a4b5c6.plan.md) | Phase 3h |
+| 15 | [projects-stubs_s4b5c6d7](projects-stubs_s4b5c6d7.plan.md) | Phase 3i |
+| 16 | [tabledata-e2e_t5c6d7e8](tabledata-e2e_t5c6d7e8.plan.md) | Phase 3j |
+| 17 | [googlesql-vendor-catalog_u6d7e8f9](googlesql-vendor-catalog_u6d7e8f9.plan.md) | Phase 4a |
+| 18 | [dryrun-cpp-rpc_v7e8f9a0](dryrun-cpp-rpc_v7e8f9a0.plan.md) | Phase 4b |
+| 19 | [dryrun-gateway-e2e_w8f9a0b1](dryrun-gateway-e2e_w8f9a0b1.plan.md) | Phase 4c |
+| 20 | [ref-impl-adapter_x9a0b1c2](ref-impl-adapter_x9a0b1c2.plan.md) | Phase 5a |
+| 21 | [execute-query-stream_y0b1c2d3](execute-query-stream_y0b1c2d3.plan.md) | Phase 5b |
+| 22 | [wire-marshal-go_z1c2d3e4](wire-marshal-go_z1c2d3e4.plan.md) | Phase 5c |
+| 23 | [jobs-query-handler_a2d3e4f5](jobs-query-handler_a2d3e4f5.plan.md) | Phase 5d |
+| 24 | [query-select-e2e_b3e4f5a6](query-select-e2e_b3e4f5a6.plan.md) | Phase 5e |
+| 25 | [transpiler-skeleton_c4f5a6b7](transpiler-skeleton_c4f5a6b7.plan.md) | Phase 5f |
+| 26 | [transpiler-emit-scans_d5a6b7c8](transpiler-emit-scans_d5a6b7c8.plan.md) | Phase 5g |
+| 27 | [transpiler-emit-join-agg_e6b7c8d9](transpiler-emit-join-agg_e6b7c8d9.plan.md) | Phase 5h |
+| 28 | [duckdb-engine-exec_f7c8d9e0](duckdb-engine-exec_f7c8d9e0.plan.md) | Phase 5i |
+| 29 | [transpiler-struct-unnest_a8d9e0f1](transpiler-struct-unnest_a8d9e0f1.plan.md) | Phase 5j |
+| 30 | [transpiler-functions-window_b9e0f1a2](transpiler-functions-window_b9e0f1a2.plan.md) | Phase 5k |
+| 31 | [duckdb-arrow-pipeline_c0f1a2b3](duckdb-arrow-pipeline_c0f1a2b3.plan.md) | Phase 5l |
+| 32 | [duckdb-parity-e2e_d1a2b3c4](duckdb-parity-e2e_d1a2b3c4.plan.md) | Phase 5m |
+| 33 | [dml-insert-e2e_e2b3c4d5](dml-insert-e2e_e2b3c4d5.plan.md) | Phase 6a |
+| 34 | [dml-update-delete_f3c4d5e6](dml-update-delete_f3c4d5e6.plan.md) | Phase 6b |
+| 35 | [ddl-statements_g4d5e6f7](ddl-statements_g4d5e6f7.plan.md) | Phase 6c |
+| 36 | [dml-ddl-e2e_h5e6f7a8](dml-ddl-e2e_h5e6f7a8.plan.md) | Phase 6d |
+| 37 | [storage-read-proto_i6f7a8b9](storage-read-proto_i6f7a8b9.plan.md) | Phase 7a |
+| 38 | [storage-read-rows_j7a8b9c0](storage-read-rows_j7a8b9c0.plan.md) | Phase 7b |
+| 39 | [storage-read-gateway_e2e_k8b9c0d1](storage-read-gateway_e2e_k8b9c0d1.plan.md) | Phase 7c |
+| 40 | [conformance-fixtures-runner_l9c0d1e2](conformance-fixtures-runner_l9c0d1e2.plan.md) | Phase 8a |
+| 41 | [conformance-diff-ci_m0d1e2f3](conformance-diff-ci_m0d1e2f3.plan.md) | Phase 8b |
+| 42 | [conformance-seed-docs_n1e2f3a4](conformance-seed-docs_n1e2f3a4.plan.md) | Phase 8c |
+| 43 | [docker-compose-smoke_o2f3a4b5](docker-compose-smoke_o2f3a4b5.plan.md) | Phase 9a |
+| 44 | [goreleaser-release_p3a4b5c6](goreleaser-release_p3a4b5c6.plan.md) | Phase 9b |
+| 45 | [profile-docs-version_q4b5c6d7](profile-docs-version_q4b5c6d7.plan.md) | Phase 9c |
 
-S = small (~1 session), M = medium (~1–2 sessions), L = large (~2–3 sessions)
-
-## Dependency graph
-
-```mermaid
-flowchart TD
-  P00[00 bootstrap-ci]
-  P01[01 gateway-polish]
-  P02[02 grpc-contract]
-  P03[03 cpp-interfaces-memory]
-  P04[04 duckdb-storage]
-  P05[05 catalog-tabledata]
-  P06[06 query-analysis]
-  P07[07 reference-impl-exec]
-  P08[08 duckdb-transpiler-core]
-  P09[09 duckdb-transpiler-advanced]
-  P10[10 dml-ddl]
-  P11[11 storage-read-api]
-  P12[12 conformance]
-  P13[13 distribution]
-
-  P00 --> P02
-  P01 --> P05
-  P02 --> P05
-  P03 --> P05
-  P04 --> P05
-  P05 --> P06
-  P06 --> P07
-  P06 --> P08
-  P03 --> P07
-  P04 --> P08
-  P07 --> P10
-  P08 --> P09
-  P09 --> P10
-  P07 --> P11
-  P09 --> P11
-  P07 --> P12
-  P09 --> P12
-  P11 --> P12
-  P12 --> P13
-```
-
-## Recommended sequencing
-
-**Wave 1 (parallel):** 00, 01 — no engine dependency.
-
-**Wave 2:** 02 — needs 00 for CI to validate codegen.
-
-**Wave 3 (parallel):** 03, 04 — both need 02 for proto types; independent of each other.
-
-**Wave 4:** 05 — needs 01 (REST handlers), 02 (gRPC), 03 (memory storage minimum).
-
-**Wave 5:** 06 — needs 05 (catalog with tables to analyze against).
-
-**Wave 6 (parallel):** 07, 08 — both need 06; 07 uses memory storage, 08 needs 04 for DuckDB path.
-
-**Wave 7:** 09 — needs 08.
-
-**Wave 8:** 10 — needs 07 (DML via reference impl at minimum).
-
-**Wave 9:** 11 — needs 07 or 09 for result sources.
-
-**Wave 10:** 12 — needs 07 + 11 for full client-library coverage.
-
-**Wave 11:** 13 — needs 12 green.
-
-## Subagent invocation template
+## Dependency graph (simplified)
 
 ```
-Read and execute .cursor/plans/<plan-file>.plan.md for bigquery-emulator.
-
-Constraints:
-- Follow ROADMAP.md non-goals (no Go port of GoogleSQL).
-- Cross-check REST shapes against docs/REST_API.md and docs/bigquery/docs/reference/rest/v2/.
-- Commit after each logical unit per CLAUDE.md auto-commit rules.
-- Mark plan todos completed as you finish them.
-- Run verification commands listed in the plan before declaring done.
+00→01→02  (bootstrap)
+03→04     (gateway polish)
+05→06→07  (grpc)
+08→09→10  (cpp interfaces + memory + cli)
+11→12→13  (duckdb storage)
+14→15→16→17 (catalog + tabledata)
+18→19→20  (dryrun)
+21→22→23→24→25 (reference impl exec)
+26→27→28→29→30→31→32→33 (duckdb transpiler)
+34→35→36→37 (dml/ddl)
+38→39→40  (storage read)
+41→42→43  (conformance)
+44→45→46  (distribution)
 ```
 
-## Non-goals (all plans)
+**Parallel lanes after plan 20:** 21–25 (ref impl) ∥ 26–33 (duckdb engine)
 
-- No Go port of GoogleSQL analyzer/executor.
-- No BigQuery ML, Omni, or external data sources.
-- No production SLA / performance guarantees.
-- Persistence is opt-in via `--storage=duckdb`; default is volatile in-memory.
+## Subagent template
+
+```
+Read and execute .cursor/plans/<plan-file>.plan.md
+Mark todos completed. Commit per CLAUDE.md. Run verification before done.
+```
