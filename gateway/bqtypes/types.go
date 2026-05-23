@@ -72,35 +72,77 @@ type TableFieldSchema struct {
 }
 
 // QueryRequest is the body of POST /bigquery/v2/projects/{projectId}/queries.
+//
+// Mirrors the QueryRequest definition under
+// docs/bigquery/docs/reference/rest/v2/jobs/query.md. Fields the
+// emulator does not honor today are still parsed so client libraries
+// don't get unmarshal errors.
 type QueryRequest struct {
-	Kind            string                 `json:"kind,omitempty"` // bigquery#queryRequest
-	Query           string                 `json:"query"`
-	MaxResults      uint32                 `json:"maxResults,omitempty"`
-	DefaultDataset  *DatasetReference      `json:"defaultDataset,omitempty"`
-	TimeoutMs       uint32                 `json:"timeoutMs,omitempty"`
-	DryRun          bool                   `json:"dryRun,omitempty"`
-	UseLegacySQL    *bool                  `json:"useLegacySql,omitempty"`
-	Location        string                 `json:"location,omitempty"`
-	Parameters      []QueryParameter       `json:"queryParameters,omitempty"`
-	Labels          map[string]string      `json:"labels,omitempty"`
-	RequestID       string                 `json:"requestId,omitempty"`
-	JobCreationMode string                 `json:"jobCreationMode,omitempty"`
-	ConnProperties  []ConnectionProperty   `json:"connectionProperties,omitempty"`
-	FormatOptions   map[string]interface{} `json:"formatOptions,omitempty"`
+	Kind                               string                 `json:"kind,omitempty"` // bigquery#queryRequest
+	Query                              string                 `json:"query"`
+	MaxResults                         uint32                 `json:"maxResults,omitempty"`
+	DefaultDataset                     *DatasetReference      `json:"defaultDataset,omitempty"`
+	TimeoutMs                          uint32                 `json:"timeoutMs,omitempty"`
+	DestinationEncryptionConfiguration map[string]interface{} `json:"destinationEncryptionConfiguration,omitempty"`
+	DryRun                             bool                   `json:"dryRun,omitempty"`
+	// PreserveNulls is deprecated upstream but still parsed.
+	PreserveNulls      *bool                  `json:"preserveNulls,omitempty"`
+	UseQueryCache      *bool                  `json:"useQueryCache,omitempty"`
+	UseLegacySQL       *bool                  `json:"useLegacySql,omitempty"`
+	ParameterMode      string                 `json:"parameterMode,omitempty"`
+	Parameters         []QueryParameter       `json:"queryParameters,omitempty"`
+	Location           string                 `json:"location,omitempty"`
+	FormatOptions      map[string]interface{} `json:"formatOptions,omitempty"`
+	ConnProperties     []ConnectionProperty   `json:"connectionProperties,omitempty"`
+	Labels             map[string]string      `json:"labels,omitempty"`
+	MaximumBytesBilled string                 `json:"maximumBytesBilled,omitempty"`
+	RequestID          string                 `json:"requestId,omitempty"`
+	CreateSession      bool                   `json:"createSession,omitempty"`
+	JobCreationMode    string                 `json:"jobCreationMode,omitempty"`
+	JobTimeoutMs       string                 `json:"jobTimeoutMs,omitempty"`
+	Reservation        string                 `json:"reservation,omitempty"`
 }
 
 // QueryResponse is the body of POST /bigquery/v2/projects/{projectId}/queries.
+//
+// Mirrors the QueryResponse definition under
+// docs/bigquery/docs/reference/rest/v2/jobs/query.md.
 type QueryResponse struct {
-	Kind                string        `json:"kind,omitempty"` // bigquery#queryResponse
-	Schema              *TableSchema  `json:"schema,omitempty"`
-	JobReference        *JobReference `json:"jobReference,omitempty"`
-	TotalRows           string        `json:"totalRows,omitempty"`
-	PageToken           string        `json:"pageToken,omitempty"`
-	Rows                []Row         `json:"rows,omitempty"`
-	TotalBytesProcessed string        `json:"totalBytesProcessed,omitempty"`
-	JobComplete         bool          `json:"jobComplete"`
-	Errors              []ErrorProto  `json:"errors,omitempty"`
-	CacheHit            bool          `json:"cacheHit,omitempty"`
+	Kind                string                 `json:"kind,omitempty"` // bigquery#queryResponse
+	Schema              *TableSchema           `json:"schema,omitempty"`
+	JobReference        *JobReference          `json:"jobReference,omitempty"`
+	JobCreationReason   map[string]interface{} `json:"jobCreationReason,omitempty"`
+	QueryID             string                 `json:"queryId,omitempty"`
+	Location            string                 `json:"location,omitempty"`
+	TotalRows           string                 `json:"totalRows,omitempty"`
+	PageToken           string                 `json:"pageToken,omitempty"`
+	Rows                []Row                  `json:"rows,omitempty"`
+	TotalBytesProcessed string                 `json:"totalBytesProcessed,omitempty"`
+	JobComplete         bool                   `json:"jobComplete"`
+	Errors              []ErrorProto           `json:"errors,omitempty"`
+	CacheHit            bool                   `json:"cacheHit,omitempty"`
+	NumDmlAffectedRows  string                 `json:"numDmlAffectedRows,omitempty"`
+	SessionInfo         *SessionInfo           `json:"sessionInfo,omitempty"`
+	DmlStats            *DmlStats              `json:"dmlStats,omitempty"`
+	TotalBytesBilled    string                 `json:"totalBytesBilled,omitempty"`
+	TotalSlotMs         string                 `json:"totalSlotMs,omitempty"`
+	CreationTime        string                 `json:"creationTime,omitempty"`
+	StartTime           string                 `json:"startTime,omitempty"`
+	EndTime             string                 `json:"endTime,omitempty"`
+}
+
+// SessionInfo tracks the session a query is running under, when sessions
+// are in use. Mirrors docs/bigquery/docs/reference/rest/v2/SessionInfo.md.
+type SessionInfo struct {
+	SessionID string `json:"sessionId,omitempty"`
+}
+
+// DmlStats is the per-DML-statement statistics envelope. Mirrors
+// docs/bigquery/docs/reference/rest/v2/DmlStats.md.
+type DmlStats struct {
+	InsertedRowCount string `json:"insertedRowCount,omitempty"`
+	UpdatedRowCount  string `json:"updatedRowCount,omitempty"`
+	DeletedRowCount  string `json:"deletedRowCount,omitempty"`
 }
 
 // QueryParameter is a positional or named query parameter.

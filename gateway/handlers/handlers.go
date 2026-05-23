@@ -44,6 +44,22 @@ func NotFound(w http.ResponseWriter, r *http.Request) {
 		"No route matches "+r.Method+" "+r.URL.Path+".")
 }
 
+// splitColonOp splits an AIP-136 custom-method path segment of the form
+// "{resource}:{op}" into its resource and op halves. If there is no colon
+// the op is returned empty and the input is the resource. This is how the
+// emulator dispatches BigQuery REST custom methods like
+// `datasets/{datasetId}:undelete` and `tables/{tableId}:getIamPolicy`,
+// because Go's net/http mux cannot match a literal segment after a
+// wildcard.
+func splitColonOp(segment string) (resource, op string) {
+	for i := 0; i < len(segment); i++ {
+		if segment[i] == ':' {
+			return segment[:i], segment[i+1:]
+		}
+	}
+	return segment, ""
+}
+
 // errorEnvelope matches the shape BigQuery returns for non-2xx responses.
 // See https://cloud.google.com/bigquery/docs/reference/rest -> error format.
 type errorEnvelope struct {
