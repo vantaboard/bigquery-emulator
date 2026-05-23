@@ -29,7 +29,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/brighten-tompkins/bigquery-emulator/gateway"
+	"github.com/vantaboard/bigquery-emulator/gateway"
 )
 
 var (

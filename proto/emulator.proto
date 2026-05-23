@@ -24,7 +24,7 @@ syntax = "proto3";
 
 package bigquery_emulator.v1;
 
-option go_package = "github.com/brighten-tompkins/bigquery-emulator/gateway/enginepb;enginepb";
+option go_package = "github.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb";
 
 // ---------------------------------------------------------------------------
 // Catalog service

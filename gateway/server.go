@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/brighten-tompkins/bigquery-emulator/gateway/handlers"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // NewServer returns the HTTP handler tree implementing the BigQuery REST
