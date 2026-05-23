@@ -4,13 +4,13 @@ overview: "Phase 2c: Go gRPC client, health-based readiness, integration smoke t
 todos:
   - id: gateway-client
     content: "Add gateway/engine/client.go; expose CatalogClient and QueryClient on handlers.Dependencies"
-    status: pending
+    status: completed
   - id: wait-for-ready
     content: "Replace waitForEngine sleep with grpc.health.v1 Check loop (30s timeout)"
-    status: pending
+    status: completed
   - id: integration-test
     content: "Add gateway_test.go or smoke script: gateway connects to emulator_main, health passes"
-    status: pending
+    status: completed
 isProject: false
 ---
 
