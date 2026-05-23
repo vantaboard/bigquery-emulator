@@ -1,0 +1,58 @@
+{
+    "editor.tabSize": 4,
+
+    "go.lintTool": "golangci-lint-v2",
+    "go.formatTool": "custom",
+    "go.alternateTools": {
+        "customFormatter": "golangci-lint"
+    },
+    "go.formatFlags": [
+        "fmt",
+        "--stdin"
+    ],
+    "go.toolsManagement.checkForUpdates": "off",
+    "go.useLanguageServer": true,
+    "[go]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "golang.go"
+    },
+    "gopls": {
+        "analyses": {
+            "composites": false
+        }
+    },
+    "exp-vscode-go.testExplorer.enable": true,
+
+    "cmake.buildDirectory": "${workspaceFolder}/build-out",
+    "cmake.generator": "Ninja",
+    "cmake.configureArgs": [
+        "-DCMAKE_C_COMPILER=clang",
+        "-DCMAKE_CXX_COMPILER=clang++",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    ],
+    "cmake.configureOnOpen": false,
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/build-out",
+        "--background-index",
+        "--clang-tidy"
+    ],
+    "[cpp]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+    "[c]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+    },
+
+    "[proto]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "bufbuild.vscode-buf"
+    },
+
+    "files.associations": {
+        "*.proto": "proto",
+        "Taskfile.yml": "yaml",
+        "taskfiles/*.yml": "yaml"
+    }
+}
