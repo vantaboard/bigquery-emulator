@@ -66,6 +66,14 @@ tasks:
       - test -z "$(gofmt -s -l .)" || (echo 'gofmt would reformat:' && gofmt -s -l . && exit 1)
       - go vet ./...
 
+  ci:run:
+    desc: Run the same checks CI runs (go vet, go test, build engine, build gateway).
+    cmds:
+      - task: vet
+      - task: test
+      - task: build:engine
+      - task: build
+
   clean:
     desc: Remove build artifacts.
     cmds:
