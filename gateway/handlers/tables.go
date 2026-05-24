@@ -303,20 +303,6 @@ func TableTestIamPermissions(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
 }
 
-// TableDataList implements `bigquery.tabledata.list`:
-//
-//	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data
-func TableDataList(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
-}
-
-// TableDataInsertAll implements `bigquery.tabledata.insertAll`:
-//
-//	POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll
-func TableDataInsertAll(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
-}
-
 // TableCustomMethodPOST dispatches the AIP-136 custom-method POST
 // endpoints registered against `/tables/{tableId}` -- the three IAM
 // helpers BigQuery exposes for table resources.

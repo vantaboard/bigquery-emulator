@@ -64,8 +64,8 @@ omit the host and use `{x}` for path variables.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `tabledata.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data` | wired | [`gateway/handlers/tables.go::TableDataList`][tables] |
-| `tabledata.insertAll` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll` | wired | [`gateway/handlers/tables.go::TableDataInsertAll`][tables] |
+| `tabledata.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data` | done | [`gateway/handlers/tabledata.go::TableDataList`][tabledata] |
+| `tabledata.insertAll` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll` | done | [`gateway/handlers/tabledata.go::TableDataInsertAll`][tabledata] |
 
 ### Jobs (`bigquery.jobs.*`)
 
@@ -101,6 +101,7 @@ the upstream URL template, see
 [projects]: ../gateway/handlers/projects.go
 [datasets]: ../gateway/handlers/datasets.go
 [tables]: ../gateway/handlers/tables.go
+[tabledata]: ../gateway/handlers/tabledata.go
 [jobs]: ../gateway/handlers/jobs.go
 [queries]: ../gateway/handlers/queries.go
 [handlers]: ../gateway/handlers/handlers.go

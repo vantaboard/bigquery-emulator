@@ -21,6 +21,8 @@ type fakeCatalogClient struct {
 	registerTableFn   func(context.Context, *enginepb.RegisterTableRequest) (*enginepb.RegisterTableResponse, error)
 	dropTableFn       func(context.Context, *enginepb.DropTableRequest) (*enginepb.DropTableResponse, error)
 	describeTableFn   func(context.Context, *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error)
+	insertRowsFn      func(context.Context, *enginepb.InsertRowsRequest) (*enginepb.InsertRowsResponse, error)
+	listRowsFn        func(context.Context, *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error)
 
 	// lastRegisterDataset captures the most recent request so tests
 	// can assert on the values forwarded over the wire without having
@@ -30,6 +32,8 @@ type fakeCatalogClient struct {
 	lastRegisterTable   *enginepb.RegisterTableRequest
 	lastDropTable       *enginepb.DropTableRequest
 	lastDescribeTable   *enginepb.DescribeTableRequest
+	lastInsertRows      *enginepb.InsertRowsRequest
+	lastListRows        *enginepb.ListRowsRequest
 }
 
 func (f *fakeCatalogClient) RegisterDataset(ctx context.Context, in *enginepb.RegisterDatasetRequest, _ ...grpc.CallOption) (*enginepb.RegisterDatasetResponse, error) {
@@ -70,4 +74,20 @@ func (f *fakeCatalogClient) DescribeTable(ctx context.Context, in *enginepb.Desc
 		return f.describeTableFn(ctx, in)
 	}
 	return &enginepb.DescribeTableResponse{}, nil
+}
+
+func (f *fakeCatalogClient) InsertRows(ctx context.Context, in *enginepb.InsertRowsRequest, _ ...grpc.CallOption) (*enginepb.InsertRowsResponse, error) {
+	f.lastInsertRows = in
+	if f.insertRowsFn != nil {
+		return f.insertRowsFn(ctx, in)
+	}
+	return &enginepb.InsertRowsResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListRows(ctx context.Context, in *enginepb.ListRowsRequest, _ ...grpc.CallOption) (*enginepb.ListRowsResponse, error) {
+	f.lastListRows = in
+	if f.listRowsFn != nil {
+		return f.listRowsFn(ctx, in)
+	}
+	return &enginepb.ListRowsResponse{}, nil
 }
