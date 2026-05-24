@@ -110,6 +110,40 @@ task emulator:run-full    # run gateway, which spawns the engine
 Run `task --list` for the full set of namespaces (`emulator:`, `lint:`,
 `test:`, `docker:`, `ci:`, `tools:`).
 
+### Building the engine: Bazel (canonical) vs CMake (legacy)
+
+The C++ engine has two build systems in parallel; they produce
+binaries with different capabilities:
+
+- **Bazel — canonical, full GoogleSQL.** Run
+  `task emulator:build-engine-bazel` (or directly
+  `bazel build //binaries/emulator_main:emulator_main`). This is the
+  build that links GoogleSQL's analyzer + reference-impl evaluator
+  along with the DuckDB storage backend and gRPC, producing a binary
+  that actually serves `Query.DryRun` and `Query.ExecuteQuery`
+  end-to-end. The integration tests under `gateway/e2e/` only
+  exercise the live `SELECT` path against a Bazel-built binary; with
+  a CMake-built binary they auto-skip on the GoogleSQL-gated probes.
+  GoogleSQL is vendored via a sibling `../googlesql/` checkout (see
+  [`MODULE.bazel`](./MODULE.bazel)), and DuckDB v1.5.3 is pulled in
+  as a prebuilt tarball through `http_archive` (see
+  [`third_party/duckdb/`](./third_party/duckdb/)). Linux/amd64 only
+  today — the GoogleSQL hermetic LLVM toolchain does not cross-build
+  cleanly to linux/arm64 yet.
+- **CMake — legacy, no GoogleSQL.** Run
+  `task emulator:build-engine` (or directly
+  `cmake -S . -B build-out && cmake --build build-out --target emulator_main`).
+  This build still works on every Linux distro and architecture we
+  support, but it leaves `BIGQUERY_EMULATOR_HAS_GOOGLESQL` unset, so
+  `Query.DryRun` and `Query.ExecuteQuery` return `UNIMPLEMENTED`. It
+  keeps the storage scaffolds (in-memory + DuckDB) and the gRPC
+  front door honest in environments where pulling GoogleSQL through
+  Bazel is impractical.
+
+Both build systems vendor the **same** prebuilt libduckdb v1.5.3
+tarball (pinned in [`third_party/duckdb/VERSION`](./third_party/duckdb/VERSION));
+the only difference is which package manager fetches it.
+
 ### Docker
 
 The repo ships a multi-stage [`Dockerfile`](./Dockerfile) that builds

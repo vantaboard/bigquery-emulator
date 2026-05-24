@@ -369,12 +369,51 @@ Goal: prove that real BigQuery client libraries work against the emulator.
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
   later if there's demand.
 
+## Build systems: Bazel (canonical) vs CMake (legacy)
+
+The C++ engine has two build systems in parallel; they produce
+binaries with different capabilities, and we keep both around
+deliberately.
+
+- **Bazel build — canonical, full GoogleSQL.** The
+  `//binaries/emulator_main:emulator_main` `cc_binary` links GoogleSQL's
+  analyzer + reference-impl evaluator, both storage backends
+  (in-memory + DuckDB), the catalog/query gRPC handlers, and grpc++ in
+  one binary that can actually serve `Query.DryRun` and
+  `Query.ExecuteQuery` end-to-end. GoogleSQL is vendored via a
+  sibling `../googlesql/` checkout (`local_path_override` in
+  [`MODULE.bazel`](./MODULE.bazel)); DuckDB v1.5.3 is pulled in as a
+  prebuilt tarball through `http_archive`
+  (see [`third_party/duckdb/`](./third_party/duckdb/)). Build with
+  `task emulator:build-engine-bazel` or directly
+  `bazel build //binaries/emulator_main:emulator_main`. Linux/amd64
+  only today — the GoogleSQL hermetic LLVM toolchain ships amd64
+  binaries and does not cross-build cleanly to linux/arm64 yet, so
+  the arm64 leg of CI keeps running the CMake build below.
+- **CMake build — legacy, no GoogleSQL.** The `emulator_main` target
+  in [`CMakeLists.txt`](./CMakeLists.txt) still builds the same
+  binary shape, but leaves `BIGQUERY_EMULATOR_HAS_GOOGLESQL` unset,
+  so `Query.DryRun` and `Query.ExecuteQuery` return `UNIMPLEMENTED`.
+  It keeps the storage scaffolds and the gRPC front door honest in
+  environments where pulling GoogleSQL through Bazel is impractical
+  (offline checkouts, hosts without the sibling `../googlesql/`
+  workflow), and is still the only build path that works on
+  linux/arm64 today. Build with `task emulator:build-engine`.
+
+Both vendor the **same** prebuilt libduckdb v1.5.3 tarball pinned in
+[`third_party/duckdb/VERSION`](./third_party/duckdb/VERSION); the only
+difference is which package manager fetches it. The integration tests
+under [`gateway/e2e/`](./gateway/e2e/) discover the engine binary via
+`./bin/emulator_main`, and `task emulator:build-engine-bazel` stages
+the Bazel-built binary + sibling `libduckdb.so` there with an `rpath`
+of `$ORIGIN`.
+
 ## Open questions / things to investigate
 
 - **Vendoring strategy for GoogleSQL.** Spanner builds it via Bazel from the
-  upstream tree. We probably want the same. CMake fallback would need to
-  cover Abseil / Protobuf / RE2 / ICU and is likely a worse path; treat it as
-  experimental.
+  upstream tree. We do the same (see "Build systems" above). CMake fallback
+  would need to cover Abseil / Protobuf / RE2 / ICU and is likely a worse
+  path; treat it as experimental.
 - **Subprocess vs. cgo.** Spanner uses subprocess + gRPC. Cleaner ABI, easier
   crash isolation, no cgo build complexity. We start there. Cgo could be
   revisited if subprocess overhead matters in CI runs.
