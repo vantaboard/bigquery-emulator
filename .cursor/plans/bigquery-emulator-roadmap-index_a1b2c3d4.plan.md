@@ -85,7 +85,7 @@ todos:
     status: completed
   - id: run-27-transpiler-emit-join-agg
     content: "Run transpiler-emit-join-agg_e6b7c8d9.plan.md"
-    status: pending
+    status: completed
   - id: run-28-duckdb-engine-exec
     content: "Run duckdb-engine-exec_f7c8d9e0.plan.md"
     status: pending
