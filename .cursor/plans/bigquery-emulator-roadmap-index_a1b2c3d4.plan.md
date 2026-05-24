@@ -79,7 +79,7 @@ todos:
     status: completed
   - id: run-25-transpiler-skeleton
     content: "Run transpiler-skeleton_c4f5a6b7.plan.md"
-    status: pending
+    status: completed
   - id: run-26-transpiler-emit-scans
     content: "Run transpiler-emit-scans_d5a6b7c8.plan.md"
     status: pending
