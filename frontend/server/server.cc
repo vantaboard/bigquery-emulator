@@ -88,12 +88,19 @@ std::pair<std::string, int> SplitHostPort(const std::string& address) {
 }  // namespace
 
 std::unique_ptr<Server> Server::Create(const Options& options) {
+  if (options.storage == nullptr) {
+    std::fprintf(stderr,
+                 "[frontend::Server] Options.storage must be non-null; "
+                 "Catalog RPCs have no backend to delegate to\n");
+    return nullptr;
+  }
+
   // EnableDefaultHealthCheckService must be toggled before constructing
   // a ServerBuilder; the builder snapshots the global flag at
   // construction time.
   ::grpc::EnableDefaultHealthCheckService(true);
 
-  auto catalog = std::make_unique<CatalogService>();
+  auto catalog = std::make_unique<CatalogService>(options.storage);
   auto query = std::make_unique<QueryService>();
 
   ::grpc::ServerBuilder builder;

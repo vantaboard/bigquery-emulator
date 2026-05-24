@@ -373,6 +373,7 @@ int main(int argc, char** argv) {
 
   bigquery_emulator::frontend::Server::Options options;
   options.server_address = flags.host_port;
+  options.storage = storage_owned.get();
 
   auto server = bigquery_emulator::frontend::Server::Create(options);
   if (!server) {

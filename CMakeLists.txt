@@ -311,7 +311,16 @@ add_library(frontend_server STATIC
   frontend/server/server.cc
 )
 target_include_directories(frontend_server PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(frontend_server PUBLIC enginepb_cc backend_engine)
+target_link_libraries(frontend_server
+  PUBLIC
+    enginepb_cc
+    backend_engine
+    backend_schema
+    backend_storage
+    absl::status
+    absl::statusor
+    absl::strings
+)
 
 # emulator_main links every backend library it can construct at CLI
 # parse time: the schema/storage interface stack, the in-memory storage
@@ -389,6 +398,31 @@ if(BIGQUERY_EMULATOR_BUILD_TESTS)
   add_test(
     NAME in_memory_storage_test
     COMMAND in_memory_storage_test
+  )
+
+  # CatalogService delegates every RPC straight to Storage; we test it
+  # against the InMemoryStorage so the test stays hermetic and fast.
+  # gRPC types come transitively via frontend_server (gRPC::grpc++).
+  add_executable(catalog_handler_test
+    frontend/handlers/catalog_test.cc
+  )
+  target_link_libraries(catalog_handler_test
+    PRIVATE
+      frontend_server
+      backend_storage_memory
+      backend_storage
+      backend_schema
+      enginepb_cc
+      absl::status
+      absl::statusor
+      absl::strings
+      GTest::gtest
+      GTest::gmock
+      GTest::gtest_main
+  )
+  add_test(
+    NAME catalog_handler_test
+    COMMAND catalog_handler_test
   )
 
   # The DuckDB storage round-trip test is only meaningful when the

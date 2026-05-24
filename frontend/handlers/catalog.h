@@ -3,6 +3,7 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include "backend/storage/storage.h"
 #include "emulator.grpc.pb.h"
 
 namespace bigquery_emulator {
@@ -13,11 +14,26 @@ namespace frontend {
 // catalog the Go gateway pokes whenever it sees REST mutations against
 // the BigQuery resource model.
 //
-// Phase 2b ships an UNIMPLEMENTED stub for every RPC so the gRPC plumbing
-// can be exercised end-to-end (health check, reflection, gateway client)
-// before any real catalog state lands in Phase 3.
+// Phase 3g wires every RPC through a `backend::storage::Storage`
+// instance: dataset / table CRUD calls delegate straight to the store,
+// and the proto request/response shapes are translated to and from the
+// engine-agnostic `backend::schema` structs at the service boundary.
+// `Storage` errors map to gRPC status codes via `AbslToGrpcStatus` in
+// `catalog.cc` (see also `catalog-errors` in the matching plan):
+//
+//   absl::NotFound          -> grpc::NOT_FOUND
+//   absl::AlreadyExists     -> grpc::ALREADY_EXISTS
+//   absl::InvalidArgument   -> grpc::INVALID_ARGUMENT
+//   absl::FailedPrecondition-> grpc::FAILED_PRECONDITION
+//   anything else           -> grpc::INTERNAL
+//
+// The service does not own the storage pointer; the caller (typically
+// `Server::Create`) keeps the `Storage` alive for the gRPC server's
+// lifetime. `storage` must be non-null.
 class CatalogService final : public v1::Catalog::Service {
  public:
+  explicit CatalogService(backend::storage::Storage* storage);
+
   ::grpc::Status RegisterDataset(
       ::grpc::ServerContext* context,
       const v1::RegisterDatasetRequest* request,
@@ -42,6 +58,9 @@ class CatalogService final : public v1::Catalog::Service {
       ::grpc::ServerContext* context,
       const v1::DescribeTableRequest* request,
       v1::DescribeTableResponse* response) override;
+
+ private:
+  backend::storage::Storage* storage_;
 };
 
 }  // namespace frontend

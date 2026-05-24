@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 
+#include "backend/storage/storage.h"
+
 namespace bigquery_emulator {
 namespace frontend {
 
@@ -33,6 +35,12 @@ class Server {
   struct Options {
     // host:port the gRPC server should listen on, e.g. "localhost:9060".
     std::string server_address;
+
+    // Storage backend the Catalog service delegates every RPC to. Must
+    // outlive the returned `Server` (the gateway today wires this to
+    // the `InMemoryStorage` / `DuckDBStorage` owned by `emulator_main`).
+    // Must be non-null; `Server::Create` returns null otherwise.
+    backend::storage::Storage* storage = nullptr;
   };
 
   virtual ~Server() = default;
