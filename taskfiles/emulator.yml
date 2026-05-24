@@ -42,6 +42,42 @@ tasks:
         cmake -S . -B build-out -DCMAKE_BUILD_TYPE=Release
         cmake --build build-out --target emulator_main -j
 
+  # build-engine-bazel is the canonical engine build: it links the full
+  # GoogleSQL + reference_impl + DuckDB + gRPC stack, so the resulting
+  # binary actually serves `Query.DryRun` / `Query.ExecuteQuery` end to
+  # end. The CMake `build-engine` target above stays for legacy /
+  # offline workflows but cannot link GoogleSQL today.
+  #
+  # After building, we stage both the binary and `libduckdb.so` into
+  # ./bin/ side-by-side. The cc_binary sets `-Wl,-rpath,$ORIGIN`, so
+  # `./bin/emulator_main` finds its sibling `./bin/libduckdb.so` without
+  # `LD_LIBRARY_PATH`. The integration tests (`go test -tags=integration
+  # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`,
+  # which means the bazel build is the path that flips the SELECT E2E
+  # tests from auto-skip to live.
+  build-engine-bazel:
+    aliases: [build-engine:bazel]
+    desc: Build the C++ engine via Bazel (full GoogleSQL + DuckDB) and stage into ./bin
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        bazel build //binaries/emulator_main:emulator_main
+        mkdir -p bin
+        cp -f bazel-bin/binaries/emulator_main/emulator_main ./bin/emulator_main
+        chmod +w ./bin/emulator_main
+        # libduckdb.so is a dynamic dep; the cc_import in
+        # //third_party/duckdb places it in the runfiles tree. Copy
+        # the resolved .so next to the binary so `-Wl,-rpath,$ORIGIN`
+        # can find it when run from ./bin/.
+        duckdb_so="$(find -L bazel-bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit)"
+        if [ -z "$duckdb_so" ]; then
+          echo "build-engine-bazel: libduckdb.so not found in runfiles" >&2
+          exit 1
+        fi
+        cp -L "$duckdb_so" ./bin/libduckdb.so
+
   build-all:
     desc: Build both halves (gateway + engine) and stage the engine in ./bin
     deps: [build, build-engine]

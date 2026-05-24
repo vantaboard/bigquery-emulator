@@ -1,10 +1,18 @@
 # CI for the BigQuery emulator.
 #
 # Mirrors `task ci:run` (see Taskfile.yml): `go vet`, `go test`, CMake
-# build of the C++ engine, and a Go build of the gateway. Runs on a
-# linux/amd64 + linux/arm64 matrix so we catch architecture-specific
-# regressions early (the C++ engine will eventually link GoogleSQL, and
-# GoogleSQL is sensitive to compiler/arch differences).
+# build of the C++ engine, a Bazel build of the canonical engine
+# binary (GoogleSQL + reference_impl + DuckDB + gRPC, amd64-only), and
+# a Go build of the gateway. Runs on a linux/amd64 + linux/arm64
+# matrix so we catch architecture-specific regressions early.
+#
+# Build-system split (see README.md "Building"):
+#   * CMake — runs on every matrix entry; covers the storage scaffolds
+#     and the DuckDB engine scaffold. Does NOT link GoogleSQL.
+#   * Bazel — amd64 only; produces the canonical
+#     `//binaries/emulator_main:emulator_main` cc_binary that links
+#     the full GoogleSQL analyzer + reference-impl evaluator and
+#     actually serves Query.DryRun / Query.ExecuteQuery end-to-end.
 #
 # Keep this file and the `ci:run` task in sync: anything that runs here
 # should also run via `task ci:run` locally, and vice versa.
@@ -73,6 +81,53 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++
           cmake --build build-out --target emulator_main -j
+
+      # ---------------------------------------------------------------
+      # Bazel build of emulator_main (canonical, full GoogleSQL)
+      # ---------------------------------------------------------------
+      #
+      # Scoped to linux/amd64 only: the GoogleSQL + Bazel toolchain
+      # does not cross-build cleanly to linux/arm64 in CI yet
+      # (upstream GoogleSQL pins a hermetic LLVM that only ships amd64
+      # binaries today), so the arm64 leg of this matrix continues to
+      # exercise the CMake path above. The SELECT E2E tests auto-skip
+      # on arm64 until a Bazel-built engine binary is available; that
+      # was the trade-off documented in plans 21–24. Track arm64
+      # enablement against upstream GoogleSQL toolchain notes.
+      #
+      # `local_path_override` in MODULE.bazel points at a sibling
+      # `../googlesql/` checkout; the step below pulls the matching
+      # tag from upstream and applies the one-line semver patch
+      # documented in MODULE.bazel before the build kicks off.
+      - name: Set up Bazel (bazelisk)
+        if: matrix.arch == 'amd64'
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (for local_path_override)
+        if: matrix.arch == 'amd64'
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: 2026.01.1
+          path: googlesql-sibling
+
+      - name: Stage googlesql at ../googlesql
+        if: matrix.arch == 'amd64'
+        run: |
+          mv googlesql-sibling ../googlesql
+          # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
+          # strict semver parser ("leading zero"); see the long note
+          # at the top of //MODULE.bazel for the rationale.
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
+        if: matrix.arch == 'amd64'
+        run: |
+          bazel build //binaries/emulator_main:emulator_main
 
       - name: Build Go gateway (gateway_main)
         run: |
