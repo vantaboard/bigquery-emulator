@@ -35,6 +35,8 @@ const (
 	Catalog_RegisterTable_FullMethodName   = "/bigquery_emulator.v1.Catalog/RegisterTable"
 	Catalog_DropTable_FullMethodName       = "/bigquery_emulator.v1.Catalog/DropTable"
 	Catalog_DescribeTable_FullMethodName   = "/bigquery_emulator.v1.Catalog/DescribeTable"
+	Catalog_InsertRows_FullMethodName      = "/bigquery_emulator.v1.Catalog/InsertRows"
+	Catalog_ListRows_FullMethodName        = "/bigquery_emulator.v1.Catalog/ListRows"
 )
 
 // CatalogClient is the client API for Catalog service.
@@ -46,6 +48,13 @@ type CatalogClient interface {
 	RegisterTable(ctx context.Context, in *RegisterTableRequest, opts ...grpc.CallOption) (*RegisterTableResponse, error)
 	DropTable(ctx context.Context, in *DropTableRequest, opts ...grpc.CallOption) (*DropTableResponse, error)
 	DescribeTable(ctx context.Context, in *DescribeTableRequest, opts ...grpc.CallOption) (*DescribeTableResponse, error)
+	// Row-level access. `InsertRows` delegates to `Storage::AppendRows`
+	// and is the engine side of `tabledata.insertAll`. `ListRows` is
+	// the engine side of `tabledata.list` and returns a single
+	// (possibly empty) page of rows plus the total row count so the
+	// gateway can synthesize BigQuery's pageToken semantics.
+	InsertRows(ctx context.Context, in *InsertRowsRequest, opts ...grpc.CallOption) (*InsertRowsResponse, error)
+	ListRows(ctx context.Context, in *ListRowsRequest, opts ...grpc.CallOption) (*ListRowsResponse, error)
 }
 
 type catalogClient struct {
@@ -106,6 +115,26 @@ func (c *catalogClient) DescribeTable(ctx context.Context, in *DescribeTableRequ
 	return out, nil
 }
 
+func (c *catalogClient) InsertRows(ctx context.Context, in *InsertRowsRequest, opts ...grpc.CallOption) (*InsertRowsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InsertRowsResponse)
+	err := c.cc.Invoke(ctx, Catalog_InsertRows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *catalogClient) ListRows(ctx context.Context, in *ListRowsRequest, opts ...grpc.CallOption) (*ListRowsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRowsResponse)
+	err := c.cc.Invoke(ctx, Catalog_ListRows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CatalogServer is the server API for Catalog service.
 // All implementations should embed UnimplementedCatalogServer
 // for forward compatibility.
@@ -115,6 +144,13 @@ type CatalogServer interface {
 	RegisterTable(context.Context, *RegisterTableRequest) (*RegisterTableResponse, error)
 	DropTable(context.Context, *DropTableRequest) (*DropTableResponse, error)
 	DescribeTable(context.Context, *DescribeTableRequest) (*DescribeTableResponse, error)
+	// Row-level access. `InsertRows` delegates to `Storage::AppendRows`
+	// and is the engine side of `tabledata.insertAll`. `ListRows` is
+	// the engine side of `tabledata.list` and returns a single
+	// (possibly empty) page of rows plus the total row count so the
+	// gateway can synthesize BigQuery's pageToken semantics.
+	InsertRows(context.Context, *InsertRowsRequest) (*InsertRowsResponse, error)
+	ListRows(context.Context, *ListRowsRequest) (*ListRowsResponse, error)
 }
 
 // UnimplementedCatalogServer should be embedded to have
@@ -138,6 +174,12 @@ func (UnimplementedCatalogServer) DropTable(context.Context, *DropTableRequest) 
 }
 func (UnimplementedCatalogServer) DescribeTable(context.Context, *DescribeTableRequest) (*DescribeTableResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DescribeTable not implemented")
+}
+func (UnimplementedCatalogServer) InsertRows(context.Context, *InsertRowsRequest) (*InsertRowsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InsertRows not implemented")
+}
+func (UnimplementedCatalogServer) ListRows(context.Context, *ListRowsRequest) (*ListRowsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRows not implemented")
 }
 func (UnimplementedCatalogServer) testEmbeddedByValue() {}
 
@@ -249,6 +291,42 @@ func _Catalog_DescribeTable_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Catalog_InsertRows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InsertRowsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).InsertRows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_InsertRows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).InsertRows(ctx, req.(*InsertRowsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Catalog_ListRows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRowsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).ListRows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_ListRows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).ListRows(ctx, req.(*ListRowsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Catalog_ServiceDesc is the grpc.ServiceDesc for Catalog service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -275,6 +353,14 @@ var Catalog_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeTable",
 			Handler:    _Catalog_DescribeTable_Handler,
+		},
+		{
+			MethodName: "InsertRows",
+			Handler:    _Catalog_InsertRows_Handler,
+		},
+		{
+			MethodName: "ListRows",
+			Handler:    _Catalog_ListRows_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

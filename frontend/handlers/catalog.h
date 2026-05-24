@@ -59,6 +59,16 @@ class CatalogService final : public v1::Catalog::Service {
       const v1::DescribeTableRequest* request,
       v1::DescribeTableResponse* response) override;
 
+  ::grpc::Status InsertRows(
+      ::grpc::ServerContext* context,
+      const v1::InsertRowsRequest* request,
+      v1::InsertRowsResponse* response) override;
+
+  ::grpc::Status ListRows(
+      ::grpc::ServerContext* context,
+      const v1::ListRowsRequest* request,
+      v1::ListRowsResponse* response) override;
+
  private:
   backend::storage::Storage* storage_;
 };

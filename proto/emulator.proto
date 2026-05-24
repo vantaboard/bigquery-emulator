@@ -39,6 +39,14 @@ service Catalog {
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
 
   rpc DescribeTable(DescribeTableRequest) returns (DescribeTableResponse);
+
+  // Row-level access. `InsertRows` delegates to `Storage::AppendRows`
+  // and is the engine side of `tabledata.insertAll`. `ListRows` is
+  // the engine side of `tabledata.list` and returns a single
+  // (possibly empty) page of rows plus the total row count so the
+  // gateway can synthesize BigQuery's pageToken semantics.
+  rpc InsertRows(InsertRowsRequest) returns (InsertRowsResponse);
+  rpc ListRows(ListRowsRequest) returns (ListRowsResponse);
 }
 
 message DatasetRef {
@@ -96,6 +104,41 @@ message DescribeTableRequest {
 }
 message DescribeTableResponse {
   TableSchema schema = 1;
+}
+
+// DataRow is a single row of stored data. Cells are positional and
+// align with the columns of the target table's `TableSchema`. The
+// `Cell` shape is shared with `Query`'s result rows so the wire
+// types stay consistent across the two read paths.
+message DataRow {
+  repeated Cell cells = 1;
+}
+
+message InsertRowsRequest {
+  TableRef table = 1;
+  repeated DataRow rows = 2;
+}
+message InsertRowsResponse {}
+
+message ListRowsRequest {
+  TableRef table = 1;
+  // Row index of the first row to return (0-based). Rows before this
+  // index are skipped.
+  int64 start_index = 2;
+  // Maximum number of rows in the response. A non-positive value
+  // returns every remaining row from `start_index`.
+  int64 max_results = 3;
+}
+message ListRowsResponse {
+  repeated DataRow rows = 1;
+  // Total number of rows in the table at the moment the request was
+  // served; the gateway surfaces this as `totalRows` in the REST
+  // response.
+  int64 total_rows = 2;
+  // One past the index of the last row returned. The gateway uses
+  // this to emit a `pageToken` (when `next_start_index < total_rows`)
+  // or omit it (when the page reached the end of the table).
+  int64 next_start_index = 3;
 }
 
 // ---------------------------------------------------------------------------

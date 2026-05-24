@@ -1,12 +1,17 @@
 #include "frontend/handlers/catalog.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 
@@ -93,6 +98,84 @@ backend::storage::DatasetId DatasetIdFromProto(const v1::DatasetRef& ref) {
 backend::storage::TableId TableIdFromProto(const v1::TableRef& ref) {
   return backend::storage::TableId{ref.project_id(), ref.dataset_id(),
                                     ref.table_id()};
+}
+
+// Converts an `enginepb::Cell` to a `backend::storage::Value`.
+//
+// Tabledata.insertAll's REST payload sends every primitive as a JSON
+// string (BigQuery's "f"/"v" wire shape). The gateway forwards them
+// as `Cell::string_value` and `Cell::null_value`; the engine keeps
+// them stored as either `Value::String` or `Value::Null` so a later
+// `ListRows` returns the exact same string-shaped bytes back. Typed
+// coercion happens at the engine boundary inside Phase 5; the
+// catalog only round-trips opaque wire-shape data.
+backend::storage::Value CellToValue(const v1::Cell& cell) {
+  switch (cell.value_case()) {
+    case v1::Cell::kStringValue:
+      return backend::storage::Value::String(cell.string_value());
+    case v1::Cell::kNullValue:
+      return backend::storage::Value::Null();
+    case v1::Cell::kArray: {
+      std::vector<backend::storage::Value> elements;
+      elements.reserve(cell.array().elements_size());
+      for (const auto& el : cell.array().elements()) {
+        elements.push_back(CellToValue(el));
+      }
+      return backend::storage::Value::Array(std::move(elements));
+    }
+    case v1::Cell::kStructValue: {
+      std::vector<backend::storage::Value> fields;
+      fields.reserve(cell.struct_value().fields_size());
+      for (const auto& f : cell.struct_value().fields()) {
+        fields.push_back(CellToValue(f));
+      }
+      return backend::storage::Value::Struct(std::move(fields));
+    }
+    case v1::Cell::VALUE_NOT_SET:
+      break;
+  }
+  return backend::storage::Value::Null();
+}
+
+// Inverse of CellToValue. Mirrors the `Value::Kind` variant onto the
+// `Cell` oneof; primitives that do not have a dedicated proto slot
+// (bool/int/float) round-trip as their decimal-string formatting,
+// matching the BigQuery REST `f`/`v` wire shape.
+void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
+  using Kind = backend::storage::Value::Kind;
+  out->Clear();
+  switch (value.kind()) {
+    case Kind::kNull:
+      out->set_null_value(true);
+      return;
+    case Kind::kBool:
+      out->set_string_value(value.bool_value() ? "true" : "false");
+      return;
+    case Kind::kInt64:
+      out->set_string_value(absl::StrCat(value.int64_value()));
+      return;
+    case Kind::kFloat64:
+      out->set_string_value(absl::StrCat(value.float64_value()));
+      return;
+    case Kind::kString:
+    case Kind::kBytes:
+      out->set_string_value(value.string_value());
+      return;
+    case Kind::kArray: {
+      auto* arr = out->mutable_array();
+      for (const auto& el : value.array_value()) {
+        ValueToCell(el, arr->add_elements());
+      }
+      return;
+    }
+    case Kind::kStruct: {
+      auto* st = out->mutable_struct_value();
+      for (const auto& f : value.struct_value()) {
+        ValueToCell(f, st->add_fields());
+      }
+      return;
+    }
+  }
 }
 
 }  // namespace
@@ -184,6 +267,78 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return AbslToGrpcStatus(schema_or.status());
   }
   backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status CatalogService::InsertRows(
+    ::grpc::ServerContext* /*context*/,
+    const v1::InsertRowsRequest* request,
+    v1::InsertRowsResponse* /*response*/) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "CatalogService: storage backend is not configured");
+  }
+  if (auto v = ValidateTableRef(request->table(), "InsertRows"); !v.ok()) {
+    return v;
+  }
+  const auto id = TableIdFromProto(request->table());
+  std::vector<backend::storage::Row> rows;
+  rows.reserve(request->rows_size());
+  for (const auto& proto_row : request->rows()) {
+    backend::storage::Row row;
+    row.cells.reserve(proto_row.cells_size());
+    for (const auto& cell : proto_row.cells()) {
+      row.cells.push_back(CellToValue(cell));
+    }
+    rows.push_back(std::move(row));
+  }
+  return AbslToGrpcStatus(storage_->AppendRows(id, absl::MakeSpan(rows)));
+}
+
+::grpc::Status CatalogService::ListRows(
+    ::grpc::ServerContext* /*context*/,
+    const v1::ListRowsRequest* request,
+    v1::ListRowsResponse* response) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "CatalogService: storage backend is not configured");
+  }
+  if (auto v = ValidateTableRef(request->table(), "ListRows"); !v.ok()) {
+    return v;
+  }
+  const auto id = TableIdFromProto(request->table());
+  auto iter_or = storage_->ScanRows(id);
+  if (!iter_or.ok()) {
+    return AbslToGrpcStatus(iter_or.status());
+  }
+  std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
+
+  const int64_t start_index = request->start_index() > 0
+                                  ? request->start_index()
+                                  : 0;
+  const int64_t max_results = request->max_results();
+  const bool unlimited = max_results <= 0;
+
+  int64_t row_index = 0;
+  int64_t emitted = 0;
+  backend::storage::Row row;
+  while (true) {
+    auto next_or = iter->Next(&row);
+    if (!next_or.ok()) {
+      return AbslToGrpcStatus(next_or.status());
+    }
+    if (!*next_or) break;
+    if (row_index >= start_index && (unlimited || emitted < max_results)) {
+      auto* proto_row = response->add_rows();
+      for (const auto& cell : row.cells) {
+        ValueToCell(cell, proto_row->add_cells());
+      }
+      ++emitted;
+    }
+    ++row_index;
+  }
+  response->set_total_rows(row_index);
+  response->set_next_start_index(start_index + emitted);
   return ::grpc::Status::OK;
 }
 

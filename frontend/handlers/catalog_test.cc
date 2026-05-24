@@ -241,6 +241,124 @@ TEST_F(CatalogServiceTest, RegisterTableWithMissingFieldNameIsInvalidArgument) {
   EXPECT_THAT(status.error_message(), HasSubstr("name"));
 }
 
+// Helper: register `proj-1.ds_1.people` with the three-column
+// schema used by the row-level RPC tests.
+void RegisterPeople(CatalogService* service) {
+  v1::RegisterDatasetRequest ds_req;
+  ds_req.mutable_dataset()->set_project_id("proj-1");
+  ds_req.mutable_dataset()->set_dataset_id("ds_1");
+  v1::RegisterDatasetResponse ds_resp;
+  ASSERT_TRUE(service->RegisterDataset(nullptr, &ds_req, &ds_resp).ok());
+
+  v1::RegisterTableRequest tbl_req;
+  tbl_req.mutable_table()->set_project_id("proj-1");
+  tbl_req.mutable_table()->set_dataset_id("ds_1");
+  tbl_req.mutable_table()->set_table_id("people");
+  FillPeopleSchema(tbl_req.mutable_schema());
+  v1::RegisterTableResponse tbl_resp;
+  ASSERT_TRUE(service->RegisterTable(nullptr, &tbl_req, &tbl_resp).ok());
+}
+
+// Helper: append a string cell to `row` with the given value.
+void AddStringCell(v1::DataRow* row, const std::string& value) {
+  row->add_cells()->set_string_value(value);
+}
+
+// Helper: append a null cell to `row`.
+void AddNullCell(v1::DataRow* row) {
+  row->add_cells()->set_null_value(true);
+}
+
+TEST_F(CatalogServiceTest, InsertAndListRowsHappyPath) {
+  RegisterPeople(service_.get());
+
+  v1::InsertRowsRequest ins_req;
+  ins_req.mutable_table()->set_project_id("proj-1");
+  ins_req.mutable_table()->set_dataset_id("ds_1");
+  ins_req.mutable_table()->set_table_id("people");
+  auto* row1 = ins_req.add_rows();
+  AddStringCell(row1, "1");
+  AddStringCell(row1, "alice");
+  // tags is REPEATED -> empty ARRAY cell.
+  row1->add_cells()->mutable_array();
+  auto* row2 = ins_req.add_rows();
+  AddStringCell(row2, "2");
+  AddNullCell(row2);
+  row2->add_cells()->mutable_array();
+  v1::InsertRowsResponse ins_resp;
+  auto ins_status = service_->InsertRows(nullptr, &ins_req, &ins_resp);
+  EXPECT_TRUE(ins_status.ok()) << ins_status.error_message();
+
+  v1::ListRowsRequest ls_req;
+  ls_req.mutable_table()->set_project_id("proj-1");
+  ls_req.mutable_table()->set_dataset_id("ds_1");
+  ls_req.mutable_table()->set_table_id("people");
+  v1::ListRowsResponse ls_resp;
+  auto ls_status = service_->ListRows(nullptr, &ls_req, &ls_resp);
+  ASSERT_TRUE(ls_status.ok()) << ls_status.error_message();
+  EXPECT_EQ(ls_resp.total_rows(), 2);
+  EXPECT_EQ(ls_resp.next_start_index(), 2);
+  ASSERT_EQ(ls_resp.rows_size(), 2);
+  ASSERT_EQ(ls_resp.rows(0).cells_size(), 3);
+  EXPECT_EQ(ls_resp.rows(0).cells(0).string_value(), "1");
+  EXPECT_EQ(ls_resp.rows(0).cells(1).string_value(), "alice");
+  EXPECT_TRUE(ls_resp.rows(0).cells(2).has_array());
+  EXPECT_EQ(ls_resp.rows(1).cells(0).string_value(), "2");
+  EXPECT_TRUE(ls_resp.rows(1).cells(1).null_value());
+}
+
+TEST_F(CatalogServiceTest, ListRowsPagination) {
+  RegisterPeople(service_.get());
+  v1::InsertRowsRequest ins_req;
+  ins_req.mutable_table()->set_project_id("proj-1");
+  ins_req.mutable_table()->set_dataset_id("ds_1");
+  ins_req.mutable_table()->set_table_id("people");
+  for (int i = 0; i < 5; ++i) {
+    auto* row = ins_req.add_rows();
+    AddStringCell(row, std::to_string(i));
+    AddStringCell(row, "n" + std::to_string(i));
+    row->add_cells()->mutable_array();
+  }
+  v1::InsertRowsResponse ins_resp;
+  ASSERT_TRUE(service_->InsertRows(nullptr, &ins_req, &ins_resp).ok());
+
+  v1::ListRowsRequest ls_req;
+  ls_req.mutable_table()->set_project_id("proj-1");
+  ls_req.mutable_table()->set_dataset_id("ds_1");
+  ls_req.mutable_table()->set_table_id("people");
+  ls_req.set_start_index(1);
+  ls_req.set_max_results(2);
+  v1::ListRowsResponse ls_resp;
+  ASSERT_TRUE(service_->ListRows(nullptr, &ls_req, &ls_resp).ok());
+  EXPECT_EQ(ls_resp.total_rows(), 5);
+  EXPECT_EQ(ls_resp.next_start_index(), 3);
+  ASSERT_EQ(ls_resp.rows_size(), 2);
+  EXPECT_EQ(ls_resp.rows(0).cells(0).string_value(), "1");
+  EXPECT_EQ(ls_resp.rows(1).cells(0).string_value(), "2");
+}
+
+TEST_F(CatalogServiceTest, InsertRowsMissingTableIsNotFound) {
+  v1::InsertRowsRequest ins_req;
+  ins_req.mutable_table()->set_project_id("proj-1");
+  ins_req.mutable_table()->set_dataset_id("ds_1");
+  ins_req.mutable_table()->set_table_id("ghost");
+  auto* row = ins_req.add_rows();
+  AddStringCell(row, "1");
+  v1::InsertRowsResponse ins_resp;
+  auto status = service_->InsertRows(nullptr, &ins_req, &ins_resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);
+}
+
+TEST_F(CatalogServiceTest, ListRowsMissingTableIsNotFound) {
+  v1::ListRowsRequest ls_req;
+  ls_req.mutable_table()->set_project_id("proj-1");
+  ls_req.mutable_table()->set_dataset_id("ds_1");
+  ls_req.mutable_table()->set_table_id("ghost");
+  v1::ListRowsResponse ls_resp;
+  auto status = service_->ListRows(nullptr, &ls_req, &ls_resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);
+}
+
 }  // namespace
 }  // namespace frontend
 }  // namespace bigquery_emulator
