@@ -75,17 +75,41 @@ type Statistics struct {
 	TotalBytesProcessed string `json:"totalBytesProcessed,omitempty"`
 }
 
+// QueryResult is the cached result of a synchronous query, kept in
+// the registry so a follow-up `jobs.getQueryResults` can replay the
+// same schema and rows without re-running the SQL. Schema and Rows
+// are stored in the BigQuery REST `f`/`v` shape so the handler can
+// emit them verbatim.
+//
+// The registry holds the entire result set in memory; this matches
+// the Phase 5e "single-page only" charter from
+// `.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`. Pagination
+// (real `pageToken` lifecycle, cursored reads from a streaming
+// engine) is deferred until Phase 6, when long-running jobs land.
+type QueryResult struct {
+	Schema *bqtypes.TableSchema
+	Rows   []bqtypes.Row
+}
+
 // Job is the gateway's view of a single BigQuery job. Today it's
 // populated from the sync `jobs.query` path and is mostly metadata
 // -- `configuration`, `selfLink`, `etag`, `user_email`, and the
 // per-type `*Statistics` sub-objects are deferred until a handler
 // actually needs them.
+//
+// Result is the cached query result, populated by
+// `CompleteQueryWithResult` and consumed by `jobs.getQueryResults`.
+// It is excluded from the JSON encoding because the upstream Job
+// resource has no rows/schema field; result data is only emitted
+// through the dedicated `QueryResponse`/`GetQueryResultsResponse`
+// shapes.
 type Job struct {
 	Kind         string               `json:"kind,omitempty"`
 	ID           string               `json:"id,omitempty"`
 	JobReference bqtypes.JobReference `json:"jobReference"`
 	Status       Status               `json:"status"`
 	Statistics   Statistics           `json:"statistics"`
+	Result       *QueryResult         `json:"-"`
 }
 
 // Registry is a process-local jobs table keyed by jobId. Reads /
@@ -140,6 +164,21 @@ func (r *Registry) CompleteQuery(
 	totalBytesProcessed int64,
 	start, end time.Time,
 ) *Job {
+	return r.CompleteQueryWithResult(
+		projectID, location, totalBytesProcessed, start, end, nil)
+}
+
+// CompleteQueryWithResult records a finished query job along with the
+// schema + rows the engine produced. The result is cached on the Job
+// so `jobs.getQueryResults` can replay it without re-running the SQL.
+// Pass `result == nil` when no rows are available (the same behavior
+// as `CompleteQuery`).
+func (r *Registry) CompleteQueryWithResult(
+	projectID, location string,
+	totalBytesProcessed int64,
+	start, end time.Time,
+	result *QueryResult,
+) *Job {
 	jobID := r.NewJobID()
 	j := &Job{
 		Kind: JobKind,
@@ -156,6 +195,7 @@ func (r *Registry) CompleteQuery(
 			EndTime:             millisString(end),
 			TotalBytesProcessed: strconv.FormatInt(totalBytesProcessed, 10),
 		},
+		Result: result,
 	}
 	r.jobs.Store(jobID, j)
 	return j

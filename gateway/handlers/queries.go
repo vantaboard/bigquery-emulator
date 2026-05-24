@@ -208,16 +208,20 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	end := time.Now().UTC()
 
-	// Record the completed job before assembling the response so
-	// the jobReference we emit is the same one a later jobs.get
-	// will find. Phase 5d does not track engine-side bytes-
-	// processed yet, so we stamp 0; Phase 6 wires the real metric.
-	job := deps.Jobs.CompleteQuery(projectID, req.Location, 0, start, end)
+	// Record the completed job (with its rows + schema cached)
+	// before assembling the response so the jobReference we emit
+	// is the same one a later jobs.get / jobs.getQueryResults will
+	// find. Phase 5d does not track engine-side bytes-processed
+	// yet, so we stamp 0; Phase 6 wires the real metric.
+	restSchema := schemaFromProto(schema)
+	result := &jobs.QueryResult{Schema: restSchema, Rows: rows}
+	job := deps.Jobs.CompleteQueryWithResult(
+		projectID, req.Location, 0, start, end, result)
 	jobRef := job.JobReference
 
 	out := bqtypes.QueryResponse{
 		Kind:                queryResponseKind,
-		Schema:              schemaFromProto(schema),
+		Schema:              restSchema,
 		JobReference:        &jobRef,
 		JobComplete:         true,
 		TotalRows:           strconv.FormatUint(uint64(len(rows)), 10),
@@ -231,13 +235,117 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, out)
 }
 
+// getQueryResultsKind is the value the BigQuery REST API returns for
+// the `kind` field of a GetQueryResultsResponse resource. See
+// docs/bigquery/docs/reference/rest/v2/jobs/getQueryResults.md.
+const getQueryResultsKind = "bigquery#getQueryResultsResponse"
+
 // QueryGetResults implements `bigquery.jobs.getQueryResults`:
 //
 //	GET /bigquery/v2/projects/{projectId}/queries/{jobId}
 //
-// Pages through results of a running or completed query job. Supports
-// `startIndex`, `pageToken`, `maxResults`, `timeoutMs`, `location`, and
-// `formatOptions` per the upstream docs.
-func QueryGetResults(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+// Replays the cached rows + schema for a previously-run synchronous
+// query. The Phase 5e charter (`.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`)
+// limits this handler to single-page reads: the registry holds the
+// entire result set in memory at job-completion time and this
+// endpoint emits it back in one response. Real cursored pagination
+// (multi-page `pageToken` lifecycle, partial reads from a streaming
+// engine) is deferred to Phase 6 alongside long-running async jobs.
+//
+// Documented query parameters and current behavior:
+//
+//   - `startIndex` (uint): respected; rows < startIndex are skipped.
+//   - `maxResults` (uint): respected; rows beyond the slice are
+//     truncated. The result is still flagged as complete (no
+//     pageToken is emitted) -- the BigQuery contract permits
+//     returning fewer rows than requested.
+//   - `pageToken` (string): the emulator never mints one, so a
+//     non-empty value cannot be honored. We respond with an empty
+//     page and `jobComplete=true` to keep client polling loops happy.
+//   - `location` (string): when both the stored job's location and
+//     the query parameter are non-empty and disagree, returns 404
+//     notFound -- the same shape BigQuery uses when callers route a
+//     `getQueryResults` to the wrong region.
+//   - `timeoutMs`, `formatOptions`: ignored. Queries are synchronous
+//     so timeoutMs is moot, and the f/v wire shape is the only
+//     output format the emulator emits.
+//
+// Project mismatches between the URL path and the stored job map to
+// 404 notFound rather than 403, matching BigQuery's behavior of
+// hiding cross-project jobs behind the same 404 envelope.
+func QueryGetResults(deps Dependencies) http.HandlerFunc {
+	if deps.Jobs == nil {
+		deps.Jobs = jobs.NewRegistry()
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID := r.PathValue("projectId")
+		jobID := r.PathValue("jobId")
+
+		job, ok := deps.Jobs.Get(jobID)
+		if !ok || job.JobReference.ProjectID != projectID {
+			writeError(w, http.StatusNotFound, "notFound",
+				"Not found: Job "+projectID+":"+jobID)
+			return
+		}
+		if loc := r.URL.Query().Get("location"); loc != "" &&
+			job.JobReference.Location != "" &&
+			loc != job.JobReference.Location {
+			writeError(w, http.StatusNotFound, "notFound",
+				"Not found: Job "+projectID+":"+jobID+
+					" in location "+loc)
+			return
+		}
+
+		var (
+			schema   *bqtypes.TableSchema
+			allRows  []bqtypes.Row
+			pageRows []bqtypes.Row
+		)
+		if result := job.Result; result != nil {
+			schema = result.Schema
+			allRows = result.Rows
+		}
+
+		// pageToken support: the registry never mints one, so any
+		// non-empty value is a stale token from a prior emulator run
+		// or a client that conflated tabledata.list with
+		// getQueryResults. Respond with an empty terminal page so
+		// polling loops complete cleanly.
+		if r.URL.Query().Get("pageToken") == "" {
+			start := uint64(0)
+			if s := r.URL.Query().Get("startIndex"); s != "" {
+				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
+					start = v
+				}
+			}
+			limit := uint64(len(allRows))
+			if s := r.URL.Query().Get("maxResults"); s != "" {
+				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
+					limit = v
+				}
+			}
+			total := uint64(len(allRows))
+			if start > total {
+				start = total
+			}
+			end := start + limit
+			if end > total {
+				end = total
+			}
+			pageRows = allRows[start:end]
+		}
+
+		jobRef := job.JobReference
+		out := bqtypes.QueryResponse{
+			Kind:                getQueryResultsKind,
+			Schema:              schema,
+			JobReference:        &jobRef,
+			JobComplete:         true,
+			TotalRows:           strconv.FormatUint(uint64(len(allRows)), 10),
+			Rows:                pageRows,
+			TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
+			Location:            jobRef.Location,
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
 }

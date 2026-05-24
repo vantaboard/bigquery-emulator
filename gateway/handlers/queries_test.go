@@ -518,3 +518,298 @@ func TestQueryRunExecuteUnimplementedFromEngine(t *testing.T) {
 			rec.Code, http.StatusNotImplemented, rec.Body.String())
 	}
 }
+
+// runQueryAndGetResults submits a query through QueryRun, then calls
+// QueryGetResults on the returned jobReference. The result-side
+// recorder is returned to the caller so the test can inspect the
+// GetQueryResultsResponse shape directly. Both calls share the same
+// Dependencies (and therefore the same Registry) so the registered
+// job is reachable on the read.
+func runQueryAndGetResults(t *testing.T, deps Dependencies, queryBody, query string) *bqtypes.QueryResponse {
+	t.Helper()
+	rec := runQueryWithDeps(t, "proj", deps, queryBody)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("QueryRun status = %d, want 200; body=%s",
+			rec.Code, rec.Body.String())
+	}
+	var run bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run body: %v", err)
+	}
+	if run.JobReference == nil {
+		t.Fatalf("QueryRun did not emit a jobReference; body=%s", rec.Body.String())
+	}
+
+	getRec := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/proj/queries/"+run.JobReference.JobID+query, nil)
+	getReq.SetPathValue("projectId", "proj")
+	getReq.SetPathValue("jobId", run.JobReference.JobID)
+	QueryGetResults(deps)(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("QueryGetResults status = %d, want 200; body=%s",
+			getRec.Code, getRec.Body.String())
+	}
+	var get bqtypes.QueryResponse
+	if err := json.NewDecoder(getRec.Body).Decode(&get); err != nil {
+		t.Fatalf("decode getResults body: %v", err)
+	}
+	return &get
+}
+
+// twoRowExecuteStream is the standard fixture used by the
+// QueryGetResults tests: a schema message followed by two row
+// messages, mirroring the proto contract on QueryResultRow.
+func twoRowExecuteStream() *fakeQueryResultStream {
+	return &fakeQueryResultStream{
+		msgs: []*enginepb.QueryResultRow{
+			{Schema: &enginepb.TableSchema{
+				Fields: []*enginepb.FieldSchema{
+					{Name: "id", Type: "INT64", Mode: "REQUIRED"},
+					{Name: "name", Type: "STRING", Mode: "NULLABLE"},
+				},
+			}},
+			{Cells: []*enginepb.Cell{
+				{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
+				{Value: &enginepb.Cell_StringValue{StringValue: "alice"}},
+			}},
+			{Cells: []*enginepb.Cell{
+				{Value: &enginepb.Cell_StringValue{StringValue: "2"}},
+				{Value: &enginepb.Cell_StringValue{StringValue: "bob"}},
+			}},
+		},
+	}
+}
+
+// TestQueryGetResultsReturnsCachedRows asserts the happy path:
+// jobs.query stores schema+rows on the registry, and a follow-up
+// jobs.getQueryResults replays them with a getQueryResultsResponse-
+// shaped body (kind, jobReference, schema, totalRows, jobComplete,
+// rows). This pins the Phase 5e "single-page replay" contract.
+func TestQueryGetResultsReturnsCachedRows(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false,"location":"US"}`
+	resp := runQueryAndGetResults(t, deps, body, "")
+
+	if resp.Kind != getQueryResultsKind {
+		t.Errorf("kind = %q, want %q", resp.Kind, getQueryResultsKind)
+	}
+	if !resp.JobComplete {
+		t.Error("jobComplete = false, want true")
+	}
+	if resp.TotalRows != "2" {
+		t.Errorf("totalRows = %q, want %q", resp.TotalRows, "2")
+	}
+	if resp.JobReference == nil {
+		t.Fatal("jobReference missing on getResults response")
+	}
+	if resp.JobReference.ProjectID != "proj" {
+		t.Errorf("jobReference.projectId = %q, want %q",
+			resp.JobReference.ProjectID, "proj")
+	}
+	if resp.JobReference.Location != "US" {
+		t.Errorf("jobReference.location = %q, want %q",
+			resp.JobReference.Location, "US")
+	}
+	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
+		t.Fatalf("schema = %+v, want 2 fields", resp.Schema)
+	}
+	if len(resp.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(resp.Rows))
+	}
+	if got := resp.Rows[0].F[0].V; got != "1" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", got, "1")
+	}
+	if got := resp.Rows[0].F[1].V; got != "alice" {
+		t.Errorf("rows[0].f[1].v = %v, want %q", got, "alice")
+	}
+	if got := resp.Rows[1].F[0].V; got != "2" {
+		t.Errorf("rows[1].f[0].v = %v, want %q", got, "2")
+	}
+	if got := resp.Rows[1].F[1].V; got != "bob" {
+		t.Errorf("rows[1].f[1].v = %v, want %q", got, "bob")
+	}
+}
+
+// TestQueryGetResultsRespectsStartIndexAndMaxResults pins the
+// pagination knobs: startIndex skips the leading row, maxResults
+// caps the trailing one. totalRows still reports the full count
+// because that field describes the underlying result set, not the
+// emitted page.
+func TestQueryGetResultsRespectsStartIndexAndMaxResults(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false}`
+
+	got := runQueryAndGetResults(t, deps, body, "?startIndex=1&maxResults=10")
+	if got.TotalRows != "2" {
+		t.Errorf("totalRows = %q, want %q", got.TotalRows, "2")
+	}
+	if len(got.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1 (after startIndex=1)", len(got.Rows))
+	}
+	if v := got.Rows[0].F[0].V; v != "2" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", v, "2")
+	}
+
+	got = runQueryAndGetResults(t, deps, body, "?maxResults=1")
+	if len(got.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1 (after maxResults=1)", len(got.Rows))
+	}
+	if v := got.Rows[0].F[0].V; v != "1" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", v, "1")
+	}
+
+	got = runQueryAndGetResults(t, deps, body, "?startIndex=99")
+	if len(got.Rows) != 0 {
+		t.Errorf("rows = %d, want 0 (startIndex past end)", len(got.Rows))
+	}
+}
+
+// TestQueryGetResultsPageTokenReturnsEmptyPage documents the
+// single-page-only behavior: the emulator never mints pageTokens, so
+// any non-empty token yields an empty terminal page. Polling clients
+// see jobComplete=true and exit cleanly instead of looping forever.
+func TestQueryGetResultsPageTokenReturnsEmptyPage(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false}`
+
+	got := runQueryAndGetResults(t, deps, body, "?pageToken=stale")
+	if !got.JobComplete {
+		t.Error("jobComplete = false, want true even with a stale pageToken")
+	}
+	if got.TotalRows != "2" {
+		t.Errorf("totalRows = %q, want %q (totalRows reflects the full set)",
+			got.TotalRows, "2")
+	}
+	if len(got.Rows) != 0 {
+		t.Errorf("rows = %d, want 0 (single-page emulator never mints a token)",
+			len(got.Rows))
+	}
+	if got.PageToken != "" {
+		t.Errorf("pageToken = %q, want empty (Phase 5e: never mint one)",
+			got.PageToken)
+	}
+}
+
+// TestQueryGetResultsUnknownJobReturns404 asserts the unknown-jobId
+// branch surfaces as a BigQuery-shaped 404 envelope.
+func TestQueryGetResultsUnknownJobReturns404(t *testing.T) {
+	deps := Dependencies{Jobs: jobs.NewRegistry()}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/proj/queries/job_does_not_exist", nil)
+	req.SetPathValue("projectId", "proj")
+	req.SetPathValue("jobId", "job_does_not_exist")
+	QueryGetResults(deps)(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	var env errorEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if env.Error.Status != "notFound" {
+		t.Errorf("error.status = %q, want %q", env.Error.Status, "notFound")
+	}
+}
+
+// TestQueryGetResultsProjectMismatchReturns404 asserts that a job
+// minted under one project is not visible from another project. The
+// emulator uses 404 (not 403) to match BigQuery's wire shape: cross-
+// project jobs are hidden behind the same envelope as missing ones.
+func TestQueryGetResultsProjectMismatchReturns404(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	rec := runQueryWithDeps(t, "proj-a", deps,
+		`{"query":"SELECT 1","useLegacySql":false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setup QueryRun status = %d, want 200; body=%s",
+			rec.Code, rec.Body.String())
+	}
+	var run bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run body: %v", err)
+	}
+
+	getRec := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/proj-b/queries/"+run.JobReference.JobID, nil)
+	getReq.SetPathValue("projectId", "proj-b")
+	getReq.SetPathValue("jobId", run.JobReference.JobID)
+	QueryGetResults(deps)(getRec, getReq)
+	if getRec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s",
+			getRec.Code, getRec.Body.String())
+	}
+}
+
+// TestQueryGetResultsLocationMismatchReturns404 asserts that a
+// location query parameter that disagrees with the stored job's
+// location surfaces as 404 notFound, mirroring BigQuery's behavior
+// when a client routes a getQueryResults to the wrong region.
+func TestQueryGetResultsLocationMismatchReturns404(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	rec := runQueryWithDeps(t, "proj", deps,
+		`{"query":"SELECT 1","useLegacySql":false,"location":"US"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setup QueryRun status = %d, want 200; body=%s",
+			rec.Code, rec.Body.String())
+	}
+	var run bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run body: %v", err)
+	}
+
+	getRec := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/proj/queries/"+run.JobReference.JobID+"?location=EU", nil)
+	getReq.SetPathValue("projectId", "proj")
+	getReq.SetPathValue("jobId", run.JobReference.JobID)
+	QueryGetResults(deps)(getRec, getReq)
+	if getRec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s",
+			getRec.Code, getRec.Body.String())
+	}
+}
+
+// TestQueryGetResultsNilJobsLazyInit asserts the handler builds a
+// fallback Registry when `deps.Jobs == nil` (legacy unit-mode wiring)
+// rather than panicking on a nil deref. With no jobs registered the
+// only reachable branch is "unknown jobId", which must still surface
+// as a 404.
+func TestQueryGetResultsNilJobsLazyInit(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/proj/queries/job_anything", nil)
+	req.SetPathValue("projectId", "proj")
+	req.SetPathValue("jobId", "job_anything")
+	QueryGetResults(Dependencies{})(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s",
+			rec.Code, rec.Body.String())
+	}
+}

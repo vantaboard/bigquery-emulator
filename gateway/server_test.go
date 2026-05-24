@@ -3,14 +3,18 @@ package gateway
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 // TestRouteTable smoke-tests that every documented BigQuery v2 REST
-// endpoint reaches a handler (not the 404 catch-all). Currently every
-// handler is a 501 stub, so we only assert the response is *not* a 404
-// and that it has the BigQuery error envelope. As real implementations
-// land, individual handlers grow their own targeted tests.
+// endpoint reaches a handler (not the 404 catch-all). Originally
+// every handler returned 501 so the test simply asserted "code != 404",
+// but as real handlers land some now legitimately return 404 for
+// not-yet-existing resources (e.g. `jobs.getQueryResults` for an
+// unknown jobId). To stay precise about what we are testing, the
+// route-missing 404 emitted by `handlers.NotFound` is distinguished
+// from a handler 404 by its `"No route matches ..."` message.
 //
 // Cross-reference docs/REST_API.md when adding new routes here.
 func TestRouteTable(t *testing.T) {
@@ -74,8 +78,10 @@ func TestRouteTable(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, req)
-			if rec.Code == http.StatusNotFound {
-				t.Fatalf("%s %s returned 404; route is missing", tc.method, tc.path)
+			if rec.Code == http.StatusNotFound &&
+				strings.Contains(rec.Body.String(), "No route matches") {
+				t.Fatalf("%s %s returned 404 from the route catch-all; "+
+					"route is missing", tc.method, tc.path)
 			}
 		})
 	}
