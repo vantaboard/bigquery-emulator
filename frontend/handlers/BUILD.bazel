@@ -1,0 +1,83 @@
+# Bazel build for the gRPC handler implementations behind
+# `bigquery_emulator.v1.Catalog` and `bigquery_emulator.v1.Query`.
+#
+# The Query handler is the first piece of the C++ engine that links
+# GoogleSQL's analyzer (plan dryrun-cpp-rpc_v7e8f9a0). The CMake build
+# (`//CMakeLists.txt:frontend_server`) still compiles the same .cc but
+# without `BIGQUERY_EMULATOR_HAS_GOOGLESQL` defined, so `Query.DryRun`
+# falls back to `UNIMPLEMENTED` on that path. The Bazel build below
+# is the canonical one: it sets the define, links GoogleSQL, and
+# wires the analyzer end-to-end.
+#
+# Same split lives over in `backend/schema/BUILD.bazel` for
+# `googlesql_to_bq` (the type reflector the Query handler uses).
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "catalog_handler",
+    srcs = ["catalog.cc"],
+    hdrs = ["catalog.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "//proto:emulator_cc_grpc",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
+    name = "query_handler",
+    srcs = ["query.cc"],
+    hdrs = ["query.h"],
+    # Flip the GoogleSQL-gated branch of `query.cc` on. The CMake
+    # build leaves this define unset so it falls back to the
+    # `UNIMPLEMENTED` stub; the Bazel build is the only one that
+    # actually wires the analyzer.
+    local_defines = ["BIGQUERY_EMULATOR_HAS_GOOGLESQL=1"],
+    deps = [
+        "//backend/catalog:googlesql_catalog",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
+        "//backend/storage",
+        "//proto:emulator_cc_grpc",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:error_helpers",
+        "@googlesql//googlesql/public:error_location_cc_proto",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "query_handler_test",
+    srcs = ["query_test.cc"],
+    deps = [
+        ":query_handler",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage:memory",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

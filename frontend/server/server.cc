@@ -101,7 +101,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
   ::grpc::EnableDefaultHealthCheckService(true);
 
   auto catalog = std::make_unique<CatalogService>(options.storage);
-  auto query = std::make_unique<QueryService>();
+  auto query = std::make_unique<QueryService>(options.storage);
 
   ::grpc::ServerBuilder builder;
   int bound_port = 0;

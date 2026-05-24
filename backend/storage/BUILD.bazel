@@ -25,3 +25,23 @@ cc_library(
         "@com_google_absl//absl/types:span",
     ],
 )
+
+# Volatile in-memory `Storage` impl. Used by every dependency that
+# needs a working catalog without DuckDB on the link line — chiefly
+# the Query DryRun handler test, which fabricates a small catalog
+# and analyzes references against it.
+cc_library(
+    name = "memory",
+    srcs = ["memory/in_memory_storage.cc"],
+    hdrs = ["memory/in_memory_storage.h"],
+    deps = [
+        ":storage",
+        "//backend/schema",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+    ],
+)

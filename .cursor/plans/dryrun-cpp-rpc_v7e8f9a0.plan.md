@@ -4,13 +4,13 @@ overview: "Phase 4b: Query.DryRun gRPC and googlesql→BigQuery type reflection.
 todos:
   - id: dryrun-rpc
     content: "Implement query.cc DryRun: parse, analyze, return DryRunResponse schema + estimated_bytes_processed"
-    status: pending
+    status: completed
   - id: type-reflection
     content: "Add googlesql_to_bq.{h,cc}: googlesql::Type → proto FieldSchema"
-    status: pending
+    status: completed
   - id: analyze-errors
     content: "Map analysis errors to InvalidArgument with line/col; gateway maps to HTTP 400 invalidQuery"
-    status: pending
+    status: completed
 isProject: false
 ---
 
