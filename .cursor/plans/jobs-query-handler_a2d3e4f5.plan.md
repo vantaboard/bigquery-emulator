@@ -4,10 +4,10 @@ overview: "Phase 5d: Wire non-dryRun jobs.query and in-memory job registry."
 todos:
   - id: go-query-handler
     content: "Wire queries.go non-dryRun: call ExecuteQuery stream, assemble QueryResponse with rows and jobReference"
-    status: pending
+    status: completed
   - id: job-lifecycle
     content: "Add gateway/jobs/registry.go: generate jobId, store DONE Job with statistics timestamps"
-    status: pending
+    status: completed
 isProject: false
 ---
 
