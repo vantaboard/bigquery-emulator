@@ -4,7 +4,7 @@ overview: "Phase 5b: ExecuteQuery server-streaming gRPC handler."
 todos:
   - id: execute-query-rpc
     content: "Implement query.cc ExecuteQuery: stream schema first then QueryResultRow batches"
-    status: pending
+    status: completed
 isProject: false
 ---
 
