@@ -4,13 +4,13 @@ overview: "Phase 5f: DuckDB transpiler visitor skeleton, shape tracker, type low
 todos:
   - id: transpiler-skeleton
     content: "Add transpiler.{h,cc} ResolvedASTVisitor; Transpile(resolved_query)->std::string"
-    status: pending
+    status: completed
   - id: shape-tracker
     content: "Add SHAPE_TRACKER.md: node kinds done|skiplist|not_started"
-    status: pending
+    status: completed
   - id: type-lowering
     content: "Add types.{h,cc}: googlesql TypeKind → DuckDB SQL type names"
-    status: pending
+    status: completed
 isProject: false
 ---
 
