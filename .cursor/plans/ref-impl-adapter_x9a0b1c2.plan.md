@@ -4,10 +4,10 @@ overview: "Phase 5a: storage_table adapter and reference impl engine ExecuteQuer
 todos:
   - id: table-adapter
     content: "Implement storage_table.{h,cc}: googlesql::Table reading Storage ScanRows"
-    status: pending
+    status: completed
   - id: ref-impl-engine
     content: "Fill reference_impl_engine.cc: ExecuteQuery runs Algebrizer+Evaluator, streams rows"
-    status: pending
+    status: completed
 isProject: false
 ---
 
