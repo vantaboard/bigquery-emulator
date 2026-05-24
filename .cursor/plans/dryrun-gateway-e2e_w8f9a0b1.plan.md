@@ -4,10 +4,10 @@ overview: "Phase 4c: Wire jobs.query dryRun=true end-to-end."
 todos:
   - id: go-dryrun-handler
     content: "Wire queries.go QueryRun dryRun=true: call DryRun, return schema + totalBytesProcessed, jobComplete=true"
-    status: pending
+    status: completed
   - id: dryrun-test
     content: "E2E: dryRun SELECT * FROM ds.t matches table schema; bad syntax returns 400 invalidQuery"
-    status: pending
+    status: completed
 isProject: false
 ---
 
