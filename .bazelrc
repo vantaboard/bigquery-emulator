@@ -1,0 +1,60 @@
+# Project-wide Bazel options for bigquery-emulator.
+#
+# GoogleSQL is C++20 and ships a hermetic LLVM toolchain through its
+# own `MODULE.bazel`, but those toolchain registrations only fire when
+# this repo's build is *configured* the same way. Mirror the relevant
+# flags from `../googlesql/.bazelrc` here so a top-level
+# `bazel build //...` against this repo Just Works.
+#
+# Clang-specific warning silences (matches `../googlesql/.bazelrc`).
+# Without these, the GoogleSQL TU tree raises a wall of warnings the
+# upstream tree already suppressed.
+build:clang --action_env=BAZEL_CXXOPTS="-std=c++20"
+build:clang --cxxopt=-std=c++20
+build:clang --cxxopt=-Wno-module-import-in-extern-c
+build:clang --cxxopt=-Wno-deprecated-declarations
+build:clang --cxxopt=-Wno-range-loop-analysis
+build:clang --cxxopt=-Wno-inconsistent-missing-override
+build:clang --cxxopt=-Wno-char-subscripts
+build:clang --cxxopt=-Wno-enum-compare-switch
+build:clang --cxxopt=-Wno-defaulted-function-deleted
+build:clang --cxxopt=-Wno-unused-private-field
+build:clang --cxxopt=-Wno-return-std-move
+build:clang --cxxopt=-Wno-reorder-ctor
+build:clang --cxxopt=-Wno-unused-const-variable
+build:clang --cxxopt=-Wno-unused-function
+build:clang --cxxopt=-Wno-macro-redefined
+build:clang --cxxopt=-Werror=undefined-internal
+
+# GCC fallback (kept here for symmetry; the default `--config=clang`
+# below means the LLVM toolchain GoogleSQL registers does the work).
+build:g++ --action_env=BAZEL_CXXOPTS="-std=c++20"
+build:g++ --cxxopt=-std=c++20
+build:g++ --cxxopt=-Wno-sign-compare
+build:g++ --cxxopt=-Wno-switch
+build:g++ --cxxopt=-Wno-unused-function
+build:g++ --cxxopt=-Wno-unused-but-set-parameter
+build:g++ --cxxopt=-Wno-unused-but-set-variable
+build:g++ --cxxopt=-Wno-char-subscripts
+build:g++ --cxxopt=-Wno-nonnull-compare
+build:g++ --cxxopt=-Wno-return-type
+build:g++ --cxxopt=-Wno-class-memaccess
+build:g++ --cxxopt=-Wno-deprecated-declarations
+build:g++ --cxxopt=-Wno-stringop-truncation
+
+# Default build / test / run options. C++20 is mandatory for GoogleSQL
+# (its `<concepts>` usage and the upgrades inside `googlesql/base/`).
+# `--java_runtime_version=remotejdk_11` keeps the Java side of the
+# GoogleSQL build hermetic so a stray host JDK never sneaks in.
+build --cxxopt=-std=c++20 --host_cxxopt=-std=c++20 --config=clang --java_runtime_version=remotejdk_11
+test  --cxxopt=-std=c++20 --host_cxxopt=-std=c++20 --config=clang --java_runtime_version=remotejdk_11
+run   --cxxopt=-std=c++20 --host_cxxopt=-std=c++20 --config=clang --java_runtime_version=remotejdk_11
+
+# Force Go-built targets to PIE; matches the GoogleSQL .bazelrc note
+# about modern Linux toolchains rejecting `R_X86_64_64` relocations
+# inside non-PIE objects. Gated behind `--config=googlesql` so the
+# flag is only required when a top-level target pulls in
+# `@io_bazel_rules_go` transitively through GoogleSQL; pure-C++
+# targets in this repo (proto, schema, storage, the in-progress
+# Bazel migration of the engine scaffolds) do not need it.
+build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie

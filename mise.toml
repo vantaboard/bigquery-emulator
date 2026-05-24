@@ -21,6 +21,18 @@ golangci-lint = "2.12.2"   # Driven by .golangci.yml; surfaced via `task lint:go
 cmake = "4.3.3"
 ninja = "1.13.2"
 
+# Bazel is the canonical build path for anything that links GoogleSQL
+# (the analyzer / reference-impl engine) — GoogleSQL is Bazel-only and
+# `cloud-spanner-emulator` builds the same way, so the C++ engine side
+# of `bigquery-emulator` follows suit starting with the
+# `googlesql-vendor-catalog` plan. Bazelisk auto-resolves the
+# `.bazelversion` at the repo root (7.6.1, matching the sibling
+# googlesql checkout). The CMake build is kept around in parallel as
+# the legacy entry point for the storage / engine scaffolds and the
+# vendored libduckdb until those are migrated under Bazel; see the
+# top of `CMakeLists.txt` for the build-system split.
+bazelisk = "1.27.0"
+
 # Internal gRPC contract (proto/emulator.proto). protoc handles raw
 # codegen today; buf is the front-end we'll switch to once Phase 2 lands
 # the generation step.
