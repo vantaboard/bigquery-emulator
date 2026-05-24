@@ -64,7 +64,7 @@ todos:
     status: completed
   - id: run-20-ref-impl-adapter
     content: "Run ref-impl-adapter_x9a0b1c2.plan.md"
-    status: pending
+    status: completed
   - id: run-21-execute-query-stream
     content: "Run execute-query-stream_y0b1c2d3.plan.md"
     status: pending
