@@ -42,6 +42,7 @@ buf    = "1.69.0"
 # Miscellaneous.
 gcloud     = "568.0.0"     # For poking real BigQuery while debugging parity.
 shellcheck = "0.11.0"      # Used by `task lint:shell` on docker/*.sh.
+grpcurl = "1.9.3"
 
 [env]
 # Put the project's `bin/` (where `task emulator:build`, `go install`,
