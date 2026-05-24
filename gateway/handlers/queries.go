@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 )
 
 // queryResponseKind is the value the BigQuery REST API returns for the
@@ -24,12 +27,19 @@ const queryResponseKind = "bigquery#queryResponse"
 // page, or an empty result set + non-empty `jobReference` if the query
 // is still running and the client should poll `jobs.getQueryResults`.
 //
-// Today this handler implements only the dry-run branch (Phase 4c):
-// when `dryRun=true`, it forwards the SQL to `enginepb.Query.DryRun`
-// (which calls `googlesql::Analyzer` on the C++ side) and turns the
-// resulting analyzed schema + estimated bytes into a QueryResponse
-// with `jobComplete=true` and an empty rows page. The non-dry-run
-// branch lands in Phase 5.
+// The handler has two branches:
+//
+//   - dryRun=true forwards the SQL to `enginepb.Query.DryRun` (which
+//     calls `googlesql::Analyzer` on the C++ side) and turns the
+//     resulting analyzed schema + estimated bytes into a QueryResponse
+//     with `jobComplete=true` and an empty rows page.
+//   - dryRun=false (or unset) forwards the SQL to
+//     `enginepb.Query.ExecuteQuery`, drains the server-streaming
+//     response (first message carries the schema, subsequent messages
+//     carry one row of cells each), marshals each row through
+//     `bqtypes.CellsToRow`, and records a DONE Job in `deps.Jobs` so
+//     the returned `jobReference` is discoverable by a later
+//     `jobs.get`.
 //
 // SQL dialect: BigQuery's `useLegacySql` field defaults to true on the
 // wire. The emulator only supports GoogleSQL because the engine is
@@ -40,6 +50,13 @@ const queryResponseKind = "bigquery#queryResponse"
 // Idempotency: `requestId` provides 15-minute idempotency for matching
 // requests, per the upstream docs.
 func QueryRun(deps Dependencies) http.HandlerFunc {
+	// Default to a per-handler Registry so unit tests that pass a
+	// zero-valued Dependencies still get a working job store; the
+	// server-mode path passes a process-shared Registry from
+	// gateway.NewServer so jobs survive between requests.
+	if deps.Jobs == nil {
+		deps.Jobs = jobs.NewRegistry()
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -70,8 +87,7 @@ func QueryRun(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		// Non-dry-run query execution lands in Phase 5; see ROADMAP.md.
-		NotImplemented(w, r)
+		runQueryExecute(deps, w, r, &req)
 	}
 }
 
@@ -120,6 +136,97 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		Schema:              schemaFromProto(resp.GetSchema()),
 		TotalBytesProcessed: strconv.FormatInt(resp.GetEstimatedBytesProcessed(), 10),
 		JobComplete:         true,
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// runQueryExecute handles the dryRun=false branch of QueryRun. It
+// forwards the SQL to the engine's server-streaming
+// `enginepb.Query.ExecuteQuery` RPC, drains the schema + row stream,
+// marshals every row through `bqtypes.CellsToRow`, and stamps the
+// resulting `QueryResponse` with a DONE jobReference recorded in
+// `deps.Jobs`.
+//
+// Stream contract (mirrors the comment on proto QueryResultRow):
+// the first message carries the schema; subsequent messages each
+// carry one row's cells. The schema reader is defensive -- if a
+// later message also sets `schema` it is ignored, and a message
+// with neither schema nor cells contributes an empty row.
+//
+// When `deps.Query` is nil (the gateway was started without an
+// engine subprocess), the handler degrades to the structured 501
+// stub the rest of the route table uses; unit-mode runs (`task
+// emulator:run --engine_binary=""`) keep returning a BigQuery-
+// shaped error envelope instead of a panic.
+func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
+	req *bqtypes.QueryRequest) {
+	if deps.Query == nil {
+		NotImplemented(w, r)
+		return
+	}
+	projectID := r.PathValue("projectId")
+
+	defaultDataset := ""
+	if req.DefaultDataset != nil {
+		defaultDataset = req.DefaultDataset.DatasetID
+	}
+
+	engineReq := &enginepb.QueryRequest{
+		ProjectId:        projectID,
+		DefaultDatasetId: defaultDataset,
+		Sql:              req.Query,
+		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
+	}
+
+	start := time.Now().UTC()
+	stream, err := deps.Query.ExecuteQuery(r.Context(), engineReq)
+	if queryGRPCToHTTPError(w, err) {
+		return
+	}
+
+	var schema *enginepb.TableSchema
+	rows := make([]bqtypes.Row, 0)
+	for {
+		msg, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if queryGRPCToHTTPError(w, err) {
+			return
+		}
+		if s := msg.GetSchema(); s != nil {
+			// Per proto contract the first message carries the
+			// schema and subsequent messages carry rows. Keep the
+			// first schema we see and ignore any later resends so
+			// we don't reset mid-stream.
+			if schema == nil {
+				schema = s
+			}
+			continue
+		}
+		rows = append(rows, bqtypes.CellsToRow(msg.GetCells()))
+	}
+	end := time.Now().UTC()
+
+	// Record the completed job before assembling the response so
+	// the jobReference we emit is the same one a later jobs.get
+	// will find. Phase 5d does not track engine-side bytes-
+	// processed yet, so we stamp 0; Phase 6 wires the real metric.
+	job := deps.Jobs.CompleteQuery(projectID, req.Location, 0, start, end)
+	jobRef := job.JobReference
+
+	out := bqtypes.QueryResponse{
+		Kind:                queryResponseKind,
+		Schema:              schemaFromProto(schema),
+		JobReference:        &jobRef,
+		JobComplete:         true,
+		TotalRows:           strconv.FormatUint(uint64(len(rows)), 10),
+		Rows:                rows,
+		TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
+		CreationTime:        job.Statistics.CreationTime,
+		StartTime:           job.Statistics.StartTime,
+		EndTime:             job.Statistics.EndTime,
+		Location:            jobRef.Location,
 	}
 	writeJSON(w, http.StatusOK, out)
 }

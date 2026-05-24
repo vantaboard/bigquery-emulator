@@ -15,6 +15,7 @@ import (
 	"net/http"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -35,6 +36,13 @@ type Dependencies struct {
 	// Query is the gRPC client used by jobs.query and the query branch
 	// of jobs.insert to forward SQL execution to the engine.
 	Query enginepb.QueryClient
+
+	// Jobs is the in-memory job registry the synchronous jobs.query
+	// handler records DONE jobs in, and that future jobs.get /
+	// jobs.list handlers will read back from. When nil (legacy unit
+	// tests that predate the registry), QueryRun lazily mints a
+	// per-handler fallback so behavior stays compatible.
+	Jobs *jobs.Registry
 }
 
 // Health is a trivial liveness endpoint useful for `docker-compose`

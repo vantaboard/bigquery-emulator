@@ -7,6 +7,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
+	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
 
@@ -31,7 +32,10 @@ import (
 // parent path and dispatch on the trailing `:op` inside the handler.
 func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mux := http.NewServeMux()
-	deps := handlers.Dependencies{}
+	// One Registry per gateway process: shared across the jobs.query,
+	// jobs.get, and jobs.list handlers so a job minted by the sync
+	// query API is discoverable by subsequent reads.
+	deps := handlers.Dependencies{Jobs: jobs.NewRegistry()}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to
 		// handlers. When eng is nil (Phase 1 / unit tests / `task
