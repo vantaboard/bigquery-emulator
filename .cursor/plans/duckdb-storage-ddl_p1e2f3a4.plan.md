@@ -4,13 +4,13 @@ overview: "Phase 3f: DuckDB DDL mapping, type conversion, persistence test."
 todos:
   - id: ddl-mapping
     content: "CreateTable writes empty Parquet; DropTable removes files; AppendRows via DuckDB INSERT; ScanRows via read_parquet"
-    status: pending
+    status: completed
   - id: schema-duckdb-convert
     content: "Add ToDuckDBType/FromDuckDBType for INT64, STRING, BOOL, FLOAT64, TIMESTAMP, DATE, NUMERIC, STRUCT, ARRAY"
-    status: pending
+    status: completed
   - id: duckdb-storage-test
     content: "Integration test: create table, insert 100 rows, restart, scan 100 rows back"
-    status: pending
+    status: completed
 isProject: false
 ---
 
