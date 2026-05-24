@@ -4,7 +4,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include "backend/storage/storage.h"
-#include "emulator.grpc.pb.h"
+#include "proto/emulator.grpc.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

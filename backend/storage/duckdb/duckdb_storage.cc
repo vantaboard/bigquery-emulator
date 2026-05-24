@@ -26,7 +26,7 @@
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
-#include "emulator.pb.h"
+#include "proto/emulator.pb.h"
 #include "google/protobuf/util/json_util.h"
 
 #ifdef BIGQUERY_EMULATOR_HAS_DUCKDB

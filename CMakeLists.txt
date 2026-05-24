@@ -131,7 +131,12 @@ add_library(enginepb_cc STATIC
 )
 target_include_directories(enginepb_cc
   PUBLIC
-    ${PROTO_GEN_DIR}
+    # Add the *parent* of the proto-generated dir so includes match the
+    # Bazel layout (`#include "proto/emulator.pb.h"`). This keeps the
+    # source tree's `#include` lines identical between the legacy
+    # CMake build and the canonical Bazel build (the latter resolves
+    # `proto/emulator.pb.h` through `//proto:emulator_cc_proto`).
+    ${CMAKE_BINARY_DIR}/generated
 )
 target_link_libraries(enginepb_cc
   PUBLIC

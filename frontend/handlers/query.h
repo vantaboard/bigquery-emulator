@@ -3,7 +3,7 @@
 
 #include <grpcpp/grpcpp.h>
 
-#include "emulator.grpc.pb.h"
+#include "proto/emulator.grpc.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

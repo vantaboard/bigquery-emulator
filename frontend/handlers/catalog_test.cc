@@ -16,7 +16,7 @@
 #include "absl/status/status.h"
 #include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
-#include "emulator.pb.h"
+#include "proto/emulator.pb.h"
 #include "gmock/gmock.h"
 #include "grpcpp/grpcpp.h"
 #include "gtest/gtest.h"
