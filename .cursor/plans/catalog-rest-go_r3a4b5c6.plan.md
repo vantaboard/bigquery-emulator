@@ -4,10 +4,10 @@ overview: "Phase 3h: Wire Go REST handlers for dataset and table CRUD via gRPC."
 todos:
   - id: go-catalog-client
     content: "Wire datasets.go and tables.go: decode REST JSON, call CatalogClient, encode Dataset/Table resources"
-    status: pending
+    status: completed
   - id: update-rest-api-crud
     content: "Update docs/REST_API.md status for dataset/table CRUD from wired→done"
-    status: pending
+    status: completed
 isProject: false
 ---
 
