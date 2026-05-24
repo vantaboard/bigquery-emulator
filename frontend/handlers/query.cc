@@ -149,10 +149,11 @@ QueryService::QueryService(backend::storage::Storage* storage)
   }
 
   ::googlesql::TypeFactory type_factory;
-  backend::catalog::GoogleSqlCatalog catalog(request->project_id(), storage_,
-                                              &type_factory);
-
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  backend::catalog::GoogleSqlCatalog catalog(request->project_id(), storage_,
+                                              &type_factory,
+                                              options.language());
+
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
       request->sql(), options, &catalog, &type_factory, &output);

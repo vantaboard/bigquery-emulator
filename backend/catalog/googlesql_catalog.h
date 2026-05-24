@@ -33,13 +33,20 @@
 //     "unrecognized name" error with the offending path, which the
 //     gateway maps to a `notFound` BigQuery REST error.
 //
-// The adapter does NOT yet wire up `CreateEvaluatorTableIterator` on
-// the synthesized `SimpleTable`s: row iteration belongs to the
-// `Storage`-backed `googlesql::Table` subclass that the reference
-// impl engine will use (Phase 5.A). Until then, the `SimpleTable`s
-// returned here are analysis-only; calling them as scan sources will
-// hit GoogleSQL's "Table does not support the API in evaluator.h"
-// default error.
+// Materialized tables are `backend::catalog::StorageTable` instances
+// (a `SimpleTable` subclass with a working `CreateEvaluatorTableIterator`
+// that streams rows out of the underlying `Storage`). The same
+// catalog instance therefore drives both Phase 4 analysis and Phase
+// 5.A reference-impl execution.
+//
+// The catalog inherits from `googlesql::SimpleCatalog` so the
+// analyzer / evaluator can look up GoogleSQL built-in functions and
+// types through the standard `SimpleCatalog::AddBuiltinFunctionsAndTypes`
+// path -- the constructor wires that up once per query so the
+// reference-impl PreparedQuery sees `COUNT`, `SUM`, `CONCAT`, and
+// friends. We override `FindTable` to short-circuit the SimpleCatalog
+// default and hit `Storage` directly for the BigQuery
+// `<dataset>.<table>` / `<project>.<dataset>.<table>` path shapes.
 
 #include <memory>
 #include <string>
@@ -51,9 +58,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/language_options.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/type_factory.h"
@@ -62,7 +71,7 @@ namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
 
-class GoogleSqlCatalog : public ::googlesql::Catalog {
+class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
  public:
   // `storage` and `type_factory` must outlive the catalog. The
   // catalog does not take ownership; the typical lifetime is
@@ -73,15 +82,23 @@ class GoogleSqlCatalog : public ::googlesql::Catalog {
   // `project_id` is the implicit project for two-element table
   // paths. It must be non-empty; the BigQuery REST surface always
   // supplies a project on `jobs.query` / `jobs.insert` requests.
+  // `language` controls which GoogleSQL feature set is registered on
+  // the catalog (via `SimpleCatalog::AddBuiltinFunctionsAndTypes`).
+  // Pass the same `LanguageOptions` the analyzer is configured with
+  // so the analyzer and the catalog agree on what's resolvable.
   GoogleSqlCatalog(absl::string_view project_id,
                    storage::Storage* storage,
-                   ::googlesql::TypeFactory* type_factory);
+                   ::googlesql::TypeFactory* type_factory,
+                   const ::googlesql::LanguageOptions& language);
 
   ~GoogleSqlCatalog() override = default;
 
   GoogleSqlCatalog(const GoogleSqlCatalog&) = delete;
   GoogleSqlCatalog& operator=(const GoogleSqlCatalog&) = delete;
 
+  // SimpleCatalog::FullName() returns the catalog name we passed to
+  // its constructor; mirror the previous "project as catalog name"
+  // contract by always returning the project_id.
   std::string FullName() const override { return project_id_; }
 
   // Path resolution rules are documented in the file header. A miss
@@ -131,10 +148,9 @@ class GoogleSqlCatalog : public ::googlesql::Catalog {
   ::googlesql::TypeFactory* const type_factory_;
 
   mutable absl::Mutex mu_;
-  // Owns every `SimpleTable` we hand out to the analyzer. Keys are
-  // `CacheKey(project, dataset, table)`; values are non-null.
-  std::vector<std::unique_ptr<::googlesql::SimpleTable>> tables_
-      ABSL_GUARDED_BY(mu_);
+  // Owns every `StorageTable` we hand out to the analyzer / evaluator.
+  // Keys are `CacheKey(project, dataset, table)`; values are non-null.
+  std::vector<std::unique_ptr<StorageTable>> tables_ ABSL_GUARDED_BY(mu_);
   // Parallel-by-index lookup from cache key to `tables_` entry.
   // `flat_hash_map` would be cleaner but the catalog stays small per
   // query (BigQuery queries rarely reference more than a handful of

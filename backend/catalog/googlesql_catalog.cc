@@ -7,13 +7,17 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/language_options.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -30,6 +34,8 @@ using ::googlesql::SimpleTable;
 using ::googlesql::StructType;
 using ::googlesql::Type;
 using ::googlesql::TypeFactory;
+using ::googlesql::LanguageOptions;
+using ::googlesql::BuiltinFunctionOptions;
 
 // Translate a *scalar-or-struct* `schema::ColumnSchema` into a
 // GoogleSQL `Type*` without consulting the cardinality. Wrapping in
@@ -116,10 +122,33 @@ absl::StatusOr<const Type*> GoogleSqlCatalog::ToGoogleSqlType(
 
 GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
                                    storage::Storage* storage,
-                                   TypeFactory* type_factory)
-    : project_id_(project_id),
+                                   TypeFactory* type_factory,
+                                   const LanguageOptions& language)
+    : ::googlesql::SimpleCatalog(std::string(project_id), type_factory),
+      project_id_(project_id),
       storage_(storage),
-      type_factory_(type_factory) {}
+      type_factory_(type_factory) {
+  // Register every GoogleSQL builtin function and type that `language`
+  // enables on this catalog. The analyzer's name resolution falls
+  // back to the catalog for non-operator function calls (`COUNT`,
+  // `SUM`, ...), and the reference-impl evaluator needs the same
+  // entries to algebrize them at execution time.
+  //
+  // This registration is per-catalog (i.e., per-query in our
+  // usage). The underlying built-in tables are populated lazily once
+  // per process and then cached; the per-call cost is the
+  // catalog-side hash-map insertions for the names we want to expose.
+  absl::Status s =
+      AddBuiltinFunctionsAndTypes(BuiltinFunctionOptions(language));
+  if (!s.ok()) {
+    // The only documented failure mode is a programmer error (e.g.
+    // the same name added twice); log so the per-RPC analyzer error
+    // is actionable but do not raise -- the catalog still works,
+    // just without the failing builtin entry.
+    LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: "
+               << s;
+  }
+}
 
 std::string GoogleSqlCatalog::CacheKey(absl::string_view project_id,
                                        absl::string_view dataset_id,
@@ -185,11 +214,15 @@ absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
     columns.emplace_back(column.name, *column_type);
   }
 
-  // SimpleTable's name is the unqualified table id; FullName() returns
-  // the dotted path which is what GoogleSQL prints in error messages.
-  auto simple_table = std::make_unique<SimpleTable>(table_id, columns);
-  const ::googlesql::Table* raw = simple_table.get();
-  tables_.push_back(std::move(simple_table));
+  // The fully-qualified `project.dataset.table` path is what
+  // GoogleSQL prints in error messages; SimpleTable's
+  // `set_full_name` carries that through.
+  const std::string full_name =
+      absl::StrCat(project_id, ".", dataset_id, ".", table_id);
+  auto storage_table = std::make_unique<StorageTable>(
+      table_id, full_name, columns, *table_schema, id, storage_);
+  const ::googlesql::Table* raw = storage_table.get();
+  tables_.push_back(std::move(storage_table));
   keys_.push_back(key);
   return raw;
 }

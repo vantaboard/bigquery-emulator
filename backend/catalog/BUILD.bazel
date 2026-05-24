@@ -13,18 +13,44 @@
 # (`../googlesql/`) is the source of truth for this dep. Bumping
 # GoogleSQL = bumping that checkout; no registry hop required.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
+
+# `storage_table` is the `googlesql::Table` adapter that wraps an
+# entry in the active `Storage`. It is the execution-side counterpart
+# of the analysis-only `SimpleTable`s the catalog used to mint;
+# subclassing `SimpleTable` keeps the column-list management one
+# place so the override is just the `CreateEvaluatorTableIterator`
+# factory plus the storage Value -> googlesql Value conversion.
+cc_library(
+    name = "storage_table",
+    srcs = ["storage_table.cc"],
+    hdrs = ["storage_table.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@googlesql//googlesql/public:evaluator_table_iterator",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
 
 cc_library(
     name = "googlesql_catalog",
     srcs = ["googlesql_catalog.cc"],
     hdrs = ["googlesql_catalog.h"],
     deps = [
+        ":storage_table",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -36,7 +62,9 @@ cc_library(
         # don't depend on `googlesql/public/types:types` directly
         # because its package restricts visibility to
         # `//googlesql/base:googlesql_implementation`.
+        "@googlesql//googlesql/public:builtin_function_options",
         "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
     ],
