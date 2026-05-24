@@ -79,6 +79,14 @@ bazel_dep(name = "grpc", version = "1.69.0", repo_name = "com_github_grpc_grpc")
 bazel_dep(name = "rules_proto", version = "7.0.2")
 bazel_dep(name = "rules_cc", version = "0.2.8")
 
+# GoogleTest — used by the C++ unit tests for the analyzer-facing
+# code (backend/schema/googlesql_to_bq, frontend/handlers/query, ...).
+# Pin matches GoogleSQL's own pin so a single resolved version flows
+# through the build graph; declaring it as a direct bazel_dep is what
+# lets our `cc_test` targets reach `@com_google_googletest//:gtest_main`
+# without going through GoogleSQL's transitive surface.
+bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
+
 # Bump Gazelle past the broken semver parser. Pinned googlesql ships
 # `gazelle = 0.45.0`, which crashes on Go pseudo-version timestamps
 # (e.g. `v0.0.0-20210717090340-…` -> "Numeric identifiers in semantic

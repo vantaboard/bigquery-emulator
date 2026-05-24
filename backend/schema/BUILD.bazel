@@ -22,3 +22,45 @@ cc_library(
         "@com_google_absl//absl/strings",
     ],
 )
+
+# googlesql_to_bq is the inverse of the catalog adapter's
+# `ToGoogleSqlType`: it reflects a `googlesql::Type*` (e.g. the
+# column types on a `ResolvedQueryStmt::output_column_list`) back
+# into a BigQuery `FieldSchema` proto. The Query DryRun handler in
+# `frontend/handlers/` uses it to build the
+# `Job.statistics.query.schema` response.
+#
+# Bazel-only because it links GoogleSQL. The CMake `backend_schema`
+# target does not include it; CMake's `frontend_server` still ships
+# a stub `Query.DryRun` that returns `UNIMPLEMENTED`.
+cc_library(
+    name = "googlesql_to_bq",
+    srcs = ["googlesql_to_bq.cc"],
+    hdrs = ["googlesql_to_bq.h"],
+    deps = [
+        ":schema",
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "googlesql_to_bq_test",
+    srcs = ["googlesql_to_bq_test.cc"],
+    deps = [
+        ":googlesql_to_bq",
+        ":schema",
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        # simple_catalog transitively re-exports `type_factory.h` and
+        # `struct_type.h`; the public `googlesql/public/types:types`
+        # target has visibility restricted to GoogleSQL internals.
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)
