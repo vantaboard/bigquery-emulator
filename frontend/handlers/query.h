@@ -3,6 +3,8 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <functional>
+
 #include "backend/storage/storage.h"
 #include "proto/emulator.grpc.pb.h"
 
@@ -30,7 +32,12 @@ namespace frontend {
 // the gateway can map them to BigQuery's HTTP 400
 // `reason: invalidQuery` envelope.
 //
-// ExecuteQuery is still a Phase 5 stub.
+// ExecuteQuery (Phase 5.A) drives the GoogleSQL reference-impl engine
+// (`backend/engine/reference_impl`) and streams the resolved schema as
+// the first `QueryResultRow` followed by one `QueryResultRow` per
+// result row. The `ExecuteQuery` gRPC handler is a thin shim over
+// `StreamQueryResults` (below) so unit tests can exercise the
+// streaming logic without a real `grpc::ServerWriter`.
 class QueryService final : public v1::Query::Service {
  public:
   explicit QueryService(backend::storage::Storage* storage = nullptr);
@@ -46,6 +53,31 @@ class QueryService final : public v1::Query::Service {
  private:
   backend::storage::Storage* storage_;
 };
+
+// Executes `request` against the reference-impl engine and emits the
+// result through `write`. The first emitted message carries the
+// resolved output schema (with `cells` empty); every subsequent
+// message carries one result row (with `schema` unset).
+//
+// `write(msg)` is invoked once per emitted message. It must return
+// `true` if the message was accepted by the downstream consumer and
+// `false` to abort the stream early (mirroring the
+// `grpc::ServerWriter::Write` contract). A `false` return is reported
+// back to the caller as `CANCELLED`.
+//
+// Mirrors the validation rules in `QueryService::DryRun`:
+//
+//   * `storage` must be non-null (`FAILED_PRECONDITION` otherwise).
+//   * `request.use_legacy_sql` is rejected (`INVALID_ARGUMENT`).
+//   * `request.project_id` and `request.sql` are required.
+//
+// Returns `UNIMPLEMENTED` on builds compiled without GoogleSQL linked
+// in (the legacy CMake target). The gRPC handler wraps this helper
+// with a one-line lambda; tests call it directly with a capturing
+// lambda and inspect the emitted messages.
+::grpc::Status StreamQueryResults(
+    backend::storage::Storage* storage, const v1::QueryRequest& request,
+    const std::function<bool(const v1::QueryResultRow&)>& write);
 
 }  // namespace frontend
 }  // namespace bigquery_emulator

@@ -40,10 +40,12 @@ cc_library(
     # Flip the GoogleSQL-gated branch of `query.cc` on. The CMake
     # build leaves this define unset so it falls back to the
     # `UNIMPLEMENTED` stub; the Bazel build is the only one that
-    # actually wires the analyzer.
+    # actually wires the analyzer + reference-impl engine.
     local_defines = ["BIGQUERY_EMULATOR_HAS_GOOGLESQL=1"],
     deps = [
         "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",
@@ -51,6 +53,7 @@ cc_library(
         "//proto:emulator_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@googlesql//googlesql/public:analyzer",
         "@googlesql//googlesql/public:analyzer_options",
@@ -78,6 +81,7 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
     ],
 )

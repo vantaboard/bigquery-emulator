@@ -7,10 +7,15 @@
 
 #include "frontend/handlers/query.h"
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
@@ -174,6 +179,185 @@ TEST(QueryServiceWithoutStorageTest, DryRunReturnsFailedPrecondition) {
   v1::DryRunResponse resp;
   auto status = service.DryRun(nullptr, &req, &resp);
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION)
+      << status.error_message();
+}
+
+// ---------------------------------------------------------------------------
+// StreamQueryResults / ExecuteQuery
+//
+// The gRPC handler is a one-line shim over `StreamQueryResults`, which
+// takes a writer callback so the tests can collect messages into a
+// vector without spinning up a real `grpc::ServerWriter`. The streaming
+// contract is what these tests pin down:
+//
+//   * The very first emitted message is `QueryResultRow` with the
+//     resolved output schema populated (cells empty).
+//   * Each subsequent message is a `QueryResultRow` with cells set
+//     (schema unset).
+//   * Even a zero-row query (e.g. SELECT from an empty table) still
+//     produces the schema message, so the gateway can synthesize the
+//     BigQuery REST `schema` field without waiting for a row.
+// ---------------------------------------------------------------------------
+
+// Helper that pushes every emitted message into a vector. Returns the
+// std::function the handler expects so tests can spell out the
+// `StreamQueryResults` invocation in one line.
+class MessageCollector {
+ public:
+  std::function<bool(const v1::QueryResultRow&)> Writer() {
+    return [this](const v1::QueryResultRow& msg) {
+      messages_.push_back(msg);
+      return true;
+    };
+  }
+  const std::vector<v1::QueryResultRow>& messages() const { return messages_; }
+
+ private:
+  std::vector<v1::QueryResultRow> messages_;
+};
+
+TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
+  v1::QueryRequest req = MakeRequest("SELECT 1 AS one");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+
+  const auto& messages = collector.messages();
+  ASSERT_EQ(messages.size(), 2u);
+
+  EXPECT_TRUE(messages[0].has_schema());
+  EXPECT_EQ(messages[0].cells_size(), 0);
+  ASSERT_EQ(messages[0].schema().fields_size(), 1);
+  EXPECT_EQ(messages[0].schema().fields(0).name(), "one");
+  EXPECT_EQ(messages[0].schema().fields(0).type(), "INT64");
+
+  EXPECT_FALSE(messages[1].has_schema());
+  ASSERT_EQ(messages[1].cells_size(), 1);
+  EXPECT_EQ(messages[1].cells(0).string_value(), "1");
+}
+
+TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
+  CreatePeopleTable();
+  std::vector<backend::storage::Row> rows;
+  auto append = [&](int64_t id, std::string name) {
+    backend::storage::Row r;
+    r.cells = {
+        backend::storage::Value::Int64(id),
+        backend::storage::Value::String(std::move(name)),
+        backend::storage::Value::Array({}),
+    };
+    rows.push_back(std::move(r));
+  };
+  append(1, "ada");
+  append(2, "linus");
+  append(3, "grace");
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "t"},
+                               absl::MakeConstSpan(rows))
+                  .ok());
+
+  v1::QueryRequest req =
+      MakeRequest("SELECT id, name FROM ds.t ORDER BY id");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+
+  const auto& messages = collector.messages();
+  ASSERT_EQ(messages.size(), 4u);
+
+  ASSERT_TRUE(messages[0].has_schema());
+  ASSERT_EQ(messages[0].schema().fields_size(), 2);
+  EXPECT_EQ(messages[0].schema().fields(0).name(), "id");
+  EXPECT_EQ(messages[0].schema().fields(0).type(), "INT64");
+  EXPECT_EQ(messages[0].schema().fields(1).name(), "name");
+  EXPECT_EQ(messages[0].schema().fields(1).type(), "STRING");
+
+  ASSERT_EQ(messages[1].cells_size(), 2);
+  EXPECT_EQ(messages[1].cells(0).string_value(), "1");
+  EXPECT_EQ(messages[1].cells(1).string_value(), "ada");
+  ASSERT_EQ(messages[2].cells_size(), 2);
+  EXPECT_EQ(messages[2].cells(0).string_value(), "2");
+  EXPECT_EQ(messages[2].cells(1).string_value(), "linus");
+  ASSERT_EQ(messages[3].cells_size(), 2);
+  EXPECT_EQ(messages[3].cells(0).string_value(), "3");
+  EXPECT_EQ(messages[3].cells(1).string_value(), "grace");
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaOnly) {
+  CreatePeopleTable();
+  v1::QueryRequest req = MakeRequest("SELECT id, name FROM ds.t");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  ASSERT_EQ(collector.messages().size(), 1u);
+  EXPECT_TRUE(collector.messages()[0].has_schema());
+}
+
+TEST_F(QueryServiceTest, ExecuteQuerySyntaxErrorIsInvalidArgument) {
+  v1::QueryRequest req = MakeRequest("SELECT FROM");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+  EXPECT_TRUE(collector.messages().empty());
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryUseLegacySqlIsInvalidArgument) {
+  v1::QueryRequest req = MakeRequest("SELECT 1");
+  req.set_use_legacy_sql(true);
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+  EXPECT_TRUE(collector.messages().empty());
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryMissingProjectIsInvalidArgument) {
+  v1::QueryRequest req;
+  req.set_sql("SELECT 1");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryEmptySqlIsInvalidArgument) {
+  v1::QueryRequest req = MakeRequest("");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+}
+
+TEST(QueryServiceWithoutStorageTest, ExecuteQueryReturnsFailedPrecondition) {
+  v1::QueryRequest req;
+  req.set_project_id("proj-test");
+  req.set_sql("SELECT 1");
+  std::vector<v1::QueryResultRow> messages;
+  ::grpc::Status status = StreamQueryResults(
+      /*storage=*/nullptr, req,
+      [&](const v1::QueryResultRow& m) {
+        messages.push_back(m);
+        return true;
+      });
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION)
+      << status.error_message();
+  EXPECT_TRUE(messages.empty());
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryCancelledWriterReturnsCancelled) {
+  v1::QueryRequest req = MakeRequest("SELECT 1 AS one");
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req,
+                          [](const v1::QueryResultRow&) { return false; });
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::CANCELLED)
       << status.error_message();
 }
 

@@ -1,9 +1,11 @@
 #include "frontend/handlers/query.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -12,7 +14,10 @@
 
 #if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/schema/googlesql_to_bq.h"
+#include "backend/schema/schema.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -34,10 +39,11 @@ namespace {
 constexpr char kAnalysisUnimplemented[] =
     "Query.DryRun is not implemented yet (Phase 4 of ROADMAP.md): this "
     "build was produced without GoogleSQL linked in";
-#endif
 
 constexpr char kExecutionUnimplemented[] =
-    "Query.ExecuteQuery is not implemented yet (Phase 5 of ROADMAP.md)";
+    "Query.ExecuteQuery is not implemented yet (Phase 5 of ROADMAP.md): "
+    "this build was produced without GoogleSQL linked in";
+#endif
 
 #if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
 // Map an analyzer / parser error from `googlesql::AnalyzeStatement` to
@@ -101,6 +107,76 @@ constexpr char kExecutionUnimplemented[] =
   options.set_attach_error_location_payload(true);
   options.CreateDefaultArenasIfNotSet();
   return options;
+}
+
+// Mirrors `frontend/handlers/catalog.cc::ValueToCell`: marshals an
+// engine-agnostic `backend::storage::Value` onto the `v1::Cell`
+// oneof the proto carries on the wire. Duplicated here (instead of
+// extracted) because the catalog and query handlers are the only
+// two callers and a shared utility would otherwise pull a third
+// `cell_marshal` library into the build graph just to host one
+// function. The two implementations must stay in sync; both follow
+// the BigQuery REST `f`/`v` shape (primitives flattened to their
+// decimal-string formatting so STRING / INT64 / FLOAT64 / BOOL all
+// land on the wire as `string_value`).
+void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
+  using Kind = backend::storage::Value::Kind;
+  out->Clear();
+  switch (value.kind()) {
+    case Kind::kNull:
+      out->set_null_value(true);
+      return;
+    case Kind::kBool:
+      out->set_string_value(value.bool_value() ? "true" : "false");
+      return;
+    case Kind::kInt64:
+      out->set_string_value(absl::StrCat(value.int64_value()));
+      return;
+    case Kind::kFloat64:
+      out->set_string_value(absl::StrCat(value.float64_value()));
+      return;
+    case Kind::kString:
+    case Kind::kBytes:
+      out->set_string_value(value.string_value());
+      return;
+    case Kind::kArray: {
+      auto* arr = out->mutable_array();
+      for (const auto& el : value.array_value()) {
+        ValueToCell(el, arr->add_elements());
+      }
+      return;
+    }
+    case Kind::kStruct: {
+      auto* st = out->mutable_struct_value();
+      for (const auto& f : value.struct_value()) {
+        ValueToCell(f, st->add_fields());
+      }
+      return;
+    }
+  }
+}
+
+// Translates a `bigquery_emulator.v1.QueryRequest` proto into the
+// engine-facing `backend::engine::QueryRequest` struct. The two have
+// the same fields but live in different packages (proto vs. plain
+// C++ struct) so the engine never has to depend on the proto
+// runtime.
+backend::engine::QueryRequest ProtoToEngineRequest(
+    const v1::QueryRequest& request) {
+  backend::engine::QueryRequest engine_request;
+  engine_request.project_id = request.project_id();
+  engine_request.default_dataset_id = request.default_dataset_id();
+  engine_request.sql = request.sql();
+  engine_request.use_legacy_sql = request.use_legacy_sql();
+  engine_request.parameters.reserve(request.parameters_size());
+  for (const auto& kv : request.parameters()) {
+    backend::engine::QueryParameter parameter;
+    parameter.name = kv.first;
+    parameter.type_kind = kv.second.type_kind();
+    parameter.value_json = kv.second.value_json();
+    engine_request.parameters.push_back(std::move(parameter));
+  }
+  return engine_request;
 }
 #endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
@@ -194,10 +270,124 @@ QueryService::QueryService(backend::storage::Storage* storage)
 }
 
 ::grpc::Status QueryService::ExecuteQuery(
-    ::grpc::ServerContext* /*context*/, const v1::QueryRequest* /*request*/,
-    ::grpc::ServerWriter<v1::QueryResultRow>* /*writer*/) {
+    ::grpc::ServerContext* /*context*/, const v1::QueryRequest* request,
+    ::grpc::ServerWriter<v1::QueryResultRow>* writer) {
+  if (writer == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "QueryService::ExecuteQuery: writer is null");
+  }
+  if (request == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "QueryService::ExecuteQuery: request is null");
+  }
+  // The lambda is invoked synchronously by StreamQueryResults; no
+  // need to capture state by value.
+  return StreamQueryResults(
+      storage_, *request,
+      [writer](const v1::QueryResultRow& message) -> bool {
+        return writer->Write(message);
+      });
+}
+
+::grpc::Status StreamQueryResults(
+    backend::storage::Storage* storage, const v1::QueryRequest& request,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+#if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
+  (void)storage;
+  (void)request;
+  (void)write;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED,
                         kExecutionUnimplemented);
+#else
+  if (!write) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "QueryService::ExecuteQuery: write callback is empty");
+  }
+  if (storage == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        "QueryService::ExecuteQuery: storage backend is not configured");
+  }
+  if (request.use_legacy_sql()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        "QueryService::ExecuteQuery: useLegacySql=true is not supported; "
+        "the emulator only implements GoogleSQL");
+  }
+  if (request.project_id().empty()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        "QueryService::ExecuteQuery: request.project_id is required");
+  }
+  if (request.sql().empty()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        "QueryService::ExecuteQuery: request.sql is required");
+  }
+
+  // The catalog adapter materializes `googlesql::Table*`s out of
+  // `storage` lazily; its `TypeFactory` must outlive the
+  // RowSource the engine returns because the iterator's value
+  // pointers reach back into the catalog's type allocations. We
+  // therefore pin both the type factory and the catalog as locals
+  // here for the duration of the stream.
+  ::googlesql::TypeFactory type_factory;
+  ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
+  backend::catalog::GoogleSqlCatalog catalog(
+      request.project_id(), storage, &type_factory,
+      analyzer_options.language());
+
+  backend::engine::reference_impl::ReferenceImplEngine engine(storage);
+  backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+  absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
+      engine.ExecuteQuery(engine_request, &catalog);
+  if (!source_or.ok()) {
+    return AnalyzeStatusToGrpc(source_or.status());
+  }
+  std::unique_ptr<backend::engine::RowSource> source =
+      std::move(source_or).value();
+  if (source == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "QueryService::ExecuteQuery: engine returned a "
+                          "null RowSource");
+  }
+
+  // First message: the schema. We always emit it (even for queries
+  // that return zero rows) so the gateway can synthesize a BigQuery
+  // REST `schema` field on the response without having to wait for
+  // the first row.
+  v1::QueryResultRow schema_message;
+  backend::schema::TableSchemaToProto(source->schema(),
+                                       schema_message.mutable_schema());
+  if (!write(schema_message)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::CANCELLED,
+        "QueryService::ExecuteQuery: client cancelled stream before schema");
+  }
+
+  // Subsequent messages: one per result row. `RowSource::Next`
+  // returns false on end-of-stream and a non-OK status on a
+  // mid-stream failure; both surface to the caller through the
+  // standard gRPC status code mapping.
+  backend::storage::Row row;
+  while (true) {
+    absl::StatusOr<bool> next = source->Next(&row);
+    if (!next.ok()) {
+      return AnalyzeStatusToGrpc(next.status());
+    }
+    if (!*next) break;
+    v1::QueryResultRow row_message;
+    for (const auto& cell : row.cells) {
+      ValueToCell(cell, row_message.add_cells());
+    }
+    if (!write(row_message)) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::CANCELLED,
+          "QueryService::ExecuteQuery: client cancelled stream mid-row");
+    }
+  }
+  return ::grpc::Status::OK;
+#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 }
 
 }  // namespace frontend
