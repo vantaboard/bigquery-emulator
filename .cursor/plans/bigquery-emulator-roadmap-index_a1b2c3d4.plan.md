@@ -73,7 +73,7 @@ todos:
     status: completed
   - id: run-23-jobs-query-handler
     content: "Run jobs-query-handler_a2d3e4f5.plan.md"
-    status: pending
+    status: completed
   - id: run-24-query-select-e2e
     content: "Run query-select-e2e_b3e4f5a6.plan.md"
     status: pending
