@@ -70,7 +70,7 @@ todos:
     status: completed
   - id: run-22-wire-marshal-go
     content: "Run wire-marshal-go_z1c2d3e4.plan.md"
-    status: pending
+    status: completed
   - id: run-23-jobs-query-handler
     content: "Run jobs-query-handler_a2d3e4f5.plan.md"
     status: pending
