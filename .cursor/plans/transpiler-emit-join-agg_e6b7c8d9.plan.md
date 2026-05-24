@@ -4,7 +4,7 @@ overview: "Phase 5h: Emit JOIN, GROUP BY, ORDER BY, LIMIT/OFFSET."
 todos:
   - id: emit-join-agg-sort
     content: "Emit ResolvedJoinScan, ResolvedAggregateScan, ResolvedOrderByScan, LIMIT/OFFSET"
-    status: pending
+    status: completed
 isProject: false
 ---
 
