@@ -4,10 +4,10 @@ overview: "Phase 3i: projects.list and getServiceAccount stubs."
 todos:
   - id: projects-list-stub
     content: "Implement projects.list: single synthetic project from path or BIGQUERY_EMULATOR_PROJECT default"
-    status: pending
+    status: completed
   - id: service-account-stub
     content: "Implement getServiceAccount: fixed email bigquery-emulator@test-project.iam.gserviceaccount.com"
-    status: pending
+    status: completed
 isProject: false
 ---
 
