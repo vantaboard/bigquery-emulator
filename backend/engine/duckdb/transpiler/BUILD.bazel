@@ -13,7 +13,7 @@
 # the part of the DuckDB engine that needs GoogleSQL's resolved-AST
 # headers most heavily.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -38,12 +38,52 @@ cc_library(
     hdrs = ["transpiler.h"],
     deps = [
         ":types",
+        "@com_google_absl//absl/strings",
+        # The function-call emit consults `Function::Name()` and the
+        # column-ref / table-scan emits consult `Catalog`'s `Table` +
+        # `Column` interfaces, so we pull in `:catalog` and
+        # `:function` alongside the resolved-AST target.
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:function",
+        # ProductMode enum (`PRODUCT_EXTERNAL`) lives on the
+        # options_cc_proto target; `Value::GetSQLLiteral` takes it as
+        # its first argument.
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:value",
         # `:resolved_ast` is the canonical target for the generated
         # node classes (`ResolvedQueryStmt`, `ResolvedProjectScan`,
         # ...) and the `ResolvedASTVisitor` base. We pull it in via
         # the no-colon `@googlesql//googlesql/resolved_ast` form
         # for consistency with how `reference_impl_engine` depends
         # on the same library.
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "transpiler_test",
+    srcs = ["transpiler_test.cc"],
+    deps = [
+        ":transpiler",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        # The tests drive a real `AnalyzeStatement` against a tiny
+        # `SimpleCatalog` so the ResolvedAST nodes the transpiler
+        # sees are exactly the ones the engine will see at runtime.
+        # That keeps the assertions on the emitted SQL string honest
+        # without having to hand-construct `Function` /
+        # `FunctionSignature` objects for every case.
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/resolved_ast",
     ],
 )

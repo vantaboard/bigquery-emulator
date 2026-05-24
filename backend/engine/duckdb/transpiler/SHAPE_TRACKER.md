@@ -57,10 +57,10 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedTableScan`                           | `not_started` | Phase 5.B emit-scans plan.                                                                |
+| `ResolvedTableScan`                           | `done`        | `SELECT "col" AS "alias", ... FROM "<table>"` — Phase 5g `transpiler-emit-scans` plan.    |
 | `ResolvedSingleRowScan`                       | `not_started` | `SELECT 1` shape; first emit lands with the scans plan.                                    |
 | `ResolvedProjectScan`                         | `not_started` | Scans plan.                                                                               |
-| `ResolvedFilterScan`                          | `not_started` | Scans plan (WHERE clause).                                                                |
+| `ResolvedFilterScan`                          | `done`        | `SELECT * FROM (<input>) WHERE <expr>` — Phase 5g `transpiler-emit-scans` plan.            |
 | `ResolvedJoinScan`                            | `not_started` | Scans plan; INNER/LEFT/RIGHT/FULL covered by DuckDB natively.                              |
 | `ResolvedArrayScan`                           | `not_started` | UNNEST shape; needs lateral-join rewrite in the unnest plan.                               |
 | `ResolvedAggregateScan`                       | `not_started` | GROUP BY shape; aggregate emit plan.                                                      |
@@ -95,10 +95,10 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedLiteral`                             | `not_started` | Expr emit plan; scalar literals + ARRAY / STRUCT literals.                                |
+| `ResolvedLiteral`                             | `done`        | Lowers via `Value::GetSQLLiteral(PRODUCT_EXTERNAL)` — Phase 5g `transpiler-emit-scans`.    |
 | `ResolvedParameter`                           | `not_started` | Expr emit plan; named + positional `@p` parameters via DuckDB's `$1` bind shape.          |
-| `ResolvedColumnRef`                           | `not_started` | Expr emit plan; resolves to the DuckDB-side column alias from the active scan.            |
-| `ResolvedFunctionCall`                        | `not_started` | Expr emit plan via the function disposition table.                                        |
+| `ResolvedColumnRef`                           | `done`        | Emits the quoted `ResolvedColumn::name()` — Phase 5g `transpiler-emit-scans` plan.         |
+| `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; everything else still falls back to ref-impl.    |
 | `ResolvedAggregateFunctionCall`               | `not_started` | Aggregate emit plan.                                                                      |
 | `ResolvedAnalyticFunctionCall`                | `not_started` | Analytic emit plan.                                                                       |
 | `ResolvedCast`                                | `not_started` | Expr emit plan; relies on `types.h` for the DuckDB type name.                             |
@@ -143,16 +143,22 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 ## Coverage summary
 
-* **Status today:** every shape is `not_started` or `skiplist`. The
-  skeleton compiles, `Transpiler::Transpile` returns the empty
-  string, and the engine falls back to the reference-impl evaluator
-  via the disposition policy.
+* **Status today:** Phase 5g landed the first wave — `ResolvedLiteral`,
+  `ResolvedColumnRef`, the `COALESCE` / `IFNULL` subset of
+  `ResolvedFunctionCall`, `ResolvedTableScan`, and `ResolvedFilterScan`
+  emit DuckDB SQL. `Transpiler::Transpile` still returns the empty
+  string for everything else (including `ResolvedQueryStmt`), so the
+  engine continues to fall back to the reference-impl evaluator via
+  the disposition policy for any full query that touches an unhandled
+  shape.
 * **Next plan(s):**
-  * `transpiler-emit-scans_d5a6b7c8.plan.md` — flip the basic scan +
-    `ResolvedQueryStmt` rows to `done`.
-  * Subsequent plans (`transpiler-emit-exprs`, `transpiler-emit-aggs`,
-    ...) fill in the expression family, aggregates, analytics, and
-    set ops.
+  * `transpiler-emit-join-agg_e6b7c8d9.plan.md` — flip `ResolvedJoinScan`,
+    `ResolvedAggregateScan`, and the wrapping `ResolvedQueryStmt` /
+    `ResolvedProjectScan` rows so a full `SELECT ... FROM ... WHERE ...`
+    end-to-end transpile is exercisable.
+  * Subsequent plans (`transpiler-emit-exprs`, `transpiler-functions-window`,
+    ...) fill in the rest of the expression family, aggregates,
+    analytics, and set ops.
 * **Skiplist policy:** the rows tagged `skiplist` above stay on the
   reference-impl engine until a deliberate plan moves them. Promoting
   a row out of `skiplist` requires both an emit method and a

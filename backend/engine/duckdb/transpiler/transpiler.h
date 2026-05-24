@@ -143,6 +143,18 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedOutputColumn* node);
   virtual std::string EmitComputedColumn(
       const ::googlesql::ResolvedComputedColumn* node);
+
+ private:
+  // Dispatch a `ResolvedExpr` to the matching `Emit*` method based on
+  // its `node_kind()`. Returns the empty string for any expression
+  // kind whose `Emit*` still returns `""` -- the engine fallback
+  // policy treats an empty fragment the same way `Transpile()` does
+  // and re-runs the query through the reference-impl evaluator.
+  std::string EmitExpr(const ::googlesql::ResolvedExpr* expr);
+
+  // Dispatch a `ResolvedScan` to the matching `Emit*` method. Same
+  // empty-string-as-fallback contract as `EmitExpr`.
+  std::string EmitScan(const ::googlesql::ResolvedScan* scan);
 };
 
 }  // namespace transpiler
