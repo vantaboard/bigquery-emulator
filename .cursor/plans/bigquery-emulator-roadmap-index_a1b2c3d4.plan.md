@@ -67,7 +67,7 @@ todos:
     status: completed
   - id: run-21-execute-query-stream
     content: "Run execute-query-stream_y0b1c2d3.plan.md"
-    status: pending
+    status: completed
   - id: run-22-wire-marshal-go
     content: "Run wire-marshal-go_z1c2d3e4.plan.md"
     status: pending
