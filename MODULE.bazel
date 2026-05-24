@@ -98,3 +98,30 @@ single_version_override(
     module_name = "gazelle",
     version = "0.51.0",
 )
+
+# DuckDB — prebuilt libduckdb tarball v1.5.3, same artifact the CMake
+# build's `third_party/duckdb/CMakeLists.txt` fetches. We use
+# `http_archive` (the WORKSPACE-era rule, re-exposed under bzlmod via
+# `use_repo_rule`) rather than building DuckDB from source: upstream
+# publishes a ready-to-link `libduckdb.so` + headers per architecture,
+# and pulling those in directly avoids a multi-minute compile of
+# DuckDB's ~600k-line C++ tree on every clean build. The pin/SHA-256
+# lives in `third_party/duckdb/VERSION` next to the CMake fetch so
+# both build systems bump in lockstep.
+#
+# Today we register only the linux/amd64 artifact: the Bazel + GoogleSQL
+# toolchain stack here is only exercised on amd64 (linux/arm64 CI
+# still runs the CMake build path for `emulator_main`). When the arm64
+# Bazel build lands, copy this block, swap in the arm64 zip URL +
+# SHA-256, and `select()` between the two in
+# `//binaries/emulator_main:emulator_main`'s `deps` list.
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "duckdb_linux_amd64",
+    build_file = "//third_party/duckdb:duckdb.BUILD.bazel",
+    sha256 = "0a926eba5bce0abc0010f4b9109133e4440cb74e97bd10fd2d0fc2a721621b05",
+    urls = [
+        "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-amd64.zip",
+    ],
+)

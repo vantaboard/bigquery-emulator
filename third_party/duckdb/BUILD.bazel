@@ -1,0 +1,42 @@
+# Bazel-side glue for the vendored DuckDB. The actual prebuilt
+# `libduckdb.so` + headers live inside the `@duckdb_linux_amd64` repo
+# that `//MODULE.bazel`'s `http_archive` materializes; this BUILD
+# file exposes a stable `//third_party/duckdb:duckdb` label so
+# downstream callers (`//backend/storage/duckdb`,
+# `//backend/engine/duckdb`, `//binaries/emulator_main`) name a single
+# arch-agnostic target instead of reaching into `@duckdb_linux_amd64`
+# directly.
+#
+# `select()` keeps the door open for arm64: when the linux/arm64
+# Bazel build of `emulator_main` lands, register a second
+# `@duckdb_linux_arm64` http_archive in `MODULE.bazel` and add a
+# matching `@platforms//cpu:aarch64` arm to the select below. Today
+# the only supported configuration is linux/amd64; the
+# `//conditions:default` arm fails the build with a clear message
+# rather than silently linking the wrong arch.
+#
+# The split mirrors the CMake build's `BIGQUERY_EMULATOR_ENABLE_DUCKDB`
+# option (see `//CMakeLists.txt`): both build systems vendor the same
+# prebuilt v1.5.3 tarball pinned in `third_party/duckdb/VERSION`, just
+# through their respective package managers.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "duckdb",
+    deps = select({
+        "@platforms//cpu:x86_64": ["@duckdb_linux_amd64//:duckdb"],
+        "//conditions:default": [":_unsupported_arch"],
+    }),
+)
+
+# Sentinel that fails the build with a clear message on any architecture
+# we have not registered a prebuilt for. The CMake path covers arm64
+# via FetchContent today; the Bazel `cc_binary` for `emulator_main`
+# is intentionally scoped to linux/amd64 in this revision.
+cc_library(
+    name = "_unsupported_arch",
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+)

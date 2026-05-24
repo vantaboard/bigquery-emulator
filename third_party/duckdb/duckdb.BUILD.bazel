@@ -1,0 +1,44 @@
+# BUILD file injected into the prebuilt libduckdb tarball that
+# `MODULE.bazel`'s `http_archive(name = "duckdb_linux_amd64", ...)`
+# downloads from the upstream DuckDB release. The zip is flat — it
+# ships `duckdb.h`, `duckdb.hpp`, `libduckdb.so`, and
+# `libduckdb_static.a` at the root — so this BUILD file lives next to
+# them inside the extracted repo, glued on by `build_file =
+# "//third_party/duckdb:duckdb.BUILD.bazel"`.
+#
+# The canonical Bazel `//binaries/emulator_main` target depends on
+# `@duckdb//:duckdb`, which is the same shape that the CMake build's
+# `duckdb::duckdb` imported target presents. Keeping the two import
+# names parallel means `backend/storage/duckdb` / `backend/engine/duckdb`
+# `#include "duckdb.h"` lines work identically under both build
+# systems; only the link-line plumbing differs.
+
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Import the prebuilt shared object as a Bazel target. Using
+# `cc_import` (rather than declaring `libduckdb.so` as `srcs` on a
+# `cc_library`) gives us an unambiguous SO that gets copied into the
+# binary's runfiles, which is what `bazel run`/`bazel-bin` depend on
+# for libduckdb.so to be findable at startup. We point at the .so
+# (rather than the static archive) so the symbol surface matches the
+# CMake build, which also links libduckdb.so.
+cc_import(
+    name = "libduckdb_so",
+    shared_library = "libduckdb.so",
+)
+
+# Public C/C++ API exposed to consumers. Headers are pulled in via
+# `hdrs`; the underlying .so flows in through `deps = [":libduckdb_so"]`
+# so anything that links `@duckdb//:duckdb` automatically gets
+# `libduckdb.so` on its runtime link line + runfiles.
+cc_library(
+    name = "duckdb",
+    hdrs = [
+        "duckdb.h",
+        "duckdb.hpp",
+    ],
+    includes = ["."],
+    deps = [":libduckdb_so"],
+)
