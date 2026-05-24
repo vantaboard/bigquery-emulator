@@ -4,10 +4,10 @@ overview: "Phase 4a: vendor GoogleSQL and build googlesql catalog adapter over S
 todos:
   - id: vendor-googlesql
     content: "Add GoogleSQL Bazel dep or sibling ../googlesql; MODULE.bazel + local_path_override for dev"
-    status: pending
+    status: completed
   - id: analyzer-catalog
     content: "Implement googlesql_catalog.{h,cc}: googlesql::Table adapter over Storage for name resolution"
-    status: pending
+    status: completed
 isProject: false
 ---
 
