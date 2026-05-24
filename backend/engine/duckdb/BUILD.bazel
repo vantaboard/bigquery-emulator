@@ -1,0 +1,25 @@
+# Bazel build for the DuckDB query engine scaffold. Mirrors the CMake
+# `backend_engine_duckdb` target (`//CMakeLists.txt`).
+#
+# Today every `Engine` method returns `UNIMPLEMENTED`; the .cc just
+# touches `duckdb_library_version` to keep `libduckdb.so` on the link
+# line under `--as-needed`. Phase 5.B (`engine-duckdb-transpiler`)
+# wires the ZetaSQL → DuckDB SQL translation through this same target.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "duckdb_engine",
+    srcs = ["duckdb_engine.cc"],
+    hdrs = ["duckdb_engine.h"],
+    local_defines = ["BIGQUERY_EMULATOR_HAS_DUCKDB=1"],
+    deps = [
+        "//backend/engine",
+        "//backend/storage",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)

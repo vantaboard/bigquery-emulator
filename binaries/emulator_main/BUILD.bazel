@@ -1,0 +1,54 @@
+# Canonical Bazel build for the BigQuery emulator's C++ engine entry
+# point. This `cc_binary` is the one that links the full GoogleSQL +
+# reference_impl + DuckDB + gRPC stack — the CMake fallback in
+# `//CMakeLists.txt` cannot do the same because GoogleSQL is a
+# Bazel-only build today (see ROADMAP.md "Build systems").
+#
+# Pull-in list mirrors the runtime factory in
+# `binaries/emulator_main/main.cc`: every storage backend the
+# `--storage` flag can pick (memory + duckdb), every engine backend
+# `--engine` can pick (reference_impl + duckdb), the gRPC front door,
+# and the catalog/query handlers it registers. The handlers transitively
+# pull in GoogleSQL's analyzer + the reference-impl evaluator with
+# `BIGQUERY_EMULATOR_HAS_GOOGLESQL=1` set (see
+# `//frontend/handlers:query_handler` and
+# `//backend/engine/reference_impl:reference_impl_engine`).
+#
+# Static C++/C linkage (`-static-libgcc` / `-static-libstdc++`) follows
+# the cloud-spanner-emulator precedent: it lets the binary run on
+# distros with older libstdc++ than the build host without an explicit
+# RPATH dance. `libduckdb.so` still ships as a dynamic dep via
+# `//third_party/duckdb`; Bazel parks it next to the binary in
+# runfiles, and the cc_import in `third_party/duckdb/duckdb.BUILD.bazel`
+# handles the runtime rpath.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "emulator_main",
+    srcs = ["main.cc"],
+    # `-Wl,-rpath,$ORIGIN` lets the binary find a sibling libduckdb.so
+    # at run time when it has been copied out of `bazel-bin/` (e.g.
+    # staged into `./bin/` for the integration tests, where Bazel's
+    # `_solib_k8/` runfiles tree is not present). Bazel injects its
+    # own `$ORIGIN/../../_solib_k8/...` entries for the in-place
+    # `bazel run` case; the extra `$ORIGIN` entry below is purely
+    # defensive for out-of-tree staging.
+    linkopts = [
+        "-static-libgcc",
+        "-static-libstdc++",
+        "-Wl,-rpath,$$ORIGIN",
+    ],
+    deps = [
+        "//backend/engine",
+        "//backend/engine/duckdb:duckdb_engine",
+        "//backend/engine/reference_impl:reference_impl_engine",
+        "//backend/storage",
+        "//backend/storage:memory",
+        "//backend/storage/duckdb:duckdb_storage",
+        "//frontend/server:server",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)

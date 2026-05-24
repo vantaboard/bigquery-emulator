@@ -1,0 +1,35 @@
+# Bazel build for the persistent, file-backed DuckDB `Storage` impl.
+# Mirrors the CMake `backend_storage_duckdb` target
+# (`//CMakeLists.txt`).
+#
+# `BIGQUERY_EMULATOR_HAS_DUCKDB=1` is set unconditionally here — the
+# Bazel build is the canonical path for the full DuckDB-enabled
+# emulator binary, so the no-DuckDB compile path that CMake exposes
+# through `-DBIGQUERY_EMULATOR_ENABLE_DUCKDB=OFF` is intentionally
+# unreachable from Bazel. The CMake side keeps the option around for
+# host installs without libduckdb on PATH.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "duckdb_storage",
+    srcs = ["duckdb_storage.cc"],
+    hdrs = ["duckdb_storage.h"],
+    local_defines = ["BIGQUERY_EMULATOR_HAS_DUCKDB=1"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
