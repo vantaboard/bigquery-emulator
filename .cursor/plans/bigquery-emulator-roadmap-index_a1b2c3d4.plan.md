@@ -76,7 +76,7 @@ todos:
     status: completed
   - id: run-24-query-select-e2e
     content: "Run query-select-e2e_b3e4f5a6.plan.md"
-    status: pending
+    status: completed
   - id: run-25-transpiler-skeleton
     content: "Run transpiler-skeleton_c4f5a6b7.plan.md"
     status: pending
