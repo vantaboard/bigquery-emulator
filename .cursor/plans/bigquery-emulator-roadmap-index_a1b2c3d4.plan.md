@@ -82,7 +82,7 @@ todos:
     status: completed
   - id: run-26-transpiler-emit-scans
     content: "Run transpiler-emit-scans_d5a6b7c8.plan.md"
-    status: pending
+    status: completed
   - id: run-27-transpiler-emit-join-agg
     content: "Run transpiler-emit-join-agg_e6b7c8d9.plan.md"
     status: pending
