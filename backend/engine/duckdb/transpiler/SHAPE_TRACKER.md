@@ -61,15 +61,15 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedSingleRowScan`                       | `not_started` | `SELECT 1` shape; first emit lands with the scans plan.                                    |
 | `ResolvedProjectScan`                         | `not_started` | Scans plan.                                                                               |
 | `ResolvedFilterScan`                          | `done`        | `SELECT * FROM (<input>) WHERE <expr>` — Phase 5g `transpiler-emit-scans` plan.            |
-| `ResolvedJoinScan`                            | `not_started` | Scans plan; INNER/LEFT/RIGHT/FULL covered by DuckDB natively.                              |
+| `ResolvedJoinScan`                            | `done` (subset) | Phase 5h `transpiler-emit-join-agg`: INNER (+ CROSS) / LEFT / RIGHT / FULL via DuckDB's native join keywords. Lateral joins (`is_lateral`), `JOIN USING(...)` (`has_using`), and lateral correlated `parameter_list` still fall back to reference-impl. |
 | `ResolvedArrayScan`                           | `not_started` | UNNEST shape; needs lateral-join rewrite in the unnest plan.                               |
-| `ResolvedAggregateScan`                       | `not_started` | GROUP BY shape; aggregate emit plan.                                                      |
+| `ResolvedAggregateScan`                       | `done` (subset) | Phase 5h `transpiler-emit-join-agg`: GROUP BY + simple aggregates (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`COUNT(*)`) via `ResolvedAggregateFunctionCall`. ROLLUP/CUBE/GROUPING SETS/GROUPING() still fall back to reference-impl. |
 | `ResolvedAnonymizedAggregateScan`             | `skiplist`    | Differential-privacy variant; reference-impl fallback today.                              |
 | `ResolvedDifferentialPrivacyAggregateScan`    | `skiplist`    | Same DP family.                                                                           |
 | `ResolvedAggregationThresholdAggregateScan`   | `skiplist`    | Same DP family.                                                                           |
 | `ResolvedSetOperationScan`                    | `not_started` | UNION / INTERSECT / EXCEPT; set-ops emit plan.                                            |
-| `ResolvedOrderByScan`                         | `not_started` | ORDER BY emit plan.                                                                       |
-| `ResolvedLimitOffsetScan`                     | `not_started` | LIMIT / OFFSET emit plan.                                                                 |
+| `ResolvedOrderByScan`                         | `done`        | Phase 5h `transpiler-emit-join-agg`: `ORDER BY <col> [ASC|DESC] [NULLS FIRST|LAST]` per item, dropping the null-order keyword when unspecified. `COLLATE` still falls back. |
+| `ResolvedLimitOffsetScan`                     | `done`        | Phase 5h `transpiler-emit-join-agg`: `LIMIT <n> [OFFSET <m>]` via the literal-emit subset. |
 | `ResolvedAnalyticScan`                        | `not_started` | Window functions; analytic emit plan.                                                     |
 | `ResolvedSampleScan`                          | `not_started` | TABLESAMPLE; emit plan via DuckDB's `USING SAMPLE`.                                       |
 | `ResolvedWithScan`                            | `not_started` | CTEs; emit plan.                                                                          |
@@ -99,7 +99,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedParameter`                           | `not_started` | Expr emit plan; named + positional `@p` parameters via DuckDB's `$1` bind shape.          |
 | `ResolvedColumnRef`                           | `done`        | Emits the quoted `ResolvedColumn::name()` — Phase 5g `transpiler-emit-scans` plan.         |
 | `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; everything else still falls back to ref-impl.    |
-| `ResolvedAggregateFunctionCall`               | `not_started` | Aggregate emit plan.                                                                      |
+| `ResolvedAggregateFunctionCall`               | `done` (subset) | Phase 5h `transpiler-emit-join-agg` covers `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) and optional `DISTINCT`. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, and `SAFE.<agg>(...)` still fall back. |
 | `ResolvedAnalyticFunctionCall`                | `not_started` | Analytic emit plan.                                                                       |
 | `ResolvedCast`                                | `not_started` | Expr emit plan; relies on `types.h` for the DuckDB type name.                             |
 | `ResolvedMakeStruct`                          | `not_started` | Struct literal emit plan.                                                                 |
@@ -132,7 +132,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedOutputColumn`                        | `not_started` | Maps an output alias onto its `ResolvedColumn`; emit plan.                                |
 | `ResolvedComputedColumn`                      | `not_started` | Carries an expression bound to a column id; emit plan.                                    |
 | `ResolvedDeferredComputedColumn`              | `skiplist`    | Pipe-operator-only; fallback today.                                                       |
-| `ResolvedOrderByItem`                         | `not_started` | Sibling of ORDER BY scan; emit plan.                                                      |
+| `ResolvedOrderByItem`                         | `done`        | Phase 5h `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` still falls back. |
 | `ResolvedColumnHolder`                        | `not_started` | UNNEST WITH OFFSET shape; emit plan.                                                      |
 | `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` | `not_started` | Aggregate emit plan (GROUPING SETS / ROLLUP / CUBE via DuckDB syntax).         |
 | `ResolvedAggregateHavingModifier`             | `not_started` | HAVING inside aggregate; aggregate emit plan.                                             |
@@ -143,19 +143,23 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 ## Coverage summary
 
-* **Status today:** Phase 5g landed the first wave — `ResolvedLiteral`,
-  `ResolvedColumnRef`, the `COALESCE` / `IFNULL` subset of
-  `ResolvedFunctionCall`, `ResolvedTableScan`, and `ResolvedFilterScan`
-  emit DuckDB SQL. `Transpiler::Transpile` still returns the empty
-  string for everything else (including `ResolvedQueryStmt`), so the
-  engine continues to fall back to the reference-impl evaluator via
-  the disposition policy for any full query that touches an unhandled
-  shape.
+* **Status today:** Phase 5h extends the Phase 5g baseline with the
+  big four "shape" scans the conformance harness exercises most:
+  `ResolvedJoinScan` (INNER/LEFT/RIGHT/FULL plus CROSS),
+  `ResolvedAggregateScan` (GROUP BY + simple aggregates),
+  `ResolvedOrderByScan`, and `ResolvedLimitOffsetScan`. The
+  expression layer also gains the first cut of
+  `ResolvedAggregateFunctionCall` (SUM/COUNT/AVG/MIN/MAX, plus
+  COUNT(*) and optional DISTINCT). `Transpiler::Transpile` still
+  returns the empty string for `ResolvedQueryStmt` and
+  `ResolvedProjectScan` so the engine continues to fall back to
+  reference-impl for the wrapping shapes; a follow-up plan lands
+  those rows.
 * **Next plan(s):**
-  * `transpiler-emit-join-agg_e6b7c8d9.plan.md` — flip `ResolvedJoinScan`,
-    `ResolvedAggregateScan`, and the wrapping `ResolvedQueryStmt` /
-    `ResolvedProjectScan` rows so a full `SELECT ... FROM ... WHERE ...`
-    end-to-end transpile is exercisable.
+  * `transpiler-emit-project-stmt` (TBD) — flip `ResolvedProjectScan`
+    and `ResolvedQueryStmt` so a full `SELECT ... FROM ... WHERE
+    ... GROUP BY ... ORDER BY ... LIMIT ...` query lowers end to
+    end without falling back to reference-impl.
   * Subsequent plans (`transpiler-emit-exprs`, `transpiler-functions-window`,
     ...) fill in the rest of the expression family, aggregates,
     analytics, and set ops.

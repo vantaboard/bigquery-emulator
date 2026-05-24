@@ -51,6 +51,10 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_FILTER_SCAN:
     case ::googlesql::RESOLVED_PROJECT_SCAN:
     case ::googlesql::RESOLVED_SINGLE_ROW_SCAN:
+    case ::googlesql::RESOLVED_JOIN_SCAN:
+    case ::googlesql::RESOLVED_AGGREGATE_SCAN:
+    case ::googlesql::RESOLVED_ORDER_BY_SCAN:
+    case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_COLUMN_REF:
@@ -88,6 +92,17 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
     case ::googlesql::RESOLVED_SINGLE_ROW_SCAN:
       return EmitSingleRowScan(
           scan->GetAs<::googlesql::ResolvedSingleRowScan>());
+    case ::googlesql::RESOLVED_JOIN_SCAN:
+      return EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+    case ::googlesql::RESOLVED_AGGREGATE_SCAN:
+      return EmitAggregateScan(
+          scan->GetAs<::googlesql::ResolvedAggregateScan>());
+    case ::googlesql::RESOLVED_ORDER_BY_SCAN:
+      return EmitOrderByScan(
+          scan->GetAs<::googlesql::ResolvedOrderByScan>());
+    case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
+      return EmitLimitOffsetScan(
+          scan->GetAs<::googlesql::ResolvedLimitOffsetScan>());
     default:
       return "";
   }
@@ -183,8 +198,62 @@ std::string Transpiler::EmitFilterScan(
 }
 
 std::string Transpiler::EmitJoinScan(
-    const ::googlesql::ResolvedJoinScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedJoinScan* node) {
+  // INNER / LEFT / RIGHT / FULL all map directly onto DuckDB join
+  // syntax. We compose the two input scans as derived tables for the
+  // same reason `EmitFilterScan` does: each scan emits a self-
+  // contained SELECT so the join sees the column aliases the child
+  // emitted. CROSS JOIN is the natural fallback when the analyzer
+  // hands us an INNER join with no `join_expr`.
+  //
+  // Lateral joins, JOIN USING(...) (`has_using`), and the lateral
+  // `parameter_list` need bespoke rewrite passes that the first emit
+  // pass doesn't cover; we return "" so the engine takes the
+  // reference-impl fallback for those shapes.
+  if (node == nullptr) return "";
+  if (node->is_lateral() || node->has_using() ||
+      node->parameter_list_size() > 0) {
+    return "";
+  }
+  std::string left = EmitScan(node->left_scan());
+  if (left.empty()) return "";
+  std::string right = EmitScan(node->right_scan());
+  if (right.empty()) return "";
+
+  const char* join_kw = nullptr;
+  switch (node->join_type()) {
+    case ::googlesql::ResolvedJoinScan::INNER:
+      join_kw = "INNER JOIN";
+      break;
+    case ::googlesql::ResolvedJoinScan::LEFT:
+      join_kw = "LEFT JOIN";
+      break;
+    case ::googlesql::ResolvedJoinScan::RIGHT:
+      join_kw = "RIGHT JOIN";
+      break;
+    case ::googlesql::ResolvedJoinScan::FULL:
+      join_kw = "FULL JOIN";
+      break;
+    default:
+      return "";
+  }
+
+  if (node->join_expr() == nullptr) {
+    // INNER + no join_expr is the analyzer's representation of
+    // CROSS JOIN. LEFT / RIGHT / FULL without a condition is a
+    // grammar error the analyzer rejects upstream; we double-check
+    // here so a malformed AST falls back instead of emitting
+    // illegal SQL.
+    if (node->join_type() != ::googlesql::ResolvedJoinScan::INNER) {
+      return "";
+    }
+    return absl::StrCat("SELECT * FROM (", left, ") CROSS JOIN (", right,
+                        ")");
+  }
+  std::string on = EmitExpr(node->join_expr());
+  if (on.empty()) return "";
+  return absl::StrCat("SELECT * FROM (", left, ") ", join_kw, " (", right,
+                      ") ON ", on);
 }
 
 std::string Transpiler::EmitArrayScan(
@@ -193,8 +262,69 @@ std::string Transpiler::EmitArrayScan(
 }
 
 std::string Transpiler::EmitAggregateScan(
-    const ::googlesql::ResolvedAggregateScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedAggregateScan* node) {
+  // Emit `SELECT <grouping-cols>, <aggregates> FROM (<input>) GROUP BY ...`
+  // where each grouping column repeats its underlying expression in
+  // GROUP BY (rather than referencing the SELECT-list alias), so the
+  // emitted SQL composes safely no matter how DuckDB resolves alias
+  // visibility in the future.
+  //
+  // ROLLUP / CUBE / GROUPING SETS / GROUPING() function calls all set
+  // one of the grouping-set / rollup / grouping_call lists on the
+  // node; we leave those shapes on the reference-impl fallback until
+  // a dedicated lower pass lands.
+  if (node == nullptr) return "";
+  if (node->grouping_set_list_size() > 0 ||
+      node->rollup_column_list_size() > 0 ||
+      node->grouping_call_list_size() > 0) {
+    return "";
+  }
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+
+  std::vector<std::string> projections;
+  std::vector<std::string> group_by_exprs;
+  projections.reserve(node->group_by_list_size() +
+                      node->aggregate_list_size());
+  group_by_exprs.reserve(node->group_by_list_size());
+
+  for (int i = 0; i < node->group_by_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* gc = node->group_by_list(i);
+    if (gc == nullptr) return "";
+    std::string expr = EmitExpr(gc->expr());
+    if (expr.empty()) return "";
+    std::string quoted_out = QuoteIdent(gc->column().name());
+    projections.push_back(
+        expr == quoted_out ? expr
+                           : absl::StrCat(expr, " AS ", quoted_out));
+    group_by_exprs.push_back(expr);
+  }
+
+  for (int i = 0; i < node->aggregate_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumnBase* ac =
+        node->aggregate_list(i);
+    if (ac == nullptr) return "";
+    const ::googlesql::ResolvedExpr* expr_node = ac->expr();
+    if (expr_node == nullptr ||
+        expr_node->node_kind() !=
+            ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL) {
+      return "";
+    }
+    std::string fn = EmitAggregateFunctionCall(
+        expr_node->GetAs<::googlesql::ResolvedAggregateFunctionCall>());
+    if (fn.empty()) return "";
+    projections.push_back(
+        absl::StrCat(fn, " AS ", QuoteIdent(ac->column().name())));
+  }
+
+  std::string select_list =
+      projections.empty() ? "*" : absl::StrJoin(projections, ", ");
+  std::string sql =
+      absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
+  if (!group_by_exprs.empty()) {
+    absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
+  }
+  return sql;
 }
 
 std::string Transpiler::EmitSetOperationScan(
@@ -203,13 +333,71 @@ std::string Transpiler::EmitSetOperationScan(
 }
 
 std::string Transpiler::EmitOrderByScan(
-    const ::googlesql::ResolvedOrderByScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedOrderByScan* node) {
+  // `SELECT * FROM (<input>) ORDER BY <col> [ASC|DESC] [NULLS FIRST|LAST]`
+  // -- one item per `ResolvedOrderByItem`. The order-by item's
+  // `column_ref` always points at a column produced by `input_scan`,
+  // so the inner SELECT exposes the right alias for the outer ORDER
+  // BY clause to bind against.
+  //
+  // `collation_name` carries `ORDER BY x COLLATE ...`; the lower
+  // pass for collations lands separately, so we fall back when it
+  // is set.
+  if (node == nullptr) return "";
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+  std::vector<std::string> items;
+  items.reserve(node->order_by_item_list_size());
+  for (int i = 0; i < node->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item =
+        node->order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) return "";
+    if (item->collation_name() != nullptr) return "";
+    std::string col = EmitColumnRef(item->column_ref());
+    if (col.empty()) return "";
+    const char* dir = item->is_descending() ? "DESC" : "ASC";
+    const char* nulls = "";
+    switch (item->null_order()) {
+      case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+        nulls = " NULLS FIRST";
+        break;
+      case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+        nulls = " NULLS LAST";
+        break;
+      case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
+      default:
+        break;
+    }
+    items.push_back(absl::StrCat(col, " ", dir, nulls));
+  }
+  if (items.empty()) return "";
+  return absl::StrCat("SELECT * FROM (", input, ") ORDER BY ",
+                      absl::StrJoin(items, ", "));
 }
 
 std::string Transpiler::EmitLimitOffsetScan(
-    const ::googlesql::ResolvedLimitOffsetScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedLimitOffsetScan* node) {
+  // `SELECT * FROM (<input>) LIMIT <n> [OFFSET <m>]`. The analyzer
+  // guarantees `limit` and `offset` are constant INT64-coercible
+  // expressions, so `EmitExpr` lowers them through `EmitLiteral`
+  // when they were spelled as literals. We fall back when either
+  // expression is something the literal-emit subset cannot lower
+  // yet (e.g. a parameter).
+  if (node == nullptr) return "";
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+  std::string sql = absl::StrCat("SELECT * FROM (", input, ")");
+  if (node->limit() != nullptr) {
+    std::string l = EmitExpr(node->limit());
+    if (l.empty()) return "";
+    absl::StrAppend(&sql, " LIMIT ", l);
+  }
+  if (node->offset() != nullptr) {
+    std::string o = EmitExpr(node->offset());
+    if (o.empty()) return "";
+    absl::StrAppend(&sql, " OFFSET ", o);
+  }
+  return sql;
 }
 
 std::string Transpiler::EmitAnalyticScan(
@@ -301,8 +489,50 @@ std::string Transpiler::EmitFunctionCall(
 }
 
 std::string Transpiler::EmitAggregateFunctionCall(
-    const ::googlesql::ResolvedAggregateFunctionCall* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedAggregateFunctionCall* node) {
+  // First-wave aggregate subset: COUNT(*), SUM, COUNT, AVG, MIN, MAX
+  // with optional DISTINCT. The richer modifiers (ORDER BY inside
+  // an aggregate, HAVING MAX/MIN, IGNORE/RESPECT NULLS, multi-level
+  // GROUP BY, aggregate filtering, LIMIT) all need bespoke lower
+  // passes -- we propagate "" so the engine takes the reference-impl
+  // fallback whenever one of them is set. SAFE.<agg>(...) follows
+  // the same fallback contract `EmitFunctionCall` uses.
+  if (node == nullptr || node->function() == nullptr) return "";
+  if (node->error_mode() ==
+      ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+    return "";
+  }
+  if (node->having_modifier() != nullptr ||
+      node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
+      node->group_by_list_size() > 0 ||
+      node->group_by_aggregate_list_size() > 0 ||
+      node->where_expr() != nullptr ||
+      node->having_expr() != nullptr ||
+      node->null_handling_modifier() !=
+          ::googlesql::ResolvedNonScalarFunctionCallBase::
+              DEFAULT_NULL_HANDLING) {
+    return "";
+  }
+  const std::string name = absl::AsciiStrToLower(node->function()->Name());
+  if (name == "$count_star") {
+    if (node->argument_list_size() != 0) return "";
+    return "COUNT(*)";
+  }
+  if (name != "sum" && name != "count" && name != "avg" && name != "min" &&
+      name != "max") {
+    return "";
+  }
+  std::vector<std::string> args;
+  args.reserve(node->argument_list_size());
+  for (int i = 0; i < node->argument_list_size(); ++i) {
+    std::string a = EmitExpr(node->argument_list(i));
+    if (a.empty()) return "";
+    args.push_back(std::move(a));
+  }
+  std::string args_str = absl::StrJoin(args, ", ");
+  std::string prefix = node->distinct() ? "DISTINCT " : "";
+  return absl::StrCat(absl::AsciiStrToUpper(name), "(", prefix, args_str,
+                      ")");
 }
 
 std::string Transpiler::EmitAnalyticFunctionCall(
