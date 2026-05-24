@@ -15,6 +15,8 @@ import (
 	"net/http"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Dependencies bundles everything a handler might need to reach (engine
@@ -113,4 +115,57 @@ func writeError(w http.ResponseWriter, status int, reason, msg string) {
 			}},
 		},
 	})
+}
+
+// grpcToHTTPError translates a gRPC error returned by the engine into
+// the BigQuery-shaped JSON error envelope and writes it to w. Returns
+// true when err was non-nil (and therefore an error was written), so
+// callers can use it as `if grpcToHTTPError(...) { return }`.
+//
+// The mapping mirrors the Storage→gRPC mapping in
+// frontend/handlers/catalog.cc: NOT_FOUND → 404 notFound,
+// ALREADY_EXISTS → 409 duplicate, INVALID_ARGUMENT → 400 invalid,
+// FAILED_PRECONDITION → 400 failedPrecondition, UNIMPLEMENTED → 501
+// notImplemented, UNAVAILABLE → 503 backendError. Anything else
+// (INTERNAL, plain Go errors) is reported as 500 internalError so a
+// misbehaving engine cannot be mistaken for a 404 on the wire.
+func grpcToHTTPError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "internalError",
+			"Engine RPC failed: "+err.Error())
+		return true
+	}
+	httpStatus, reason := http.StatusInternalServerError, "internalError"
+	switch st.Code() {
+	case codes.OK:
+		return false
+	case codes.NotFound:
+		httpStatus, reason = http.StatusNotFound, "notFound"
+	case codes.AlreadyExists:
+		httpStatus, reason = http.StatusConflict, "duplicate"
+	case codes.InvalidArgument:
+		httpStatus, reason = http.StatusBadRequest, "invalid"
+	case codes.FailedPrecondition:
+		httpStatus, reason = http.StatusBadRequest, "failedPrecondition"
+	case codes.PermissionDenied:
+		httpStatus, reason = http.StatusForbidden, "accessDenied"
+	case codes.Unauthenticated:
+		// The emulator never authenticates so this is unlikely, but
+		// map it so a buggy engine doesn't crash through to 500.
+		httpStatus, reason = http.StatusUnauthorized, "authError"
+	case codes.Unimplemented:
+		httpStatus, reason = http.StatusNotImplemented, "notImplemented"
+	case codes.Unavailable:
+		httpStatus, reason = http.StatusServiceUnavailable, "backendError"
+	case codes.DeadlineExceeded:
+		httpStatus, reason = http.StatusGatewayTimeout, "backendError"
+	case codes.ResourceExhausted:
+		httpStatus, reason = http.StatusTooManyRequests, "quotaExceeded"
+	}
+	writeError(w, httpStatus, reason, st.Message())
+	return true
 }

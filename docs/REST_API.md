@@ -38,24 +38,24 @@ omit the host and use `{x}` for path variables.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `datasets.list` | `GET /bigquery/v2/projects/{projectId}/datasets` | wired | [`gateway/handlers/datasets.go::DatasetList`][datasets] |
-| `datasets.insert` | `POST /bigquery/v2/projects/{projectId}/datasets` | wired | [`gateway/handlers/datasets.go::DatasetInsert`][datasets] |
-| `datasets.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | wired | [`gateway/handlers/datasets.go::DatasetGet`][datasets] |
-| `datasets.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | wired | [`gateway/handlers/datasets.go::DatasetUpdate`][datasets] |
-| `datasets.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | wired | [`gateway/handlers/datasets.go::DatasetPatch`][datasets] |
-| `datasets.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | wired | [`gateway/handlers/datasets.go::DatasetDelete`][datasets] |
+| `datasets.list` | `GET /bigquery/v2/projects/{projectId}/datasets` | done | [`gateway/handlers/datasets.go::DatasetList`][datasets] |
+| `datasets.insert` | `POST /bigquery/v2/projects/{projectId}/datasets` | done | [`gateway/handlers/datasets.go::DatasetInsert`][datasets] |
+| `datasets.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetGet`][datasets] |
+| `datasets.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetUpdate`][datasets] |
+| `datasets.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetPatch`][datasets] |
+| `datasets.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetDelete`][datasets] |
 | `datasets.undelete` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete` | wired | [`gateway/handlers/datasets.go::DatasetUndelete`][datasets] |
 
 ### Tables (`bigquery.tables.*`)
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `tables.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | wired | [`gateway/handlers/tables.go::TableList`][tables] |
-| `tables.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | wired | [`gateway/handlers/tables.go::TableInsert`][tables] |
-| `tables.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | wired | [`gateway/handlers/tables.go::TableGet`][tables] |
-| `tables.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | wired | [`gateway/handlers/tables.go::TableUpdate`][tables] |
-| `tables.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | wired | [`gateway/handlers/tables.go::TablePatch`][tables] |
-| `tables.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | wired | [`gateway/handlers/tables.go::TableDelete`][tables] |
+| `tables.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | done | [`gateway/handlers/tables.go::TableList`][tables] |
+| `tables.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | done | [`gateway/handlers/tables.go::TableInsert`][tables] |
+| `tables.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableGet`][tables] |
+| `tables.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableUpdate`][tables] |
+| `tables.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TablePatch`][tables] |
+| `tables.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableDelete`][tables] |
 | `tables.getIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy` | wired | [`gateway/handlers/tables.go::TableGetIamPolicy`][tables] |
 | `tables.setIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy` | wired | [`gateway/handlers/tables.go::TableSetIamPolicy`][tables] |
 | `tables.testIamPermissions` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions` | wired | [`gateway/handlers/tables.go::TableTestIamPermissions`][tables] |
