@@ -4,10 +4,10 @@ overview: "Phase 3g: Catalog gRPC handlers delegating to Storage."
 todos:
   - id: catalog-handlers
     content: "Implement catalog.cc: RegisterDataset, DropDataset, RegisterTable, DropTable, DescribeTable; map errors to grpc Status"
-    status: pending
+    status: completed
   - id: catalog-errors
     content: "Map Storage NotFound→NOT_FOUND, AlreadyExists→ALREADY_EXISTS consistently"
-    status: pending
+    status: completed
 isProject: false
 ---
 
