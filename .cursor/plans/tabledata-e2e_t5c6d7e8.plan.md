@@ -4,13 +4,13 @@ overview: "Phase 3j: insertAll + tabledata.list E2E on memory storage."
 todos:
   - id: insert-all-handler
     content: "Implement tabledata.insertAll: decode body, convert rows to proto, AppendRows via catalog/engine"
-    status: pending
+    status: completed
   - id: tabledata-list-handler
     content: "Implement tabledata.list: paginated GET with startIndex/maxResults/pageToken"
-    status: pending
+    status: completed
   - id: e2e-test-go
     content: "Add gateway/e2e/catalog_test.go: create dataset/table, insertAll 2 rows, list returns 2 rows"
-    status: pending
+    status: completed
 isProject: false
 ---
 
