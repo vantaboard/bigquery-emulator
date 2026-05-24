@@ -4,10 +4,10 @@ overview: "Phase 5c: BigQuery f/v wire marshaling and unit tests."
 todos:
   - id: wire-marshal
     content: "Add gateway/bqtypes/wire.go: ValueToCell per StandardSqlDataType — INT64 string, TIMESTAMP RFC3339Z, STRUCT, NULL"
-    status: pending
+    status: completed
   - id: wire-marshal-test
     content: "Unit tests: INT64, FLOAT64 NaN, BYTES base64, TIMESTAMP, STRUCT, ARRAY, NULL"
-    status: pending
+    status: completed
 isProject: false
 ---
 
