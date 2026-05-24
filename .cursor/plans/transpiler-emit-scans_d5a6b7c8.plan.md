@@ -4,10 +4,10 @@ overview: "Phase 5g: Emit literals, columns, functions, table scan, and WHERE fi
 todos:
   - id: emit-literals-scalars
     content: "Emit ResolvedLiteral, ResolvedColumn, ResolvedFunctionCall (SAFE_CAST, COALESCE, IFNULL)"
-    status: pending
+    status: completed
   - id: emit-scan-filter
     content: "Emit ResolvedScan (table scan), ResolvedFilter (WHERE)"
-    status: pending
+    status: completed
 isProject: false
 ---
 
