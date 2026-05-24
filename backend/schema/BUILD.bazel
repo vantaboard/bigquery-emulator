@@ -1,0 +1,24 @@
+# Bazel build for the engine-agnostic schema types
+# (`schema::ColumnType`, `schema::TableSchema`, the proto conversions,
+# and the DuckDB-name lowering). Mirrors the CMake `backend_schema`
+# target (`../../CMakeLists.txt`).
+#
+# Both build systems include this library; it sits below the gRPC
+# service boundary and below GoogleSQL, so neither needs to know
+# about the analyzer when round-tripping a `TableSchema` proto.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "schema",
+    srcs = ["schema.cc"],
+    hdrs = ["schema.h"],
+    deps = [
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)

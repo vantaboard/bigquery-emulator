@@ -1,9 +1,92 @@
-# Bzlmod root for bigquery-emulator. Empty in Phase 0 -- Phase 2 of
-# ROADMAP.md will add module() and bazel_dep() lines for googlesql,
-# protobuf, gRPC, abseil, and rules_go (matching the toolchain
-# cloud-spanner-emulator builds against).
+# Bzlmod root for bigquery-emulator.
+#
+# Bazel is the canonical build path for anything that links GoogleSQL
+# (i.e. the C++ engine's analyzer / reference-impl plumbing). GoogleSQL
+# is Bazel-only, and `cloud-spanner-emulator` builds the same way, so
+# the C++ engine of bigquery-emulator follows suit starting with the
+# `googlesql-vendor-catalog` plan. The CMake build is kept in parallel
+# for the legacy storage / engine scaffolds and the vendored libduckdb;
+# see the top of `CMakeLists.txt` for the build-system split.
+#
+# `googlesql` is vendored via a `bazel_dep` + a `local_path_override`
+# pointing at a sibling checkout of
+# https://github.com/google/googlesql. The override is the
+# `cloud-spanner-emulator`-style developer workflow — every contributor
+# clones googlesql next to bigquery-emulator (sibling path
+# `../googlesql/`), so the Bazel build always sees a real on-disk
+# repository rather than a tarball pinned by the central registry. The
+# version we pin to (`2026.01.1`) matches the upstream module name +
+# version in `../googlesql/MODULE.bazel`.
+#
+# Abseil is pinned to the version GoogleSQL pins (20240722.1). Older
+# Abseil is required by GoogleSQL because newer releases removed the
+# `slot_type` member that `googlesql/public/types/internal_utils.h`
+# relies on; the same `single_version_override` lives in GoogleSQL's
+# MODULE.bazel.
 
 module(
     name = "bigquery_emulator",
     version = "0.0.0",
+)
+
+# GoogleSQL — name resolution / analyzer / reference-impl. Built from
+# the sibling checkout (`../googlesql`).
+#
+# Dev workflow: clone https://github.com/google/googlesql at the
+# tag matching the version below into `../googlesql/`. Bumping the
+# local checkout is enough to bump the build (no registry hop needed).
+#
+# IMPORTANT (one-time dev setup): upstream GoogleSQL tags its
+# `MODULE.bazel:module(version = ...)` as `2026.01.1`. That string is
+# not strict semver — the leading zero in `01` trips a hard `fail()`
+# inside `gazelle` (`internal/bzlmod/semver.bzl:30`,
+# "Numeric identifiers in semantic version strings must not include
+# leading zeroes"). The version is parsed eagerly by gazelle's
+# `go_deps` extension for every Bazel module in the resolved graph,
+# regardless of whether anything actually uses the Go side, so a
+# fresh checkout will refuse to build until the `2026.01.1` is
+# rewritten to `2026.1.1` (or another strict-semver alias). Apply
+# the patch in `../googlesql/` directly:
+#
+#     sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' \
+#         ../googlesql/MODULE.bazel
+#
+# Re-running after a `git pull` upstream is a no-op until upstream
+# bumps the leading zero or gazelle gets a non-strict semver mode
+# (https://github.com/bazel-contrib/bazel-gazelle/issues — track and
+# remove this note when fixed).
+bazel_dep(name = "googlesql", version = "2026.1.1")
+local_path_override(
+    module_name = "googlesql",
+    path = "../googlesql",
+)
+
+# Abseil — same `slot_type`-era pin GoogleSQL itself uses. Without the
+# matching `single_version_override`, Bzlmod resolves to a newer
+# release and `googlesql/public/types/internal_utils.h` fails to
+# compile.
+bazel_dep(name = "abseil-cpp", version = "20240722.1", repo_name = "com_google_absl")
+single_version_override(
+    module_name = "abseil-cpp",
+    version = "20240722.1",
+)
+
+# Protobuf + gRPC — already transitive deps of googlesql, but we list
+# them explicitly so our own targets (proto_library, cc_grpc_library)
+# can name them directly. Versions match what GoogleSQL pulls in.
+bazel_dep(name = "protobuf", version = "29.0", repo_name = "com_google_protobuf")
+bazel_dep(name = "grpc", version = "1.69.0", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "rules_proto", version = "7.0.2")
+bazel_dep(name = "rules_cc", version = "0.2.8")
+
+# Bump Gazelle past the broken semver parser. Pinned googlesql ships
+# `gazelle = 0.45.0`, which crashes on Go pseudo-version timestamps
+# (e.g. `v0.0.0-20210717090340-…` -> "Numeric identifiers in semantic
+# version strings must not include leading zeroes" inside its
+# `internal/bzlmod/semver.bzl`). 0.48+ rewrites the parser; pin a
+# recent stable so the GoogleSQL `go_deps.from_file("//:go.mod")`
+# extension can resolve cleanly.
+single_version_override(
+    module_name = "gazelle",
+    version = "0.51.0",
 )

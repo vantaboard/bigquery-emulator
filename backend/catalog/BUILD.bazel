@@ -1,0 +1,43 @@
+# Bazel build for the GoogleSQL-facing catalog adapter (Phase 4a).
+#
+# The adapter is the bridge between GoogleSQL's `Catalog` interface
+# (which name-resolution / analysis call) and the engine-agnostic
+# `backend::storage::Storage` interface (which actually owns the
+# dataset/table catalog). It lives under its own Bazel target because
+# this is the first piece of the C++ engine that pulls a hard dep on
+# GoogleSQL -- everything below it (schema, storage, the legacy
+# scaffolds in CMake) still works without GoogleSQL on PATH.
+#
+# `@googlesql//...` resolves through the `local_path_override` in the
+# repo-root `MODULE.bazel`, so a sibling checkout of GoogleSQL
+# (`../googlesql/`) is the source of truth for this dep. Bumping
+# GoogleSQL = bumping that checkout; no registry hop required.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "googlesql_catalog",
+    srcs = ["googlesql_catalog.cc"],
+    hdrs = ["googlesql_catalog.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+        # `simple_catalog` transitively re-exports `:type` and the
+        # `googlesql/public/types/*` headers (`type_factory`,
+        # `struct_type`, ...), which is what the adapter needs. We
+        # don't depend on `googlesql/public/types:types` directly
+        # because its package restricts visibility to
+        # `//googlesql/base:googlesql_implementation`.
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)

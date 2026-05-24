@@ -1,0 +1,27 @@
+# Bazel build for the `Storage` interface + the engine-agnostic
+# `Value`/`Row`/`RowIterator` types. Mirrors the CMake
+# `backend_storage` target (`../../CMakeLists.txt`).
+#
+# Only the abstract interface ships here; the concrete impls
+# (`backend/storage/memory/`, `backend/storage/duckdb/`) still build
+# from CMake until the Bazel migration reaches them. The
+# `googlesql_catalog` adapter in `backend/catalog/` consumes this
+# header-only entry point and delegates to whichever `Storage` impl
+# the engine constructed at startup.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "storage",
+    srcs = ["storage.cc"],
+    hdrs = ["storage.h"],
+    deps = [
+        "//backend/schema",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)

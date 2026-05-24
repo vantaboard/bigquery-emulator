@@ -1,0 +1,36 @@
+# Bazel build for the internal Go <-> C++ gRPC contract.
+#
+# Mirrors the CMake `enginepb_cc` target (see `../CMakeLists.txt`):
+# both ultimately produce `emulator.pb.{h,cc}` +
+# `emulator.grpc.pb.{h,cc}` and a C++ static library that the engine
+# code links against. Bazel is the canonical build path for anything
+# that links GoogleSQL (the analyzer / reference-impl plumbing); CMake
+# stays around as the legacy entry point for the storage / engine
+# scaffolds and the vendored libduckdb.
+#
+# The Go bindings still come from `buf generate` (see `../buf.gen.yaml`)
+# and are checked in under `../gateway/enginepb/`; this file does not
+# emit a Go proto library, only the C++ side.
+
+load("@com_github_grpc_grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "emulator_proto",
+    srcs = ["emulator.proto"],
+)
+
+cc_proto_library(
+    name = "emulator_cc_proto",
+    deps = [":emulator_proto"],
+)
+
+cc_grpc_library(
+    name = "emulator_cc_grpc",
+    srcs = [":emulator_proto"],
+    grpc_only = True,
+    deps = [":emulator_cc_proto"],
+)
