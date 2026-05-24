@@ -109,6 +109,50 @@ absl::StatusOr<TableSchema> TableSchemaFromProto(const v1::TableSchema& proto);
 void ColumnSchemaToProto(const ColumnSchema& column, v1::FieldSchema* out);
 void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out);
 
+// ---------------------------------------------------------------------------
+// DuckDB type-name conversions
+//
+// Used by the DuckDB-backed storage (`backend/storage/duckdb/`) and,
+// later, the DuckDB engine transpiler (Phase 5.B) to lower BigQuery
+// column types onto DuckDB's type system. The mapping is intentionally
+// total: any unknown BigQuery type maps to `VARCHAR` so a misconfigured
+// schema does not fail the CREATE TABLE; conversely, `FromDuckDBType`
+// returns `kUnknown` for types DuckDB knows but BigQuery does not
+// (e.g. `UTINYINT`).
+//
+// Scalar mapping:
+//
+//   BigQuery       DuckDB
+//   ---------      ----------
+//   INT64          BIGINT
+//   FLOAT64        DOUBLE
+//   BOOL           BOOLEAN
+//   STRING         VARCHAR
+//   BYTES          BLOB
+//   DATE           DATE
+//   TIME           TIME
+//   DATETIME       TIMESTAMP
+//   TIMESTAMP      TIMESTAMP WITH TIME ZONE
+//   NUMERIC        DECIMAL(38, 9)
+//   BIGNUMERIC     DECIMAL(38, 38)
+//   JSON           JSON
+//   GEOGRAPHY      VARCHAR (no native; round-tripped as WKT)
+//
+// Container types do not have a stable scalar name — use
+// `ColumnSchemaToDuckDBType` for the full type expression
+// (`BIGINT[]`, `STRUCT(a BIGINT, b VARCHAR)`, ...).
+// ---------------------------------------------------------------------------
+
+absl::string_view ToDuckDBType(ColumnType type);
+ColumnType FromDuckDBType(absl::string_view duckdb_type);
+
+// Renders the full DuckDB type expression for `column`, honoring both
+// the cardinality (`mode == kRepeated` becomes a LIST `T[]`) and any
+// nested STRUCT fields. Identifiers inside STRUCTs are double-quote
+// escaped so column names with hyphens / unicode round-trip safely
+// through a `CREATE TABLE` statement.
+std::string ColumnSchemaToDuckDBType(const ColumnSchema& column);
+
 }  // namespace schema
 }  // namespace backend
 }  // namespace bigquery_emulator

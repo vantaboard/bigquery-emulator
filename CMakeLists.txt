@@ -239,6 +239,7 @@ target_link_libraries(backend_storage_duckdb
     absl::status
     absl::statusor
     absl::strings
+    absl::str_format
     absl::synchronization
     absl::span
 )
@@ -389,4 +390,31 @@ if(BIGQUERY_EMULATOR_BUILD_TESTS)
     NAME in_memory_storage_test
     COMMAND in_memory_storage_test
   )
+
+  # The DuckDB storage round-trip test is only meaningful when the
+  # vendored libduckdb is linked in — without it AppendRows /
+  # ScanRows surface UNIMPLEMENTED, which would fail the round-trip
+  # asserts. Phase 0 (no DuckDB vendoring) and disabled-DuckDB CI
+  # configurations skip the test entirely.
+  if(BIGQUERY_EMULATOR_ENABLE_DUCKDB)
+    add_executable(duckdb_storage_test
+      backend/storage/duckdb/duckdb_storage_test.cc
+    )
+    target_link_libraries(duckdb_storage_test
+      PRIVATE
+        backend_storage_duckdb
+        backend_storage
+        backend_schema
+        absl::status
+        absl::statusor
+        absl::strings
+        GTest::gtest
+        GTest::gmock
+        GTest::gtest_main
+    )
+    add_test(
+      NAME duckdb_storage_test
+      COMMAND duckdb_storage_test
+    )
+  endif()
 endif()
