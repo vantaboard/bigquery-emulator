@@ -1,18 +1,31 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_REFERENCE_IMPL_REFERENCE_IMPL_ENGINE_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_REFERENCE_IMPL_REFERENCE_IMPL_ENGINE_H_
 
-// ReferenceImplEngine is the Phase 3c scaffold for the GoogleSQL
-// reference-impl backend. Every `Engine` method returns
-// `absl::UnimplementedError` so the CLI factory in
-// `binaries/emulator_main/main.cc` can already construct the engine
-// while the real wiring (`Algebrizer` + `Evaluator`, see ROADMAP
-// Phase 5.A) lands in a later plan.
+// ReferenceImplEngine is the GoogleSQL reference-impl execution
+// backend. It implements `Engine::Analyze` / `DryRun` / `ExecuteQuery`
+// by driving the analyzer's `AnalyzeStatement` and the reference-impl
+// `PreparedQuery` evaluator. Row iteration is delegated to a
+// `Storage`-backed `googlesql::Table` adapter (`backend/catalog/storage_table`)
+// that the supplied `Catalog` materializes when the analyzer touches
+// it.
 //
-// The constructor takes a non-owning `Storage*` because Phase 5.A will
-// adapt the active storage backend into a `googlesql::Table` source so
-// the reference impl can stream rows out of either the in-memory store
-// or the DuckDB store. We thread the pointer through now so the
-// scaffold compiles against the real interface and not a stub.
+// The constructor takes a non-owning `Storage*` even though the
+// engine itself never reads rows directly -- the storage pointer
+// flows through the catalog the gateway hands to `ExecuteQuery`. We
+// keep the parameter because the engine is constructed once at
+// startup and the storage handle gives it a stable lifetime
+// reference for future plans that wire async cancellation.
+//
+// Lifetime contract for the `Catalog*` parameter on each method:
+// the gateway constructs a `backend::catalog::GoogleSqlCatalog` per
+// `Query.*` RPC, sized for that request's project context, and
+// destroys it once the engine call returns. The engine MUST NOT
+// retain raw pointers into the catalog past the returned
+// `AnalyzedQuery` / `RowSource`'s lifetime; both wrappers carry
+// internal references to the catalog through GoogleSQL's analyzer
+// output and prepared-query state so the catalog has to outlive
+// them. The gateway plan (`execute-query-stream_y0b1c2d3.plan.md`)
+// makes that ordering explicit.
 
 #include <memory>
 

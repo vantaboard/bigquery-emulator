@@ -1,0 +1,23 @@
+# Bazel build for the engine abstract interfaces + the reference-impl
+# engine concrete (`backend/engine/reference_impl/`).
+#
+# The interface library (`//backend/engine:engine`) mirrors the CMake
+# `backend_engine` target -- header-only-ish, no GoogleSQL on the
+# link line. The concrete library lives in
+# `//backend/engine/reference_impl/` and pulls GoogleSQL in.
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "engine",
+    srcs = ["engine.cc"],
+    hdrs = ["engine.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
