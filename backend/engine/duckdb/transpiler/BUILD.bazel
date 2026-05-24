@@ -1,0 +1,49 @@
+# Bazel build for the DuckDB transpiler skeleton (Phase 5.B).
+#
+# The transpiler walks a GoogleSQL `ResolvedAST` and lowers it to a
+# DuckDB-flavored SQL string the DuckDB C++ client can execute. This
+# package only ships the skeleton today: every `Emit*` returns the
+# empty string and the SHAPE_TRACKER.md tracks the per-node
+# disposition (`done | skiplist | not_started`). Subsequent plans
+# (`transpiler-emit-scans_d5a6b7c8`, ...) fill the bodies in one
+# node kind at a time.
+#
+# There is intentionally no CMake counterpart here -- GoogleSQL is
+# Bazel-only (see ROADMAP "Build systems"), and the transpiler is
+# the part of the DuckDB engine that needs GoogleSQL's resolved-AST
+# headers most heavily.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "types",
+    srcs = ["types.cc"],
+    hdrs = ["types.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+        # `googlesql/public:type` is the public include for the
+        # `Type` / `ArrayType` / `StructType` family + the
+        # `TypeKind` proto enum. The transpiler's `CAST` emit and
+        # column-def emit both consult the type, so a per-kind
+        # mapping lives next to the visitor it serves.
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
+    name = "transpiler",
+    srcs = ["transpiler.cc"],
+    hdrs = ["transpiler.h"],
+    deps = [
+        ":types",
+        # `:resolved_ast` is the canonical target for the generated
+        # node classes (`ResolvedQueryStmt`, `ResolvedProjectScan`,
+        # ...) and the `ResolvedASTVisitor` base. We pull it in via
+        # the no-colon `@googlesql//googlesql/resolved_ast` form
+        # for consistency with how `reference_impl_engine` depends
+        # on the same library.
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
