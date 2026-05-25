@@ -1,0 +1,157 @@
+// storage_read.proto is the internal contract for the BigQuery Storage
+// Read API surface (BQ public name: `google.cloud.bigquery.storage.v1`).
+// The Go gateway translates REST `tabledata.list` reads against large
+// tables into Storage Read RPCs against this service so the C++ engine
+// can stream rows back without the entire result set living in the
+// gateway's heap.
+//
+// Plan 37 ships the proto + the `CreateReadSession` handler; plan 38
+// (`storage-read-rows`) lights up the streaming `ReadRows` reply, and
+// plan 39 (`storage-read-gateway-e2e`) wires the gateway to it. The
+// shape here is the **simplified** Storage Read v1 contract: no
+// Arrow/Avro projections (rows ride on the same `DataRow` cells that
+// `Catalog.ListRows` already returns), no SplitReadStream RPC, no
+// session liveness extension. Those are documented as "future" so
+// the conformance harness in plan 40 can pin per-feature gaps.
+//
+// Code generation:
+//   - Go:  `task proto:gen` writes
+//          `gateway/enginepb/storage_read.{pb,grpc.pb}.go`. Same
+//          plugin pipeline as `emulator.proto`.
+//   - C++: Bazel's `cc_proto_library` + `cc_grpc_library` rules in
+//          `proto/BUILD.bazel` emit
+//          `storage_read.{pb,grpc.pb}.{h,cc}` into bazel-bin.
+
+syntax = "proto3";
+
+package bigquery_emulator.v1;
+
+import "emulator.proto";
+
+option go_package = "github.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb";
+
+option cc_enable_arenas = true;
+
+// ---------------------------------------------------------------------------
+// StorageRead service
+//
+// Reads rows from a table the engine has registered through the
+// `Catalog` service. Designed to mirror the shape of BigQuery's public
+// `BigQueryRead` service so the gateway can adapt REST clients without
+// inventing a second wire contract:
+//
+//   * `CreateReadSession` returns a session pinning the table + schema
+//     + the (list of) streams the caller can drain.
+//   * `ReadRows` streams `DataRow` messages off one of the session's
+//     streams.
+//
+// Plan 37 (this proto + the session-creation handler) keeps the
+// session shape minimal: one session, one stream, no parallel reads.
+// Phase 7c will revisit parallelism once the conformance suite asks
+// for it.
+// ---------------------------------------------------------------------------
+
+service StorageRead {
+  // CreateReadSession validates the request, materializes a session
+  // pinning the table + schema, and returns the session handle the
+  // caller will pass back to `ReadRows`. The reply carries the table
+  // schema verbatim so the caller does not need a follow-up
+  // `Catalog.DescribeTable` round-trip before starting to read.
+  rpc CreateReadSession(CreateReadSessionRequest) returns (ReadSession);
+
+  // ReadRows streams rows off the named stream. The stream id must be
+  // one of the `ReadSession.streams[*].name` values returned by the
+  // matching `CreateReadSession` call (plan 37 hands out exactly one
+  // stream per session; plan 38 fills in the streaming logic).
+  rpc ReadRows(ReadRowsRequest) returns (stream ReadRowsResponse);
+}
+
+message CreateReadSessionRequest {
+  // BigQuery resource path the session belongs to: `projects/{project_id}`.
+  // The gateway derives this from the REST URL path so different
+  // projects do not see each other's sessions.
+  string parent = 1;
+
+  // Session shape the caller wants to read. Today only `read_session.table`
+  // is honored; `read_options.selected_fields` is parsed but not yet
+  // projected (plan 38 wires it).
+  ReadSession read_session = 2;
+
+  // Maximum number of streams the caller is willing to drain in
+  // parallel. Plan 37 always returns exactly one stream (no parallel
+  // reads); plan 39+ will respect this knob.
+  int32 max_stream_count = 3;
+}
+
+message ReadSession {
+  // Server-assigned session id, of the form
+  // `projects/{project_id}/locations/{location}/sessions/{session_id}`.
+  // The gateway returns this in the REST `name` field so a follow-up
+  // `ReadRows` call can find the session again.
+  string name = 1;
+
+  // Fully-qualified BigQuery table id the session is reading from:
+  // `projects/{project_id}/datasets/{dataset_id}/tables/{table_id}`.
+  // Set on the request side (caller specifies which table to read);
+  // echoed back on the response side so the caller does not have to
+  // re-derive it.
+  string table = 2;
+
+  // Schema of the rows the streams will emit. Populated by the engine
+  // from `Storage::GetSchema` so the caller can decode the cells the
+  // same way it decodes `tabledata.list` rows.
+  TableSchema schema = 3;
+
+  // Subset of fields to read. Plan 37 accepts but does not enforce
+  // this list; plan 38 wires per-column projection.
+  ReadOptions read_options = 4;
+
+  // Streams the caller can drain. Each one is independent and any
+  // single row in `table` appears in exactly one stream. Plan 37
+  // always returns a single stream with the full table.
+  repeated ReadStream streams = 5;
+}
+
+message ReadOptions {
+  // Names of the columns the caller wants returned. Empty / unset
+  // means "all columns". Plan 38 wires the projection; today the
+  // engine returns every column even when this is non-empty.
+  repeated string selected_fields = 1;
+
+  // SQL-shaped filter expression the engine should push down. Plan 37
+  // does not honor this knob; it is here so the proto matches the
+  // public surface and so plan 39+ can light it up without changing
+  // the wire shape.
+  string row_restriction = 2;
+}
+
+message ReadStream {
+  // Server-assigned stream id of the form
+  // `{session_name}/streams/{stream_id}`. The caller passes this
+  // back to `ReadRows` to drain rows off this stream.
+  string name = 1;
+}
+
+message ReadRowsRequest {
+  // Stream id returned by `CreateReadSession`. The engine looks the
+  // session up by stripping the trailing `/streams/{id}` and finding
+  // the matching `ReadSession`.
+  string read_stream = 1;
+
+  // Row offset to resume from. The gateway uses this to re-attach to
+  // a stream after a transient failure without re-driving rows the
+  // client already received. Plan 38 wires this; today the engine
+  // returns rows starting from `offset == 0`.
+  int64 offset = 2;
+}
+
+message ReadRowsResponse {
+  // Rows on this page of the stream. Plan 38 chooses a page size and
+  // wires the streaming logic; today this list is empty and the
+  // method returns UNIMPLEMENTED before sending the first message.
+  repeated DataRow rows = 1;
+
+  // Number of rows in this page. Convenience field so callers do not
+  // have to count `rows.size()` on every reply.
+  int64 row_count = 2;
+}

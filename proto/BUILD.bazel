@@ -34,3 +34,21 @@ cc_grpc_library(
     grpc_only = True,
     deps = [":emulator_cc_proto"],
 )
+
+proto_library(
+    name = "storage_read_proto",
+    srcs = ["storage_read.proto"],
+    deps = [":emulator_proto"],
+)
+
+cc_proto_library(
+    name = "storage_read_cc_proto",
+    deps = [":storage_read_proto"],
+)
+
+cc_grpc_library(
+    name = "storage_read_cc_grpc",
+    srcs = [":storage_read_proto"],
+    grpc_only = True,
+    deps = [":storage_read_cc_proto"],
+)
