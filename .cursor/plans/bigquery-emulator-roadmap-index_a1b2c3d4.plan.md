@@ -112,7 +112,7 @@ todos:
     status: completed
   - id: run-36-dml-ddl-e2e
     content: "Run dml-ddl-e2e_h5e6f7a8.plan.md"
-    status: pending
+    status: completed
   - id: run-37-storage-read-proto
     content: "Run storage-read-proto_i6f7a8b9.plan.md"
     status: pending
