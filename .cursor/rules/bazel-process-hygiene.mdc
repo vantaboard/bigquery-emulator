@@ -31,9 +31,9 @@ Always go through `taskfiles/bazel.yml` and `taskfiles/emulator.yml`:
 
 Direct `bazel ...` invocations are allowed for one-off targets but MUST:
 
-1. Pass `--jobs=2 --local_resources=cpu=2 --local_resources=memory=8192` (or smaller) unless the user explicitly raised the cap for this run.
+1. Pass throttled `--jobs=N --local_resources=cpu=N --local_resources=memory=M` flags that leave headroom for the OS/IDE. The shared `task bazel:*` helpers auto-detect: `jobs = max(2, nproc - 2)` and `memory = max(4096, 75% of MemTotal MB)`. Match those numbers (or smaller) unless the user explicitly raised the cap for this run.
 2. Use the system clang via `CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH` + `--action_env=CC=/usr/bin/clang --action_env=CXX=/usr/bin/clang++` (the `mise` clang-22 lacks libstdc++ headers).
-3. Run `bazel shutdown` afterward (`trap 'bazel shutdown' EXIT INT TERM` when scripted).
+3. Run `bazel shutdown` afterward (`trap 'bazel shutdown' EXIT INT TERM` when scripted in bash; Task's mvdan/sh shell does NOT accept the symbolic signal names, so wrap such commands in `bash -c '...'`).
 
 ## When a build looks stuck or you change direction
 

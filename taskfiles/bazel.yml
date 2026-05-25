@@ -15,12 +15,29 @@
 version: "3"
 
 vars:
-  # Throttled defaults that fit a 32 GiB / 8-core box without swapping.
-  # Override on the CLI when you have headroom: BAZEL_JOBS=4 BAZEL_MEM_MB=16384 task ...
+  # Auto-detected defaults. The goal is "use the box without swamping
+  # the OS/IDE": jobs = nproc - 2 (floor 2) so two threads stay free
+  # for the editor, and memory = ~75% of MemTotal (floor 4 GiB) so the
+  # kernel page cache + IDE still have room. Override on the CLI when
+  # you want a different shape:
+  #   BAZEL_JOBS=4 BAZEL_MEM_MB=8192 task bazel:build TARGETS=...
   BAZEL_JOBS:
-    sh: echo "${BAZEL_JOBS:-2}"
+    sh: |
+      if [ -n "${BAZEL_JOBS:-}" ]; then
+        echo "$BAZEL_JOBS"
+      else
+        n=$(nproc 2>/dev/null || echo 4)
+        if [ "$n" -gt 4 ]; then echo $((n - 2)); else echo 2; fi
+      fi
   BAZEL_MEM_MB:
-    sh: echo "${BAZEL_MEM_MB:-8192}"
+    sh: |
+      if [ -n "${BAZEL_MEM_MB:-}" ]; then
+        echo "$BAZEL_MEM_MB"
+      elif [ -r /proc/meminfo ]; then
+        awk '/^MemTotal:/ { mb = int($2 * 3 / 4 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo
+      else
+        echo 8192
+      fi
   # Pin the host toolchain to system clang-18; the `mise` clang-22 build
   # ships without C++ stdlib headers and breaks the cc_toolchain probe.
   BAZEL_CC:
@@ -107,23 +124,29 @@ tasks:
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
     cmds:
+      # Delegated to bash because Task's embedded mvdan/sh shell does
+      # not accept `INT`/`TERM` (or numeric `2`/`15`) in `trap`. Bash
+      # is the only shell on the path where the exit-trap shutdown
+      # actually fires on signal cancellation.
       - |
-        set -eo pipefail
-        if [ -z "{{.TARGETS}}" ]; then
-          echo "task bazel:build requires TARGETS=//path/to:target" >&2
-          exit 2
-        fi
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
-        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
-          bazel build \
-            --jobs={{.BAZEL_JOBS}} \
-            --local_resources=cpu={{.BAZEL_JOBS}} \
-            --local_resources=memory={{.BAZEL_MEM_MB}} \
-            --action_env=CC={{.BAZEL_CC}} \
-            --action_env=CXX={{.BAZEL_CXX}} \
-            {{.TARGETS}}
+        bash -c '
+          set -eo pipefail
+          if [ -z "{{.TARGETS}}" ]; then
+            echo "task bazel:build requires TARGETS=//path/to:target" >&2
+            exit 2
+          fi
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+            bazel build \
+              --jobs={{.BAZEL_JOBS}} \
+              --local_resources=cpu={{.BAZEL_JOBS}} \
+              --local_resources=memory={{.BAZEL_MEM_MB}} \
+              --action_env=CC={{.BAZEL_CC}} \
+              --action_env=CXX={{.BAZEL_CXX}} \
+              {{.TARGETS}}
+        '
 
   test:
     desc: |
@@ -134,21 +157,25 @@ tasks:
       TARGETS: '{{.TARGETS | default ""}}'
       TEST_FLAGS: '{{.TEST_FLAGS | default "--test_output=errors"}}'
     cmds:
+      # See `bazel:build` for why we wrap in bash. Task's mvdan/sh
+      # cannot trap non-EXIT signals.
       - |
-        set -eo pipefail
-        if [ -z "{{.TARGETS}}" ]; then
-          echo "task bazel:test requires TARGETS=//path/to:target" >&2
-          exit 2
-        fi
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
-        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
-          bazel test \
-            --jobs={{.BAZEL_JOBS}} \
-            --local_resources=cpu={{.BAZEL_JOBS}} \
-            --local_resources=memory={{.BAZEL_MEM_MB}} \
-            --action_env=CC={{.BAZEL_CC}} \
-            --action_env=CXX={{.BAZEL_CXX}} \
-            {{.TEST_FLAGS}} \
-            {{.TARGETS}}
+        bash -c '
+          set -eo pipefail
+          if [ -z "{{.TARGETS}}" ]; then
+            echo "task bazel:test requires TARGETS=//path/to:target" >&2
+            exit 2
+          fi
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+            bazel test \
+              --jobs={{.BAZEL_JOBS}} \
+              --local_resources=cpu={{.BAZEL_JOBS}} \
+              --local_resources=memory={{.BAZEL_MEM_MB}} \
+              --action_env=CC={{.BAZEL_CC}} \
+              --action_env=CXX={{.BAZEL_CXX}} \
+              {{.TEST_FLAGS}} \
+              {{.TARGETS}}
+        '

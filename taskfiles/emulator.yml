@@ -57,8 +57,10 @@ tasks:
   # tests from auto-skip to live.
   #
   # Process hygiene (see .cursor/rules/bazel-process-hygiene.mdc):
-  #   - Throttled by default (jobs=2, mem=8 GiB). Override with
-  #     BAZEL_JOBS=4 BAZEL_MEM_MB=16384 task emulator:build-engine:bazel.
+  #   - Throttled by `task bazel:*` shared defaults: jobs = nproc-2,
+  #     mem = ~75% of MemTotal. Override with BAZEL_JOBS=N
+  #     BAZEL_MEM_MB=N task emulator:build-engine:bazel when you
+  #     want a different shape.
   #   - Pinned to system clang-18; the `mise` clang-22 lacks libstdc++ hdrs.
   #   - `trap bazel shutdown` releases the daemon on signal / failure.
   build-engine-bazel:
@@ -66,40 +68,58 @@ tasks:
     desc: Build the C++ engine via Bazel (full GoogleSQL + DuckDB) and stage into ./bin
     vars:
       BAZEL_JOBS:
-        sh: echo "${BAZEL_JOBS:-2}"
+        sh: |
+          if [ -n "${BAZEL_JOBS:-}" ]; then
+            echo "$BAZEL_JOBS"
+          else
+            n=$(nproc 2>/dev/null || echo 4)
+            if [ "$n" -gt 4 ]; then echo $((n - 2)); else echo 2; fi
+          fi
       BAZEL_MEM_MB:
-        sh: echo "${BAZEL_MEM_MB:-8192}"
+        sh: |
+          if [ -n "${BAZEL_MEM_MB:-}" ]; then
+            echo "$BAZEL_MEM_MB"
+          elif [ -r /proc/meminfo ]; then
+            awk '/^MemTotal:/ { mb = int($2 * 3 / 4 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo
+          else
+            echo 8192
+          fi
       BAZEL_CC:
         sh: echo "${BAZEL_CC:-/usr/bin/clang}"
       BAZEL_CXX:
         sh: echo "${BAZEL_CXX:-/usr/bin/clang++}"
     cmds:
+      # Delegated to bash because Task's embedded mvdan/sh shell does
+      # not accept INT/TERM in `trap`. Wrapping ensures the daemon is
+      # released even when Cursor cancels the build mid-flight.
       - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
-        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
-          bazel build \
-            --jobs={{.BAZEL_JOBS}} \
-            --local_resources=cpu={{.BAZEL_JOBS}} \
-            --local_resources=memory={{.BAZEL_MEM_MB}} \
-            --action_env=CC={{.BAZEL_CC}} \
-            --action_env=CXX={{.BAZEL_CXX}} \
-            //binaries/emulator_main:emulator_main
-        mkdir -p bin
-        cp -f bazel-bin/binaries/emulator_main/emulator_main ./bin/emulator_main
-        chmod +w ./bin/emulator_main
-        # libduckdb.so is a dynamic dep; the cc_import in
-        # //third_party/duckdb places it in the runfiles tree. Copy
-        # the resolved .so next to the binary so `-Wl,-rpath,$ORIGIN`
-        # can find it when run from ./bin/.
-        duckdb_so="$(find -L bazel-bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit)"
-        if [ -z "$duckdb_so" ]; then
-          echo "build-engine-bazel: libduckdb.so not found in runfiles" >&2
-          exit 1
-        fi
-        cp -L "$duckdb_so" ./bin/libduckdb.so
+        bash -c '
+          set -eo pipefail
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+            bazel build \
+              --jobs={{.BAZEL_JOBS}} \
+              --local_resources=cpu={{.BAZEL_JOBS}} \
+              --local_resources=memory={{.BAZEL_MEM_MB}} \
+              --action_env=CC={{.BAZEL_CC}} \
+              --action_env=CXX={{.BAZEL_CXX}} \
+              //binaries/emulator_main:emulator_main
+          mkdir -p bin
+          cp -f bazel-bin/binaries/emulator_main/emulator_main ./bin/emulator_main
+          chmod +w ./bin/emulator_main
+          # libduckdb.so is a dynamic dep; the cc_import in
+          # //third_party/duckdb places it in the runfiles tree. Copy
+          # the resolved .so next to the binary so `-Wl,-rpath,$ORIGIN`
+          # can find it when run from ./bin/.
+          duckdb_so="$(find -L bazel-bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit)"
+          if [ -z "$duckdb_so" ]; then
+            echo "build-engine-bazel: libduckdb.so not found in runfiles" >&2
+            exit 1
+          fi
+          cp -L "$duckdb_so" ./bin/libduckdb.so
+        '
 
   build-all:
     desc: Build both halves (gateway + engine) and stage the engine in ./bin
