@@ -155,6 +155,15 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Dispatch a `ResolvedScan` to the matching `Emit*` method. Same
   // empty-string-as-fallback contract as `EmitExpr`.
   std::string EmitScan(const ::googlesql::ResolvedScan* scan);
+
+  // Lower one `ResolvedWindowFrameExpr` (PRECEDING / CURRENT ROW /
+  // FOLLOWING). Used by `EmitAnalyticScan` for the inner ROWS / RANGE
+  // BETWEEN ... AND ... clause; returns the empty string when the
+  // bound is malformed or when an offset bound carries an expression
+  // we cannot lower yet, so the caller can propagate the empty-string
+  // contract.
+  std::string EmitFrameBound(
+      const ::googlesql::ResolvedWindowFrameExpr* expr);
 };
 
 }  // namespace transpiler

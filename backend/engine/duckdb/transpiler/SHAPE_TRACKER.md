@@ -70,7 +70,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedSetOperationScan`                    | `not_started` | UNION / INTERSECT / EXCEPT; set-ops emit plan.                                            |
 | `ResolvedOrderByScan`                         | `done`        | Phase 5h `transpiler-emit-join-agg`: `ORDER BY <col> [ASC|DESC] [NULLS FIRST|LAST]` per item, dropping the null-order keyword when unspecified. `COLLATE` still falls back. |
 | `ResolvedLimitOffsetScan`                     | `done`        | Phase 5h `transpiler-emit-join-agg`: `LIMIT <n> [OFFSET <m>]` via the literal-emit subset. |
-| `ResolvedAnalyticScan`                        | `not_started` | Window functions; analytic emit plan.                                                     |
+| `ResolvedAnalyticScan`                        | `done` (subset) | Phase 5k `transpiler-functions-window`: emits `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [ROWS\|RANGE BETWEEN ... AND ...]) AS "<col>", ... FROM (<input>)` per analytic function group. ROW_NUMBER / RANK / DENSE_RANK / SUM/COUNT/AVG/MIN/MAX OVER (...) all lower through the YAML disposition table. Hint lists, collation lists, lateral `parameter_list`, and `RANGE` over non-numeric ORDER BY still fall back to reference-impl. |
 | `ResolvedSampleScan`                          | `not_started` | TABLESAMPLE; emit plan via DuckDB's `USING SAMPLE`.                                       |
 | `ResolvedWithScan`                            | `not_started` | CTEs; emit plan.                                                                          |
 | `ResolvedWithRefScan`                         | `not_started` | CTE references; emit plan.                                                                |
@@ -98,9 +98,9 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedLiteral`                             | `done`        | Phase 5g `transpiler-emit-scans` for scalars (via `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`). Phase 5j `transpiler-struct-unnest` extends the path through a private `EmitValueLiteral` helper that recurses into `ARRAY` and (named-field) `STRUCT` values so the nested STRING / STRUCT shapes use DuckDB-flavored quoting (`'...'`, `{'k': v}`) instead of BQ's `"..."` / `(...)`. Anonymous-field `STRUCT` literals still fall back. |
 | `ResolvedParameter`                           | `not_started` | Expr emit plan; named + positional `@p` parameters via DuckDB's `$1` bind shape.          |
 | `ResolvedColumnRef`                           | `done`        | Emits the quoted `ResolvedColumn::name()` — Phase 5g `transpiler-emit-scans` plan.         |
-| `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; Phase 5j `transpiler-struct-unnest` adds `$make_array(<args>)` (the non-const array constructor) which lowers to DuckDB's bracket literal (`[a, b, c]`). Everything else still falls back to ref-impl. |
-| `ResolvedAggregateFunctionCall`               | `done` (subset) | Phase 5h `transpiler-emit-join-agg` covers `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) and optional `DISTINCT`. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, and `SAFE.<agg>(...)` still fall back. |
-| `ResolvedAnalyticFunctionCall`                | `not_started` | Analytic emit plan.                                                                       |
+| `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; Phase 5j `transpiler-struct-unnest` adds `$make_array(<args>)` for the non-const array constructor; Phase 5k `transpiler-functions-window` routes everything else through the YAML-backed disposition table (`functions.yaml` -> `functions_table.inc`). Math (`ABS`, `ROUND`, ...), string (`CONCAT`, `LENGTH`, `LOWER`, `UPPER`, `SUBSTR`, `STARTS_WITH`, `ENDS_WITH`, ...), and array (`ARRAY_LENGTH`, `ARRAY_CONCAT`, `GENERATE_ARRAY`) lower as `kMap`. Datetime / regex / format functions are marked `kFallback` pending dedicated rewrite passes. BQ-specific (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `HLL_COUNT.*`, `KEYS.*`, `ST_*`) are `kSkiplist`. `SAFE.<fn>(...)` (`SAFE_ERROR_MODE`) short-circuits regardless of disposition. |
+| `ResolvedAggregateFunctionCall`               | `done` (subset) | Phase 5h baseline + Phase 5k disposition-table dispatch: `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) plus YAML-table entries `ARRAY_AGG`, `STRING_AGG`, `ANY_VALUE`, `LOGICAL_AND`, `LOGICAL_OR`, `BIT_AND/OR/XOR`. Optional `DISTINCT` lowers as a prefix. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, `SAFE.<agg>(...)`, and skiplisted aggregates (`APPROX_QUANTILES`, `COUNTIF`, ...) still fall back. |
+| `ResolvedAnalyticFunctionCall`                | `done` (subset) | Phase 5k `transpiler-functions-window`: ROW_NUMBER, RANK, DENSE_RANK, PERCENT_RANK, CUME_DIST, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE, and aggregate-over-window (`SUM/COUNT/AVG/MIN/MAX`) dispatch through the YAML disposition table. The OVER clause (PARTITION BY / ORDER BY / ROWS\|RANGE BETWEEN) is stitched on by `EmitAnalyticScan`. IGNORE/RESPECT NULLS and `SAFE.<fn>(...)` still fall back. |
 | `ResolvedCast`                                | `not_started` | Expr emit plan; relies on `types.h` for the DuckDB type name.                             |
 | `ResolvedMakeStruct`                          | `done` (subset) | Phase 5j `transpiler-struct-unnest`: named-field `STRUCT(<expr> AS <name>, ...)` lowers to DuckDB's `{'<name>': <value>, ...}` struct literal, walking the `StructType` for ordered names and `field_list` for parallel values. Anonymous-field structs (`STRUCT(1, 2)`) have no DuckDB analog and fall back to reference-impl via the empty-string contract; a follow-up plan could synthesize positional names (`_0`, `_1`, ...). |
 | `ResolvedGetStructField`                      | `done` (subset) | Phase 5j `transpiler-struct-unnest`: named-field access lowers to `<expr>."<field_name>"`. Anonymous fields (empty `StructField::name`) fall back to reference-impl. `field_expr_is_positional` is user-intent only and does not affect the emit. |
@@ -136,24 +136,43 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedColumnHolder`                        | `not_started` | UNNEST WITH OFFSET shape; emit plan.                                                      |
 | `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` | `not_started` | Aggregate emit plan (GROUPING SETS / ROLLUP / CUBE via DuckDB syntax).         |
 | `ResolvedAggregateHavingModifier`             | `not_started` | HAVING inside aggregate; aggregate emit plan.                                             |
-| `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` | `not_started` | Analytic / window emit plan.                                                  |
+| `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` | `done` (subset) | Phase 5k `transpiler-functions-window`: `ROWS|RANGE BETWEEN <bound> AND <bound>` lowered via `EmitFrameBound` (UNBOUNDED PRECEDING / CURRENT ROW / `<n>` PRECEDING / `<n>` FOLLOWING / UNBOUNDED FOLLOWING). Frame bounds with non-literal offsets that the expr emit cannot lower fall back. |
 | `ResolvedSetOperationItem`                    | `not_started` | Set-ops emit plan.                                                                        |
 | `ResolvedFunctionArgument`                    | `not_started` | Function arg wrapper; expr emit plan.                                                     |
 | `ResolvedReturningClause`                     | `skiplist`    | RETURNING is DML-only; Phase 6.                                                           |
 
 ## Coverage summary
 
-* **Status today:** Phase 5j layers STRUCT / ARRAY / UNNEST on top of
-  the Phase 5h baseline. The transpiler now lowers
-  `ResolvedArrayScan` for the standalone `UNNEST(<arr>) AS <col>`
-  shape, `ResolvedMakeStruct` for named-field struct literals,
-  `ResolvedGetStructField` for named struct field access, and the
-  `$make_array(...)` `ResolvedFunctionCall` for the non-const array
-  constructor. `EmitLiteral` also gained a recursive
-  `EmitValueLiteral` helper so `ARRAY` and (named-field) `STRUCT`
-  literal values reach DuckDB with the right quoting (`'..'` for
-  STRING, `{'k': v}` for STRUCT, `[..]` for ARRAY) rather than BQ's
-  `"..."` / `(...)` shapes.
+* **Status today:** Phase 5k layers analytic / window function
+  emit and the YAML-backed scalar-function disposition table on top
+  of the Phase 5j STRUCT / ARRAY / UNNEST baseline. The transpiler
+  now lowers `ResolvedAnalyticScan` for the
+  `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [ROWS|RANGE
+  BETWEEN ...]) AS "<col>" FROM (<input>)` shape, with one
+  projection per analytic function across every analytic-function
+  group. ROW_NUMBER / RANK / DENSE_RANK / PERCENT_RANK / CUME_DIST /
+  NTILE / LAG / LEAD / FIRST_VALUE / LAST_VALUE / NTH_VALUE all
+  dispatch through the disposition table; aggregate-over-window
+  (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX OVER (...)`) reuses the same
+  `kMap` rows the scalar aggregate path uses, so a function lives in
+  one place in the YAML.
+* **Function disposition table (`functions.yaml`).** The
+  source-of-truth file ships ~140 BigQuery functions across math,
+  string, datetime, conditional, array, aggregation, window, and
+  BQ-specific (skiplist) categories. The Bazel `genrule`
+  `:functions_table_inc` regenerates `functions_table.inc` from the
+  YAML; `functions.cc` `#include`s it inside a static
+  `absl::flat_hash_map<std::string, FnEntry>`. The `LookupFunction`
+  API returns one of:
+  * `kMap` — emit `<duckdb_name>(<args>)` (the entry's value is the
+    DuckDB function name, e.g. `ABS`, `LENGTH`, `SUBSTRING`,
+    `ARRAY_AGG`, `ROW_NUMBER`).
+  * `kFallback` — lowering deferred (e.g. `date_add`, `format`,
+    `if`, `mod`); the emit returns "" and the engine falls back to
+    reference-impl, with a `LOG(INFO)` recording the miss.
+  * `kSkiplist` — out of scope today (`approx_quantiles`, `ml.*`,
+    `net.*`, `keys.*`, `st_*`, `hll_count.*`, `bit_count`,
+    `generate_uuid`, `session_user`, ...).
 * **DuckDB STRUCT / ARRAY quirks the emit honors:**
   * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
     are keyed by name. The emit walks the resolved `StructType` for
@@ -173,9 +192,10 @@ same commit that touches `transpiler.cc` so the doc stays honest.
     `generate_subscripts(...)` / `CROSS JOIN unnest(...) AS _(col)`
     rewrites the standalone-UNNEST subset does not cover.
 * **Next plan(s):**
-  * `transpiler-functions-window_b9e0f1a2` — analytic functions
-    (`OVER (...)` window frames + ranking / aggregate analytics) and
-    the rest of the scalar-function whitelist.
+  * `duckdb-arrow-pipeline_c0f1a2b3` — wire the DuckDB Arrow result
+    chunks straight onto the gRPC wire so the BigQuery REST `f`/`v`
+    serialization on the Phase 5.B path can give way to native
+    Arrow round-tripping for the Storage Read API.
   * `transpiler-emit-project-stmt` (TBD) — flip `ResolvedProjectScan`
     and `ResolvedQueryStmt` so a full `SELECT ... FROM ... WHERE
     ... GROUP BY ... ORDER BY ... LIMIT ...` query lowers end to
@@ -184,4 +204,6 @@ same commit that touches `transpiler.cc` so the doc stays honest.
   reference-impl engine until a deliberate plan moves them. Promoting
   a row out of `skiplist` requires both an emit method and a
   conformance label that pins the affected tests onto the DuckDB
-  engine (see ROADMAP Phase 8).
+  engine (see ROADMAP Phase 8). The function-disposition `kSkiplist`
+  entries in `functions.yaml` follow the same policy: deliberate
+  reference-impl pin until a function-specific lowering plan ships.

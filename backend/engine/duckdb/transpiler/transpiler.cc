@@ -3,11 +3,13 @@
 #include <string>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/duckdb/transpiler/functions.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/options.pb.h"
@@ -125,6 +127,7 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_AGGREGATE_SCAN:
     case ::googlesql::RESOLVED_ORDER_BY_SCAN:
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
+    case ::googlesql::RESOLVED_ANALYTIC_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_COLUMN_REF:
@@ -182,6 +185,9 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return EmitLimitOffsetScan(
           scan->GetAs<::googlesql::ResolvedLimitOffsetScan>());
+    case ::googlesql::RESOLVED_ANALYTIC_SCAN:
+      return EmitAnalyticScan(
+          scan->GetAs<::googlesql::ResolvedAnalyticScan>());
     default:
       return "";
   }
@@ -521,8 +527,146 @@ std::string Transpiler::EmitLimitOffsetScan(
 }
 
 std::string Transpiler::EmitAnalyticScan(
-    const ::googlesql::ResolvedAnalyticScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedAnalyticScan* node) {
+  // Emit `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [frame])
+  // AS "<col>", ... FROM (<input>)` -- one projection per analytic
+  // function across every group. The OVER clause lives at the group
+  // level (PARTITION / ORDER BY) plus per-function (window_frame), so
+  // we walk the function-group list once and stitch the two together
+  // for each analytic call.
+  //
+  // Skiplisted shapes the first emit pass does not cover:
+  //   * Hint lists on the partition / order spec (PARTITION BY ...
+  //     OPTIONS(...) and similar) -- BQ-specific.
+  //   * Collation lists on PARTITION BY -- collations land separately.
+  //   * The `partition_by` `parameter_list` -- lateral-correlated
+  //     analytics; defer to the lateral-rewrite plan.
+  //
+  // If any sub-emit returns "" (analytic function not on the
+  // disposition table, frame bound we cannot lower, ...) we propagate
+  // the empty string up; the engine takes the reference-impl fallback
+  // for the whole query.
+  if (node == nullptr) return "";
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+
+  std::vector<std::string> projections;
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) return "";
+
+    std::string partition_clause;
+    if (group->partition_by() != nullptr) {
+      const auto* p = group->partition_by();
+      if (!p->collation_list().empty() || p->hint_list_size() > 0) {
+        return "";
+      }
+      std::vector<std::string> cols;
+      cols.reserve(p->partition_by_list_size());
+      for (int i = 0; i < p->partition_by_list_size(); ++i) {
+        std::string c = EmitColumnRef(p->partition_by_list(i));
+        if (c.empty()) return "";
+        cols.push_back(std::move(c));
+      }
+      if (!cols.empty()) {
+        partition_clause =
+            absl::StrCat("PARTITION BY ", absl::StrJoin(cols, ", "));
+      }
+    }
+
+    std::string order_clause;
+    if (group->order_by() != nullptr) {
+      const auto* o = group->order_by();
+      if (o->hint_list_size() > 0) return "";
+      std::vector<std::string> items;
+      items.reserve(o->order_by_item_list_size());
+      for (int i = 0; i < o->order_by_item_list_size(); ++i) {
+        const ::googlesql::ResolvedOrderByItem* it = o->order_by_item_list(i);
+        if (it == nullptr || it->column_ref() == nullptr) return "";
+        if (it->collation_name() != nullptr) return "";
+        std::string col = EmitColumnRef(it->column_ref());
+        if (col.empty()) return "";
+        const char* dir = it->is_descending() ? "DESC" : "ASC";
+        const char* nulls = "";
+        switch (it->null_order()) {
+          case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+            nulls = " NULLS FIRST";
+            break;
+          case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+            nulls = " NULLS LAST";
+            break;
+          case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
+          default:
+            break;
+        }
+        items.push_back(absl::StrCat(col, " ", dir, nulls));
+      }
+      if (!items.empty()) {
+        order_clause =
+            absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
+      }
+    }
+
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* col =
+          group->analytic_function_list(f);
+      if (col == nullptr || col->expr() == nullptr) return "";
+      if (col->expr()->node_kind() !=
+          ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        return "";
+      }
+      const auto* afn =
+          col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+      std::string fn_sql = EmitAnalyticFunctionCall(afn);
+      if (fn_sql.empty()) return "";
+
+      // Frame clause sits *inside* the OVER (...). DuckDB requires an
+      // ORDER BY for ROWS / RANGE frames; we leave that contract to
+      // the analyzer (which rejects malformed cases at AnalyzeStatement
+      // time) and just propagate the bounds verbatim.
+      std::string frame_clause;
+      if (afn->window_frame() != nullptr) {
+        const auto* wf = afn->window_frame();
+        const char* unit = nullptr;
+        switch (wf->frame_unit()) {
+          case ::googlesql::ResolvedWindowFrame::ROWS:
+            unit = "ROWS";
+            break;
+          case ::googlesql::ResolvedWindowFrame::RANGE:
+            unit = "RANGE";
+            break;
+          default:
+            return "";
+        }
+        std::string start = EmitFrameBound(wf->start_expr());
+        if (start.empty()) return "";
+        std::string end = EmitFrameBound(wf->end_expr());
+        if (end.empty()) return "";
+        frame_clause =
+            absl::StrCat(unit, " BETWEEN ", start, " AND ", end);
+      }
+
+      std::vector<std::string> over_parts;
+      if (!partition_clause.empty()) over_parts.push_back(partition_clause);
+      if (!order_clause.empty()) over_parts.push_back(order_clause);
+      if (!frame_clause.empty()) over_parts.push_back(frame_clause);
+      std::string over =
+          absl::StrCat("OVER (", absl::StrJoin(over_parts, " "), ")");
+      projections.push_back(absl::StrCat(fn_sql, " ", over, " AS ",
+                                          QuoteIdent(col->column().name())));
+    }
+  }
+
+  std::string select_list;
+  if (projections.empty()) {
+    // No analytic functions in any group is a malformed AST; the
+    // analyzer would not produce it, but we guard so an unexpected
+    // shape falls back rather than emitting illegal SQL.
+    return "";
+  }
+  select_list = absl::StrCat("*, ", absl::StrJoin(projections, ", "));
+  return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
 }
 
 std::string Transpiler::EmitSampleScan(
@@ -576,15 +720,28 @@ std::string Transpiler::EmitColumnRef(
 
 std::string Transpiler::EmitFunctionCall(
     const ::googlesql::ResolvedFunctionCall* node) {
-  // Phase 5g subset: only the handful of scalar functions the plan
-  // pulled forward (`COALESCE` and `IFNULL`) lower to DuckDB SQL
-  // here. `SAFE.<fn>(...)` style call-sites set the SAFE error mode
-  // which has no native DuckDB analog yet, so we leave them on the
-  // reference-impl fallback. Everything else (including SAFE_CAST,
-  // which the analyzer routes through `ResolvedCast` rather than
-  // `ResolvedFunctionCall`) follows the same fallback path.
+  // Scalar function dispatch goes through the YAML-backed disposition
+  // table in `functions.h` for the well-known BigQuery scalar surface
+  // (math / string / conditional / regex / datetime / array). Two
+  // narrow special cases stay inline:
+  //   * `SAFE.<fn>(...)` (`SAFE_ERROR_MODE`) has no native DuckDB
+  //     analog; we short-circuit to "" so the fallback fires
+  //     regardless of the underlying function's disposition.
+  //   * `$make_array(...)` is the analyzer's representation of a
+  //     non-const ARRAY literal (`[a, col, b]`); DuckDB shares the
+  //     bracket-literal syntax so we emit it directly rather than
+  //     going through a `kMap` entry that would render as
+  //     `$MAKE_ARRAY(...)`.
+  // Anything outside the table falls back to the reference-impl
+  // engine via the empty-string contract; the LOG(INFO) records the
+  // miss so debug builds can audit which functions still need a
+  // disposition row.
   if (node == nullptr || node->function() == nullptr) return "";
-  if (node->error_mode() == ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+  if (node->error_mode() ==
+      ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+    LOG(INFO) << "duckdb transpiler: SAFE function call falls back to "
+                 "reference-impl (function="
+              << node->function()->Name() << ")";
     return "";
   }
   const std::string name = absl::AsciiStrToLower(node->function()->Name());
@@ -595,37 +752,54 @@ std::string Transpiler::EmitFunctionCall(
     if (a.empty()) return "";
     args.push_back(std::move(a));
   }
-  if (name == "coalesce") {
-    return absl::StrCat("COALESCE(", absl::StrJoin(args, ", "), ")");
-  }
-  if (name == "ifnull") {
-    if (args.size() != 2) return "";
-    return absl::StrCat("IFNULL(", args[0], ", ", args[1], ")");
-  }
   if (name == "$make_array") {
-    // `[a, b, c]` (or `ARRAY[a, b, c]`) lowers through the analyzer
-    // to a `$make_array(...)` function call when the element
-    // expressions aren't all constants. DuckDB's array constructor
-    // shares BigQuery's bracket syntax, so the lowering is a
-    // direct join. The all-const case ships as a `ResolvedLiteral`
-    // (handled by `EmitValueLiteral` above), not here.
     return absl::StrCat("[", absl::StrJoin(args, ", "), "]");
+  }
+  const FnEntry* entry = LookupFunction(name);
+  if (entry == nullptr) {
+    LOG(INFO) << "duckdb transpiler: function '" << name
+              << "' has no disposition; falling back to reference-impl";
+    return "";
+  }
+  switch (entry->kind) {
+    case FnKind::kSkiplist:
+      LOG(INFO) << "duckdb transpiler: function '" << name
+                << "' is skiplisted (BigQuery-specific / no DuckDB "
+                   "analog); falling back to reference-impl";
+      return "";
+    case FnKind::kFallback:
+      LOG(INFO) << "duckdb transpiler: function '" << name
+                << "' lowering deferred; falling back to reference-impl";
+      return "";
+    case FnKind::kMap:
+      return absl::StrCat(entry->duckdb_name, "(",
+                          absl::StrJoin(args, ", "), ")");
   }
   return "";
 }
 
 std::string Transpiler::EmitAggregateFunctionCall(
     const ::googlesql::ResolvedAggregateFunctionCall* node) {
-  // First-wave aggregate subset: COUNT(*), SUM, COUNT, AVG, MIN, MAX
-  // with optional DISTINCT. The richer modifiers (ORDER BY inside
-  // an aggregate, HAVING MAX/MIN, IGNORE/RESPECT NULLS, multi-level
-  // GROUP BY, aggregate filtering, LIMIT) all need bespoke lower
-  // passes -- we propagate "" so the engine takes the reference-impl
-  // fallback whenever one of them is set. SAFE.<agg>(...) follows
-  // the same fallback contract `EmitFunctionCall` uses.
+  // Aggregate dispatch lives in the same disposition table the scalar
+  // emit consults; we just guard the unsupported modifier set first.
+  // `$count_star` is the analyzer's representation of `COUNT(*)` -- we
+  // emit it directly rather than going through a kMap entry because
+  // the dispatch passes zero argument expressions (not even a single
+  // `*` placeholder), so the standard `<NAME>(<args>)` shape wouldn't
+  // apply.
+  //
+  // The richer modifiers (HAVING MAX/MIN, ORDER BY / LIMIT inside the
+  // aggregate, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate
+  // filtering) all need bespoke lower passes; we propagate "" so the
+  // engine takes the reference-impl fallback whenever one of them is
+  // set. `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) follows the same
+  // fallback contract `EmitFunctionCall` uses.
   if (node == nullptr || node->function() == nullptr) return "";
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+    LOG(INFO) << "duckdb transpiler: SAFE aggregate falls back to "
+                 "reference-impl (function="
+              << node->function()->Name() << ")";
     return "";
   }
   if (node->having_modifier() != nullptr ||
@@ -637,6 +811,9 @@ std::string Transpiler::EmitAggregateFunctionCall(
       node->null_handling_modifier() !=
           ::googlesql::ResolvedNonScalarFunctionCallBase::
               DEFAULT_NULL_HANDLING) {
+    LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
+              << "' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / "
+                 "NULL-handling) that has no DuckDB analog yet; falling back";
     return "";
   }
   const std::string name = absl::AsciiStrToLower(node->function()->Name());
@@ -644,8 +821,69 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (node->argument_list_size() != 0) return "";
     return "COUNT(*)";
   }
-  if (name != "sum" && name != "count" && name != "avg" && name != "min" &&
-      name != "max") {
+  std::vector<std::string> args;
+  args.reserve(node->argument_list_size());
+  for (int i = 0; i < node->argument_list_size(); ++i) {
+    std::string a = EmitExpr(node->argument_list(i));
+    if (a.empty()) return "";
+    args.push_back(std::move(a));
+  }
+  const FnEntry* entry = LookupFunction(name);
+  if (entry == nullptr) {
+    LOG(INFO) << "duckdb transpiler: aggregate '" << name
+              << "' has no disposition; falling back to reference-impl";
+    return "";
+  }
+  switch (entry->kind) {
+    case FnKind::kSkiplist:
+      LOG(INFO) << "duckdb transpiler: aggregate '" << name
+                << "' is skiplisted; falling back to reference-impl";
+      return "";
+    case FnKind::kFallback:
+      LOG(INFO) << "duckdb transpiler: aggregate '" << name
+                << "' lowering deferred; falling back to reference-impl";
+      return "";
+    case FnKind::kMap: {
+      std::string prefix = node->distinct() ? "DISTINCT " : "";
+      return absl::StrCat(entry->duckdb_name, "(", prefix,
+                          absl::StrJoin(args, ", "), ")");
+    }
+  }
+  return "";
+}
+
+std::string Transpiler::EmitAnalyticFunctionCall(
+    const ::googlesql::ResolvedAnalyticFunctionCall* node) {
+  // Window functions: route the name through the disposition table
+  // and emit `<NAME>(<args>)` for the analytic call body. The OVER
+  // clause (PARTITION BY, ORDER BY, frame) is stitched on by
+  // `EmitAnalyticScan` since those live on the surrounding group.
+  //
+  // The function table flags ROW_NUMBER / RANK / DENSE_RANK / CUME_DIST
+  // / PERCENT_RANK / NTILE / LAG / LEAD / FIRST_VALUE / LAST_VALUE /
+  // NTH_VALUE as `kMap` so they fall through here; aggregate-over-
+  // window calls (SUM / COUNT / AVG / MIN / MAX OVER (...)) flow
+  // through the same map entries the scalar aggregate emit uses.
+  //
+  // We share the SAFE-mode / modifier-rejection contract with
+  // `EmitAggregateFunctionCall` because GoogleSQL hands us the same
+  // base class for both.
+  if (node == nullptr || node->function() == nullptr) return "";
+  if (node->error_mode() ==
+      ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+    LOG(INFO) << "duckdb transpiler: SAFE analytic function falls back to "
+                 "reference-impl (function="
+              << node->function()->Name() << ")";
+    return "";
+  }
+  if (node->null_handling_modifier() !=
+      ::googlesql::ResolvedNonScalarFunctionCallBase::
+          DEFAULT_NULL_HANDLING) {
+    // IGNORE / RESPECT NULLS modifies LAG / LEAD / FIRST_VALUE /
+    // LAST_VALUE semantics; DuckDB has the same keywords but the
+    // rewrite needs more care than this emit pass covers.
+    LOG(INFO) << "duckdb transpiler: analytic '" << node->function()->Name()
+              << "' uses IGNORE/RESPECT NULLS; falling back";
     return "";
   }
   std::vector<std::string> args;
@@ -655,14 +893,58 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (a.empty()) return "";
     args.push_back(std::move(a));
   }
-  std::string args_str = absl::StrJoin(args, ", ");
-  std::string prefix = node->distinct() ? "DISTINCT " : "";
-  return absl::StrCat(absl::AsciiStrToUpper(name), "(", prefix, args_str,
-                      ")");
+  const std::string name = absl::AsciiStrToLower(node->function()->Name());
+  if (name == "$count_star") {
+    if (!args.empty()) return "";
+    return "COUNT(*)";
+  }
+  const FnEntry* entry = LookupFunction(name);
+  if (entry == nullptr) {
+    LOG(INFO) << "duckdb transpiler: analytic function '" << name
+              << "' has no disposition; falling back to reference-impl";
+    return "";
+  }
+  switch (entry->kind) {
+    case FnKind::kSkiplist:
+      LOG(INFO) << "duckdb transpiler: analytic function '" << name
+                << "' is skiplisted; falling back to reference-impl";
+      return "";
+    case FnKind::kFallback:
+      LOG(INFO) << "duckdb transpiler: analytic function '" << name
+                << "' lowering deferred; falling back to reference-impl";
+      return "";
+    case FnKind::kMap: {
+      std::string prefix = node->distinct() ? "DISTINCT " : "";
+      return absl::StrCat(entry->duckdb_name, "(", prefix,
+                          absl::StrJoin(args, ", "), ")");
+    }
+  }
+  return "";
 }
 
-std::string Transpiler::EmitAnalyticFunctionCall(
-    const ::googlesql::ResolvedAnalyticFunctionCall* /*node*/) {
+std::string Transpiler::EmitFrameBound(
+    const ::googlesql::ResolvedWindowFrameExpr* expr) {
+  if (expr == nullptr) return "";
+  switch (expr->boundary_type()) {
+    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_PRECEDING:
+      return "UNBOUNDED PRECEDING";
+    case ::googlesql::ResolvedWindowFrameExpr::CURRENT_ROW:
+      return "CURRENT ROW";
+    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_FOLLOWING:
+      return "UNBOUNDED FOLLOWING";
+    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING: {
+      if (expr->expression() == nullptr) return "";
+      std::string e = EmitExpr(expr->expression());
+      if (e.empty()) return "";
+      return absl::StrCat(e, " PRECEDING");
+    }
+    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING: {
+      if (expr->expression() == nullptr) return "";
+      std::string e = EmitExpr(expr->expression());
+      if (e.empty()) return "";
+      return absl::StrCat(e, " FOLLOWING");
+    }
+  }
   return "";
 }
 

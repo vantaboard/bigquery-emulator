@@ -32,12 +32,49 @@ cc_library(
     ],
 )
 
+# Convert the human-readable `functions.yaml` disposition table into
+# a C++ initializer fragment (`functions_table.inc`) the `:functions`
+# library `#include`s inside a `absl::flat_hash_map<std::string,
+# FnEntry>`. Running the conversion at build time keeps the C++ side
+# parser-free: a malformed YAML edit lands as a Bazel error (the awk
+# script exits non-zero) rather than as a silent skip at run time.
+#
+# We use awk rather than python so the rule has no `srcs_version`
+# question to answer and works identically on every developer host
+# that has GoogleSQL's hermetic toolchain available (POSIX awk is
+# part of the toolchain's coreutils set).
+genrule(
+    name = "functions_table_inc",
+    srcs = [
+        "functions.yaml",
+        "functions_table_gen.awk",
+    ],
+    outs = ["functions_table.inc"],
+    cmd = ("awk -f $(location functions_table_gen.awk) " +
+           "$(location functions.yaml) > $@"),
+)
+
+cc_library(
+    name = "functions",
+    srcs = [
+        "functions.cc",
+        ":functions_table_inc",
+    ],
+    hdrs = ["functions.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
 cc_library(
     name = "transpiler",
     srcs = ["transpiler.cc"],
     hdrs = ["transpiler.h"],
     deps = [
+        ":functions",
         ":types",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
         # The function-call emit consults `Function::Name()` and the
         # column-ref / table-scan emits consult `Catalog`'s `Table` +
@@ -71,6 +108,7 @@ cc_test(
     name = "transpiler_test",
     srcs = ["transpiler_test.cc"],
     deps = [
+        ":functions",
         ":transpiler",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

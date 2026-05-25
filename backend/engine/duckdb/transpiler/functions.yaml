@@ -1,0 +1,198 @@
+# BigQuery -> DuckDB function disposition table.
+#
+# Each line is `<bq_function>: <disposition>` where `<disposition>` is one of:
+#   * a DuckDB function name (the transpiler emits `<NAME>(<args>)`)
+#   * `skiplist`  — out of scope today; engine falls back to reference-impl
+#   * `fallback`  — lowering not yet implemented; engine falls back to reference-impl
+#
+# Keys are case-insensitive; the loader lowercases them at parse time.
+# Functions registered as both scalar (`ResolvedFunctionCall`) and
+# aggregate (`ResolvedAggregateFunctionCall`) get one entry here; the
+# transpiler dispatches to the right emit path based on the resolved
+# node kind. SAFE.* prefix (`error_mode == SAFE_ERROR_MODE`) is not
+# represented here -- the emit short-circuits to `""` so the fallback
+# fires regardless of the underlying function disposition.
+#
+# Order does not affect resolution; entries are grouped by category for
+# readability. Keep this file the source of truth -- the genrule
+# `functions_table_inc` regenerates `functions_table.inc` from this
+# YAML at build time.
+
+# --- Math --------------------------------------------------------------
+abs: ABS
+ceil: CEIL
+ceiling: CEIL
+floor: FLOOR
+round: ROUND
+trunc: TRUNC
+sqrt: SQRT
+exp: EXP
+sign: SIGN
+greatest: GREATEST
+least: LEAST
+pi: PI
+ln: LN
+log10: LOG10
+log: fallback             # BQ LOG(x) == ln; two-arg LOG(x,base) needs a rewrite
+mod: fallback             # BQ MOD(x,y) returns y's type; DuckDB MOD diverges on signed
+pow: POW
+power: POW
+sqrt_numeric: fallback    # BQ SQRT over NUMERIC needs an explicit cast
+cbrt: CBRT
+is_inf: ISINF
+is_nan: ISNAN
+safe_divide: fallback     # BQ semantics differ (returns NULL on /0; DuckDB raises)
+div: fallback             # BQ DIV truncates toward zero; DuckDB / coerces to FLOAT
+safe_negate: fallback     # BQ returns NULL on INT64 overflow; DuckDB raises
+
+# --- String ------------------------------------------------------------
+concat: CONCAT
+length: LENGTH
+char_length: LENGTH
+character_length: LENGTH
+byte_length: OCTET_LENGTH
+lower: LOWER
+upper: UPPER
+substr: SUBSTRING
+substring: SUBSTRING
+replace: REPLACE
+trim: TRIM
+ltrim: LTRIM
+rtrim: RTRIM
+lpad: LPAD
+rpad: RPAD
+reverse: REVERSE
+ascii: ASCII
+chr: CHR
+starts_with: STARTS_WITH
+ends_with: ENDS_WITH
+to_hex: TO_HEX
+from_hex: FROM_HEX
+
+# --- Regex / format ----------------------------------------------------
+# BigQuery's RE2 dialect differs from DuckDB's; FORMAT is %-style, DuckDB
+# has PRINTF which differs subtly. Keep these on the fallback path until
+# a dedicated regex / format rewriter lands.
+split: fallback
+regexp_contains: fallback
+regexp_replace: fallback
+regexp_extract: fallback
+regexp_extract_all: fallback
+format: fallback
+contains_substr: fallback
+strpos: fallback
+instr: fallback
+soundex: fallback
+
+# --- Datetime ----------------------------------------------------------
+# Most datetime functions need interval-semantics rewriting before they
+# can target DuckDB equivalents safely (month-end arithmetic, calendar
+# weeks, etc.). The zero-arg "current_*" family is safe to map.
+current_timestamp: GET_CURRENT_TIMESTAMP
+current_date: CURRENT_DATE
+current_time: CURRENT_TIME
+current_datetime: GET_CURRENT_TIMESTAMP
+date_add: fallback
+date_sub: fallback
+date_diff: fallback
+date_trunc: fallback
+datetime_add: fallback
+datetime_sub: fallback
+datetime_diff: fallback
+timestamp_add: fallback
+timestamp_sub: fallback
+timestamp_diff: fallback
+timestamp_trunc: fallback
+extract: fallback
+format_timestamp: fallback
+format_date: fallback
+format_datetime: fallback
+parse_date: fallback
+parse_timestamp: fallback
+parse_datetime: fallback
+unix_seconds: fallback
+unix_millis: fallback
+unix_micros: fallback
+unix_date: fallback
+
+# --- Conditional / null-handling --------------------------------------
+ifnull: IFNULL
+coalesce: COALESCE
+nullif: NULLIF
+if: fallback             # BQ IF(cond,a,b); DuckDB has CASE-of equivalence but corner cases differ
+isnull: fallback         # BQ has no IS NULL function-form; emitter sees the operator
+
+# --- Array -------------------------------------------------------------
+array_length: LEN
+array_to_string: ARRAY_TO_STRING
+array_concat: ARRAY_CONCAT
+array_reverse: ARRAY_REVERSE
+generate_array: GENERATE_SERIES
+
+# --- Aggregation -------------------------------------------------------
+# The transpiler routes aggregates through `EmitAggregateFunctionCall`,
+# which still owns the DISTINCT / ORDER BY / HAVING modifier rejection
+# (those have no native DuckDB OVER analog yet). Entries here only
+# control whether the bare aggregate name lowers cleanly.
+count: COUNT
+sum: SUM
+avg: AVG
+min: MIN
+max: MAX
+any_value: ANY_VALUE
+array_agg: ARRAY_AGG
+string_agg: STRING_AGG
+countif: fallback        # BQ COUNTIF(b) ↔ DuckDB COUNT(*) FILTER (WHERE b); needs rewrite
+logical_and: BOOL_AND
+logical_or: BOOL_OR
+bit_and: BIT_AND
+bit_or: BIT_OR
+bit_xor: BIT_XOR
+
+# --- Window functions --------------------------------------------------
+# Ranking analytics route through `EmitAnalyticFunctionCall` -- listed
+# here so `LookupFunction` agrees the disposition is "lower it" rather
+# than "fall back".
+row_number: ROW_NUMBER
+rank: RANK
+dense_rank: DENSE_RANK
+percent_rank: PERCENT_RANK
+cume_dist: CUME_DIST
+ntile: NTILE
+lag: LAG
+lead: LEAD
+first_value: FIRST_VALUE
+last_value: LAST_VALUE
+nth_value: NTH_VALUE
+
+# --- Skiplist ----------------------------------------------------------
+# Out of scope today; reference-impl handles these and the harness pins
+# them to the reference-impl engine via session labels.
+approx_quantiles: skiplist
+approx_count_distinct: skiplist
+approx_top_count: skiplist
+approx_top_sum: skiplist
+hll_count.init: skiplist
+hll_count.merge: skiplist
+hll_count.merge_partial: skiplist
+hll_count.extract: skiplist
+ml.predict: skiplist
+ml.forecast: skiplist
+ml.evaluate: skiplist
+net.ip_from_string: skiplist
+net.ip_to_string: skiplist
+net.host: skiplist
+net.public_suffix: skiplist
+keys.new_keyset: skiplist
+keys.encrypt: skiplist
+keys.decrypt_bytes: skiplist
+st_geogfromtext: skiplist
+st_geogfromwkb: skiplist
+st_distance: skiplist
+st_within: skiplist
+st_contains: skiplist
+st_intersects: skiplist
+bit_count: skiplist
+generate_uuid: skiplist
+session_user: skiplist
+error: skiplist

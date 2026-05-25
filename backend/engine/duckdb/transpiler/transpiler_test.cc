@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 
+#include "backend/engine/duckdb/transpiler/functions.h"
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -164,6 +166,7 @@ class TranspilerTest : public ::testing::Test {
 class TestTranspiler : public Transpiler {
  public:
   using Transpiler::EmitAggregateScan;
+  using Transpiler::EmitAnalyticScan;
   using Transpiler::EmitArrayScan;
   using Transpiler::EmitColumnRef;
   using Transpiler::EmitFilterScan;
@@ -256,11 +259,58 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
             "IFNULL(\"name\", 'unknown')");
 }
 
-TEST_F(TranspilerTest, EmitFunctionCallUnsupportedReturnsEmpty) {
-  // `LENGTH` is not on the Phase 5g whitelist; we expect "" so the
-  // disposition policy can take the reference-impl fallback.
+TEST_F(TranspilerTest, EmitFunctionCallSkiplistReturnsEmpty) {
+  // `BIT_COUNT` is on the skiplist in `functions.yaml` (BQ flavor
+  // differs from DuckDB's `bit_count` and the conformance harness
+  // pins it on the reference-impl engine for now). The emit returns
+  // "" so the engine takes the reference-impl fallback for the
+  // whole query.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT BIT_COUNT(id) AS n FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+            "");
+}
+
+TEST_F(TranspilerTest, EmitFunctionCallMappedFunction) {
+  // Disposition-table-backed scalars: `ABS(id)` lowers to DuckDB's
+  // `ABS(...)`. The casing of the emitted function name comes from
+  // the YAML disposition (we render the duckdb_name verbatim); the
+  // BQ-side `abs` lookup is case-insensitive.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT ABS(id) AS n FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+            "ABS(\"id\")");
+}
+
+TEST_F(TranspilerTest, EmitFunctionCallLengthMaps) {
+  // `LENGTH(name)` -> `LENGTH("name")`. Two-arg variants don't exist
+  // for LENGTH in either dialect; the single-arg shape is the entire
+  // disposition surface.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT LENGTH(name) AS n FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+            "LENGTH(\"name\")");
+}
+
+TEST_F(TranspilerTest, EmitFunctionCallSafeModeReturnsEmpty) {
+  // SAFE.<fn>(...) sets `error_mode = SAFE_ERROR_MODE`. DuckDB has no
+  // native SAFE analog yet, so the emit short-circuits to "" before
+  // consulting the disposition table -- this would otherwise emit
+  // ABS("id") and silently lose the SAFE error semantics.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT SAFE.ABS(id) AS n FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
@@ -451,13 +501,31 @@ TEST_F(TranspilerTest, EmitAggregateScanAvgMinMaxGroupBy) {
       "\"people\") GROUP BY \"id\"");
 }
 
-TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnknownAggregate) {
-  // `ARRAY_AGG` isn't on the Phase 5h aggregate whitelist; the
-  // aggregate emit returns "" and the AggregateScan emit
-  // propagates the empty string so the disposition policy takes
-  // the reference-impl fallback for the whole query.
+TEST_F(TranspilerTest, EmitAggregateScanArrayAggMapsThroughTable) {
+  // `ARRAY_AGG` is in the disposition table (`array_agg: ARRAY_AGG`),
+  // so the lower path emits the DuckDB aggregate verbatim. This
+  // exercises the table-driven dispatch from inside the AggregateScan
+  // emit -- a direct counterpart to `EmitFunctionCallMappedFunction`
+  // above for the aggregate code path.
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT id, ARRAY_AGG(id) FROM people GROUP BY id");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>()),
+      "SELECT \"id\", ARRAY_AGG(\"id\") AS \"$agg1\" FROM (SELECT \"id\", "
+      "\"name\" FROM \"people\") GROUP BY \"id\"");
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnSkiplistedAggregate) {
+  // `APPROX_QUANTILES` is on the skiplist; the aggregate emit
+  // returns "" and the AggregateScan emit propagates the empty
+  // string. The disposition policy then takes the reference-impl
+  // fallback for the whole query.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, APPROX_QUANTILES(id, 2) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
@@ -728,6 +796,216 @@ TEST_F(TranspilerTest, EmitFunctionCallMakeArrayWithColumn) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
             "[\"id\", 0]");
+}
+
+// --- Functions disposition table ----------------------------------------
+
+TEST(FunctionsTableTest, LookupKnownMappedScalar) {
+  // Sanity check on a representative `kMap` entry. The lookup is
+  // case-insensitive (we accept `ABS`, `abs`, `Abs` all the same).
+  const FnEntry* e = LookupFunction("abs");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->kind, FnKind::kMap);
+  EXPECT_EQ(e->duckdb_name, "ABS");
+  const FnEntry* upper = LookupFunction("ABS");
+  ASSERT_NE(upper, nullptr);
+  EXPECT_EQ(upper->kind, FnKind::kMap);
+  EXPECT_EQ(upper->duckdb_name, "ABS");
+}
+
+TEST(FunctionsTableTest, LookupKnownAggregate) {
+  // `array_agg` is in the table so the aggregate emit dispatches
+  // through it; ditto for the SUM / COUNT family.
+  const FnEntry* agg = LookupFunction("array_agg");
+  ASSERT_NE(agg, nullptr);
+  EXPECT_EQ(agg->kind, FnKind::kMap);
+  EXPECT_EQ(agg->duckdb_name, "ARRAY_AGG");
+  const FnEntry* sum = LookupFunction("sum");
+  ASSERT_NE(sum, nullptr);
+  EXPECT_EQ(sum->kind, FnKind::kMap);
+  EXPECT_EQ(sum->duckdb_name, "SUM");
+}
+
+TEST(FunctionsTableTest, LookupSkiplistedFunction) {
+  // Skiplist disposition: the lookup succeeds but the kind tells the
+  // caller to short-circuit to "" so the engine falls back.
+  const FnEntry* e = LookupFunction("approx_quantiles");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->kind, FnKind::kSkiplist);
+  EXPECT_TRUE(e->duckdb_name.empty());
+}
+
+TEST(FunctionsTableTest, LookupFallbackFunction) {
+  // Fallback disposition: same runtime behavior as skiplist, but the
+  // entry is in the table (with kind=kFallback) so we can tell
+  // "deliberately deferred" from "no row in the table". `date_add`
+  // is fallback today because BigQuery's INTERVAL semantics need a
+  // dedicated rewrite pass.
+  const FnEntry* e = LookupFunction("date_add");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->kind, FnKind::kFallback);
+}
+
+TEST(FunctionsTableTest, LookupUnknownReturnsNull) {
+  // Functions not in the YAML disposition table return nullptr; the
+  // transpiler treats nullptr the same as a `kFallback` entry, but
+  // the distinction lets the LOG(INFO) tell "configured fallback"
+  // from "no disposition row".
+  EXPECT_EQ(LookupFunction("totally_made_up_function"), nullptr);
+}
+
+TEST(FunctionsTableTest, CoverageMeetsPlanThreshold) {
+  // The plan requires the disposition table to cover at least 50
+  // BigQuery functions across the math / string / datetime /
+  // conditional / array / aggregation / skiplist categories. We
+  // spot-check a few entries from each category here rather than
+  // hard-counting the size of the underlying map (which is private
+  // to `functions.cc`) -- a regression in the YAML would surface as
+  // one of these sentinel lookups returning nullptr.
+  const std::vector<std::string> required = {
+      // math
+      "abs", "ceil", "floor", "round", "trunc", "sqrt", "exp",
+      "sign", "greatest", "least", "pi", "ln", "pow",
+      // string
+      "concat", "length", "lower", "upper", "substr", "replace",
+      "trim", "ltrim", "rtrim", "lpad", "rpad", "reverse",
+      "starts_with", "ends_with",
+      // datetime (fallback)
+      "current_timestamp", "current_date", "date_add",
+      "format_timestamp",
+      // conditional
+      "ifnull", "coalesce", "nullif",
+      // array
+      "array_length", "array_concat", "generate_array",
+      // aggregation
+      "count", "sum", "avg", "min", "max", "any_value",
+      "array_agg", "string_agg",
+      // skiplist
+      "approx_quantiles", "ml.predict", "net.ip_from_string",
+      // window
+      "row_number", "rank", "dense_rank",
+  };
+  for (const auto& name : required) {
+    EXPECT_NE(LookupFunction(name), nullptr) << "missing entry: " << name;
+  }
+  EXPECT_GE(required.size(), 50u);
+}
+
+// --- Window / Analytic --------------------------------------------------
+
+TEST_F(TranspilerTest, EmitAnalyticScanRowNumber) {
+  // `ROW_NUMBER() OVER (ORDER BY id)` lowers to a ResolvedAnalyticScan
+  // whose only group has a null partition_by and a single-item
+  // order_by; the analytic function list carries one
+  // ResolvedAnalyticFunctionCall (`row_number`, no args). The
+  // synthesized output column is `$analytic1`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT ROW_NUMBER() OVER (ORDER BY id) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "SELECT *, ROW_NUMBER() OVER (ORDER BY \"id\" ASC) AS \"$analytic1\""
+      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitAnalyticScanRankPartitionByOrderBy) {
+  // `RANK() OVER (PARTITION BY name ORDER BY id DESC)` exercises both
+  // the partition_by and the explicit-direction order_by paths. The
+  // partition spec emits one PARTITION BY column and the order spec
+  // emits the explicit DESC keyword.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT RANK() OVER (PARTITION BY name ORDER BY id DESC) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "SELECT *, RANK() OVER (PARTITION BY \"name\" ORDER BY \"id\" DESC)"
+      " AS \"$analytic1\" FROM (SELECT \"id\", \"name\" FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitAnalyticScanDenseRank) {
+  // DENSE_RANK is the third ranking analytic the plan calls out; the
+  // test mirrors RANK so we get explicit coverage of the disposition
+  // row in `functions.yaml` (`dense_rank: DENSE_RANK`).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT DENSE_RANK() OVER (ORDER BY id) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "SELECT *, DENSE_RANK() OVER (ORDER BY \"id\" ASC) AS \"$analytic1\""
+      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitAnalyticScanSumOverWithFrame) {
+  // Aggregate-over-window with an explicit ROWS frame. SUM is a
+  // `kMap` entry shared with the scalar aggregate emit, so the
+  // analytic path renders it the same way (`SUM(<expr>)`) and the
+  // OVER clause carries the ROWS BETWEEN bound. UNBOUNDED PRECEDING
+  // / CURRENT ROW are both supported boundary types.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT SUM(id) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING "
+      "AND CURRENT ROW) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "SELECT *, SUM(\"id\") OVER (ORDER BY \"id\" ASC ROWS BETWEEN "
+      "UNBOUNDED PRECEDING AND CURRENT ROW) AS \"$analytic1\""
+      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitAnalyticScanCountStarOverPartition) {
+  // COUNT(*) lowers through the `$count_star` special case both in
+  // the aggregate path and in the analytic path -- the analyzer
+  // gives us an empty argument_list and the function name
+  // `$count_star`. With a PARTITION-BY-only OVER clause the analyzer
+  // synthesizes a `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED
+  // FOLLOWING` frame for aggregate analytic functions, so the emit
+  // surfaces that frame even though the user didn't spell it.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT COUNT(*) OVER (PARTITION BY name) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "SELECT *, COUNT(*) OVER (PARTITION BY \"name\" ROWS BETWEEN "
+      "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS \"$analytic1\""
+      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
+  // `SAFE.SUM(id) OVER (ORDER BY id)` analyzes cleanly (SAFE is a
+  // function-call decoration, not an OVER-time modifier) but sets
+  // `error_mode = SAFE_ERROR_MODE`. The per-call SAFE short-circuit
+  // returns "" and the analytic emit propagates the empty string,
+  // exactly the disposition policy the engine reads for the
+  // reference-impl fallback.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT SAFE.SUM(id) OVER (ORDER BY id) FROM people");
+  if (stmt == nullptr) {
+    GTEST_SKIP() << "analyzer rejected SAFE aggregate OVER -- skip";
+  }
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  if (scan == nullptr ||
+      scan->node_kind() != ::googlesql::RESOLVED_ANALYTIC_SCAN) {
+    GTEST_SKIP() << "analyzer produced non-analytic scan -- skip";
+  }
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
+      "");
 }
 
 }  // namespace
