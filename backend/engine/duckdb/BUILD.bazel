@@ -1,12 +1,15 @@
-# Bazel build for the DuckDB query engine scaffold. Mirrors the CMake
+# Bazel build for the DuckDB query engine. Mirrors the CMake
 # `backend_engine_duckdb` target (`//CMakeLists.txt`).
 #
-# Today every `Engine` method returns `UNIMPLEMENTED`; the .cc just
-# touches `duckdb_library_version` to keep `libduckdb.so` on the link
-# line under `--as-needed`. Phase 5.B (`engine-duckdb-transpiler`)
-# wires the ZetaSQL → DuckDB SQL translation through this same target.
+# Phase 5i wires the engine end-to-end: open an in-memory DuckDB
+# connection per query, attach the storage's row stream as a DuckDB
+# table, run the transpiled SQL, and stream the results back as a
+# `RowSource`. The same translation unit compiles down to
+# UNIMPLEMENTED stubs in the CMake build (which doesn't link
+# GoogleSQL), identical to how `backend/engine/reference_impl/` flips
+# on `BIGQUERY_EMULATOR_HAS_GOOGLESQL`.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,12 +17,51 @@ cc_library(
     name = "duckdb_engine",
     srcs = ["duckdb_engine.cc"],
     hdrs = ["duckdb_engine.h"],
-    local_defines = ["BIGQUERY_EMULATOR_HAS_DUCKDB=1"],
+    local_defines = [
+        "BIGQUERY_EMULATOR_HAS_DUCKDB=1",
+        "BIGQUERY_EMULATOR_HAS_GOOGLESQL=1",
+    ],
     deps = [
+        "//backend/catalog:storage_table",
         "//backend/engine",
+        "//backend/engine/duckdb/transpiler",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
         "//backend/storage",
+        "//proto:emulator_cc_proto",
         "//third_party/duckdb",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "duckdb_engine_test",
+    srcs = ["duckdb_engine_test.cc"],
+    deps = [
+        ":duckdb_engine",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage:memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
     ],
 )
