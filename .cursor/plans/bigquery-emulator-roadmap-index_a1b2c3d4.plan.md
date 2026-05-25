@@ -88,7 +88,7 @@ todos:
     status: completed
   - id: run-28-duckdb-engine-exec
     content: "Run duckdb-engine-exec_f7c8d9e0.plan.md"
-    status: pending
+    status: completed
   - id: run-29-transpiler-struct-unnest
     content: "Run transpiler-struct-unnest_a8d9e0f1.plan.md"
     status: pending
