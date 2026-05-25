@@ -43,6 +43,17 @@ class DuckDBEngine : public Engine {
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
+  // Plan-34 (DuckDB-only MERGE). Other DML kinds (INSERT/UPDATE/DELETE)
+  // intentionally return UNIMPLEMENTED so the `FallbackEngine` wrapper
+  // routes them to the reference-impl engine, which already runs them
+  // through `PreparedModify`. MERGE lands here because the GoogleSQL
+  // reference-impl algebrizer does not yet algebrize `ResolvedMergeStmt`
+  // at the statement root; see the comment block at the matching switch
+  // in `backend/engine/reference_impl/reference_impl_engine.cc` for the
+  // engine-asymmetry rationale.
+  absl::StatusOr<DmlStats> ExecuteDml(
+      const QueryRequest& request, googlesql::Catalog* catalog) override;
+
  private:
   storage::Storage* storage_;  // not owned
 };

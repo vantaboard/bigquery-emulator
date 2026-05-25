@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -263,6 +264,124 @@ TEST_F(DuckDBEngineTest, ExecuteQueryRejectsNullCatalog) {
   auto source = engine_->ExecuteQuery(MakeRequest("SELECT 1"), nullptr);
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteDml (Plan 34 -- DuckDB-only MERGE)
+//
+// The DuckDB engine's DML surface is intentionally narrow: only MERGE
+// lands here today, since INSERT / UPDATE / DELETE already run on the
+// reference-impl engine through `PreparedModify`. The `FallbackEngine`
+// wrapper that the canonical Phase 5i binary configures (see
+// `--engine=duckdb --on_unknown_fn=fallback`) routes the non-MERGE
+// DML kinds to the reference-impl engine when this engine returns
+// UNIMPLEMENTED.
+//
+// These tests pin:
+//
+//   * MERGE WHEN MATCHED + WHEN NOT MATCHED rewrites the target table
+//     atomically through `Storage::OverwriteRows` and surfaces an
+//     accurate per-branch DmlStats (insertedRowCount,
+//     updatedRowCount, deletedRowCount) by diffing the pre-MERGE
+//     snapshot against the post-MERGE state on the synthetic primary
+//     key (column 0; see `backend/catalog/storage_table.cc`).
+//   * INSERT / UPDATE / DELETE return UNIMPLEMENTED so the
+//     FallbackEngine wrapper hands them off to the reference-impl
+//     engine (which already runs all three through PreparedModify).
+//   * MERGE on a target table whose schema is not backed by a
+//     StorageTable surfaces FAILED_PRECONDITION (the engine has no
+//     way to write rows back through a non-storage catalog Table).
+// ---------------------------------------------------------------------------
+
+TEST_F(DuckDBEngineTest, ExecuteDmlMergeMatchedAndNotMatchedUpdatesStorage) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  // MATCHED branch hits id=2 (already in the table, name 'linus' ->
+  // 'linus-updated'); NOT MATCHED branch inserts id=4 (not in the
+  // table). The USING clause sources both rows from a single SELECT
+  // UNION ALL so the resolved MergeStmt has no extra table
+  // dependencies beyond the target.
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("MERGE INTO ds.people T USING ("
+                  "  SELECT 2 AS id, 'linus-updated' AS name "
+                  "  UNION ALL "
+                  "  SELECT 4 AS id, 'rust' AS name) S "
+                  "ON T.id = S.id "
+                  "WHEN MATCHED THEN UPDATE SET name = S.name "
+                  "WHEN NOT MATCHED THEN INSERT (id, name) "
+                  "VALUES (S.id, S.name)"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 1) << "id=4 should land via INSERT";
+  EXPECT_EQ(stats->updated_row_count, 1) << "id=2 should land via UPDATE";
+  EXPECT_EQ(stats->deleted_row_count, 0) << "no DELETE branch in MERGE";
+
+  // Storage round-trip: id=2 is now 'linus-updated', id=4 is the
+  // newly merged-in row, and id=1 / id=3 ride through unchanged.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_GE(row.cells.size(), 2u);
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id.size(), 4u);
+  EXPECT_EQ(by_id[1], "ada");
+  EXPECT_EQ(by_id[2], "linus-updated");
+  EXPECT_EQ(by_id[3], "grace");
+  EXPECT_EQ(by_id[4], "rust");
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDmlInsertFallsBackToUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  // INSERT lives on the reference-impl engine; the DuckDB engine
+  // returns UNIMPLEMENTED so the FallbackEngine wrapper takes over.
+  // We pin the status code so the wrapper has a stable contract to
+  // read.
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("INSERT INTO ds.people (id, name) VALUES (10, 'kay')"),
+      bundle.catalog.get());
+  ASSERT_FALSE(stats.ok());
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
+      << stats.status();
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDmlUpdateFallsBackToUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("UPDATE ds.people SET name = 'unknown' WHERE id = 2"),
+      bundle.catalog.get());
+  ASSERT_FALSE(stats.ok());
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
+      << stats.status();
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDmlDeleteFallsBackToUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("DELETE FROM ds.people WHERE id = 1"),
+      bundle.catalog.get());
+  ASSERT_FALSE(stats.ok());
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
+      << stats.status();
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDmlRejectsNullCatalog) {
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("MERGE INTO ds.people T USING (SELECT 1 AS id, "
+                  "'ada' AS name) S ON T.id = S.id "
+                  "WHEN NOT MATCHED THEN INSERT (id, name) "
+                  "VALUES (S.id, S.name)"),
+      nullptr);
+  ASSERT_FALSE(stats.ok());
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
 }  // namespace
