@@ -100,7 +100,7 @@ todos:
     status: completed
   - id: run-32-duckdb-parity-e2e
     content: "Run duckdb-parity-e2e_d1a2b3c4.plan.md"
-    status: pending
+    status: completed
   - id: run-33-dml-insert
     content: "Run dml-insert-e2e_e2b3c4d5.plan.md"
     status: pending
