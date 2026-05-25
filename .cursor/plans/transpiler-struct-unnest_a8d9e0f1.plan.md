@@ -4,7 +4,7 @@ overview: "Phase 5j: STRUCT, UNNEST, ARRAY transpiler nodes."
 todos:
   - id: struct-unnest
     content: "Emit ResolvedArrayScan, ResolvedStructFieldAccess, ResolvedCreateArray, ResolvedCreateStruct; document LIST/STRUCT quirks"
-    status: pending
+    status: completed
 isProject: false
 ---
 
