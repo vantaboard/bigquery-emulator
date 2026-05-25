@@ -1,0 +1,35 @@
+# Bazel build for the FallbackEngine wrapper.
+#
+# Phase 5i: composes a primary Engine with a fallback Engine so the
+# `--on_unknown_fn=fallback` flag in `binaries/emulator_main/main.cc`
+# can wrap the DuckDB engine in a wrapper that retries
+# `UNIMPLEMENTED` queries against the reference-impl evaluator.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "fallback_engine",
+    srcs = ["fallback_engine.cc"],
+    hdrs = ["fallback_engine.h"],
+    deps = [
+        "//backend/engine",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "fallback_engine_test",
+    srcs = ["fallback_engine_test.cc"],
+    deps = [
+        ":fallback_engine",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
