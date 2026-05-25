@@ -283,6 +283,7 @@ target_link_libraries(backend_engine_reference_impl
 )
 
 add_library(backend_engine_duckdb STATIC
+  backend/engine/duckdb/arrow_to_bq.cc
   backend/engine/duckdb/duckdb_engine.cc
 )
 target_include_directories(backend_engine_duckdb

@@ -35,6 +35,7 @@
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -373,86 +374,35 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
   return out;
 }
 
-// Read one DuckDB cell into a storage::Value using `column` to pick
-// the right C-API accessor. The mode/type discrimination mirrors
-// the read path in `backend/storage/duckdb/duckdb_storage.cc` for
-// the same reason: storage layer is engine-agnostic and the result
-// of `Storage::ScanRows` flows through this conversion regardless of
-// which engine ran the query.
-absl::StatusOr<storage::Value> ReadCell(::duckdb_result* result, idx_t col,
-                                         idx_t row,
-                                         const schema::ColumnSchema& column) {
-  if (::duckdb_value_is_null(result, col, row)) return storage::Value::Null();
-  if (column.mode == schema::ColumnMode::kRepeated ||
-      column.type == schema::ColumnType::kArray ||
-      column.type == schema::ColumnType::kStruct) {
-    // ARRAY / STRUCT round-trip through the canonical DuckDB
-    // textual rendering. The transpiler doesn't yet lower queries
-    // that return container columns, so a fall-into-string here is
-    // the expected hand-off to the reference-impl fallback path for
-    // any caller that actually exercises this branch.
-    char* str = ::duckdb_value_varchar(result, col, row);
-    storage::Value out = storage::Value::String(
-        str == nullptr ? std::string("") : str);
-    if (str != nullptr) ::duckdb_free(str);
-    return out;
-  }
-  switch (column.type) {
-    case schema::ColumnType::kBool:
-      return storage::Value::Bool(::duckdb_value_boolean(result, col, row));
-    case schema::ColumnType::kInt64:
-      return storage::Value::Int64(::duckdb_value_int64(result, col, row));
-    case schema::ColumnType::kFloat64:
-      return storage::Value::Float64(::duckdb_value_double(result, col, row));
-    case schema::ColumnType::kBytes: {
-      ::duckdb_blob blob = ::duckdb_value_blob(result, col, row);
-      std::string bytes;
-      if (blob.data != nullptr) {
-        bytes.assign(static_cast<const char*>(blob.data), blob.size);
-        ::duckdb_free(blob.data);
-      }
-      return storage::Value::Bytes(std::move(bytes));
-    }
-    case schema::ColumnType::kString:
-    case schema::ColumnType::kDate:
-    case schema::ColumnType::kTime:
-    case schema::ColumnType::kDatetime:
-    case schema::ColumnType::kTimestamp:
-    case schema::ColumnType::kNumeric:
-    case schema::ColumnType::kBignumeric:
-    case schema::ColumnType::kJson:
-    case schema::ColumnType::kGeography:
-    case schema::ColumnType::kArray:
-    case schema::ColumnType::kStruct:
-    case schema::ColumnType::kUnknown: {
-      char* str = ::duckdb_value_varchar(result, col, row);
-      storage::Value out = storage::Value::String(
-          str == nullptr ? std::string("") : str);
-      if (str != nullptr) ::duckdb_free(str);
-      return out;
-    }
-  }
-  return absl::InternalError("ReadCell: unreachable column type");
-}
-
-// Streams rows out of a materialized DuckDB result. Owns the
-// underlying database + connection so the per-query DuckDB state is
-// destroyed in the right order when the gateway finishes pulling
-// rows. Declaration order pins destruction order: result_ first
-// (releases the rendered chunk), then conn_, then db_.
+// Streams rows out of a DuckDB result by fetching one columnar data
+// chunk at a time -- the C-API equivalent of pulling Arrow
+// RecordBatches off the result iterator. Each chunk's vectors are
+// what `duckdb_data_chunk_to_arrow` exports, so this is the same
+// columnar interface the Storage Read API path in Phase 7 will
+// stream straight onto the wire.
+//
+// Each cell is rendered through `arrow_to_bq::ChunkRowToCells` so
+// the resulting `storage::Value` shape matches what
+// `ReferenceImplEngine::ExecuteQuery` returns; the per-engine
+// `frontend/handlers/query.cc::ValueToCell` then lowers both onto
+// the same proto Cell wire shape. The chunked path replaces the
+// previous row-at-a-time `duckdb_value_*` accessors so the engine
+// no longer pays one C-API call per cell.
+//
+// Declaration order pins destruction order: chunk_ first (releases
+// the columnar buffers it borrowed from result_), then result_, then
+// conn_, then db_.
 class DuckDBRowSource : public RowSource {
  public:
   DuckDBRowSource(::duckdb_database db, ::duckdb_connection conn,
-                  ::duckdb_result result, schema::TableSchema schema,
-                  idx_t row_count)
+                  ::duckdb_result result, schema::TableSchema schema)
       : db_(db),
         conn_(conn),
         result_(result),
-        schema_(std::move(schema)),
-        row_count_(row_count),
-        next_row_(0) {}
+        schema_(std::move(schema)) {}
 
   ~DuckDBRowSource() override {
+    if (chunk_ != nullptr) ::duckdb_destroy_data_chunk(&chunk_);
     ::duckdb_destroy_result(&result_);
     if (conn_ != nullptr) ::duckdb_disconnect(&conn_);
     if (db_ != nullptr) ::duckdb_close(&db_);
@@ -468,31 +418,34 @@ class DuckDBRowSource : public RowSource {
       return absl::InvalidArgumentError(
           "DuckDBEngine row source: Next called with null row");
     }
-    if (next_row_ >= row_count_) return false;
-    // We trust the analyzer-driven output schema for the column shape
-    // rather than what DuckDB reports on the result: for the queries
-    // the transpiler covers today the two agree column-for-column,
-    // and surfacing the analyzer's BigQuery-typed column metadata is
-    // what the gateway needs to render the REST `f`/`v` envelope.
-    row->cells.clear();
-    row->cells.reserve(schema_.columns.size());
-    for (size_t c = 0; c < schema_.columns.size(); ++c) {
-      absl::StatusOr<storage::Value> cell = ReadCell(
-          &result_, static_cast<idx_t>(c), next_row_, schema_.columns[c]);
-      if (!cell.ok()) return cell.status();
-      row->cells.push_back(std::move(cell).value());
+    while (chunk_ == nullptr || next_in_chunk_ >= chunk_size_) {
+      if (chunk_ != nullptr) {
+        ::duckdb_destroy_data_chunk(&chunk_);
+        chunk_ = nullptr;
+      }
+      chunk_ = ::duckdb_fetch_chunk(result_);
+      if (chunk_ == nullptr) return false;
+      chunk_size_ = ::duckdb_data_chunk_get_size(chunk_);
+      next_in_chunk_ = 0;
+      // A zero-sized chunk can show up at end-of-stream; loop to the
+      // next fetch which will hand back nullptr and terminate.
     }
-    ++next_row_;
+    absl::StatusOr<storage::Row> rendered =
+        arrow_to_bq::ChunkRowToCells(chunk_, next_in_chunk_, schema_);
+    if (!rendered.ok()) return rendered.status();
+    *row = std::move(rendered).value();
+    ++next_in_chunk_;
     return true;
   }
 
  private:
-  ::duckdb_database db_;
-  ::duckdb_connection conn_;
+  ::duckdb_database db_ = nullptr;
+  ::duckdb_connection conn_ = nullptr;
   ::duckdb_result result_;
   schema::TableSchema schema_;
-  idx_t row_count_;
-  idx_t next_row_;
+  ::duckdb_data_chunk chunk_ = nullptr;
+  ::idx_t chunk_size_ = 0;
+  ::idx_t next_in_chunk_ = 0;
 };
 
 // Runs `sql` on `conn`; returns OK or INTERNAL with the DuckDB
@@ -774,9 +727,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDBEngine::ExecuteQuery(
         "duckdb engine: DuckDB rejected transpiled SQL: ", detail,
         " (sql=", sql, ")"));
   }
-  const idx_t row_count = ::duckdb_row_count(&result);
   return std::unique_ptr<RowSource>(new DuckDBRowSource(
-      db, conn, result, std::move(*output_schema), row_count));
+      db, conn, result, std::move(*output_schema)));
 }
 
 #endif  // BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
