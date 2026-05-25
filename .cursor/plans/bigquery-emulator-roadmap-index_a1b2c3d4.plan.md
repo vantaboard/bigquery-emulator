@@ -91,7 +91,7 @@ todos:
     status: completed
   - id: run-29-transpiler-struct-unnest
     content: "Run transpiler-struct-unnest_a8d9e0f1.plan.md"
-    status: pending
+    status: completed
   - id: run-30-transpiler-functions-window
     content: "Run transpiler-functions-window_b9e0f1a2.plan.md"
     status: pending
