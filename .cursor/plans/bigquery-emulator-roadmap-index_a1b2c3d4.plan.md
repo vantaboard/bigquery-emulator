@@ -106,7 +106,7 @@ todos:
     status: completed
   - id: run-34-dml-update-delete
     content: "Run dml-update-delete_f3c4d5e6.plan.md"
-    status: pending
+    status: completed
   - id: run-35-ddl-statements
     content: "Run ddl-statements_g4d5e6f7.plan.md"
     status: pending
