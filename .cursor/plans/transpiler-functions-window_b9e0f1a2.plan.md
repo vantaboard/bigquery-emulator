@@ -4,13 +4,13 @@ overview: "Phase 5k: function disposition table, window functions, skiplist fall
 todos:
   - id: function-table
     content: "Add functions.yaml: BQ function → DuckDB | skiplist | fallback; loader for ResolvedFunctionCall"
-    status: pending
+    status: completed
   - id: emit-window
     content: "Emit ResolvedAnalyticScan: ROW_NUMBER, RANK, SUM OVER PARTITION BY"
-    status: pending
+    status: completed
   - id: skiplist-fallback
     content: "Skiplist functions trigger ReferenceImplEngine fallback; log reason at debug"
-    status: pending
+    status: completed
 isProject: false
 ---
 
