@@ -4,10 +4,10 @@ overview: "Phase 5m: reference_impl vs duckdb parity tests and analytics E2E."
 todos:
   - id: parity-tests
     content: "Compare reference_impl vs duckdb results on identical seed data (FLOAT tolerance)"
-    status: pending
+    status: completed
   - id: e2e-analytics
     content: "E2E: UNNEST array column, STRUCT field access, window function on DuckDB engine"
-    status: pending
+    status: completed
 isProject: false
 ---
 
