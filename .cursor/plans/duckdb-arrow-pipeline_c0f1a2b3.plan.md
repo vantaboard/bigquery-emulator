@@ -4,10 +4,10 @@ overview: "Phase 5l: DuckDB Arrow result fetch and conversion to proto/wire cell
 todos:
   - id: arrow-results
     content: "DuckDB ExecuteQuery: fetch Arrow RecordBatch stream, convert to QueryResultRow batches"
-    status: pending
+    status: completed
   - id: arrow-to-wire
     content: "Add arrow_to_bq.{h,cc} or proto path mapping Arrow types to StandardSqlDataType wire cells"
-    status: pending
+    status: completed
 isProject: false
 ---
 
