@@ -20,6 +20,7 @@ golangci-lint = "2.12.2"   # Driven by .golangci.yml; surfaced via `task lint:go
 # its own copies inside the build images so container builds stay hermetic.
 cmake = "4.3.3"
 ninja = "1.13.2"
+clang = "22.1.6"
 
 # Bazel is the canonical build path for anything that links GoogleSQL
 # (the analyzer / reference-impl engine) — GoogleSQL is Bazel-only and
