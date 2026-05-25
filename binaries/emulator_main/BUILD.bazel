@@ -44,6 +44,7 @@ cc_binary(
     deps = [
         "//backend/engine",
         "//backend/engine/duckdb:duckdb_engine",
+        "//backend/engine/fallback:fallback_engine",
         "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/storage",
         "//backend/storage:memory",

@@ -24,6 +24,7 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/duckdb/duckdb_engine.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/fallback/fallback_engine.h"
 #include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/memory/in_memory_storage.h"
@@ -59,6 +60,17 @@ enum class ProfileKind {
   kDev,
 };
 
+// Selects what the engine should do when the active engine reports
+// `UNIMPLEMENTED` for a query shape it cannot lower (Phase 5i). The
+// default is to surface the UNIMPLEMENTED to the client; `fallback`
+// transparently retries the query against the reference-impl engine
+// so the DuckDB transpiler can land per-shape coverage without
+// breaking shapes it does not cover yet.
+enum class OnUnknownFnKind {
+  kUnimplemented,
+  kFallback,
+};
+
 // Default `--data_dir` when `--storage=duckdb` is selected without an
 // explicit data_dir. Mirrors what cloud-spanner-emulator does for its
 // persistent-store directory: a stable, user-scoped path under $HOME.
@@ -82,6 +94,12 @@ struct Flags {
   EngineKind engine = EngineKind::kReferenceImpl;
   StorageKind storage = StorageKind::kMemory;
   ProfileKind profile = ProfileKind::kUnset;
+  // Phase 5i fallback policy. Default is `unimplemented` so
+  // `--engine=duckdb` surfaces UNIMPLEMENTED for transpiler-uncovered
+  // shapes; `--on_unknown_fn=fallback` wraps the active engine in a
+  // FallbackEngine that retries against the reference-impl evaluator
+  // on UNIMPLEMENTED.
+  OnUnknownFnKind on_unknown_fn = OnUnknownFnKind::kUnimplemented;
   // Persistent-store root used by `--storage=duckdb`. The default is
   // `$HOME/.bigquery-emulator`; users override via `--data_dir=PATH`.
   // Ignored when `--storage=memory`.
@@ -142,6 +160,16 @@ void PrintUsage(std::FILE* out, const char* argv0) {
                "                          --storage=memory.\n"
                "                          default: $HOME/.bigquery-emulator\n"
                "\n"
+               "  --on_unknown_fn=POLICY  what to do when the active engine\n"
+               "                          cannot lower a query shape:\n"
+               "                            unimplemented surface UNIMPLEMENTED\n"
+               "                                          to the client\n"
+               "                            fallback      retry the query\n"
+               "                                          against the\n"
+               "                                          reference-impl\n"
+               "                                          engine\n"
+               "                          default: unimplemented\n"
+               "\n"
                "  --help, -h              print this message and exit\n",
                argv0);
 }
@@ -189,6 +217,15 @@ absl::StatusOr<ProfileKind> ParseProfileKind(const std::string& value) {
   if (value == "dev") return ProfileKind::kDev;
   return absl::InvalidArgumentError(
       "unknown --profile value (expected ci|dev): " + value);
+}
+
+absl::StatusOr<OnUnknownFnKind> ParseOnUnknownFnKind(
+    const std::string& value) {
+  if (value == "unimplemented") return OnUnknownFnKind::kUnimplemented;
+  if (value == "fallback") return OnUnknownFnKind::kFallback;
+  return absl::InvalidArgumentError(
+      "unknown --on_unknown_fn value (expected unimplemented|fallback): " +
+      value);
 }
 
 const char* EngineName(EngineKind kind) {
@@ -269,6 +306,12 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
       flags.data_dir_explicit = true;
       continue;
     }
+    if (MatchStringFlag(argc, argv, &i, "on_unknown_fn", &value)) {
+      auto kind = ParseOnUnknownFnKind(value);
+      if (!kind.ok()) return kind.status();
+      flags.on_unknown_fn = *kind;
+      continue;
+    }
     return absl::InvalidArgumentError(
         std::string("unknown flag: ") + std::string(arg));
   }
@@ -306,9 +349,12 @@ CreateStorage(StorageKind kind, const std::string& data_dir) {
   return absl::InternalError("CreateStorage: unreachable storage kind");
 }
 
-// Engine factory. Both implementations are Phase 3c scaffolds and
-// return UNIMPLEMENTED on every Engine method; the real wiring lands
-// in ROADMAP Phase 5.A / 5.B.
+// Engine factory. Constructs the concrete engine corresponding to
+// `kind`. The reference-impl engine is the conformance-bar
+// implementation (slow but correct); the DuckDB engine is the
+// transpiler-driven fast path (Phase 5i). Whether `UNIMPLEMENTED` from
+// the DuckDB engine falls back to reference-impl is the
+// `--on_unknown_fn` knob handled in `main`, not here.
 std::unique_ptr<bigquery_emulator::backend::engine::Engine> CreateEngine(
     EngineKind kind, bigquery_emulator::backend::storage::Storage* storage) {
   switch (kind) {
@@ -322,6 +368,16 @@ std::unique_ptr<bigquery_emulator::backend::engine::Engine> CreateEngine(
               storage));
   }
   return nullptr;
+}
+
+const char* OnUnknownFnName(OnUnknownFnKind kind) {
+  switch (kind) {
+    case OnUnknownFnKind::kUnimplemented:
+      return "unimplemented";
+    case OnUnknownFnKind::kFallback:
+      return "fallback";
+  }
+  return "?";
 }
 
 }  // namespace
@@ -350,30 +406,60 @@ int main(int argc, char** argv) {
   std::unique_ptr<bigquery_emulator::backend::storage::Storage> storage_owned =
       std::move(storage).value();
 
-  std::unique_ptr<bigquery_emulator::backend::engine::Engine> engine =
+  std::unique_ptr<bigquery_emulator::backend::engine::Engine> primary_engine =
       CreateEngine(flags.engine, storage_owned.get());
-  if (engine == nullptr) {
+  if (primary_engine == nullptr) {
     std::fprintf(stderr, "[emulator_main] failed to create engine\n");
     return EXIT_FAILURE;
+  }
+
+  // `--on_unknown_fn=fallback` wraps the active engine in a
+  // FallbackEngine so UNIMPLEMENTED queries transparently retry
+  // through the reference-impl evaluator. We construct the fallback
+  // engine even when `--engine=reference_impl` is already selected
+  // because the wrapper is a no-op in that case (the primary never
+  // returns UNIMPLEMENTED for shapes the reference-impl covers) and
+  // keeping the wiring symmetric makes the binary easier to reason
+  // about. `fallback_engine_owned` is null when the policy is
+  // `unimplemented`; the wrapper is null on the same branch and we
+  // forward the raw primary engine to the server.
+  std::unique_ptr<bigquery_emulator::backend::engine::Engine>
+      fallback_engine_owned;
+  std::unique_ptr<bigquery_emulator::backend::engine::Engine> wrapper_engine;
+  bigquery_emulator::backend::engine::Engine* active_engine =
+      primary_engine.get();
+  if (flags.on_unknown_fn == OnUnknownFnKind::kFallback) {
+    fallback_engine_owned = std::unique_ptr<
+        bigquery_emulator::backend::engine::Engine>(
+        new bigquery_emulator::backend::engine::reference_impl::
+            ReferenceImplEngine(storage_owned.get()));
+    wrapper_engine = std::unique_ptr<
+        bigquery_emulator::backend::engine::Engine>(
+        new bigquery_emulator::backend::engine::fallback::FallbackEngine(
+            primary_engine.get(), fallback_engine_owned.get()));
+    active_engine = wrapper_engine.get();
   }
 
   if (flags.storage == StorageKind::kDuckDB) {
     std::fprintf(stderr,
                  "[emulator_main] starting engine=%s storage=%s "
-                 "data_dir=%s host_port=%s\n",
+                 "on_unknown_fn=%s data_dir=%s host_port=%s\n",
                  EngineName(flags.engine), StorageName(flags.storage),
+                 OnUnknownFnName(flags.on_unknown_fn),
                  flags.data_dir.c_str(), flags.host_port.c_str());
   } else {
     std::fprintf(stderr,
                  "[emulator_main] starting engine=%s storage=%s "
-                 "host_port=%s\n",
+                 "on_unknown_fn=%s host_port=%s\n",
                  EngineName(flags.engine), StorageName(flags.storage),
+                 OnUnknownFnName(flags.on_unknown_fn),
                  flags.host_port.c_str());
   }
 
   bigquery_emulator::frontend::Server::Options options;
   options.server_address = flags.host_port;
   options.storage = storage_owned.get();
+  options.engine = active_engine;
 
   auto server = bigquery_emulator::frontend::Server::Create(options);
   if (!server) {
