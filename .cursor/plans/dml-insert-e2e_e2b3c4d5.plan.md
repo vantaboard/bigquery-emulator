@@ -4,10 +4,10 @@ overview: "Phase 6a: statement classification and INSERT DML on reference impl."
 todos:
   - id: dml-analyzer
     content: "Classify SELECT vs DML vs DDL from analyzed AST; UNIMPLEMENTED for unsupported kinds"
-    status: pending
+    status: completed
   - id: insert-dml
     content: "Reference impl INSERT INTO VALUES/SELECT; update Storage AppendRows; return dmlStats"
-    status: pending
+    status: completed
 isProject: false
 ---
 
