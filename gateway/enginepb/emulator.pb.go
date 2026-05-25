@@ -1151,10 +1151,18 @@ func (x *DryRunResponse) GetEstimatedBytesProcessed() int64 {
 
 type QueryResultRow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// First message in the stream carries the schema; subsequent messages
-	// carry rows. Either `schema` or `cells` is set, not both.
+	// The stream carries one of three message kinds:
+	//   - `schema` only — emitted as the first message of every
+	//     `ExecuteQuery` reply for SELECT-shaped queries.
+	//   - `cells` only — emitted once per result row.
+	//   - `dml_stats` only — emitted as the final message of an
+	//     INSERT / UPDATE / DELETE / MERGE reply, after any optional
+	//     THEN-RETURN rows. Carries the per-statement modification
+	//     counts the gateway folds into BigQuery's REST `dmlStats`
+	//     and `numDmlAffectedRows` fields.
 	Schema        *TableSchema `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	Cells         []*Cell      `protobuf:"bytes,2,rep,name=cells,proto3" json:"cells,omitempty"`
+	DmlStats      *DmlStats    `protobuf:"bytes,3,opt,name=dml_stats,json=dmlStats,proto3" json:"dml_stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1203,6 +1211,83 @@ func (x *QueryResultRow) GetCells() []*Cell {
 	return nil
 }
 
+func (x *QueryResultRow) GetDmlStats() *DmlStats {
+	if x != nil {
+		return x.DmlStats
+	}
+	return nil
+}
+
+// DmlStats is the engine's report of how many rows a DML statement
+// (INSERT / UPDATE / DELETE / MERGE) modified. Mirrors the BigQuery
+// REST `Job.statistics.query.dmlStats` shape (see
+// docs/bigquery/docs/reference/rest/v2/DmlStats.md): the counts are
+// 64-bit because BigQuery exposes them as decimal strings on the
+// wire and the gateway formats them with `strconv.FormatInt` from
+// these int64 fields.
+type DmlStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of rows added by INSERT / MERGE-INSERT branches.
+	InsertedRowCount int64 `protobuf:"varint,1,opt,name=inserted_row_count,json=insertedRowCount,proto3" json:"inserted_row_count,omitempty"`
+	// Number of rows updated by UPDATE / MERGE-UPDATE branches.
+	UpdatedRowCount int64 `protobuf:"varint,2,opt,name=updated_row_count,json=updatedRowCount,proto3" json:"updated_row_count,omitempty"`
+	// Number of rows removed by DELETE / MERGE-DELETE branches.
+	DeletedRowCount int64 `protobuf:"varint,3,opt,name=deleted_row_count,json=deletedRowCount,proto3" json:"deleted_row_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DmlStats) Reset() {
+	*x = DmlStats{}
+	mi := &file_emulator_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DmlStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DmlStats) ProtoMessage() {}
+
+func (x *DmlStats) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DmlStats.ProtoReflect.Descriptor instead.
+func (*DmlStats) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DmlStats) GetInsertedRowCount() int64 {
+	if x != nil {
+		return x.InsertedRowCount
+	}
+	return 0
+}
+
+func (x *DmlStats) GetUpdatedRowCount() int64 {
+	if x != nil {
+		return x.UpdatedRowCount
+	}
+	return 0
+}
+
+func (x *DmlStats) GetDeletedRowCount() int64 {
+	if x != nil {
+		return x.DeletedRowCount
+	}
+	return 0
+}
+
 type Cell struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Wire shape: either `string_value`, `null_value`, `array`, or `struct`
@@ -1221,7 +1306,7 @@ type Cell struct {
 
 func (x *Cell) Reset() {
 	*x = Cell{}
-	mi := &file_emulator_proto_msgTypes[23]
+	mi := &file_emulator_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1233,7 +1318,7 @@ func (x *Cell) String() string {
 func (*Cell) ProtoMessage() {}
 
 func (x *Cell) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[23]
+	mi := &file_emulator_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1246,7 +1331,7 @@ func (x *Cell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cell.ProtoReflect.Descriptor instead.
 func (*Cell) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{23}
+	return file_emulator_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Cell) GetValue() isCell_Value {
@@ -1329,7 +1414,7 @@ type Array struct {
 
 func (x *Array) Reset() {
 	*x = Array{}
-	mi := &file_emulator_proto_msgTypes[24]
+	mi := &file_emulator_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1341,7 +1426,7 @@ func (x *Array) String() string {
 func (*Array) ProtoMessage() {}
 
 func (x *Array) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[24]
+	mi := &file_emulator_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1354,7 +1439,7 @@ func (x *Array) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Array.ProtoReflect.Descriptor instead.
 func (*Array) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{24}
+	return file_emulator_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Array) GetElements() []*Cell {
@@ -1373,7 +1458,7 @@ type Struct struct {
 
 func (x *Struct) Reset() {
 	*x = Struct{}
-	mi := &file_emulator_proto_msgTypes[25]
+	mi := &file_emulator_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1385,7 +1470,7 @@ func (x *Struct) String() string {
 func (*Struct) ProtoMessage() {}
 
 func (x *Struct) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[25]
+	mi := &file_emulator_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1398,7 +1483,7 @@ func (x *Struct) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Struct.ProtoReflect.Descriptor instead.
 func (*Struct) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{25}
+	return file_emulator_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Struct) GetFields() []*Cell {
@@ -1487,10 +1572,15 @@ const file_emulator_proto_rawDesc = "" +
 	"value_json\x18\x02 \x01(\tR\tvalueJson\"\x87\x01\n" +
 	"\x0eDryRunResponse\x129\n" +
 	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x12:\n" +
-	"\x19estimated_bytes_processed\x18\x02 \x01(\x03R\x17estimatedBytesProcessed\"}\n" +
+	"\x19estimated_bytes_processed\x18\x02 \x01(\x03R\x17estimatedBytesProcessed\"\xba\x01\n" +
 	"\x0eQueryResultRow\x129\n" +
 	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x120\n" +
-	"\x05cells\x18\x02 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\"\xcd\x01\n" +
+	"\x05cells\x18\x02 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\x12;\n" +
+	"\tdml_stats\x18\x03 \x01(\v2\x1e.bigquery_emulator.v1.DmlStatsR\bdmlStats\"\x90\x01\n" +
+	"\bDmlStats\x12,\n" +
+	"\x12inserted_row_count\x18\x01 \x01(\x03R\x10insertedRowCount\x12*\n" +
+	"\x11updated_row_count\x18\x02 \x01(\x03R\x0fupdatedRowCount\x12*\n" +
+	"\x11deleted_row_count\x18\x03 \x01(\x03R\x0fdeletedRowCount\"\xcd\x01\n" +
 	"\x04Cell\x12#\n" +
 	"\fstring_value\x18\x01 \x01(\tH\x00R\vstringValue\x12\x1f\n" +
 	"\n" +
@@ -1527,7 +1617,7 @@ func file_emulator_proto_rawDescGZIP() []byte {
 	return file_emulator_proto_rawDescData
 }
 
-var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_emulator_proto_goTypes = []any{
 	(*DatasetRef)(nil),              // 0: bigquery_emulator.v1.DatasetRef
 	(*TableRef)(nil),                // 1: bigquery_emulator.v1.TableRef
@@ -1552,10 +1642,11 @@ var file_emulator_proto_goTypes = []any{
 	(*QueryParameter)(nil),          // 20: bigquery_emulator.v1.QueryParameter
 	(*DryRunResponse)(nil),          // 21: bigquery_emulator.v1.DryRunResponse
 	(*QueryResultRow)(nil),          // 22: bigquery_emulator.v1.QueryResultRow
-	(*Cell)(nil),                    // 23: bigquery_emulator.v1.Cell
-	(*Array)(nil),                   // 24: bigquery_emulator.v1.Array
-	(*Struct)(nil),                  // 25: bigquery_emulator.v1.Struct
-	nil,                             // 26: bigquery_emulator.v1.QueryRequest.ParametersEntry
+	(*DmlStats)(nil),                // 23: bigquery_emulator.v1.DmlStats
+	(*Cell)(nil),                    // 24: bigquery_emulator.v1.Cell
+	(*Array)(nil),                   // 25: bigquery_emulator.v1.Array
+	(*Struct)(nil),                  // 26: bigquery_emulator.v1.Struct
+	nil,                             // 27: bigquery_emulator.v1.QueryRequest.ParametersEntry
 }
 var file_emulator_proto_depIdxs = []int32{
 	2,  // 0: bigquery_emulator.v1.FieldSchema.fields:type_name -> bigquery_emulator.v1.FieldSchema
@@ -1567,43 +1658,44 @@ var file_emulator_proto_depIdxs = []int32{
 	1,  // 6: bigquery_emulator.v1.DropTableRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	1,  // 7: bigquery_emulator.v1.DescribeTableRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	3,  // 8: bigquery_emulator.v1.DescribeTableResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
-	23, // 9: bigquery_emulator.v1.DataRow.cells:type_name -> bigquery_emulator.v1.Cell
+	24, // 9: bigquery_emulator.v1.DataRow.cells:type_name -> bigquery_emulator.v1.Cell
 	1,  // 10: bigquery_emulator.v1.InsertRowsRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	14, // 11: bigquery_emulator.v1.InsertRowsRequest.rows:type_name -> bigquery_emulator.v1.DataRow
 	1,  // 12: bigquery_emulator.v1.ListRowsRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	14, // 13: bigquery_emulator.v1.ListRowsResponse.rows:type_name -> bigquery_emulator.v1.DataRow
-	26, // 14: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
+	27, // 14: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
 	3,  // 15: bigquery_emulator.v1.DryRunResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
 	3,  // 16: bigquery_emulator.v1.QueryResultRow.schema:type_name -> bigquery_emulator.v1.TableSchema
-	23, // 17: bigquery_emulator.v1.QueryResultRow.cells:type_name -> bigquery_emulator.v1.Cell
-	24, // 18: bigquery_emulator.v1.Cell.array:type_name -> bigquery_emulator.v1.Array
-	25, // 19: bigquery_emulator.v1.Cell.struct_value:type_name -> bigquery_emulator.v1.Struct
-	23, // 20: bigquery_emulator.v1.Array.elements:type_name -> bigquery_emulator.v1.Cell
-	23, // 21: bigquery_emulator.v1.Struct.fields:type_name -> bigquery_emulator.v1.Cell
-	20, // 22: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
-	4,  // 23: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
-	6,  // 24: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
-	8,  // 25: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
-	10, // 26: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
-	12, // 27: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
-	15, // 28: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
-	17, // 29: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
-	19, // 30: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
-	19, // 31: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
-	5,  // 32: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
-	7,  // 33: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
-	9,  // 34: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
-	11, // 35: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
-	13, // 36: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
-	16, // 37: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
-	18, // 38: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
-	21, // 39: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
-	22, // 40: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
-	32, // [32:41] is the sub-list for method output_type
-	23, // [23:32] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	24, // 17: bigquery_emulator.v1.QueryResultRow.cells:type_name -> bigquery_emulator.v1.Cell
+	23, // 18: bigquery_emulator.v1.QueryResultRow.dml_stats:type_name -> bigquery_emulator.v1.DmlStats
+	25, // 19: bigquery_emulator.v1.Cell.array:type_name -> bigquery_emulator.v1.Array
+	26, // 20: bigquery_emulator.v1.Cell.struct_value:type_name -> bigquery_emulator.v1.Struct
+	24, // 21: bigquery_emulator.v1.Array.elements:type_name -> bigquery_emulator.v1.Cell
+	24, // 22: bigquery_emulator.v1.Struct.fields:type_name -> bigquery_emulator.v1.Cell
+	20, // 23: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
+	4,  // 24: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
+	6,  // 25: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
+	8,  // 26: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
+	10, // 27: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
+	12, // 28: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
+	15, // 29: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
+	17, // 30: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
+	19, // 31: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
+	19, // 32: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
+	5,  // 33: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
+	7,  // 34: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
+	9,  // 35: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
+	11, // 36: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
+	13, // 37: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
+	16, // 38: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
+	18, // 39: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
+	21, // 40: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
+	22, // 41: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
+	33, // [33:42] is the sub-list for method output_type
+	24, // [24:33] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_emulator_proto_init() }
@@ -1611,7 +1703,7 @@ func file_emulator_proto_init() {
 	if File_emulator_proto != nil {
 		return
 	}
-	file_emulator_proto_msgTypes[23].OneofWrappers = []any{
+	file_emulator_proto_msgTypes[24].OneofWrappers = []any{
 		(*Cell_StringValue)(nil),
 		(*Cell_NullValue)(nil),
 		(*Cell_Array)(nil),
@@ -1623,7 +1715,7 @@ func file_emulator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_emulator_proto_rawDesc), len(file_emulator_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

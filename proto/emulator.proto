@@ -177,10 +177,34 @@ message DryRunResponse {
 }
 
 message QueryResultRow {
-  // First message in the stream carries the schema; subsequent messages
-  // carry rows. Either `schema` or `cells` is set, not both.
+  // The stream carries one of three message kinds:
+  //   * `schema` only — emitted as the first message of every
+  //     `ExecuteQuery` reply for SELECT-shaped queries.
+  //   * `cells` only — emitted once per result row.
+  //   * `dml_stats` only — emitted as the final message of an
+  //     INSERT / UPDATE / DELETE / MERGE reply, after any optional
+  //     THEN-RETURN rows. Carries the per-statement modification
+  //     counts the gateway folds into BigQuery's REST `dmlStats`
+  //     and `numDmlAffectedRows` fields.
   TableSchema schema = 1;
   repeated Cell cells = 2;
+  DmlStats dml_stats = 3;
+}
+
+// DmlStats is the engine's report of how many rows a DML statement
+// (INSERT / UPDATE / DELETE / MERGE) modified. Mirrors the BigQuery
+// REST `Job.statistics.query.dmlStats` shape (see
+// docs/bigquery/docs/reference/rest/v2/DmlStats.md): the counts are
+// 64-bit because BigQuery exposes them as decimal strings on the
+// wire and the gateway formats them with `strconv.FormatInt` from
+// these int64 fields.
+message DmlStats {
+  // Number of rows added by INSERT / MERGE-INSERT branches.
+  int64 inserted_row_count = 1;
+  // Number of rows updated by UPDATE / MERGE-UPDATE branches.
+  int64 updated_row_count = 2;
+  // Number of rows removed by DELETE / MERGE-DELETE branches.
+  int64 deleted_row_count = 3;
 }
 
 message Cell {
