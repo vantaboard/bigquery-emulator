@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -399,6 +401,267 @@ absl::StatusOr<std::unique_ptr<RowSource>> ReferenceImplEngine::ExecuteQuery(
       std::move(*output_schema)));
 }
 
+namespace {
+
+// Recover the `StorageTable*` behind the resolved table scan of a DML
+// statement. The catalog hands out `StorageTable*` for every
+// materialized table; a non-StorageTable means the analyzer resolved
+// against a different shape (e.g. a built-in) and we cannot
+// meaningfully apply DML to it.
+absl::StatusOr<const catalog::StorageTable*> StorageTargetFor(
+    const ::googlesql::ResolvedTableScan* scan, absl::string_view what) {
+  if (scan == nullptr || scan->table() == nullptr) {
+    return absl::InternalError(absl::StrCat(
+        "ReferenceImplEngine::ExecuteDml: ", what,
+        " has no resolved table scan"));
+  }
+  const auto* storage_table =
+      dynamic_cast<const catalog::StorageTable*>(scan->table());
+  if (storage_table == nullptr) {
+    return absl::FailedPreconditionError(absl::StrCat(
+        "ReferenceImplEngine::ExecuteDml: ", what, " target table '",
+        scan->table()->FullName(),
+        "' is not backed by a StorageTable; cannot apply DML"));
+  }
+  return storage_table;
+}
+
+// Project the iterator's "new" row values onto a fresh
+// `storage::Row` in catalog column order. The iterator carries one
+// `googlesql::Value` per table column; for INSERT VALUES that does
+// not name every column the analyzer has already filled defaults /
+// NULLs into the unmentioned slots, so we walk the full schema.
+absl::StatusOr<storage::Row> BuildRowFromIterator(
+    const ::googlesql::EvaluatorTableModifyIterator& iter,
+    const schema::TableSchema& schema) {
+  storage::Row row;
+  row.cells.reserve(schema.columns.size());
+  for (size_t i = 0; i < schema.columns.size(); ++i) {
+    const ::googlesql::Value& cell =
+        iter.GetColumnValue(static_cast<int>(i));
+    absl::StatusOr<storage::Value> converted =
+        GoogleSqlValueToStorageValue(cell);
+    if (!converted.ok()) return converted.status();
+    row.cells.push_back(std::move(converted).value());
+  }
+  return row;
+}
+
+// Pull every row out of the storage backend for the table behind
+// `target_id`. Used by UPDATE / DELETE so we can rewrite the snapshot
+// in-place via `OverwriteRows`. A NOT_FOUND on the table propagates
+// to the caller verbatim so the gateway can map it to BigQuery's
+// matching REST error.
+absl::StatusOr<std::vector<storage::Row>> ScanAllRows(
+    const storage::Storage& storage, const storage::TableId& target_id) {
+  absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
+      storage.ScanRows(target_id);
+  if (!iter.ok()) return iter.status();
+  std::unique_ptr<storage::RowIterator> rows_iter = std::move(iter).value();
+  std::vector<storage::Row> all_rows;
+  storage::Row row;
+  while (true) {
+    absl::StatusOr<bool> has = rows_iter->Next(&row);
+    if (!has.ok()) return has.status();
+    if (!*has) break;
+    all_rows.push_back(row);
+  }
+  return all_rows;
+}
+
+// Stable string representation of a `storage::Value` so primary-key
+// lookups land on a single map entry regardless of the underlying
+// variant kind. The first column of every `StorageTable` is treated
+// as the synthetic primary key (see the constructor in
+// `backend/catalog/storage_table.cc`); the engine compares two
+// PK Values by serializing them through this helper so a `Bool(true)`
+// from one path and a `String("true")` from another do not collide.
+std::string SerializeForPkLookup(const storage::Value& value) {
+  using Kind = storage::Value::Kind;
+  switch (value.kind()) {
+    case Kind::kNull:
+      return "n:";
+    case Kind::kBool:
+      return std::string(value.bool_value() ? "b:1" : "b:0");
+    case Kind::kInt64:
+      return absl::StrCat("i:", value.int64_value());
+    case Kind::kFloat64:
+      return absl::StrCat("f:", value.float64_value());
+    case Kind::kString:
+      return absl::StrCat("s:", value.string_value());
+    case Kind::kBytes:
+      return absl::StrCat("y:", value.string_value());
+    case Kind::kArray: {
+      std::string out = "a:[";
+      for (const auto& e : value.array_value()) {
+        absl::StrAppend(&out, SerializeForPkLookup(e), ",");
+      }
+      absl::StrAppend(&out, "]");
+      return out;
+    }
+    case Kind::kStruct: {
+      std::string out = "t:{";
+      for (const auto& f : value.struct_value()) {
+        absl::StrAppend(&out, SerializeForPkLookup(f), ",");
+      }
+      absl::StrAppend(&out, "}");
+      return out;
+    }
+  }
+  return "?:";
+}
+
+// Run the INSERT path: every iterator row is a fresh row to append
+// to the storage backend.
+absl::StatusOr<DmlStats> RunInsert(
+    storage::Storage& storage, const storage::TableId& target_id,
+    const schema::TableSchema& target_schema,
+    ::googlesql::EvaluatorTableModifyIterator& rows) {
+  std::vector<storage::Row> pending;
+  while (rows.NextRow()) {
+    if (rows.GetOperation() !=
+        ::googlesql::EvaluatorTableModifyIterator::Operation::kInsert) {
+      return absl::InternalError(absl::StrCat(
+          "ReferenceImplEngine::ExecuteDml: INSERT iterator yielded a "
+          "non-insert operation kind ",
+          static_cast<int>(rows.GetOperation())));
+    }
+    absl::StatusOr<storage::Row> row =
+        BuildRowFromIterator(rows, target_schema);
+    if (!row.ok()) return row.status();
+    pending.push_back(*std::move(row));
+  }
+  absl::Status iter_status = rows.Status();
+  if (!iter_status.ok()) return iter_status;
+
+  if (!pending.empty()) {
+    absl::Status appended = storage.AppendRows(
+        target_id, absl::MakeConstSpan(pending));
+    if (!appended.ok()) return appended;
+  }
+  DmlStats stats;
+  stats.inserted_row_count = static_cast<int64_t>(pending.size());
+  return stats;
+}
+
+// Run the UPDATE path: iterator yields one row per matched row, where
+// each row carries the post-mutation values for every catalog column.
+// We pair them with the original PK via `GetOriginalKeyValue(0)`
+// (the catalog wires `PrimaryKey = {0}` in `StorageTable`), scan the
+// existing storage snapshot, and rewrite each matching row.
+absl::StatusOr<DmlStats> RunUpdate(
+    storage::Storage& storage, const storage::TableId& target_id,
+    const schema::TableSchema& target_schema,
+    ::googlesql::EvaluatorTableModifyIterator& rows) {
+  absl::flat_hash_map<std::string, storage::Row> updates;
+  int64_t modified = 0;
+  while (rows.NextRow()) {
+    if (rows.GetOperation() !=
+        ::googlesql::EvaluatorTableModifyIterator::Operation::kUpdate) {
+      return absl::InternalError(absl::StrCat(
+          "ReferenceImplEngine::ExecuteDml: UPDATE iterator yielded a "
+          "non-update operation kind ",
+          static_cast<int>(rows.GetOperation())));
+    }
+    const ::googlesql::Value& key = rows.GetOriginalKeyValue(0);
+    absl::StatusOr<storage::Value> pk = GoogleSqlValueToStorageValue(key);
+    if (!pk.ok()) return pk.status();
+    absl::StatusOr<storage::Row> new_row =
+        BuildRowFromIterator(rows, target_schema);
+    if (!new_row.ok()) return new_row.status();
+    updates.insert_or_assign(SerializeForPkLookup(*pk), *std::move(new_row));
+    ++modified;
+  }
+  absl::Status iter_status = rows.Status();
+  if (!iter_status.ok()) return iter_status;
+
+  if (updates.empty()) {
+    DmlStats stats;
+    stats.updated_row_count = 0;
+    return stats;
+  }
+
+  absl::StatusOr<std::vector<storage::Row>> all_rows =
+      ScanAllRows(storage, target_id);
+  if (!all_rows.ok()) return all_rows.status();
+
+  // Walk the existing rows in storage order; swap any row whose PK
+  // (column 0) shows up in the iterator's update map. Rows not
+  // touched by the UPDATE keep their original cell vector.
+  for (storage::Row& row : *all_rows) {
+    if (row.cells.empty()) continue;
+    auto it = updates.find(SerializeForPkLookup(row.cells.front()));
+    if (it == updates.end()) continue;
+    row = it->second;
+  }
+  absl::Status applied = storage.OverwriteRows(
+      target_id, absl::MakeConstSpan(*all_rows));
+  if (!applied.ok()) return applied;
+
+  DmlStats stats;
+  stats.updated_row_count = modified;
+  return stats;
+}
+
+// Run the DELETE path: iterator yields one row per matched row; we
+// only need each row's original PK to drop the matching row from the
+// storage snapshot. `GetColumnValue` returns an invalid Value for
+// kDelete operations (see `evaluator_base.cc`) so we never call it.
+absl::StatusOr<DmlStats> RunDelete(
+    storage::Storage& storage, const storage::TableId& target_id,
+    ::googlesql::EvaluatorTableModifyIterator& rows) {
+  absl::flat_hash_set<std::string> deleted_pks;
+  int64_t deleted = 0;
+  while (rows.NextRow()) {
+    if (rows.GetOperation() !=
+        ::googlesql::EvaluatorTableModifyIterator::Operation::kDelete) {
+      return absl::InternalError(absl::StrCat(
+          "ReferenceImplEngine::ExecuteDml: DELETE iterator yielded a "
+          "non-delete operation kind ",
+          static_cast<int>(rows.GetOperation())));
+    }
+    const ::googlesql::Value& key = rows.GetOriginalKeyValue(0);
+    absl::StatusOr<storage::Value> pk = GoogleSqlValueToStorageValue(key);
+    if (!pk.ok()) return pk.status();
+    deleted_pks.insert(SerializeForPkLookup(*pk));
+    ++deleted;
+  }
+  absl::Status iter_status = rows.Status();
+  if (!iter_status.ok()) return iter_status;
+
+  if (deleted_pks.empty()) {
+    DmlStats stats;
+    stats.deleted_row_count = 0;
+    return stats;
+  }
+
+  absl::StatusOr<std::vector<storage::Row>> all_rows =
+      ScanAllRows(storage, target_id);
+  if (!all_rows.ok()) return all_rows.status();
+
+  std::vector<storage::Row> kept;
+  kept.reserve(all_rows->size());
+  for (storage::Row& row : *all_rows) {
+    if (row.cells.empty()) {
+      kept.push_back(std::move(row));
+      continue;
+    }
+    if (deleted_pks.contains(SerializeForPkLookup(row.cells.front()))) {
+      continue;
+    }
+    kept.push_back(std::move(row));
+  }
+  absl::Status applied = storage.OverwriteRows(
+      target_id, absl::MakeConstSpan(kept));
+  if (!applied.ok()) return applied;
+
+  DmlStats stats;
+  stats.deleted_row_count = deleted;
+  return stats;
+}
+
+}  // namespace
+
 absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
     const QueryRequest& request, ::googlesql::Catalog* catalog) {
   absl::Status valid = ValidateRequest(request, catalog);
@@ -428,42 +691,58 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
         "ReferenceImplEngine::ExecuteDml: PreparedModify did not expose a "
         "resolved statement");
   }
-  if (stmt->node_kind() != ::googlesql::RESOLVED_INSERT_STMT) {
-    return absl::UnimplementedError(absl::StrCat(
-        "ReferenceImplEngine::ExecuteDml: only INSERT is implemented "
-        "today; got ", stmt->node_kind_string()));
-  }
-  const auto* insert_stmt =
-      stmt->GetAs<::googlesql::ResolvedInsertStmt>();
-  const ::googlesql::ResolvedTableScan* table_scan =
-      insert_stmt->table_scan();
-  if (table_scan == nullptr || table_scan->table() == nullptr) {
-    return absl::InternalError(
-        "ReferenceImplEngine::ExecuteDml: INSERT has no resolved table "
-        "scan");
-  }
-  // The catalog hands out `StorageTable*` for every materialized
-  // table; downcast so we can recover the engine-agnostic
-  // `storage::TableId`. A non-StorageTable means the catalog adapter
-  // returned a different shape (e.g. a built-in) and we cannot
-  // meaningfully append rows to it.
-  const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(
-      table_scan->table());
-  if (storage_table == nullptr) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "ReferenceImplEngine::ExecuteDml: INSERT target table '",
-        table_scan->table()->FullName(),
-        "' is not backed by a StorageTable; cannot append rows"));
-  }
-  const storage::TableId target_id = storage_table->storage_table_id();
-  const schema::TableSchema& target_schema = storage_table->bq_schema();
 
-  // PreparedModify's iterator returns a row per insert with one
-  // googlesql::Value per *table* column (in catalog order). For an
-  // INSERT VALUES with a column subset, the analyzer fills in
-  // defaults / NULLs for the unmentioned columns automatically before
-  // the iterator hands the row back, so we always project across the
-  // full `target_schema.columns` list here.
+  // Resolve the target table once via the statement-shape switch
+  // below; every DML kind PreparedModify supports (INSERT / UPDATE /
+  // DELETE) wraps a `ResolvedTableScan` we have to downcast back to
+  // a `StorageTable` to recover the storage::TableId.
+  const ::googlesql::ResolvedTableScan* table_scan = nullptr;
+  absl::string_view stmt_kind;
+  switch (stmt->node_kind()) {
+    case ::googlesql::RESOLVED_INSERT_STMT:
+      table_scan =
+          stmt->GetAs<::googlesql::ResolvedInsertStmt>()->table_scan();
+      stmt_kind = "INSERT";
+      break;
+    case ::googlesql::RESOLVED_UPDATE_STMT:
+      table_scan =
+          stmt->GetAs<::googlesql::ResolvedUpdateStmt>()->table_scan();
+      stmt_kind = "UPDATE";
+      break;
+    case ::googlesql::RESOLVED_DELETE_STMT:
+      table_scan =
+          stmt->GetAs<::googlesql::ResolvedDeleteStmt>()->table_scan();
+      stmt_kind = "DELETE";
+      break;
+    case ::googlesql::RESOLVED_MERGE_STMT:
+      // MERGE is intentionally deferred to a follow-up plan: the
+      // reference-impl algebrizer does not yet algebrize
+      // ResolvedMergeStmt at the statement root (see the
+      // `// TODO: Add MERGE support.` comment in
+      // `googlesql/reference_impl/algebrizer.cc::AlgebrizeStatement`),
+      // so PreparedModify cannot run a MERGE end-to-end. We return
+      // UNIMPLEMENTED with the standard prefix so the FallbackEngine
+      // wrapper can route the query to another engine if one is
+      // configured. Phase 6c will land a scan-and-diff MERGE
+      // implementation that does not depend on PreparedModify.
+      return absl::UnimplementedError(
+          "ReferenceImplEngine::ExecuteDml: MERGE is not yet implemented "
+          "(the GoogleSQL reference-impl algebrizer does not yet support "
+          "MERGE at the statement root); rewrite as INSERT / UPDATE / "
+          "DELETE or wait for Phase 6c");
+    default:
+      return absl::UnimplementedError(absl::StrCat(
+          "ReferenceImplEngine::ExecuteDml: statement kind ",
+          stmt->node_kind_string(),
+          " is not a DML statement supported by PreparedModify"));
+  }
+
+  absl::StatusOr<const catalog::StorageTable*> storage_table =
+      StorageTargetFor(table_scan, stmt_kind);
+  if (!storage_table.ok()) return storage_table.status();
+  const storage::TableId target_id = (*storage_table)->storage_table_id();
+  const schema::TableSchema& target_schema = (*storage_table)->bq_schema();
+
   absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableModifyIterator>>
       iter = modify->Execute();
   if (!iter.ok()) return iter.status();
@@ -475,42 +754,20 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
         "returned a null iterator");
   }
 
-  std::vector<storage::Row> pending;
-  while (rows->NextRow()) {
-    if (rows->GetOperation() !=
-        ::googlesql::EvaluatorTableModifyIterator::Operation::kInsert) {
-      // We classified the statement as INSERT above, so anything
-      // other than `kInsert` here is a reference-impl invariant
-      // violation; surface it as INTERNAL so the caller sees the
-      // bug instead of a silently dropped row.
+  switch (stmt->node_kind()) {
+    case ::googlesql::RESOLVED_INSERT_STMT:
+      return RunInsert(*storage_, target_id, target_schema, *rows);
+    case ::googlesql::RESOLVED_UPDATE_STMT:
+      return RunUpdate(*storage_, target_id, target_schema, *rows);
+    case ::googlesql::RESOLVED_DELETE_STMT:
+      return RunDelete(*storage_, target_id, *rows);
+    default:
+      // Unreachable: the switch above already filtered to the three
+      // supported kinds.
       return absl::InternalError(absl::StrCat(
-          "ReferenceImplEngine::ExecuteDml: INSERT iterator yielded a "
-          "non-insert operation kind ",
-          static_cast<int>(rows->GetOperation())));
-    }
-    storage::Row row;
-    row.cells.reserve(target_schema.columns.size());
-    for (size_t i = 0; i < target_schema.columns.size(); ++i) {
-      const ::googlesql::Value& cell = rows->GetColumnValue(static_cast<int>(i));
-      absl::StatusOr<storage::Value> converted =
-          GoogleSqlValueToStorageValue(cell);
-      if (!converted.ok()) return converted.status();
-      row.cells.push_back(std::move(converted).value());
-    }
-    pending.push_back(std::move(row));
+          "ReferenceImplEngine::ExecuteDml: unexpected statement kind ",
+          stmt->node_kind_string()));
   }
-  absl::Status iter_status = rows->Status();
-  if (!iter_status.ok()) return iter_status;
-
-  if (!pending.empty()) {
-    absl::Status appended = storage_->AppendRows(
-        target_id, absl::MakeConstSpan(pending));
-    if (!appended.ok()) return appended;
-  }
-
-  DmlStats stats;
-  stats.inserted_row_count = static_cast<int64_t>(pending.size());
-  return stats;
 }
 
 #endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL

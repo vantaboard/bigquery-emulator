@@ -95,6 +95,8 @@ class DuckDBStorage : public Storage {
   // DuckDB's `read_parquet` + INSERT statements.
   absl::Status AppendRows(const TableId& id,
                            absl::Span<const Row> rows) override;
+  absl::Status OverwriteRows(const TableId& id,
+                              absl::Span<const Row> rows) override;
   absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const override;
 

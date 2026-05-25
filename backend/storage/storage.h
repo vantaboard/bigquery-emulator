@@ -186,6 +186,21 @@ class Storage {
   virtual absl::Status AppendRows(const TableId& id,
                                    absl::Span<const Row> rows) = 0;
 
+  // Atomically replaces every row in `id` with `rows`. Used by the
+  // DML engine's scan-and-rewrite path for UPDATE / DELETE / MERGE:
+  // the engine pulls the existing rows, computes the post-mutation
+  // shape, and hands the result back through this method so the
+  // store can swap the row vector / parquet file in one shot.
+  //
+  // Same shape-check contract as `AppendRows`: row cell count must
+  // equal the table's top-level column count, otherwise
+  // INVALID_ARGUMENT. NOT_FOUND if the dataset / table does not
+  // exist. The new row vector replaces the existing one in full,
+  // including the empty-vector case (`rows.empty()` truncates the
+  // table).
+  virtual absl::Status OverwriteRows(const TableId& id,
+                                      absl::Span<const Row> rows) = 0;
+
   // Begins a fresh scan of `id`'s rows. The returned iterator captures
   // a snapshot at call time; rows appended afterward may or may not be
   // visible depending on the impl. NOT_FOUND if the table does not

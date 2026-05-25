@@ -1058,6 +1058,108 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
 #endif
 }
 
+absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
+                                            absl::Span<const Row> rows) {
+#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
+  (void)id;
+  (void)rows;
+  return absl::UnimplementedError(
+      "DuckDBStorage::OverwriteRows: built without "
+      "BIGQUERY_EMULATOR_HAS_DUCKDB");
+#else
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return absl::NotFoundError(absl::StrCat(
+        "dataset not found: ", id.project_id, ".", id.dataset_id));
+  }
+  const fs::path meta_path = TableMetaPath(id);
+  if (!fs::exists(meta_path, ec)) {
+    return absl::NotFoundError(absl::StrCat(
+        "table not found: ", id.project_id, ".", id.dataset_id, ".",
+        id.table_id));
+  }
+
+  auto contents_or = ReadFile(meta_path);
+  if (!contents_or.ok()) return contents_or.status();
+  auto schema_or = ParseTableMetaJson(*contents_or);
+  if (!schema_or.ok()) return schema_or.status();
+  const schema::TableSchema& schema = *schema_or;
+  const size_t ncols = schema.columns.size();
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (rows[i].cells.size() != ncols) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "OverwriteRows: row[", i, "] has ", rows[i].cells.size(),
+          " cell(s) but table ", id.project_id, ".", id.dataset_id, ".",
+          id.table_id, " has ", ncols, " column(s)"));
+    }
+  }
+
+  const std::string parquet_path = TableParquetPath(id);
+  const std::string tmp_path = absl::StrCat(parquet_path, ".tmp");
+  const std::string tmp_table = "main.__bqemu_overwrite";
+
+  // Stage a fresh temp table holding just the new rows. We deliberately
+  // do NOT carry over existing rows (unlike AppendRows) -- this is the
+  // overwrite contract: replace the parquet file with whatever the
+  // caller hands us, including the empty-vector case.
+  const std::string col_list = RenderColumnList(schema);
+  auto status = RunSql(impl_.get(),
+                        absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
+                                     tmp_table, " ", col_list));
+  if (!status.ok()) return status;
+
+  if (!rows.empty()) {
+    std::string insert_sql;
+    absl::StrAppend(&insert_sql, "INSERT INTO ", tmp_table, " VALUES ");
+    for (size_t r = 0; r < rows.size(); ++r) {
+      if (r > 0) absl::StrAppend(&insert_sql, ", ");
+      absl::StrAppend(&insert_sql, "(");
+      for (size_t c = 0; c < ncols; ++c) {
+        if (c > 0) absl::StrAppend(&insert_sql, ", ");
+        auto cell_or = RenderCellLiteral(rows[r].cells[c], schema.columns[c]);
+        if (!cell_or.ok()) {
+          TryDropTempTable(impl_.get(), tmp_table);
+          return cell_or.status();
+        }
+        absl::StrAppend(&insert_sql, *cell_or);
+      }
+      absl::StrAppend(&insert_sql, ")");
+    }
+    status = RunSql(impl_.get(), insert_sql);
+    if (!status.ok()) {
+      TryDropTempTable(impl_.get(), tmp_table);
+      return status;
+    }
+  }
+
+  fs::remove(tmp_path, ec);
+  status =
+      RunSql(impl_.get(),
+              absl::StrCat("COPY ", tmp_table, " TO '",
+                           EscapeStringLiteralInner(tmp_path),
+                           "' (FORMAT PARQUET)"));
+  if (!status.ok()) {
+    TryDropTempTable(impl_.get(), tmp_table);
+    fs::remove(tmp_path, ec);
+    return status;
+  }
+
+  fs::rename(tmp_path, parquet_path, ec);
+  if (ec) {
+    TryDropTempTable(impl_.get(), tmp_table);
+    fs::remove(tmp_path, ec);
+    return absl::Status(
+        absl::StatusCode::kInternal,
+        absl::StrCat("OverwriteRows: failed to rename ", tmp_path, " -> ",
+                     parquet_path, ": ", ec.message()));
+  }
+  TryDropTempTable(impl_.get(), tmp_table);
+  return absl::OkStatus();
+#endif
+}
+
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
     const TableId& id) const {
 #ifndef BIGQUERY_EMULATOR_HAS_DUCKDB

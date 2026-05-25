@@ -416,12 +416,33 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlIsUnimplemented) {
   EXPECT_TRUE(collector.messages().empty());
 }
 
-TEST_F(QueryServiceTest, ExecuteQueryDeleteIsUnimplementedFromEngine) {
+TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
   CreatePeopleTable();
-  // DELETE is classified as DML but the reference-impl engine only
-  // implements INSERT today, so the engine returns UNIMPLEMENTED and
-  // the handler propagates it as gRPC UNIMPLEMENTED.
+  // Phase 6b: DELETE now runs end-to-end against the reference-impl
+  // engine; the handler streams a single dml_stats message with the
+  // matching deletedRowCount.
   v1::QueryRequest req = MakeRequest("DELETE FROM ds.t WHERE FALSE");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  const auto& messages = collector.messages();
+  ASSERT_EQ(messages.size(), 1u);
+  ASSERT_TRUE(messages[0].has_dml_stats());
+  EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryMergeIsUnimplementedFromEngine) {
+  CreatePeopleTable();
+  // Phase 6b: MERGE is intentionally deferred -- the reference-impl
+  // algebrizer does not yet support ResolvedMergeStmt at the
+  // statement root, so the engine returns UNIMPLEMENTED and the
+  // handler propagates it as gRPC UNIMPLEMENTED.
+  v1::QueryRequest req = MakeRequest(
+      "MERGE INTO ds.t T USING (SELECT 99 AS id, 'mira' AS name, [] "
+      "AS tags) S ON T.id = S.id "
+      "WHEN NOT MATCHED THEN INSERT (id, name, tags) "
+      "VALUES (S.id, S.name, S.tags)");
   MessageCollector collector;
   ::grpc::Status status =
       StreamQueryResults(storage_.get(), req, collector.Writer());

@@ -210,6 +210,91 @@ TEST(InMemoryStorageTest, ScanMissingTableIsNotFound) {
   EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kNotFound);
 }
 
+TEST(InMemoryStorageTest, OverwriteRowsReplacesTableContents) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+
+  std::vector<Row> initial = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(initial)).ok());
+
+  // OverwriteRows: replace the two-row snapshot with a one-row one.
+  std::vector<Row> replacement = {MakePerson(7, "grace", {"compiler"})};
+  ASSERT_TRUE(store.OverwriteRows(t, absl::MakeConstSpan(replacement)).ok());
+
+  auto iter_or = store.ScanRows(t);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned;
+  Row r;
+  while (true) {
+    auto has = (*iter_or)->Next(&r);
+    ASSERT_TRUE(has.ok());
+    if (!*has) break;
+    scanned.push_back(r);
+  }
+  ASSERT_EQ(scanned.size(), 1u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 7);
+  EXPECT_EQ(scanned[0].cells[1].string_value(), "grace");
+}
+
+TEST(InMemoryStorageTest, OverwriteRowsEmptyTruncatesTable) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+
+  std::vector<Row> initial = {MakePerson(1, "ada", {})};
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(initial)).ok());
+
+  ASSERT_TRUE(
+      store.OverwriteRows(t, absl::Span<const Row>()).ok());
+
+  auto iter_or = store.ScanRows(t);
+  ASSERT_TRUE(iter_or.ok());
+  Row r;
+  auto has = (*iter_or)->Next(&r);
+  ASSERT_TRUE(has.ok());
+  EXPECT_FALSE(*has);
+}
+
+TEST(InMemoryStorageTest, OverwriteRowsRejectsMisshapenBatch) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+
+  std::vector<Row> initial = {MakePerson(1, "ada", {})};
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(initial)).ok());
+
+  std::vector<Row> bad = {Row{{Value::Int64(2)}}};
+  auto status = store.OverwriteRows(t, absl::MakeConstSpan(bad));
+  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
+
+  // The original row is still there: the misshapen batch was rejected
+  // before any rewrite happened.
+  auto iter_or = store.ScanRows(t);
+  ASSERT_TRUE(iter_or.ok());
+  Row r;
+  auto has = (*iter_or)->Next(&r);
+  ASSERT_TRUE(has.ok());
+  ASSERT_TRUE(*has);
+  EXPECT_EQ(r.cells[0].int64_value(), 1);
+}
+
+TEST(InMemoryStorageTest, OverwriteRowsOnMissingTableIsNotFound) {
+  InMemoryStorage store;
+  const TableId t{"proj-1", "ds_1", "ghost"};
+  auto status = store.OverwriteRows(t, absl::Span<const Row>());
+  EXPECT_EQ(status.code(), absl::StatusCode::kNotFound);
+}
+
 }  // namespace
 }  // namespace memory
 }  // namespace storage

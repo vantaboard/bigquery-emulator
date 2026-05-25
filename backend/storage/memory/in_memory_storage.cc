@@ -211,6 +211,44 @@ absl::Status InMemoryStorage::AppendRows(const TableId& id,
   return absl::OkStatus();
 }
 
+absl::Status InMemoryStorage::OverwriteRows(const TableId& id,
+                                              absl::Span<const Row> rows) {
+  const std::string key = DatasetKey(id);
+  absl::MutexLock lock(&mu_);
+  auto ds_it = datasets_.find(key);
+  if (ds_it == datasets_.end()) {
+    return absl::NotFoundError(absl::StrCat("dataset not found: ",
+                                             id.project_id, ".",
+                                             id.dataset_id));
+  }
+  auto& tables = ds_it->second.tables;
+  auto t_it = tables.find(id.table_id);
+  if (t_it == tables.end()) {
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                             id.project_id, ".",
+                                             id.dataset_id, ".",
+                                             id.table_id));
+  }
+  TableState& state = t_it->second;
+  const size_t expected = TopLevelColumnCount(state.schema);
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (rows[i].cells.size() != expected) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("OverwriteRows: row[", i, "] has ",
+                       rows[i].cells.size(), " cell(s) but table ",
+                       id.project_id, ".", id.dataset_id, ".",
+                       id.table_id, " has ", expected, " column(s)"));
+    }
+  }
+  std::vector<Row> replacement;
+  replacement.reserve(rows.size());
+  for (const auto& row : rows) {
+    replacement.push_back(row);
+  }
+  state.rows = std::move(replacement);
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::ScanRows(
     const TableId& id) const {
   const std::string key = DatasetKey(id);

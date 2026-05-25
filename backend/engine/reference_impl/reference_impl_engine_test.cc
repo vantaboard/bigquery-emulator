@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -238,22 +239,31 @@ TEST_F(ReferenceImplEngineTest, ExecuteQueryRejectsNullCatalog) {
 }
 
 // ---------------------------------------------------------------------------
-// ExecuteDml (Phase 6a)
+// ExecuteDml (Phase 6a / 6b)
 //
-// The DML path is the engine's `INSERT INTO ds.t VALUES(...)` /
-// `INSERT INTO ds.t SELECT ...` entry point. These tests pin:
+// The DML path is the engine's INSERT / UPDATE / DELETE entry point.
+// MERGE intentionally returns UNIMPLEMENTED today (the GoogleSQL
+// reference-impl algebrizer does not yet algebrize ResolvedMergeStmt
+// at the statement root). These tests pin:
 //
-//   * VALUES rows land in the underlying `Storage` and the
+//   * INSERT VALUES rows land in the underlying `Storage` and the
 //     returned `DmlStats.inserted_row_count` equals the number of
 //     appended rows.
 //   * INSERT INTO ... SELECT routes through the same path: rows
 //     materialized by the inner SELECT get appended into the
 //     destination table.
-//   * UNIMPLEMENTED is returned for non-INSERT DML (UPDATE / DELETE /
-//     MERGE) so the frontend handler can surface the standard
-//     `notImplemented` reason without the engine crashing.
+//   * UPDATE rewrites every matching row through the catalog's
+//     synthetic primary key (column 0); `DmlStats.updated_row_count`
+//     reflects the number of rewritten rows and unmatched rows are
+//     untouched on the storage round-trip.
+//   * DELETE drops every matching row from the storage snapshot via
+//     a scan-and-rewrite; `DmlStats.deleted_row_count` reflects the
+//     number of removed rows.
 //   * SELECT statements routed to ExecuteDml return INVALID_ARGUMENT
 //     (the analyzer's classification mistake, not ours).
+//   * MERGE returns UNIMPLEMENTED so the FallbackEngine wrapper can
+//     route the query to another engine until Phase 6c lands a
+//     scan-and-diff MERGE implementation.
 // ---------------------------------------------------------------------------
 
 TEST_F(ReferenceImplEngineTest, ExecuteDmlInsertValuesAppendsRows) {
@@ -355,11 +365,164 @@ TEST_F(ReferenceImplEngineTest, ExecuteDmlSelectIsInvalidArgument) {
       << stats.status();
 }
 
-TEST_F(ReferenceImplEngineTest, ExecuteDmlDeleteIsUnimplemented) {
+TEST_F(ReferenceImplEngineTest, ExecuteDmlDeleteRemovesMatchingRows) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto stats = engine_->ExecuteDml(
       MakeRequest("DELETE FROM ds.people WHERE id = 1"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 0);
+  EXPECT_EQ(stats->updated_row_count, 0);
+  EXPECT_EQ(stats->deleted_row_count, 1);
+
+  // Storage round-trip: the row keyed by id=1 should be gone; the
+  // other two rows survive.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::vector<int64_t> ids;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_GE(row.cells.size(), 1u);
+    ids.push_back(row.cells[0].int64_value());
+  }
+  EXPECT_EQ(ids.size(), 2u);
+  EXPECT_EQ(std::find(ids.begin(), ids.end(), 1), ids.end());
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlDeleteAllRowsWithTrueWhere) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("DELETE FROM ds.people WHERE TRUE"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->deleted_row_count, 3);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  storage::Row row;
+  auto has = (*scan)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  EXPECT_FALSE(*has);
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlDeleteNoMatchesReportsZero) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("DELETE FROM ds.people WHERE id = 999"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->deleted_row_count, 0);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows_seen = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 3);
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlUpdateRewritesMatchingRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("UPDATE ds.people SET name = 'augusta' WHERE id = 1"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 0);
+  EXPECT_EQ(stats->updated_row_count, 1);
+  EXPECT_EQ(stats->deleted_row_count, 0);
+
+  // Storage round-trip: id=1's name flipped, the other rows are
+  // unchanged.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_GE(row.cells.size(), 2u);
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id[1], "augusta");
+  EXPECT_EQ(by_id[2], "linus");
+  EXPECT_EQ(by_id[3], "grace");
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlUpdateMultipleRowsReportsCount) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("UPDATE ds.people SET name = 'unknown' WHERE id > 1"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->updated_row_count, 2);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id[1], "ada");
+  EXPECT_EQ(by_id[2], "unknown");
+  EXPECT_EQ(by_id[3], "unknown");
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlUpdateNoMatchesLeavesRowsAlone) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("UPDATE ds.people SET name = 'nobody' WHERE id = 999"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->updated_row_count, 0);
+
+  // The existing rows are unchanged.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id[1], "ada");
+  EXPECT_EQ(by_id[2], "linus");
+  EXPECT_EQ(by_id[3], "grace");
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlMergeIsUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  // The merge body is intentionally simple: we just want to pin that
+  // the engine returns UNIMPLEMENTED (not a parse error or an
+  // INTERNAL crash) so the FallbackEngine wrapper can route a MERGE
+  // to a different engine once Phase 6c lands the real
+  // implementation.
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("MERGE INTO ds.people T USING (SELECT 99 AS id, 'mira' "
+                  "AS name, [] AS tags) S ON T.id = S.id "
+                  "WHEN NOT MATCHED THEN INSERT (id, name, tags) "
+                  "VALUES (S.id, S.name, S.tags)"),
       bundle.catalog.get());
   ASSERT_FALSE(stats.ok());
   EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
