@@ -2,17 +2,21 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "proto/emulator.pb.h"
 #include "proto/storage_read.pb.h"
 
 namespace bigquery_emulator {
@@ -50,6 +54,74 @@ namespace {
       break;
   }
   return ::grpc::Status(code, std::string(status.message()));
+}
+
+// ValueToCell mirrors the converter in `catalog.cc`. Kept duplicated
+// rather than shared because the StorageRead handler ships
+// independently and the helper is small; bringing in the catalog
+// header just for this one function would invert the dependency
+// order (storage_read is a sibling of catalog under
+// `//frontend/handlers/`, not its consumer).
+//
+// The wire shape matches `Catalog.ListRows`: every primitive lands on
+// `Cell.string_value` and NULLs on `Cell.null_value`. The gateway
+// (plan 39) decodes both REST surfaces with the same converter, so
+// keeping the wire shape identical between `tabledata.list` and
+// `StorageRead.ReadRows` avoids a second decoder.
+void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
+  using Kind = backend::storage::Value::Kind;
+  out->Clear();
+  switch (value.kind()) {
+    case Kind::kNull:
+      out->set_null_value(true);
+      return;
+    case Kind::kBool:
+      out->set_string_value(value.bool_value() ? "true" : "false");
+      return;
+    case Kind::kInt64:
+      out->set_string_value(absl::StrCat(value.int64_value()));
+      return;
+    case Kind::kFloat64:
+      out->set_string_value(absl::StrCat(value.float64_value()));
+      return;
+    case Kind::kString:
+    case Kind::kBytes:
+      out->set_string_value(value.string_value());
+      return;
+    case Kind::kArray: {
+      auto* arr = out->mutable_array();
+      for (const auto& el : value.array_value()) {
+        ValueToCell(el, arr->add_elements());
+      }
+      return;
+    }
+    case Kind::kStruct: {
+      auto* st = out->mutable_struct_value();
+      for (const auto& f : value.struct_value()) {
+        ValueToCell(f, st->add_fields());
+      }
+      return;
+    }
+  }
+}
+
+// SchemasEqualByShape compares two `TableSchema` snapshots column-by-
+// column, looking only at the bits the handler cares about for drift
+// detection: column count, column names, BigQuery types, and modes
+// (NULLABLE / REQUIRED / REPEATED). Descriptions and nested struct
+// field details are intentionally ignored — they can change without
+// invalidating an already-served stream, and pinning them would
+// surface noisy false-positive FAILED_PRECONDITION replies when the
+// catalog handler updates them out-of-band.
+bool SchemasEqualByShape(const backend::schema::TableSchema& a,
+                          const backend::schema::TableSchema& b) {
+  if (a.columns.size() != b.columns.size()) return false;
+  for (size_t i = 0; i < a.columns.size(); ++i) {
+    if (a.columns[i].name != b.columns[i].name) return false;
+    if (a.columns[i].type != b.columns[i].type) return false;
+    if (a.columns[i].mode != b.columns[i].mode) return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -192,12 +264,144 @@ std::string StorageReadService::StreamIdForSession(
 
 ::grpc::Status StorageReadService::ReadRows(
     ::grpc::ServerContext* /*context*/,
-    const v1::ReadRowsRequest* /*request*/,
-    ::grpc::ServerWriter<v1::ReadRowsResponse>* /*writer*/) {
-  return ::grpc::Status(
-      ::grpc::StatusCode::UNIMPLEMENTED,
-      "StorageRead.ReadRows: streaming rows lands in plan 38 "
-      "(storage-read-rows); plan 37 only implements CreateReadSession");
+    const v1::ReadRowsRequest* request,
+    ::grpc::ServerWriter<v1::ReadRowsResponse>* writer) {
+  if (request == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INTERNAL,
+        "StorageRead.ReadRows: request must be non-null");
+  }
+
+  // 1. Recover the session name. Plan 37 mints stream ids of the form
+  // `{session_name}/streams/0`; anything else is a client bug and
+  // surfaces as INVALID_ARGUMENT so the gateway can return BigQuery's
+  // 400 envelope. We deliberately do NOT accept arbitrary trailing
+  // `/streams/{N}` here because plan 37 only mints stream 0; any
+  // other stream id would be one we never created, which is
+  // ambiguous between "wrong session" and "wrong stream index".
+  //
+  // Validate this BEFORE the writer null-check so unit tests can
+  // exercise the parser without standing up a server (the writer is
+  // only needed once we start streaming rows).
+  const std::string& read_stream = request->read_stream();
+  constexpr absl::string_view kStreamsSuffix = "/streams/0";
+  if (read_stream.empty() ||
+      read_stream.size() <= kStreamsSuffix.size() ||
+      !absl::EndsWith(read_stream, kStreamsSuffix)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        absl::StrCat(
+            "StorageRead.ReadRows: read_stream must be of the form "
+            "{session_name}/streams/0 (got: ",
+            read_stream, ")"));
+  }
+  const std::string session_name =
+      read_stream.substr(0, read_stream.size() - kStreamsSuffix.size());
+
+  // 2. Look the session up and copy out the fields we need under the
+  // lock so the streaming body below does not hold the mutex for the
+  // entire I/O duration.
+  backend::storage::TableId table;
+  backend::schema::TableSchema session_schema;
+  {
+    absl::MutexLock lock(&mu_);
+    auto it = sessions_.find(session_name);
+    if (it == sessions_.end()) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::NOT_FOUND,
+          absl::StrCat(
+              "StorageRead.ReadRows: no such session (call "
+              "CreateReadSession first): ",
+              session_name));
+    }
+    table = it->second.table;
+    session_schema = it->second.schema;
+  }
+
+  // 3. Schema drift check. If the table schema changed between
+  // CreateReadSession and ReadRows, the caller is decoding rows with
+  // a stale shape and we cannot safely serve the request. BigQuery's
+  // public Storage Read API uses ABORTED here; plan 38 follows the
+  // simpler FAILED_PRECONDITION convention the rest of the engine
+  // already uses for "preconditions of the call have changed."
+  absl::StatusOr<backend::schema::TableSchema> live_schema_or =
+      storage_->GetSchema(table);
+  if (!live_schema_or.ok()) {
+    return AbslToGrpcStatus(live_schema_or.status());
+  }
+  if (!SchemasEqualByShape(session_schema, *live_schema_or)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        absl::StrCat(
+            "StorageRead.ReadRows: table schema for ", table.project_id,
+            ".", table.dataset_id, ".", table.table_id,
+            " changed since CreateReadSession; open a new session"));
+  }
+
+  // From here on we are about to stream rows; the writer must be
+  // present. In real gRPC dispatch the server framework guarantees a
+  // non-null writer, but the unit tests that exercise the validation
+  // path above pass nullptr -- so we delay the null check until we
+  // actually need to write.
+  if (writer == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INTERNAL,
+        "StorageRead.ReadRows: writer must be non-null");
+  }
+
+  // 4. Open a read stream against the storage backend. We honor the
+  // request-side offset (per the proto: gateway uses this to resume
+  // after a transient failure). row_limit is not on the request
+  // surface; we pass 0 so the iterator yields every remaining row.
+  backend::storage::ReadFilter filter;
+  filter.offset = request->offset();
+  filter.row_limit = 0;
+  absl::StatusOr<std::unique_ptr<backend::storage::RowIterator>> iter_or =
+      storage_->CreateReadStream(table, filter);
+  if (!iter_or.ok()) {
+    return AbslToGrpcStatus(iter_or.status());
+  }
+  std::unique_ptr<backend::storage::RowIterator> iter =
+      std::move(*iter_or);
+
+  // 5. Stream rows in pages of kReadRowsBatchSize. Each Write that
+  // returns false means the client cancelled or the channel broke;
+  // we surface ABORTED so the gateway can decide whether to retry
+  // the stream.
+  v1::ReadRowsResponse page;
+  int64_t in_page = 0;
+  backend::storage::Row row;
+  while (true) {
+    auto has_or = iter->Next(&row);
+    if (!has_or.ok()) {
+      return AbslToGrpcStatus(has_or.status());
+    }
+    if (!*has_or) break;
+    auto* proto_row = page.add_rows();
+    for (const auto& cell : row.cells) {
+      ValueToCell(cell, proto_row->add_cells());
+    }
+    ++in_page;
+    if (in_page >= kReadRowsBatchSize) {
+      page.set_row_count(in_page);
+      if (!writer->Write(page)) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::ABORTED,
+            "StorageRead.ReadRows: client cancelled mid-stream");
+      }
+      page.Clear();
+      in_page = 0;
+    }
+  }
+  if (in_page > 0) {
+    page.set_row_count(in_page);
+    if (!writer->Write(page)) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::ABORTED,
+          "StorageRead.ReadRows: client cancelled mid-stream");
+    }
+  }
+  return ::grpc::Status::OK;
 }
 
 std::size_t StorageReadService::SessionsForTesting() const {

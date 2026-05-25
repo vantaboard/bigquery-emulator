@@ -53,15 +53,45 @@ class StorageReadService final : public v1::StorageRead::Service {
       const v1::CreateReadSessionRequest* request,
       v1::ReadSession* response) override;
 
-  // Plan-38 surface. Plan 37 returns UNIMPLEMENTED so the
-  // FallbackEngine pattern can already exercise the round-trip
-  // shape; the verification command (`grpcurl ... list | grep -i
-  // read`) only inspects the reflection-emitted service list, not
-  // the implemented methods.
+  // Streams rows off the stream id minted by `CreateReadSession`.
+  // The handler:
+  //   1. Strips the trailing `/streams/{id}` segment from the
+  //      `read_stream` request field to recover the session name.
+  //      Plan 37 mints exactly `streams/0`, so anything else is
+  //      INVALID_ARGUMENT.
+  //   2. Looks the session up in `sessions_`. Missing sessions
+  //      surface as NOT_FOUND; the gateway maps that onto the
+  //      BigQuery REST 404 envelope.
+  //   3. Re-fetches the table schema and compares it cell-by-cell
+  //      against the snapshot we recorded at session-create time.
+  //      Drift (column added / dropped / type changed) is reported
+  //      as FAILED_PRECONDITION because the caller is decoding rows
+  //      with a stale schema.
+  //   4. Opens a `Storage::CreateReadStream` against the session's
+  //      table with the request's `offset` plumbed through (plan 38
+  //      does not yet honor a request-side row_limit — the proto
+  //      does not surface one and the gateway is the only caller).
+  //   5. Streams batches of up to `kReadRowsBatchSize` rows per
+  //      `ReadRowsResponse`, one writer->Write per page. The final
+  //      page may carry fewer rows; an empty table emits zero pages.
+  //
+  // The handler obeys the gRPC server-streaming contract: it stops
+  // sending after `writer->Write` returns false (the client cancelled
+  // or the channel broke) and surfaces ABORTED in that case so the
+  // caller sees the truncation.
   ::grpc::Status ReadRows(
       ::grpc::ServerContext* context,
       const v1::ReadRowsRequest* request,
       ::grpc::ServerWriter<v1::ReadRowsResponse>* writer) override;
+
+  // Page size for ReadRows. Picked to keep each
+  // `ReadRowsResponse` well under the 4 MiB default gRPC message
+  // cap when rows are wide (e.g. 32-column tables with KB-sized
+  // strings) while still amortizing the per-message overhead. The
+  // value is exposed publicly so the unit tests can assert that a
+  // multi-page response actually paginates instead of bundling the
+  // whole table into one message.
+  static constexpr int kReadRowsBatchSize = 100;
 
   // SessionsForTesting exposes the live session count so unit tests
   // can pin the mint-on-create / look-up-on-read contract without

@@ -103,6 +103,12 @@ cc_library(
     deps = [
         "//backend/schema",
         "//backend/storage",
+        # The handler converts `backend::storage::Value` cells onto
+        # `bigquery_emulator.v1.Cell` slots for the ReadRows reply;
+        # the Cell oneof lives in the emulator proto, so we depend on
+        # it explicitly even though the StorageRead RPC surface itself
+        # only imports it transitively.
+        "//proto:emulator_cc_proto",
         "//proto:storage_read_cc_grpc",
         "//proto:storage_read_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
@@ -121,8 +127,16 @@ cc_test(
         "//backend/schema",
         "//backend/storage",
         "//backend/storage:memory",
+        # The in-process server fixture (StorageReadGrpcTest) needs
+        # both the proto and the gRPC stub headers so it can stand
+        # up a real client/server pair without the full
+        # `frontend/server/server.cc` machinery.
+        "//proto:emulator_cc_proto",
+        "//proto:storage_read_cc_grpc",
         "//proto:storage_read_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
     ],
 )
