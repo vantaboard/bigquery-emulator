@@ -262,8 +262,10 @@ TEST_F(ReferenceImplEngineTest, ExecuteQueryRejectsNullCatalog) {
 //   * SELECT statements routed to ExecuteDml return INVALID_ARGUMENT
 //     (the analyzer's classification mistake, not ours).
 //   * MERGE returns UNIMPLEMENTED so the FallbackEngine wrapper can
-//     route the query to another engine until Phase 6c lands a
-//     scan-and-diff MERGE implementation.
+//     route the query to the DuckDB engine (which implements MERGE
+//     end-to-end as of Plan 34's "DuckDB-only MERGE" decision; see
+//     HANDOFF.md §4.3 path 3 and the matching ExecuteDml block in
+//     `backend/engine/duckdb/duckdb_engine.cc`).
 // ---------------------------------------------------------------------------
 
 TEST_F(ReferenceImplEngineTest, ExecuteDmlInsertValuesAppendsRows) {
@@ -514,13 +516,19 @@ TEST_F(ReferenceImplEngineTest, ExecuteDmlMergeIsUnimplemented) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   // The merge body is intentionally simple: we just want to pin that
-  // the engine returns UNIMPLEMENTED (not a parse error or an
-  // INTERNAL crash) so the FallbackEngine wrapper can route a MERGE
-  // to a different engine once Phase 6c lands the real
-  // implementation.
+  // the reference-impl engine returns UNIMPLEMENTED (not a parse error
+  // or an INTERNAL crash) for MERGE so the FallbackEngine wrapper can
+  // route a MERGE to the DuckDB engine, which implements MERGE
+  // end-to-end as of Plan 34's "DuckDB-only MERGE" decision (see
+  // HANDOFF.md §4.3 path 3 and the matching ExecuteDml block in
+  // `backend/engine/duckdb/duckdb_engine.cc`). The empty array
+  // literal is explicitly typed (`CAST([] AS ARRAY<STRING>)`) because
+  // the analyzer cannot otherwise infer an element type for `[]`
+  // against the `ARRAY<STRING>` `tags` column.
   auto stats = engine_->ExecuteDml(
       MakeRequest("MERGE INTO ds.people T USING (SELECT 99 AS id, 'mira' "
-                  "AS name, [] AS tags) S ON T.id = S.id "
+                  "AS name, CAST([] AS ARRAY<STRING>) AS tags) S "
+                  "ON T.id = S.id "
                   "WHEN NOT MATCHED THEN INSERT (id, name, tags) "
                   "VALUES (S.id, S.name, S.tags)"),
       bundle.catalog.get());

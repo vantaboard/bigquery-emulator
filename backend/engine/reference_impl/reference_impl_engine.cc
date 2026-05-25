@@ -673,13 +673,67 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
   }
 
   // Mirror the analyzer plumbing in ExecuteQuery so the resolved AST
-  // we hand to `PreparedModify` shares the same `LanguageOptions` and
-  // `TypeFactory` snapshot as the SELECT path.
+  // shares the same `LanguageOptions` and `TypeFactory` snapshot as
+  // the SELECT path. We analyze the statement directly (rather than
+  // routing every DML kind through `PreparedModify::Prepare`, which
+  // rejects MERGE up front with INVALID_ARGUMENT and never reaches
+  // the switch below) so the MERGE branch can short-circuit to
+  // UNIMPLEMENTED per the Plan 34 engine-policy decision
+  // (HANDOFF.md §4.3 path 3, "DuckDB-only MERGE") -- this lets the
+  // FallbackEngine wrapper route a MERGE to the DuckDB engine
+  // without callers having to grep status messages for the kind.
   auto type_factory = std::make_unique<::googlesql::TypeFactory>();
   ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output;
+  absl::Status analyze = ::googlesql::AnalyzeStatement(
+      request.sql, analyzer_options, catalog, type_factory.get(),
+      &analyzer_output);
+  if (!analyze.ok()) return analyze;
+  if (analyzer_output == nullptr ||
+      analyzer_output->resolved_statement() == nullptr) {
+    return absl::InternalError(
+        "ReferenceImplEngine::ExecuteDml: analyzer returned no resolved "
+        "statement");
+  }
+  const ::googlesql::ResolvedStatement* analyzed_stmt =
+      analyzer_output->resolved_statement();
+  if (analyzed_stmt->node_kind() == ::googlesql::RESOLVED_MERGE_STMT) {
+    // MERGE on the reference-impl engine stays UNIMPLEMENTED on
+    // purpose. The GoogleSQL reference-impl algebrizer does not
+    // algebrize ResolvedMergeStmt at the statement root (see the
+    // `// TODO: Add MERGE support.` comment in
+    // `googlesql/reference_impl/algebrizer.cc::AlgebrizeStatement`),
+    // so PreparedModify cannot run a MERGE end-to-end through this
+    // path -- in fact, `PreparedModify::Prepare` rejects MERGE up
+    // front with INVALID_ARGUMENT, which is why we short-circuit
+    // here on the analyzer output instead of letting the kind reach
+    // the switch below. Per the engine-policy decision recorded in
+    // HANDOFF.md §4.3 (path 3, "DuckDB-only MERGE"), Plan 34 landed
+    // MERGE on the DuckDB engine
+    // (`backend/engine/duckdb/duckdb_engine.cc::
+    // DuckDBEngine::ExecuteDml`) and left the reference-impl path
+    // as the documented asymmetry. The conformance harness in
+    // plans 40-42 will surface any divergence between the two
+    // engines on MERGE-shaped fixtures.
+    //
+    // Returning UNIMPLEMENTED with the standard prefix lets the
+    // FallbackEngine wrapper route a MERGE to the DuckDB engine
+    // when the binary was launched with
+    // `--engine=reference_impl --on_unknown_fn=fallback` (the
+    // typical Phase 5i shape inverts that: `--engine=duckdb` puts
+    // DuckDB on the primary slot, so MERGE lands there directly
+    // without bouncing through this branch).
+    return absl::UnimplementedError(
+        "ReferenceImplEngine::ExecuteDml: MERGE is not implemented on the "
+        "reference-impl engine (the GoogleSQL reference-impl algebrizer "
+        "does not yet support MERGE at the statement root); MERGE is "
+        "served by the DuckDB engine -- launch emulator_main with "
+        "--engine=duckdb (or with --on_unknown_fn=fallback so the "
+        "FallbackEngine wrapper retries against DuckDB)");
+  }
+
   ::googlesql::EvaluatorOptions evaluator_options;
   evaluator_options.type_factory = type_factory.get();
-
   auto modify = std::make_unique<::googlesql::PreparedModify>(
       request.sql, evaluator_options);
   absl::Status prepare = modify->Prepare(analyzer_options, catalog);
@@ -714,22 +768,6 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
           stmt->GetAs<::googlesql::ResolvedDeleteStmt>()->table_scan();
       stmt_kind = "DELETE";
       break;
-    case ::googlesql::RESOLVED_MERGE_STMT:
-      // MERGE is intentionally deferred to a follow-up plan: the
-      // reference-impl algebrizer does not yet algebrize
-      // ResolvedMergeStmt at the statement root (see the
-      // `// TODO: Add MERGE support.` comment in
-      // `googlesql/reference_impl/algebrizer.cc::AlgebrizeStatement`),
-      // so PreparedModify cannot run a MERGE end-to-end. We return
-      // UNIMPLEMENTED with the standard prefix so the FallbackEngine
-      // wrapper can route the query to another engine if one is
-      // configured. Phase 6c will land a scan-and-diff MERGE
-      // implementation that does not depend on PreparedModify.
-      return absl::UnimplementedError(
-          "ReferenceImplEngine::ExecuteDml: MERGE is not yet implemented "
-          "(the GoogleSQL reference-impl algebrizer does not yet support "
-          "MERGE at the statement root); rewrite as INSERT / UPDATE / "
-          "DELETE or wait for Phase 6c");
     default:
       return absl::UnimplementedError(absl::StrCat(
           "ReferenceImplEngine::ExecuteDml: statement kind ",

@@ -434,13 +434,19 @@ TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
 
 TEST_F(QueryServiceTest, ExecuteQueryMergeIsUnimplementedFromEngine) {
   CreatePeopleTable();
-  // Phase 6b: MERGE is intentionally deferred -- the reference-impl
-  // algebrizer does not yet support ResolvedMergeStmt at the
-  // statement root, so the engine returns UNIMPLEMENTED and the
-  // handler propagates it as gRPC UNIMPLEMENTED.
+  // Phase 6b: MERGE on the reference-impl engine returns UNIMPLEMENTED
+  // because the reference-impl algebrizer does not yet support
+  // ResolvedMergeStmt at the statement root. Plan 34's engine-policy
+  // decision (HANDOFF.md §4.3 path 3, "DuckDB-only MERGE") landed MERGE
+  // on the DuckDB engine and left this path as the documented
+  // asymmetry; the handler propagates the engine's UNIMPLEMENTED as
+  // gRPC UNIMPLEMENTED. The empty array literal is explicitly typed
+  // (`CAST([] AS ARRAY<STRING>)`) because the analyzer cannot
+  // otherwise infer an element type for `[]` against the
+  // `ARRAY<STRING>` `tags` column.
   v1::QueryRequest req = MakeRequest(
-      "MERGE INTO ds.t T USING (SELECT 99 AS id, 'mira' AS name, [] "
-      "AS tags) S ON T.id = S.id "
+      "MERGE INTO ds.t T USING (SELECT 99 AS id, 'mira' AS name, "
+      "CAST([] AS ARRAY<STRING>) AS tags) S ON T.id = S.id "
       "WHEN NOT MATCHED THEN INSERT (id, name, tags) "
       "VALUES (S.id, S.name, S.tags)");
   MessageCollector collector;
