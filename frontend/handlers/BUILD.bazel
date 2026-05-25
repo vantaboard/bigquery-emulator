@@ -79,6 +79,7 @@ cc_test(
     srcs = ["query_test.cc"],
     deps = [
         ":query_handler",
+        "//backend/engine/duckdb:duckdb_engine",
         "//backend/schema",
         "//backend/storage",
         "//backend/storage:memory",

@@ -525,12 +525,27 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
       }
       return ::grpc::Status::OK;
     }
-    case StatementClass::kDdl:
-      return ::grpc::Status(
-          ::grpc::StatusCode::UNIMPLEMENTED,
-          absl::StrCat("QueryService::ExecuteQuery: DDL statements are not "
-                       "implemented yet (Phase 6b of ROADMAP.md); got ",
-                       stmt->node_kind_string()));
+    case StatementClass::kDdl: {
+      // Plan-35 ENGINE POLICY (extends HANDOFF.md §4.3 path 3's
+      // "DuckDB-only MERGE" pattern): DDL lives on the DuckDB
+      // engine. The reference-impl engine returns UNIMPLEMENTED for
+      // ExecuteDdl, which surfaces here as gRPC UNIMPLEMENTED so
+      // the gateway maps it to BigQuery's `notImplemented` reason;
+      // the FallbackEngine wrapper (operator launched with
+      // `--engine=reference_impl --on_unknown_fn=fallback`) catches
+      // it transparently and retries against DuckDB before this
+      // status ever escapes.
+      absl::Status ddl_status =
+          active_engine->ExecuteDdl(engine_request, &catalog);
+      if (!ddl_status.ok()) {
+        return AnalyzeStatusToGrpc(ddl_status);
+      }
+      // DDL reply: an empty stream. The gateway reads zero
+      // messages, surfaces `jobComplete=true` with no schema and no
+      // rows, and the BigQuery REST client sees the matching
+      // "DDL succeeded" envelope.
+      return ::grpc::Status::OK;
+    }
     case StatementClass::kOther:
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,

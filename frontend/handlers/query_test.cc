@@ -16,6 +16,7 @@
 
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/engine/duckdb/duckdb_engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
@@ -405,7 +406,17 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   EXPECT_EQ(rows_seen, 2);
 }
 
-TEST_F(QueryServiceTest, ExecuteQueryDdlIsUnimplemented) {
+TEST_F(QueryServiceTest, ExecuteQueryDdlOnReferenceImplIsUnimplemented) {
+  // Plan 35 extended HANDOFF.md §4.3 path 3's "DuckDB-only MERGE"
+  // pattern to cover DDL: the reference-impl engine returns
+  // UNIMPLEMENTED for CREATE / DROP / ALTER, the DuckDB engine
+  // implements them end-to-end, and the FallbackEngine wrapper
+  // routes a DDL statement through to DuckDB. This test exercises
+  // the default-engine path (no explicit engine threaded into
+  // `StreamQueryResults`, so the handler instantiates a
+  // ReferenceImplEngine) and pins the UNIMPLEMENTED contract that
+  // FallbackEngine reads. The matching success-on-DuckDB path is
+  // covered in `ExecuteQueryDdlOnDuckDBSucceeds` below.
   v1::QueryRequest req =
       MakeRequest("CREATE TABLE ds.new_table (id INT64) OPTIONS()");
   MessageCollector collector;
@@ -414,6 +425,30 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlIsUnimplemented) {
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
       << status.error_message();
   EXPECT_TRUE(collector.messages().empty());
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryDdlOnDuckDBSucceeds) {
+  // The matching DDL-on-DuckDB path: when the operator launches
+  // `--engine=duckdb`, the handler routes a CREATE TABLE through
+  // `DuckDBEngine::ExecuteDdl`. The result stream is empty (no
+  // schema, no rows, no dml_stats) and the gateway maps that to
+  // `jobComplete=true` with zero rows -- the same envelope the
+  // BigQuery REST `query` endpoint emits for a successful DDL.
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  backend::engine::duckdb::DuckDBEngine engine(storage_.get());
+  v1::QueryRequest req =
+      MakeRequest("CREATE TABLE ds.new_table (id INT64, name STRING)");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer(), &engine);
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  EXPECT_TRUE(collector.messages().empty());
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "new_table"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 2u);
+  EXPECT_EQ(sch->columns[0].name, "id");
+  EXPECT_EQ(sch->columns[1].name, "name");
 }
 
 TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
