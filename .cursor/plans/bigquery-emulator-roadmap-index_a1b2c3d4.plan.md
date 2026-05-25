@@ -94,7 +94,7 @@ todos:
     status: completed
   - id: run-30-transpiler-functions-window
     content: "Run transpiler-functions-window_b9e0f1a2.plan.md"
-    status: pending
+    status: completed
   - id: run-31-duckdb-arrow-pipeline
     content: "Run duckdb-arrow-pipeline_c0f1a2b3.plan.md"
     status: pending
