@@ -4,10 +4,10 @@ overview: "Phase 7b: Storage read stream backend and ReadRows streaming."
 todos:
   - id: scan-backend
     content: "Add Storage::CreateReadStream(table, filter); memory scans rows; DuckDB reads Parquet"
-    status: pending
+    status: completed
   - id: read-rows-stream
     content: "ReadRows server-streaming: Avro or Arrow IPC batches; honor offset/limit"
-    status: pending
+    status: completed
 isProject: false
 ---
 

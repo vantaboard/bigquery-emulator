@@ -118,7 +118,7 @@ todos:
     status: completed
   - id: run-38-storage-read-rows
     content: "Run storage-read-rows_j7a8b9c0.plan.md"
-    status: pending
+    status: completed
   - id: run-39-storage-read-gateway-e2e
     content: "Run storage-read-gateway_e2e_k8b9c0d1.plan.md"
     status: pending
