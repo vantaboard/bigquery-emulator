@@ -137,11 +137,41 @@ func (e *emulatorEnv) tearDown() {
 	}
 }
 
-// startEmulator launches the engine subprocess (with the in-memory
-// storage backend) and wires up an in-process gateway HTTP server
-// dialed at it. The test is responsible for tearing it down via the
-// returned cleanup function.
+// emulatorFlags bundles the subset of `emulator_main` flags the E2E
+// tests need to control. Zero values mean "do not pass the flag" so
+// the emulator's own defaults apply (reference_impl engine + in-memory
+// storage). Tests that need the canonical Phase 5i `--engine=duckdb
+// --storage=duckdb --on_unknown_fn=fallback` configuration construct a
+// fully-populated `emulatorFlags`.
+type emulatorFlags struct {
+	// engine maps to `--engine`. Empty leaves the flag off so the
+	// emulator's default (`reference_impl`) applies.
+	engine string
+	// storage maps to `--storage`. Empty leaves the flag off so the
+	// emulator's default (`memory`) applies.
+	storage string
+	// onUnknownFn maps to `--on_unknown_fn`. Empty leaves the flag off
+	// so the emulator's default (`unimplemented`) applies.
+	onUnknownFn string
+	// dataDir maps to `--data_dir`. Empty defers to the emulator's
+	// default; tests that want a hermetic data dir pass `t.TempDir()`.
+	dataDir string
+}
+
+// startEmulator is the default-configuration helper that mirrors the
+// pre-Phase-5i behavior: `--storage=memory` with no engine override.
+// New tests that need a different engine/storage combination call
+// `startEmulatorWithFlags` directly.
 func startEmulator(t *testing.T) *emulatorEnv {
+	t.Helper()
+	return startEmulatorWithFlags(t, emulatorFlags{storage: "memory"})
+}
+
+// startEmulatorWithFlags launches the engine subprocess with the
+// given flag overrides and wires up an in-process gateway HTTP server
+// dialed at it. The test is responsible for tearing it down via the
+// returned cleanup function (registered with `t.Cleanup`).
+func startEmulatorWithFlags(t *testing.T, flags emulatorFlags) *emulatorEnv {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("emulator_main is a POSIX subprocess; Windows is not yet wired")
@@ -155,7 +185,21 @@ func startEmulator(t *testing.T) *emulatorEnv {
 	port := freeTCPPort(t)
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 
-	cmd := exec.Command(bin, "--host_port", addr, "--storage", "memory")
+	args := []string{"--host_port", addr}
+	if flags.engine != "" {
+		args = append(args, "--engine", flags.engine)
+	}
+	if flags.storage != "" {
+		args = append(args, "--storage", flags.storage)
+	}
+	if flags.onUnknownFn != "" {
+		args = append(args, "--on_unknown_fn", flags.onUnknownFn)
+	}
+	if flags.dataDir != "" {
+		args = append(args, "--data_dir", flags.dataDir)
+	}
+
+	cmd := exec.Command(bin, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
