@@ -97,7 +97,7 @@ todos:
     status: completed
   - id: run-31-duckdb-arrow-pipeline
     content: "Run duckdb-arrow-pipeline_c0f1a2b3.plan.md"
-    status: pending
+    status: completed
   - id: run-32-duckdb-parity-e2e
     content: "Run duckdb-parity-e2e_d1a2b3c4.plan.md"
     status: pending
