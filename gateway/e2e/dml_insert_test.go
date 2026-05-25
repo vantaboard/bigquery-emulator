@@ -203,17 +203,22 @@ func TestDMLInsertSelectRoundTrip(t *testing.T) {
 		}
 	}
 
-	insertBody := `{
-        "rows":[
-            {"json":{"id":1,"name":"alice"}},
-            {"json":{"id":2,"name":"bob"}}
-        ]
-    }`
+	// Populate the source table via INSERT VALUES rather than
+	// `tabledata.insertAll`. The latter goes through the gateway's
+	// `jsonToCell` shim that stringifies every numeric value (Phase
+	// 3's intentional simplification, see
+	// `gateway/handlers/tabledata.go::jsonToCell`); rows it lands
+	// would carry STRING cells in the INT64 `id` column and trip
+	// the analyzer's struct-type check on the inner SELECT during
+	// `INSERT ... SELECT`. Going through DML keeps the
+	// types honest end-to-end.
+	seedBody := `{"query":"INSERT INTO ` + datasetID + `.` + srcTable +
+		` (id, name) VALUES (1, 'alice'), (2, 'bob')",` +
+		`"useLegacySql":false}`
 	status, body = doJSON(t, http.MethodPost,
-		base+"/datasets/"+datasetID+"/tables/"+srcTable+"/insertAll",
-		[]byte(insertBody))
+		base+"/queries", []byte(seedBody))
 	if status != http.StatusOK {
-		t.Fatalf("tabledata.insertAll(src) -> %d: %s", status, string(body))
+		t.Fatalf("jobs.query (seed src) -> %d: %s", status, string(body))
 	}
 
 	queryBody := `{"query":"INSERT INTO ` + datasetID + `.` + dstTable +
