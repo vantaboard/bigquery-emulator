@@ -97,6 +97,13 @@ constexpr char kExecutionUnimplemented[] =
   language.EnableMaximumLanguageFeatures();
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+  // Without this opt-in the analyzer rejects every non-SELECT
+  // statement kind in `Prepare()` with a generic
+  // "Statement not supported" error. Phase 6a needs INSERT/UPDATE/
+  // DELETE/MERGE to flow through to the classifier in
+  // `StreamQueryResults` so the handler can return UNIMPLEMENTED
+  // (or run INSERT) instead of a misleading INVALID_ARGUMENT.
+  language.SetSupportsAllStatementKinds();
   ::googlesql::AnalyzerOptions options(language);
   // Single-line error messages so the gRPC error string stays
   // one-line-friendly. The `attach_error_location_payload` flag is
@@ -186,6 +193,98 @@ QueryService::QueryService(backend::storage::Storage* storage,
                             backend::engine::Engine* engine)
     : storage_(storage), engine_(engine) {}
 
+#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
+
+namespace {
+
+// Statement classes the gateway needs to distinguish. The analyzer
+// returns a richer `ResolvedNodeKind`; we collapse that down to the
+// four categories BigQuery's REST API treats differently:
+//   * `kSelect` -> `Query.ExecuteQuery` streams a schema + rows;
+//     `Query.DryRun` returns the analyzed schema.
+//   * `kDml`    -> `Query.ExecuteQuery` runs INSERT/UPDATE/DELETE/
+//     MERGE through the engine's DML path and emits a final
+//     `dml_stats` summary; `Query.DryRun` for DML is allowed and
+//     returns an empty schema with zero estimated bytes (BigQuery
+//     does the same).
+//   * `kDdl`    -> reserved for CREATE/DROP/ALTER once those land;
+//     today we surface `UNIMPLEMENTED` so client libraries see the
+//     standard `notImplemented` reason.
+//   * `kOther`  -> unclassified statement shape (CALL, EXPORT,
+//     scripting, ...); also `UNIMPLEMENTED`.
+enum class StatementClass { kSelect, kDml, kDdl, kOther };
+
+StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
+  switch (kind) {
+    case ::googlesql::RESOLVED_QUERY_STMT:
+      return StatementClass::kSelect;
+    case ::googlesql::RESOLVED_INSERT_STMT:
+    case ::googlesql::RESOLVED_UPDATE_STMT:
+    case ::googlesql::RESOLVED_DELETE_STMT:
+    case ::googlesql::RESOLVED_MERGE_STMT:
+    case ::googlesql::RESOLVED_TRUNCATE_STMT:
+      return StatementClass::kDml;
+    case ::googlesql::RESOLVED_CREATE_DATABASE_STMT:
+    case ::googlesql::RESOLVED_CREATE_INDEX_STMT:
+    case ::googlesql::RESOLVED_CREATE_SCHEMA_STMT:
+    case ::googlesql::RESOLVED_CREATE_EXTERNAL_SCHEMA_STMT:
+    case ::googlesql::RESOLVED_CREATE_TABLE_STMT:
+    case ::googlesql::RESOLVED_CREATE_TABLE_AS_SELECT_STMT:
+    case ::googlesql::RESOLVED_CREATE_EXTERNAL_TABLE_STMT:
+    case ::googlesql::RESOLVED_CREATE_MODEL_STMT:
+    case ::googlesql::RESOLVED_CREATE_VIEW_STMT:
+    case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
+    case ::googlesql::RESOLVED_CREATE_APPROX_VIEW_STMT:
+    case ::googlesql::RESOLVED_CREATE_PROCEDURE_STMT:
+    case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
+    case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT:
+    case ::googlesql::RESOLVED_CREATE_CONSTANT_STMT:
+    case ::googlesql::RESOLVED_CREATE_ENTITY_STMT:
+    case ::googlesql::RESOLVED_CREATE_ROW_ACCESS_POLICY_STMT:
+    case ::googlesql::RESOLVED_CREATE_PRIVILEGE_RESTRICTION_STMT:
+    case ::googlesql::RESOLVED_CREATE_SNAPSHOT_TABLE_STMT:
+    case ::googlesql::RESOLVED_CREATE_PROPERTY_GRAPH_STMT:
+    case ::googlesql::RESOLVED_CREATE_CONNECTION_STMT:
+    case ::googlesql::RESOLVED_CREATE_SEQUENCE_STMT:
+    case ::googlesql::RESOLVED_CLONE_DATA_STMT:
+    case ::googlesql::RESOLVED_DROP_STMT:
+    case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
+    case ::googlesql::RESOLVED_DROP_TABLE_FUNCTION_STMT:
+    case ::googlesql::RESOLVED_DROP_INDEX_STMT:
+    case ::googlesql::RESOLVED_DROP_MATERIALIZED_VIEW_STMT:
+    case ::googlesql::RESOLVED_DROP_PRIVILEGE_RESTRICTION_STMT:
+    case ::googlesql::RESOLVED_DROP_ROW_ACCESS_POLICY_STMT:
+    case ::googlesql::RESOLVED_DROP_SNAPSHOT_TABLE_STMT:
+    case ::googlesql::RESOLVED_RENAME_STMT:
+    case ::googlesql::RESOLVED_ALTER_DATABASE_STMT:
+    case ::googlesql::RESOLVED_ALTER_INDEX_STMT:
+    case ::googlesql::RESOLVED_ALTER_MATERIALIZED_VIEW_STMT:
+    case ::googlesql::RESOLVED_ALTER_APPROX_VIEW_STMT:
+    case ::googlesql::RESOLVED_ALTER_MODEL_STMT:
+    case ::googlesql::RESOLVED_ALTER_PRIVILEGE_RESTRICTION_STMT:
+    case ::googlesql::RESOLVED_ALTER_ROW_ACCESS_POLICY_STMT:
+    case ::googlesql::RESOLVED_ALTER_ALL_ROW_ACCESS_POLICIES_STMT:
+    case ::googlesql::RESOLVED_ALTER_SCHEMA_STMT:
+    case ::googlesql::RESOLVED_ALTER_EXTERNAL_SCHEMA_STMT:
+    case ::googlesql::RESOLVED_ALTER_TABLE_SET_OPTIONS_STMT:
+    case ::googlesql::RESOLVED_ALTER_TABLE_STMT:
+    case ::googlesql::RESOLVED_ALTER_VIEW_STMT:
+    case ::googlesql::RESOLVED_ALTER_CONNECTION_STMT:
+    case ::googlesql::RESOLVED_ALTER_SEQUENCE_STMT:
+    case ::googlesql::RESOLVED_ALTER_ENTITY_STMT:
+    case ::googlesql::RESOLVED_GRANT_STMT:
+    case ::googlesql::RESOLVED_REVOKE_STMT:
+    case ::googlesql::RESOLVED_UNDROP_STMT:
+      return StatementClass::kDdl;
+    default:
+      return StatementClass::kOther;
+  }
+}
+
+}  // namespace
+
+#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
+
 ::grpc::Status QueryService::DryRun(::grpc::ServerContext* /*context*/,
                                     const v1::QueryRequest* request,
                                     v1::DryRunResponse* response) {
@@ -243,18 +342,36 @@ QueryService::QueryService(backend::storage::Storage* storage,
                           "resolved statement");
   }
   const ::googlesql::ResolvedStatement* stmt = output->resolved_statement();
-  if (stmt->node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::INVALID_ARGUMENT,
-        absl::StrCat("QueryService::DryRun: only SELECT-shaped queries "
-                     "are supported in DryRun; got ",
-                     stmt->node_kind_string()));
-  }
-  const auto* query_stmt = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
-  absl::Status reflect = backend::schema::OutputColumnListToTableSchema(
-      query_stmt->output_column_list(), response->mutable_schema());
-  if (!reflect.ok()) {
-    return AnalyzeStatusToGrpc(reflect);
+  const StatementClass cls = ClassifyStatement(stmt->node_kind());
+  switch (cls) {
+    case StatementClass::kSelect: {
+      const auto* query_stmt = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+      absl::Status reflect = backend::schema::OutputColumnListToTableSchema(
+          query_stmt->output_column_list(), response->mutable_schema());
+      if (!reflect.ok()) {
+        return AnalyzeStatusToGrpc(reflect);
+      }
+      break;
+    }
+    case StatementClass::kDml:
+      // BigQuery's `jobs.query?dryRun=true` for DML returns a
+      // completed reply with no schema and `totalBytesProcessed=0`
+      // (since dry-run doesn't run the statement). We mirror that:
+      // the schema is left empty and the byte estimate is set
+      // below.
+      break;
+    case StatementClass::kDdl:
+      return ::grpc::Status(
+          ::grpc::StatusCode::UNIMPLEMENTED,
+          absl::StrCat("QueryService::DryRun: DDL statements are not "
+                       "implemented yet (Phase 6b of ROADMAP.md); got ",
+                       stmt->node_kind_string()));
+    case StatementClass::kOther:
+      return ::grpc::Status(
+          ::grpc::StatusCode::UNIMPLEMENTED,
+          absl::StrCat("QueryService::DryRun: statement kind ",
+                       stmt->node_kind_string(),
+                       " is not supported by the emulator"));
   }
 
   // estimated_bytes_processed: BigQuery's dry-run statistic includes a
@@ -341,6 +458,30 @@ QueryService::QueryService(backend::storage::Storage* storage,
       request.project_id(), storage, &type_factory,
       analyzer_options.language());
 
+  // Pre-classify the statement so we can pick the right engine entry
+  // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
+  // and reject DDL with a friendly UNIMPLEMENTED. We pay for one
+  // analyzer pass here even though the engine re-analyzes inside
+  // `PreparedQuery::Prepare` / `PreparedModify::Prepare`; the cost is
+  // dominated by the catalog setup and Phase 6c will fold the two
+  // analyses together.
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
+  absl::Status classify_status = ::googlesql::AnalyzeStatement(
+      request.sql(), analyzer_options, &catalog, &type_factory,
+      &classify_output);
+  if (!classify_status.ok()) {
+    return AnalyzeStatusToGrpc(classify_status);
+  }
+  if (classify_output == nullptr ||
+      classify_output->resolved_statement() == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "QueryService::ExecuteQuery: analyzer returned "
+                          "no resolved statement");
+  }
+  const ::googlesql::ResolvedStatement* stmt =
+      classify_output->resolved_statement();
+  const StatementClass cls = ClassifyStatement(stmt->node_kind());
+
   // Engine selection:
   //   * If the caller provided one (the `binaries/emulator_main` wire
   //     path always does), use it verbatim -- including any
@@ -358,6 +499,46 @@ QueryService::QueryService(backend::storage::Storage* storage,
     active_engine = owned_engine.get();
   }
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+
+  switch (cls) {
+    case StatementClass::kSelect:
+      break;  // Fall through to the SELECT path below.
+    case StatementClass::kDml: {
+      absl::StatusOr<backend::engine::DmlStats> stats =
+          active_engine->ExecuteDml(engine_request, &catalog);
+      if (!stats.ok()) {
+        return AnalyzeStatusToGrpc(stats.status());
+      }
+      // DML reply: no schema and no row messages, just a single
+      // `dml_stats` summary the gateway folds into BigQuery's
+      // `dmlStats` / `numDmlAffectedRows` envelope.
+      v1::QueryResultRow stats_message;
+      auto* proto_stats = stats_message.mutable_dml_stats();
+      proto_stats->set_inserted_row_count(stats->inserted_row_count);
+      proto_stats->set_updated_row_count(stats->updated_row_count);
+      proto_stats->set_deleted_row_count(stats->deleted_row_count);
+      if (!write(stats_message)) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::CANCELLED,
+            "QueryService::ExecuteQuery: client cancelled stream before "
+            "dml_stats");
+      }
+      return ::grpc::Status::OK;
+    }
+    case StatementClass::kDdl:
+      return ::grpc::Status(
+          ::grpc::StatusCode::UNIMPLEMENTED,
+          absl::StrCat("QueryService::ExecuteQuery: DDL statements are not "
+                       "implemented yet (Phase 6b of ROADMAP.md); got ",
+                       stmt->node_kind_string()));
+    case StatementClass::kOther:
+      return ::grpc::Status(
+          ::grpc::StatusCode::UNIMPLEMENTED,
+          absl::StrCat("QueryService::ExecuteQuery: statement kind ",
+                       stmt->node_kind_string(),
+                       " is not supported by the emulator"));
+  }
+
   absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
       active_engine->ExecuteQuery(engine_request, &catalog);
   if (!source_or.ok()) {

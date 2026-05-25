@@ -361,6 +361,75 @@ TEST_F(QueryServiceTest, ExecuteQueryCancelledWriterReturnsCancelled) {
       << status.error_message();
 }
 
+// ---------------------------------------------------------------------------
+// Statement classification (Phase 6a)
+//
+// `StreamQueryResults` analyzes the statement once up front so it can
+// pick the right engine entry point: SELECT keeps the existing
+// schema+rows protocol, INSERT/UPDATE/DELETE/MERGE routes through
+// ExecuteDml and emits a final dml_stats summary, and DDL is rejected
+// with UNIMPLEMENTED until Phase 6b implements CREATE/DROP/ALTER.
+// ---------------------------------------------------------------------------
+
+TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
+  CreatePeopleTable();
+  v1::QueryRequest req = MakeRequest(
+      "INSERT INTO ds.t (id, name, tags) "
+      "VALUES (1, 'ada', ['math']), (2, 'linus', [])");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+
+  // DML response shape: one message, no schema / cells, just stats.
+  const auto& messages = collector.messages();
+  ASSERT_EQ(messages.size(), 1u);
+  EXPECT_FALSE(messages[0].has_schema());
+  EXPECT_EQ(messages[0].cells_size(), 0);
+  ASSERT_TRUE(messages[0].has_dml_stats());
+  EXPECT_EQ(messages[0].dml_stats().inserted_row_count(), 2);
+  EXPECT_EQ(messages[0].dml_stats().updated_row_count(), 0);
+  EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
+
+  // Storage round-trip: the rows actually landed.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "t"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows_seen = 0;
+  backend::storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 2);
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryDdlIsUnimplemented) {
+  v1::QueryRequest req =
+      MakeRequest("CREATE TABLE ds.new_table (id INT64) OPTIONS()");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
+      << status.error_message();
+  EXPECT_TRUE(collector.messages().empty());
+}
+
+TEST_F(QueryServiceTest, ExecuteQueryDeleteIsUnimplementedFromEngine) {
+  CreatePeopleTable();
+  // DELETE is classified as DML but the reference-impl engine only
+  // implements INSERT today, so the engine returns UNIMPLEMENTED and
+  // the handler propagates it as gRPC UNIMPLEMENTED.
+  v1::QueryRequest req = MakeRequest("DELETE FROM ds.t WHERE FALSE");
+  MessageCollector collector;
+  ::grpc::Status status =
+      StreamQueryResults(storage_.get(), req, collector.Writer());
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
+      << status.error_message();
+  EXPECT_TRUE(collector.messages().empty());
+}
+
 }  // namespace
 }  // namespace frontend
 }  // namespace bigquery_emulator
