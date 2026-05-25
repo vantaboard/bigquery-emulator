@@ -110,7 +110,9 @@ StorageReadService::StorageReadService(backend::storage::Storage* storage)
 }
 
 std::string StorageReadService::NewSessionId(const std::string& project_id) {
-  // Caller holds `mu_`.
+  // Caller must hold `mu_` (see header annotation
+  // ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_)). Bumping the counter and
+  // formatting the string here keeps the critical section short.
   const std::int64_t id = next_session_id_++;
   return absl::StrCat("projects/", project_id,
                       "/locations/-/sessions/s", id);

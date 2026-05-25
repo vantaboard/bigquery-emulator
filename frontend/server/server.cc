@@ -1,5 +1,6 @@
 #include "frontend/server/server.h"
 
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 #include <grpcpp/server.h>
@@ -13,6 +14,7 @@
 
 #include "frontend/handlers/catalog.h"
 #include "frontend/handlers/query.h"
+#include "frontend/handlers/storage_read.h"
 
 namespace bigquery_emulator {
 namespace frontend {
@@ -22,24 +24,28 @@ namespace {
 // GrpcServer hosts the real `grpc::Server` for the emulator engine.
 //
 // It owns:
-//   * a `CatalogService` and `QueryService` implementation of the
-//     `bigquery_emulator.v1.*` gRPC services defined in
-//     `proto/emulator.proto`, and
+//   * a `CatalogService`, `QueryService`, and `StorageReadService`
+//     implementation of the `bigquery_emulator.v1.*` gRPC services
+//     defined in `proto/emulator.proto` + `proto/storage_read.proto`,
+//     and
 //   * the default `grpc.health.v1.Health` service that ServerBuilder
 //     registers when EnableDefaultHealthCheckService(true) is called.
 //
-// Both Catalog and Query are Phase 2b stubs that return
-// `UNIMPLEMENTED`; the wiring exists so the Go gateway and external
-// probes (`grpc_health_probe`) can drive the engine over a real socket.
+// Catalog + Query are wired end-to-end against the storage backend
+// and the (DuckDB or reference-impl) engine; StorageRead lights up
+// `CreateReadSession` today and returns UNIMPLEMENTED from `ReadRows`
+// until plan 38 (`storage-read-rows`) wires the streaming reply.
 class GrpcServer final : public Server {
  public:
   GrpcServer(std::unique_ptr<::grpc::Server> server,
              std::unique_ptr<CatalogService> catalog,
              std::unique_ptr<QueryService> query,
+             std::unique_ptr<StorageReadService> storage_read,
              std::string host, int port)
       : server_(std::move(server)),
         catalog_(std::move(catalog)),
         query_(std::move(query)),
+        storage_read_(std::move(storage_read)),
         host_(std::move(host)),
         port_(port) {}
 
@@ -58,6 +64,7 @@ class GrpcServer final : public Server {
   std::unique_ptr<::grpc::Server> server_;
   std::unique_ptr<CatalogService> catalog_;
   std::unique_ptr<QueryService> query_;
+  std::unique_ptr<StorageReadService> storage_read_;
   std::string host_;
   int port_;
 };
@@ -97,11 +104,17 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
 
   // EnableDefaultHealthCheckService must be toggled before constructing
   // a ServerBuilder; the builder snapshots the global flag at
-  // construction time.
+  // construction time. The reflection plugin must be installed in the
+  // same pre-builder window so `grpcurl -plaintext :PORT list` works
+  // against the running engine (used by plan 37's storage-read smoke
+  // verification, plan 38's streaming check, and any future ad-hoc
+  // gRPC debugging session).
   ::grpc::EnableDefaultHealthCheckService(true);
+  ::grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
   auto catalog = std::make_unique<CatalogService>(options.storage);
   auto query = std::make_unique<QueryService>(options.storage, options.engine);
+  auto storage_read = std::make_unique<StorageReadService>(options.storage);
 
   ::grpc::ServerBuilder builder;
   int bound_port = 0;
@@ -109,6 +122,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
                            ::grpc::InsecureServerCredentials(), &bound_port);
   builder.RegisterService(catalog.get());
   builder.RegisterService(query.get());
+  builder.RegisterService(storage_read.get());
 
   std::unique_ptr<::grpc::Server> grpc_server = builder.BuildAndStart();
   if (grpc_server == nullptr || bound_port == 0) {
@@ -128,6 +142,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
     health_service->SetServingStatus("", true);
     health_service->SetServingStatus("bigquery_emulator.v1.Catalog", true);
     health_service->SetServingStatus("bigquery_emulator.v1.Query", true);
+    health_service->SetServingStatus("bigquery_emulator.v1.StorageRead", true);
   }
 
   auto [host, port] = SplitHostPort(options.server_address);
@@ -137,7 +152,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
 
   auto server = std::make_unique<GrpcServer>(
       std::move(grpc_server), std::move(catalog), std::move(query),
-      std::move(host), port);
+      std::move(storage_read), std::move(host), port);
 
   g_server = server.get();
   std::signal(SIGINT, HandleSignal);

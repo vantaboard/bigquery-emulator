@@ -21,6 +21,8 @@ cc_library(
         "//backend/storage",
         "//frontend/handlers:catalog_handler",
         "//frontend/handlers:query_handler",
+        "//frontend/handlers:storage_read_handler",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_github_grpc_grpc//:grpc++_reflection",
     ],
 )

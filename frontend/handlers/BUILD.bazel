@@ -91,3 +91,38 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# StorageRead handler (plan 37). Mirrors the `catalog_handler` shape:
+# header + .cc + the storage_read proto stubs. Plan 37 only wires
+# `CreateReadSession`; plan 38 will light up the streaming `ReadRows`
+# reply on the same library.
+cc_library(
+    name = "storage_read_handler",
+    srcs = ["storage_read.cc"],
+    hdrs = ["storage_read.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "//proto:storage_read_cc_grpc",
+        "//proto:storage_read_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "storage_read_handler_test",
+    srcs = ["storage_read_test.cc"],
+    deps = [
+        ":storage_read_handler",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage:memory",
+        "//proto:storage_read_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

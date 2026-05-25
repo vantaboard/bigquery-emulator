@@ -101,7 +101,12 @@ class StorageReadService final : public v1::StorageRead::Service {
   // from a monotonic counter. The synthetic `-` location placeholder
   // matches what BigQuery does when the caller does not pin a
   // location on the read request.
-  std::string NewSessionId(const std::string& project_id);
+  //
+  // The counter bump is mutating shared state, so the caller MUST
+  // already hold `mu_` exclusively. The annotation lets clang's
+  // -Wthread-safety verify this at the call site.
+  std::string NewSessionId(const std::string& project_id)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // StreamIdForSession builds the canonical stream id of the form
   // `{session_name}/streams/0`. Plan 37 only mints stream 0 because
