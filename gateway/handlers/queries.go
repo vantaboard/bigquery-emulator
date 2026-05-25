@@ -185,6 +185,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 
 	var schema *enginepb.TableSchema
+	var dmlStats *enginepb.DmlStats
 	rows := make([]bqtypes.Row, 0)
 	for {
 		msg, err := stream.Recv()
@@ -201,6 +202,17 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 			// we don't reset mid-stream.
 			if schema == nil {
 				schema = s
+			}
+			continue
+		}
+		if d := msg.GetDmlStats(); d != nil {
+			// Final summary message for an INSERT/UPDATE/DELETE/
+			// MERGE statement. The engine emits exactly one of
+			// these on the DML path; later messages on the same
+			// stream are ignored (the proto contract is "one or
+			// the other" per RPC).
+			if dmlStats == nil {
+				dmlStats = d
 			}
 			continue
 		}
@@ -231,6 +243,29 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		StartTime:           job.Statistics.StartTime,
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
+	}
+	if dmlStats != nil {
+		// Surface BigQuery's DML statistics envelope. `dmlStats`
+		// carries the per-operation row counts; `numDmlAffectedRows`
+		// is the legacy aggregate (sum of inserted + updated +
+		// deleted) that older client libraries still read.
+		inserted := dmlStats.GetInsertedRowCount()
+		updated := dmlStats.GetUpdatedRowCount()
+		deleted := dmlStats.GetDeletedRowCount()
+		out.DmlStats = &bqtypes.DmlStats{
+			InsertedRowCount: strconv.FormatInt(inserted, 10),
+			UpdatedRowCount:  strconv.FormatInt(updated, 10),
+			DeletedRowCount:  strconv.FormatInt(deleted, 10),
+		}
+		out.NumDmlAffectedRows = strconv.FormatInt(
+			inserted+updated+deleted, 10)
+		// DML statements have no result schema or rows; clear the
+		// SELECT-shape fields so the response stays consistent with
+		// BigQuery's wire encoding (TotalRows = "0", no rows array,
+		// no schema).
+		out.Schema = nil
+		out.Rows = nil
+		out.TotalRows = "0"
 	}
 	writeJSON(w, http.StatusOK, out)
 }
