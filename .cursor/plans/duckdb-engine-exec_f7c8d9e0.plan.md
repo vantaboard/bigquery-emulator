@@ -4,13 +4,13 @@ overview: "Phase 5i: DuckDB engine ExecuteQuery, attach storage, fallback policy
 todos:
   - id: duckdb-attach
     content: "duckdb_engine ExecuteQuery: ATTACH Parquet tables, run transpiled SQL"
-    status: pending
+    status: completed
   - id: fallback-policy
     content: "Unimplemented node → UNIMPLEMENTED; --on_unknown_fn=fallback delegates to ReferenceImplEngine"
-    status: pending
+    status: completed
   - id: e2e-basic-select
     content: "E2E --engine=duckdb --storage=duckdb: SELECT 1; SELECT * FROM ds.t; GROUP BY query"
-    status: pending
+    status: completed
 isProject: false
 ---
 
