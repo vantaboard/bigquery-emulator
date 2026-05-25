@@ -89,6 +89,13 @@ type Statistics struct {
 type QueryResult struct {
 	Schema *bqtypes.TableSchema
 	Rows   []bqtypes.Row
+	// DmlStats is non-nil for an INSERT/UPDATE/DELETE/MERGE job and
+	// nil for a SELECT/DDL job. When set, `jobs.getQueryResults`
+	// surfaces the same `dmlStats` + `numDmlAffectedRows` envelope
+	// the synchronous `jobs.query` response carried, so polling
+	// BigQuery clients (e.g. the Go SDK's `JobIterator`) see the
+	// row counts on the replay too.
+	DmlStats *bqtypes.DmlStats
 }
 
 // Job is the gateway's view of a single BigQuery job. Today it's

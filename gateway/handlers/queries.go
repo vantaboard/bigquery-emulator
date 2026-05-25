@@ -226,7 +226,25 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// find. Phase 5d does not track engine-side bytes-processed
 	// yet, so we stamp 0; Phase 6 wires the real metric.
 	restSchema := schemaFromProto(schema)
-	result := &jobs.QueryResult{Schema: restSchema, Rows: rows}
+	// Build the bqtypes.DmlStats envelope once so the synchronous
+	// response and the cached `QueryResult` (replayed by
+	// `jobs.getQueryResults`) emit byte-identical row counts.
+	var restDmlStats *bqtypes.DmlStats
+	if dmlStats != nil {
+		inserted := dmlStats.GetInsertedRowCount()
+		updated := dmlStats.GetUpdatedRowCount()
+		deleted := dmlStats.GetDeletedRowCount()
+		restDmlStats = &bqtypes.DmlStats{
+			InsertedRowCount: strconv.FormatInt(inserted, 10),
+			UpdatedRowCount:  strconv.FormatInt(updated, 10),
+			DeletedRowCount:  strconv.FormatInt(deleted, 10),
+		}
+	}
+	result := &jobs.QueryResult{
+		Schema:   restSchema,
+		Rows:     rows,
+		DmlStats: restDmlStats,
+	}
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
 	jobRef := job.JobReference
@@ -244,21 +262,16 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
 	}
-	if dmlStats != nil {
+	if restDmlStats != nil {
 		// Surface BigQuery's DML statistics envelope. `dmlStats`
 		// carries the per-operation row counts; `numDmlAffectedRows`
 		// is the legacy aggregate (sum of inserted + updated +
 		// deleted) that older client libraries still read.
-		inserted := dmlStats.GetInsertedRowCount()
-		updated := dmlStats.GetUpdatedRowCount()
-		deleted := dmlStats.GetDeletedRowCount()
-		out.DmlStats = &bqtypes.DmlStats{
-			InsertedRowCount: strconv.FormatInt(inserted, 10),
-			UpdatedRowCount:  strconv.FormatInt(updated, 10),
-			DeletedRowCount:  strconv.FormatInt(deleted, 10),
-		}
+		out.DmlStats = restDmlStats
 		out.NumDmlAffectedRows = strconv.FormatInt(
-			inserted+updated+deleted, 10)
+			dmlStats.GetInsertedRowCount()+
+				dmlStats.GetUpdatedRowCount()+
+				dmlStats.GetDeletedRowCount(), 10)
 		// DML statements have no result schema or rows; clear the
 		// SELECT-shape fields so the response stays consistent with
 		// BigQuery's wire encoding (TotalRows = "0", no rows array,
@@ -335,10 +348,12 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 			schema   *bqtypes.TableSchema
 			allRows  []bqtypes.Row
 			pageRows []bqtypes.Row
+			dmlStats *bqtypes.DmlStats
 		)
 		if result := job.Result; result != nil {
 			schema = result.Schema
 			allRows = result.Rows
+			dmlStats = result.DmlStats
 		}
 
 		// pageToken support: the registry never mints one, so any
@@ -380,6 +395,22 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 			Rows:                pageRows,
 			TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
 			Location:            jobRef.Location,
+		}
+		if dmlStats != nil {
+			// DML replay: re-emit the same `dmlStats` /
+			// `numDmlAffectedRows` envelope `jobs.query` sent
+			// at submit time, and strip the SELECT-shape fields
+			// (schema, rows, totalRows) the same way the
+			// synchronous response does.
+			out.DmlStats = dmlStats
+			inserted, _ := strconv.ParseInt(dmlStats.InsertedRowCount, 10, 64)
+			updated, _ := strconv.ParseInt(dmlStats.UpdatedRowCount, 10, 64)
+			deleted, _ := strconv.ParseInt(dmlStats.DeletedRowCount, 10, 64)
+			out.NumDmlAffectedRows = strconv.FormatInt(
+				inserted+updated+deleted, 10)
+			out.Schema = nil
+			out.Rows = nil
+			out.TotalRows = "0"
 		}
 		writeJSON(w, http.StatusOK, out)
 	}

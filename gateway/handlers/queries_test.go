@@ -706,6 +706,118 @@ func TestQueryGetResultsPageTokenReturnsEmptyPage(t *testing.T) {
 	}
 }
 
+// dmlStatsExecuteStream is the standard DML fixture: no schema, no
+// row cells, exactly one trailing `dml_stats` message carrying the
+// engine's per-operation counts. Mirrors the proto contract on
+// `QueryResultRow.dml_stats`.
+func dmlStatsExecuteStream(inserted, updated, deleted int64) *fakeQueryResultStream {
+	return &fakeQueryResultStream{
+		msgs: []*enginepb.QueryResultRow{
+			{DmlStats: &enginepb.DmlStats{
+				InsertedRowCount: inserted,
+				UpdatedRowCount:  updated,
+				DeletedRowCount:  deleted,
+			}},
+		},
+	}
+}
+
+// TestQueryRunDmlStatsResponseShape pins the synchronous `jobs.query`
+// envelope for a DML statement: `dmlStats` + `numDmlAffectedRows` are
+// populated from the engine's trailing `dml_stats` message and the
+// SELECT-shape fields (`schema`, `rows`, `totalRows`) are blanked out
+// so the response wire matches BigQuery's documented DML shape.
+func TestQueryRunDmlStatsResponseShape(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return dmlStatsExecuteStream(3, 1, 2), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	rec := runQueryWithDeps(t, "proj", deps,
+		`{"query":"DELETE FROM ds.t WHERE id < 10","useLegacySql":false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s",
+			rec.Code, rec.Body.String())
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if resp.DmlStats == nil {
+		t.Fatalf("dmlStats missing on DML response; body=%s", rec.Body.String())
+	}
+	if resp.DmlStats.InsertedRowCount != "3" {
+		t.Errorf("dmlStats.insertedRowCount = %q, want %q",
+			resp.DmlStats.InsertedRowCount, "3")
+	}
+	if resp.DmlStats.UpdatedRowCount != "1" {
+		t.Errorf("dmlStats.updatedRowCount = %q, want %q",
+			resp.DmlStats.UpdatedRowCount, "1")
+	}
+	if resp.DmlStats.DeletedRowCount != "2" {
+		t.Errorf("dmlStats.deletedRowCount = %q, want %q",
+			resp.DmlStats.DeletedRowCount, "2")
+	}
+	if resp.NumDmlAffectedRows != "6" {
+		t.Errorf("numDmlAffectedRows = %q, want %q (3+1+2)",
+			resp.NumDmlAffectedRows, "6")
+	}
+	if resp.Schema != nil {
+		t.Errorf("schema = %+v, want nil (DML has no result schema)",
+			resp.Schema)
+	}
+	if len(resp.Rows) != 0 {
+		t.Errorf("rows = %d, want 0 (DML has no rows)", len(resp.Rows))
+	}
+	if resp.TotalRows != "0" {
+		t.Errorf("totalRows = %q, want %q", resp.TotalRows, "0")
+	}
+}
+
+// TestQueryGetResultsReplaysDmlStats pins the Phase 6d contract that
+// `jobs.getQueryResults` re-emits the same `dmlStats` /
+// `numDmlAffectedRows` envelope that `jobs.query` returned at submit
+// time. Polling BigQuery clients (e.g. the Go SDK's `JobIterator`)
+// read row counts from the replay endpoint, not just from the
+// synchronous submit response, so the registry has to cache the
+// stats alongside schema + rows.
+func TestQueryGetResultsReplaysDmlStats(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return dmlStatsExecuteStream(5, 0, 0), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"INSERT INTO ds.t (id) VALUES (1),(2),(3),(4),(5)","useLegacySql":false}`
+	resp := runQueryAndGetResults(t, deps, body, "")
+
+	if resp.Kind != getQueryResultsKind {
+		t.Errorf("kind = %q, want %q", resp.Kind, getQueryResultsKind)
+	}
+	if resp.DmlStats == nil {
+		t.Fatalf("dmlStats missing on getResults replay")
+	}
+	if resp.DmlStats.InsertedRowCount != "5" {
+		t.Errorf("dmlStats.insertedRowCount = %q, want %q",
+			resp.DmlStats.InsertedRowCount, "5")
+	}
+	if resp.NumDmlAffectedRows != "5" {
+		t.Errorf("numDmlAffectedRows = %q, want %q",
+			resp.NumDmlAffectedRows, "5")
+	}
+	if resp.Schema != nil {
+		t.Errorf("schema = %+v, want nil on DML replay", resp.Schema)
+	}
+	if len(resp.Rows) != 0 {
+		t.Errorf("rows = %d, want 0 on DML replay", len(resp.Rows))
+	}
+	if resp.TotalRows != "0" {
+		t.Errorf("totalRows = %q, want %q on DML replay",
+			resp.TotalRows, "0")
+	}
+}
+
 // TestQueryGetResultsUnknownJobReturns404 asserts the unknown-jobId
 // branch surfaces as a BigQuery-shaped 404 envelope.
 func TestQueryGetResultsUnknownJobReturns404(t *testing.T) {
