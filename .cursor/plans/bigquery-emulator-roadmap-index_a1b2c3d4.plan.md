@@ -103,7 +103,7 @@ todos:
     status: completed
   - id: run-33-dml-insert
     content: "Run dml-insert-e2e_e2b3c4d5.plan.md"
-    status: pending
+    status: completed
   - id: run-34-dml-update-delete
     content: "Run dml-update-delete_f3c4d5e6.plan.md"
     status: pending
