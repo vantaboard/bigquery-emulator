@@ -109,7 +109,7 @@ todos:
     status: completed
   - id: run-35-ddl-statements
     content: "Run ddl-statements_g4d5e6f7.plan.md"
-    status: pending
+    status: completed
   - id: run-36-dml-ddl-e2e
     content: "Run dml-ddl-e2e_h5e6f7a8.plan.md"
     status: pending
