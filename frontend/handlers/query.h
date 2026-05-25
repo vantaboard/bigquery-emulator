@@ -9,6 +9,11 @@
 #include "proto/emulator.grpc.pb.h"
 
 namespace bigquery_emulator {
+namespace backend {
+namespace engine {
+class Engine;
+}  // namespace engine
+}  // namespace backend
 namespace frontend {
 
 // QueryService is the C++ engine's implementation of the
@@ -40,7 +45,20 @@ namespace frontend {
 // streaming logic without a real `grpc::ServerWriter`.
 class QueryService final : public v1::Query::Service {
  public:
-  explicit QueryService(backend::storage::Storage* storage = nullptr);
+  // `storage` is the catalog adapter's backing store (used to
+  // materialize `googlesql::Table*`s for name resolution). `engine`
+  // is the execution backend the handler forwards `DryRun` /
+  // `ExecuteQuery` to. When `engine == nullptr` the handler falls
+  // back to constructing a per-request reference-impl engine; this
+  // preserves the legacy behavior (and the existing tests in
+  // `query_test.cc`) where the handler only knew about `storage`.
+  // The Phase 5i `--engine=duckdb --on_unknown_fn=fallback` flag in
+  // `binaries/emulator_main/main.cc` constructs a long-lived engine
+  // (possibly wrapped in `FallbackEngine`) and passes it in here so
+  // the binary actually exercises the selected engine instead of
+  // hardcoding reference-impl.
+  explicit QueryService(backend::storage::Storage* storage = nullptr,
+                         backend::engine::Engine* engine = nullptr);
 
   ::grpc::Status DryRun(::grpc::ServerContext* context,
                         const v1::QueryRequest* request,
@@ -52,6 +70,7 @@ class QueryService final : public v1::Query::Service {
 
  private:
   backend::storage::Storage* storage_;
+  backend::engine::Engine* engine_;  // not owned; may be null
 };
 
 // Executes `request` against the reference-impl engine and emits the
@@ -75,9 +94,18 @@ class QueryService final : public v1::Query::Service {
 // in (the legacy CMake target). The gRPC handler wraps this helper
 // with a one-line lambda; tests call it directly with a capturing
 // lambda and inspect the emitted messages.
+//
+// `engine` is the execution backend to forward to. When null, the
+// helper constructs a per-call reference-impl engine so the existing
+// `query_test.cc` tests (which only know about `storage`) keep
+// passing. The Phase 5i wiring path in `emulator_main` always
+// supplies a non-null engine -- usually a `FallbackEngine` wrapping
+// `--engine=duckdb` with the reference-impl evaluator as the safety
+// net.
 ::grpc::Status StreamQueryResults(
     backend::storage::Storage* storage, const v1::QueryRequest& request,
-    const std::function<bool(const v1::QueryResultRow&)>& write);
+    const std::function<bool(const v1::QueryResultRow&)>& write,
+    backend::engine::Engine* engine = nullptr);
 
 }  // namespace frontend
 }  // namespace bigquery_emulator

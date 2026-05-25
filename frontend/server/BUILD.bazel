@@ -17,6 +17,7 @@ cc_library(
     srcs = ["server.cc"],
     hdrs = ["server.h"],
     deps = [
+        "//backend/engine",
         "//backend/storage",
         "//frontend/handlers:catalog_handler",
         "//frontend/handlers:query_handler",

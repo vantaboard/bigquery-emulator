@@ -7,6 +7,11 @@
 #include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
+namespace backend {
+namespace engine {
+class Engine;
+}  // namespace engine
+}  // namespace backend
 namespace frontend {
 
 // Server is the BigQuery emulator's C++ engine front door.
@@ -41,6 +46,16 @@ class Server {
     // the `InMemoryStorage` / `DuckDBStorage` owned by `emulator_main`).
     // Must be non-null; `Server::Create` returns null otherwise.
     backend::storage::Storage* storage = nullptr;
+
+    // Execution backend the Query service forwards `DryRun` and
+    // `ExecuteQuery` RPCs to. Optional: when null, the Query service
+    // constructs a per-request reference-impl engine (the original
+    // Phase 5.A behavior). The Phase 5i wiring path in
+    // `binaries/emulator_main/main.cc` always supplies one -- usually
+    // a `FallbackEngine` wrapping the user-selected `--engine` with
+    // the reference-impl evaluator as the safety net. Must outlive
+    // the returned `Server`.
+    backend::engine::Engine* engine = nullptr;
   };
 
   virtual ~Server() = default;

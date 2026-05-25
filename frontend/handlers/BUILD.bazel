@@ -44,6 +44,11 @@ cc_library(
     local_defines = ["BIGQUERY_EMULATOR_HAS_GOOGLESQL=1"],
     deps = [
         "//backend/catalog:googlesql_catalog",
+        # `backend/engine` is needed unconditionally for the optional
+        # `Engine*` parameter on `QueryService` and `StreamQueryResults`
+        # (which the Phase 5i wiring path threads through from
+        # `binaries/emulator_main/main.cc`). The reference-impl engine
+        # is the legacy default when no engine is supplied.
         "//backend/engine",
         "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/schema",

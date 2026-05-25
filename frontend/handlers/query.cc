@@ -10,11 +10,11 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/engine.h"
 #include "backend/storage/storage.h"
 
 #if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
 #include "backend/catalog/googlesql_catalog.h"
-#include "backend/engine/engine.h"
 #include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -182,8 +182,9 @@ backend::engine::QueryRequest ProtoToEngineRequest(
 
 }  // namespace
 
-QueryService::QueryService(backend::storage::Storage* storage)
-    : storage_(storage) {}
+QueryService::QueryService(backend::storage::Storage* storage,
+                            backend::engine::Engine* engine)
+    : storage_(storage), engine_(engine) {}
 
 ::grpc::Status QueryService::DryRun(::grpc::ServerContext* /*context*/,
                                     const v1::QueryRequest* request,
@@ -286,16 +287,19 @@ QueryService::QueryService(backend::storage::Storage* storage)
       storage_, *request,
       [writer](const v1::QueryResultRow& message) -> bool {
         return writer->Write(message);
-      });
+      },
+      engine_);
 }
 
 ::grpc::Status StreamQueryResults(
     backend::storage::Storage* storage, const v1::QueryRequest& request,
-    const std::function<bool(const v1::QueryResultRow&)>& write) {
+    const std::function<bool(const v1::QueryResultRow&)>& write,
+    backend::engine::Engine* engine) {
 #if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
   (void)storage;
   (void)request;
   (void)write;
+  (void)engine;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED,
                         kExecutionUnimplemented);
 #else
@@ -337,10 +341,25 @@ QueryService::QueryService(backend::storage::Storage* storage)
       request.project_id(), storage, &type_factory,
       analyzer_options.language());
 
-  backend::engine::reference_impl::ReferenceImplEngine engine(storage);
+  // Engine selection:
+  //   * If the caller provided one (the `binaries/emulator_main` wire
+  //     path always does), use it verbatim -- including any
+  //     `FallbackEngine` wrapping the operator already configured via
+  //     `--on_unknown_fn=fallback`.
+  //   * Otherwise (the legacy `query_test.cc` path that only knows
+  //     about `storage`) construct a per-call reference-impl engine
+  //     so the existing tests still pin the original behavior.
+  std::unique_ptr<backend::engine::reference_impl::ReferenceImplEngine>
+      owned_engine;
+  backend::engine::Engine* active_engine = engine;
+  if (active_engine == nullptr) {
+    owned_engine = std::make_unique<
+        backend::engine::reference_impl::ReferenceImplEngine>(storage);
+    active_engine = owned_engine.get();
+  }
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
   absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
-      engine.ExecuteQuery(engine_request, &catalog);
+      active_engine->ExecuteQuery(engine_request, &catalog);
   if (!source_or.ok()) {
     return AnalyzeStatusToGrpc(source_or.status());
   }
