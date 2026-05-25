@@ -104,14 +104,40 @@ absl::StatusOr<std::string> RenderCellLiteral(
 // calling). The column metadata is needed to pick the right SQL
 // literal form for the temporal / numeric types that round-trip as
 // strings in our Value union.
+//
+// The Phase 1 gateway tabledata.insertAll path lowers every JSON cell
+// to a `Value::String` regardless of the column's declared type
+// (see the comment on `frontend/handlers/catalog.cc::CellToValue`).
+// For numeric / boolean columns we therefore accept both the natively-
+// typed `Value::Int64` / `Value::Float64` / `Value::Bool` and a
+// `Value::String` carrying the textual representation, and we delegate
+// the final parse to DuckDB by emitting a CAST literal. This keeps
+// the storage layer compatible with the wire-shape stringification
+// the gateway performs while still surfacing malformed values as a
+// CAST failure from DuckDB rather than silently storing zero.
 absl::StatusOr<std::string> RenderScalarLiteral(
     const Value& cell, const schema::ColumnSchema& column) {
   switch (column.type) {
     case schema::ColumnType::kBool:
+      if (cell.kind() == Value::Kind::kString) {
+        return absl::StrCat("CAST('",
+                             EscapeStringLiteralInner(cell.string_value()),
+                             "' AS BOOLEAN)");
+      }
       return std::string(cell.bool_value() ? "TRUE" : "FALSE");
     case schema::ColumnType::kInt64:
+      if (cell.kind() == Value::Kind::kString) {
+        return absl::StrCat("CAST('",
+                             EscapeStringLiteralInner(cell.string_value()),
+                             "' AS BIGINT)");
+      }
       return absl::StrCat(cell.int64_value());
     case schema::ColumnType::kFloat64: {
+      if (cell.kind() == Value::Kind::kString) {
+        return absl::StrCat("CAST('",
+                             EscapeStringLiteralInner(cell.string_value()),
+                             "' AS DOUBLE)");
+      }
       const double v = cell.float64_value();
       if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
       if (std::isinf(v)) {
