@@ -58,6 +58,21 @@ class ReferenceImplEngine : public Engine {
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
+  // Execute a DML statement (Phase 6a: only INSERT is wired today;
+  // UPDATE / DELETE / MERGE return UNIMPLEMENTED). The handler in
+  // `frontend/handlers/query.cc` classifies the analyzed AST and
+  // routes here when it sees `RESOLVED_INSERT_STMT`.
+  //
+  // `catalog` MUST be a `backend::catalog::GoogleSqlCatalog`
+  // wrapping `storage_`: the engine recovers the destination
+  // `storage::TableId` by `dynamic_cast`-ing the
+  // `ResolvedTableScan::table()` pointer back to a
+  // `backend::catalog::StorageTable*` (which the catalog adapter
+  // hands out for every materialized table). A non-`StorageTable`
+  // table pointer surfaces as `FAILED_PRECONDITION`.
+  absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
+                                      googlesql::Catalog* catalog) override;
+
  private:
   storage::Storage* storage_;  // not owned
 };

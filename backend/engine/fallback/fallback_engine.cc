@@ -61,6 +61,20 @@ absl::StatusOr<std::unique_ptr<RowSource>> FallbackEngine::ExecuteQuery(
   return fallback_->ExecuteQuery(request, catalog);
 }
 
+absl::StatusOr<DmlStats> FallbackEngine::ExecuteDml(
+    const QueryRequest& request, ::googlesql::Catalog* catalog) {
+  if (primary_ == nullptr || fallback_ == nullptr) {
+    return absl::FailedPreconditionError(
+        "FallbackEngine: primary and fallback engines must be non-null");
+  }
+  absl::StatusOr<DmlStats> result = primary_->ExecuteDml(request, catalog);
+  if (result.ok()) return result;
+  if (result.status().code() != absl::StatusCode::kUnimplemented) {
+    return result;
+  }
+  return fallback_->ExecuteDml(request, catalog);
+}
+
 }  // namespace fallback
 }  // namespace engine
 }  // namespace backend

@@ -27,6 +27,8 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "googlesql/public/analyzer.h"
@@ -86,6 +88,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> ReferenceImplEngine::ExecuteQuery(
   return absl::UnimplementedError(kNoGoogleSqlMsg);
 }
 
+absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
+    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
+  return absl::UnimplementedError(kNoGoogleSqlMsg);
+}
+
 #else  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
 namespace {
@@ -100,6 +107,15 @@ namespace {
   language.EnableMaximumLanguageFeatures();
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+  // The analyzer's default `supported_statement_kinds_` only allows
+  // `RESOLVED_QUERY_STMT`, which would reject INSERT/UPDATE/DELETE/
+  // MERGE in `Prepare()` with a generic "Statement not supported"
+  // error before our handler ever sees the resolved AST. Phase 6a's
+  // statement classifier in `frontend/handlers/query.cc` is the right
+  // place to gate which kinds we *implement*, so we opt in to all
+  // statement kinds at the language layer and let the handler
+  // surface UNIMPLEMENTED for the ones the engine does not yet run.
+  language.SetSupportsAllStatementKinds();
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
   options.set_attach_error_location_payload(true);
@@ -381,6 +397,120 @@ absl::StatusOr<std::unique_ptr<RowSource>> ReferenceImplEngine::ExecuteQuery(
   return std::unique_ptr<RowSource>(new RowSourceImpl(
       std::move(type_factory), std::move(query), std::move(iter).value(),
       std::move(*output_schema)));
+}
+
+absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
+    const QueryRequest& request, ::googlesql::Catalog* catalog) {
+  absl::Status valid = ValidateRequest(request, catalog);
+  if (!valid.ok()) return valid;
+  if (storage_ == nullptr) {
+    return absl::FailedPreconditionError(
+        "ReferenceImplEngine::ExecuteDml: storage backend is not "
+        "configured");
+  }
+
+  // Mirror the analyzer plumbing in ExecuteQuery so the resolved AST
+  // we hand to `PreparedModify` shares the same `LanguageOptions` and
+  // `TypeFactory` snapshot as the SELECT path.
+  auto type_factory = std::make_unique<::googlesql::TypeFactory>();
+  ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
+  ::googlesql::EvaluatorOptions evaluator_options;
+  evaluator_options.type_factory = type_factory.get();
+
+  auto modify = std::make_unique<::googlesql::PreparedModify>(
+      request.sql, evaluator_options);
+  absl::Status prepare = modify->Prepare(analyzer_options, catalog);
+  if (!prepare.ok()) return prepare;
+
+  const ::googlesql::ResolvedStatement* stmt = modify->resolved_statement();
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ReferenceImplEngine::ExecuteDml: PreparedModify did not expose a "
+        "resolved statement");
+  }
+  if (stmt->node_kind() != ::googlesql::RESOLVED_INSERT_STMT) {
+    return absl::UnimplementedError(absl::StrCat(
+        "ReferenceImplEngine::ExecuteDml: only INSERT is implemented "
+        "today; got ", stmt->node_kind_string()));
+  }
+  const auto* insert_stmt =
+      stmt->GetAs<::googlesql::ResolvedInsertStmt>();
+  const ::googlesql::ResolvedTableScan* table_scan =
+      insert_stmt->table_scan();
+  if (table_scan == nullptr || table_scan->table() == nullptr) {
+    return absl::InternalError(
+        "ReferenceImplEngine::ExecuteDml: INSERT has no resolved table "
+        "scan");
+  }
+  // The catalog hands out `StorageTable*` for every materialized
+  // table; downcast so we can recover the engine-agnostic
+  // `storage::TableId`. A non-StorageTable means the catalog adapter
+  // returned a different shape (e.g. a built-in) and we cannot
+  // meaningfully append rows to it.
+  const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(
+      table_scan->table());
+  if (storage_table == nullptr) {
+    return absl::FailedPreconditionError(absl::StrCat(
+        "ReferenceImplEngine::ExecuteDml: INSERT target table '",
+        table_scan->table()->FullName(),
+        "' is not backed by a StorageTable; cannot append rows"));
+  }
+  const storage::TableId target_id = storage_table->storage_table_id();
+  const schema::TableSchema& target_schema = storage_table->bq_schema();
+
+  // PreparedModify's iterator returns a row per insert with one
+  // googlesql::Value per *table* column (in catalog order). For an
+  // INSERT VALUES with a column subset, the analyzer fills in
+  // defaults / NULLs for the unmentioned columns automatically before
+  // the iterator hands the row back, so we always project across the
+  // full `target_schema.columns` list here.
+  absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableModifyIterator>>
+      iter = modify->Execute();
+  if (!iter.ok()) return iter.status();
+  std::unique_ptr<::googlesql::EvaluatorTableModifyIterator> rows =
+      std::move(iter).value();
+  if (rows == nullptr) {
+    return absl::InternalError(
+        "ReferenceImplEngine::ExecuteDml: PreparedModify::Execute "
+        "returned a null iterator");
+  }
+
+  std::vector<storage::Row> pending;
+  while (rows->NextRow()) {
+    if (rows->GetOperation() !=
+        ::googlesql::EvaluatorTableModifyIterator::Operation::kInsert) {
+      // We classified the statement as INSERT above, so anything
+      // other than `kInsert` here is a reference-impl invariant
+      // violation; surface it as INTERNAL so the caller sees the
+      // bug instead of a silently dropped row.
+      return absl::InternalError(absl::StrCat(
+          "ReferenceImplEngine::ExecuteDml: INSERT iterator yielded a "
+          "non-insert operation kind ",
+          static_cast<int>(rows->GetOperation())));
+    }
+    storage::Row row;
+    row.cells.reserve(target_schema.columns.size());
+    for (size_t i = 0; i < target_schema.columns.size(); ++i) {
+      const ::googlesql::Value& cell = rows->GetColumnValue(static_cast<int>(i));
+      absl::StatusOr<storage::Value> converted =
+          GoogleSqlValueToStorageValue(cell);
+      if (!converted.ok()) return converted.status();
+      row.cells.push_back(std::move(converted).value());
+    }
+    pending.push_back(std::move(row));
+  }
+  absl::Status iter_status = rows->Status();
+  if (!iter_status.ok()) return iter_status;
+
+  if (!pending.empty()) {
+    absl::Status appended = storage_->AppendRows(
+        target_id, absl::MakeConstSpan(pending));
+    if (!appended.ok()) return appended;
+  }
+
+  DmlStats stats;
+  stats.inserted_row_count = static_cast<int64_t>(pending.size());
+  return stats;
 }
 
 #endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL

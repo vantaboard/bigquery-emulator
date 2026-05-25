@@ -9,6 +9,7 @@
 
 #include "backend/engine/reference_impl/reference_impl_engine.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -234,6 +235,135 @@ TEST_F(ReferenceImplEngineTest, ExecuteQueryRejectsNullCatalog) {
   auto source = engine_->ExecuteQuery(MakeRequest("SELECT 1"), nullptr);
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteDml (Phase 6a)
+//
+// The DML path is the engine's `INSERT INTO ds.t VALUES(...)` /
+// `INSERT INTO ds.t SELECT ...` entry point. These tests pin:
+//
+//   * VALUES rows land in the underlying `Storage` and the
+//     returned `DmlStats.inserted_row_count` equals the number of
+//     appended rows.
+//   * INSERT INTO ... SELECT routes through the same path: rows
+//     materialized by the inner SELECT get appended into the
+//     destination table.
+//   * UNIMPLEMENTED is returned for non-INSERT DML (UPDATE / DELETE /
+//     MERGE) so the frontend handler can surface the standard
+//     `notImplemented` reason without the engine crashing.
+//   * SELECT statements routed to ExecuteDml return INVALID_ARGUMENT
+//     (the analyzer's classification mistake, not ours).
+// ---------------------------------------------------------------------------
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlInsertValuesAppendsRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("INSERT INTO ds.people (id, name, tags) "
+                  "VALUES (10, 'kay', ['a','b']), (11, 'jay', [])"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 2);
+  EXPECT_EQ(stats->updated_row_count, 0);
+  EXPECT_EQ(stats->deleted_row_count, 0);
+
+  // Verify the appended rows are visible on a follow-up scan.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::vector<int64_t> ids;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_GE(row.cells.size(), 1u);
+    EXPECT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+    ids.push_back(row.cells[0].int64_value());
+  }
+  // CreatePeopleTable seeds id=1,2,3; the INSERT adds 10 and 11.
+  EXPECT_EQ(ids.size(), 5u);
+  EXPECT_NE(std::find(ids.begin(), ids.end(), 10), ids.end());
+  EXPECT_NE(std::find(ids.begin(), ids.end(), 11), ids.end());
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlInsertSelectAppendsRows) {
+  CreatePeopleTable();
+  // Mirror table for the INSERT SELECT destination.
+  schema::TableSchema mirror;
+  schema::ColumnSchema id;
+  id.name = "id";
+  id.type = schema::ColumnType::kInt64;
+  id.mode = schema::ColumnMode::kRequired;
+  mirror.columns.push_back(id);
+  schema::ColumnSchema name;
+  name.name = "name";
+  name.type = schema::ColumnType::kString;
+  name.mode = schema::ColumnMode::kNullable;
+  mirror.columns.push_back(name);
+  schema::ColumnSchema tags;
+  tags.name = "tags";
+  tags.type = schema::ColumnType::kString;
+  tags.mode = schema::ColumnMode::kRepeated;
+  mirror.columns.push_back(tags);
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "people_copy"}, mirror).ok());
+
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("INSERT INTO ds.people_copy (id, name, tags) "
+                  "SELECT id, name, tags FROM ds.people WHERE id < 3"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 2);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows_seen = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 2);
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlInsertEmptyValuesYieldsNoRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  // INSERT SELECT with WHERE FALSE is a row-count-zero shape we
+  // expect the engine to handle without calling AppendRows on an
+  // empty span.
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("INSERT INTO ds.people (id, name, tags) "
+                  "SELECT id, name, tags FROM ds.people WHERE FALSE"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 0);
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlSelectIsInvalidArgument) {
+  CatalogBundle bundle = MakeCatalog();
+  auto stats =
+      engine_->ExecuteDml(MakeRequest("SELECT 1"), bundle.catalog.get());
+  ASSERT_FALSE(stats.ok());
+  // PreparedModify rejects non-DML statements with
+  // INVALID_ARGUMENT during Prepare(); we surface that verbatim.
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kInvalidArgument)
+      << stats.status();
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDmlDeleteIsUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("DELETE FROM ds.people WHERE id = 1"),
+      bundle.catalog.get());
+  ASSERT_FALSE(stats.ok());
+  EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
+      << stats.status();
 }
 
 }  // namespace

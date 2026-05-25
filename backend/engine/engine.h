@@ -114,6 +114,21 @@ struct DryRunResult {
   int64_t estimated_bytes_processed = 0;
 };
 
+// Result of `Engine::ExecuteDml`: per-statement modification counts
+// for an INSERT / UPDATE / DELETE / MERGE statement. Mirrors the
+// BigQuery REST `Job.statistics.query.dmlStats` envelope; the
+// frontend handler folds these counts into a final
+// `QueryResultRow.dml_stats` message on the `Query.ExecuteQuery`
+// stream.
+struct DmlStats {
+  // Number of rows added by INSERT / MERGE-INSERT branches.
+  int64_t inserted_row_count = 0;
+  // Number of rows updated by UPDATE / MERGE-UPDATE branches.
+  int64_t updated_row_count = 0;
+  // Number of rows removed by DELETE / MERGE-DELETE branches.
+  int64_t deleted_row_count = 0;
+};
+
 // Engine is the abstract interface every query backend implements.
 //
 // Lifetime: created once at startup with a `Storage*` and a
@@ -142,6 +157,23 @@ class Engine {
   // `bigquery.jobs.getQueryResults` REST endpoints.
   virtual absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) = 0;
+
+  // Plan + execute a DML statement (INSERT / UPDATE / DELETE / MERGE)
+  // and return the per-statement modification counts. The engine is
+  // expected to apply the changes to the underlying `Storage` it was
+  // constructed with -- callers do not see the modified rows, only
+  // the count summary the gateway folds into BigQuery's
+  // `dmlStats` / `numDmlAffectedRows` fields. Engines that do not
+  // implement DML yet return `absl::StatusCode::kUnimplemented`; the
+  // frontend handler maps that to gRPC `UNIMPLEMENTED` so the
+  // gateway can surface BigQuery's `notImplemented` reason.
+  virtual absl::StatusOr<DmlStats> ExecuteDml(
+      const QueryRequest& request, googlesql::Catalog* catalog) {
+    (void)request;
+    (void)catalog;
+    return absl::UnimplementedError(
+        "Engine::ExecuteDml is not implemented in this engine");
+  }
 };
 
 }  // namespace engine

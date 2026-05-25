@@ -59,6 +59,9 @@ class FallbackEngine : public Engine {
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
+  absl::StatusOr<DmlStats> ExecuteDml(
+      const QueryRequest& request, googlesql::Catalog* catalog) override;
+
  private:
   Engine* primary_;   // not owned
   Engine* fallback_;  // not owned
