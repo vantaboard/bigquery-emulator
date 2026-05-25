@@ -62,7 +62,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedProjectScan`                         | `not_started` | Scans plan.                                                                               |
 | `ResolvedFilterScan`                          | `done`        | `SELECT * FROM (<input>) WHERE <expr>` — Phase 5g `transpiler-emit-scans` plan.            |
 | `ResolvedJoinScan`                            | `done` (subset) | Phase 5h `transpiler-emit-join-agg`: INNER (+ CROSS) / LEFT / RIGHT / FULL via DuckDB's native join keywords. Lateral joins (`is_lateral`), `JOIN USING(...)` (`has_using`), and lateral correlated `parameter_list` still fall back to reference-impl. |
-| `ResolvedArrayScan`                           | `not_started` | UNNEST shape; needs lateral-join rewrite in the unnest plan.                               |
+| `ResolvedArrayScan`                           | `done` (subset) | Phase 5j `transpiler-struct-unnest`: standalone `UNNEST(<arr>) AS <col>` lowers to DuckDB `SELECT unnest(<arr>) AS "<col>"`. Multi-array `UNNEST(a, b, ...)` (`array_zip_mode`), `WITH OFFSET` (`array_offset_column`), `LEFT JOIN UNNEST` / cross-joined `FROM t, UNNEST(t.arr)` (non-`SingleRowScan` `input_scan` / `join_expr` / `is_outer`) all fall back to reference-impl pending the lateral-join + `generate_subscripts(...)` rewrites. |
 | `ResolvedAggregateScan`                       | `done` (subset) | Phase 5h `transpiler-emit-join-agg`: GROUP BY + simple aggregates (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`COUNT(*)`) via `ResolvedAggregateFunctionCall`. ROLLUP/CUBE/GROUPING SETS/GROUPING() still fall back to reference-impl. |
 | `ResolvedAnonymizedAggregateScan`             | `skiplist`    | Differential-privacy variant; reference-impl fallback today.                              |
 | `ResolvedDifferentialPrivacyAggregateScan`    | `skiplist`    | Same DP family.                                                                           |
@@ -95,15 +95,15 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedLiteral`                             | `done`        | Lowers via `Value::GetSQLLiteral(PRODUCT_EXTERNAL)` — Phase 5g `transpiler-emit-scans`.    |
+| `ResolvedLiteral`                             | `done`        | Phase 5g `transpiler-emit-scans` for scalars (via `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`). Phase 5j `transpiler-struct-unnest` extends the path through a private `EmitValueLiteral` helper that recurses into `ARRAY` and (named-field) `STRUCT` values so the nested STRING / STRUCT shapes use DuckDB-flavored quoting (`'...'`, `{'k': v}`) instead of BQ's `"..."` / `(...)`. Anonymous-field `STRUCT` literals still fall back. |
 | `ResolvedParameter`                           | `not_started` | Expr emit plan; named + positional `@p` parameters via DuckDB's `$1` bind shape.          |
 | `ResolvedColumnRef`                           | `done`        | Emits the quoted `ResolvedColumn::name()` — Phase 5g `transpiler-emit-scans` plan.         |
-| `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; everything else still falls back to ref-impl.    |
+| `ResolvedFunctionCall`                        | `done` (subset) | Phase 5g covers `COALESCE` + `IFNULL`; Phase 5j `transpiler-struct-unnest` adds `$make_array(<args>)` (the non-const array constructor) which lowers to DuckDB's bracket literal (`[a, b, c]`). Everything else still falls back to ref-impl. |
 | `ResolvedAggregateFunctionCall`               | `done` (subset) | Phase 5h `transpiler-emit-join-agg` covers `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) and optional `DISTINCT`. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, and `SAFE.<agg>(...)` still fall back. |
 | `ResolvedAnalyticFunctionCall`                | `not_started` | Analytic emit plan.                                                                       |
 | `ResolvedCast`                                | `not_started` | Expr emit plan; relies on `types.h` for the DuckDB type name.                             |
-| `ResolvedMakeStruct`                          | `not_started` | Struct literal emit plan.                                                                 |
-| `ResolvedGetStructField`                      | `not_started` | Struct field access emit plan (`s.a`).                                                    |
+| `ResolvedMakeStruct`                          | `done` (subset) | Phase 5j `transpiler-struct-unnest`: named-field `STRUCT(<expr> AS <name>, ...)` lowers to DuckDB's `{'<name>': <value>, ...}` struct literal, walking the `StructType` for ordered names and `field_list` for parallel values. Anonymous-field structs (`STRUCT(1, 2)`) have no DuckDB analog and fall back to reference-impl via the empty-string contract; a follow-up plan could synthesize positional names (`_0`, `_1`, ...). |
+| `ResolvedGetStructField`                      | `done` (subset) | Phase 5j `transpiler-struct-unnest`: named-field access lowers to `<expr>."<field_name>"`. Anonymous fields (empty `StructField::name`) fall back to reference-impl. `field_expr_is_positional` is user-intent only and does not affect the emit. |
 | `ResolvedMakeProto`                           | `skiplist`    | BigQuery proto types are out of scope today.                                              |
 | `ResolvedGetProtoField`                       | `skiplist`    | Same.                                                                                     |
 | `ResolvedGetProtoOneof`                       | `skiplist`    | Same.                                                                                     |
@@ -143,26 +143,43 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 ## Coverage summary
 
-* **Status today:** Phase 5h extends the Phase 5g baseline with the
-  big four "shape" scans the conformance harness exercises most:
-  `ResolvedJoinScan` (INNER/LEFT/RIGHT/FULL plus CROSS),
-  `ResolvedAggregateScan` (GROUP BY + simple aggregates),
-  `ResolvedOrderByScan`, and `ResolvedLimitOffsetScan`. The
-  expression layer also gains the first cut of
-  `ResolvedAggregateFunctionCall` (SUM/COUNT/AVG/MIN/MAX, plus
-  COUNT(*) and optional DISTINCT). `Transpiler::Transpile` still
-  returns the empty string for `ResolvedQueryStmt` and
-  `ResolvedProjectScan` so the engine continues to fall back to
-  reference-impl for the wrapping shapes; a follow-up plan lands
-  those rows.
+* **Status today:** Phase 5j layers STRUCT / ARRAY / UNNEST on top of
+  the Phase 5h baseline. The transpiler now lowers
+  `ResolvedArrayScan` for the standalone `UNNEST(<arr>) AS <col>`
+  shape, `ResolvedMakeStruct` for named-field struct literals,
+  `ResolvedGetStructField` for named struct field access, and the
+  `$make_array(...)` `ResolvedFunctionCall` for the non-const array
+  constructor. `EmitLiteral` also gained a recursive
+  `EmitValueLiteral` helper so `ARRAY` and (named-field) `STRUCT`
+  literal values reach DuckDB with the right quoting (`'..'` for
+  STRING, `{'k': v}` for STRUCT, `[..]` for ARRAY) rather than BQ's
+  `"..."` / `(...)` shapes.
+* **DuckDB STRUCT / ARRAY quirks the emit honors:**
+  * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
+    are keyed by name. The emit walks the resolved `StructType` for
+    names in parallel with `field_list` for values.
+  * **DuckDB does not support anonymous STRUCT fields.** Anonymous
+    (`STRUCT(1, 2)`) cases fall back to reference-impl; a follow-up
+    plan could synthesize positional names (`_0`, `_1`, ...) and
+    teach `EmitGetStructField` to look them up.
+  * **DuckDB `LIST` ↔ BigQuery `ARRAY`.** Both spell their literal as
+    `[a, b, c]`, so the emit is a direct join. NULL element
+    semantics also match (`NULL` propagates as the literal `NULL`).
+  * **`NULL` in struct fields** lowers as the literal `NULL`, which
+    DuckDB matches against BigQuery's "absent NULL field" semantics
+    for struct literals.
+  * **UNNEST + WITH OFFSET / lateral joins / multi-array zip / outer
+    UNNEST** all fall back today; they need bespoke
+    `generate_subscripts(...)` / `CROSS JOIN unnest(...) AS _(col)`
+    rewrites the standalone-UNNEST subset does not cover.
 * **Next plan(s):**
+  * `transpiler-functions-window_b9e0f1a2` — analytic functions
+    (`OVER (...)` window frames + ranking / aggregate analytics) and
+    the rest of the scalar-function whitelist.
   * `transpiler-emit-project-stmt` (TBD) — flip `ResolvedProjectScan`
     and `ResolvedQueryStmt` so a full `SELECT ... FROM ... WHERE
     ... GROUP BY ... ORDER BY ... LIMIT ...` query lowers end to
     end without falling back to reference-impl.
-  * Subsequent plans (`transpiler-emit-exprs`, `transpiler-functions-window`,
-    ...) fill in the rest of the expression family, aggregates,
-    analytics, and set ops.
 * **Skiplist policy:** the rows tagged `skiplist` above stay on the
   reference-impl engine until a deliberate plan moves them. Promoting
   a row out of `skiplist` requires both an emit method and a

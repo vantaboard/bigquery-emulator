@@ -11,6 +11,8 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
@@ -29,6 +31,73 @@ namespace {
 // or hyphens round-trip safely through the emitted SQL.
 std::string QuoteIdent(absl::string_view name) {
   return absl::StrCat("\"", absl::StrReplaceAll(name, {{"\"", "\"\""}}), "\"");
+}
+
+// Single-quote escape a DuckDB string literal. DuckDB doubles embedded
+// `'` characters; we do the same so BQ string literals with embedded
+// apostrophes round-trip safely. Used for both ResolvedLiteral
+// strings and for STRUCT field-name keys in `{'k': v}` literals.
+std::string QuoteString(absl::string_view text) {
+  return absl::StrCat("'", absl::StrReplaceAll(text, {{"'", "''"}}), "'");
+}
+
+// Lower a GoogleSQL `Value` into a DuckDB SQL literal expression.
+//
+// Scalars route through `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`
+// because that path already matches DuckDB syntax for INT / FLOAT /
+// BOOL / DATE / NUMERIC / DATETIME etc. Strings, arrays, and structs
+// each need a bespoke shape:
+//
+// * Strings: DuckDB reads double-quoted text as an *identifier*, so we
+//   emit the single-quoted form (`'hi'`).
+// * Arrays: DuckDB's array literal is `[e1, e2, ...]`, same shape as
+//   GoogleSQL's `kSQLLiteral` output, but we recurse so nested
+//   STRINGs / STRUCTs get the DuckDB-flavored quoting above instead
+//   of GoogleSQL's `"..."` and `(...)` shapes.
+// * Structs: DuckDB struct literals are `{'k1': v1, 'k2': v2, ...}`
+//   keyed by name. BQ STRUCT field order is positional (the type
+//   carries the names), so we walk the StructType for the keys in
+//   parallel with the value list. Anonymous fields (empty name) have
+//   no DuckDB analog and force the caller back to the reference-impl
+//   fallback by returning the empty string.
+//
+// Returns the empty string when any element / field cannot be lowered;
+// callers propagate that up so the engine fallback fires per the
+// per-shape disposition in SHAPE_TRACKER.md.
+std::string EmitValueLiteral(const ::googlesql::Value& v) {
+  if (v.is_null()) return "NULL";
+  const ::googlesql::Type* type = v.type();
+  if (type == nullptr) return "";
+  switch (type->kind()) {
+    case ::googlesql::TYPE_STRING:
+      return QuoteString(v.string_value());
+    case ::googlesql::TYPE_ARRAY: {
+      std::vector<std::string> elems;
+      elems.reserve(v.num_elements());
+      for (int i = 0; i < v.num_elements(); ++i) {
+        std::string e = EmitValueLiteral(v.element(i));
+        if (e.empty()) return "";
+        elems.push_back(std::move(e));
+      }
+      return absl::StrCat("[", absl::StrJoin(elems, ", "), "]");
+    }
+    case ::googlesql::TYPE_STRUCT: {
+      const ::googlesql::StructType* st = type->AsStruct();
+      if (st == nullptr || st->num_fields() != v.num_fields()) return "";
+      std::vector<std::string> kvs;
+      kvs.reserve(v.num_fields());
+      for (int i = 0; i < v.num_fields(); ++i) {
+        const ::googlesql::StructField& f = st->field(i);
+        if (f.name.empty()) return "";
+        std::string fv = EmitValueLiteral(v.field(i));
+        if (fv.empty()) return "";
+        kvs.push_back(absl::StrCat(QuoteString(f.name), ": ", fv));
+      }
+      return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
+    }
+    default:
+      return v.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL);
+  }
 }
 
 }  // namespace
@@ -52,6 +121,7 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_PROJECT_SCAN:
     case ::googlesql::RESOLVED_SINGLE_ROW_SCAN:
     case ::googlesql::RESOLVED_JOIN_SCAN:
+    case ::googlesql::RESOLVED_ARRAY_SCAN:
     case ::googlesql::RESOLVED_AGGREGATE_SCAN:
     case ::googlesql::RESOLVED_ORDER_BY_SCAN:
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
@@ -59,6 +129,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_COLUMN_REF:
     case ::googlesql::RESOLVED_FUNCTION_CALL:
+    case ::googlesql::RESOLVED_MAKE_STRUCT:
+    case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
       return EmitExpr(node->GetAs<::googlesql::ResolvedExpr>());
     default:
       return "";
@@ -75,6 +147,11 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
     case ::googlesql::RESOLVED_FUNCTION_CALL:
       return EmitFunctionCall(
           expr->GetAs<::googlesql::ResolvedFunctionCall>());
+    case ::googlesql::RESOLVED_MAKE_STRUCT:
+      return EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>());
+    case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
+      return EmitGetStructField(
+          expr->GetAs<::googlesql::ResolvedGetStructField>());
     default:
       return "";
   }
@@ -94,6 +171,8 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
           scan->GetAs<::googlesql::ResolvedSingleRowScan>());
     case ::googlesql::RESOLVED_JOIN_SCAN:
       return EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+    case ::googlesql::RESOLVED_ARRAY_SCAN:
+      return EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>());
     case ::googlesql::RESOLVED_AGGREGATE_SCAN:
       return EmitAggregateScan(
           scan->GetAs<::googlesql::ResolvedAggregateScan>());
@@ -257,8 +336,49 @@ std::string Transpiler::EmitJoinScan(
 }
 
 std::string Transpiler::EmitArrayScan(
-    const ::googlesql::ResolvedArrayScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedArrayScan* node) {
+  // Phase 5j subset: standalone UNNEST. Emit
+  // `SELECT unnest(<arr>) AS "<col>"`, which DuckDB lowers to one row
+  // per array element with the column carrying `<col>` as its name.
+  //
+  // The full BigQuery `ResolvedArrayScan` surface is wider than what
+  // we lower today; everything outside the standalone case falls
+  // back to the reference-impl engine via the disposition policy:
+  //
+  //   * `FROM t, UNNEST(t.arr)` (`input_scan != nullptr` and the
+  //     input is not a `SingleRowScan`) needs DuckDB's lateral
+  //     `CROSS JOIN unnest(...)` rewrite; we defer that to a
+  //     follow-up plan so the column-aliasing contract for the
+  //     cross-join side stays focused.
+  //   * `UNNEST(arr) WITH OFFSET pos` (`array_offset_column`) needs
+  //     a `generate_subscripts(...)` shape with a positional join,
+  //     which BigQuery's ordinal semantics make load-bearing.
+  //   * Multi-array `UNNEST(a, b, c)` (`array_zip_mode`) is the BQ
+  //     array-zip extension; DuckDB's only analog (`list_zip`) does
+  //     not match the PAD / TRUNCATE / STRICT modes exactly.
+  //   * LEFT/RIGHT-style outer UNNEST (`is_outer` / `join_expr`)
+  //     also needs the lateral rewrite plus a literal `NULL` row
+  //     fixup for empty arrays.
+  if (node == nullptr) return "";
+  if (node->array_expr_list_size() != 1 ||
+      node->element_column_list_size() != 1 ||
+      node->array_offset_column() != nullptr ||
+      node->join_expr() != nullptr || node->is_outer() ||
+      node->array_zip_mode() != nullptr) {
+    return "";
+  }
+  // Standalone UNNEST either has no input_scan or a SingleRowScan
+  // (the analyzer's stand-in for "no FROM clause"). Anything else is
+  // the lateral / cross-join shape we defer above.
+  if (node->input_scan() != nullptr &&
+      node->input_scan()->node_kind() !=
+          ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
+    return "";
+  }
+  std::string arr = EmitExpr(node->array_expr_list(0));
+  if (arr.empty()) return "";
+  return absl::StrCat("SELECT unnest(", arr, ") AS ",
+                      QuoteIdent(node->element_column_list(0).name()));
 }
 
 std::string Transpiler::EmitAggregateScan(
@@ -419,26 +539,23 @@ std::string Transpiler::EmitWithRefScan(
 
 std::string Transpiler::EmitLiteral(
     const ::googlesql::ResolvedLiteral* node) {
-  // For most scalar kinds `Value::GetSQLLiteral` is the
-  // closest-to-source SQL form and is also a valid DuckDB literal.
-  // The notable exception is `STRING`: GoogleSQL prefers
-  // double-quoted string literals (`"hi"`), but DuckDB uses
-  // double-quoted text as an *identifier*, so we override the
-  // string case onto the single-quoted form (`'hi'`). Container
-  // literals (ARRAY / STRUCT) and the DATE / TIMESTAMP / NUMERIC
-  // families still fall back to GetSQLLiteral until the per-type
-  // emit lands in a later plan -- the conformance harness pin
-  // stays on reference-impl for those shapes today.
+  // Delegates to the file-private `EmitValueLiteral` helper. Scalar
+  // kinds keep going through `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`
+  // because that path already matches DuckDB syntax for INT / FLOAT /
+  // BOOL / DATE / NUMERIC / DATETIME etc. The helper carves out the
+  // three cases DuckDB spells differently from GoogleSQL:
+  //
+  //   * STRING: DuckDB reads double-quoted text as an *identifier*,
+  //     so we emit the single-quoted form (`'hi'`).
+  //   * ARRAY: GoogleSQL's `[1, 2]` shape happens to match DuckDB's,
+  //     but we recurse so nested STRINGs / STRUCTs get the
+  //     DuckDB-flavored quoting rather than `"..."` / `(...)`.
+  //   * STRUCT: DuckDB struct literals are `{'k': v, ...}` keyed by
+  //     field name. Anonymous fields (empty name) have no DuckDB
+  //     analog and force the caller back to the reference-impl
+  //     fallback via the empty-string contract.
   if (node == nullptr) return "";
-  const ::googlesql::Value& value = node->value();
-  if (!value.is_null() && value.type() != nullptr &&
-      value.type()->kind() == ::googlesql::TYPE_STRING) {
-    return absl::StrCat(
-        "'",
-        absl::StrReplaceAll(value.string_value(), {{"'", "''"}}),
-        "'");
-  }
-  return value.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL);
+  return EmitValueLiteral(node->value());
 }
 
 std::string Transpiler::EmitParameter(
@@ -484,6 +601,15 @@ std::string Transpiler::EmitFunctionCall(
   if (name == "ifnull") {
     if (args.size() != 2) return "";
     return absl::StrCat("IFNULL(", args[0], ", ", args[1], ")");
+  }
+  if (name == "$make_array") {
+    // `[a, b, c]` (or `ARRAY[a, b, c]`) lowers through the analyzer
+    // to a `$make_array(...)` function call when the element
+    // expressions aren't all constants. DuckDB's array constructor
+    // shares BigQuery's bracket syntax, so the lowering is a
+    // direct join. The all-const case ships as a `ResolvedLiteral`
+    // (handled by `EmitValueLiteral` above), not here.
+    return absl::StrCat("[", absl::StrJoin(args, ", "), "]");
   }
   return "";
 }
@@ -546,13 +672,77 @@ std::string Transpiler::EmitCast(
 }
 
 std::string Transpiler::EmitMakeStruct(
-    const ::googlesql::ResolvedMakeStruct* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedMakeStruct* node) {
+  // BigQuery `STRUCT(<expr> [AS <name>], ...)` lowers through the
+  // analyzer to a `ResolvedMakeStruct` carrying the resolved
+  // `StructType` (the source of truth for field names + order) plus
+  // the parallel `field_list` of value expressions. DuckDB's struct
+  // literal is `{'<name>': <value>, ...}`, keyed by name -- so the
+  // emit walks the two lists in lockstep and stitches them onto the
+  // DuckDB key/value syntax.
+  //
+  // BQ STRUCT semantics quirks we honor here, with the matching
+  // SHAPE_TRACKER row documenting the fallback:
+  //
+  //   * BigQuery STRUCT field order is positional and the analyzer
+  //     guarantees `field_list_size() == StructType::num_fields()`;
+  //     we double-check defensively because a drift would silently
+  //     produce a struct DuckDB rejects.
+  //   * DuckDB STRUCTs *require* named fields; BigQuery permits
+  //     anonymous ones (`STRUCT(1, 2)`). Anonymous fields fall back
+  //     to reference-impl via the empty-string contract; a follow-up
+  //     plan could synthesize positional names (`_0`, `_1`, ...) and
+  //     teach `EmitGetStructField` to look them up.
+  //   * NULL field values propagate through `EmitExpr` /
+  //     `EmitValueLiteral` as the literal `NULL`; DuckDB matches
+  //     BigQuery's "absent NULL field" semantics for struct literals.
+  if (node == nullptr) return "";
+  const ::googlesql::Type* t = node->type();
+  if (t == nullptr || !t->IsStruct()) return "";
+  const ::googlesql::StructType* st = t->AsStruct();
+  if (st == nullptr ||
+      st->num_fields() != node->field_list_size()) {
+    return "";
+  }
+  std::vector<std::string> kvs;
+  kvs.reserve(node->field_list_size());
+  for (int i = 0; i < node->field_list_size(); ++i) {
+    const ::googlesql::StructField& f = st->field(i);
+    if (f.name.empty()) return "";
+    std::string v = EmitExpr(node->field_list(i));
+    if (v.empty()) return "";
+    kvs.push_back(absl::StrCat(QuoteString(f.name), ": ", v));
+  }
+  return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
 }
 
 std::string Transpiler::EmitGetStructField(
-    const ::googlesql::ResolvedGetStructField* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedGetStructField* node) {
+  // BigQuery `s.a` (or `s[OFFSET(0)]`) lowers to a
+  // `ResolvedGetStructField` carrying the parent expression, the
+  // 0-indexed `field_idx`, and `field_expr_is_positional` (which is
+  // user-intent only; it does not change semantics). DuckDB's struct
+  // field access is also `<expr>.<name>` or `<expr>['<name>']`; we
+  // pick the dotted form for readability when the source struct's
+  // field has a name. Anonymous fields are out of scope (see the
+  // `EmitMakeStruct` comment) and fall back here too.
+  if (node == nullptr || node->expr() == nullptr) return "";
+  const ::googlesql::Type* base_type = node->expr()->type();
+  if (base_type == nullptr || !base_type->IsStruct()) return "";
+  const ::googlesql::StructType* st = base_type->AsStruct();
+  if (st == nullptr) return "";
+  int idx = node->field_idx();
+  if (idx < 0 || idx >= st->num_fields()) return "";
+  const ::googlesql::StructField& f = st->field(idx);
+  if (f.name.empty()) return "";
+  std::string base = EmitExpr(node->expr());
+  if (base.empty()) return "";
+  // Mark `field_expr_is_positional` accessed even though it carries
+  // no semantic weight on the DuckDB side; the validator inside
+  // `ResolvedAST::CheckFieldsAccessed` otherwise tears down deep
+  // copies through the conformance harness.
+  (void)node->field_expr_is_positional();
+  return absl::StrCat(base, ".", QuoteIdent(f.name));
 }
 
 std::string Transpiler::EmitSubqueryExpr(

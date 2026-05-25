@@ -49,6 +49,13 @@ cc_library(
         # options_cc_proto target; `Value::GetSQLLiteral` takes it as
         # its first argument.
         "@googlesql//googlesql/public:options_cc_proto",
+        # `:type` provides `type.h` plus the per-kind header bundle
+        # (`struct_type.h`, `array_type.h`, ...) the STRUCT / UNNEST
+        # emits walk for field names / element types. `:value`
+        # transitively re-exports the same header set, but pinning
+        # `:type` directly keeps Bazel's strict-deps check honest
+        # when a future emit drops the `Value` dependency.
+        "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",
         # `:resolved_ast` is the canonical target for the generated
         # node classes (`ResolvedQueryStmt`, `ResolvedProjectScan`,

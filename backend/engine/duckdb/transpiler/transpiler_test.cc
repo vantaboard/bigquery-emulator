@@ -164,12 +164,15 @@ class TranspilerTest : public ::testing::Test {
 class TestTranspiler : public Transpiler {
  public:
   using Transpiler::EmitAggregateScan;
+  using Transpiler::EmitArrayScan;
   using Transpiler::EmitColumnRef;
   using Transpiler::EmitFilterScan;
   using Transpiler::EmitFunctionCall;
+  using Transpiler::EmitGetStructField;
   using Transpiler::EmitJoinScan;
   using Transpiler::EmitLimitOffsetScan;
   using Transpiler::EmitLiteral;
+  using Transpiler::EmitMakeStruct;
   using Transpiler::EmitOrderByScan;
   using Transpiler::EmitTableScan;
 };
@@ -561,6 +564,170 @@ TEST_F(TranspilerTest, EmitLimitOffsetScanLimitAndOffset) {
                 scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()),
             "SELECT * FROM (SELECT * FROM (SELECT \"id\", \"name\" FROM "
             "\"people\") ORDER BY \"id\" ASC) LIMIT 10 OFFSET 5");
+}
+
+// --- STRUCT / UNNEST / ARRAY --------------------------------------------
+
+TEST_F(TranspilerTest, EmitLiteralArrayInt64) {
+  // `ARRAY<INT64>[1, 2]` resolves to a `ResolvedLiteral` whose value
+  // is an `ARRAY<INT64>`. DuckDB's array constructor shares
+  // BigQuery's bracket syntax, so the emit is a direct join. The
+  // assertion pins the spaces around the element separator so a
+  // drift in `EmitValueLiteral`'s join (`", "` vs `","`) surfaces
+  // here rather than downstream in the engine fallback.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT [1, 2] AS a");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
+            "[1, 2]");
+}
+
+TEST_F(TranspilerTest, EmitLiteralArrayStringUsesSingleQuotes) {
+  // `["a", "b"]` resolves to a `ResolvedLiteral` of type
+  // `ARRAY<STRING>`. `Value::GetSQLLiteral` would emit BQ-flavored
+  // `["a", "b"]` with double quotes, which DuckDB reads as
+  // *identifiers*. `EmitValueLiteral` recurses into the array so
+  // each STRING element gets the single-quoted DuckDB form.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT ['a', 'b'] AS a");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
+            "['a', 'b']");
+}
+
+TEST_F(TranspilerTest, EmitMakeStructNamedFields) {
+  // Fully-constant `STRUCT(1 AS a, 'x' AS b)` gets folded by the
+  // analyzer onto a `ResolvedLiteral` whose value is the constant
+  // struct; the `EmitValueLiteral` path covers that case. To
+  // exercise the `EmitMakeStruct` *emit* we have to thread at
+  // least one non-const expression in, here a column ref onto
+  // `people.id`. The result is a `ResolvedMakeStruct` with
+  // `StructType{a INT64, b STRING}` and a parallel `field_list` of
+  // (`ColumnRef`, `Literal`).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT STRUCT(id AS a, 'x' AS b) AS s FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_MAKE_STRUCT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>()),
+            "{'a': \"id\", 'b': 'x'}");
+}
+
+TEST_F(TranspilerTest, EmitMakeStructAnonymousFieldsFallsBack) {
+  // `STRUCT(id, 'x')` (no `AS <name>`) resolves to a
+  // `ResolvedMakeStruct` whose `StructType` carries *empty* field
+  // names (`StructField{name: ""}`). DuckDB does not support
+  // unnamed struct fields, so the emit propagates "" to take the
+  // reference-impl fallback per the disposition policy. The
+  // conformance harness pins this shape on the reference-impl
+  // engine until a follow-up plan synthesizes positional names.
+  // The first arg is a column ref so the analyzer can't fold the
+  // whole expression onto a `ResolvedLiteral`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT STRUCT(id, 'x') AS s FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_MAKE_STRUCT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>()),
+            "");
+}
+
+TEST_F(TranspilerTest, EmitGetStructFieldNamedAccess) {
+  // `STRUCT(1 AS a, 'x' AS b).a` analyzes to a
+  // `ResolvedGetStructField` whose `expr` is the MakeStruct above
+  // and whose `field_idx=0`. The emit composes the two: the inner
+  // MakeStruct emits to `{'a': 1, 'b': 'x'}`, the outer GetStructField
+  // wraps it as `{'a': 1, 'b': 'x'}."a"`.
+  //
+  // DuckDB resolves `<struct>."<name>"` against the struct's named
+  // field; the quoted form keeps unusual field names (Unicode,
+  // hyphens, ...) round-tripping correctly.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT STRUCT(1 AS a, 'x' AS b).a AS x");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_GET_STRUCT_FIELD);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitGetStructField(
+          expr->GetAs<::googlesql::ResolvedGetStructField>()),
+      "{'a': 1, 'b': 'x'}.\"a\"");
+}
+
+TEST_F(TranspilerTest, EmitArrayScanStandaloneUnnestLiteral) {
+  // `FROM UNNEST([1, 2]) AS x` resolves to a `ResolvedArrayScan`
+  // with `input_scan=nullptr`, a single array (a `ResolvedLiteral`
+  // of type `ARRAY<INT64>`), and a single element column named "x".
+  // The emit lowers it to DuckDB's `SELECT unnest(<arr>) AS "<col>"`
+  // shape, which produces one row per array element with the column
+  // carrying the BQ alias name.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT 1 FROM UNNEST([1, 2]) AS x");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
+            "SELECT unnest([1, 2]) AS \"x\"");
+}
+
+TEST_F(TranspilerTest, EmitArrayScanWithOffsetFallsBack) {
+  // `UNNEST(arr) WITH OFFSET pos` analyzes with a non-null
+  // `array_offset_column`. DuckDB has no `WITH OFFSET` analog
+  // (`generate_subscripts(arr, 1)` is the typical rewrite) and the
+  // standalone-UNNEST subset we lower today does not cover the
+  // join-on-offset shape, so the emit propagates "" and the engine
+  // takes the reference-impl fallback for the whole query.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT x, pos FROM UNNEST([1, 2]) AS x WITH OFFSET pos");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
+            "");
+}
+
+TEST_F(TranspilerTest, EmitArrayScanJoinedToTableFallsBack) {
+  // `FROM people, UNNEST([1, 2]) AS x` analyzes to a
+  // `ResolvedArrayScan` whose `input_scan` is a `ResolvedTableScan`
+  // (lateral cross-join). The lateral rewrite needs DuckDB's
+  // `CROSS JOIN unnest(...)` shape plus column-aliasing
+  // coordination with the input scan; we defer it to a follow-up
+  // plan and fall back via "" today.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people, UNNEST([1, 2]) AS x");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
+            "");
+}
+
+TEST_F(TranspilerTest, EmitFunctionCallMakeArrayWithColumn) {
+  // `[id, 0, id * 2]` mixes a column ref with a literal, so the
+  // analyzer cannot fold it to a `ResolvedLiteral` and instead
+  // produces a `$make_array(...)` function call. The `*` arg also
+  // forces the expression off the literal path. Here we keep it
+  // simple with just one non-const element so the emit shape is
+  // unambiguous against the COALESCE / IFNULL whitelist.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT [id, 0] AS a FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+            "[\"id\", 0]");
 }
 
 }  // namespace
