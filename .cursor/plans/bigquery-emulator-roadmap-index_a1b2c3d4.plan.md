@@ -115,7 +115,7 @@ todos:
     status: completed
   - id: run-37-storage-read-proto
     content: "Run storage-read-proto_i6f7a8b9.plan.md"
-    status: pending
+    status: completed
   - id: run-38-storage-read-rows
     content: "Run storage-read-rows_j7a8b9c0.plan.md"
     status: pending

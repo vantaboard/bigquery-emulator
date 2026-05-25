@@ -4,10 +4,10 @@ overview: "Phase 7a: Storage Read proto and CreateReadSession handler."
 todos:
   - id: proto-storage-read
     content: "Add proto/storage_read.proto with CreateReadSession, ReadRows RPCs (simplified BQ storage v1)"
-    status: pending
+    status: completed
   - id: read-session-handler
     content: "Implement storage_read.{h,cc}: CreateReadSession validates table, returns session + schema + streams"
-    status: pending
+    status: completed
 isProject: false
 ---
 
