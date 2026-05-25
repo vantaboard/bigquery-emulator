@@ -73,6 +73,17 @@ class ReferenceImplEngine : public Engine {
   absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
                                       googlesql::Catalog* catalog) override;
 
+  // DDL is intentionally UNIMPLEMENTED on the reference-impl engine.
+  // Plan 35's engine-policy decision (extending HANDOFF.md §4.3
+  // path 3's "DuckDB-only MERGE" pattern to cover DDL) lands
+  // CREATE / DROP / ALTER on the DuckDB engine; the reference-impl
+  // path stays UNIMPLEMENTED so the FallbackEngine wrapper routes
+  // DDL to DuckDB without callers having to grep status messages
+  // for the kind. The conformance harness in plans 40-42 will
+  // surface any divergence between the two engines on DDL fixtures.
+  absl::Status ExecuteDdl(const QueryRequest& request,
+                          googlesql::Catalog* catalog) override;
+
  private:
   storage::Storage* storage_;  // not owned
 };

@@ -62,6 +62,22 @@ class FallbackEngine : public Engine {
   absl::StatusOr<DmlStats> ExecuteDml(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
+  // Plan-35: DDL routes here from the frontend. The primary engine
+  // is consulted first; if it returns UNIMPLEMENTED (the reference-
+  // impl engine does, per the engine-policy decision in
+  // `backend/engine/reference_impl/reference_impl_engine.cc::
+  // ExecuteDdl`), the wrapper retries against the fallback engine
+  // (the DuckDB engine, which implements DDL end-to-end in
+  // `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`). The
+  // typical Phase 5i shape (`--engine=duckdb --on_unknown_fn=
+  // fallback`) inverts the slots and DDL lands on the primary
+  // directly, so this branch primarily exists for the inverse
+  // configuration (`--engine=reference_impl --on_unknown_fn=
+  // fallback`) and for forward-compat with any DDL kinds DuckDB
+  // adds later than the reference-impl path.
+  absl::Status ExecuteDdl(const QueryRequest& request,
+                          googlesql::Catalog* catalog) override;
+
  private:
   Engine* primary_;   // not owned
   Engine* fallback_;  // not owned

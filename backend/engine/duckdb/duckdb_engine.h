@@ -54,6 +54,19 @@ class DuckDBEngine : public Engine {
   absl::StatusOr<DmlStats> ExecuteDml(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
+  // Plan-35 (DuckDB-only DDL). Implements CREATE TABLE,
+  // CREATE TABLE AS SELECT, DROP TABLE, and ALTER TABLE ADD COLUMN
+  // by analyzing the GoogleSQL statement, mapping the resolved name
+  // path to a `storage::TableId`, and driving the underlying
+  // `Storage` (scan + rewrite where necessary for ALTER, plus a
+  // per-query DuckDB connection for CTAS). The reference-impl
+  // engine returns UNIMPLEMENTED so the `FallbackEngine` wrapper
+  // routes DDL here; see the matching comment in
+  // `backend/engine/reference_impl/reference_impl_engine.cc::
+  // ExecuteDdl` for the engine-asymmetry rationale.
+  absl::Status ExecuteDdl(const QueryRequest& request,
+                          googlesql::Catalog* catalog) override;
+
  private:
   storage::Storage* storage_;  // not owned
 };

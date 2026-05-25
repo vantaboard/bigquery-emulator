@@ -95,6 +95,11 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
   return absl::UnimplementedError(kNoGoogleSqlMsg);
 }
 
+absl::Status ReferenceImplEngine::ExecuteDdl(
+    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
+  return absl::UnimplementedError(kNoGoogleSqlMsg);
+}
+
 #else  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
 namespace {
@@ -806,6 +811,33 @@ absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
           "ReferenceImplEngine::ExecuteDml: unexpected statement kind ",
           stmt->node_kind_string()));
   }
+}
+
+absl::Status ReferenceImplEngine::ExecuteDdl(
+    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
+  // DDL on the reference-impl engine stays UNIMPLEMENTED on purpose.
+  // Plan 35's engine-policy decision (extending HANDOFF.md §4.3
+  // path 3's "DuckDB-only MERGE" pattern to cover DDL) was to land
+  // CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE / ALTER TABLE
+  // ADD COLUMN on the DuckDB engine
+  // (`backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`) and leave
+  // the reference-impl path as the documented asymmetry. The
+  // conformance harness in plans 40-42 will surface any divergence
+  // between the two engines on DDL fixtures.
+  //
+  // Returning UNIMPLEMENTED with the standard prefix lets the
+  // FallbackEngine wrapper route a DDL statement to the DuckDB
+  // engine when the binary was launched with
+  // `--engine=reference_impl --on_unknown_fn=fallback` (the
+  // typical Phase 5i shape inverts that: `--engine=duckdb` puts
+  // DuckDB on the primary slot, so DDL lands there directly
+  // without bouncing through this branch).
+  return absl::UnimplementedError(
+      "ReferenceImplEngine::ExecuteDdl: DDL is not implemented on the "
+      "reference-impl engine; DDL is served by the DuckDB engine -- "
+      "launch emulator_main with --engine=duckdb (or with "
+      "--on_unknown_fn=fallback so the FallbackEngine wrapper retries "
+      "against DuckDB)");
 }
 
 #endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL

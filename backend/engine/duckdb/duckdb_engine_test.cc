@@ -384,6 +384,194 @@ TEST_F(DuckDBEngineTest, ExecuteDmlRejectsNullCatalog) {
   EXPECT_EQ(stats.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
+// ---------------------------------------------------------------------------
+// ExecuteDdl (Plan 35 -- DuckDB-only DDL)
+//
+// The DuckDB engine owns the DDL surface end-to-end. The
+// reference-impl engine returns UNIMPLEMENTED for ExecuteDdl, so
+// the FallbackEngine wrapper retries DDL against this engine.
+// These tests pin the four DDL shapes the plan ships:
+//
+//   * CREATE TABLE (schema-only) lands an empty table on storage
+//     under the BigQuery-typed schema we pass through
+//     `Storage::CreateTable`.
+//   * CREATE TABLE AS SELECT materializes the inner SELECT against
+//     a per-query in-memory DuckDB instance, reads the resulting
+//     rows back, and lands them on storage under the analyzer's
+//     `column_definition_list` (i.e. BigQuery type fidelity).
+//   * DROP TABLE removes the table from storage; DROP TABLE IF
+//     EXISTS swallows the missing-table case.
+//   * ALTER TABLE ADD COLUMN runs a scan-drop-create-append cycle
+//     because `Storage` has no in-place schema evolution. Existing
+//     rows get padded with `Value::Null()` for the new column.
+// ---------------------------------------------------------------------------
+
+TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableSchemaOnly) {
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.empty (id INT64 NOT NULL, name STRING)"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "empty"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 2u);
+  EXPECT_EQ(sch->columns[0].name, "id");
+  EXPECT_EQ(sch->columns[0].type, schema::ColumnType::kInt64);
+  EXPECT_EQ(sch->columns[0].mode, schema::ColumnMode::kRequired);
+  EXPECT_EQ(sch->columns[1].name, "name");
+  EXPECT_EQ(sch->columns[1].type, schema::ColumnType::kString);
+  EXPECT_EQ(sch->columns[1].mode, schema::ColumnMode::kNullable);
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableIfNotExistsSwallowsAlreadyExists) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE IF NOT EXISTS ds.people "
+                  "(id INT64, name STRING)"),
+      bundle.catalog.get());
+  EXPECT_TRUE(status.ok()) << status;
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableConflictIsAlreadyExists) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.people (id INT64, name STRING)"),
+      bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kAlreadyExists) << status;
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest(
+          "CREATE TABLE ds.people_copy AS SELECT id, name FROM ds.people"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 2u);
+  EXPECT_EQ(sch->columns[0].name, "id");
+  EXPECT_EQ(sch->columns[0].type, schema::ColumnType::kInt64);
+  EXPECT_EQ(sch->columns[1].name, "name");
+  EXPECT_EQ(sch->columns[1].type, schema::ColumnType::kString);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::vector<std::pair<int64_t, std::string>> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    seen.emplace_back(row.cells[0].int64_value(),
+                       row.cells[1].string_value());
+  }
+  std::sort(seen.begin(), seen.end());
+  std::vector<std::pair<int64_t, std::string>> want = {
+      {1, "ada"}, {2, "linus"}, {3, "grace"}};
+  EXPECT_EQ(seen, want);
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlDropTableRemovesStorage) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.people"),
+                                     bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_FALSE(sch.ok());
+  EXPECT_EQ(sch.status().code(), absl::StatusCode::kNotFound) << sch.status();
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlDropTableMissingIsNotFound) {
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.missing"),
+                                     bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kNotFound) << status;
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlDropTableIfExistsSwallowsMissing) {
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("DROP TABLE IF EXISTS ds.missing"), bundle.catalog.get());
+  EXPECT_TRUE(status.ok()) << status;
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlAlterTableAddColumnPadsExistingRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("ALTER TABLE ds.people ADD COLUMN age INT64"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 3u);
+  EXPECT_EQ(sch->columns[2].name, "age");
+  EXPECT_EQ(sch->columns[2].type, schema::ColumnType::kInt64);
+
+  // Existing rows survive the rewrite. The new `age` column is NULL
+  // for every pre-existing row.
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows_seen = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 3u);
+    EXPECT_EQ(row.cells[2].kind(), storage::Value::Kind::kNull)
+        << "post-ALTER row for id=" << row.cells[0].int64_value()
+        << " should have NULL age";
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 3);
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlAlterTableAddColumnIfNotExistsIsIdempotent) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  ASSERT_TRUE(engine_
+                  ->ExecuteDdl(
+                      MakeRequest(
+                          "ALTER TABLE ds.people ADD COLUMN age INT64"),
+                      bundle.catalog.get())
+                  .ok());
+  auto second = engine_->ExecuteDdl(
+      MakeRequest("ALTER TABLE ds.people ADD COLUMN IF NOT EXISTS age INT64"),
+      bundle.catalog.get());
+  EXPECT_TRUE(second.ok()) << second;
+
+  // Duplicate add without IF NOT EXISTS surfaces as ALREADY_EXISTS
+  // (per BigQuery's error contract for ALTER TABLE).
+  auto duplicate = engine_->ExecuteDdl(
+      MakeRequest("ALTER TABLE ds.people ADD COLUMN age INT64"),
+      bundle.catalog.get());
+  ASSERT_FALSE(duplicate.ok());
+  EXPECT_EQ(duplicate.code(), absl::StatusCode::kAlreadyExists) << duplicate;
+}
+
+TEST_F(DuckDBEngineTest, ExecuteDdlRejectsNullCatalog) {
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.empty (id INT64)"), nullptr);
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kFailedPrecondition) << status;
+}
+
 }  // namespace
 }  // namespace duckdb
 }  // namespace engine

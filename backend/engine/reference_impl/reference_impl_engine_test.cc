@@ -537,6 +537,59 @@ TEST_F(ReferenceImplEngineTest, ExecuteDmlMergeIsUnimplemented) {
       << stats.status();
 }
 
+// ---------------------------------------------------------------------------
+// ExecuteDdl (Plan 35 -- DuckDB-only DDL)
+//
+// DDL is intentionally UNIMPLEMENTED on the reference-impl engine.
+// Plan 35 extends HANDOFF.md §4.3 path 3's "DuckDB-only MERGE"
+// pattern to cover CREATE TABLE, CREATE TABLE AS SELECT, DROP
+// TABLE, and ALTER TABLE ADD COLUMN: those land on the DuckDB
+// engine (see `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`),
+// the reference-impl engine returns UNIMPLEMENTED, and the
+// FallbackEngine wrapper retries against DuckDB. Each test here
+// pins the status code so a future refactor that drops the policy
+// surfaces here as a test failure rather than silently changing
+// behavior.
+// ---------------------------------------------------------------------------
+
+TEST_F(ReferenceImplEngineTest, ExecuteDdlCreateTableIsUnimplemented) {
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.empty (id INT64, name STRING)"),
+      bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kUnimplemented) << status;
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDdlCreateTableAsSelectIsUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.people_copy AS SELECT * FROM ds.people"),
+      bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kUnimplemented) << status;
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDdlDropTableIsUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.people"),
+                                     bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kUnimplemented) << status;
+}
+
+TEST_F(ReferenceImplEngineTest, ExecuteDdlAlterTableAddColumnIsUnimplemented) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("ALTER TABLE ds.people ADD COLUMN age INT64"),
+      bundle.catalog.get());
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), absl::StatusCode::kUnimplemented) << status;
+}
+
 }  // namespace
 }  // namespace reference_impl
 }  // namespace engine

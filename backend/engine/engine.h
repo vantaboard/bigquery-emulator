@@ -174,6 +174,26 @@ class Engine {
     return absl::UnimplementedError(
         "Engine::ExecuteDml is not implemented in this engine");
   }
+
+  // Plan + execute a DDL statement
+  // (CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE / ALTER TABLE
+  // ADD COLUMN). The engine mutates the underlying `Storage` -- there
+  // is no row-shaped reply, just success (OK) or a status mapped to
+  // the matching gRPC code. Plan 35 ships DDL on the DuckDB engine
+  // only; the reference-impl engine returns UNIMPLEMENTED with a
+  // "served by the DuckDB engine" rationale so the FallbackEngine
+  // wrapper routes DDL to the DuckDB engine the same way it routes
+  // MERGE (HANDOFF.md §4.3 path 3, "DuckDB-only MERGE", extended to
+  // cover DDL in Plan 35). Engines that do not implement DDL yet
+  // return `absl::StatusCode::kUnimplemented`; the frontend handler
+  // maps that to gRPC `UNIMPLEMENTED`.
+  virtual absl::Status ExecuteDdl(const QueryRequest& request,
+                                   googlesql::Catalog* catalog) {
+    (void)request;
+    (void)catalog;
+    return absl::UnimplementedError(
+        "Engine::ExecuteDdl is not implemented in this engine");
+  }
 };
 
 }  // namespace engine
