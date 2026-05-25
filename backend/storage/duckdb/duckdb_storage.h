@@ -99,6 +99,8 @@ class DuckDBStorage : public Storage {
                               absl::Span<const Row> rows) override;
   absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const override;
+  absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
+      const TableId& id, const ReadFilter& filter) const override;
 
   // Pimpl: keeps the DuckDB C handles out of this header so the
   // engine-agnostic Storage signatures stay enforceable from the

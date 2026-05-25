@@ -139,6 +139,50 @@ class RowIterator {
   virtual absl::StatusOr<bool> Next(Row* row) = 0;
 };
 
+// ReadFilter constrains the rows a `CreateReadStream` iterator yields.
+//
+// Plan 38 wires the StorageRead gRPC surface (`ReadRows`) on top of
+// `CreateReadStream`, so the filter shape mirrors what the public
+// `bigquery_emulator.v1.ReadOptions` proto can ask for. Each backend
+// applies the knobs it can push down natively (DuckDB layers a SQL
+// `LIMIT`; the memory backend caps iteration in C++); both speak the
+// same wire shape after the iterator, so the handler does not branch
+// on the storage type.
+//
+// Plan-38 scope is intentionally narrow: only `row_limit` is honored.
+// `selected_fields` and `row_restriction` are documented in the proto
+// for forward compatibility but are deferred to a follow-up plan when
+// the engine wires per-column projection / pushdown — the storage
+// layer accepts them today as `std::vector<std::string>` / `std::string`
+// only so call sites compose cleanly with `ReadOptions`.
+struct ReadFilter {
+  // Maximum number of rows the iterator will yield before signaling
+  // end-of-stream. <= 0 means "no limit" (return every row in the
+  // table snapshot). Plan 38 enforces this knob on both backends so
+  // ReadRows can honor caller-supplied caps without re-counting at
+  // the handler layer.
+  std::int64_t row_limit = 0;
+
+  // Number of rows to skip from the head of the stream before the
+  // first emitted row. Plan 38 uses this to honor
+  // `ReadRowsRequest.offset` so a caller resuming a stream after a
+  // transient failure does not re-receive rows it already processed.
+  // <= 0 means "start at the first row".
+  std::int64_t offset = 0;
+
+  // Subset of column names the caller wants returned. Empty means
+  // "all columns". Plan 38 accepts this list to keep the interface
+  // forward-compatible with `ReadOptions.selected_fields`; the
+  // backends do not yet project rows down to the subset (the engine
+  // wiring lands in a follow-up plan).
+  std::vector<std::string> selected_fields;
+
+  // SQL-shaped predicate the caller wants pushed down. Plan 38
+  // accepts but does not honor this knob; backends ignore it. Same
+  // forward-compatibility story as `selected_fields`.
+  std::string row_restriction;
+};
+
 // Storage is the abstract interface every backend implements.
 //
 // All methods are **thread-safe**. Implementations are free to provide
@@ -207,6 +251,22 @@ class Storage {
   // exist.
   virtual absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const = 0;
+
+  // CreateReadStream is the StorageRead.ReadRows-shaped scan: same
+  // snapshot semantics as `ScanRows`, but the returned iterator is
+  // constrained by `filter` (see `ReadFilter` above). The memory
+  // backend caps iteration in C++; the DuckDB backend pushes the
+  // limit / offset into the underlying SELECT so we don't materialize
+  // rows we will never emit. Both backends speak the same wire shape
+  // afterward — the iterator is a `RowIterator` either way — so the
+  // `StorageReadService` handler does not branch on backend type.
+  //
+  // Plan 38 enforces `row_limit` and `offset` on both backends;
+  // `selected_fields` and `row_restriction` are accepted but not
+  // honored (see the field comments on `ReadFilter`). NOT_FOUND if
+  // the table does not exist.
+  virtual absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
+      const TableId& id, const ReadFilter& filter) const = 0;
 };
 
 }  // namespace storage

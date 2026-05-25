@@ -270,6 +270,152 @@ TEST_F(DuckDBStorageTest, AppendRowsAppendsAcrossMultipleBatches) {
 // inverse mapping recovers the original kind. Container types are
 // exercised via ColumnSchemaToDuckDBType so the test catches the
 // nested-rendering path.
+// ---------------------------------------------------------------------------
+// CreateReadStream (plan 38)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Drains the iterator into a vector. Reused across CreateReadStream
+// tests; the DuckDB backend pre-materializes the rows under the lock,
+// so this loop is just a thin wrapper around Next() for symmetry with
+// the memory store's test fixture.
+std::vector<Row> Drain(std::unique_ptr<RowIterator> iter) {
+  std::vector<Row> out;
+  Row r;
+  while (true) {
+    auto has = iter->Next(&r);
+    EXPECT_TRUE(has.ok());
+    if (!has.ok() || !*has) break;
+    out.push_back(r);
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST_F(DuckDBStorageTest, CreateReadStreamReturnsAllRowsByDefault) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 5; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  auto iter_or = store.CreateReadStream(table, ReadFilter{});
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 5u);
+  // CreateReadStream pins the order to the parquet file_row_number,
+  // which mirrors INSERT order; rows[i] == person-i.
+  for (size_t i = 0; i < scanned.size(); ++i) {
+    EXPECT_EQ(scanned[i].cells[0].int64_value(), static_cast<int64_t>(i));
+    EXPECT_EQ(scanned[i].cells[1].string_value(),
+              absl::StrCat("person-", i));
+  }
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamHonorsRowLimit) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 10; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.row_limit = 3;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 3u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 0);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 1);
+  EXPECT_EQ(scanned[2].cells[0].int64_value(), 2);
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamHonorsOffsetAndLimit) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 10; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.offset = 4;
+  filter.row_limit = 3;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 3u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 4);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 5);
+  EXPECT_EQ(scanned[2].cells[0].int64_value(), 6);
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamOffsetOnlyReturnsTail) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 4; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.offset = 2;
+  // No row_limit -- DuckDB receives LIMIT ALL OFFSET 2 and yields the tail.
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 3);
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamOnMissingTableIsNotFound) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const TableId table{"proj-1", "ds_1", "ghost"};
+  auto iter_or = store.CreateReadStream(table, ReadFilter{});
+  ASSERT_FALSE(iter_or.ok());
+  EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kNotFound);
+}
+
 TEST(SchemaToDuckDBType, RoundTripsAllPlanCoveredTypes) {
   struct Case {
     schema::ColumnType bq;

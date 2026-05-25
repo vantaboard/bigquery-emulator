@@ -66,6 +66,9 @@ class InMemoryStorage : public Storage {
   absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const override;
 
+  absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
+      const TableId& id, const ReadFilter& filter) const override;
+
  private:
   struct TableState {
     schema::TableSchema schema;

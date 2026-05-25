@@ -9,7 +9,7 @@
 # header-only entry point and delegates to whichever `Storage` impl
 # the engine constructed at startup.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -43,5 +43,25 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
+    ],
+)
+
+# in_memory_storage_test is the Bazel mirror of the CMake
+# `in_memory_storage_test` target. Covers AppendRows / ScanRows /
+# OverwriteRows shape checks plus the plan-38 CreateReadStream
+# row_limit / offset slicing. Build cost is low (no DuckDB on the
+# link line) so this stays in the default `task bazel:test` set.
+cc_test(
+    name = "in_memory_storage_test",
+    srcs = ["memory/in_memory_storage_test.cc"],
+    deps = [
+        ":memory",
+        ":storage",
+        "//backend/schema",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )

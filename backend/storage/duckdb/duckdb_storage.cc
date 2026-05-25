@@ -1160,6 +1160,68 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
 #endif
 }
 
+namespace {
+
+#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
+
+// Runs `sql` (a SELECT) against `impl`'s connection and materializes
+// every emitted row into `*out`. Shared between `ScanRows` and
+// `CreateReadStream`: both differ only in whether they push LIMIT /
+// OFFSET into the SQL, but the post-execute decoding loop is
+// identical, and lifting it out avoids two near-duplicate copies of
+// the duckdb_result handling.
+//
+// `tag` is the caller-facing name plumbed into error messages
+// ("ScanRows" / "CreateReadStream") so a failure in either branch is
+// attributed to the right surface.
+absl::Status ExecuteSelect(DuckDBStorage::Impl* impl, absl::string_view sql,
+                            const schema::TableSchema& schema,
+                            absl::string_view tag,
+                            const TableId& id,
+                            absl::string_view parquet_path,
+                            std::vector<Row>* out) {
+  const std::string sql_str(sql);
+  ::duckdb_result result;
+  const auto state =
+      ::duckdb_query(impl->connection, sql_str.c_str(), &result);
+  if (state != ::DuckDBSuccess) {
+    const char* err = ::duckdb_result_error(&result);
+    std::string detail = err == nullptr ? std::string("") : std::string(err);
+    ::duckdb_destroy_result(&result);
+    return absl::InternalError(absl::StrCat(
+        tag, ": duckdb_query failed for ", parquet_path, ": ", detail));
+  }
+  const idx_t row_count = ::duckdb_row_count(&result);
+  const idx_t col_count = ::duckdb_column_count(&result);
+  if (col_count != schema.columns.size()) {
+    ::duckdb_destroy_result(&result);
+    return absl::InternalError(absl::StrCat(
+        tag, ": parquet file has ", col_count,
+        " column(s) but sidecar schema declares ", schema.columns.size(),
+        " for table ", id.project_id, ".", id.dataset_id, ".", id.table_id));
+  }
+  out->reserve(out->size() + row_count);
+  for (idx_t r = 0; r < row_count; ++r) {
+    Row row;
+    row.cells.reserve(col_count);
+    for (idx_t c = 0; c < col_count; ++c) {
+      auto cell_or = ReadCell(&result, c, r, schema.columns[c]);
+      if (!cell_or.ok()) {
+        ::duckdb_destroy_result(&result);
+        return cell_or.status();
+      }
+      row.cells.push_back(std::move(*cell_or));
+    }
+    out->push_back(std::move(row));
+  }
+  ::duckdb_destroy_result(&result);
+  return absl::OkStatus();
+}
+
+#endif  // BIGQUERY_EMULATOR_HAS_DUCKDB
+
+}  // namespace
+
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
     const TableId& id) const {
 #ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
@@ -1200,41 +1262,78 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   const std::string sql = absl::StrCat(
       "SELECT ", select_cols, " FROM read_parquet('",
       EscapeStringLiteralInner(parquet_path), "')");
+  auto status = ExecuteSelect(impl_.get(), sql, schema, "ScanRows", id,
+                                parquet_path, &rows);
+  if (!status.ok()) return status;
+  return std::unique_ptr<RowIterator>(
+      new VectorRowIterator(std::move(rows)));
+#endif
+}
 
-  ::duckdb_result result;
-  const auto state =
-      ::duckdb_query(impl_->connection, sql.c_str(), &result);
-  if (state != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
-    std::string detail = err == nullptr ? std::string("") : std::string(err);
-    ::duckdb_destroy_result(&result);
-    return absl::InternalError(absl::StrCat(
-        "ScanRows: duckdb_query failed for ", parquet_path, ": ", detail));
+absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
+    const TableId& id, const ReadFilter& filter) const {
+#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
+  (void)id;
+  (void)filter;
+  return absl::UnimplementedError(
+      "DuckDBStorage::CreateReadStream: built without "
+      "BIGQUERY_EMULATOR_HAS_DUCKDB");
+#else
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return absl::NotFoundError(absl::StrCat(
+        "dataset not found: ", id.project_id, ".", id.dataset_id));
   }
-  const idx_t row_count = ::duckdb_row_count(&result);
-  const idx_t col_count = ::duckdb_column_count(&result);
-  if (col_count != schema.columns.size()) {
-    ::duckdb_destroy_result(&result);
-    return absl::InternalError(absl::StrCat(
-        "ScanRows: parquet file has ", col_count,
-        " column(s) but sidecar schema declares ", schema.columns.size(),
-        " for table ", id.project_id, ".", id.dataset_id, ".", id.table_id));
+  const fs::path meta_path = TableMetaPath(id);
+  if (!fs::exists(meta_path, ec)) {
+    return absl::NotFoundError(absl::StrCat(
+        "table not found: ", id.project_id, ".", id.dataset_id, ".",
+        id.table_id));
   }
-  rows.reserve(row_count);
-  for (idx_t r = 0; r < row_count; ++r) {
-    Row row;
-    row.cells.reserve(col_count);
-    for (idx_t c = 0; c < col_count; ++c) {
-      auto cell_or = ReadCell(&result, c, r, schema.columns[c]);
-      if (!cell_or.ok()) {
-        ::duckdb_destroy_result(&result);
-        return cell_or.status();
-      }
-      row.cells.push_back(std::move(*cell_or));
+  auto contents_or = ReadFile(meta_path);
+  if (!contents_or.ok()) return contents_or.status();
+  auto schema_or = ParseTableMetaJson(*contents_or);
+  if (!schema_or.ok()) return schema_or.status();
+  const schema::TableSchema& schema = *schema_or;
+
+  const std::string parquet_path = TableParquetPath(id);
+  std::vector<Row> rows;
+  if (!fs::exists(parquet_path, ec)) {
+    return std::unique_ptr<RowIterator>(
+        new VectorRowIterator(std::move(rows)));
+  }
+
+  // ORDER BY a stable row identifier so OFFSET / LIMIT yield
+  // deterministic windows across calls. The plan-31 Arrow pipeline
+  // uses `read_parquet`'s `file_row_number` extra column for the
+  // same purpose; reuse that here so a caller resuming a stream
+  // (plan-39 territory) at offset=N gets the same rows it would
+  // have received if it had stayed connected. The column is
+  // synthesized by DuckDB at scan time and never selected into the
+  // result.
+  const std::string select_cols = RenderColumnIdentList(schema);
+  std::string sql = absl::StrCat(
+      "SELECT ", select_cols,
+      " FROM read_parquet('", EscapeStringLiteralInner(parquet_path),
+      "', file_row_number = true) ORDER BY file_row_number");
+  if (filter.row_limit > 0) {
+    absl::StrAppend(&sql, " LIMIT ", filter.row_limit);
+  }
+  if (filter.offset > 0) {
+    // DuckDB requires LIMIT to appear before OFFSET. When the caller
+    // did not pin a limit we still need to emit one for OFFSET to
+    // parse — use the DuckDB `LIMIT ALL` form so the optimizer keeps
+    // the cap unbounded.
+    if (filter.row_limit <= 0) {
+      absl::StrAppend(&sql, " LIMIT ALL");
     }
-    rows.push_back(std::move(row));
+    absl::StrAppend(&sql, " OFFSET ", filter.offset);
   }
-  ::duckdb_destroy_result(&result);
+  auto status = ExecuteSelect(impl_.get(), sql, schema,
+                                "CreateReadStream", id, parquet_path, &rows);
+  if (!status.ok()) return status;
   return std::unique_ptr<RowIterator>(
       new VectorRowIterator(std::move(rows)));
 #endif

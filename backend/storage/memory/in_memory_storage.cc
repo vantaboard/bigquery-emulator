@@ -275,6 +275,53 @@ absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::ScanRows(
       new VectorRowIterator(std::move(snapshot)));
 }
 
+absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::CreateReadStream(
+    const TableId& id, const ReadFilter& filter) const {
+  const std::string key = DatasetKey(id);
+  std::vector<Row> snapshot;
+  {
+    absl::MutexLock lock(&mu_);
+    auto ds_it = datasets_.find(key);
+    if (ds_it == datasets_.end()) {
+      return absl::NotFoundError(absl::StrCat("dataset not found: ",
+                                               id.project_id, ".",
+                                               id.dataset_id));
+    }
+    const auto& tables = ds_it->second.tables;
+    auto t_it = tables.find(id.table_id);
+    if (t_it == tables.end()) {
+      return absl::NotFoundError(absl::StrCat("table not found: ",
+                                               id.project_id, ".",
+                                               id.dataset_id, ".",
+                                               id.table_id));
+    }
+    // Slice the snapshot under the lock so the iterator the caller
+    // walks does not have to revisit the table_ map for every Next().
+    // offset > #rows truncates to empty; row_limit <= 0 means "every
+    // remaining row after offset".
+    const auto& rows = t_it->second.rows;
+    const size_t total = rows.size();
+    const size_t off = filter.offset > 0
+                            ? static_cast<size_t>(filter.offset)
+                            : 0;
+    if (off >= total) {
+      // Empty snapshot; the iterator immediately reports EOS.
+    } else {
+      const size_t available = total - off;
+      const size_t limit = filter.row_limit > 0
+                               ? static_cast<size_t>(filter.row_limit)
+                               : available;
+      const size_t take = limit < available ? limit : available;
+      snapshot.reserve(take);
+      for (size_t i = 0; i < take; ++i) {
+        snapshot.push_back(rows[off + i]);
+      }
+    }
+  }
+  return std::unique_ptr<RowIterator>(
+      new VectorRowIterator(std::move(snapshot)));
+}
+
 }  // namespace memory
 }  // namespace storage
 }  // namespace backend

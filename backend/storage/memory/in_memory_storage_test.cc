@@ -295,6 +295,144 @@ TEST(InMemoryStorageTest, OverwriteRowsOnMissingTableIsNotFound) {
   EXPECT_EQ(status.code(), absl::StatusCode::kNotFound);
 }
 
+// ---------------------------------------------------------------------------
+// CreateReadStream (plan 38)
+// ---------------------------------------------------------------------------
+
+// Helper that drains a `CreateReadStream` iterator into a vector. The
+// memory backend yields its private snapshot under the lock, so the
+// callers can drop the lock as soon as `CreateReadStream` returns.
+std::vector<Row> Drain(std::unique_ptr<RowIterator> iter) {
+  std::vector<Row> out;
+  Row r;
+  while (true) {
+    auto has = iter->Next(&r);
+    EXPECT_TRUE(has.ok());
+    if (!has.ok() || !*has) break;
+    out.push_back(r);
+  }
+  return out;
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamReturnsAllRowsByDefault) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  auto iter_or = store.CreateReadStream(t, ReadFilter{});
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 3u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 1);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[2].cells[0].int64_value(), 3);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamHonorsRowLimit) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.row_limit = 2;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 1);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 2);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamHonorsOffset) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.offset = 1;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 3);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamCombinesOffsetAndLimit) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+      MakePerson(4, "rob", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.offset = 1;
+  filter.row_limit = 2;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 3);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamOffsetPastEndIsEmpty) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {MakePerson(1, "ada", {})};
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.offset = 100;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  EXPECT_TRUE(scanned.empty());
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamOnMissingTableIsNotFound) {
+  InMemoryStorage store;
+  const TableId t{"proj-1", "missing", "ghost"};
+  auto iter_or = store.CreateReadStream(t, ReadFilter{});
+  ASSERT_FALSE(iter_or.ok());
+  EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kNotFound);
+}
+
 }  // namespace
 }  // namespace memory
 }  // namespace storage
