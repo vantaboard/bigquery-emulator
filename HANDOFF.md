@@ -110,15 +110,17 @@ This is where you (the new Cursor instance) will resume.
 
 ### 4.1 Why we paused
 
-The previous orchestrator session ran on **WSL2 with 9.7 GiB RAM and ~3.6 GiB swap already in use**. The plan-34 subagent froze trying to run `bazel test //...` against the GoogleSQL-linked tree at the default `--jobs=8`. The user is rebooting into native Linux on the same machine (which has more RAM) to continue. Memory is no longer expected to be a hard ceiling, but if you hit OOM symptoms again, fall back to:
+The previous orchestrator session ran on **WSL2 with 9.7 GiB RAM and ~3.6 GiB swap already in use**. The plan-34 subagent froze trying to run `bazel test //...` against the GoogleSQL-linked tree at the default `--jobs=8`. The user is rebooting into native Linux on the same machine (which has more RAM) to continue. Memory is no longer expected to be a hard ceiling, but Bazel hygiene is still a hard requirement — see [`.cursor/rules/bazel-process-hygiene.mdc`](.cursor/rules/bazel-process-hygiene.mdc). Use the `task bazel:*` helpers (already wired in `taskfiles/bazel.yml`) and the throttled `task emulator:build-engine:bazel`; do not spawn raw `bazel build`/`bazel test` invocations in parallel and always finish with `task bazel:shutdown`.
+
+If you hit OOM or thrashing again, fall back to:
 
 ```
-bazel build  --jobs=2 --local_resources=cpu=2,memory=4096 <targets>
-bazel test   --jobs=2 --local_resources=cpu=2,memory=4096 --test_output=errors <targets>
-bazel shutdown   # between long invocations to release the persistent server's heap
+BAZEL_JOBS=2 BAZEL_MEM_MB=4096 task bazel:build TARGETS=//path/to:target
+BAZEL_JOBS=2 BAZEL_MEM_MB=4096 task bazel:test  TARGETS=//path/to:target
+task bazel:shutdown   # between long invocations to release the persistent server's heap
 ```
 
-Do **not** edit `.bazelrc` to add a low-memory config; keep flags on the CLI for plan-34's commits.
+Do **not** edit `.bazelrc` to add a low-memory config; keep flags on the CLI / `BAZEL_*` env vars.
 
 ### 4.2 What's already shipped in the WIP checkpoint commit
 

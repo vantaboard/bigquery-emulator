@@ -55,15 +55,38 @@ tasks:
   # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`,
   # which means the bazel build is the path that flips the SELECT E2E
   # tests from auto-skip to live.
+  #
+  # Process hygiene (see .cursor/rules/bazel-process-hygiene.mdc):
+  #   - Throttled by default (jobs=2, mem=8 GiB). Override with
+  #     BAZEL_JOBS=4 BAZEL_MEM_MB=16384 task emulator:build-engine:bazel.
+  #   - Pinned to system clang-18; the `mise` clang-22 lacks libstdc++ hdrs.
+  #   - `trap bazel shutdown` releases the daemon on signal / failure.
   build-engine-bazel:
     aliases: [build-engine:bazel]
     desc: Build the C++ engine via Bazel (full GoogleSQL + DuckDB) and stage into ./bin
+    vars:
+      BAZEL_JOBS:
+        sh: echo "${BAZEL_JOBS:-2}"
+      BAZEL_MEM_MB:
+        sh: echo "${BAZEL_MEM_MB:-8192}"
+      BAZEL_CC:
+        sh: echo "${BAZEL_CC:-/usr/bin/clang}"
+      BAZEL_CXX:
+        sh: echo "${BAZEL_CXX:-/usr/bin/clang++}"
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        bazel build //binaries/emulator_main:emulator_main
+        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
+        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+          bazel build \
+            --jobs={{.BAZEL_JOBS}} \
+            --local_resources=cpu={{.BAZEL_JOBS}} \
+            --local_resources=memory={{.BAZEL_MEM_MB}} \
+            --action_env=CC={{.BAZEL_CC}} \
+            --action_env=CXX={{.BAZEL_CXX}} \
+            //binaries/emulator_main:emulator_main
         mkdir -p bin
         cp -f bazel-bin/binaries/emulator_main/emulator_main ./bin/emulator_main
         chmod +w ./bin/emulator_main

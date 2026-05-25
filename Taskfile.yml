@@ -15,6 +15,7 @@ includes:
   ci: ./taskfiles/ci.yml
   tools: ./taskfiles/tools.yml
   proto: ./taskfiles/proto.yml
+  bazel: ./taskfiles/bazel.yml
 
 tasks:
   default:

@@ -1,0 +1,60 @@
+---
+description: Keep Bazel/Clang process tree clean; never queue multiple bazel invocations in parallel
+alwaysApply: true
+---
+
+# Bazel process hygiene (BigQuery emulator)
+
+A single GoogleSQL-linked `bazel build` for this repo compiles ~8K C++ TUs and holds a multi-GB JVM daemon for hours. The default agent failure mode is **stacking** invocations: a backgrounded shell freezes, the next prompt spawns another `bazel ...`, and they queue behind each other (`Another command (pid=X) is running. Waiting for it to complete on the server (server_pid=Y)...`). When the assistant session dies, the queued clients + their `zsh -c` wrappers + the daemon keep running and consume the box.
+
+Follow every rule below; treat violations as bugs.
+
+## Single-invocation invariant
+
+- **One bazel command per workspace at a time.** Never spawn a second `bazel build`, `bazel test`, or `bazel run` against this repo while another is alive. Reuse the existing one's output instead.
+- Before spawning *any* bazel command, audit live state:
+
+```bash
+ps -eo pid,etime,args | rg -i 'bazel|clang\b|process-wrapper' | rg -vw 'rg' || echo '(clean)'
+```
+
+- If anything is alive, decide: **wait, attach to that terminal, or kill the whole tree** (see below) — do NOT start a parallel invocation.
+
+## Spawn pattern (use `task bazel:*` helpers)
+
+Always go through `taskfiles/bazel.yml` and `taskfiles/emulator.yml`:
+
+- `task bazel:status` — list current bazel/clang/wrapper PIDs and the daemon's running time.
+- `task bazel:shutdown` — releases the persistent server (frees JVM heap, lets the next invocation start fresh).
+- `task bazel:kill-strays` — full-tree kill (`pkill -TERM -P` then `-KILL`) for any leftover wrapper / bazelisk / clang / process-wrapper, then `bazel shutdown`.
+- `task emulator:build-engine:bazel` — the canonical throttled `emulator_main` build (jobs=2, mem cap, env-pinned clang-18, trap-driven shutdown on signal).
+
+Direct `bazel ...` invocations are allowed for one-off targets but MUST:
+
+1. Pass `--jobs=2 --local_resources=cpu=2 --local_resources=memory=8192` (or smaller) unless the user explicitly raised the cap for this run.
+2. Use the system clang via `CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH` + `--action_env=CC=/usr/bin/clang --action_env=CXX=/usr/bin/clang++` (the `mise` clang-22 lacks libstdc++ headers).
+3. Run `bazel shutdown` afterward (`trap 'bazel shutdown' EXIT INT TERM` when scripted).
+
+## When a build looks stuck or you change direction
+
+A bazel invocation appearing to "hang" is almost always either compiling (normal — a fresh tree is 25–55 min) or queued behind another command on the same server. Before assuming it's stuck:
+
+```bash
+task bazel:status
+```
+
+If you actually want to abandon it, kill the **tree**, not just the PID — the bazelisk client and the daemon-side worker are different processes:
+
+```bash
+task bazel:kill-strays
+```
+
+Never `kill -9` the daemon alone while clients are alive; the clients will spin reporting `Lost connection`.
+
+## After every plan / subagent / multi-step task
+
+When you finish a unit of work that touched bazel, **always** end with `task bazel:shutdown` so the daemon does not hold gigabytes of heap across plans. Also run `task bazel:status` to confirm `(clean)` before declaring done.
+
+## Subagent boundary
+
+If you delegate work to a subagent that may invoke bazel, the parent agent stays responsible for cleanup. After the subagent returns (success, failure, or interrupt) run `task bazel:status` and `task bazel:kill-strays` before the next subagent or before reporting completion. Do not assume the subagent cleaned up.

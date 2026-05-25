@@ -1,0 +1,154 @@
+# Bazel process-hygiene helpers. The GoogleSQL-linked builds in this
+# repo are long (25-55 min on a fresh tree) and the persistent Bazel
+# daemon eats multi-GB of JVM heap, so stray queues / orphaned client
+# wrappers cause real pain.
+#
+# See `.cursor/rules/bazel-process-hygiene.mdc` for the agent-side rule
+# that drives these tasks. Humans should default to:
+#   task bazel:status      # is anything alive?
+#   task bazel:shutdown    # release the daemon between plans
+#   task bazel:kill-strays # full-tree kill when something got wedged
+#
+# All `task emulator:build-engine:bazel`-style wrappers should source
+# BAZEL_JOBS / BAZEL_MEM_MB / BAZEL_ENV from here so a single override
+# (`BAZEL_JOBS=4 task ...`) reshapes every entrypoint.
+version: "3"
+
+vars:
+  # Throttled defaults that fit a 32 GiB / 8-core box without swapping.
+  # Override on the CLI when you have headroom: BAZEL_JOBS=4 BAZEL_MEM_MB=16384 task ...
+  BAZEL_JOBS:
+    sh: echo "${BAZEL_JOBS:-2}"
+  BAZEL_MEM_MB:
+    sh: echo "${BAZEL_MEM_MB:-8192}"
+  # Pin the host toolchain to system clang-18; the `mise` clang-22 build
+  # ships without C++ stdlib headers and breaks the cc_toolchain probe.
+  BAZEL_CC:
+    sh: echo "${BAZEL_CC:-/usr/bin/clang}"
+  BAZEL_CXX:
+    sh: echo "${BAZEL_CXX:-/usr/bin/clang++}"
+
+tasks:
+  default:
+    desc: List bazel helper tasks
+    cmds:
+      - task --list-all | grep '^* bazel:'
+    silent: true
+
+  status:
+    desc: Print live bazel/clang/process-wrapper PIDs (or '(clean)')
+    cmds:
+      - |
+        echo "=== bazel server / clients / process-wrappers ==="
+        # grep returns 1 when there are no matches; that is the
+        # success case here, so swallow it explicitly.
+        matches=$(ps -eo pid,ppid,etime,pcpu,pmem,rss,args \
+          | grep -E 'bazel|clang\b|process-wrapper|emulator_main' \
+          | grep -vE '\bgrep\b|task bazel:status' || true)
+        if [ -z "$matches" ]; then
+          echo '(clean)'
+        else
+          echo "$matches"
+        fi
+
+  shutdown:
+    desc: Gracefully shut down the persistent Bazel server (releases JVM heap)
+    cmds:
+      - |
+        set -o pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        bazel shutdown || true
+
+  kill-strays:
+    desc: Full-tree kill of bazel/clang/process-wrapper leftovers; then bazel shutdown
+    cmds:
+      - |
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        # Match bazelisk, bazel client (java -jar A-server.jar), bazel
+        # subprocesses (process-wrapper, clang under sandbox), and the
+        # zsh wrappers that Cursor uses to background `bazel ...`.
+        patterns='bazel|process-wrapper|/usr/lib/llvm-.*/bin/clang|CURSOR_SANDBOX_ENV_RESTORE.*bazel'
+        list_strays() {
+          ps -eo pid,etime,args \
+            | grep -E "$patterns" \
+            | grep -vE '\bgrep\b|task bazel:kill-strays' \
+            || true
+        }
+        list_stray_pids() {
+          list_strays | awk '{print $1}'
+        }
+        echo "=== before ==="
+        before="$(list_strays)"
+        if [ -z "$before" ]; then echo '(clean)'; else echo "$before"; fi
+        # Kill children first (process-wrapper / clang), then parents
+        # (bazel clients / wrappers), so signals do not race the
+        # parent-side cleanup.
+        for sig in TERM KILL; do
+          pids="$(list_stray_pids)"
+          if [ -n "$pids" ]; then
+            echo "sending SIG$sig to: $(echo $pids | tr '\n' ' ')"
+            kill "-$sig" $pids 2>/dev/null || true
+            sleep 1
+          fi
+        done
+        # Daemon may still answer pings; ask it to shut down too.
+        bazel shutdown 2>/dev/null || true
+        echo "=== after ==="
+        after="$(list_strays)"
+        if [ -z "$after" ]; then echo '(clean)'; else echo "$after"; fi
+
+  build:
+    desc: |
+      Throttled `bazel build` wrapper. Set TARGETS="//path/to:target" (required).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Runs
+      `bazel shutdown` on exit (success, failure, or signal).
+    vars:
+      TARGETS: '{{.TARGETS | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        if [ -z "{{.TARGETS}}" ]; then
+          echo "task bazel:build requires TARGETS=//path/to:target" >&2
+          exit 2
+        fi
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
+        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+          bazel build \
+            --jobs={{.BAZEL_JOBS}} \
+            --local_resources=cpu={{.BAZEL_JOBS}} \
+            --local_resources=memory={{.BAZEL_MEM_MB}} \
+            --action_env=CC={{.BAZEL_CC}} \
+            --action_env=CXX={{.BAZEL_CXX}} \
+            {{.TARGETS}}
+
+  test:
+    desc: |
+      Throttled `bazel test` wrapper. Set TARGETS="//path/to:target" (required).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Runs
+      `bazel shutdown` on exit (success, failure, or signal).
+    vars:
+      TARGETS: '{{.TARGETS | default ""}}'
+      TEST_FLAGS: '{{.TEST_FLAGS | default "--test_output=errors"}}'
+    cmds:
+      - |
+        set -eo pipefail
+        if [ -z "{{.TARGETS}}" ]; then
+          echo "task bazel:test requires TARGETS=//path/to:target" >&2
+          exit 2
+        fi
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        trap 'bazel shutdown 2>/dev/null || true' EXIT INT TERM
+        CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+          bazel test \
+            --jobs={{.BAZEL_JOBS}} \
+            --local_resources=cpu={{.BAZEL_JOBS}} \
+            --local_resources=memory={{.BAZEL_MEM_MB}} \
+            --action_env=CC={{.BAZEL_CC}} \
+            --action_env=CXX={{.BAZEL_CXX}} \
+            {{.TEST_FLAGS}} \
+            {{.TARGETS}}

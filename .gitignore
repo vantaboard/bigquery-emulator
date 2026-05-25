@@ -14,8 +14,10 @@ cloud-spanner-emulator/
 *.dll
 *.exe
 
-# Bazel
-bazel-*
+# Bazel workspace symlinks (bazel-bin, bazel-out, bazel-testlogs, ...).
+# Leading slash anchors to repo root so this does not accidentally
+# match files like `.cursor/rules/bazel-process-hygiene.mdc`.
+/bazel-*
 
 # CMake
 CMakeFiles/
