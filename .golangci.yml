@@ -1,0 +1,174 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: "2"
+
+# Runtime controls for golangci-lint itself. Keep module downloads readonly so
+# linting cannot mutate go.mod/go.sum, and allow parallel runners for use in
+# editors and CI jobs that may overlap.
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+  go: '1.26'
+
+# Include enough context in plain-text output to make failures actionable from
+# CI logs without requiring a separate editor integration.
+output:
+  formats:
+    text:
+      print-linter-name: true
+      print-issued-lines: true
+
+# Do not cap repeated findings. This keeps CI honest when a broad pattern
+# regresses, while uniq-by-line avoids duplicate reports for the same location.
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  uniq-by-line: true
+
+# Formatting is handled by golangci-lint so local editor runs and CI agree.
+formatters:
+  enable:
+    - goimports
+    - golines
+    - gofumpt
+  settings:
+    golines:
+      max-len: 120
+      shorten-comments: true
+  exclusions:
+    warn-unused: true
+    paths:
+      # Generated code is not reformatted; it should be regenerated instead.
+      - '^gen/'
+      # Vendored or mirrored upstream code; keep upstream style.
+      - '^third_party/'
+
+linters:
+  # Start from an empty set so each enabled linter is an intentional project
+  # policy instead of whatever golangci-lint happens to enable by default.
+  default: none
+  enable:
+    # Correctness and modernization checks.
+    - copyloopvar
+    - intrange
+    - modernize
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - bodyclose
+    - errorlint
+    - nilerr
+    - rowserrcheck
+    - sqlclosecheck
+    - makezero
+    # Security and suspicious-text checks.
+    - gosec
+    - bidichk
+    - asciicheck
+    # Style, maintainability, and readability checks.
+    - revive
+    - gocritic
+    - goconst
+    - cyclop
+    - funlen
+    - nestif
+    - godot
+    - perfsprint
+    - sloglint
+    - whitespace
+    - tagalign
+    - depguard
+    - testifylint
+    # Dead-code and simplification checks.
+    - unparam
+    - unconvert
+    - gochecksumtype
+
+  exclusions:
+    # Treat generated markers flexibly because different generators emit
+    # slightly different headers.
+    generated: lax
+    paths:
+      - '^gen/'
+      - '^node_modules/'
+      - '^vendor/'
+      - '^third_party/'
+    rules:
+      # Tests may intentionally trade strict production constraints for clarity
+      # or focused coverage of edge cases.
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+
+  settings:
+    govet:
+      # Enable all vet analyzers except fieldalignment, which tends to push
+      # memory-layout micro-optimizations into otherwise clear structs.
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    revive:
+      # Keep revive focused on naming and error-message consistency. Other
+      # style guidance is covered by formatters and the linters above.
+      rules:
+        - name: file-length-limit
+          arguments:
+            - max: 500
+              skip-comments: true
+              skip-blank-lines: false
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+
+    depguard:
+      rules:
+        main:
+          files: ["$all"]
+          # Prefer current standard-library or maintained replacements for
+          # deprecated libraries and older ecosystem defaults.
+          deny:
+            - pkg: "io/ioutil"
+              desc: "Use 'io' and 'os' packages instead."
+            - pkg: "log$"
+              desc: "Use 'log/slog' for structured logging (deny only stdlib 'log', not 'log/slog')."
+            - pkg: "github.com/pkg/errors"
+              desc: "Use standard 'errors' (Go 1.13+)."
+            - pkg: "golang.org/x/net/context"
+              desc: "Use standard 'context' instead."
+            - pkg: "golang.org/x/crypto/ssh/terminal"
+              desc: "Use 'golang.org/x/term' instead."
+            - pkg: "github.com/dgrijalva/jwt-go"
+              desc: "Use 'github.com/golang-jwt/jwt' (v4+) instead."
+            - pkg: "github.com/jinzhu/gorm"
+              desc: "Use 'gorm.io/gorm' instead."
+            - pkg: "github.com/golang/mock"
+              desc: "Use 'go.uber.org/mock' instead."
+            - pkg: "github.com/go-pg/pg"
+              desc: "Use 'github.com/uptrace/bun' instead."
+            - pkg: "github.com/gorilla/mux"
+              desc: "Use standard net/http (Go 1.22+ routing)."
+            - pkg: "github.com/sirupsen/logrus"
+              desc: "Use 'log/slog' or 'go.uber.org/zap'."
+
+    cyclop:
+      # Permit moderately complex orchestration while still flagging functions
+      # that are becoming hard to reason about.
+      max-complexity: 25
+
+    sloglint:
+      # Encourage passing contextual loggers around instead of relying on global
+      # logger state.
+      no-global: all
+      context: scope
+
+    nolintlint:
+      # Suppressions should document the reason and identify the exact linter
+      # being suppressed, so they remain auditable over time.
+      require-explanation: true
+      require-specific: true
