@@ -133,7 +133,7 @@ todos:
     status: completed
   - id: run-43-docker-compose-smoke
     content: "Run docker-compose-smoke_o2f3a4b5.plan.md"
-    status: pending
+    status: completed
   - id: run-44-goreleaser-release
     content: "Run goreleaser-release_p3a4b5c6.plan.md"
     status: pending

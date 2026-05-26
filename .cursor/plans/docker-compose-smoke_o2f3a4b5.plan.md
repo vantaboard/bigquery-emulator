@@ -4,13 +4,13 @@ overview: "Phase 9a: finalize Docker image, docker-compose, CI quickstart smoke.
 todos:
   - id: docker-multistage
     content: "Finalize Dockerfile: build both binaries, ENTRYPOINT gateway, EXPOSE 9050, default --profile=ci"
-    status: pending
+    status: completed
   - id: compose-dev
     content: "Add docker-compose.yml: mount data_dir, BIGQUERY_EMULATOR_HOST, healthcheck"
-    status: pending
+    status: completed
   - id: quickstart-ci
     content: "CI smoke: docker run, curl datasets + SELECT 1, assert 200"
-    status: pending
+    status: completed
 isProject: false
 ---
 
