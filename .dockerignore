@@ -43,6 +43,17 @@ vendor/
 .git/
 .github/
 .cursor/
+.cursorignore
+
+# Conformance fixtures + harness aren't needed by the runtime image
+# (the Dockerfile copies only the Bazel + Go build inputs explicitly).
+conformance/
+
+# Reference googlesql sibling: NEVER ship through the Docker context.
+# The engine-builder stage clones the matching upstream tag fresh
+# inside the image at /googlesql; including a host sibling here would
+# be ambiguous AND blow up the build context by ~1 GiB.
+googlesql/
 
 # User-managed dev-environment files (mise/direnv). These are
 # intentionally untracked by git and have no business in the image.
