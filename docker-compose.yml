@@ -1,0 +1,45 @@
+# Single-service Compose file for local quickstart + CI smoke.
+#
+# Mirrors the layout `cloud-spanner-emulator` ships at the same place:
+# one service that bakes the published image and exposes the REST port
+# on the host. `docker compose up --build -d` is the canonical
+# quickstart entrypoint and the CI smoke workflow
+# (.github/workflows/docker-smoke.yml + `task docker:smoke`) drives the
+# same recipe end-to-end.
+#
+# Notes on the env-var line: the BigQuery client SDKs read
+# `BIGQUERY_EMULATOR_HOST` to decide where to send REST traffic; the
+# *server* doesn't read it. We export the value here so a developer
+# whose host shell sources Compose's `--env-from` (or who copies the
+# value verbatim into their own shell) gets a consistent client-side
+# pointer at the published port. The gateway itself binds to
+# `--hostname=0.0.0.0` via the in-container shim
+# (`docker/gateway_main.sh`), so no env var is required to make the
+# port reachable.
+
+services:
+  bigquery-emulator:
+    image: bigquery-emulator:local
+    build:
+      context: .
+      args:
+        VERSION: dev
+    ports:
+      - "9050:9050"
+      - "9060:9060"
+    environment:
+      # Hint for client SDKs sharing this network or copying this value.
+      # Has no effect on the gateway itself; see comment block above.
+      BIGQUERY_EMULATOR_HOST: "0.0.0.0:9050"
+    volumes:
+      - bq-emulator-data:/var/lib/bigquery-emulator
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9050/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  bq-emulator-data:
