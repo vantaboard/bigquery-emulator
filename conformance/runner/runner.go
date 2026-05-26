@@ -301,8 +301,15 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
-	if diff := rowDiff(fx.Expected.Rows, run.Schema, run.Rows); diff != "" {
-		result.Message = "row mismatch"
+	if diff := rowDiff(fx.Expected, run.Schema, run.Rows); diff != "" {
+		switch fx.Expected.Match {
+		case MatchSchemaOnly:
+			result.Message = "schema mismatch"
+		case MatchUnordered:
+			result.Message = "row multiset mismatch"
+		default:
+			result.Message = "row mismatch"
+		}
 		result.Diff = diff
 		result.DurationMs = time.Since(started).Milliseconds()
 		return result

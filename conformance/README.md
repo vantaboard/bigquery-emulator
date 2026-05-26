@@ -71,6 +71,11 @@ setup:                            # optional, runs in order before `query`
   - sql: INSERT INTO ds_conformance.people (id, name) VALUES (1, 'a')
 query: SELECT id, name FROM ds_conformance.people ORDER BY id   # required
 expected:                         # exactly one of `rows:` or `error:`
+                                  # (schema_only mode may set neither)
+  match: ordered                  # optional; ordered (default) | unordered | schema_only
+  schema:                         # optional; required for match=schema_only
+    - {name: id, type: INT64}
+    - {name: name, type: STRING}
   rows:
     - {id: "1", name: "a"}
   # OR
@@ -98,20 +103,68 @@ The `setup` list is dispatched by which field is present in each step:
 A fixture that needs only a `SELECT` (with no catalog state) omits
 `setup` entirely.
 
-### `expected.rows` matching
+### `expected.match` matching modes
 
-`expected.rows` is order-sensitive and content-sensitive. Authors are
-expected to add `ORDER BY` to the fixture's `query` so the comparison
-is deterministic. Cell values are compared as strings (the BigQuery
-REST wire format encodes every scalar as a string regardless of SQL
-type, see `docs/REST_API.md` "Type wire encoding"); a fixture writing
-`id: 1` and the gateway returning `"1"` therefore matches. NULLs are
-represented as `null` in YAML and compared against the gateway's
-omitted-or-`null` cell form.
+Three matching modes are supported. The mode is declared on
+`expected.match`; omitting it defaults to `ordered` (the plan-40
+default, kept stable for the seed fixtures).
 
-The diff output on failure is a unified text diff between the YAML's
-`expected.rows` and the actual rows as the runner observed them, so a
-human can pin which column / row diverged at a glance.
+| mode | what it pins | when to use |
+|------|--------------|-------------|
+| `ordered` *(default)* | row[i] ↔ actual[i], cell-by-cell, typed compare | queries with `ORDER BY` |
+| `unordered` | multiset equality after type-aware canonicalization | engines that do not guarantee row order, parallel scans |
+| `schema_only` | column names + types only; row values ignored | non-deterministic data (timestamps, generated IDs), dryRun smoke checks |
+
+`ordered` and `unordered` both require `rows:` (or `error:`).
+`schema_only` requires `schema:` (preferred) or `rows:` (the first
+row's keys are used as the expected column-name set, with type
+checks skipped).
+
+#### Typed cell comparison
+
+Cells are compared against the column's SQL type taken from the
+gateway's `QueryResponse.schema`. This means a fixture writing
+`id: 1` (decoded by YAML as an `int`) still matches the gateway's
+wire encoding `"1"` (a string). Per-type rules:
+
+| BigQuery type | comparison |
+|---------------|------------|
+| `INT64` / `INTEGER` / `NUMERIC` / `BIGNUMERIC` | exact rational equality (`math/big.Rat`) |
+| `FLOAT64` / `FLOAT` | relative epsilon of `1e-9` (NaN compares equal to NaN for diff purposes) |
+| `BOOL` / `BOOLEAN` | normalize `true` / `false` / `t` / `f` / `1` / `0` (case-insensitive) before compare |
+| `STRING` / `BYTES` | literal byte equality on the canonical string form |
+| `TIMESTAMP` / `DATETIME` / `DATE` / `TIME` | parse both sides into `time.Time` (RFC3339, SQL form, or Unix-seconds-as-string) and compare for instant equality |
+| `STRUCT` / `REPEATED` / unknown | fall back to JSON-serialized string compare |
+
+NULL is distinct from the literal string `"NULL"`: a YAML `null`
+expects a NULL cell (`{"v":null}` on the wire) and refuses to match
+a cell whose string value happens to be `"NULL"`. NULL on either
+side without NULL on the other is always a mismatch.
+
+#### Unordered mode caveats
+
+The unordered diff buckets rows by their canonicalized one-line
+form (sorted by column name, with type normalization applied per
+the table above). For float columns the canonicalizer rounds to 12
+significant digits, so values within ~1e-12 relative tolerance
+still bucket together; tighter float tolerances need `ordered`
+mode. Failure output lists every multiset element plus an explicit
+`missing` (expected-only) / `extra` (actual-only) breakdown so the
+diverging row is visible without manual subtraction.
+
+#### Schema-only mode
+
+`schema_only` validates the gateway's returned `schema.fields[]`
+positionally against `expected.schema`. The `Type` field is matched
+case-insensitively (`INTEGER` matches `INT64`). If `expected.schema`
+is omitted and only `expected.rows[0]` is present, the runner uses
+that row's keys as the expected column-name set and skips the type
+check.
+
+The diff output on failure is a unified text diff between the
+YAML's `expected.rows` (or `schema:`) and the actual rows / schema
+as the runner observed them, so a human can pin which column / row
+diverged at a glance.
 
 ### `expected.error` matching
 

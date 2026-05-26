@@ -30,11 +30,13 @@ func rewriteFixtureRows(fx *Fixture, body []byte) error {
 		row := make(map[string]any, len(r.F))
 		for i, cell := range r.F {
 			name := positionalName(cols, i)
-			row[name] = cellString(cell.V)
+			row[name] = baselineCellValue(cell.V)
 		}
 		rows = append(rows, row)
 	}
-	fx.Expected = Expectation{Rows: rows}
+	// Preserve the fixture's existing Match mode; baseline
+	// rewriting is a values-only operation, not a mode flip.
+	fx.Expected = Expectation{Match: fx.Expected.Match, Rows: rows}
 	return writeFixture(fx)
 }
 
@@ -62,6 +64,23 @@ func rewriteFixtureError(fx *Fixture, status int, body []byte) error {
 		MessageContains: msg,
 	}}
 	return writeFixture(fx)
+}
+
+// baselineCellValue maps a wire-format cell value (string scalar,
+// nested object, or REPEATED array) onto the YAML form that should
+// be written back into the fixture's `expected.rows` block. Scalars
+// keep their string form (BigQuery encodes everything as strings on
+// the wire), NULLs land as YAML `null`, and nested structures are
+// passed through `any` so the YAML encoder renders them as inline
+// maps/sequences.
+func baselineCellValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return v
 }
 
 // writeFixture serializes the fixture and atomically replaces the

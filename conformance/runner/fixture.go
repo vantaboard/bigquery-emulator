@@ -114,20 +114,76 @@ type SchemaColumn struct {
 }
 
 // Expectation captures one of two assertion modes. Exactly one of
-// `Rows` or `Error` must be set. `Rows == nil && Error == nil` is
-// rejected at load time.
+// `Rows` or `Error` must be set (with the exception of
+// `Match==schema_only`, which may set neither and rely on the
+// gateway-returned schema alone).
 type Expectation struct {
+	// Match controls how Rows are compared against the gateway's
+	// response. One of `ordered` (default), `unordered`, or
+	// `schema_only`. See `conformance/README.md` for the matching
+	// semantics each mode implies.
+	Match MatchMode `yaml:"match,omitempty"`
+
+	// Schema is the optional list of expected output columns. The
+	// diff engine uses it for two things:
+	//
+	//   1. `schema_only` mode: required for the schema-vs-schema
+	//      assertion (the engine compares this list against the
+	//      `QueryResponse.schema` returned by the gateway).
+	//   2. `ordered` / `unordered` modes: advisory, used to
+	//      double-check the column set the query actually returned
+	//      before diffing rows. When omitted, the runner trusts
+	//      the gateway-supplied schema.
+	Schema []ExpectedColumn `yaml:"schema,omitempty"`
+
 	// Rows is the expected row set for a successful query. Each
-	// row is a column-name -> cell-value map. Cell values are
-	// compared as their YAML-stringified form against the BigQuery
-	// wire format (`bqtypes.Cell.V`, always a string for scalars).
-	// Order matters; fixture writers add `ORDER BY` to keep the
-	// diff deterministic.
+	// row is a column-name -> cell-value map. The diff engine
+	// normalizes both sides per the column's SQL type from the
+	// gateway's `QueryResponse.schema` (so INT64 `1` matches
+	// `"1"`, FLOAT64 compares with a relative epsilon, NULL stays
+	// distinct from the literal string "NULL", etc.). See
+	// `conformance/README.md` for the full type table.
+	//
+	// Ignored when `Match==schema_only`.
 	Rows []map[string]any `yaml:"rows,omitempty"`
 
 	// Error pins the expected error envelope when the fixture
 	// intends to verify a failure mode (e.g. invalid SQL).
 	Error *ExpectedError `yaml:"error,omitempty"`
+}
+
+// MatchMode is the row-comparison strategy declared by a fixture.
+// Default is MatchOrdered.
+type MatchMode string
+
+const (
+	// MatchOrdered (the default) compares rows pairwise in
+	// declaration order. Use `ORDER BY` in the fixture query so the
+	// comparison stays deterministic.
+	MatchOrdered MatchMode = "ordered"
+
+	// MatchUnordered compares rows as a multiset; the diff engine
+	// canonicalizes every row to a type-normalized string and
+	// asserts the two multisets are equal. Useful when the query
+	// does not declare an ORDER BY and the storage engine returns
+	// rows in implementation-defined order (DuckDB, parallel
+	// scans, etc.).
+	MatchUnordered MatchMode = "unordered"
+
+	// MatchSchemaOnly ignores `Rows` entirely and only validates
+	// the column names + types returned by the query. Useful for
+	// queries whose row values are non-deterministic (CURRENT_*,
+	// generated IDs) and for "dryRun" style smoke checks.
+	MatchSchemaOnly MatchMode = "schema_only"
+)
+
+// ExpectedColumn is one entry in `Expectation.Schema`. The Type field
+// is compared case-insensitively against the gateway's wire-format
+// type (`STRING`, `INT64`, `FLOAT64`, etc.) so a fixture pinning
+// `INTEGER` will still match a response advertising `INT64`.
+type ExpectedColumn struct {
+	Name string `yaml:"name"`
+	Type string `yaml:"type"`
 }
 
 // ExpectedError captures the assertion vocabulary for the error path.
@@ -259,13 +315,39 @@ func (f *Fixture) normalize() error {
 }
 
 func (f *Fixture) validateExpectation() error {
+	if f.Expected.Match == "" {
+		f.Expected.Match = MatchOrdered
+	}
+	switch f.Expected.Match {
+	case MatchOrdered, MatchUnordered, MatchSchemaOnly:
+	default:
+		return fmt.Errorf(
+			"expected.match=%q is not one of ordered, unordered, schema_only",
+			f.Expected.Match)
+	}
+
 	hasRows := f.Expected.Rows != nil
+	hasSchema := len(f.Expected.Schema) > 0
 	hasErr := f.Expected.Error != nil
-	switch {
-	case !hasRows && !hasErr:
-		return errors.New("expected: must set either rows: or error:")
-	case hasRows && hasErr:
-		return errors.New("expected: only one of rows: or error: may be set")
+	if hasErr && (hasRows || hasSchema) {
+		return errors.New(
+			"expected: error: cannot be combined with rows: or schema:")
+	}
+	switch f.Expected.Match {
+	case MatchSchemaOnly:
+		// schema_only fixtures must either declare an explicit
+		// schema: block OR a rows: block (whose first row's keys
+		// are used as the expected column-name set). Otherwise
+		// there is nothing to assert on.
+		if !hasErr && !hasRows && !hasSchema {
+			return errors.New(
+				"expected: match=schema_only requires schema: or rows: (column names)")
+		}
+	default:
+		// ordered / unordered must set rows: or error:.
+		if !hasRows && !hasErr {
+			return errors.New("expected: must set either rows: or error:")
+		}
 	}
 	if hasErr {
 		e := f.Expected.Error

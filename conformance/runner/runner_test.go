@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -56,6 +57,84 @@ expected:
 	}
 }
 
+func TestLoadDefaultsMatchToOrdered(t *testing.T) {
+	body := []byte(`name: test
+query: SELECT 1
+expected:
+  rows:
+    - {n: "1"}
+`)
+	f, err := loadBytes(body, "test.yaml")
+	if err != nil {
+		t.Fatalf("loadBytes: %v", err)
+	}
+	if f.Expected.Match != MatchOrdered {
+		t.Fatalf("Match=%q, want %q", f.Expected.Match, MatchOrdered)
+	}
+}
+
+func TestLoadAcceptsUnorderedMatch(t *testing.T) {
+	body := []byte(`name: test
+query: SELECT 1
+expected:
+  match: unordered
+  rows:
+    - {n: "1"}
+`)
+	f, err := loadBytes(body, "test.yaml")
+	if err != nil {
+		t.Fatalf("loadBytes: %v", err)
+	}
+	if f.Expected.Match != MatchUnordered {
+		t.Fatalf("Match=%q, want unordered", f.Expected.Match)
+	}
+}
+
+func TestLoadAcceptsSchemaOnlyMatch(t *testing.T) {
+	body := []byte(`name: test
+query: SELECT 1
+expected:
+  match: schema_only
+  schema:
+    - {name: n, type: INT64}
+`)
+	f, err := loadBytes(body, "test.yaml")
+	if err != nil {
+		t.Fatalf("loadBytes: %v", err)
+	}
+	if f.Expected.Match != MatchSchemaOnly {
+		t.Fatalf("Match=%q, want schema_only", f.Expected.Match)
+	}
+	if len(f.Expected.Schema) != 1 || f.Expected.Schema[0].Name != "n" {
+		t.Fatalf("Schema=%v, want [{n, INT64}]", f.Expected.Schema)
+	}
+}
+
+func TestLoadRejectsUnknownMatch(t *testing.T) {
+	body := []byte(`name: test
+query: SELECT 1
+expected:
+  match: cosmic
+  rows: []
+`)
+	_, err := loadBytes(body, "test.yaml")
+	if err == nil || !strings.Contains(err.Error(), "match=") {
+		t.Fatalf("want unknown-match error, got %v", err)
+	}
+}
+
+func TestLoadRejectsSchemaOnlyWithoutSchemaOrRows(t *testing.T) {
+	body := []byte(`name: test
+query: SELECT 1
+expected:
+  match: schema_only
+`)
+	_, err := loadBytes(body, "test.yaml")
+	if err == nil || !strings.Contains(err.Error(), "schema_only") {
+		t.Fatalf("want schema_only requires schema/rows error, got %v", err)
+	}
+}
+
 func TestLoadRejectsUnknownProfile(t *testing.T) {
 	body := []byte(`name: test
 profiles: [bogus]
@@ -88,7 +167,7 @@ expected:
     code: 400
 `)
 	_, err := loadBytes(body, "test.yaml")
-	if err == nil || !strings.Contains(err.Error(), "only one") {
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("want exclusive-expectation error, got %v", err)
 	}
 }
@@ -120,46 +199,54 @@ expected:
 	}
 }
 
-// TestRowDiffMatchesEqualRows pins the happy-path: when the gateway
-// returns rows that match the YAML, rowDiff is an empty string.
-func TestRowDiffMatchesEqualRows(t *testing.T) {
-	expected := []map[string]any{
-		{"id": "1", "name": "ada"},
-		{"id": "2", "name": "linus"},
+// schemaWith is a tiny test helper that builds a TableSchema from
+// (name,type) pairs so the cell-comparison tests stay readable.
+func schemaWith(pairs ...string) *bqtypes.TableSchema {
+	if len(pairs)%2 != 0 {
+		panic("schemaWith: need (name,type) pairs")
 	}
-	schema := &bqtypes.TableSchema{
-		Fields: []bqtypes.TableFieldSchema{
-			{Name: "id", Type: "INT64"},
-			{Name: "name", Type: "STRING"},
+	s := &bqtypes.TableSchema{}
+	for i := 0; i < len(pairs); i += 2 {
+		s.Fields = append(s.Fields, bqtypes.TableFieldSchema{
+			Name: pairs[i],
+			Type: pairs[i+1],
+		})
+	}
+	return s
+}
+
+// rowOf builds a wire-format bqtypes.Row from raw cell values.
+func rowOf(values ...any) bqtypes.Row {
+	row := bqtypes.Row{F: make([]bqtypes.Cell, len(values))}
+	for i, v := range values {
+		row.F[i] = bqtypes.Cell{V: v}
+	}
+	return row
+}
+
+// TestRowDiffOrderedMatchesEqualRows pins the happy-path: when the
+// gateway returns rows that match the YAML, rowDiff is empty.
+func TestRowDiffOrderedMatchesEqualRows(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{
+			{"id": "1", "name": "ada"},
+			{"id": "2", "name": "linus"},
 		},
 	}
-	actual := []bqtypes.Row{
-		{F: []bqtypes.Cell{{V: "1"}, {V: "ada"}}},
-		{F: []bqtypes.Cell{{V: "2"}, {V: "linus"}}},
-	}
-	if diff := rowDiff(expected, schema, actual); diff != "" {
+	schema := schemaWith("id", "INT64", "name", "STRING")
+	actual := []bqtypes.Row{rowOf("1", "ada"), rowOf("2", "linus")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty (match), got:\n%s", diff)
 	}
 }
 
-// TestRowDiffDetectsCellValueDifference pins the negative path: when
-// one cell value differs, rowDiff returns a unified diff that
-// mentions both the expected and actual values so a human can pin
-// which column drifted.
-func TestRowDiffDetectsCellValueDifference(t *testing.T) {
-	expected := []map[string]any{
-		{"id": "1", "name": "ada"},
+func TestRowDiffOrderedDetectsCellValueDifference(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"id": "1", "name": "ada"}},
 	}
-	schema := &bqtypes.TableSchema{
-		Fields: []bqtypes.TableFieldSchema{
-			{Name: "id", Type: "INT64"},
-			{Name: "name", Type: "STRING"},
-		},
-	}
-	actual := []bqtypes.Row{
-		{F: []bqtypes.Cell{{V: "1"}, {V: "augusta"}}},
-	}
-	diff := rowDiff(expected, schema, actual)
+	schema := schemaWith("id", "INT64", "name", "STRING")
+	actual := []bqtypes.Row{rowOf("1", "augusta")}
+	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("rowDiff: want non-empty diff, got empty")
 	}
@@ -168,18 +255,13 @@ func TestRowDiffDetectsCellValueDifference(t *testing.T) {
 	}
 }
 
-func TestRowDiffDetectsRowCountMismatch(t *testing.T) {
-	expected := []map[string]any{
-		{"id": "1"},
-		{"id": "2"},
+func TestRowDiffOrderedDetectsRowCountMismatch(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"id": "1"}, {"id": "2"}},
 	}
-	schema := &bqtypes.TableSchema{
-		Fields: []bqtypes.TableFieldSchema{{Name: "id", Type: "INT64"}},
-	}
-	actual := []bqtypes.Row{
-		{F: []bqtypes.Cell{{V: "1"}}},
-	}
-	diff := rowDiff(expected, schema, actual)
+	schema := schemaWith("id", "INT64")
+	actual := []bqtypes.Row{rowOf("1")}
+	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("rowDiff: want non-empty diff for row-count mismatch")
 	}
@@ -188,21 +270,292 @@ func TestRowDiffDetectsRowCountMismatch(t *testing.T) {
 	}
 }
 
-func TestRowDiffCoercesIntegerYAMLValues(t *testing.T) {
-	// YAML decoders give us `int` for unquoted numerics; cellString
-	// returns the string form. The diff should still pass because
-	// both sides canonicalize to "1".
-	expected := []map[string]any{
-		{"id": 1},
+// TestRowDiffIntCoercesYAMLNumeric pins typed INT64 comparison: a
+// YAML `1` (decoded as int) matches the gateway's wire string "1".
+func TestRowDiffIntCoercesYAMLNumeric(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"id": 1}},
 	}
-	schema := &bqtypes.TableSchema{
-		Fields: []bqtypes.TableFieldSchema{{Name: "id", Type: "INT64"}},
+	schema := schemaWith("id", "INT64")
+	actual := []bqtypes.Row{rowOf("1")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for typed INT coercion, got:\n%s", diff)
 	}
+}
+
+// TestRowDiffNumericCoercesDecimal pins typed NUMERIC comparison
+// (the rational form covers fixed-point precision the float path
+// would lose).
+func TestRowDiffNumericCoercesDecimal(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"amount": "1.2300"}},
+	}
+	schema := schemaWith("amount", "NUMERIC")
+	actual := []bqtypes.Row{rowOf("1.23")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for NUMERIC equivalence, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffFloatWithinEpsilonPasses(t *testing.T) {
+	// 1.0 vs 1.0 + 1e-12 is well inside the 1e-9 relative
+	// tolerance; both sides parse as float64 and compare equal.
+	exp := Expectation{
+		Rows: []map[string]any{{"v": "1.0"}},
+	}
+	schema := schemaWith("v", "FLOAT64")
+	actual := []bqtypes.Row{rowOf("1.000000000001")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for float within epsilon, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffFloatOutsideEpsilonFails(t *testing.T) {
+	// 1.0 vs 1.001 is well outside 1e-9 relative tolerance.
+	exp := Expectation{
+		Rows: []map[string]any{{"v": "1.0"}},
+	}
+	schema := schemaWith("v", "FLOAT64")
+	actual := []bqtypes.Row{rowOf("1.001")}
+	if diff := rowDiff(exp, schema, actual); diff == "" {
+		t.Fatal("rowDiff: want non-empty diff for float outside epsilon")
+	}
+}
+
+func TestRowDiffBoolNormalizes(t *testing.T) {
+	// YAML decodes unquoted `true` as bool; wire returns "true".
+	exp := Expectation{
+		Rows: []map[string]any{{"flag": true}},
+	}
+	schema := schemaWith("flag", "BOOL")
+	actual := []bqtypes.Row{rowOf("true")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for bool normalize, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffTimestampParsesRFC3339(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"ts": "2024-01-02T03:04:05Z"}},
+	}
+	schema := schemaWith("ts", "TIMESTAMP")
+	// BigQuery's wire form is Unix-seconds-as-string with optional
+	// fractional component; this is the same instant.
+	actual := []bqtypes.Row{rowOf("1704164645.000000")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for matching timestamps, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffNullMatchesNull(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"name": nil}},
+	}
+	schema := schemaWith("name", "STRING")
+	actual := []bqtypes.Row{rowOf(nil)}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for NULL == NULL, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffNullVsValueMismatch(t *testing.T) {
+	exp := Expectation{
+		Rows: []map[string]any{{"name": nil}},
+	}
+	schema := schemaWith("name", "STRING")
+	actual := []bqtypes.Row{rowOf("ada")}
+	if diff := rowDiff(exp, schema, actual); diff == "" {
+		t.Fatal("rowDiff: want non-empty diff for NULL vs value")
+	}
+}
+
+func TestRowDiffNullVsLiteralStringMismatch(t *testing.T) {
+	// A real NULL on the wire must not match the literal string
+	// "NULL" on the expected side; the diff would otherwise mask
+	// a fixture writer's mistake.
+	exp := Expectation{
+		Rows: []map[string]any{{"name": "NULL"}},
+	}
+	schema := schemaWith("name", "STRING")
+	actual := []bqtypes.Row{rowOf(nil)}
+	if diff := rowDiff(exp, schema, actual); diff == "" {
+		t.Fatal(`rowDiff: want non-empty diff for "NULL" string vs NULL cell`)
+	}
+}
+
+// TestRowDiffUnorderedMatchesShuffled is the canonical multiset case:
+// expected and actual contain the same rows in different orders.
+func TestRowDiffUnorderedMatchesShuffled(t *testing.T) {
+	exp := Expectation{
+		Match: MatchUnordered,
+		Rows: []map[string]any{
+			{"id": "1", "name": "ada"},
+			{"id": "2", "name": "linus"},
+		},
+	}
+	schema := schemaWith("id", "INT64", "name", "STRING")
+	actual := []bqtypes.Row{rowOf("2", "linus"), rowOf("1", "ada")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff: want empty for shuffled-equal multiset, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffUnorderedDetectsSwap(t *testing.T) {
+	exp := Expectation{
+		Match: MatchUnordered,
+		Rows: []map[string]any{
+			{"id": "1", "name": "ada"},
+			{"id": "2", "name": "linus"},
+		},
+	}
+	schema := schemaWith("id", "INT64", "name", "STRING")
+	// id=2 row's name swapped for "grace"; this should surface
+	// as one missing (linus) and one extra (grace).
+	actual := []bqtypes.Row{rowOf("1", "ada"), rowOf("2", "grace")}
+	diff := rowDiff(exp, schema, actual)
+	if diff == "" {
+		t.Fatal("rowDiff: want non-empty diff for swapped row")
+	}
+	if !strings.Contains(diff, "missing") || !strings.Contains(diff, "extra") {
+		t.Fatalf("unordered diff missing missing/extra sections:\n%s", diff)
+	}
+	if !strings.Contains(diff, "linus") {
+		t.Fatalf("expected 'linus' in missing section:\n%s", diff)
+	}
+	if !strings.Contains(diff, "grace") {
+		t.Fatalf("expected 'grace' in extra section:\n%s", diff)
+	}
+}
+
+func TestRowDiffUnorderedRowCountMismatch(t *testing.T) {
+	exp := Expectation{
+		Match: MatchUnordered,
+		Rows: []map[string]any{
+			{"id": "1"},
+			{"id": "2"},
+		},
+	}
+	schema := schemaWith("id", "INT64")
+	actual := []bqtypes.Row{rowOf("1")}
+	diff := rowDiff(exp, schema, actual)
+	if diff == "" {
+		t.Fatal("rowDiff: want non-empty diff for unordered row-count mismatch")
+	}
+	if !strings.Contains(diff, "missing") {
+		t.Fatalf("unordered diff missing 'missing' section:\n%s", diff)
+	}
+}
+
+// TestRowDiffSchemaOnlyMatchesDifferentRows pins the dryRun-style
+// case: rows differ wildly but the column set is the same, so
+// schema_only mode passes.
+func TestRowDiffSchemaOnlyMatchesDifferentRows(t *testing.T) {
+	exp := Expectation{
+		Match: MatchSchemaOnly,
+		Schema: []ExpectedColumn{
+			{Name: "id", Type: "INT64"},
+			{Name: "name", Type: "STRING"},
+		},
+	}
+	schema := schemaWith("id", "INT64", "name", "STRING")
 	actual := []bqtypes.Row{
-		{F: []bqtypes.Cell{{V: "1"}}},
+		rowOf("7", "henrietta"),
+		rowOf("8", "grace"),
 	}
-	if diff := rowDiff(expected, schema, actual); diff != "" {
-		t.Fatalf("rowDiff: want empty for coerced int, got:\n%s", diff)
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff schema_only: want empty, got:\n%s", diff)
+	}
+}
+
+func TestRowDiffSchemaOnlyDetectsColumnNameMismatch(t *testing.T) {
+	exp := Expectation{
+		Match: MatchSchemaOnly,
+		Schema: []ExpectedColumn{
+			{Name: "id", Type: "INT64"},
+			{Name: "name", Type: "STRING"},
+		},
+	}
+	// Actual has "id" + "label" (not "name").
+	schema := schemaWith("id", "INT64", "label", "STRING")
+	actual := []bqtypes.Row{rowOf("1", "ada")}
+	diff := rowDiff(exp, schema, actual)
+	if diff == "" {
+		t.Fatal("rowDiff schema_only: want non-empty diff for column-name mismatch")
+	}
+	if !strings.Contains(diff, "name") || !strings.Contains(diff, "label") {
+		t.Fatalf("schema_only diff missing column names:\n%s", diff)
+	}
+}
+
+func TestRowDiffSchemaOnlyDetectsTypeMismatch(t *testing.T) {
+	exp := Expectation{
+		Match: MatchSchemaOnly,
+		Schema: []ExpectedColumn{
+			{Name: "amount", Type: "FLOAT64"},
+		},
+	}
+	schema := schemaWith("amount", "INT64")
+	if diff := rowDiff(exp, schema, nil); diff == "" {
+		t.Fatal("rowDiff schema_only: want non-empty diff for type mismatch")
+	}
+}
+
+func TestRowDiffSchemaOnlyFallsBackToRowKeys(t *testing.T) {
+	// No schema: declared, only rows[0] keys. The runner should
+	// still pin the column-name set from those keys.
+	exp := Expectation{
+		Match: MatchSchemaOnly,
+		Rows:  []map[string]any{{"id": 0, "name": ""}},
+	}
+	schema := schemaWith("id", "INT64", "name", "STRING")
+	actual := []bqtypes.Row{rowOf("42", "anything")}
+	if diff := rowDiff(exp, schema, actual); diff != "" {
+		t.Fatalf("rowDiff schema_only (rows fallback): want empty, got:\n%s", diff)
+	}
+}
+
+// TestExpectedSchemaPreflightCatchesColumnDrift exercises the
+// advisory `expected.schema:` preflight used by ordered/unordered
+// modes. It does NOT replace the row diff; it only catches schema
+// drift before the row diff runs.
+func TestExpectedSchemaPreflightCatchesColumnDrift(t *testing.T) {
+	exp := Expectation{
+		Match: MatchOrdered,
+		Schema: []ExpectedColumn{
+			{Name: "id", Type: "INT64"},
+			{Name: "name", Type: "STRING"},
+		},
+		Rows: []map[string]any{{"id": "1", "label": "ada"}},
+	}
+	// Actual schema has "label" instead of "name".
+	schema := schemaWith("id", "INT64", "label", "STRING")
+	actual := []bqtypes.Row{rowOf("1", "ada")}
+	diff := rowDiff(exp, schema, actual)
+	if diff == "" {
+		t.Fatal("preflight: want non-empty diff for schema drift")
+	}
+	if !strings.Contains(diff, "schema mismatch") {
+		t.Fatalf("want 'schema mismatch' in diff, got:\n%s", diff)
+	}
+}
+
+func TestNumericEqualRejectsTypeDrift(t *testing.T) {
+	// "abc" is not a number; the equality must refuse rather
+	// than silently zeroing both sides.
+	if numericEqual("abc", "1") {
+		t.Fatal("numericEqual: must reject non-numeric expected")
+	}
+	if numericEqual("1", "abc") {
+		t.Fatal("numericEqual: must reject non-numeric actual")
+	}
+}
+
+func TestFloatEqualHandlesNaN(t *testing.T) {
+	if !floatEqual(math.NaN(), math.NaN()) {
+		t.Fatal("floatEqual: NaN vs NaN should be equal (treated as match for diff purposes)")
+	}
+	if floatEqual(math.NaN(), 1.0) {
+		t.Fatal("floatEqual: NaN vs 1.0 should NOT match")
 	}
 }
 

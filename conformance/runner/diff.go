@@ -3,28 +3,173 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// rowDiff compares the gateway's response against the fixture's
-// expected row set and returns a non-empty unified-diff string on
-// mismatch. An empty return means the rows match.
+// floatRelEpsilon is the relative tolerance used when comparing
+// FLOAT64 cells. 1e-9 is loose enough to absorb the round-trip
+// IEEE-754 noise that BigQuery's wire encoding introduces (the
+// gateway formats float64s with `strconv.FormatFloat(v, 'g', -1, 64)`
+// which is bit-exact, but the YAML decoder + JSON unmarshal pair on
+// the expected side does pass values through `strconv.ParseFloat`).
+const floatRelEpsilon = 1e-9
+
+// rowDiff dispatches the actual row vs expected comparison based on
+// the fixture's declared match mode. An empty string means PASS.
 //
-// We normalize both sides to `[{column: value, ...}, ...]` keyed by
-// the schema's column names, then JSON-marshal each row as a stable
-// pretty string. The textual diff is rendered against those lines so
-// the diff output is human-readable.
-func rowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actualRows []bqtypes.Row) string {
+// The diff engine is mode-aware:
+//
+//   - MatchOrdered: pairwise compare row i ↔ actualRows[i] with typed
+//     cell comparison driven by the gateway-supplied schema (INT64
+//     compares as int, FLOAT64 with a relative epsilon, etc.). This
+//     is the default and matches the plan-40 behavior.
+//   - MatchUnordered: treats both sides as a multiset and compares
+//     after type-aware canonicalization. Use when the storage engine
+//     does not guarantee row order and the query lacks ORDER BY.
+//   - MatchSchemaOnly: ignores `expected.rows` entirely and checks
+//     that the response schema matches `expected.schema` (or, if no
+//     explicit schema is declared, the column names taken from
+//     `expected.rows[0]`).
+func rowDiff(exp Expectation, schema *bqtypes.TableSchema, actualRows []bqtypes.Row) string {
+	mode := exp.Match
+	if mode == "" {
+		mode = MatchOrdered
+	}
+	if mode == MatchSchemaOnly {
+		return schemaDiff(exp, schema)
+	}
+	if diff := schemaPreflight(exp, schema); diff != "" {
+		return diff
+	}
+	switch mode {
+	case MatchOrdered:
+		return orderedRowDiff(exp.Rows, schema, actualRows)
+	case MatchUnordered:
+		return unorderedRowDiff(exp.Rows, schema, actualRows)
+	default:
+		// Loader validates mode, so this is unreachable at run time.
+		return fmt.Sprintf("internal: unknown match mode %q", mode)
+	}
+}
+
+// schemaPreflight enforces an opt-in column-set assertion before the
+// row diff runs. If the fixture declared `expected.schema:` it must
+// match the gateway's response; otherwise we are silent.
+func schemaPreflight(exp Expectation, actual *bqtypes.TableSchema) string {
+	if len(exp.Schema) == 0 {
+		return ""
+	}
+	return diffSchemaList(exp.Schema, actual, true)
+}
+
+// schemaDiff is the schema_only-mode entry point. Tries the explicit
+// `expected.schema:` declaration first; falls back to the column-name
+// set derived from `expected.rows[0]` if the fixture writer leaned on
+// the rows-as-column-template shorthand.
+func schemaDiff(exp Expectation, actual *bqtypes.TableSchema) string {
+	if len(exp.Schema) > 0 {
+		return diffSchemaList(exp.Schema, actual, true)
+	}
+	// Names-only fallback. Pull the expected column set from
+	// rows[0] so a writer can pin "make sure these columns come
+	// back" without having to spell out the type for each one.
+	if len(exp.Rows) == 0 {
+		// Loader rejects this combo, so this is only a safety
+		// net.
+		return "schema_only: nothing to compare against (no schema:, no rows:)"
+	}
+	expected := make([]ExpectedColumn, 0, len(exp.Rows[0]))
+	for name := range exp.Rows[0] {
+		expected = append(expected, ExpectedColumn{Name: name})
+	}
+	sort.Slice(expected, func(i, j int) bool { return expected[i].Name < expected[j].Name })
+	return diffSchemaList(expected, actual, false)
+}
+
+// diffSchemaList compares a list of expected columns against the
+// gateway's schema. checkTypes=true enforces the Type field on each
+// column (case-insensitive); checkTypes=false is the names-only path
+// used by the rows-shorthand for schema_only.
+func diffSchemaList(expected []ExpectedColumn, actual *bqtypes.TableSchema, checkTypes bool) string {
+	if actual == nil || len(actual.Fields) == 0 {
+		return fmt.Sprintf(
+			"schema mismatch: expected %d columns, gateway returned no schema",
+			len(expected))
+	}
+	if len(expected) != len(actual.Fields) {
+		return renderSchemaDiff(expected, actual)
+	}
+
+	// When the fallback path supplies expected as a sorted
+	// column-name set, allow the actual schema's order to differ;
+	// otherwise the comparison is positional (matches BigQuery's
+	// `schema.fields[]` ordering semantics).
+	if !checkTypes {
+		actualNames := make([]string, 0, len(actual.Fields))
+		for _, f := range actual.Fields {
+			actualNames = append(actualNames, f.Name)
+		}
+		sort.Strings(actualNames)
+		for i, n := range actualNames {
+			if !strings.EqualFold(expected[i].Name, n) {
+				return renderSchemaDiff(expected, actual)
+			}
+		}
+		return ""
+	}
+
+	for i, e := range expected {
+		a := actual.Fields[i]
+		if !strings.EqualFold(e.Name, a.Name) {
+			return renderSchemaDiff(expected, actual)
+		}
+		if e.Type != "" && !strings.EqualFold(e.Type, a.Type) {
+			return renderSchemaDiff(expected, actual)
+		}
+	}
+	return ""
+}
+
+// renderSchemaDiff prints both schemas side by side so the failing
+// column or type is visible at a glance.
+func renderSchemaDiff(expected []ExpectedColumn, actual *bqtypes.TableSchema) string {
+	var b strings.Builder
+	b.WriteString("schema mismatch\nexpected:\n")
+	for _, c := range expected {
+		if c.Type == "" {
+			fmt.Fprintf(&b, "  %s\n", c.Name)
+			continue
+		}
+		fmt.Fprintf(&b, "  %s:%s\n", c.Name, strings.ToUpper(c.Type))
+	}
+	b.WriteString("actual:\n")
+	if actual == nil || len(actual.Fields) == 0 {
+		b.WriteString("  (no schema)\n")
+	} else {
+		for _, f := range actual.Fields {
+			fmt.Fprintf(&b, "  %s:%s\n", f.Name, strings.ToUpper(f.Type))
+		}
+	}
+	return b.String()
+}
+
+// orderedRowDiff is the plan-40 default: row i is compared against
+// actualRows[i] cell-by-cell. Typed comparison kicks in based on the
+// column's SQL type from the gateway-supplied schema.
+func orderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actualRows []bqtypes.Row) string {
 	cols := schemaColumns(schema)
-	expectedNormalized := normalizeExpectedRows(expected, cols)
-	actualNormalized := normalizeActualRows(actualRows, cols)
-	if len(expectedNormalized) == len(actualNormalized) {
+	types := schemaTypes(schema)
+	if len(expected) == len(actualRows) {
 		match := true
-		for i := range expectedNormalized {
-			if !rowsEqual(expectedNormalized[i], actualNormalized[i]) {
+		for i := range expected {
+			if !rowMatchesTyped(expected[i], actualRows[i], cols, types) {
 				match = false
 				break
 			}
@@ -33,112 +178,441 @@ func rowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actualRows 
 			return ""
 		}
 	}
-	return unifiedDiff(renderRows(expectedNormalized), renderRows(actualNormalized))
+	return unifiedDiff(
+		renderExpectedRows(expected, cols, types),
+		renderActualRows(actualRows, cols, types),
+	)
 }
 
-// schemaColumns returns the schema's column names in declared order.
-// When the gateway omits the schema (e.g. some legacy
-// `getQueryResults` paths), we fall back to positional column names
-// (`col0`, `col1`, ...) so the diff still tells the user which cell
-// was off.
-func schemaColumns(schema *bqtypes.TableSchema) []string {
-	if schema == nil {
+// unorderedRowDiff compares the two sides as a multiset. Both sides
+// are canonicalized to type-normalized strings and bucketed; any row
+// with mismatched counts surfaces in the unified diff as
+// "missing" (present only on the expected side) or
+// "extra" (present only on the actual side).
+//
+// Float epsilon is best-effort under this mode: the canonicalizer
+// rounds float64 values to 12 significant digits so values within
+// ~1e-12 relative tolerance still bucket together. Ordered mode
+// remains the right tool for fixtures whose tolerance budget is
+// tighter than that.
+func unorderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actualRows []bqtypes.Row) string {
+	cols := schemaColumns(schema)
+	types := schemaTypes(schema)
+
+	expCanon := make(map[string]int)
+	actCanon := make(map[string]int)
+	expLines := make([]string, 0, len(expected))
+	actLines := make([]string, 0, len(actualRows))
+	for _, r := range expected {
+		line := canonicalExpectedRow(r, cols, types)
+		expCanon[line]++
+		expLines = append(expLines, line)
+	}
+	for _, r := range actualRows {
+		line := canonicalActualRow(r, cols, types)
+		actCanon[line]++
+		actLines = append(actLines, line)
+	}
+
+	allMatch := len(expCanon) == len(actCanon)
+	if allMatch {
+		for k, v := range expCanon {
+			if actCanon[k] != v {
+				allMatch = false
+				break
+			}
+		}
+	}
+	if allMatch {
+		return ""
+	}
+
+	var missing, extra []string
+	for k, v := range expCanon {
+		have := actCanon[k]
+		for i := 0; i < v-have; i++ {
+			missing = append(missing, k)
+		}
+	}
+	for k, v := range actCanon {
+		have := expCanon[k]
+		for i := 0; i < v-have; i++ {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+	sort.Strings(expLines)
+	sort.Strings(actLines)
+
+	var b strings.Builder
+	b.WriteString("unordered row mismatch\nexpected (multiset):\n")
+	if len(expLines) == 0 {
+		b.WriteString("  (no rows)\n")
+	}
+	for _, line := range expLines {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString("actual (multiset):\n")
+	if len(actLines) == 0 {
+		b.WriteString("  (no rows)\n")
+	}
+	for _, line := range actLines {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	if len(missing) > 0 {
+		b.WriteString("missing (expected but not in actual):\n")
+		for _, line := range missing {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	if len(extra) > 0 {
+		b.WriteString("extra (actual but not in expected):\n")
+		for _, line := range extra {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// rowMatchesTyped is the per-row typed comparator used by ordered
+// mode. Returns true when every cell in `expected` matches the
+// corresponding cell in `actual` under the column's SQL type
+// (INT64/NUMERIC compare as numbers, FLOAT64 with epsilon, etc.).
+// Missing keys on either side are surfaced as mismatches so the
+// diff exposes column-name drift.
+func rowMatchesTyped(expected map[string]any, actual bqtypes.Row, cols []string, types []string) bool {
+	for i, col := range cols {
+		var actVal any
+		if i < len(actual.F) {
+			actVal = actual.F[i].V
+		}
+		expVal, hasExp := expected[col]
+		if !hasExp {
+			// Expected row lacks this column. If both sides are
+			// "missing" we treat it as NULL; otherwise it is a
+			// real divergence.
+			if actVal == nil {
+				continue
+			}
+			return false
+		}
+		fieldType := ""
+		if i < len(types) {
+			fieldType = types[i]
+		}
+		if !cellsEqual(expVal, actVal, fieldType) {
+			return false
+		}
+	}
+	// Reject extra keys on the expected side that the schema does
+	// not include; otherwise the fixture writer could pin a column
+	// the engine never returned and the diff would silently pass.
+	for k := range expected {
+		if !containsString(cols, k) {
+			return false
+		}
+	}
+	// Reject extra cells on the actual side that the schema does
+	// not enumerate (the gateway should never do this, but the
+	// belt-and-braces check keeps the diff honest if it does).
+	if len(actual.F) > len(cols) {
+		return false
+	}
+	return true
+}
+
+// cellsEqual is the type-aware cell equality predicate. It returns
+// false for NULL-vs-non-NULL pairs and otherwise delegates to a
+// per-type comparator. Fall-through for unknown types is the
+// string-form compare used by plan-40.
+func cellsEqual(expected, actual any, fieldType string) bool {
+	expIsNull := isNullExpected(expected)
+	actIsNull := actual == nil
+	if expIsNull && actIsNull {
+		return true
+	}
+	if expIsNull != actIsNull {
+		return false
+	}
+	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
+	case "INT64", "INTEGER", "NUMERIC", "BIGNUMERIC":
+		return numericEqual(expected, actual)
+	case "FLOAT64", "FLOAT":
+		return floatEqual(expected, actual)
+	case "BOOL", "BOOLEAN":
+		return boolEqual(expected, actual)
+	case "TIMESTAMP", "DATE", "DATETIME", "TIME":
+		return timeEqual(expected, actual)
+	case "STRING", "BYTES":
+		return stringForm(expected) == stringForm(actual)
+	default:
+		// Unknown / empty type (e.g. STRUCT/REPEATED at the top
+		// level, or the schema is absent): fall back to the
+		// plan-40 stringy compare so nothing regresses for the
+		// existing fixtures.
+		return stringForm(expected) == stringForm(actual)
+	}
+}
+
+// isNullExpected returns true when a YAML-decoded value is the
+// canonical NULL marker. Distinguishes between `nil` (YAML `null`)
+// and the literal string "NULL" (which a fixture would have to
+// quote explicitly).
+func isNullExpected(v any) bool {
+	if v == nil {
+		return true
+	}
+	return false
+}
+
+// numericEqual compares two values as exact rationals. INT64,
+// NUMERIC, and BIGNUMERIC all use this path so a YAML `1` matches
+// the wire `"1"` regardless of how either side wrote it. Returns
+// false when either side cannot be parsed as a rational.
+func numericEqual(expected, actual any) bool {
+	e := toRat(expected)
+	a := toRat(actual)
+	if e == nil || a == nil {
+		return false
+	}
+	return e.Cmp(a) == 0
+}
+
+// toRat best-effort parses a value into math/big.Rat. Integers,
+// floats, and strings of either are all accepted; everything else
+// returns nil so cellsEqual can flag a type drift instead of a
+// silent zero-vs-zero pass.
+func toRat(v any) *big.Rat {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case *big.Rat:
+		return x
+	case int:
+		return new(big.Rat).SetInt64(int64(x))
+	case int32:
+		return new(big.Rat).SetInt64(int64(x))
+	case int64:
+		return new(big.Rat).SetInt64(x)
+	case uint:
+		r := new(big.Rat)
+		r.SetUint64(uint64(x))
+		return r
+	case uint32:
+		r := new(big.Rat)
+		r.SetUint64(uint64(x))
+		return r
+	case uint64:
+		r := new(big.Rat)
+		r.SetUint64(x)
+		return r
+	case float32:
+		r := new(big.Rat)
+		r.SetFloat64(float64(x))
+		return r
+	case float64:
+		r := new(big.Rat)
+		r.SetFloat64(x)
+		return r
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return nil
+		}
+		if r, ok := new(big.Rat).SetString(s); ok {
+			return r
+		}
 		return nil
 	}
-	out := make([]string, len(schema.Fields))
-	for i, f := range schema.Fields {
-		out[i] = f.Name
-	}
-	return out
+	return nil
 }
 
-// normalizeExpectedRows turns the YAML-decoded expected rows into a
-// canonical `[]map[string]string` where values are the
-// `fmt.Sprint(...)` form (matching the wire's string-cell encoding).
-// Missing keys in the YAML map are reported as `<missing>` so the
-// diff is informative.
-func normalizeExpectedRows(rows []map[string]any, cols []string) []map[string]string {
-	out := make([]map[string]string, len(rows))
-	for i, r := range rows {
-		out[i] = canonicalizeRow(r, cols)
+// floatEqual compares two values as float64 with a relative
+// epsilon (floatRelEpsilon). Special-cases exact zero so an
+// expected-zero / actual-zero pair does not divide by zero.
+func floatEqual(expected, actual any) bool {
+	e, ok1 := toFloat(expected)
+	a, ok2 := toFloat(actual)
+	if !ok1 || !ok2 {
+		return false
 	}
-	return out
+	if math.IsNaN(e) || math.IsNaN(a) {
+		return math.IsNaN(e) && math.IsNaN(a)
+	}
+	if e == a {
+		return true
+	}
+	diff := math.Abs(e - a)
+	norm := math.Max(math.Abs(e), math.Abs(a))
+	if norm == 0 {
+		return diff <= floatRelEpsilon
+	}
+	return diff/norm <= floatRelEpsilon
 }
 
-// normalizeActualRows extracts each cell value from the BigQuery
-// wire shape (nested `f`/`v` arrays) and keys it by the schema's
-// column name. Nested STRUCT / REPEATED cells are JSON-encoded so
-// the diff stays one line per row.
-func normalizeActualRows(rows []bqtypes.Row, cols []string) []map[string]string {
-	out := make([]map[string]string, len(rows))
-	for i, r := range rows {
-		m := make(map[string]string, len(r.F))
-		for j, cell := range r.F {
-			name := positionalName(cols, j)
-			m[name] = cellString(cell.V)
+// toFloat parses a value into float64 best-effort. Strings of digit
+// literals are accepted (BigQuery's wire format encodes everything
+// as a string).
+func toFloat(v any) (float64, bool) {
+	switch x := v.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case uint:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	case string:
+		s := strings.TrimSpace(x)
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return 0, false
 		}
-		out[i] = m
+		return f, true
 	}
-	return out
+	return 0, false
 }
 
-// canonicalizeRow strings every value in the YAML expected map and,
-// if columns are known, fills missing columns with `<missing>` so the
-// diff shows the column-name divergence rather than silently passing.
-// Extra YAML keys not in cols are kept under their literal name so
-// fixtures cannot pin columns that the engine never returned.
-func canonicalizeRow(r map[string]any, cols []string) map[string]string {
-	out := make(map[string]string, len(r))
-	for k, v := range r {
-		out[k] = valueString(v)
+// boolEqual normalizes "true"/"false"/"1"/"0" forms (case
+// insensitive) before comparison. The YAML decoder gives us a real
+// bool; the wire gives us a string; the normalizer reconciles them.
+func boolEqual(expected, actual any) bool {
+	e, ok1 := toBool(expected)
+	a, ok2 := toBool(actual)
+	if !ok1 || !ok2 {
+		return false
 	}
-	for _, c := range cols {
-		if _, ok := out[c]; !ok {
-			out[c] = "<missing>"
+	return e == a
+}
+
+// toBool returns the canonical bool form for a value. Strings are
+// recognized as "true"/"false"/"t"/"f"/"1"/"0" (case insensitive);
+// integers as 0/non-zero; anything else returns ok=false.
+func toBool(v any) (bool, bool) {
+	switch x := v.(type) {
+	case bool:
+		return x, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(x)) {
+		case "true", "t", "1":
+			return true, true
+		case "false", "f", "0":
+			return false, true
 		}
+	case int:
+		return x != 0, true
+	case int32:
+		return x != 0, true
+	case int64:
+		return x != 0, true
 	}
-	return out
+	return false, false
 }
 
-// positionalName returns the column name at position i, falling back
-// to `col<i>` when the schema is absent or too short. The fallback
-// keeps the diff readable even when the gateway omits the schema
-// envelope (some `getQueryResults` paths do this; see
-// gateway/handlers/queries.go).
-func positionalName(cols []string, i int) string {
-	if i < len(cols) {
-		return cols[i]
+// timeEqual parses both sides as time.Time and compares for
+// instant-equality. Accepts RFC3339 with optional nanoseconds, the
+// SQL `YYYY-MM-DD HH:MM:SS[.fffffffff]` shape, plain dates, and the
+// Unix-seconds-as-string form BigQuery uses for TIMESTAMP on the
+// wire.
+func timeEqual(expected, actual any) bool {
+	e, ok1 := toTime(expected)
+	a, ok2 := toTime(actual)
+	if !ok1 || !ok2 {
+		return false
 	}
-	return fmt.Sprintf("col%d", i)
+	return e.Equal(a)
 }
 
-// cellString renders one cell value as a comparable string. Scalars
-// already come back as strings on the BigQuery wire; nested objects
-// (STRUCT cells and REPEATED arrays) are JSON-encoded so the diff
-// keeps one row per line.
-func cellString(v any) string {
+var timeFormats = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05.999999999 MST",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+	"15:04:05.999999999",
+	"15:04:05",
+}
+
+// toTime parses a value into time.Time. Returns ok=false when no
+// recognized format matches.
+func toTime(v any) (time.Time, bool) {
+	switch x := v.(type) {
+	case nil:
+		return time.Time{}, false
+	case time.Time:
+		return x, true
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return time.Time{}, false
+		}
+		for _, f := range timeFormats {
+			if t, err := time.Parse(f, s); err == nil {
+				return t.UTC(), true
+			}
+		}
+		// Unix-seconds-as-string is BigQuery's wire form for
+		// TIMESTAMP; parse and split into sec + nsec rather
+		// than going through float (which loses precision past
+		// microseconds).
+		if dot := strings.Index(s, "."); dot >= 0 {
+			secStr, fracStr := s[:dot], s[dot+1:]
+			if sec, err := strconv.ParseInt(secStr, 10, 64); err == nil {
+				// Pad / truncate the fractional part to 9
+				// digits so ParseInt sees a clean nsec.
+				if len(fracStr) > 9 {
+					fracStr = fracStr[:9]
+				}
+				for len(fracStr) < 9 {
+					fracStr += "0"
+				}
+				if nsec, err := strconv.ParseInt(fracStr, 10, 64); err == nil {
+					return time.Unix(sec, nsec).UTC(), true
+				}
+			}
+		}
+		if sec, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return time.Unix(sec, 0).UTC(), true
+		}
+	case int:
+		return time.Unix(int64(x), 0).UTC(), true
+	case int64:
+		return time.Unix(x, 0).UTC(), true
+	case float64:
+		sec := int64(x)
+		nsec := int64((x - float64(sec)) * 1e9)
+		return time.Unix(sec, nsec).UTC(), true
+	}
+	return time.Time{}, false
+}
+
+// stringForm returns the canonical scalar string for the diff
+// renderer. Mirrors plan-40 behaviour for STRING/BYTES, with the
+// NULL sentinel kept distinct from the literal string "NULL".
+func stringForm(v any) string {
 	if v == nil {
-		return "NULL"
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	// Anything else (a map for STRUCT, a slice for REPEATED) gets
-	// the JSON representation; deterministic enough for diffs and
-	// roundtrips cleanly through `json.Marshal`.
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(b)
-}
-
-// valueString renders a YAML-decoded expected value as the same
-// stringy form `cellString` emits, so the two sides can compare for
-// equality without type drift.
-func valueString(v any) string {
-	if v == nil {
-		return "NULL"
+		return "<NULL>"
 	}
 	switch x := v.(type) {
 	case string:
@@ -161,54 +635,150 @@ func valueString(v any) string {
 	}
 }
 
-// rowsEqual is a strict map equality check on the canonical row form.
-func rowsEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
+// schemaColumns returns the schema's column names in declared order
+// (mirrors the plan-40 helper).
+func schemaColumns(schema *bqtypes.TableSchema) []string {
+	if schema == nil {
+		return nil
 	}
-	for k, v := range a {
-		if bv, ok := b[k]; !ok || bv != v {
-			return false
-		}
-	}
-	return true
-}
-
-// renderRows turns a slice of canonical rows into a deterministic
-// multi-line string for the unified diff: one row per line, keys in
-// alphabetical order so the output is byte-stable.
-func renderRows(rows []map[string]string) []string {
-	out := make([]string, 0, len(rows))
-	for i, r := range rows {
-		keys := make([]string, 0, len(r))
-		for k := range r {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		var b strings.Builder
-		fmt.Fprintf(&b, "row %d: {", i)
-		for j, k := range keys {
-			if j > 0 {
-				b.WriteString(", ")
-			}
-			fmt.Fprintf(&b, "%s=%q", k, r[k])
-		}
-		b.WriteString("}")
-		out = append(out, b.String())
+	out := make([]string, len(schema.Fields))
+	for i, f := range schema.Fields {
+		out[i] = f.Name
 	}
 	return out
 }
 
-// unifiedDiff is a minimal expected-vs-actual diff renderer. Not a
-// full Myers diff (we do not need O(n+m) here -- conformance row
-// counts are small and a side-by-side listing is more legible than
-// a hunk-grouped diff). Format:
-//
-//	expected:
-//	  row 0: {...}
-//	  row 1: {...}
-//	actual:
-//	  row 0: {...}
+// schemaTypes returns the schema's column types in declared order.
+// Empty when the schema is nil so callers can rely on positional
+// lookup without bounds-checking.
+func schemaTypes(schema *bqtypes.TableSchema) []string {
+	if schema == nil {
+		return nil
+	}
+	out := make([]string, len(schema.Fields))
+	for i, f := range schema.Fields {
+		out[i] = f.Type
+	}
+	return out
+}
+
+// positionalName returns the column name at position i, falling
+// back to `col<i>` when the schema is absent or too short.
+func positionalName(cols []string, i int) string {
+	if i < len(cols) {
+		return cols[i]
+	}
+	return fmt.Sprintf("col%d", i)
+}
+
+// canonicalExpectedRow renders an expected row into its
+// type-normalized one-line form (sorted by column name) so the
+// unordered bucketing can compare it byte-for-byte.
+func canonicalExpectedRow(r map[string]any, cols []string, types []string) string {
+	pairs := make([]string, 0, len(cols)+len(r))
+	seen := make(map[string]bool, len(cols))
+	for i, c := range cols {
+		ft := ""
+		if i < len(types) {
+			ft = types[i]
+		}
+		v, ok := r[c]
+		if !ok {
+			pairs = append(pairs, c+"=<missing>")
+		} else {
+			pairs = append(pairs, fmt.Sprintf("%s=%s", c, canonicalCell(v, ft)))
+		}
+		seen[c] = true
+	}
+	// Surface stray expected columns that the schema does not
+	// know about so the diff exposes the divergence.
+	extras := make([]string, 0)
+	for k := range r {
+		if !seen[k] {
+			extras = append(extras, k)
+		}
+	}
+	sort.Strings(extras)
+	for _, k := range extras {
+		pairs = append(pairs, fmt.Sprintf("%s=%s", k, canonicalCell(r[k], "")))
+	}
+	return "{" + strings.Join(pairs, ", ") + "}"
+}
+
+// canonicalActualRow renders one wire-format row into the same
+// canonical form `canonicalExpectedRow` emits.
+func canonicalActualRow(r bqtypes.Row, cols []string, types []string) string {
+	pairs := make([]string, 0, len(r.F))
+	for i, cell := range r.F {
+		name := positionalName(cols, i)
+		ft := ""
+		if i < len(types) {
+			ft = types[i]
+		}
+		pairs = append(pairs, fmt.Sprintf("%s=%s", name, canonicalCell(cell.V, ft)))
+	}
+	return "{" + strings.Join(pairs, ", ") + "}"
+}
+
+// canonicalCell renders one value into its type-normalized text
+// form. The result is what both sides of the unordered multiset
+// bucket on, so the implementation must be deterministic across
+// "1" vs 1, "true" vs true, 1.0 vs "1.0", etc.
+func canonicalCell(v any, fieldType string) string {
+	if v == nil {
+		return "<NULL>"
+	}
+	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
+	case "INT64", "INTEGER", "NUMERIC", "BIGNUMERIC":
+		if r := toRat(v); r != nil {
+			return r.RatString()
+		}
+	case "FLOAT64", "FLOAT":
+		if f, ok := toFloat(v); ok {
+			// 12 significant digits absorbs ~1e-12 relative
+			// drift; ordered-mode epsilon still applies for
+			// tighter tolerances.
+			return strconv.FormatFloat(f, 'g', 12, 64)
+		}
+	case "BOOL", "BOOLEAN":
+		if b, ok := toBool(v); ok {
+			if b {
+				return "true"
+			}
+			return "false"
+		}
+	case "TIMESTAMP", "DATE", "DATETIME", "TIME":
+		if t, ok := toTime(v); ok {
+			return t.UTC().Format(time.RFC3339Nano)
+		}
+	}
+	return stringForm(v)
+}
+
+// renderExpectedRows is the diff-rendering helper for the ordered
+// path. Mirrors the plan-40 layout (one row per line, sorted keys)
+// so the new typed diff stays scannable.
+func renderExpectedRows(rows []map[string]any, cols []string, types []string) []string {
+	out := make([]string, 0, len(rows))
+	for i, r := range rows {
+		out = append(out, fmt.Sprintf("row %d: %s", i, canonicalExpectedRow(r, cols, types)))
+	}
+	return out
+}
+
+// renderActualRows is the diff-rendering helper for the actual side.
+func renderActualRows(rows []bqtypes.Row, cols []string, types []string) []string {
+	out := make([]string, 0, len(rows))
+	for i, r := range rows {
+		out = append(out, fmt.Sprintf("row %d: %s", i, canonicalActualRow(r, cols, types)))
+	}
+	return out
+}
+
+// unifiedDiff is the side-by-side expected-vs-actual renderer used
+// for the ordered-mode mismatch path. See plan-40 for the rationale
+// of not running a full Myers diff: fixture row counts are small and
+// a side-by-side listing is more legible than a hunk-grouped diff.
 func unifiedDiff(expected, actual []string) string {
 	var b strings.Builder
 	b.WriteString("expected:\n")
@@ -267,9 +837,9 @@ func errorDiff(expected ExpectedError, status int, body []byte) string {
 	return ""
 }
 
-// snippet truncates a body for inclusion in a diff message; the body
-// can be large (the engine emits ZetaSQL parse-error pointers) and
-// we want the diff to stay scannable.
+// snippet truncates a body for inclusion in a diff message; the
+// body can be large (the engine emits ZetaSQL parse-error pointers)
+// and we want the diff to stay scannable.
 func snippet(b []byte) string {
 	const limit = 240
 	s := strings.TrimSpace(string(b))
@@ -277,4 +847,13 @@ func snippet(b []byte) string {
 		s = s[:limit] + "..."
 	}
 	return s
+}
+
+func containsString(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if h == needle {
+			return true
+		}
+	}
+	return false
 }
