@@ -4,10 +4,10 @@ overview: "Phase 9c: profile docs, --version flags, README release section."
 todos:
   - id: profile-docs
     content: "Document --profile=ci|duckdb|dev in README and ROADMAP Phase 9"
-    status: pending
+    status: completed
   - id: version-flag
     content: "Add --version to gateway and emulator_main with git sha + semver ldflags"
-    status: pending
+    status: completed
 isProject: false
 ---
 

@@ -139,7 +139,7 @@ todos:
     status: completed
   - id: run-45-profile-docs-version
     content: "Run profile-docs-version_q4b5c6d7.plan.md"
-    status: pending
+    status: completed
 isProject: false
 ---
 
