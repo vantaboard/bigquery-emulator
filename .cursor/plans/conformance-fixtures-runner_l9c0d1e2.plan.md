@@ -4,10 +4,10 @@ overview: "Phase 8a: fixture layout and conformance runner CLI."
 todos:
   - id: fixture-layout
     content: "Add conformance/fixtures/ YAML cases: setup, query, expected rows/error, profile tags"
-    status: pending
+    status: completed
   - id: runner-cli
     content: "Add conformance/cmd/runner: start emulator or connect, run fixture lifecycle, diff results"
-    status: pending
+    status: completed
 isProject: false
 ---
 

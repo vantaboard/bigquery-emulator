@@ -124,7 +124,7 @@ todos:
     status: completed
   - id: run-40-conformance-fixtures-runner
     content: "Run conformance-fixtures-runner_l9c0d1e2.plan.md"
-    status: pending
+    status: completed
   - id: run-41-conformance-diff-ci
     content: "Run conformance-diff-ci_m0d1e2f3.plan.md"
     status: pending
