@@ -111,9 +111,23 @@ type emulatorEnv struct {
 	httpServer *httptest.Server
 	client     *engine.Client
 	cmd        *exec.Cmd
+	// engineAddr is the `host:port` the engine subprocess is listening
+	// on for its gRPC surface (Catalog + Query + StorageRead). The
+	// gateway's REST handlers reach it via `client`; tests that drive
+	// the engine directly (plan 39 StorageRead integration) dial this
+	// address to open their own channel.
+	engineAddr string
 }
 
 func (e *emulatorEnv) URL() string { return e.httpServer.URL }
+
+// EngineAddress returns the `host:port` for the engine subprocess's
+// gRPC server. Plan 39's StorageRead E2E uses this to open a
+// dedicated channel that mirrors the way real BigQuery clients dial
+// the Storage Read endpoint (which is a separate gRPC service from
+// the REST surface, so the gateway does not proxy it — see
+// `docs/REST_API.md#storage-read-api`).
+func (e *emulatorEnv) EngineAddress() string { return e.engineAddr }
 
 func (e *emulatorEnv) tearDown() {
 	e.httpServer.Close()
@@ -222,7 +236,12 @@ func startEmulatorWithFlags(t *testing.T, flags emulatorFlags) *emulatorEnv {
 	handler := gateway.NewServer(gateway.Options{}, client)
 	httpServer := httptest.NewServer(handler)
 
-	env := &emulatorEnv{httpServer: httpServer, client: client, cmd: cmd}
+	env := &emulatorEnv{
+		httpServer: httpServer,
+		client:     client,
+		cmd:        cmd,
+		engineAddr: addr,
+	}
 	t.Cleanup(env.tearDown)
 	return env
 }
