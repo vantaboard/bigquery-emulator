@@ -1,0 +1,53 @@
+# Parked semantic-release configuration.
+#
+# THIS CONFIG IS NOT WIRED TO ANY GITHUB ACTIONS WORKFLOW TODAY. The
+# project's plan-44 release posture (see HANDOFF.md §6 and the
+# `.cursor/plans/goreleaser-release_p3a4b5c6.plan.md` addendum) is
+# manual tag pushes:
+#
+#   git tag -a v0.0.1 -m 'release: v0.0.1 (preview)'
+#   git push origin v0.0.1
+#
+# The tag push triggers `.github/workflows/release.yml`, which builds
+# the engine, publishes the Docker runtime image to GHCR, and runs
+# goreleaser to upload the gateway archives + checksums.
+#
+# This file exists so:
+#   1. The conventional-commits format documented in
+#      `.cursor/rules/auto-commit.mdc` (`feat(...)`, `fix(...)`, etc.,
+#      with `BREAKING CHANGE` footer) has a parked schema describing
+#      how it eventually maps to a release.
+#   2. When the project flips to auto-release on push to `main`, the
+#      switch is one commit (a new
+#      `.github/workflows/semantic-release.yml` running
+#      `npx semantic-release`) instead of also re-deciding the
+#      conventional-commits preset, branch list, and tag format.
+#
+# Until then: do NOT run `semantic-release` from CI; the goreleaser
+# workflow owns publishing. If you need to verify this file's schema,
+# run `npx --yes semantic-release@24 verify` against this config — it
+# will require a GH_TOKEN and access to the repo, but it will validate
+# the plugin chain.
+
+branches:
+  - main
+
+# `conventionalcommits` aligns with the format in
+# `.cursor/rules/auto-commit.mdc` (feat/fix/refactor/style/docs/test/chore
+# scopes plus `BREAKING CHANGE`/`BREAKING CHANGES`/`BREAKING` footers).
+preset: conventionalcommits
+tagFormat: 'v${version}'
+
+plugins:
+  - "@semantic-release/commit-analyzer"
+  - "@semantic-release/release-notes-generator"
+  # `@semantic-release/github` posts the rendered release notes to a
+  # GitHub release. The `successComment` / `failComment` flags are
+  # disabled because the project does not use issues to track release
+  # progress; `releasedLabels` is disabled for the same reason. When
+  # the auto-release workflow flips on it can override these for a
+  # specific release pipeline.
+  - - "@semantic-release/github"
+    - successComment: false
+      failComment: false
+      releasedLabels: false
