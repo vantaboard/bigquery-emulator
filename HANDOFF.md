@@ -230,6 +230,30 @@ PLAN_RESULT/PLAN_ID/COMMITS/NOTES sentinel block.
 
 After plan 45 the orchestrator should print a summary (total commits, wall time, next-step pointers) and stop.
 
+### 6.1 Release / distribution posture (set by plan 44)
+
+The user-confirmed decisions for plan 44 are **frozen**; do not
+re-litigate without explicit user input:
+
+| Knob | Decision |
+|------|----------|
+| Tag scheme | **Manual seed.** `v0.0.1` is the first cut. Releases are triggered by `git tag -a vX.Y.Z && git push origin vX.Y.Z`; the tag push fires [`.github/workflows/release.yml`](./.github/workflows/release.yml). The semantic-release config at [`.releaserc.yml`](./.releaserc.yml) is **parked**, not active — it documents the conventional-commits format we already use (see `.cursor/rules/auto-commit.mdc`) and is a one-commit flip away from being wired to a `push: branches: [main]` workflow when the project chooses to auto-release. **Do not** wire that workflow before the user explicitly opts in. |
+| GHCR target | `ghcr.io/vantaboard/bigquery-emulator`. The release workflow lowercases the owner via `tr '[:upper:]' '[:lower:]'` before passing it to `docker/metadata-action@v5`. |
+| Docker tags | Full SemVer trinity + `latest` per release (`vX.Y.Z`, `vX.Y`, `vX`, `latest`). `latest` is suppressed for pre-release tags (`v0.0.1-rc1`) via the `!contains(github.ref, '-')` predicate. |
+| Engine binary | **`linux/amd64` only.** The release workflow builds it once via `task emulator:build-engine:bazel` and goreleaser bundles `bin/emulator_main` + `bin/libduckdb.so` into all four gateway archives (linux/{amd64,arm64} + darwin/{amd64,arm64}). The release notes header + README §Releases call out that non-linux/amd64 callers must use the published Docker image (`ghcr.io/vantaboard/bigquery-emulator:vX.Y.Z`) or supply their own engine. |
+| Trigger | `on: push: tags: ['v*']` plus `workflow_dispatch` with an `inputs.ref` to re-run a previously pushed tag without re-tagging. |
+
+Helper task list:
+
+- `task release:check` — `goreleaser check` (offline schema validation).
+- `task release:snapshot` — `goreleaser release --snapshot --clean`. Requires `bin/emulator_main` + `bin/libduckdb.so`; the goreleaser `before.hooks` block on those existing.
+- `task release:tag VERSION=v0.0.1` — print-only by default; pass `CONFIRM=yes` to actually run `git tag -a … && git push origin …`.
+
+When plan 45 lands, the gateway will gain a real `--version` flag.
+The `-X main.version=…` ldflags injected by `.goreleaser.yml` are
+forward-compatible no-ops until that flag exists; nothing in plan 44
+needs to change when plan 45 wires the variable.
+
 ---
 
 ## 7. Key reference files (skim these as needed)
@@ -239,7 +263,8 @@ After plan 45 the orchestrator should print a summary (total commits, wall time,
 - [`.cursor/rules/pre-commit-lint.mdc`](.cursor/rules/pre-commit-lint.mdc) — when to gate commits on lint vs. when to skip.
 - [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — per-plan progress + dependency graph.
 - [`MODULE.bazel`](MODULE.bazel), [`.bazelrc`](.bazelrc), [`.bazelversion`](.bazelversion) — Bazel + GoogleSQL toolchain wiring.
-- [`Taskfile.yml`](Taskfile.yml) — `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`.
+- [`Taskfile.yml`](Taskfile.yml) — `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`, `task release:*`.
+- [`.goreleaser.yml`](.goreleaser.yml), [`.releaserc.yml`](.releaserc.yml), [`.github/workflows/release.yml`](.github/workflows/release.yml) — release path (plan 44 deliverables; see §6.1).
 - [`mise.toml`](mise.toml), `.envrc` — toolchain pins (Go, golangci-lint, cmake, ninja, clang, bazel-via-bazelisk). `direnv` exposes them.
 - `/home/brighten-tompkins/Code/go-googlesql/` — sibling GoogleSQL checkout; `MODULE.bazel` `local_path_override`s to it. Its `.envrc` was the reference for tooling setup.
 
