@@ -40,6 +40,13 @@ bazelisk = "1.27.0"
 protoc = "35.0"
 buf    = "1.69.0"
 
+# Release tooling. `goreleaser` cuts the gateway archives + checksums
+# (see `.goreleaser.yml`) and is invoked by `task release:snapshot`
+# locally and by `goreleaser-action@v6` in `.github/workflows/release.yml`
+# on tag push. Pinning here keeps the local snapshot path matched to
+# the workflow's installed version.
+goreleaser = "2.16.0"
+
 # Miscellaneous.
 gcloud     = "568.0.0"     # For poking real BigQuery while debugging parity.
 shellcheck = "0.11.0"      # Used by `task lint:shell` on docker/*.sh.

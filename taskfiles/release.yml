@@ -1,0 +1,125 @@
+# Release helpers (plan 44, phase 9b).
+#
+# Today releases are cut by hand: tag the commit with `vX.Y.Z` and
+# push the tag. The push triggers `.github/workflows/release.yml`,
+# which builds the engine binary, publishes the runtime Docker image
+# to GHCR, and runs goreleaser to upload the gateway archives +
+# checksums to the GitHub release page. The semantic-release config
+# at `.releaserc.yml` is parked for the eventual automatic-release
+# flip; see HANDOFF.md §6 for the migration plan.
+#
+# Local sanity targets (these never push):
+#   task release:check     - `goreleaser check` on .goreleaser.yml
+#   task release:snapshot  - `goreleaser release --snapshot --clean`
+#                            (requires bin/emulator_main +
+#                             bin/libduckdb.so; run
+#                             `task emulator:build-engine:bazel`
+#                             first)
+#   task release:tag VERSION=v0.0.1
+#                          - prints + (with CONFIRM=yes) executes the
+#                            git tag + git push commands. The default
+#                            is print-only so the operator can paste
+#                            and inspect before pushing.
+#
+# `goreleaser` is sourced from `mise.toml` (see [tools]); fresh
+# checkouts get it via `mise install` / `task tools:install`.
+version: "3"
+
+vars:
+  GORELEASER:
+    sh: command -v goreleaser || echo goreleaser
+  RELEASE_DIST: dist
+
+tasks:
+  default:
+    desc: List release helper tasks
+    cmds:
+      - task --list-all | grep '^* release:'
+    silent: true
+
+  check:
+    desc: Validate .goreleaser.yml schema (offline)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        {{.GORELEASER}} check
+
+  snapshot:
+    desc: Build a snapshot release locally (no publish, no tag required)
+    cmds:
+      # Wrapped in bash so set -eo pipefail + the precondition guard
+      # land in a real bash shell. Task's mvdan/sh shell is fine for
+      # most things but the multi-line guard block reads cleaner here.
+      - |
+        bash -c '
+          set -eo pipefail
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+
+          if [ ! -x bin/emulator_main ] || [ ! -f bin/libduckdb.so ]; then
+            echo "release:snapshot: bin/emulator_main and/or bin/libduckdb.so missing." >&2
+            echo "The .goreleaser.yml before.hooks will block the build until those" >&2
+            echo "files exist (engine binary is linux/amd64 only and is bundled into" >&2
+            echo "every archive). Stage them first:" >&2
+            echo "" >&2
+            echo "  task emulator:build-engine:bazel" >&2
+            echo "" >&2
+            exit 1
+          fi
+
+          {{.GORELEASER}} release --snapshot --clean
+        '
+
+  tag:
+    desc: Print (and with CONFIRM=yes execute) the git-tag + git-push commands for a release cut.
+    vars:
+      VERSION: '{{.VERSION | default ""}}'
+      CONFIRM: '{{.CONFIRM | default "no"}}'
+    cmds:
+      - |
+        bash -c '
+          set -eo pipefail
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+
+          version="{{.VERSION}}"
+          confirm="{{.CONFIRM}}"
+
+          if [ -z "$version" ]; then
+            echo "release:tag requires VERSION=vX.Y.Z (got empty)" >&2
+            exit 2
+          fi
+          case "$version" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "release:tag VERSION=$version does not look like vX.Y.Z" >&2
+              exit 2
+              ;;
+          esac
+
+          if git rev-parse --quiet --verify "refs/tags/$version" >/dev/null 2>&1; then
+            echo "release:tag: tag $version already exists locally; aborting" >&2
+            exit 3
+          fi
+
+          message="release: $version"
+
+          echo "Would run:"
+          echo "  git tag -a $version -m \"$message\""
+          echo "  git push origin $version"
+          echo
+          echo "Tag push triggers .github/workflows/release.yml (GHCR + goreleaser)."
+
+          if [ "$confirm" = "yes" ]; then
+            echo
+            echo "CONFIRM=yes: executing now."
+            git tag -a "$version" -m "$message"
+            git push origin "$version"
+          else
+            echo
+            echo "Re-run with CONFIRM=yes to actually push:"
+            echo "  task release:tag VERSION=$version CONFIRM=yes"
+          fi
+        '

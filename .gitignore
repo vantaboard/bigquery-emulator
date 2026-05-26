@@ -4,6 +4,7 @@ cloud-spanner-emulator/
 # Build outputs
 /bin/
 /build-out/
+/dist/
 /out/
 /tmp/
 *.o
