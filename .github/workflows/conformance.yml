@@ -1,0 +1,123 @@
+# Conformance matrix CI for the BigQuery emulator.
+#
+# Runs `task conformance:run` against every seed fixture under
+# `conformance/fixtures/` for each engine + storage profile in
+# parallel. Each profile produces its own JSON report which is
+# uploaded as a workflow artifact (`conformance-<profile>.json`) so a
+# divergence between profiles is auditable after the run.
+#
+# Triggers mirror `.github/workflows/ci.yml`: pull requests against
+# any branch and pushes to `main`. The workflow stays in its own
+# file (rather than folding into ci.yml) so the conformance lane
+# does not block the build/test gate when an engine bug surfaces
+# only through the fixture diff -- and vice versa: a build break
+# does not mask a conformance regression.
+#
+# The C++ engine binary is built fresh via
+# `task emulator:build-engine:bazel`, which links the full GoogleSQL
+# + reference_impl + DuckDB + gRPC stack. We piggy-back on the same
+# Bazel + repository caches the `ci.yml` workflow uses (via
+# `bazel-contrib/setup-bazel`) so a cold start lands somewhere near
+# the build-and-test job's wall-clock budget; subsequent runs hit
+# the warm cache.
+
+name: conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: conformance (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [memory, duckdb]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            cmake \
+            make \
+            ninja-build \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      # The full GoogleSQL build keys a multi-GB Bazel cache. Share
+      # it across runs (per-branch via setup-bazel's disk-cache
+      # group) so the conformance matrix's cold-start budget stays
+      # close to ci.yml's warm-cache budget.
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          disk-cache: conformance
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (for local_path_override)
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: 2026.01.1
+          path: googlesql-sibling
+
+      - name: Stage googlesql at ../googlesql
+        run: |
+          mv googlesql-sibling ../googlesql
+          # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
+          # strict semver parser ("leading zero"); see the long note
+          # at the top of //MODULE.bazel for the rationale. Mirror the
+          # ci.yml workflow's patch.
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
+        run: task emulator:build-engine:bazel
+
+      - name: Run conformance fixtures
+        run: |
+          task conformance:run \
+            PROFILE=${{ matrix.profile }} \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-${{ matrix.profile }}.json
+
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-${{ matrix.profile }}
+          path: conformance-${{ matrix.profile }}.json
+          if-no-files-found: warn
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true

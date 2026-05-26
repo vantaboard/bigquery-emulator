@@ -10,8 +10,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -48,6 +50,7 @@ func run() error {
 		connect         = fs.String("connect", "", "HOST:PORT of an already-running engine to dial instead of spawning emulator_main")
 		updateBaselines = fs.Bool("update-baselines", false, "overwrite each fixture's expected: block with the captured response (bootstrap mode)")
 		output          = fs.String("output", "text", "output format: text or json")
+		outputFile      = fs.String("output-file", "", "if non-empty, write the rendered report to this file (atomic write) in addition to stdout")
 		profiles        stringSliceFlag
 		showHelp        = fs.Bool("help", false, "print usage and exit")
 	)
@@ -97,6 +100,42 @@ shape.`)
 		*engineBinary = ""
 	}
 
+	// When --output-file is set, tee the renderer output into a
+	// sibling tmp file and atomically rename it on the way out so
+	// the CI consumer can upload the JSON artifact without juggling
+	// shell redirects.
+	//
+	// We rename regardless of whether the runner returned an error
+	// or reported a non-zero exit code (fixture mismatch): the
+	// artifact is still the most useful diagnostic the workflow
+	// has on hand. Only a CreateTemp failure (out of disk, perm
+	// denied) short-circuits before any data lands.
+	var (
+		runnerStdout io.Writer = os.Stdout
+		tmpFile      *os.File
+		tmpName      string
+	)
+	if *outputFile != "" {
+		dir := filepath.Dir(*outputFile)
+		if dir == "" {
+			dir = "."
+		}
+		tmp, err := os.CreateTemp(dir, ".conformance-runner-*.tmp")
+		if err != nil {
+			return fmt.Errorf("create --output-file tmp: %w", err)
+		}
+		tmpFile = tmp
+		tmpName = tmp.Name()
+		runnerStdout = io.MultiWriter(os.Stdout, tmpFile)
+		defer func() {
+			_ = tmpFile.Close()
+			if err := os.Rename(tmpName, *outputFile); err != nil {
+				fmt.Fprintln(os.Stderr, "runner: rename --output-file:", err)
+				_ = os.Remove(tmpName)
+			}
+		}()
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -123,7 +162,7 @@ shape.`)
 		Profiles:        []string(profiles),
 		UpdateBaselines: *updateBaselines,
 		Output:          *output,
-		Out:             os.Stdout,
+		Out:             runnerStdout,
 		Err:             os.Stderr,
 	})
 	if err != nil {

@@ -14,17 +14,26 @@ task emulator:build-engine:bazel
 
 # 2. Run every fixture in conformance/fixtures against both profiles,
 #    spawning a fresh emulator per fixture × profile.
-go run ./conformance/cmd/runner
+task conformance:run
+# (equivalent to `go run ./conformance/cmd/runner`)
 
-# 3. Run a single fixture against a single profile, against an
-#    emulator you have already booted on :9060.
+# 3. Restrict the matrix to one or more profiles. PROFILE is a
+#    comma-separated list; each entry maps to a single --profile flag.
+task conformance:run PROFILE=memory
+task conformance:run PROFILE=memory,duckdb
+
+# 4. Run a single fixture file. Honors PROFILE too.
+task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
+
+# 5. JSON output for CI consumption (plan 41 hooks this).
+task conformance:run OUTPUT=json OUTPUT_FILE=conformance-result.json
+
+# 6. Reach an already-running gateway on :9060 instead of spawning
+#    emulator_main subprocesses (faster dev loop).
 go run ./conformance/cmd/runner \
   --fixtures conformance/fixtures/select_literal_value.yaml \
   --profile memory \
   --connect 127.0.0.1:9060
-
-# 4. JSON output for CI consumption (plan 41 hooks this).
-go run ./conformance/cmd/runner --output json
 ```
 
 ## Profile matrix
@@ -233,6 +242,11 @@ Flags:
                           fixtures (plan 42 leans on this).
   --output FORMAT         text (human, default) or json (machine,
                           consumed by plan 41 CI).
+  --output-file PATH      If non-empty, tee the rendered report into
+                          this file (atomic write via a sibling tmp +
+                          rename) in addition to stdout. Used by the
+                          CI workflow to capture per-profile JSON
+                          artifacts.
 ```
 
 Exit codes:

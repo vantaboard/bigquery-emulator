@@ -1,0 +1,99 @@
+# Conformance harness wrapper. Drives `go run
+# ./conformance/cmd/runner` with the project's conventions baked in:
+# the engine binary lives at ./bin/emulator_main (staged by
+# `task emulator:build-engine:bazel`), the seed fixtures live under
+# conformance/fixtures, and the matrix iterates both `memory` +
+# `duckdb` profiles by default. Plan 41 wires this into CI.
+#
+# Usage:
+#   task conformance:run                       # all fixtures, both profiles
+#   task conformance:run PROFILE=memory        # subset
+#   task conformance:run PROFILE=memory,duckdb # explicit matrix
+#   task conformance:run OUTPUT=json OUTPUT_FILE=/tmp/r.json
+#   task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
+#
+# Environment overrides:
+#   EMULATOR_BIN   path to emulator_main (default ./bin/emulator_main)
+#   FIXTURES       directory or single .yaml (default conformance/fixtures)
+#   OUTPUT         text | json (default text)
+#   OUTPUT_FILE    if set, tee renderer output into this file too
+#   PROFILE        comma-separated subset (default: all known profiles)
+version: "3"
+
+vars:
+  EMULATOR_BIN:
+    sh: echo "${EMULATOR_BIN:-./bin/emulator_main}"
+  FIXTURES:
+    sh: echo "${FIXTURES:-conformance/fixtures}"
+  OUTPUT:
+    sh: echo "${OUTPUT:-text}"
+  OUTPUT_FILE:
+    sh: echo "${OUTPUT_FILE:-}"
+  PROFILE:
+    sh: echo "${PROFILE:-}"
+
+tasks:
+  default:
+    desc: List conformance helper tasks
+    cmds:
+      - task --list-all | grep '^* conformance:'
+    silent: true
+
+  run:
+    desc: Run conformance fixtures against EMULATOR_BIN. Honors PROFILE, FIXTURES, OUTPUT, OUTPUT_FILE.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        # Comma-separated PROFILE list expands to repeated
+        # --profile flags. Empty means "all known profiles" so
+        # the runner picks them up from KnownProfiles().
+        PROFILE_FLAGS=""
+        if [ -n "{{.PROFILE}}" ]; then
+          for p in $(echo "{{.PROFILE}}" | tr ',' ' '); do
+            PROFILE_FLAGS="$PROFILE_FLAGS --profile $p"
+          done
+        fi
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures "{{.FIXTURES}}" \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          $PROFILE_FLAGS \
+          $OUTPUT_FILE_FLAG
+
+  run-fixture:
+    desc: Run a single fixture (FIXTURE=path/to/fixture.yaml). Honors PROFILE.
+    vars:
+      FIXTURE: '{{.FIXTURE | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        if [ -z "{{.FIXTURE}}" ]; then
+          echo "task conformance:run-fixture requires FIXTURE=path/to/fixture.yaml" >&2
+          exit 2
+        fi
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        PROFILE_FLAGS=""
+        if [ -n "{{.PROFILE}}" ]; then
+          for p in $(echo "{{.PROFILE}}" | tr ',' ' '); do
+            PROFILE_FLAGS="$PROFILE_FLAGS --profile $p"
+          done
+        fi
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures "{{.FIXTURE}}" \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          $PROFILE_FLAGS \
+          $OUTPUT_FILE_FLAG

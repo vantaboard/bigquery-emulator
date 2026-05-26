@@ -16,6 +16,7 @@ includes:
   tools: ./taskfiles/tools.yml
   proto: ./taskfiles/proto.yml
   bazel: ./taskfiles/bazel.yml
+  conformance: ./taskfiles/conformance.yml
 
 tasks:
   default:
