@@ -4,7 +4,11 @@ The conformance harness drives the BigQuery emulator through its REST
 gateway with declarative YAML fixtures and diffs the resulting rows (or
 errors) against the values pinned in each file. The harness is Phase 8
 of `ROADMAP.md`; the runner CLI is the deliverable of plan 40
-(`conformance-fixtures-runner`).
+(`conformance-fixtures-runner`) and the seed fixture set is plan 42
+(`conformance-seed-docs`). At time of writing the directory contains
+**24 fixtures** spanning SELECT shapes, GROUP BY / aggregates, JOINs,
+DML, structural errors, DDL, and a schema-only smoke check; see the
+"Contributing a new fixture" section below to add more.
 
 ## Quick start
 
@@ -283,19 +287,166 @@ Exit codes:
 short-form reason; `diff` (only present on `FAIL`) carries the unified
 diff of expected vs actual.
 
-## Adding fixtures
+## Contributing a new fixture
+
+This section walks through the end-to-end workflow for adding one
+new fixture. The seed set already covers the broad categories
+(SELECT shapes, GROUP BY / aggregates, JOINs, DML, structural
+errors, DDL, schema-only); a new fixture is justified when it pins
+a *new* construct or a *new* failure mode the existing set does not
+already exercise.
+
+### 1. Pick a category and name
+
+Use the filename pattern `<category>_<feature>.yaml` so a directory
+listing groups related fixtures together. Categories already in
+use (skim the existing files before naming):
+
+| Category prefix | Examples |
+|---|---|
+| `select_` | `select_literal_value`, `select_where_clause`, `select_case_expression` |
+| `aggregate_` | `aggregate_count_star`, `aggregate_count_distinct` |
+| `groupby_` | `groupby_count`, `groupby_having` |
+| `join_` | `join_inner`, `join_left_outer` |
+| `dml_` | `insert_then_select`, `dml_update_delete`, `dml_delete_where_predicate` |
+| `ddl_` | `ddl_create_table_as_select`, `ddl_drop_table_then_select` |
+| `error_` | `error_invalid_sql`, `error_unknown_table`, `error_type_mismatch` |
+
+The `name:` field inside the YAML **must** match the filename
+without the extension; the runner echoes the `name:` in its diff
+log and a mismatch makes the failure harder to bisect.
+
+### 2. Write `name`, `profiles`, `setup`, `query`, `expected`
+
+Start from a similar existing fixture and adapt it. The shape is
+documented under "Fixture schema" above; key choices to make:
+
+- **`profiles:`** -- both `memory` and `duckdb` unless you have a
+  specific reason to target one. See "When DuckDB and the memory
+  profile disagree" below.
+- **`setup:`** -- only the catalog state the fixture *needs*. A
+  SELECT fixture that doesn't read any tables can omit `setup:`
+  entirely (see `select_literal_value.yaml`).
+- **`query:`** -- a single SQL statement. One scenario per fixture
+  keeps the diff readable.
+- **`expected:`** -- pin either rows or an error, per the schema
+  table above.
+
+Lead the file with a **top-of-file comment** explaining what the
+fixture pins and which existing test (if any) it mirrors. Reviewers
+lean on this when a fixture starts failing; "I copied another one"
+is not enough context to triage.
+
+### 3. Run the fixture locally
+
+The conformance harness needs `./bin/emulator_main` -- the
+canonical Bazel-built engine (run `task emulator:build-engine:bazel`
+once if you have not already; it is cached).
+
+```bash
+# Run the new fixture against both profiles.
+task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml
+
+# Run against only one profile (faster iteration on a duckdb-only
+# fixture, for example).
+task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml PROFILE=duckdb
+
+# Run the full suite to confirm no regression.
+task conformance:run
+```
+
+### 4. Use `--update-baselines` carefully
+
+When you're authoring a fixture and don't know the exact wire
+shape the engine returns, `--update-baselines` rewrites the
+fixture's `expected:` block with whatever the engine actually
+produced:
+
+```bash
+task conformance:update-baselines FIXTURE=conformance/fixtures/<name>.yaml
+```
+
+**Do not commit the rewritten baseline without reading it.** The
+engine might return what you expected, or it might be returning
+something subtly wrong (extra column, stringified NULL, wrong row
+order, a literal `"NULL"` instead of a real null). Eyeball every
+cell. If the engine looks wrong, fix the *engine* (or open a bug),
+do not pin the bad output as the expected baseline.
+
+### 5. Add to your PR
+
+The fixture YAML is the only file you typically need to touch. If
+the new fixture is a brand-new category or stresses an unusual
+shape, mention it briefly in your PR description so reviewers know
+to look at it.
+
+## Choosing the right match mode
+
+`expected.match` controls how the runner compares rows. See the
+"matching modes" table above for the full semantics; this is the
+quick decision tree for picking one:
+
+1. **Does the fixture have a single scalar result row?** Use the
+   default (`ordered`); ordering is trivial with one row.
+2. **Does the query use `ORDER BY`?** Use `ordered` (the default).
+3. **Is it a `GROUP BY` / parallel-scan query whose row order is
+   implementation-defined?** Either add an `ORDER BY` and use
+   `ordered`, or use `unordered`. Prefer `ORDER BY` -- the diff
+   output is more readable when the rows are pinned positionally.
+4. **Are the row values non-deterministic (timestamps, generated
+   IDs, hashes)?** Use `schema_only` with an explicit `schema:`
+   list. The runner asserts on the column names + types and
+   ignores the cell values.
+
+## When DuckDB and the memory profile disagree
+
+The `memory` profile is `--engine=reference_impl --storage=memory`;
+the `duckdb` profile is `--engine=duckdb --storage=duckdb
+--on_unknown_fn=fallback` (DuckDB-uncovered constructs route to
+ReferenceImpl through `FallbackEngine`).
+
+The two profiles disagree on:
+
+- **DDL** -- only the DuckDB engine implements `CREATE` / `DROP`
+  / `CREATE TABLE AS SELECT`. The memory profile leaves
+  `--on_unknown_fn` at its default (`unimplemented`), so DDL
+  fixtures targeting the memory profile would surface a 501. Mark
+  DDL fixtures `profiles: [duckdb]`.
+- **Cell type fidelity from in-memory storage** -- the in-memory
+  storage layer returns every cell as `Value::String` regardless
+  of the declared column type. Equality (`WHERE id = 1`) and
+  `ORDER BY id` work because the engine normalizes both sides;
+  but predicates like `WHERE id > 1` fail on memory because
+  INT64 > STRING is not a supported comparison. Fixtures that
+  exercise comparison operators on integer columns should either
+  filter on STRING columns or be tagged `profiles: [duckdb]`.
+- **`INFORMATION_SCHEMA` views** -- only ReferenceImpl implements
+  most of them today. A fixture pinning a system view may need
+  `profiles: [memory]`.
+
+When in doubt, target the `duckdb` profile first; see
+[`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md) for the
+"DuckDB-primary" policy decision and why.
+
+## Adding fixtures (compact recap)
+
+Already comfortable with the above? The short version:
 
 1. Drop a new `<name>.yaml` under `conformance/fixtures/`. Keep the
    filename and the `name:` field in sync.
 2. Decide which profile(s) the fixture applies to and list them in
    `profiles:`. Default to both unless you know one profile cannot
-   support the shape (e.g. a Parquet-only storage feature).
-3. Run `go run ./conformance/cmd/runner --fixtures conformance/fixtures/<name>.yaml`
+   support the shape (e.g. a Parquet-only storage feature). See
+   "When DuckDB and the memory profile disagree" above for the
+   common reasons to single-target a profile.
+3. Run `task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml`
    to verify the fixture against your local emulator.
 4. If the runner reports a result that matches what you expected, you
    are done. If you are bootstrapping a fixture against a known-good
-   emulator, pass `--update-baselines` to write the captured rows
-   back into the fixture, then review the diff and commit.
+   emulator, pass `--update-baselines` (via
+   `task conformance:update-baselines FIXTURE=...`) to write the
+   captured rows back into the fixture, then **read the diff**
+   carefully before committing.
 
 ## Process hygiene
 
