@@ -8,11 +8,15 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
@@ -275,6 +279,60 @@ absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::ScanRows(
       new VectorRowIterator(std::move(snapshot)));
 }
 
+namespace {
+
+// PredicateMatches compares a single row's cell against the parsed
+// equality predicate. Predicate kinds map 1:1 onto the storage Value
+// kinds the gateway lands on the wire today (see
+// `frontend/handlers/catalog.cc::CellToValue` for the lowering side):
+//   * INT64 -> Value::Int64
+//     or Value::String carrying a decimal digit (the
+//     tabledata.insertAll path stringifies every cell, so a freshly
+//     ingested INT64 column will hold a Value::String even though the
+//     declared type is INT64).
+//   * BOOL  -> Value::Bool, or Value::String "true"/"false".
+//   * STRING-> Value::String / Value::Bytes (both share the same slot
+//     in our Value union).
+// NULL cells never match an equality predicate; SQL semantics treat
+// `col = literal` as UNKNOWN for NULL on either side, so the row is
+// excluded.
+bool PredicateMatches(const EqualityPredicate& pred, const Row& row) {
+  if (pred.column_index >= row.cells.size()) return false;
+  const Value& cell = row.cells[pred.column_index];
+  if (cell.is_null()) return false;
+  switch (pred.kind) {
+    case EqualityPredicate::Kind::kInt64:
+      if (cell.kind() == Value::Kind::kInt64) {
+        return cell.int64_value() == pred.int64_value;
+      }
+      if (cell.kind() == Value::Kind::kString) {
+        std::int64_t parsed = 0;
+        if (!absl::SimpleAtoi(cell.string_value(), &parsed)) return false;
+        return parsed == pred.int64_value;
+      }
+      return false;
+    case EqualityPredicate::Kind::kBool:
+      if (cell.kind() == Value::Kind::kBool) {
+        return cell.bool_value() == pred.bool_value;
+      }
+      if (cell.kind() == Value::Kind::kString) {
+        const std::string& s = cell.string_value();
+        if (absl::EqualsIgnoreCase(s, "true")) return pred.bool_value;
+        if (absl::EqualsIgnoreCase(s, "false")) return !pred.bool_value;
+      }
+      return false;
+    case EqualityPredicate::Kind::kString:
+      if (cell.kind() == Value::Kind::kString ||
+          cell.kind() == Value::Kind::kBytes) {
+        return cell.string_value() == pred.string_value;
+      }
+      return false;
+  }
+  return false;
+}
+
+}  // namespace
+
 absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::CreateReadStream(
     const TableId& id, const ReadFilter& filter) const {
   const std::string key = DatasetKey(id);
@@ -298,9 +356,23 @@ absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::CreateReadStream(
     // Slice the snapshot under the lock so the iterator the caller
     // walks does not have to revisit the table_ map for every Next().
     // offset > #rows truncates to empty; row_limit <= 0 means "every
-    // remaining row after offset".
+    // remaining row after offset". When a row_restriction predicate
+    // is present we filter the underlying vector FIRST and then apply
+    // offset / limit to the filtered view; this mirrors what BigQuery
+    // does (offset is over the post-filter row stream) and keeps the
+    // memory backend's behavior bit-identical with the DuckDB one,
+    // which lets DuckDB apply the WHERE before LIMIT / OFFSET.
     const auto& rows = t_it->second.rows;
-    const size_t total = rows.size();
+    std::vector<const Row*> filtered;
+    filtered.reserve(rows.size());
+    const EqualityPredicate* pred = filter.equality_predicate
+                                         ? &*filter.equality_predicate
+                                         : nullptr;
+    for (const auto& row : rows) {
+      if (pred != nullptr && !PredicateMatches(*pred, row)) continue;
+      filtered.push_back(&row);
+    }
+    const size_t total = filtered.size();
     const size_t off = filter.offset > 0
                             ? static_cast<size_t>(filter.offset)
                             : 0;
@@ -314,7 +386,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> InMemoryStorage::CreateReadStream(
       const size_t take = limit < available ? limit : available;
       snapshot.reserve(take);
       for (size_t i = 0; i < take; ++i) {
-        snapshot.push_back(rows[off + i]);
+        snapshot.push_back(*filtered[off + i]);
       }
     }
   }

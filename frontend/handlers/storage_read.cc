@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "proto/emulator.pb.h"
 #include "proto/storage_read.pb.h"
@@ -235,6 +237,24 @@ std::string StorageReadService::StreamIdForSession(
     return AbslToGrpcStatus(schema_or.status());
   }
 
+  // Plan 39: parse the optional row_restriction NOW so a malformed
+  // predicate fails the CreateReadSession request rather than the
+  // downstream ReadRows call (which the caller will not retry on
+  // INVALID_ARGUMENT — by then they have already committed the
+  // session to the harness side).
+  std::optional<backend::storage::EqualityPredicate> predicate;
+  if (request->read_session().has_read_options() &&
+      !request->read_session().read_options().row_restriction().empty()) {
+    backend::storage::EqualityPredicate parsed;
+    const absl::Status parse_status = backend::storage::ParseRowRestriction(
+        request->read_session().read_options().row_restriction(),
+        *schema_or, &parsed);
+    if (!parse_status.ok()) {
+      return AbslToGrpcStatus(parse_status);
+    }
+    predicate = std::move(parsed);
+  }
+
   std::string session_name;
   std::string stream_name;
   {
@@ -244,6 +264,7 @@ std::string StorageReadService::StreamIdForSession(
     SessionState state;
     state.table = table_id;
     state.schema = *schema_or;
+    state.equality_predicate = predicate;
     sessions_.emplace(session_name, std::move(state));
   }
 
@@ -303,6 +324,7 @@ std::string StorageReadService::StreamIdForSession(
   // entire I/O duration.
   backend::storage::TableId table;
   backend::schema::TableSchema session_schema;
+  std::optional<backend::storage::EqualityPredicate> predicate;
   {
     absl::MutexLock lock(&mu_);
     auto it = sessions_.find(session_name);
@@ -316,6 +338,7 @@ std::string StorageReadService::StreamIdForSession(
     }
     table = it->second.table;
     session_schema = it->second.schema;
+    predicate = it->second.equality_predicate;
   }
 
   // 3. Schema drift check. If the table schema changed between
@@ -353,9 +376,14 @@ std::string StorageReadService::StreamIdForSession(
   // request-side offset (per the proto: gateway uses this to resume
   // after a transient failure). row_limit is not on the request
   // surface; we pass 0 so the iterator yields every remaining row.
+  // Plan 39: the parsed row_restriction (if any) lives on the
+  // session — both backends apply the predicate before offset/limit
+  // so the wire shape matches BigQuery's documented semantics
+  // (offset is over the post-filter row stream).
   backend::storage::ReadFilter filter;
   filter.offset = request->offset();
   filter.row_limit = 0;
+  filter.equality_predicate = predicate;
   absl::StatusOr<std::unique_ptr<backend::storage::RowIterator>> iter_or =
       storage_->CreateReadStream(table, filter);
   if (!iter_or.ok()) {

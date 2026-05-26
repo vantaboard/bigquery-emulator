@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -30,6 +31,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/row_restriction.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -145,16 +147,17 @@ class RowIterator {
 // `CreateReadStream`, so the filter shape mirrors what the public
 // `bigquery_emulator.v1.ReadOptions` proto can ask for. Each backend
 // applies the knobs it can push down natively (DuckDB layers a SQL
-// `LIMIT`; the memory backend caps iteration in C++); both speak the
-// same wire shape after the iterator, so the handler does not branch
-// on the storage type.
+// `LIMIT` / `WHERE`; the memory backend caps iteration in C++); both
+// speak the same wire shape after the iterator, so the handler does
+// not branch on the storage type.
 //
-// Plan-38 scope is intentionally narrow: only `row_limit` is honored.
-// `selected_fields` and `row_restriction` are documented in the proto
-// for forward compatibility but are deferred to a follow-up plan when
-// the engine wires per-column projection / pushdown — the storage
-// layer accepts them today as `std::vector<std::string>` / `std::string`
-// only so call sites compose cleanly with `ReadOptions`.
+// Plan-39 scope adds `equality_predicate` (the typed parse of
+// `<column> = <literal>` from `ReadOptions.row_restriction`). The raw
+// `row_restriction` string is left in for debugging / introspection
+// but the backends consume the parsed `equality_predicate` slot so
+// the parse happens exactly once per session. `selected_fields` is
+// still deferred to a follow-up plan when the engine wires per-column
+// projection / pushdown.
 struct ReadFilter {
   // Maximum number of rows the iterator will yield before signaling
   // end-of-stream. <= 0 means "no limit" (return every row in the
@@ -177,10 +180,21 @@ struct ReadFilter {
   // wiring lands in a follow-up plan).
   std::vector<std::string> selected_fields;
 
-  // SQL-shaped predicate the caller wants pushed down. Plan 38
-  // accepts but does not honor this knob; backends ignore it. Same
-  // forward-compatibility story as `selected_fields`.
+  // Raw SQL-shaped predicate the caller supplied. Retained on the
+  // filter for debugging / log lines; the typed
+  // `equality_predicate` below is what the backends consume.
   std::string row_restriction;
+
+  // Typed parse of `row_restriction` produced by
+  // `backend::storage::ParseRowRestriction`. When set, both backends
+  // honor it:
+  //   * Memory: linear scan; cells are compared against the typed
+  //     value before being copied into the iterator's snapshot.
+  //   * DuckDB: appended to the SELECT as a `WHERE` clause using the
+  //     same literal rendering helpers that drive INSERT.
+  // Plan 39 lifts the parse to the handler so a malformed restriction
+  // surfaces as INVALID_ARGUMENT before any rows are read.
+  std::optional<EqualityPredicate> equality_predicate;
 };
 
 // Storage is the abstract interface every backend implements.

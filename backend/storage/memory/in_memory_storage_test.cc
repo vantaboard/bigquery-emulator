@@ -433,6 +433,132 @@ TEST(InMemoryStorageTest, CreateReadStreamOnMissingTableIsNotFound) {
   EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kNotFound);
 }
 
+// ---------------------------------------------------------------------------
+// row_restriction predicate pushdown (plan 39)
+//
+// The handler parses `<column> = <literal>` into a typed
+// `EqualityPredicate` and hands it to `CreateReadStream`. Both
+// backends apply the predicate BEFORE offset/limit so the wire shape
+// matches BigQuery's "offset is over the post-filter row stream"
+// semantics.
+// ---------------------------------------------------------------------------
+
+TEST(InMemoryStorageTest, CreateReadStreamFiltersInt64Predicate) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "id";
+  pred.column_index = 0;
+  pred.kind = EqualityPredicate::Kind::kInt64;
+  pred.int64_value = 2;
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamFiltersStringPredicate) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+      MakePerson(3, "grace", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "name";
+  pred.column_index = 1;
+  pred.kind = EqualityPredicate::Kind::kString;
+  pred.string_value = "linus";
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamPredicateWithNoMatchYieldsEmpty) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  std::vector<Row> rows = {
+      MakePerson(1, "ada", {}),
+      MakePerson(2, "linus", {}),
+  };
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "id";
+  pred.column_index = 0;
+  pred.kind = EqualityPredicate::Kind::kInt64;
+  pred.int64_value = 99;
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  EXPECT_TRUE(scanned.empty());
+}
+
+TEST(InMemoryStorageTest, CreateReadStreamPredicateAppliesBeforeOffsetLimit) {
+  InMemoryStorage store;
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId t{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(t, PeopleSchema()).ok());
+  // Mix `tag=A` and `tag=B` rows; the predicate keeps only `B`s, and
+  // offset/limit then slice that filtered view.
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 10; ++i) {
+    Row r;
+    r.cells.push_back(Value::Int64(i));
+    r.cells.push_back(Value::String((i % 2 == 0) ? "even" : "odd"));
+    r.cells.push_back(Value::Array({}));
+    rows.push_back(std::move(r));
+  }
+  ASSERT_TRUE(store.AppendRows(t, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "name";
+  pred.column_index = 1;
+  pred.kind = EqualityPredicate::Kind::kString;
+  pred.string_value = "odd";
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  filter.offset = 1;
+  filter.row_limit = 2;
+  auto iter_or = store.CreateReadStream(t, filter);
+  ASSERT_TRUE(iter_or.ok());
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  // Filtered view (5 odd rows: 1,3,5,7,9), then offset=1 + limit=2 →
+  // ids 3 and 5.
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 3);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 5);
+}
+
 }  // namespace
 }  // namespace memory
 }  // namespace storage

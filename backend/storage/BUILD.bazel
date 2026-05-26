@@ -15,14 +15,35 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "storage",
-    srcs = ["storage.cc"],
-    hdrs = ["storage.h"],
+    srcs = [
+        "row_restriction.cc",
+        "storage.cc",
+    ],
+    hdrs = [
+        "row_restriction.h",
+        "storage.h",
+    ],
     deps = [
         "//backend/schema",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
+    ],
+)
+
+# row_restriction_test exercises the `<column> = <literal>` parser in
+# isolation: it does not need the Storage interface itself, only the
+# schema types the parser binds to. Kept as a standalone cc_test so
+# the parser stays cheap to iterate on (no DuckDB linkage).
+cc_test(
+    name = "row_restriction_test",
+    srcs = ["row_restriction_test.cc"],
+    deps = [
+        ":storage",
+        "//backend/schema",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

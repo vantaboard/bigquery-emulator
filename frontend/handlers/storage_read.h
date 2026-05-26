@@ -7,10 +7,12 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "absl/synchronization/mutex.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "proto/storage_read.grpc.pb.h"
 #include "proto/storage_read.pb.h"
@@ -108,6 +110,13 @@ class StorageReadService final : public v1::StorageRead::Service {
     // Schema we returned in `ReadSession.schema` so plan 38 can
     // confirm the live schema still matches before streaming.
     backend::schema::TableSchema schema;
+    // Typed parse of `read_session.read_options.row_restriction`
+    // captured at CreateReadSession time. Plan 39: the parser runs at
+    // session-mint time so a malformed restriction fails the request
+    // up front (INVALID_ARGUMENT), not after the streaming RPC has
+    // already started; the typed form is then handed verbatim to
+    // `Storage::CreateReadStream` from ReadRows.
+    std::optional<backend::storage::EqualityPredicate> equality_predicate;
   };
 
   // ParseParent enforces the

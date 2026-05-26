@@ -141,18 +141,49 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
   auto* options = req.mutable_read_session()->mutable_read_options();
   options->add_selected_fields("id");
   options->add_selected_fields("name");
-  options->set_row_restriction("id > 0");
+  // Plan 39: the handler parses the row_restriction at session-mint
+  // time. `id = 0` is the canonical happy-path shape (single
+  // `<column> = <literal>` equality); range / connective forms now
+  // surface INVALID_ARGUMENT from CreateReadSession, which has its
+  // own dedicated test below.
+  options->set_row_restriction("id = 0");
   v1::ReadSession resp;
   ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
   ASSERT_TRUE(status.ok()) << status.error_message();
 
-  // Plan 37 does not enforce read_options, but the proto contract says
-  // they round-trip on the reply so the gateway can show the caller
-  // what shape the session was minted with.
+  // The proto contract says read_options round-trips on the reply so
+  // the gateway can show the caller what shape the session was minted
+  // with. `selected_fields` is still informational (plan 39 defers
+  // projection); `row_restriction` is honored by ReadRows below.
   ASSERT_EQ(resp.read_options().selected_fields_size(), 2);
   EXPECT_EQ(resp.read_options().selected_fields(0), "id");
   EXPECT_EQ(resp.read_options().selected_fields(1), "name");
-  EXPECT_EQ(resp.read_options().row_restriction(), "id > 0");
+  EXPECT_EQ(resp.read_options().row_restriction(), "id = 0");
+}
+
+TEST_F(StorageReadServiceTest, CreateReadSessionRejectsRangeRestriction) {
+  CreatePeopleTable();
+  v1::CreateReadSessionRequest req = MakePeopleRequest();
+  // `>` is outside the plan-39 surface; the parser bails with a
+  // clear "only `<column> = <literal>` supported" message, which the
+  // handler maps onto gRPC INVALID_ARGUMENT.
+  req.mutable_read_session()->mutable_read_options()->set_row_restriction(
+      "id > 0");
+  v1::ReadSession resp;
+  ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+}
+
+TEST_F(StorageReadServiceTest, CreateReadSessionRejectsUnknownColumnRestriction) {
+  CreatePeopleTable();
+  v1::CreateReadSessionRequest req = MakePeopleRequest();
+  req.mutable_read_session()->mutable_read_options()->set_row_restriction(
+      "missing = 1");
+  v1::ReadSession resp;
+  ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
 }
 
 TEST_F(StorageReadServiceTest, CreateReadSessionMintsUniqueSessionIds) {
@@ -507,6 +538,61 @@ TEST_F(StorageReadGrpcTest, ReadRowsUnknownStreamIsNotFound) {
   }
   ::grpc::Status status = reader->Finish();
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND)
+      << status.error_message();
+}
+
+// Plan 39: row_restriction pushdown end-to-end. CreateReadSession
+// parses the predicate, stashes it on the SessionState, and ReadRows
+// hands it to `CreateReadStream` which filters before paginating.
+TEST_F(StorageReadGrpcTest, ReadRowsHonorsRowRestriction) {
+  CreatePeopleTable();
+  AppendPeople(/*n=*/10);
+
+  ::grpc::ClientContext create_ctx;
+  v1::CreateReadSessionRequest create_req;
+  create_req.set_parent("projects/proj-test");
+  create_req.mutable_read_session()->set_table(
+      "projects/proj-test/datasets/ds/tables/t");
+  create_req.mutable_read_session()
+      ->mutable_read_options()
+      ->set_row_restriction("id = 5");
+  v1::ReadSession session;
+  ASSERT_TRUE(
+      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+
+  ::grpc::ClientContext read_ctx;
+  v1::ReadRowsRequest read_req;
+  read_req.set_read_stream(session.streams(0).name());
+  auto reader = stub_->ReadRows(&read_ctx, read_req);
+  ASSERT_NE(reader, nullptr);
+  std::vector<v1::DataRow> rows;
+  v1::ReadRowsResponse page;
+  while (reader->Read(&page)) {
+    for (const auto& row : page.rows()) rows.push_back(row);
+  }
+  ::grpc::Status status = reader->Finish();
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells(0).string_value(), "5");
+  EXPECT_EQ(rows[0].cells(1).string_value(), "person-5");
+}
+
+TEST_F(StorageReadGrpcTest, CreateReadSessionRejectsMalformedRowRestriction) {
+  CreatePeopleTable();
+
+  ::grpc::ClientContext create_ctx;
+  v1::CreateReadSessionRequest create_req;
+  create_req.set_parent("projects/proj-test");
+  create_req.mutable_read_session()->set_table(
+      "projects/proj-test/datasets/ds/tables/t");
+  // `id > 0` is a range predicate — the parser only accepts `=`.
+  create_req.mutable_read_session()
+      ->mutable_read_options()
+      ->set_row_restriction("id > 0");
+  v1::ReadSession session;
+  ::grpc::Status status =
+      stub_->CreateReadSession(&create_ctx, create_req, &session);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
 }
 

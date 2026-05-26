@@ -416,6 +416,147 @@ TEST_F(DuckDBStorageTest, CreateReadStreamOnMissingTableIsNotFound) {
   EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kNotFound);
 }
 
+// ---------------------------------------------------------------------------
+// row_restriction predicate pushdown (plan 39)
+//
+// The handler parses `<column> = <literal>` into a typed
+// `EqualityPredicate` and hands it to `CreateReadStream`. The DuckDB
+// backend renders the predicate as a `WHERE` clause and lets DuckDB
+// push it into the parquet scan. The literal is rendered using the
+// same escaping the rest of the .cc uses for INSERT, so the parser's
+// quoted-string form (`'O''Reilly'`) round-trips through a literal
+// rendering of the parsed unescaped value (`O'Reilly`).
+// ---------------------------------------------------------------------------
+
+TEST_F(DuckDBStorageTest, CreateReadStreamFiltersInt64Predicate) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 5; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "id";
+  pred.column_index = 0;
+  pred.kind = EqualityPredicate::Kind::kInt64;
+  pred.int64_value = 2;
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[0].cells[1].string_value(), "person-2");
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamFiltersStringPredicate) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows = {
+      MakePerson(1, "ada"),
+      // Apostrophe in the cell exercises the literal-escape path on
+      // the SQL-side WHERE renderer.
+      MakePerson(2, "O'Reilly"),
+      MakePerson(3, "grace"),
+  };
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "name";
+  pred.column_index = 1;
+  pred.kind = EqualityPredicate::Kind::kString;
+  pred.string_value = "O'Reilly";
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 2);
+  EXPECT_EQ(scanned[0].cells[1].string_value(), "O'Reilly");
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamPredicateNoMatchYieldsEmpty) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows = {
+      MakePerson(1, "ada"),
+      MakePerson(2, "linus"),
+  };
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "id";
+  pred.column_index = 0;
+  pred.kind = EqualityPredicate::Kind::kInt64;
+  pred.int64_value = 999;
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  EXPECT_TRUE(scanned.empty());
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamPredicateBeforeOffsetLimit) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  // Two pools of names; predicate keeps only the "odd" name pool.
+  for (int64_t i = 0; i < 10; ++i) {
+    rows.push_back(MakePerson(i, (i % 2 == 0) ? "even" : "odd"));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  EqualityPredicate pred;
+  pred.column = "name";
+  pred.column_index = 1;
+  pred.kind = EqualityPredicate::Kind::kString;
+  pred.string_value = "odd";
+  ReadFilter filter;
+  filter.equality_predicate = pred;
+  filter.offset = 1;
+  filter.row_limit = 2;
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  // Filtered ids: 1, 3, 5, 7, 9. offset=1, limit=2 → 3, 5.
+  ASSERT_EQ(scanned.size(), 2u);
+  EXPECT_EQ(scanned[0].cells[0].int64_value(), 3);
+  EXPECT_EQ(scanned[1].cells[0].int64_value(), 5);
+}
+
 TEST(SchemaToDuckDBType, RoundTripsAllPlanCoveredTypes) {
   struct Case {
     schema::ColumnType bq;

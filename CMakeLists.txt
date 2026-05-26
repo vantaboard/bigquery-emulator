@@ -177,6 +177,7 @@ target_link_libraries(backend_schema
 )
 
 add_library(backend_storage STATIC
+  backend/storage/row_restriction.cc
   backend/storage/storage.cc
 )
 target_include_directories(backend_storage PUBLIC ${CMAKE_SOURCE_DIR})
@@ -404,6 +405,28 @@ if(BIGQUERY_EMULATOR_BUILD_TESTS)
   add_test(
     NAME in_memory_storage_test
     COMMAND in_memory_storage_test
+  )
+
+  # row_restriction_test pins the plan-39 `<column> = <literal>` parser
+  # in isolation. The parser only depends on `backend_schema` + the
+  # storage header, so the test link line is intentionally narrow.
+  add_executable(row_restriction_test
+    backend/storage/row_restriction_test.cc
+  )
+  target_link_libraries(row_restriction_test
+    PRIVATE
+      backend_storage
+      backend_schema
+      absl::status
+      absl::statusor
+      absl::strings
+      GTest::gtest
+      GTest::gmock
+      GTest::gtest_main
+  )
+  add_test(
+    NAME row_restriction_test
+    COMMAND row_restriction_test
   )
 
   # CatalogService delegates every RPC straight to Storage; we test it

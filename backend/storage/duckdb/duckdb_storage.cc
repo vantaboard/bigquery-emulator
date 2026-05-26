@@ -25,6 +25,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "proto/emulator.pb.h"
 #include "google/protobuf/util/json_util.h"
@@ -242,6 +243,37 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
                      schema::ColumnSchemaToDuckDBType(schema.columns[i]));
   }
   absl::StrAppend(&out, ")");
+  return out;
+}
+
+// Renders an EqualityPredicate as a DuckDB `WHERE` clause fragment
+// (with leading space, no trailing semicolon). The column identifier
+// is double-quote escaped and the literal goes through the same
+// `'...'` / numeric / CAST shapes the rest of this file uses, so a
+// caller cannot escape the WHERE via crafted input — the parser
+// already restricted the input to INT64 / BOOL / STRING literals
+// (see `row_restriction.cc`) and the string literal is rendered with
+// `EscapeStringLiteralInner`.
+//
+// Returned shape examples:
+//   ` WHERE "id" = 42`
+//   ` WHERE "active" = TRUE`
+//   ` WHERE "name" = 'ada''s laptop'`
+std::string RenderPredicateClause(const EqualityPredicate& pred) {
+  std::string out = " WHERE ";
+  absl::StrAppend(&out, QuoteIdent(pred.column), " = ");
+  switch (pred.kind) {
+    case EqualityPredicate::Kind::kInt64:
+      absl::StrAppend(&out, pred.int64_value);
+      return out;
+    case EqualityPredicate::Kind::kBool:
+      absl::StrAppend(&out, pred.bool_value ? "TRUE" : "FALSE");
+      return out;
+    case EqualityPredicate::Kind::kString:
+      absl::StrAppend(&out, "'",
+                       EscapeStringLiteralInner(pred.string_value), "'");
+      return out;
+  }
   return out;
 }
 
@@ -1317,7 +1349,15 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   std::string sql = absl::StrCat(
       "SELECT ", select_cols,
       " FROM read_parquet('", EscapeStringLiteralInner(parquet_path),
-      "', file_row_number = true) ORDER BY file_row_number");
+      "', file_row_number = true)");
+  // Plan 39: push the parsed `<column> = <literal>` predicate down
+  // into a SQL WHERE clause. The clause lands before ORDER BY so
+  // DuckDB filters on the parquet scan side rather than buffering the
+  // full table.
+  if (filter.equality_predicate.has_value()) {
+    absl::StrAppend(&sql, RenderPredicateClause(*filter.equality_predicate));
+  }
+  absl::StrAppend(&sql, " ORDER BY file_row_number");
   if (filter.row_limit > 0) {
     absl::StrAppend(&sql, " LIMIT ", filter.row_limit);
   }
