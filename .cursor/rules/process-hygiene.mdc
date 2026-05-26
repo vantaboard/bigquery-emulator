@@ -1,0 +1,157 @@
+---
+description: Explicit hanging-process audit before, during, and after every heavy task in this repo
+alwaysApply: true
+---
+
+# Process hygiene (BigQuery emulator)
+
+This repo spawns several classes of long-running, memory-hungry subprocess. The default agent failure mode is **leaving one or more of them alive** after a build, test, smoke, subagent run, or interruption. They then compound on the next invocation, eventually OOM'ing the box. The companion `.cursor/rules/bazel-process-hygiene.mdc` covers Bazel-specific posture; **this rule is broader and gates every session.**
+
+## The catalog (what to look for)
+
+These are the process names / patterns that this repo can leak. **Audit for every one** during the checks below. The catalog is the source of truth — if you add a new heavyweight subprocess to the repo, add it here.
+
+| Class                       | Patterns to match (`ps -eo pid,etime,rss,args`)                                                                |
+|----------------------------|---------------------------------------------------------------------------------------------------------------|
+| Bazel server + clients     | `bazel`, `bazelisk`, `process-wrapper`                                                                        |
+| Compiler under Bazel       | `clang`, `clang++`, `cc1`, `cc1plus`, `gcc`, `g++` (the C++ link/compile can fork dozens)                     |
+| BigQuery emulator engine   | `emulator_main` (the canonical `cc_binary`) and any test wrapper that exec'd it                                |
+| BigQuery emulator gateway  | `gateway_main`, `bigquery-emulator-gateway` (Go binary spawned by tests / docker)                              |
+| Conformance runner         | `conformance/cmd/runner`, `./runner`, any `runner_*.tmp.*` binary `go test` shelled out to                     |
+| `go test` orchestrators    | `go-build`-cached test binaries under `/tmp/go-build*` that re-spawn the engine (look for `_test` suffix)      |
+| Docker daemon-side build   | `buildkitd`, `containerd-shim`, BuildKit's `runc` children invoked for the `engine-builder` stage              |
+| Docker image-side build    | Inside-the-container `bazel`/`clang` (visible via `docker stats` / `docker top <id>`, not host `ps`)            |
+
+The `task bazel:status` helper greps for the Bazel/Clang subset and prints `(clean)` when nothing matches. **It does NOT cover the rest of the catalog** — use the full audit below for everything else.
+
+## Pre-spawn audit (MANDATORY before any heavy command)
+
+A "heavy command" is any of: `bazel ...`, `task bazel:*`, `task emulator:*`, `task conformance:run` against `bin/emulator_main`, `task docker:*`, `docker build`, `docker compose up --build`, `go test -tags=integration`, `./bin/emulator_main`, or invoking a subagent that may do any of the above.
+
+Before spawning, run:
+
+```bash
+ps -eo pid,ppid,etime,pcpu,pmem,rss,args \
+  | grep -E 'bazel|clang\b|cc1|process-wrapper|emulator_main|gateway_main|bigquery-emulator|conformance/cmd/runner|/runner |buildkitd|containerd-shim' \
+  | grep -vE '\bgrep\b|/usr/bin/zsh' \
+  || echo '(clean)'
+```
+
+If `(clean)`: proceed.
+
+If anything is alive: decide between **wait**, **reuse**, or **kill the whole tree** (`task bazel:kill-strays` covers Bazel/clang; for the rest see "Cleanup" below). Do **not** spawn a parallel heavy command — even a fresh `docker build` while Bazel is running on the host will OOM a 32-GiB box because container Bazel and host Bazel both auto-detect the full host MemTotal.
+
+Also snapshot host headroom:
+
+```bash
+free -h | head -2
+```
+
+If `available` is below `4 GiB`, the spawn will likely OOM. **Stop**, free memory first (see "Reclaim memory" below), and re-audit.
+
+## Mid-loop poll (when a build / test exceeds 5 minutes)
+
+A heavy command running > 5 minutes is normal for the C++ engine; the failure mode is a **silent fork bomb** (e.g. inside-container Bazel auto-detecting 14 jobs × 2 GiB/clang against the host's headroom-less RAM). On the next assistant turn while such a command is in flight, run:
+
+```bash
+free -h | head -2
+ps -eo pcpu,pmem,rss,args --sort=-pmem | head -10
+```
+
+If any single process is over `4 GiB RSS` AND `free -h` `available` is dropping toward `2 GiB`, the build is about to OOM the box. **Kill the tree now** (host: `task bazel:kill-strays`; container: `docker kill <id>` for the `engine-builder` stage; runner: SIGTERM the runner PID and verify children also die). Do not assume the build will recover.
+
+## Cleanup (MANDATORY after every heavy command, success OR failure)
+
+End the heavy command's terminal turn with this block:
+
+```bash
+# 1. Bazel server + clients (covers bazelisk, clang under bazel, process-wrapper).
+task bazel:shutdown
+task bazel:kill-strays            # idempotent; only kills if anything is alive
+task bazel:status                  # expect (clean)
+
+# 2. Emulator + gateway processes spawned by tests, runners, smokes.
+pgrep -af 'emulator_main|gateway_main|bigquery-emulator' \
+  | grep -vE 'grep|/usr/bin/zsh' \
+  | awk '{print $1}' \
+  | xargs -r kill -TERM
+sleep 1
+pgrep -af 'emulator_main|gateway_main|bigquery-emulator' \
+  | grep -vE 'grep|/usr/bin/zsh' \
+  | awk '{print $1}' \
+  | xargs -r kill -KILL
+pgrep -af 'emulator_main|gateway_main|bigquery-emulator' \
+  | grep -vE 'grep|/usr/bin/zsh' \
+  || echo '(emulator/gateway clean)'
+
+# 3. Conformance runner binaries (the Go test binary keeps them as children).
+pgrep -af 'conformance/cmd/runner|/runner ' \
+  | grep -vE 'grep|/usr/bin/zsh' \
+  | awk '{print $1}' \
+  | xargs -r kill -TERM
+pgrep -af 'conformance/cmd/runner|/runner ' \
+  | grep -vE 'grep|/usr/bin/zsh' \
+  || echo '(runner clean)'
+
+# 4. Docker — only when a docker build / compose was run this turn.
+docker compose down -v --remove-orphans 2>/dev/null || true
+docker ps -a --filter 'label=org.opencontainers.image.title=bigquery-emulator' --format '{{.ID}}' \
+  | xargs -r docker rm -f >/dev/null 2>&1 || true
+```
+
+The first run of any of those `xargs` invocations is a no-op when there is nothing to kill — that's fine. The point is the audit; never skip the cleanup block "because there's probably nothing there".
+
+## Reclaim memory (when `free -h` shows < 4 GiB available)
+
+```bash
+# BuildKit cache is the single biggest reclaimable bucket after an
+# interrupted docker build. A failed `engine-builder` stage routinely
+# leaves 5-15 GiB of reclaimable cache mount data. Always reclaim
+# AGED entries first (do not blow the whole cache; warm rebuilds rely
+# on it).
+docker buildx du --verbose 2>/dev/null | tail -5
+docker buildx prune --filter unused-for=1h --force
+
+# Inactive containers + dangling images from interrupted iterations.
+docker container prune --filter 'until=1h' --force
+docker image prune --filter 'until=24h' --force
+
+# Bazel disk cache on the host (the project's bazel server's external
+# repo cache, NOT the in-container cache). Only nuke if disk pressure;
+# warm host rebuilds rely on it.
+# du -sh ~/.cache/bazel
+```
+
+After reclaiming, re-run the pre-spawn audit.
+
+## Docker-specific guidance (the recent OOM source)
+
+`docker build` for this repo runs Bazel **inside** the `engine-builder` stage. The Bazel inside that container auto-detects `nproc` and `MemTotal` from the host's perspective (Docker default mode). It therefore forks `nproc - 2` parallel `clang++` processes (~14 on this box), each potentially 2-4 GiB, while the host shell, Cursor (~2 GiB), Chrome, and any other host-side Bazel session are competing for the same RAM.
+
+**When you `docker build` this repo locally, ALWAYS cap container-side Bazel:**
+
+```bash
+docker build \
+  --build-arg BAZEL_JOBS=$(($(nproc) - 6)) \
+  --build-arg BAZEL_MEM_MB=$(awk '/^MemTotal:/ { printf "%d\n", $2 / 2 / 1024 }' /proc/meminfo) \
+  -t bigquery-emulator:local .
+```
+
+That leaves ~6 cores and ~half the host RAM for Cursor, Chrome, the IDE language servers, and the host's existing processes. CI runners (smaller boxes) can fall back to the Dockerfile's auto-detect since they have no other workload.
+
+`task docker:build` and `task docker:smoke` may already forward these build-args; if not, **pass them explicitly** when iterating on the Dockerfile locally.
+
+Do not run `docker build` while a host-side `bazel build` is also running for this repo. They will race for memory and one (or both) will OOM-kill.
+
+## Subagent boundary
+
+The parent agent owns cleanup, regardless of what the subagent did. After a subagent returns (success, failure, interrupt, OOM-kill):
+
+1. Read the subagent's last-reported terminal state (don't trust "I cleaned up").
+2. Run the full **Cleanup** block above (Bazel, emulator, runner, docker).
+3. Run the full **Pre-spawn audit** + `free -h` before spawning the next subagent.
+4. If any of the catalog patterns is still alive after a `kill -KILL`, escalate to the user — do not chain another subagent on top.
+
+## Why this rule exists
+
+A literal OOM happened during plan 43 (docker-compose-smoke): the subagent kicked off `docker build`, the in-container Bazel forked 14 clangs against the same RAM the host's Cursor + Chrome were using, and Linux's OOM killer reaped processes until the assistant session itself died. Post-mortem showed (a) 13.4 GiB of reclaimable BuildKit cache that had never been pruned, (b) no `--build-arg BAZEL_*` overrides on the `docker build`, and (c) no mid-loop poll to catch the runaway. This rule's three checkpoints (pre-spawn audit, mid-loop poll, cleanup block) all three would have prevented it.
