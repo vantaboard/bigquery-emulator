@@ -4,13 +4,13 @@ overview: "Phase 8c: seed fixtures, contributor docs, Taskfile targets."
 todos:
   - id: seed-fixtures
     content: "Author ≥20 fixtures: SELECT, dryRun errors, insertAll, DML, JOIN, GROUP BY"
-    status: pending
+    status: completed
   - id: docs-contributing
     content: "Add conformance/README.md: add fixtures, run locally"
-    status: pending
+    status: completed
   - id: taskfile-target
     content: "Add task conformance:run to Taskfile.yml"
-    status: pending
+    status: completed
 isProject: false
 ---
 
