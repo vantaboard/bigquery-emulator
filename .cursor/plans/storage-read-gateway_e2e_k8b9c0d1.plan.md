@@ -4,13 +4,13 @@ overview: "Phase 7c: gateway adapter, row restriction, full Storage Read E2E."
 todos:
   - id: go-storage-gateway
     content: "Document or add gateway route for Storage Read API; check BQ client lib expectations"
-    status: pending
+    status: completed
   - id: row-restriction
     content: "Parse simple row restriction (column = literal) for filter pushdown"
-    status: pending
+    status: completed
   - id: storage-read-e2e
     content: "E2E: insertAll → CreateReadSession → ReadRows returns all rows"
-    status: pending
+    status: completed
 isProject: false
 ---
 

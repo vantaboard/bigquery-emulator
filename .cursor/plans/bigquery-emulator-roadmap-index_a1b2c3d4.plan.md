@@ -121,7 +121,7 @@ todos:
     status: completed
   - id: run-39-storage-read-gateway-e2e
     content: "Run storage-read-gateway_e2e_k8b9c0d1.plan.md"
-    status: pending
+    status: completed
   - id: run-40-conformance-fixtures-runner
     content: "Run conformance-fixtures-runner_l9c0d1e2.plan.md"
     status: pending
