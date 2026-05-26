@@ -1,0 +1,200 @@
+# Release workflow (plan 44, phase 9b).
+#
+# Cuts a release on tag push (`vX.Y.Z`) or via manual dispatch
+# (`inputs.ref` lets the operator re-release a previously pushed tag
+# without having to delete-and-retag). One job, one runner: the
+# canonical Bazel-built C++ engine, the Docker image push to GHCR, and
+# the goreleaser archive upload all share the same checkout so the
+# version numbers cannot drift.
+#
+# Steps in order:
+#   1. Checkout the triggering ref (or `inputs.ref` for dispatch).
+#   2. Set up Go + Task + Bazelisk + the GoogleSQL sibling. Mirrors
+#      `.github/workflows/conformance.yml`'s setup so the engine build
+#      reads the same toolchain knobs CI does.
+#   3. Build the C++ engine via `task emulator:build-engine:bazel`.
+#      This stages `bin/emulator_main` + `bin/libduckdb.so`. The
+#      goreleaser config's `before.hooks` block on these existing.
+#   4. Push the Docker runtime image (multi-stage `Dockerfile`) to
+#      GHCR. Tags are derived from the SemVer triplet by
+#      `docker/metadata-action@v5` (`vX.Y.Z`, `vX.Y`, `vX`, `latest`);
+#      `latest` is suppressed for pre-release tags (`v0.0.1-rc1`).
+#      Linux/amd64 only — the engine binary is linux/amd64 only and
+#      the README documents the caveat. Multi-arch is explicitly out
+#      of scope for plan 44.
+#   5. Run `goreleaser release --clean`. Goreleaser writes the
+#      gateway archives + checksums to the GitHub release the tag
+#      push opened. Engine binary is bundled into all four archives
+#      per the plan-44 user decision.
+#
+# Time budget: the cold Bazel cache dominates (~25-55 min on a fresh
+# runner). `bazel-contrib/setup-bazel@0.13.0` shares cache across
+# runs of this workflow via `disk-cache: release`, so a re-run after
+# the first cold cut should land in minutes.
+#
+# Concurrency: scoped to the ref so a force-push to a tag (rare) does
+# not race itself; `cancel-in-progress: false` because release
+# publishes must finish — interrupting mid-publish leaves a partial
+# release on GHCR or Releases.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Existing tag to (re)release (e.g. v0.0.1)"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # workflow_dispatch passes the operator-supplied tag in
+          # `inputs.ref`; tag push (`on: push: tags`) leaves it empty
+          # and the default `github.ref` resolves to the tag.
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            cmake \
+            make \
+            ninja-build \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          # `release` keeps the cache distinct from ci/conformance so
+          # tag re-cuts share their own cache key but do not invalidate
+          # the on-PR caches.
+          disk-cache: release
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (for local_path_override)
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: 2026.01.1
+          path: googlesql-sibling
+
+      - name: Stage googlesql at ../googlesql
+        run: |
+          mv googlesql-sibling ../googlesql
+          # Mirror the `ci.yml` / `conformance.yml` / Dockerfile patch:
+          # MODULE.bazel pins `version = "2026.01.1"`, but gazelle's
+          # strict semver parser rejects the leading-zero patch field.
+          # See the long note at the top of //MODULE.bazel.
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
+        # `task emulator:build-engine:bazel` reads BAZEL_JOBS /
+        # BAZEL_MEM_MB from /proc; on the GitHub-hosted ubuntu-latest
+        # runners that drives jobs=2..6 + memory ~= 75% of MemTotal
+        # which keeps headroom for the rest of the workflow.
+        run: task emulator:build-engine:bazel
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Normalize repository owner (lowercase)
+        id: owner
+        # GHCR rejects mixed-case owners; the user explicitly noted
+        # this in the plan-44 addendum. `tr` is the cheap, portable
+        # normalizer.
+        run: |
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "owner_lc=$owner_lc" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute Docker tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
+          # `type=semver` parses the trigger tag and produces the
+          # vX.Y.Z / vX.Y / vX trio; the `v` prefix matches the
+          # tagFormat in `.releaserc.yml` and the README copy.
+          # `latest` is suppressed for pre-release tags
+          # (`!contains(github.ref, '-')` returns false for
+          # v0.0.1-rc1).
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+          labels: |
+            org.opencontainers.image.title=bigquery-emulator
+            org.opencontainers.image.source=https://github.com/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Linux/amd64 only — engine is amd64-only (see README and the
+          # release notes header). Multi-arch is out of scope.
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ inputs.ref || github.ref_name }}
+
+      - name: Run goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
