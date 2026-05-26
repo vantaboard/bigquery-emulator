@@ -4,10 +4,10 @@ overview: "Phase 9b: GoReleaser binaries and semantic-release workflow."
 todos:
   - id: goreleaser
     content: "Add .goreleaser.yml: gateway for 4 platforms; bundle emulator binary from CI artifact"
-    status: pending
+    status: completed
   - id: semantic-release
     content: "Wire .releaserc.yml with GitHub release workflow; publish Docker on tag"
-    status: pending
+    status: completed
 isProject: false
 ---
 

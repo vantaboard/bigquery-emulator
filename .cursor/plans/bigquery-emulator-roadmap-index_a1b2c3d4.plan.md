@@ -136,7 +136,7 @@ todos:
     status: completed
   - id: run-44-goreleaser-release
     content: "Run goreleaser-release_p3a4b5c6.plan.md"
-    status: pending
+    status: completed
   - id: run-45-profile-docs-version
     content: "Run profile-docs-version_q4b5c6d7.plan.md"
     status: pending
