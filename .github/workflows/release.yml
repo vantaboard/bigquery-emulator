@@ -130,7 +130,19 @@ jobs:
         # BAZEL_MEM_MB from /proc; on the GitHub-hosted ubuntu-latest
         # runners that drives jobs=2..6 + memory ~= 75% of MemTotal
         # which keeps headroom for the rest of the workflow.
-        run: task emulator:build-engine:bazel
+        #
+        # EMULATOR_VERSION / EMULATOR_COMMIT / EMULATOR_BUILD_DATE
+        # flow into the `:version_cc` genrule in
+        # `binaries/emulator_main/BUILD.bazel` so the linked-in
+        # `--version` strings match the tag this workflow is publishing.
+        # `inputs.ref` covers the `workflow_dispatch` re-release path;
+        # `github.ref_name` covers the `on: push: tags` path.
+        env:
+          EMULATOR_VERSION: ${{ inputs.ref || github.ref_name }}
+          EMULATOR_COMMIT: ${{ github.sha }}
+        run: |
+          export EMULATOR_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          task emulator:build-engine:bazel
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
