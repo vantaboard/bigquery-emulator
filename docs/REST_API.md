@@ -209,6 +209,59 @@ RPC reference under [`docs/bigquery/docs/reference/storage/rpc/`][storagerpc].
 [storage]: ./bigquery/docs/reference/storage.md
 [storagerpc]: ./bigquery/docs/reference/storage/rpc/
 
+### Transport: gRPC-only, served by the engine
+
+The public BigQuery Storage Read API is **gRPC-only** in production —
+the REST surface BigQuery exposes does not proxy it, and the
+`google-cloud-bigquery-storage` client libraries (Go's
+`cloud.google.com/go/bigquery/storage`, Python's
+`google-cloud-bigquery-storage`, Java's
+`google-cloud-bigquerystorage`) all open a separate gRPC channel to
+`bigquerystorage.googleapis.com:443`. The emulator follows the same
+shape:
+
+* The **REST gateway** (`gateway_main`, default `:9050`) does **not**
+  expose any `bigquery_emulator.v1.StorageRead` surface. Plan 39
+  intentionally keeps the gateway focused on the REST-only halves of
+  the public API (`projects`, `datasets`, `tables`, `jobs`,
+  `tabledata.list`, `jobs.query`, `tabledata.insertAll`).
+* The **C++ engine** (`emulator_main`, default `:9060` via
+  `--grpc_port` on `gateway_main` / `--host_port` on `emulator_main`)
+  serves `bigquery_emulator.v1.StorageRead` directly on its gRPC port.
+  `task emulator:run-full` exposes both ports, so point a Storage Read
+  client at the engine port (`localhost:9060`) rather than the gateway.
+
+For programmatic tests, the
+`gateway/e2e/storage_read_test.go` harness gates a BigQuery Storage
+client off the gateway's `engine.Client` channel (the same connection
+the gateway uses internally for `Catalog` and `Query`). See
+`gateway/e2e/catalog_test.go::startEmulatorWithFlags` for the full
+plumbing.
+
+### Supported `ReadOptions`
+
+* `row_restriction`: a single `<column> = <literal>` equality clause.
+  Literals support INT64 (`id = 42`), BOOL (`active = true`,
+  case-insensitive), and STRING (`name = 'ada'`, with the SQL `''`
+  escape for embedded apostrophes). Backtick-quoted column names
+  (`` `id` = 42``) round-trip; bare identifiers are limited to
+  `[A-Za-z_][A-Za-z0-9_]*`. Anything more complex (range / inequality
+  ops, connectives, IN, NULL, ARRAY / STRUCT columns,
+  FLOAT64 / DATE / NUMERIC literals) is rejected at
+  `CreateReadSession` time with `INVALID_ARGUMENT` — the gateway
+  surfaces that as the public Storage Read 400 envelope.
+
+  Pushdown shape:
+  * **Memory backend**: the predicate filters the row vector in C++
+    before `offset` / `row_limit` slicing.
+  * **DuckDB backend**: the predicate becomes a `WHERE` clause on the
+    `read_parquet(...)` scan, so DuckDB filters before materializing
+    rows.
+
+* `selected_fields`: accepted and echoed on the `ReadSession` reply,
+  but **not enforced** — every column is returned regardless. Pushing
+  projection into the storage layer is deferred to a future plan.
+
 ## Authentication posture
 
 The emulator follows `cloud-spanner-emulator`'s posture: it parses but
