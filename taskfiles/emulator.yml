@@ -21,8 +21,37 @@ tasks:
       - task: run
 
   build:
-    aliases: [build-gateway]
-    desc: Build the Go gateway (gateway_main) into ./bin
+    aliases: [build-gateway, gateway-build, gateway:build]
+    desc: Build the Go gateway (gateway_main) into ./bin with ldflag-stamped version metadata
+    # Stamps the same three `-X main.<sym>=…` ldflags goreleaser sets
+    # (see `.goreleaser.yml`'s `builds[].ldflags` block) so local
+    # `./bin/gateway_main --version` reports the working-tree HEAD's
+    # `git describe`, short sha, and a UTC timestamp instead of the
+    # `dev/none/unknown` source defaults. Mirrors goreleaser's contract
+    # so operators see the same `--version` shape whether they built
+    # locally or pulled a release archive.
+    vars:
+      GATEWAY_VERSION:
+        sh: |
+          if [ -n "${GATEWAY_VERSION:-}" ]; then
+            echo "$GATEWAY_VERSION"
+          else
+            git describe --tags --always --dirty 2>/dev/null || echo dev
+          fi
+      GATEWAY_COMMIT:
+        sh: |
+          if [ -n "${GATEWAY_COMMIT:-}" ]; then
+            echo "$GATEWAY_COMMIT"
+          else
+            git rev-parse --short HEAD 2>/dev/null || echo none
+          fi
+      GATEWAY_DATE:
+        sh: |
+          if [ -n "${GATEWAY_DATE:-}" ]; then
+            echo "$GATEWAY_DATE"
+          else
+            date -u +%Y-%m-%dT%H:%M:%SZ
+          fi
     cmds:
       - |
         set -eo pipefail
@@ -30,7 +59,12 @@ tasks:
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
         mkdir -p bin
-        go build -o ./bin/gateway_main ./binaries/gateway_main
+        go build \
+          -ldflags "-s -w \
+            -X main.version={{.GATEWAY_VERSION}} \
+            -X main.commit={{.GATEWAY_COMMIT}} \
+            -X main.date={{.GATEWAY_DATE}}" \
+          -o ./bin/gateway_main ./binaries/gateway_main
 
   build-engine:
     desc: Build the C++ engine (emulator_main) via CMake into build-out/

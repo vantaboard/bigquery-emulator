@@ -10,12 +10,26 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 
 	"github.com/vantaboard/bigquery-emulator/gateway"
+)
+
+// Version metadata. The defaults (`dev` / `none` / `unknown`) are what a
+// plain `go build` produces; release builds replace them via
+// `-X main.version=... -X main.commit=... -X main.date=...` ldflags
+// (see `.goreleaser.yml` and `taskfiles/emulator.yml`'s `gateway:build`
+// helper). Keep these as `var` (not `const`) so the linker can overwrite
+// them — `const string` cannot be ldflag-injected.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 var (
@@ -36,7 +50,25 @@ var (
 		"If true, the gateway copies the engine's stderr to its own.")
 	logRequests = flag.Bool("log_requests", false,
 		"If true, every REST request and response is logged.")
+
+	versionFlag = flag.Bool("version", false,
+		"Print version information (semver + git commit + build date + "+
+			"Go toolchain) and exit.")
 )
+
+// printVersion writes the multi-line version block to w. Pulled out
+// into its own function so unit tests can drive it with a
+// `bytes.Buffer` rather than fork a process. The format intentionally
+// mirrors cloud-spanner-emulator's `gateway_main --version` shape (one
+// title line, then indented `key: value` rows) so operators who know
+// one emulator can read the other.
+func printVersion(w io.Writer) {
+	fmt.Fprintf(w, "bigquery-emulator-gateway version %s\n", version)
+	fmt.Fprintf(w, "  commit:  %s\n", commit)
+	fmt.Fprintf(w, "  built:   %s\n", date)
+	fmt.Fprintf(w, "  go:      %s\n", runtime.Version())
+	fmt.Fprintf(w, "  os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+}
 
 // resolveEngineBinary mirrors the resolution logic from
 // cloud-spanner-emulator: accept an absolute path as-is, otherwise look in
@@ -70,6 +102,16 @@ func resolveEngineBinary() string {
 
 func main() {
 	flag.Parse()
+
+	// Short-circuit before any side effect (engine subprocess lookup,
+	// socket bind, log setup). `--version` must work in stripped
+	// environments where the engine binary is missing and the gateway
+	// has no permission to bind a port.
+	if *versionFlag {
+		printVersion(os.Stdout)
+		return
+	}
+
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	gw := gateway.New(gateway.Options{
