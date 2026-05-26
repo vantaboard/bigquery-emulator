@@ -1,8 +1,15 @@
 # Build and run the runtime Docker image. The multi-stage Dockerfile
-# ships both the Go gateway and the C++ engine and is what `task ci:run`
-# / the GHCR release path eventually consume.
+# ships both the Go gateway and the C++ engine and is what
+# `task docker:smoke` / `.github/workflows/docker-smoke.yml` /
+# the GHCR release path (plan 44) eventually consume.
 #
-# Usage: task docker:build, task docker:run
+# Usage:
+#   task docker:build   - build the dev tag
+#   task docker:run     - run the dev tag interactively
+#   task docker:smoke   - bring up docker-compose, hit /healthz +
+#                         a SELECT 1 round-trip, tear down. Mirrors
+#                         the docker-smoke CI workflow so local +
+#                         CI exercise the exact same recipe.
 version: "3"
 
 vars:
@@ -37,3 +44,68 @@ tasks:
           -p {{.EMULATOR_HTTP_PORT}}:{{.EMULATOR_HTTP_PORT}} \
           -p {{.EMULATOR_GRPC_PORT}}:{{.EMULATOR_GRPC_PORT}} \
           {{.DOCKER_IMAGE}}
+
+  # Quickstart smoke: same recipe the docker-smoke CI workflow runs.
+  # Builds the bigquery-emulator:local tag via docker compose, polls
+  # the container's /healthz until it flips to healthy, fires a
+  # `SELECT 1` against the synchronous query API, asserts both shape
+  # and HTTP 200, and tears the stack down (including the named
+  # volume). Exits non-zero on any failure so a CI runner can use it
+  # verbatim.
+  smoke:
+    desc: docker compose up + /healthz + SELECT 1 round-trip + teardown
+    cmds:
+      - |
+        bash -c '
+          set -euo pipefail
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+
+          cleanup() {
+            docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT INT TERM
+
+          echo "[docker:smoke] docker compose up --build -d"
+          docker compose up --build -d
+
+          echo "[docker:smoke] waiting for /healthz to return 200"
+          # Poll the gateway directly rather than the Docker daemons
+          # Health.Status field. The healthcheck interval (30s) is too
+          # coarse for a smoke test and Task templates the inspect
+          # format string awkwardly; a tight curl loop reads the same
+          # endpoint Docker would and surfaces the engine cold-start
+          # tail in seconds, not minutes.
+          deadline=$(( $(date +%s) + 120 ))
+          while :; do
+            if curl -fsS -o /dev/null "http://localhost:{{.EMULATOR_HTTP_PORT}}/healthz"; then
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "[docker:smoke] FAILED: /healthz did not return 200 within 120s"
+              echo "[docker:smoke] docker compose ps:"
+              docker compose ps
+              echo "[docker:smoke] docker compose logs --tail=200:"
+              docker compose logs --tail=200
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "[docker:smoke] GET /healthz"
+          curl -fsS http://localhost:{{.EMULATOR_HTTP_PORT}}/healthz \
+            | tee /dev/stderr | grep -q "\"status\":\"ok\""
+
+          echo "[docker:smoke] POST jobs.query SELECT 1"
+          response=$(curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"query\":\"SELECT 1 AS n\",\"useLegacySql\":false}" \
+            "http://localhost:{{.EMULATOR_HTTP_PORT}}/bigquery/v2/projects/test/queries")
+          echo "[docker:smoke] response: ${response}"
+
+          echo "$response" | grep -q "\"kind\":\"bigquery#queryResponse\""
+          echo "$response" | grep -q "\"jobComplete\":true"
+          echo "$response" | grep -q "\"v\":\"1\""
+
+          echo "[docker:smoke] OK"
+        '

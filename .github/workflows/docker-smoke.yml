@@ -1,0 +1,107 @@
+# Docker quickstart smoke for the BigQuery emulator.
+#
+# Builds the multi-stage Dockerfile, brings the docker-compose stack up,
+# polls /healthz until the gateway is alive, fires the documented
+# `SELECT 1` quickstart query, asserts both the HTTP status and the
+# response shape, then tears the stack down (volume and all).
+#
+# This is the same recipe `task docker:smoke` runs locally; the
+# workflow shells out to that task so the CI + local paths cannot
+# drift. See `taskfiles/docker.yml`.
+#
+# Time budget: the canonical Bazel `//binaries/emulator_main:emulator_main`
+# build links the full GoogleSQL + reference-impl + DuckDB + gRPC stack,
+# which is a long pole on a cold cache (~25-55 min depending on the
+# runner). The Docker-internal Bazel cache is held in a BuildKit cache
+# mount (`docker/dockerfile:1.7` syntax). actions/cache wires that
+# cache to GitHub's cache backend so warm-cache rebuilds drop into
+# minutes. A first-of-the-day cold run on a fresh `main` will exceed
+# 10 min; subsequent runs and PR pushes hitting the warm cache should
+# land within the gate.
+#
+# Triggers + concurrency mirror conformance.yml so a stale push gets
+# cancelled when a newer push lands on the same ref.
+
+name: docker-smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quickstart-smoke:
+    name: quickstart-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # BuildKit cache mount writes under /var/lib/docker/buildkit by
+      # default; bind-mount-cache requires the gha cache backend. The
+      # docker/build-push-action's `cache-from`/`cache-to` flags wire
+      # that automatically. Here we drive `docker compose build`
+      # explicitly so the cache config is on the docker compose CLI.
+      - name: Restore Docker layer cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: docker-smoke-buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'binaries/emulator_main/**', 'backend/**', 'frontend/**', 'proto/**', 'third_party/**') }}
+          restore-keys: |
+            docker-smoke-buildx-${{ runner.os }}-
+
+      - name: Build and smoke-test via task docker:smoke
+        env:
+          # Drive `docker compose build` through Buildx with the cache
+          # bound to actions/cache. `docker:smoke` only invokes
+          # `docker compose up --build`, so we pre-build with cache
+          # flags first to populate /tmp/.buildx-cache, then let the
+          # task run hits the pre-built image.
+          DOCKER_BUILDKIT: "1"
+          COMPOSE_DOCKER_CLI_BUILD: "1"
+        run: |
+          set -euo pipefail
+          # Pre-build with explicit cache backends so layers persist
+          # across runs. compose's `--build` invocation in the task
+          # then no-ops if the image is already up to date.
+          docker buildx build \
+            --tag bigquery-emulator:local \
+            --load \
+            --cache-from "type=local,src=/tmp/.buildx-cache" \
+            --cache-to "type=local,dest=/tmp/.buildx-cache-new,mode=max" \
+            .
+          # Atomic swap so a partial cache from a failed run does not
+          # poison the next run.
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+          task docker:smoke
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --tail=400 || true
+
+      - name: Tear down (best-effort)
+        if: always()
+        run: |
+          docker compose down -v --remove-orphans || true
