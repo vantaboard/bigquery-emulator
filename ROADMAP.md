@@ -344,11 +344,27 @@ Goal: prove that real BigQuery client libraries work against the emulator.
 
 ## Phase 9 - Distribution
 
-- ⏳ `Dockerfile` that ships both binaries in one image
+- ✅ `Dockerfile` that ships both binaries in one image
   (mirrors `gcr.io/cloud-spanner-emulator/emulator`)
-- ⏳ Docker Hub / GHCR publish workflow
-- ⏳ Release-tagged static-ish Linux binaries
-  (`gateway_main`, `emulator_main`, `THIRD_PARTY_NOTICES.txt`)
+- ✅ Docker Hub / GHCR publish workflow (`.github/workflows/release.yml`,
+  pushes to `ghcr.io/vantaboard/bigquery-emulator`)
+- ✅ Release-tagged static-ish Linux binaries via goreleaser
+  (`bigquery-emulator-gateway`, bundled `bin/emulator_main` +
+  `bin/libduckdb.so`; linux/amd64 engine only — see README §Releases)
+- ✅ `--version` on both binaries reporting consistent semver +
+  git commit + build date; gateway via `-X main.<sym>=…` ldflags
+  (see `.goreleaser.yml`), engine via the `:version_cc` genrule under
+  `binaries/emulator_main/BUILD.bazel`
+- ✅ Profile matrix documented in README §Profiles
+  (`ci` / `duckdb` / `dev`); the same labels drive the conformance
+  harness (`conformance/README.md`) and the engine policy
+  (`docs/ENGINE_POLICY.md`).
+
+  | Profile  | `--engine`        | `--storage` | `--on_unknown_fn` |
+  |----------|-------------------|-------------|-------------------|
+  | `ci`     | `reference_impl`  | `memory`    | `unimplemented`   |
+  | `duckdb` | `duckdb`          | `duckdb`    | `fallback`        |
+  | `dev`    | `duckdb`          | `duckdb`    | `unimplemented`   |
 - ⏳ Document `gcloud emulators bigquery start`-equivalent usage
 
 ---

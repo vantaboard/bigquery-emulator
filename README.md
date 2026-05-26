@@ -215,6 +215,65 @@ docker run --rm -p 9050:9050 bigquery-emulator:dev \
     --log_requests --hostname=0.0.0.0 --http_port=9050
 ```
 
+## Profiles
+
+`emulator_main`'s `--engine` / `--storage` / `--on_unknown_fn` flags
+form a small product space. Three combinations are named, documented,
+and exercised in conformance:
+
+| Profile  | `--engine`        | `--storage` | `--on_unknown_fn`   | Use case                                                                 |
+|----------|-------------------|-------------|---------------------|--------------------------------------------------------------------------|
+| `ci`     | `reference_impl`  | `memory`    | `unimplemented`     | Hermetic, no on-disk state. The conformance `memory` profile and the CI smoke lanes. Slow but the source of truth for semantics (`docs/ENGINE_POLICY.md`). |
+| `duckdb` | `duckdb`          | `duckdb`    | `fallback`          | Persistent, GoogleSQL-via-DuckDB. The canonical `docker compose up` configuration; the conformance `duckdb` profile; the recommended day-to-day shape. |
+| `dev`    | `duckdb`          | `duckdb`    | `unimplemented`     | DuckDB analyzer + DuckDB persistence with the fallback bridge OFF, so transpiler-uncovered shapes surface as `UNIMPLEMENTED` instead of silently routing to the reference impl. Use when you're working on the transpiler itself and want every gap to fail loud. |
+
+Each profile is a thin label on top of the underlying flags; nothing in
+the gateway or the conformance harness changes behavior on the label,
+only on the flag combination. The two equivalent ways to select a
+profile:
+
+```bash
+# 1. Use the engine's --profile shorthand (currently `ci` / `dev`;
+#    see `emulator_main --help`). `--profile` defaults engine + storage
+#    in one knob; explicit `--engine` / `--storage` flags always win:
+./bin/emulator_main --profile=ci
+./bin/emulator_main --profile=dev
+
+# 2. Set the underlying flags explicitly. Identical to --profile but
+#    surfaces the engine / storage decision in the command line:
+./bin/emulator_main --engine=reference_impl --storage=memory                    # ci
+./bin/emulator_main --engine=duckdb --storage=duckdb --on_unknown_fn=fallback   # duckdb (canonical)
+./bin/emulator_main --engine=duckdb --storage=duckdb                            # dev
+```
+
+When the gateway spawns the engine (`task emulator:run-full`,
+`docker compose up`, the published Docker image, the goreleaser
+archive), it forwards every flag after the gateway-recognized set to
+the engine. So the same profile knobs work end-to-end:
+
+```bash
+./bin/bigquery-emulator-gateway --engine=duckdb --storage=duckdb --on_unknown_fn=fallback
+```
+
+For Docker, append the flags after the image name (the
+`docker/gateway_main.sh` shim forwards them):
+
+```bash
+docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1 \
+    --engine=duckdb --storage=duckdb --on_unknown_fn=fallback
+```
+
+The `duckdb` profile is the recommended day-to-day shape: it has the
+analyzer parity of the reference impl wherever the DuckDB transpiler
+has coverage, the persistent on-disk catalog under `--data_dir`
+(default `$HOME/.bigquery-emulator`), and the
+`--on_unknown_fn=fallback` bridge to the reference impl for shapes the
+transpiler does not yet cover. See [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
+for the engine-asymmetry rationale (DuckDB is the active development
+surface; the reference impl is maintenance-mode), and the conformance
+harness ([`conformance/README.md`](./conformance/README.md)) for how
+the same profile labels drive fixture selection.
+
 ## Pointing client libraries at the emulator
 
 Two equivalent ways to redirect a BigQuery client at the emulator:

@@ -96,3 +96,8 @@ Per the policy above:
   document from its "Contributing a new fixture" section.
 - `backend/engine/fallback/fallback_engine.cc` -- the implementation
   of the bridge described above.
+- [`README.md` §Profiles](../README.md#profiles) -- the user-facing
+  walkthrough of the three named profiles (`ci`, `duckdb`, `dev`)
+  built on the engine/storage/fallback knobs this policy governs.
+  When in doubt about which profile to run, start at the README
+  table; this document is the "why", the README section is the "how".
