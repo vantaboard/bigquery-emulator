@@ -1,0 +1,36 @@
+# groupby_having: GROUP BY ... HAVING <aggregate predicate>.
+#
+# Pins the analyzer's HAVING clause emit: the predicate runs over
+# aggregated columns (`COUNT(*) >= 2`) rather than row-level columns,
+# so the engine has to push the filter after the AggregateScan rather
+# than before it. ORDER BY kind keeps the result deterministic.
+name: groupby_having
+description: |
+  GROUP BY kind, HAVING COUNT(*) >= 2. Verifies the engine applies a
+  post-aggregation filter on the group cardinality and only surfaces
+  the groups that satisfy the threshold.
+profiles: [memory, duckdb]
+project_id: proj-groupby-having
+dataset_id: ds_groupby_having
+setup:
+  - dataset: ds_groupby_having
+  - table:
+      dataset: ds_groupby_having
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - sql: |
+      INSERT INTO ds_groupby_having.events (id, kind)
+      VALUES (1, 'login'), (2, 'click'), (3, 'login'),
+             (4, 'view'),  (5, 'click'), (6, 'login')
+query: |
+  SELECT kind, COUNT(*) AS c
+    FROM ds_groupby_having.events
+   GROUP BY kind
+  HAVING COUNT(*) >= 2
+   ORDER BY kind
+expected:
+  rows:
+    - {kind: "click", c: "2"}
+    - {kind: "login", c: "3"}

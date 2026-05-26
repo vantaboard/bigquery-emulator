@@ -1,0 +1,25 @@
+# error_unknown_column: SELECT a column the table does not have.
+#
+# Pins the analyzer's name-resolution error for a missing column.
+# GoogleSQL emits "Unrecognized name: ..." as INVALID_ARGUMENT, the
+# gateway maps it to HTTP 400 + invalidQuery.
+name: error_unknown_column
+description: |
+  SELECT bad_column FROM <existing table> returns HTTP 400 with a
+  message that mentions the offending column name.
+profiles: [memory, duckdb]
+project_id: proj-error-unknown-column
+dataset_id: ds_error_unknown_column
+setup:
+  - dataset: ds_error_unknown_column
+  - table:
+      dataset: ds_error_unknown_column
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+query: SELECT bad_column FROM ds_error_unknown_column.people
+expected:
+  error:
+    code: 400
+    message_contains: "bad_column"

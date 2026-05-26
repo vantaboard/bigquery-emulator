@@ -1,0 +1,39 @@
+# ddl_create_table_as_select: CREATE TABLE ... AS SELECT round-trip.
+#
+# DuckDB-only because DDL is implemented exclusively on the DuckDB
+# engine (`backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`). The
+# reference-impl engine returns UNIMPLEMENTED for DDL; the memory
+# profile leaves `--on_unknown_fn` at its default (`unimplemented`)
+# so a fixture targeting the memory profile would surface a 501.
+# See `docs/ENGINE_POLICY.md` for the engine matrix this lands on.
+#
+# Mirrors `gateway/e2e/ddl_create_drop_test.go::TestDDLCreateTableAsSelectRoundTrip`.
+name: ddl_create_table_as_select
+description: |
+  CREATE TABLE dst AS SELECT ... FROM src. Verifies the DuckDB engine
+  evaluates the inner SELECT, registers a new table in the catalog
+  with the inferred schema, and lands the rows in storage.
+profiles: [duckdb]
+project_id: proj-ddl-ctas
+dataset_id: ds_ddl_ctas
+setup:
+  - dataset: ds_ddl_ctas
+  - table:
+      dataset: ds_ddl_ctas
+      id: src
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_ddl_ctas.src (id, name)
+      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - sql: |
+      CREATE TABLE ds_ddl_ctas.copy AS
+      SELECT id, name FROM ds_ddl_ctas.src
+query: |
+  SELECT id, name FROM ds_ddl_ctas.copy ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "2", name: "linus"}
+    - {id: "3", name: "grace"}

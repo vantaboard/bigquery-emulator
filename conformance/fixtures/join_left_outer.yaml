@@ -1,0 +1,47 @@
+# join_left_outer: LEFT JOIN with NULL fill on the right side.
+#
+# Same shape as `join_inner.yaml` but with one user (`grace`, id=3)
+# that has no matching event row. LEFT JOIN must surface that user
+# with `event.kind = NULL`; a YAML `null` on the expected side is
+# distinct from the literal STRING "NULL" and matches the gateway's
+# wire shape `{"v": null}` (see `conformance/README.md`).
+name: join_left_outer
+description: |
+  LEFT JOIN of users + events on user_id. Verifies the engine
+  preserves left-side rows that have no right-side match and emits
+  the missing right-side columns as NULL on the wire.
+profiles: [memory, duckdb]
+project_id: proj-join-left
+dataset_id: ds_join_left
+setup:
+  - dataset: ds_join_left
+  - table:
+      dataset: ds_join_left
+      id: users
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_join_left
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: user_id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - sql: |
+      INSERT INTO ds_join_left.users (id, name)
+      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - sql: |
+      INSERT INTO ds_join_left.events (id, user_id, kind)
+      VALUES (10, 1, 'login'), (11, 2, 'click')
+query: |
+  SELECT u.id, u.name, e.kind
+    FROM ds_join_left.users AS u
+    LEFT JOIN ds_join_left.events AS e
+      ON u.id = e.user_id
+   ORDER BY u.id
+expected:
+  rows:
+    - {id: "1", name: "ada",   kind: "login"}
+    - {id: "2", name: "linus", kind: "click"}
+    - {id: "3", name: "grace", kind: null}

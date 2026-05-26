@@ -1,0 +1,50 @@
+# join_inner: INNER JOIN on a foreign key.
+#
+# Mirrors the `select_join` parity case in
+# `gateway/e2e/query_duckdb_parity_test.go::TestDuckDBParityQuerySuite`:
+# `users` joined to `events` on `u.id = e.user_id`. The seed is small
+# (3 users, 4 events, one event per matching user plus a duplicate)
+# so the row shape stays trivially auditable. ORDER BY e.id keeps the
+# row order deterministic so `match: ordered` works on both profiles.
+name: join_inner
+description: |
+  INNER JOIN of users + events on user_id. Verifies the engine emits
+  one row per (user, event) match and drops rows from either side
+  that lack a counterpart.
+profiles: [memory, duckdb]
+project_id: proj-join-inner
+dataset_id: ds_join_inner
+setup:
+  - dataset: ds_join_inner
+  - table:
+      dataset: ds_join_inner
+      id: users
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_join_inner
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: user_id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - sql: |
+      INSERT INTO ds_join_inner.users (id, name)
+      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - sql: |
+      INSERT INTO ds_join_inner.events (id, user_id, kind)
+      VALUES (10, 1, 'login'), (11, 1, 'click'),
+             (12, 2, 'login'), (13, 3, 'click')
+query: |
+  SELECT u.id, u.name, e.kind
+    FROM ds_join_inner.users AS u
+    JOIN ds_join_inner.events AS e
+      ON u.id = e.user_id
+   ORDER BY e.id
+expected:
+  rows:
+    - {id: "1", name: "ada",   kind: "login"}
+    - {id: "1", name: "ada",   kind: "click"}
+    - {id: "2", name: "linus", kind: "login"}
+    - {id: "3", name: "grace", kind: "click"}

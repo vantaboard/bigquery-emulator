@@ -1,0 +1,43 @@
+# dml_insert_select: INSERT INTO ... SELECT FROM ...
+#
+# Pins the engine's INSERT-from-query path. The reference-impl
+# evaluator implements INSERT VALUES + INSERT SELECT through the same
+# `PreparedModify` machinery (see `dml_insert_test.go::
+# TestDMLInsertSelectRoundTrip`), and the DuckDB profile routes the
+# DML to reference-impl via FallbackEngine, so both profiles should
+# behave identically.
+name: dml_insert_select
+description: |
+  INSERT INTO target SELECT FROM source. Verifies the engine evaluates
+  the inner SELECT, materializes its rows, and writes them into the
+  target table via the same DML pipeline as INSERT VALUES.
+profiles: [memory, duckdb]
+project_id: proj-dml-insert-select
+dataset_id: ds_dml_insert_select
+setup:
+  - dataset: ds_dml_insert_select
+  - table:
+      dataset: ds_dml_insert_select
+      id: src
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - table:
+      dataset: ds_dml_insert_select
+      id: dst
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_dml_insert_select.src (id, name)
+      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - sql: |
+      INSERT INTO ds_dml_insert_select.dst (id, name)
+      SELECT id, name FROM ds_dml_insert_select.src
+query: |
+  SELECT id, name FROM ds_dml_insert_select.dst ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "2", name: "linus"}
+    - {id: "3", name: "grace"}

@@ -1,0 +1,24 @@
+# error_unknown_table: SELECT from a table that does not exist.
+#
+# Pins the analyzer's name-resolution failure path. GoogleSQL surfaces
+# "Table not found" as INVALID_ARGUMENT (not NOT_FOUND), which the
+# gateway maps to HTTP 400 + invalidQuery (see
+# `gateway/handlers/errors.go`). Mirrors
+# `gateway/e2e/dryrun_test.go::TestDryRunUnknownTableReturnsInvalidQuery`
+# minus the `dryRun:true` knob (the conformance harness POSTs without
+# dryRun; the analyzer error path is the same in both modes for
+# `Table not found`).
+name: error_unknown_table
+description: |
+  SELECT from a non-existent table returns HTTP 400 with a message
+  that mentions the missing table name.
+profiles: [memory, duckdb]
+project_id: proj-error-unknown-table
+dataset_id: ds_error_unknown_table
+setup:
+  - dataset: ds_error_unknown_table
+query: SELECT * FROM ds_error_unknown_table.does_not_exist
+expected:
+  error:
+    code: 400
+    message_contains: "does_not_exist"

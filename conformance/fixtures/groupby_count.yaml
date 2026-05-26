@@ -1,0 +1,37 @@
+# groupby_count: GROUP BY <col> with COUNT(*) per group.
+#
+# Pins the AggregateScan emit with a non-empty group key list. Mirrors
+# the `select_group_by` parity case in
+# `gateway/e2e/query_duckdb_parity_test.go`. ORDER BY kind keeps the
+# output deterministic so `match: ordered` works on both profiles
+# (DuckDB does not guarantee GROUP BY emit order without an ORDER BY).
+name: groupby_count
+description: |
+  GROUP BY kind + COUNT(*). Verifies the engine partitions the row
+  set by the group key and emits one row per partition with the
+  per-partition cardinality.
+profiles: [memory, duckdb]
+project_id: proj-groupby-count
+dataset_id: ds_groupby_count
+setup:
+  - dataset: ds_groupby_count
+  - table:
+      dataset: ds_groupby_count
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - sql: |
+      INSERT INTO ds_groupby_count.events (id, kind)
+      VALUES (1, 'login'), (2, 'click'), (3, 'login'),
+             (4, 'view'),  (5, 'click'), (6, 'login')
+query: |
+  SELECT kind, COUNT(*) AS c
+    FROM ds_groupby_count.events
+   GROUP BY kind
+   ORDER BY kind
+expected:
+  rows:
+    - {kind: "click", c: "2"}
+    - {kind: "login", c: "3"}
+    - {kind: "view",  c: "1"}

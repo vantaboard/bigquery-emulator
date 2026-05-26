@@ -1,0 +1,18 @@
+# select_current_timestamp_schema_only: schema-only smoke for a
+# non-deterministic SELECT.
+#
+# `CURRENT_TIMESTAMP()` returns a different value every call, so an
+# `ordered` / `unordered` fixture would flake on the actual cell
+# value. `match: schema_only` pins the column name + type without
+# asserting on rows. See `conformance/README.md` "Schema-only mode".
+name: select_current_timestamp_schema_only
+description: |
+  SELECT CURRENT_TIMESTAMP() AS ts. Asserts the wire-format column
+  shape (`ts` of type TIMESTAMP) without pinning the cell value.
+profiles: [memory, duckdb]
+project_id: proj-select-current-ts
+query: SELECT CURRENT_TIMESTAMP() AS ts
+expected:
+  match: schema_only
+  schema:
+    - {name: ts, type: TIMESTAMP}

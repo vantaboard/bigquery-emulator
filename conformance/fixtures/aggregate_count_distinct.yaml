@@ -1,0 +1,30 @@
+# aggregate_count_distinct: COUNT(DISTINCT <col>).
+#
+# Pins the analyzer's DISTINCT-aggregate lowering. The engine has to
+# de-duplicate the input column before counting, which is a different
+# physical plan than plain COUNT(*).
+name: aggregate_count_distinct
+description: |
+  COUNT(DISTINCT kind). Verifies the engine returns the number of
+  unique values in the `kind` column rather than the total row count.
+profiles: [memory, duckdb]
+project_id: proj-count-distinct
+dataset_id: ds_count_distinct
+setup:
+  - dataset: ds_count_distinct
+  - table:
+      dataset: ds_count_distinct
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - sql: |
+      INSERT INTO ds_count_distinct.events (id, kind)
+      VALUES (1, 'login'), (2, 'click'), (3, 'login'),
+             (4, 'view'),  (5, 'click'), (6, 'login')
+query: |
+  SELECT COUNT(DISTINCT kind) AS distinct_kinds
+    FROM ds_count_distinct.events
+expected:
+  rows:
+    - {distinct_kinds: "3"}

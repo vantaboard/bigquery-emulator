@@ -1,0 +1,20 @@
+# error_type_mismatch: arithmetic on incompatible types.
+#
+# Pins the analyzer's type-resolution error path. `SELECT 1 + 'foo'`
+# resolves to the `INT64 + DATE` overload (BigQuery supports date
+# arithmetic with INT64 day offsets, so `INT64 + DATE -> DATE` is a
+# real signature), then fails when GoogleSQL tries to coerce the
+# literal `'foo'` to DATE. The wire shape is HTTP 400 invalidQuery
+# with a "Could not cast literal" message -- exactly the contract a
+# client library needs for surfacing actionable diagnostics.
+name: error_type_mismatch
+description: |
+  SELECT 1 + 'foo' returns HTTP 400 with a "Could not cast literal"
+  message from the analyzer's DATE-arithmetic overload coercion.
+profiles: [memory, duckdb]
+project_id: proj-error-type-mismatch
+query: SELECT 1 + 'foo'
+expected:
+  error:
+    code: 400
+    message_contains: "Could not cast literal"

@@ -1,0 +1,40 @@
+# select_null_handling: IS NULL + COALESCE smoke.
+#
+# Seeds three rows with a NULLABLE `name` column where one row has
+# NULL, and asserts that:
+#   1. `name IS NULL` surfaces as a BOOL true/false per row.
+#   2. `COALESCE(name, 'unknown')` substitutes the literal when the
+#      cell is NULL and passes the original value through otherwise.
+# The diff engine treats a YAML `null` distinct from the literal
+# STRING "NULL" (see `conformance/README.md` "Typed cell comparison")
+# so we do not need to escape anything special on the expected side.
+name: select_null_handling
+description: |
+  IS NULL / COALESCE round-trip. Verifies the engine's NULL semantics
+  for both predicate emission (boolean column) and default-value
+  substitution against a NULLABLE column.
+profiles: [memory, duckdb]
+project_id: proj-select-null
+dataset_id: ds_select_null
+setup:
+  - dataset: ds_select_null
+  - table:
+      dataset: ds_select_null
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_select_null.people (id, name)
+      VALUES (1, 'ada'), (2, NULL), (3, 'grace')
+query: |
+  SELECT id,
+         name IS NULL AS is_null,
+         COALESCE(name, 'unknown') AS display_name
+    FROM ds_select_null.people
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", is_null: "false", display_name: "ada"}
+    - {id: "2", is_null: "true",  display_name: "unknown"}
+    - {id: "3", is_null: "false", display_name: "grace"}

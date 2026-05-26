@@ -1,0 +1,30 @@
+# ddl_drop_table_then_select: DROP TABLE then SELECT raises an error.
+#
+# DuckDB-only because DROP TABLE is implemented exclusively on the
+# DuckDB engine (see comment in `ddl_create_table_as_select.yaml`).
+# After the DROP, a SELECT against the same name should fail at
+# analysis time with HTTP 400 + a "Table not found" message.
+name: ddl_drop_table_then_select
+description: |
+  CREATE TABLE -> DROP TABLE -> SELECT FROM the dropped table returns
+  HTTP 400 (table no longer in the catalog).
+profiles: [duckdb]
+project_id: proj-ddl-drop
+dataset_id: ds_ddl_drop
+setup:
+  - dataset: ds_ddl_drop
+  - table:
+      dataset: ds_ddl_drop
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_ddl_drop.people (id, name)
+      VALUES (1, 'ada')
+  - sql: DROP TABLE ds_ddl_drop.people
+query: SELECT id, name FROM ds_ddl_drop.people
+expected:
+  error:
+    code: 400
+    message_contains: "people"

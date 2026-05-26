@@ -1,0 +1,16 @@
+# error_unknown_function: SELECT calling a function that does not exist.
+#
+# Pins the analyzer's function-resolution error path: GoogleSQL emits
+# "Function not found" as INVALID_ARGUMENT, the gateway maps it to
+# HTTP 400 + invalidQuery.
+name: error_unknown_function
+description: |
+  SELECT NOT_A_FUNCTION(1) returns HTTP 400 with a message mentioning
+  the unrecognized function name.
+profiles: [memory, duckdb]
+project_id: proj-error-unknown-function
+query: SELECT NOT_A_FUNCTION(1)
+expected:
+  error:
+    code: 400
+    message_contains: "NOT_A_FUNCTION"

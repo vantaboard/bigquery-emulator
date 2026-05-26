@@ -1,0 +1,29 @@
+# aggregate_count_star: SELECT COUNT(*) FROM <table>.
+#
+# Pins the engine's AggregateScan emit for the COUNT(*) shape against
+# a small seed table. Mirrors the `select_count_star` parity case in
+# `gateway/e2e/query_duckdb_parity_test.go`. The result is a single
+# scalar row, so `match: ordered` is fine without an ORDER BY.
+name: aggregate_count_star
+description: |
+  Plain COUNT(*) round-trip. Verifies the engine produces a single
+  INT64 row with the seed table's cardinality.
+profiles: [memory, duckdb]
+project_id: proj-aggregate-count
+dataset_id: ds_aggregate_count
+setup:
+  - dataset: ds_aggregate_count
+  - table:
+      dataset: ds_aggregate_count
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_aggregate_count.people (id, name)
+      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+query: |
+  SELECT COUNT(*) AS c FROM ds_aggregate_count.people
+expected:
+  rows:
+    - {c: "3"}

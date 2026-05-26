@@ -1,0 +1,19 @@
+# select_computed_expression: literal arithmetic + string projection.
+#
+# Pins the engine's constant-folding ProjectScan emit on both profiles:
+# `SELECT 1 + 2 AS sum, 'hello' AS greeting` is evaluated entirely in
+# the analyzer / evaluator without any catalog state. Mirrors the
+# computed-column smoke shape from
+# `gateway/e2e/query_duckdb_parity_test.go::TestDuckDBParityQuerySuite`
+# (the `select_constant` case extended with a STRING literal column).
+name: select_computed_expression
+description: |
+  Constant arithmetic plus a STRING literal in a single projection.
+  Exercises the analyzer's literal folding + the gateway's per-column
+  type emission for INT64 / STRING side-by-side.
+profiles: [memory, duckdb]
+project_id: proj-select-computed
+query: SELECT 1 + 2 AS sum, 'hello' AS greeting
+expected:
+  rows:
+    - {sum: "3", greeting: "hello"}

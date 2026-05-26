@@ -1,0 +1,37 @@
+# dml_update_multiple_columns: UPDATE setting more than one column.
+#
+# Exercises the multi-target-column UPDATE form (SET name=..., score=...)
+# on top of the same DML pipeline as `dml_update_delete.yaml`. The
+# reference-impl engine implements ResolvedUpdateStmt directly; the
+# DuckDB profile routes through FallbackEngine.
+name: dml_update_multiple_columns
+description: |
+  UPDATE setting two columns in the same statement. Verifies the
+  engine evaluates each SET expression against the matched row and
+  writes both updates atomically.
+profiles: [memory, duckdb]
+project_id: proj-dml-update-multi
+dataset_id: ds_dml_update_multi
+setup:
+  - dataset: ds_dml_update_multi
+  - table:
+      dataset: ds_dml_update_multi
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+        - {name: tier, type: STRING, mode: NULLABLE}
+  - sql: |
+      INSERT INTO ds_dml_update_multi.people (id, name, tier)
+      VALUES (1, 'ada', 'free'), (2, 'linus', 'free')
+  - sql: |
+      UPDATE ds_dml_update_multi.people
+         SET name = 'augusta',
+             tier = 'pro'
+       WHERE id = 1
+query: |
+  SELECT id, name, tier FROM ds_dml_update_multi.people ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "augusta", tier: "pro"}
+    - {id: "2", name: "linus",   tier: "free"}
