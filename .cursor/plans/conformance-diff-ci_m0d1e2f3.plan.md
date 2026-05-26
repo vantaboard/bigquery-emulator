@@ -4,10 +4,10 @@ overview: "Phase 8b: row diff engine and CI matrix job."
 todos:
   - id: diff-engine
     content: "Row diff: order-insensitive aggregates, typed cell comparison, schema-only dryRun mode"
-    status: pending
+    status: completed
   - id: ci-matrix
     content: "Add .github/workflows/conformance.yml: matrix engine×storage profiles"
-    status: pending
+    status: completed
 isProject: false
 ---
 

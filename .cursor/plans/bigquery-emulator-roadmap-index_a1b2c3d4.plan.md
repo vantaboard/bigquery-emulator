@@ -127,7 +127,7 @@ todos:
     status: completed
   - id: run-41-conformance-diff-ci
     content: "Run conformance-diff-ci_m0d1e2f3.plan.md"
-    status: pending
+    status: completed
   - id: run-42-conformance-seed-docs
     content: "Run conformance-seed-docs_n1e2f3a4.plan.md"
     status: pending
