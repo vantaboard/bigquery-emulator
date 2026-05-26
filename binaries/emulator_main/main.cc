@@ -29,6 +29,7 @@
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
+#include "binaries/emulator_main/version.h"
 #include "frontend/server/server.h"
 
 namespace {
@@ -110,6 +111,13 @@ struct Flags {
   bool storage_explicit = false;
   bool data_dir_explicit = false;
   bool help = false;
+  // `--version` short-circuits before any catalog / storage init in
+  // `main`, so the flag works in stripped containers where
+  // `--storage=duckdb`'s default `$HOME/.bigquery-emulator` directory
+  // is unwritable or the listening port is already taken. Mirrors the
+  // Go gateway's `--version` posture (see
+  // `binaries/gateway_main/main.go`).
+  bool version = false;
 };
 
 void PrintUsage(std::FILE* out, const char* argv0) {
@@ -170,8 +178,33 @@ void PrintUsage(std::FILE* out, const char* argv0) {
                "                                          engine\n"
                "                          default: unimplemented\n"
                "\n"
+               "  --version               print engine version (semver +\n"
+               "                          git commit + build date) and exit\n"
+               "\n"
                "  --help, -h              print this message and exit\n",
                argv0);
+}
+
+// Writes the multi-line version block to `out`. Pulled out into a
+// named helper so the layout stays in lock-step with the Go
+// gateway's `printVersion` (see `binaries/gateway_main/main.go`):
+// one title line plus indented `key: value` rows. The trailing
+// `clang:` row reports the compiler that built this TU; that is
+// stable per Bazel cc_toolchain (see `.cursor/rules/bazel-process-
+// hygiene.mdc`'s pin to system clang-18) so it is genuinely
+// informative to operators diagnosing build-environment drift.
+void PrintVersion(std::FILE* out) {
+  std::fprintf(out, "bigquery-emulator-engine version %s\n",
+               bigquery_emulator::binaries::emulator_main::kVersion);
+  std::fprintf(out, "  commit:  %s\n",
+               bigquery_emulator::binaries::emulator_main::kCommit);
+  std::fprintf(out, "  built:   %s\n",
+               bigquery_emulator::binaries::emulator_main::kBuildDate);
+#if defined(__clang_version__)
+  std::fprintf(out, "  clang:   %s\n", __clang_version__);
+#elif defined(__VERSION__)
+  std::fprintf(out, "  cc:      %s\n", __VERSION__);
+#endif
 }
 
 // Parses `--key=value` and `--key value` shapes for one expected flag.
@@ -274,6 +307,10 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
     const std::string_view arg = argv[i];
     if (arg == "--help" || arg == "-h") {
       flags.help = true;
+      continue;
+    }
+    if (arg == "--version") {
+      flags.version = true;
       continue;
     }
     std::string value;
@@ -394,6 +431,15 @@ int main(int argc, char** argv) {
 
   if (flags.help) {
     PrintUsage(stdout, argv[0]);
+    return EXIT_SUCCESS;
+  }
+
+  // Short-circuit before storage / engine init: `--version` must
+  // succeed in stripped containers where the default DuckDB data dir
+  // is unwritable, and operators invoking it from `docker run --rm
+  // ... --version` should never trip the gRPC server's port bind.
+  if (flags.version) {
+    PrintVersion(stdout);
     return EXIT_SUCCESS;
   }
 

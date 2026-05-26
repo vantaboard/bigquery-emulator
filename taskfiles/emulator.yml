@@ -122,10 +122,45 @@ tasks:
         sh: echo "${BAZEL_CC:-/usr/bin/clang}"
       BAZEL_CXX:
         sh: echo "${BAZEL_CXX:-/usr/bin/clang++}"
+      # Stamp values for `:version_cc` (see binaries/emulator_main/
+      # BUILD.bazel). Matches the gateway-side ldflag inputs in
+      # `task emulator:build` so both halves of the emulator report the
+      # same `--version` shape when built from the same tree.
+      # CI workflows can override by exporting EMULATOR_VERSION /
+      # EMULATOR_COMMIT / EMULATOR_BUILD_DATE before invoking the task
+      # (`.github/workflows/release.yml` threads `github.ref_name`
+      # through this way).
+      EMULATOR_VERSION:
+        sh: |
+          if [ -n "${EMULATOR_VERSION:-}" ]; then
+            echo "$EMULATOR_VERSION"
+          else
+            git describe --tags --always --dirty 2>/dev/null || echo dev
+          fi
+      EMULATOR_COMMIT:
+        sh: |
+          if [ -n "${EMULATOR_COMMIT:-}" ]; then
+            echo "$EMULATOR_COMMIT"
+          else
+            git rev-parse --short HEAD 2>/dev/null || echo none
+          fi
+      EMULATOR_BUILD_DATE:
+        sh: |
+          if [ -n "${EMULATOR_BUILD_DATE:-}" ]; then
+            echo "$EMULATOR_BUILD_DATE"
+          else
+            date -u +%Y-%m-%dT%H:%M:%SZ
+          fi
     cmds:
       # Delegated to bash because Task's embedded mvdan/sh shell does
       # not accept INT/TERM in `trap`. Wrapping ensures the daemon is
       # released even when Cursor cancels the build mid-flight.
+      #
+      # The three `--action_env=EMULATOR_*` flags flow through to the
+      # `:version_cc` genrule's environment (see BUILD.bazel) so the
+      # generated `version.cc` reports the working-tree HEAD. Changing
+      # these values only invalidates the version genrule's action -
+      # the 8k GoogleSQL TUs stay cached.
       - |
         bash -c '
           set -eo pipefail
@@ -133,12 +168,18 @@ tasks:
           cd "$root"
           trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+          EMULATOR_VERSION={{.EMULATOR_VERSION}} \
+          EMULATOR_COMMIT={{.EMULATOR_COMMIT}} \
+          EMULATOR_BUILD_DATE={{.EMULATOR_BUILD_DATE}} \
             bazel build \
               --jobs={{.BAZEL_JOBS}} \
               --local_resources=cpu={{.BAZEL_JOBS}} \
               --local_resources=memory={{.BAZEL_MEM_MB}} \
               --action_env=CC={{.BAZEL_CC}} \
               --action_env=CXX={{.BAZEL_CXX}} \
+              --action_env=EMULATOR_VERSION \
+              --action_env=EMULATOR_COMMIT \
+              --action_env=EMULATOR_BUILD_DATE \
               //binaries/emulator_main:emulator_main
           mkdir -p bin
           cp -f bazel-bin/binaries/emulator_main/emulator_main ./bin/emulator_main

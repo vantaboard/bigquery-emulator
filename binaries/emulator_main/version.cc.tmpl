@@ -1,0 +1,15 @@
+// AUTO-GENERATED at build time from version.cc.tmpl. Do NOT edit by
+// hand and do NOT commit a generated copy; the `:version_cc` genrule
+// in this directory's BUILD.bazel re-emits this file every time
+// `--action_env=EMULATOR_VERSION` / `EMULATOR_COMMIT` /
+// `EMULATOR_BUILD_DATE` flip. See `version.h` for the contract.
+
+#include "binaries/emulator_main/version.h"
+
+namespace bigquery_emulator::binaries::emulator_main {
+
+const char* const kVersion = "@EMULATOR_VERSION@";
+const char* const kCommit = "@EMULATOR_COMMIT@";
+const char* const kBuildDate = "@EMULATOR_BUILD_DATE@";
+
+}  // namespace bigquery_emulator::binaries::emulator_main

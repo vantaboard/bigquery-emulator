@@ -22,9 +22,44 @@
 # runfiles, and the cc_import in `third_party/duckdb/duckdb.BUILD.bazel`
 # handles the runtime rpath.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
+
+# Generate `version.cc` from `version.cc.tmpl` by substituting
+# `EMULATOR_VERSION` / `EMULATOR_COMMIT` / `EMULATOR_BUILD_DATE` from
+# the action environment (see `version_gen.sh`'s header for the
+# default values). The genrule receives env vars when the wrapping
+# build forwards them via `--action_env=EMULATOR_VERSION=...` etc;
+# `task emulator:build-engine:bazel` and `.github/workflows/release.yml`
+# do exactly that. A plain `bazel build` with no stamping yields the
+# `dev` / `none` / `unknown` defaults, matching the goreleaser
+# contract on the Go gateway side.
+#
+# Why a genrule rather than `cc_binary(stamp=1)` + workspace-status:
+# `--action_env` invalidation is scoped to this single action, so
+# bumping the version only re-emits `version.cc`, re-compiles one TU,
+# and re-links — it does NOT re-compile the 8k C++ TUs of GoogleSQL.
+# workspace-status injection would be cleaner in pure Bazel terms but
+# would require a custom `bazel_status_command` script that every
+# caller must wire up; the genrule keeps the contract in one file.
+genrule(
+    name = "version_cc",
+    srcs = ["version.cc.tmpl"],
+    outs = ["version.cc"],
+    cmd = ("bash $(location version_gen.sh) " +
+           "$(location version.cc.tmpl) > $@"),
+    tools = ["version_gen.sh"],
+)
+
+# Link-time version metadata for `emulator_main`. Pulled into the
+# cc_binary as a dep so the only thing that needs to re-link when the
+# version flips is this one TU + the binary itself.
+cc_library(
+    name = "version",
+    srcs = [":version_cc"],
+    hdrs = ["version.h"],
+)
 
 cc_binary(
     name = "emulator_main",
@@ -42,6 +77,7 @@ cc_binary(
         "-Wl,-rpath,$$ORIGIN",
     ],
     deps = [
+        ":version",
         "//backend/engine",
         "//backend/engine/duckdb:duckdb_engine",
         "//backend/engine/fallback:fallback_engine",
@@ -51,5 +87,20 @@ cc_binary(
         "//backend/storage/duckdb:duckdb_storage",
         "//frontend/server:server",
         "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+# Smoke test for the generated `version.cc`: confirm the symbols are
+# defined and the defaults flow through. The test is hermetic by
+# design: it never reads env vars and runs against whatever values
+# the genrule baked in (defaults `dev/none/unknown` for `bazel test`
+# without --action_env). The point is to fail loud if a future edit
+# to `version.cc.tmpl` drops a symbol the `--version` flag prints.
+cc_test(
+    name = "version_test",
+    srcs = ["version_test.cc"],
+    deps = [
+        ":version",
+        "@com_google_googletest//:gtest_main",
     ],
 )
