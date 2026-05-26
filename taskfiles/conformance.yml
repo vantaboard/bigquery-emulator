@@ -3,7 +3,9 @@
 # the engine binary lives at ./bin/emulator_main (staged by
 # `task emulator:build-engine:bazel`), the seed fixtures live under
 # conformance/fixtures, and the matrix iterates both `memory` +
-# `duckdb` profiles by default. Plan 41 wires this into CI.
+# `duckdb` profiles by default. Plan 41 wires this into CI; plan 42
+# added the `update-baselines` and `run-fixture` convenience targets
+# used during fixture authoring.
 #
 # Usage:
 #   task conformance:run                       # all fixtures, both profiles
@@ -11,6 +13,7 @@
 #   task conformance:run PROFILE=memory,duckdb # explicit matrix
 #   task conformance:run OUTPUT=json OUTPUT_FILE=/tmp/r.json
 #   task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
+#   task conformance:update-baselines FIXTURE=conformance/fixtures/<name>.yaml
 #
 # Environment overrides:
 #   EMULATOR_BIN   path to emulator_main (default ./bin/emulator_main)
@@ -97,3 +100,33 @@ tasks:
           --output "{{.OUTPUT}}" \
           $PROFILE_FLAGS \
           $OUTPUT_FILE_FLAG
+
+  update-baselines:
+    desc: |
+      Rewrite the expected: block of one or more fixtures with the engine's actual output. Pass FIXTURE=path or default to FIXTURES (the whole directory). Honors PROFILE. Read the diff before committing.
+    vars:
+      FIXTURE: '{{.FIXTURE | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        TARGET="{{.FIXTURES}}"
+        if [ -n "{{.FIXTURE}}" ]; then
+          TARGET="{{.FIXTURE}}"
+        fi
+        PROFILE_FLAGS=""
+        if [ -n "{{.PROFILE}}" ]; then
+          for p in $(echo "{{.PROFILE}}" | tr ',' ' '); do
+            PROFILE_FLAGS="$PROFILE_FLAGS --profile $p"
+          done
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures "$TARGET" \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --update-baselines \
+          $PROFILE_FLAGS
+        echo
+        echo "task conformance:update-baselines: review the diff in '$TARGET' before committing." >&2
