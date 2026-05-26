@@ -1,0 +1,18 @@
+# select_literal_value: simplest possible round-trip.
+#
+# Pins that `SELECT 1 AS n` returns a single row with a single cell
+# whose value is "1" on the wire. Mirrors the smoke test that lives
+# in `gateway/e2e/query_test.go::TestQuerySelectOneRoundTrip` so a
+# divergence here is a one-bit signal that the gateway -> engine
+# query path is wedged for either profile.
+name: select_literal_value
+description: |
+  Trivial constant SELECT round-trip on both engine profiles. Exercises
+  the gateway's `jobs.query` synchronous path and the engine's tiny
+  computed-column ProjectScan emit.
+profiles: [memory, duckdb]
+project_id: proj-select-literal
+query: SELECT 1 AS n
+expected:
+  rows:
+    - {n: "1"}

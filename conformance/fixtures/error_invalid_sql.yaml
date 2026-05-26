@@ -1,0 +1,19 @@
+# error_invalid_sql: structural-error round-trip.
+#
+# A query with a syntax error (`FRO` instead of `FROM`) must return
+# an HTTP 400 with the `invalidQuery` reason; the analyzer's parse
+# error message contains the unrecognized keyword. Pins the gateway's
+# `queryGRPCToHTTPError` mapping for INVALID_ARGUMENT → 400 invalidQuery
+# (see `gateway/handlers/errors.go`).
+name: error_invalid_sql
+description: |
+  Negative-path: SELECT with a syntax error returns a structured
+  BigQuery error envelope on both profiles. Verifies the gateway
+  surfaces analyzer errors as 400 invalidQuery rather than 500.
+profiles: [memory, duckdb]
+project_id: proj-error-invalid-sql
+query: SELECT * FRO bad
+expected:
+  error:
+    code: 400
+    message_contains: "Syntax error"
