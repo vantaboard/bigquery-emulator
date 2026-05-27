@@ -48,6 +48,38 @@ tasks:
       - task: node-bigquery-tests
       - task: python-bigquery-dataframes-tests
 
+  # Convenience helpers for the docker compose `thirdparty` profile.
+  # The default compose recipe (used by `task docker:smoke`) only
+  # starts `bigquery-emulator`, so fake-gcs has to be opted into
+  # explicitly. The `fake-gcs-up` task is intentionally separate
+  # from `task emulator:run-full` because tests can run against the
+  # gateway alone when STORAGE_EMULATOR_HOST is unset (the GCS-backed
+  # subtests skip rather than fail; see third_party/README.md).
+  fake-gcs-up:
+    aliases: [fake-gcs]
+    desc: Start fake-gcs-server via docker compose --profile thirdparty (mounts testdata/fake-gcs-data/)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -d testdata/fake-gcs-data ]; then
+          echo "thirdparty:fake-gcs-up: testdata/fake-gcs-data/ is empty (gitignored)." >&2
+          echo "  Run 'task testdata:fake-gcs-sync' first if you need seeded sample objects." >&2
+          mkdir -p testdata/fake-gcs-data
+        fi
+        docker compose --profile thirdparty up -d fake-gcs-server
+
+  fake-gcs-down:
+    desc: Stop fake-gcs-server (other compose services keep running)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker compose stop fake-gcs-server || true
+        docker compose rm -f fake-gcs-server || true
+
   # third_party/golang-bigquery-tests is a fully vendored Go module
   # (see go.mod). When BIGQUERY_EMULATOR_HOST is unset the suite
   # mostly compiles + skips system tests; with the emulator + gRPC

@@ -1,11 +1,24 @@
-# Single-service Compose file for local quickstart + CI smoke.
+# Compose file for local quickstart, CI smoke, and the third-party
+# client sample lane.
 #
-# Mirrors the layout `cloud-spanner-emulator` ships at the same place:
-# one service that bakes the published image and exposes the REST port
-# on the host. `docker compose up --build -d` is the canonical
-# quickstart entrypoint and the CI smoke workflow
+# `bigquery-emulator` mirrors the layout `cloud-spanner-emulator` ships
+# at the same place: one service that bakes the published image and
+# exposes the REST + engine gRPC ports on the host.
+# `docker compose up --build -d` is the canonical quickstart
+# entrypoint and the CI smoke workflow
 # (.github/workflows/docker-smoke.yml + `task docker:smoke`) drives the
 # same recipe end-to-end.
+#
+# `fake-gcs-server` is opt-in via the `thirdparty` profile because the
+# default `docker compose up` (and `task docker:smoke`) do not need
+# Cloud Storage to validate the BigQuery REST surface. The third-party
+# client suites under `third_party/<lang>-bigquery-tests/` (and the
+# golang-/node-/dataframe- task lanes) need it to back
+# `gs://cloud-samples-data/...` URIs. Bring it up with
+# `docker compose --profile thirdparty up -d fake-gcs-server` (see
+# `third_party/README.md`). The host-side `testdata/fake-gcs-data/`
+# directory is gitignored: populate it on demand with
+# `task testdata:fake-gcs-sync` before recreating the container.
 #
 # Notes on the env-var line: the BigQuery client SDKs read
 # `BIGQUERY_EMULATOR_HOST` to decide where to send REST traffic; the
@@ -40,6 +53,23 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  # Local Google Cloud Storage emulator for third-party suites that
+  # load gs://cloud-samples-data/... fixtures (golang-bigquery-tests
+  # snippets/loadingdata + snippets/querying setup, node sample
+  # external-table tests, bigframes snippets). The volume mount uses
+  # ./testdata/fake-gcs-data which is gitignored — populate it via
+  # `task testdata:fake-gcs-sync` before bringing this service up.
+  # See https://github.com/fsouza/fake-gcs-server.
+  fake-gcs-server:
+    image: fsouza/fake-gcs-server:latest
+    profiles: ["thirdparty"]
+    ports:
+      - "${FAKE_GCS_PORT:-4443}:4443"
+    environment:
+      FAKE_GCS_SCHEME: http
+    volumes:
+      - ./testdata/fake-gcs-data:/data
 
 volumes:
   bq-emulator-data:
