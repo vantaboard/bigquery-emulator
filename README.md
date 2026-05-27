@@ -318,6 +318,23 @@ Python (`google-cloud-bigquery`), Java, and Node.js clients all support
 the analogous endpoint override. We document each one as the relevant
 smoke tests pass in Phase 8.
 
+### Test lanes
+
+The repository runs two parallel conformance lanes against the same
+gateway:
+
+1. **Fixture conformance** — `task conformance:*` drives YAML fixtures
+   through the in-repo runner and pins SQL semantics for both the
+   `memory` and `duckdb` profiles. See
+   [`conformance/README.md`](./conformance/README.md) for the fixture
+   schema, profile matrix, and authoring guide.
+2. **Third-party client conformance** — `task thirdparty:*` runs the
+   imported BigQuery client-library sample suites (Go, Node.js, Python,
+   BigQuery DataFrames) end-to-end against the gateway's REST + gRPC
+   surface and (optionally) `fake-gcs-server`. See
+   [`third_party/README.md`](./third_party/README.md) for the
+   per-language wiring contract, env-var matrix, and skip rules.
+
 ## Releases
 
 > **Preview-grade.** The `v0.x` series is an explicit preview: the REST

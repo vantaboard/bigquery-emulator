@@ -10,6 +10,14 @@ of `ROADMAP.md`; the runner CLI is the deliverable of plan 40
 DML, structural errors, DDL, and a schema-only smoke check; see the
 "Contributing a new fixture" section below to add more.
 
+> **Sibling lane:** [`third_party/`](../third_party/README.md) hosts
+> the imported client-library conformance suites
+> (`task thirdparty:*`). Those tests assert that the published
+> Google BigQuery clients (Go, Node.js, Python, BigQuery DataFrames)
+> talk to this emulator over its REST + gRPC surface end-to-end, in
+> contrast to the fixture lane below which pins SQL semantics through
+> a purpose-built runner. The two lanes are independent in CI.
+
 ## Quick start
 
 ```bash
