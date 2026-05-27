@@ -125,22 +125,14 @@ tasks:
         # `scripts/compute_docker_throttle.sh` for the full picks.
         eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
         docker compose up -d bigquery-emulator
-        deadline=$(( $(date +%s) + 120 ))
-        while :; do
-          if curl -fsS -o /dev/null "http://localhost:${port}/healthz"; then
-            echo "thirdparty:emulator-up: bigquery-emulator healthy at http://localhost:${port}"
-            break
-          fi
-          if [ "$(date +%s)" -ge "$deadline" ]; then
-            echo "thirdparty:emulator-up: /healthz did not return 200 within 120s" >&2
-            echo "  docker compose ps:" >&2
-            docker compose ps >&2 || true
-            echo "  docker compose logs --tail=200 bigquery-emulator:" >&2
-            docker compose logs --tail=200 bigquery-emulator >&2 || true
-            exit 1
-          fi
-          sleep 2
-        done
+        # Poll /healthz via the shared helper. It silences the
+        # cosmetic curl "Recv failure" that docker-proxy emits during
+        # the gateway's startup window (the gateway opens :9050 only
+        # AFTER engine gRPC reports SERVING; until then docker-proxy
+        # accepts the host-side handshake but RSTs when it can't
+        # forward into the container) and only dumps a diagnostic
+        # bundle if the overall deadline fires.
+        bash "${root}/scripts/wait_for_healthz.sh" "http://localhost:${port}/healthz" 120 bigquery-emulator
 
   emulator-down:
     desc: Stop the bigquery-emulator docker compose service (named volume preserved)

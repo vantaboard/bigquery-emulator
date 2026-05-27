@@ -93,24 +93,12 @@ tasks:
           # Poll the gateway directly rather than the Docker daemons
           # Health.Status field. The healthcheck interval (30s) is too
           # coarse for a smoke test and Task templates the inspect
-          # format string awkwardly; a tight curl loop reads the same
-          # endpoint Docker would and surfaces the engine cold-start
-          # tail in seconds, not minutes.
-          deadline=$(( $(date +%s) + 120 ))
-          while :; do
-            if curl -fsS -o /dev/null "http://localhost:{{.EMULATOR_HTTP_PORT}}/healthz"; then
-              break
-            fi
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "[docker:smoke] FAILED: /healthz did not return 200 within 120s"
-              echo "[docker:smoke] docker compose ps:"
-              docker compose ps
-              echo "[docker:smoke] docker compose logs --tail=200:"
-              docker compose logs --tail=200
-              exit 1
-            fi
-            sleep 2
-          done
+          # format string awkwardly; the shared helper polls every 2s
+          # and surfaces the engine cold-start tail in seconds, not
+          # minutes. It also silences the cosmetic "Recv failure"
+          # docker-proxy emits during the startup window — see
+          # `scripts/wait_for_healthz.sh` for the why.
+          bash "${root}/scripts/wait_for_healthz.sh" "http://localhost:{{.EMULATOR_HTTP_PORT}}/healthz" 120 bigquery-emulator
 
           echo "[docker:smoke] GET /healthz"
           curl -fsS http://localhost:{{.EMULATOR_HTTP_PORT}}/healthz \
