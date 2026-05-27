@@ -91,6 +91,44 @@ the upstream URL template, see
 | `jobs.query` | `POST /bigquery/v2/projects/{projectId}/queries` | wired | [`gateway/handlers/queries.go::QueryRun`][queries] |
 | `jobs.getQueryResults` | `GET /bigquery/v2/projects/{projectId}/queries/{jobId}` | wired | [`gateway/handlers/queries.go::QueryGetResults`][queries] |
 
+### Models (`bigquery.models.*`)
+
+BQML has no engine backing yet (the emulator has no trained-model
+store). List returns an empty BigQuery-shaped page so client probes
+succeed; specific-resource methods return 404 (absent) or 501
+(mutating) so list-get-delete sample loops behave predictably.
+
+| Method | Path | Status | Handler |
+|---|---|---|---|
+| `models.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models` | wired | [`gateway/handlers/models.go::ModelList`][models] |
+| `models.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelGet`][models] |
+| `models.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelPatch`][models] |
+| `models.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelDelete`][models] |
+
+### Routines (`bigquery.routines.*`)
+
+Routines (UDFs / TVFs / stored procedures) are not yet registered in
+the engine catalog. Same wired-stub posture as `models.*`.
+
+| Method | Path | Status | Handler |
+|---|---|---|---|
+| `routines.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | wired | [`gateway/handlers/routines.go::RoutineList`][routines] |
+| `routines.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | wired | [`gateway/handlers/routines.go::RoutineInsert`][routines] |
+| `routines.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineGet`][routines] |
+| `routines.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineUpdate`][routines] |
+| `routines.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineDelete`][routines] |
+
+### Row-access policies (`bigquery.rowAccessPolicies.*`)
+
+Row-level access policies have no engine backing yet (they would need a
+policy store + per-query analysis rewrite). Only `list` is wired so
+client libraries that probe at startup get an empty page; the AIP-136
+IAM custom methods return 501.
+
+| Method | Path | Status | Handler |
+|---|---|---|---|
+| `rowAccessPolicies.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies` | wired | [`gateway/handlers/row_access_policies.go::RowAccessPolicyList`][rowaccess] |
+
 ### Discovery and health
 
 | Method | Path | Status | Handler |
@@ -104,6 +142,9 @@ the upstream URL template, see
 [tabledata]: ../gateway/handlers/tabledata.go
 [jobs]: ../gateway/handlers/jobs.go
 [queries]: ../gateway/handlers/queries.go
+[models]: ../gateway/handlers/models.go
+[routines]: ../gateway/handlers/routines.go
+[rowaccess]: ../gateway/handlers/row_access_policies.go
 [handlers]: ../gateway/handlers/handlers.go
 [discovery]: ../gateway/handlers/discovery.go
 

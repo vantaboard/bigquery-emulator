@@ -103,6 +103,58 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		handlers.TableDataInsertAll(deps),
 	)
 
+	// Models (BQML). Engine has no model store; list returns the
+	// BigQuery-shaped empty page so client probes succeed, get/delete
+	// return 404 so list-get-delete sample loops behave predictably.
+	// See gateway/handlers/models.go.
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models",
+		handlers.ModelList(deps),
+	)
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
+		handlers.ModelGet(deps),
+	)
+	mux.HandleFunc(
+		"PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
+		handlers.ModelPatch(deps),
+	)
+	mux.HandleFunc(
+		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
+		handlers.ModelDelete(deps),
+	)
+
+	// Routines (UDFs / TVFs / stored procedures). Same wired-stub
+	// posture as models. See gateway/handlers/routines.go.
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines",
+		handlers.RoutineList(deps),
+	)
+	mux.HandleFunc(
+		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines",
+		handlers.RoutineInsert(deps),
+	)
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
+		handlers.RoutineGet(deps),
+	)
+	mux.HandleFunc(
+		"PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
+		handlers.RoutineUpdate(deps),
+	)
+	mux.HandleFunc(
+		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
+		handlers.RoutineDelete(deps),
+	)
+
+	// Row-access policies (table-scoped row-level security). No
+	// policy store yet; list returns the empty page, IAM custom
+	// methods return 501. See gateway/handlers/row_access_policies.go.
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
+		handlers.RowAccessPolicyList(deps),
+	)
+
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/jobs", handlers.JobList(deps))
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/jobs", handlers.JobInsert(deps))
 	// jobs.insert media-upload variant.

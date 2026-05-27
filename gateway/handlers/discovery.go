@@ -114,6 +114,28 @@ var buildDiscoveryDocument = sync.OnceValue(func() discoveryDocument {
 					"getQueryResults": jobsGetQueryResultsMethod(),
 				},
 			},
+			"models": {
+				Methods: map[string]discoveryMethod{
+					"list":   modelsListMethod(),
+					"get":    modelsGetMethod(),
+					"patch":  modelsPatchMethod(),
+					"delete": modelsDeleteMethod(),
+				},
+			},
+			"routines": {
+				Methods: map[string]discoveryMethod{
+					"list":   routinesListMethod(),
+					"insert": routinesInsertMethod(),
+					"get":    routinesGetMethod(),
+					"update": routinesUpdateMethod(),
+					"delete": routinesDeleteMethod(),
+				},
+			},
+			"rowAccessPolicies": {
+				Methods: map[string]discoveryMethod{
+					"list": rowAccessPoliciesListMethod(),
+				},
+			},
 		},
 	}
 })
@@ -443,5 +465,116 @@ func jobsGetQueryResultsMethod() discoveryMethod {
 			"projectId": pathString("projectId"),
 			"jobId":     pathString("jobId"),
 		},
+	}
+}
+
+// modelScopedParams covers the path captures shared by every
+// bigquery.models.* method that targets a specific model.
+func modelScopedParams() map[string]discoveryParameter {
+	return map[string]discoveryParameter{
+		"projectId": pathString("projectId"),
+		"datasetId": pathString("datasetId"),
+		"modelId":   pathString("modelId"),
+	}
+}
+
+func modelsListMethod() discoveryMethod {
+	return discoveryMethod{
+		ID:             "bigquery.models.list",
+		Path:           "projects/{projectId}/datasets/{datasetId}/models",
+		HTTPMethod:     http.MethodGet,
+		ParameterOrder: []string{"projectId", "datasetId"},
+		Parameters: map[string]discoveryParameter{
+			"projectId": pathString("projectId"),
+			"datasetId": pathString("datasetId"),
+		},
+	}
+}
+
+func modelsGetMethod() discoveryMethod {
+	return discoveryMethod{
+		ID:             "bigquery.models.get",
+		Path:           "projects/{projectId}/datasets/{datasetId}/models/{modelId}",
+		HTTPMethod:     http.MethodGet,
+		ParameterOrder: []string{"projectId", "datasetId", "modelId"},
+		Parameters:     modelScopedParams(),
+	}
+}
+
+func modelsPatchMethod() discoveryMethod {
+	m := modelsGetMethod()
+	m.ID = "bigquery.models.patch"
+	m.HTTPMethod = http.MethodPatch
+	return m
+}
+
+func modelsDeleteMethod() discoveryMethod {
+	m := modelsGetMethod()
+	m.ID = "bigquery.models.delete"
+	m.HTTPMethod = http.MethodDelete
+	return m
+}
+
+// routineScopedParams covers the path captures shared by every
+// bigquery.routines.* method that targets a specific routine.
+func routineScopedParams() map[string]discoveryParameter {
+	return map[string]discoveryParameter{
+		"projectId": pathString("projectId"),
+		"datasetId": pathString("datasetId"),
+		"routineId": pathString("routineId"),
+	}
+}
+
+func routinesListMethod() discoveryMethod {
+	return discoveryMethod{
+		ID:             "bigquery.routines.list",
+		Path:           "projects/{projectId}/datasets/{datasetId}/routines",
+		HTTPMethod:     http.MethodGet,
+		ParameterOrder: []string{"projectId", "datasetId"},
+		Parameters: map[string]discoveryParameter{
+			"projectId": pathString("projectId"),
+			"datasetId": pathString("datasetId"),
+		},
+	}
+}
+
+func routinesInsertMethod() discoveryMethod {
+	m := routinesListMethod()
+	m.ID = "bigquery.routines.insert"
+	m.HTTPMethod = http.MethodPost
+	return m
+}
+
+func routinesGetMethod() discoveryMethod {
+	return discoveryMethod{
+		ID:             "bigquery.routines.get",
+		Path:           "projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
+		HTTPMethod:     http.MethodGet,
+		ParameterOrder: []string{"projectId", "datasetId", "routineId"},
+		Parameters:     routineScopedParams(),
+	}
+}
+
+func routinesUpdateMethod() discoveryMethod {
+	m := routinesGetMethod()
+	m.ID = "bigquery.routines.update"
+	m.HTTPMethod = http.MethodPut
+	return m
+}
+
+func routinesDeleteMethod() discoveryMethod {
+	m := routinesGetMethod()
+	m.ID = "bigquery.routines.delete"
+	m.HTTPMethod = http.MethodDelete
+	return m
+}
+
+func rowAccessPoliciesListMethod() discoveryMethod {
+	return discoveryMethod{
+		ID:             "bigquery.rowAccessPolicies.list",
+		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
+		HTTPMethod:     http.MethodGet,
+		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		Parameters:     tableScopedParams(),
 	}
 }
