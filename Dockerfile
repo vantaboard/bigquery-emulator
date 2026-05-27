@@ -257,14 +257,23 @@ LABEL org.opencontainers.image.source="${SOURCE_REPO}" \
 #   * libstdc++6 — the engine cc_binary statically links libgcc and
 #     libstdc++ where it can, but GoogleSQL's transitive deps still
 #     pull in libstdc++.so.6.
+#   * tzdata — GoogleSQL's analyzer hardcodes `America/Los_Angeles` as
+#     the default_timezone and resolves it via absl's
+#     `FindTimeZoneByName` at engine init. Without IANA zoneinfo
+#     installed, the lookup fails OUT_OF_RANGE and the absl CHECK
+#     aborts the engine on its first query ("Did you need to install
+#     the tzdata package?"). Pin TZ=Etc/UTC below so the container's
+#     own clock stays deterministic regardless of the host.
 #   * wget — used by the HEALTHCHECK directive below.
 #   * ca-certificates — keeps the gateway HTTP client honest if the
 #     image is repurposed to talk to upstream BigQuery in the future.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         libstdc++6 \
+        tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/*
+ENV TZ=Etc/UTC
 
 # Engine + libduckdb.so co-located so `-Wl,-rpath,$ORIGIN` finds the
 # dynamic dep without `LD_LIBRARY_PATH`. The Go gateway's default
