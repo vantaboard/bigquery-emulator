@@ -274,6 +274,33 @@ surface; the reference impl is maintenance-mode), and the conformance
 harness ([`conformance/README.md`](./conformance/README.md)) for how
 the same profile labels drive fixture selection.
 
+## Seeding & CLI compatibility
+
+The gateway accepts both the legacy underscore flag names this
+repository started with (`--http_port`) and the hyphen-separated
+names that `go-googlesql`'s `bq-emulator` exposes (`--http-port`),
+so existing scripts keep working and operators can lift invocation
+snippets from the upstream docs unchanged. The full alias table
+and the seeding workflows live in
+[`docs/SEEDING.md`](./docs/SEEDING.md):
+
+1. **Declarative YAML seed files** via `--seed-data-file FILE.yaml`
+   (repeatable). Loaded after the engine reports SERVING but before
+   the gateway accepts public traffic, so any client that hits the
+   REST API sees the seeded datasets/tables/rows from request one.
+2. **Initial-data template directory** via `--initial-data-dir DIR`.
+   The gateway copies the tree into `--data-dir` on first boot
+   (when no `catalog.duckdb` is present) and never on subsequent
+   boots, so operator writes are protected.
+3. **Production seed REST API** via `--enable-seed-api`. Hits
+   `POST /api/emulator/seed` to mirror live BigQuery metadata + rows
+   into the local emulator; the polling endpoint is
+   `GET /api/emulator/seed/operations/{id}`. Off by default;
+   loopback-only by default; optional shared-secret header for
+   defense in depth. The production reader is opt-in via the
+   `seed_production_live` build tag so the default gateway build
+   stays free of the cloud BigQuery client deps.
+
 ## Pointing client libraries at the emulator
 
 Two equivalent ways to redirect a BigQuery client at the emulator:
