@@ -169,14 +169,34 @@ path before opting into emulator-backed runs.
 In-tree Python BigQuery client and integration tests at
 [`python-bigquery-tests`](python-bigquery-tests).
 
-**Status: scaffold only.** This vendor mirrors the upstream layout
-(`LICENSE`, `pyproject.toml`, `samples/`, `tests/data/`) but matches
-go-googlesql's `*.py` ignore policy: the actual `.py` source is *not*
-checked in here. `task thirdparty:python-bigquery-tests` therefore fails
-fast at the `noxfile.py` precondition and asks you to populate the tree
-before it tries to run nox.
+**Status: scaffold + on-demand sync.** The committed tree mirrors the
+upstream layout (`LICENSE`, `pyproject.toml`, `setup.cfg`, `uv.lock`,
+`samples/`, `samples/snippets/`, `samples/tests/`, `tests/data/`,
+`docs/`) but the actual `.py` source — including `noxfile.py` — is
+*not* checked in, matching go-googlesql's ignore policy. `task
+thirdparty:python-bigquery-tests` fails fast at the `noxfile.py`
+precondition and asks you to populate the tree first.
 
-When the noxfile + samples are present, the task runs:
+To populate (or refresh) the `.py` source, run the sync script from the
+repo root:
+
+```bash
+./scripts/sync_python_bigquery_tests.sh                       # ref=main (default)
+PYTHON_BIGQUERY_REF=v3.40.1 ./scripts/sync_python_bigquery_tests.sh   # pin to a tag
+PYTHON_BIGQUERY_REF=e8184fa3856 ./scripts/sync_python_bigquery_tests.sh # pin to a SHA
+./scripts/sync_python_bigquery_tests.sh --dry-run             # preview only
+```
+
+The script clones [`googleapis/python-bigquery`](https://github.com/googleapis/python-bigquery)
+into a temp dir at `${PYTHON_BIGQUERY_REF:-main}`, rsyncs only `*.py`
+files under `google/`, `samples/`, `tests/`, `docs/`, plus root-level
+`noxfile.py` / `noxfile_config.py` / `conftest.py`, then prints the
+resolved upstream commit SHA. It never overwrites the curated scaffold
+(`pyproject.toml`, `setup.cfg`, `uv.lock`, `LICENSE`, `tests/data/`
+fixtures, `samples/snippets/*.json` schemas), so refreshes stay
+diff-bounded.
+
+Once `noxfile.py` is present, the task runs:
 
 ```bash
 task thirdparty:python-bigquery-tests
