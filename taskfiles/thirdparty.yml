@@ -444,10 +444,21 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         bash scripts/preflight_node_samples_gcs.sh
-        _st="${STORAGE_EMULATOR_HOST:-}"
-        if [ -n "$_st" ] && ! printf '%s' "$_st" | grep -qE '^https?://'; then
-          export STORAGE_EMULATOR_HOST="http://${_st#//}"
-        fi
+        # Default STORAGE_EMULATOR_HOST so the @google-cloud/storage
+        # client used by the Tables suite targets fake-gcs instead of
+        # falling through to real storage.googleapis.com (where it
+        # 400s with "billing account... disabled"). The default mirrors
+        # the contract in third_party/README.md and the fallback in
+        # scripts/preflight_node_samples_gcs.sh. Operators can still
+        # override by exporting their own value before invoking the
+        # task. We always export the var (not just when normalization
+        # is needed) so the npm child process inherits it.
+        _st="${STORAGE_EMULATOR_HOST:-127.0.0.1:4443}"
+        case "$_st" in
+          http://*|https://*) ;;
+          *) _st="http://${_st#//}" ;;
+        esac
+        export STORAGE_EMULATOR_HOST="$_st"
         cd third_party/node-bigquery-tests && npm install && npm test
 
   # Slim-path Java snippets lane. Fans out across the snippet POMs listed in
