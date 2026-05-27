@@ -235,6 +235,50 @@ tasks:
           --grpc_port={{.EMULATOR_GRPC_PORT}} \
           --log_requests
 
+  # run-seeded boots the full gateway with a YAML seed file applied
+  # before the REST listener accepts traffic. The fixture is the
+  # canonical "people" example documented in docs/SEEDING.md so
+  # operators can hit /bigquery/v2/projects/dev/datasets/ds/tables/people/data
+  # immediately after the task settles.
+  #
+  # Override the file with SEED_FILE=path/to/your.yaml when calling
+  # the task; otherwise the helper writes a temporary fixture to
+  # tmp/seed-quickstart.yaml so this is a one-command flow for a
+  # fresh checkout.
+  run-seeded:
+    desc: Build both halves and run the gateway with a YAML seed file pre-loaded
+    deps: [build-all]
+    vars:
+      SEED_FILE:
+        sh: echo "${SEED_FILE:-tmp/seed-quickstart.yaml}"
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ "{{.SEED_FILE}}" = "tmp/seed-quickstart.yaml" ] && [ ! -f tmp/seed-quickstart.yaml ]; then
+          mkdir -p tmp
+          cat > tmp/seed-quickstart.yaml <<'YAML'
+        project_id: dev
+        datasets:
+          - id: ds
+            tables:
+              - id: people
+                schema:
+                  - {name: id,   type: INT64,  mode: REQUIRED}
+                  - {name: name, type: STRING}
+                rows:
+                  - {id: 1, name: ada}
+                  - {id: 2, name: bob}
+        YAML
+        fi
+        ./bin/gateway_main \
+          --engine-binary=./bin/emulator_main \
+          --http-port={{.EMULATOR_HTTP_PORT}} \
+          --grpc-port={{.EMULATOR_GRPC_PORT}} \
+          --log-requests \
+          --seed-data-file={{.SEED_FILE}}
+
   watch:
     aliases: [dev]
     desc: Hot-reload the gateway via air (see .air.toml). Engine subprocess stays disabled.
