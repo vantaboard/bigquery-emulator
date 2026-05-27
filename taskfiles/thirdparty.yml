@@ -24,10 +24,15 @@
 # Bring-up contract: each suite task below calls `task emulator-up`
 # after its own vendor-tree existence check, so a fresh clone gets a
 # running emulator (via docker-compose.yml) before any client wiring
-# runs. Task dedupes the call within a single `task thirdparty` run,
-# so the container only starts once. The container is left running
-# between invocations (compose-keep-up posture); use
-# `task thirdparty:emulator-down` for explicit teardown.
+# runs. Suites that require fake-gcs also call `task fake-gcs-up`:
+# `node-bigquery-tests` unconditionally (its preflight is unconditional),
+# and `python-bigquery-dataframes-tests` only when STORAGE_EMULATOR_HOST
+# is set (the GCS fixtures short-circuit otherwise). Both `emulator-up`
+# and `fake-gcs-up` are `run: once`, so Task dedupes the call within a
+# single `task thirdparty` run and each container only starts once. The
+# containers are left running between invocations (compose-keep-up
+# posture); use `task thirdparty:emulator-down` /
+# `task thirdparty:fake-gcs-down` for explicit teardown.
 #
 # Environment overrides:
 #   GO_TEST_FLAGS                  extra flags for the Go suite
@@ -147,6 +152,12 @@ tasks:
   fake-gcs-up:
     aliases: [fake-gcs]
     desc: Start fake-gcs-server via docker compose --profile thirdparty (mounts testdata/fake-gcs-data/)
+    # `run: once` collapses repeated calls during a single `task thirdparty`
+    # (or any suite that depends on fake-gcs in addition to the emulator)
+    # to one bringup, mirroring the `emulator-up` posture above. `docker
+    # compose up -d` is itself idempotent, so direct invocations outside
+    # the aggregator still no-op when the container is already serving.
+    run: once
     cmds:
       - |
         set -eo pipefail
@@ -304,7 +315,11 @@ tasks:
   # node-bigquery-tests (vendored). Test setup auto-prefixes
   # STORAGE_EMULATOR_HOST with http:// for @google-cloud/storage v7.
   # Preflight verifies fake-gcs is serving the seeded us-states.csv
-  # fixture so the load samples don't fail with empty bodies.
+  # fixture so the load samples don't fail with empty bodies. The
+  # preflight is unconditional (it falls back to 127.0.0.1:4443 when
+  # STORAGE_EMULATOR_HOST is unset), so fake-gcs must be up before any
+  # of the Mocha tests run — `task: fake-gcs-up` below spins it through
+  # docker compose the same way `task: emulator-up` spins the gateway.
   node-bigquery-tests:
     desc: Run vendored node-bigquery-tests Mocha suite (npm install && npm test; see third_party/node-bigquery-tests/EMULATOR.md)
     cmds:
@@ -317,6 +332,7 @@ tasks:
           exit 1
         fi
       - task: emulator-up
+      - task: fake-gcs-up
       - |
         set -euo pipefail
         root="$(git rev-parse --show-toplevel)"
@@ -416,6 +432,19 @@ tasks:
           exit 1
         fi
       - task: emulator-up
+      # Only spin up fake-gcs when the caller has opted in via
+      # STORAGE_EMULATOR_HOST. Without it, conftest's GCS fixtures
+      # short-circuit and the bigframes snippets that hit gs:// URIs
+      # are skipped — bringing up fake-gcs unconditionally would
+      # surprise callers who haven't seeded testdata/fake-gcs-data/.
+      # `task: fake-gcs-up` enforces the seed-data guard if invoked,
+      # which is the desired fail-fast behavior when the caller
+      # genuinely wants GCS coverage.
+      - |
+        set -e
+        if [ -n "${STORAGE_EMULATOR_HOST:-}" ]; then
+          task thirdparty:fake-gcs-up
+        fi
       - |
         set -e
         root="$(git rev-parse --show-toplevel)"
