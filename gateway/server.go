@@ -9,6 +9,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
+	"github.com/vantaboard/bigquery-emulator/gateway/seed"
 )
 
 // NewServer returns the HTTP handler tree implementing the BigQuery REST
@@ -63,20 +64,44 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mux.HandleFunc("DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetDelete(deps))
 	// datasets.undelete: POST /datasets/{datasetId}:undelete, dispatched
 	// on the trailing :undelete in the wildcard.
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetCustomMethodPOST(deps))
+	mux.HandleFunc(
+		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}",
+		handlers.DatasetCustomMethodPOST(deps),
+	)
 
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableList(deps))
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableInsert(deps))
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableGet(deps))
-	mux.HandleFunc("PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableUpdate(deps))
-	mux.HandleFunc("PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TablePatch(deps))
-	mux.HandleFunc("DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableDelete(deps))
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TableGet(deps),
+	)
+	mux.HandleFunc(
+		"PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TableUpdate(deps),
+	)
+	mux.HandleFunc(
+		"PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TablePatch(deps),
+	)
+	mux.HandleFunc(
+		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TableDelete(deps),
+	)
 	// tables IAM custom methods: POST /tables/{tableId}:getIamPolicy,
 	// :setIamPolicy, :testIamPermissions. Dispatched on trailing :op.
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableCustomMethodPOST(deps))
+	mux.HandleFunc(
+		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TableCustomMethodPOST(deps),
+	)
 
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data", handlers.TableDataList(deps))
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll", handlers.TableDataInsertAll(deps))
+	mux.HandleFunc(
+		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data",
+		handlers.TableDataList(deps),
+	)
+	mux.HandleFunc(
+		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll",
+		handlers.TableDataInsertAll(deps),
+	)
 
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/jobs", handlers.JobList(deps))
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/jobs", handlers.JobInsert(deps))
@@ -91,11 +116,37 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/queries", handlers.QueryRun(deps))
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/queries/{jobId}", handlers.QueryGetResults(deps))
 
+	// Seed API: registered only when explicitly enabled via
+	// --enable-seed-api. The routes refuse non-loopback callers
+	// by default; an operator who needs CI/CD reach must combine
+	// `--seed-api-allow-remote` with `--seed-api-seed-token` for
+	// the documented defense-in-depth posture. The Runner is left
+	// nil here because the default build does not link
+	// cloud.google.com/go/bigquery; building with
+	// `-tags=seed_production_live` adds the production runner.
+	// In Runner=nil mode the POST handler returns 501 with the
+	// documented "use --seed-data-file" message so operators see
+	// a meaningful error instead of a hung op.
+	if opts.EnableSeedAPI {
+		var runner seed.Runner
+		if eng != nil {
+			runner = newSeedRunner(opts, eng)
+		}
+		seed.RegisterRoutes(mux, seed.HandlerDeps{
+			Access: seed.AccessConfig{
+				AllowRemote: opts.SeedAPIAllowRemote,
+				Token:       opts.SeedAPISeedToken,
+			},
+			Store:  seed.NewStore(),
+			Runner: runner,
+		})
+	}
+
 	// Auth middleware always runs: it parses (but never validates) the
 	// Authorization header and attaches a synthetic principal to the
 	// request context. Per docs/REST_API.md and ROADMAP.md Phase 1,
 	// the emulator must never 401, so this is permissive by design.
-	var handler http.Handler = middleware.WithAuth(mux)
+	handler := middleware.WithAuth(mux)
 	if opts.LogRequests {
 		handler = loggingMiddleware(handler)
 	}
