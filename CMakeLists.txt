@@ -147,6 +147,68 @@ target_link_libraries(enginepb_cc
 )
 
 # ---------------------------------------------------------------------------
+# storage_read proto codegen (plan 37 — StorageRead service)
+#
+# storage_read.proto imports "proto/emulator.proto", so protoc has to
+# resolve the import from the workspace root, not from ./proto/.
+# Switching `-I` to ${CMAKE_SOURCE_DIR} would change the layout under
+# --cpp_out for emulator.proto too (and require updating the existing
+# include path), so we invoke protoc separately for storage_read.proto
+# with both include roots: -I ${CMAKE_SOURCE_DIR} lets the
+# `import "proto/emulator.proto"` line resolve cleanly, and the
+# --cpp_out/--grpc_out points at the *parent* of PROTO_GEN_DIR so the
+# emitted file lands at `generated/proto/storage_read.{pb,grpc.pb}.{h,cc}`
+# (same shape the existing emulator codegen lands at), matching the
+# `#include "proto/storage_read.pb.h"` lines in
+# `frontend/handlers/storage_read.{h,cc}`.
+#
+# Mirrors the Bazel split (`//proto:storage_read_cc_grpc` +
+# `//proto:storage_read_cc_proto`); the library publicly links
+# `enginepb_cc` because the generated `storage_read.pb.h` references
+# Cell / DataRow symbols from `emulator.pb.h`.
+# ---------------------------------------------------------------------------
+
+set(STORAGE_READ_PROTO ${PROTO_SOURCE_DIR}/storage_read.proto)
+
+set(STORAGE_READ_GENERATED_SOURCES
+  ${PROTO_GEN_DIR}/storage_read.pb.cc
+  ${PROTO_GEN_DIR}/storage_read.pb.h
+  ${PROTO_GEN_DIR}/storage_read.grpc.pb.cc
+  ${PROTO_GEN_DIR}/storage_read.grpc.pb.h
+)
+
+add_custom_command(
+  OUTPUT ${STORAGE_READ_GENERATED_SOURCES}
+  COMMAND protobuf::protoc
+  ARGS
+    --cpp_out=${CMAKE_BINARY_DIR}/generated
+    --grpc_out=${CMAKE_BINARY_DIR}/generated
+    --plugin=protoc-gen-grpc=${_grpc_cpp_plugin}
+    -I ${CMAKE_SOURCE_DIR}
+    proto/storage_read.proto
+  DEPENDS ${STORAGE_READ_PROTO} ${EMULATOR_PROTO}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "protoc + grpc_cpp_plugin: proto/storage_read.proto -> ${PROTO_GEN_DIR}"
+  VERBATIM
+)
+
+add_library(storage_read_pb_cc STATIC
+  ${PROTO_GEN_DIR}/storage_read.pb.cc
+  ${PROTO_GEN_DIR}/storage_read.grpc.pb.cc
+)
+target_include_directories(storage_read_pb_cc
+  PUBLIC
+    ${CMAKE_BINARY_DIR}/generated
+)
+target_link_libraries(storage_read_pb_cc
+  PUBLIC
+    enginepb_cc
+    protobuf::libprotobuf
+    gRPC::grpc++
+    Threads::Threads
+)
+
+# ---------------------------------------------------------------------------
 # Backend interfaces (Phase 3a)
 #
 # Three libraries that mirror the directory layout under backend/:
@@ -315,18 +377,26 @@ endif()
 add_library(frontend_server STATIC
   frontend/handlers/catalog.cc
   frontend/handlers/query.cc
+  frontend/handlers/storage_read.cc
   frontend/server/server.cc
 )
 target_include_directories(frontend_server PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(frontend_server
   PUBLIC
     enginepb_cc
+    # storage_read_pb_cc is needed because
+    # `frontend/handlers/storage_read.h` (transitively included from
+    # `frontend/server/server.cc`) includes the StorageRead proto +
+    # gRPC headers. Mirrors the Bazel `//frontend/server:server` dep
+    # on `//frontend/handlers:storage_read_handler`.
+    storage_read_pb_cc
     backend_engine
     backend_schema
     backend_storage
     absl::status
     absl::statusor
     absl::strings
+    absl::synchronization
 )
 
 # emulator_main links every backend library it can construct at CLI
@@ -452,6 +522,34 @@ if(BIGQUERY_EMULATOR_BUILD_TESTS)
   add_test(
     NAME catalog_handler_test
     COMMAND catalog_handler_test
+  )
+
+  # StorageReadService tests (plan 37/38). Same pattern as
+  # catalog_handler_test: InMemoryStorage fixture, in-process gRPC
+  # client/server (the test's `StorageReadGrpcTest` fixture stands
+  # one up via grpcpp/server_builder). Mirrors the Bazel cc_test at
+  # `//frontend/handlers:storage_read_handler_test`.
+  add_executable(storage_read_handler_test
+    frontend/handlers/storage_read_test.cc
+  )
+  target_link_libraries(storage_read_handler_test
+    PRIVATE
+      frontend_server
+      backend_storage_memory
+      backend_storage
+      backend_schema
+      enginepb_cc
+      storage_read_pb_cc
+      absl::status
+      absl::statusor
+      absl::strings
+      GTest::gtest
+      GTest::gmock
+      GTest::gtest_main
+  )
+  add_test(
+    NAME storage_read_handler_test
+    COMMAND storage_read_handler_test
   )
 
   # The DuckDB storage round-trip test is only meaningful when the
