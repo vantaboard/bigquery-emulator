@@ -37,6 +37,20 @@ services:
       context: .
       args:
         VERSION: dev
+        # Throttle the in-container Bazel build (engine-builder-bazel
+        # stage) so it cannot fork enough clang processes to OOM the
+        # host. Without overrides, in-container Bazel auto-detects the
+        # host's full nproc / MemTotal and routinely consumes 20+ GiB
+        # of RAM during the `//binaries/emulator_main` link, which is
+        # the exact failure mode `.cursor/rules/process-hygiene.mdc`
+        # warns about. The empty fallback hands control back to the
+        # Dockerfile's own auto-detect (nproc-2 jobs, 75% MemTotal) for
+        # CI runners where the host has no other workload competing
+        # for RAM. Local task wrappers (task thirdparty:emulator-up,
+        # task docker:build, task docker:smoke) compute the right
+        # values for the developer's machine and export them.
+        BAZEL_JOBS: ${BAZEL_JOBS:-}
+        BAZEL_MEM_MB: ${BAZEL_MEM_MB:-}
     ports:
       - "9050:9050"
       - "9060:9060"
@@ -53,6 +67,17 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+    # Runtime resource caps. The emulator itself (engine + gateway)
+    # is normally well under a couple of GiB resident, but the
+    # in-process GoogleSQL analyzer can spike on pathological queries
+    # and the container should never be allowed to evict the host's
+    # IDE / browser. Defaults (8g, 4 cores) suit a typical developer
+    # box; task thirdparty:emulator-up exports tighter values derived
+    # from the live host's `/proc/meminfo` and `nproc`. Override via
+    # BIGQUERY_EMULATOR_MEM_LIMIT (e.g. "12g") and
+    # BIGQUERY_EMULATOR_CPUS (e.g. "6") before `docker compose up`.
+    mem_limit: ${BIGQUERY_EMULATOR_MEM_LIMIT:-8g}
+    cpus: ${BIGQUERY_EMULATOR_CPUS:-4.0}
 
   # Local Google Cloud Storage emulator for third-party suites that
   # load gs://cloud-samples-data/... fixtures (golang-bigquery-tests

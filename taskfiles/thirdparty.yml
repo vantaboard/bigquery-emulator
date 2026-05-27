@@ -110,6 +110,41 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         port="${EMULATOR_HTTP_PORT:-9050}"
+        # Throttle so a `docker compose up --build` that triggers the
+        # in-container Bazel build (engine-builder-bazel stage) cannot
+        # blow past the host's RAM. The C++ engine link forks ~nproc
+        # parallel clang++ processes, each easily 2-4 GiB; without
+        # caps the build routinely OOM-kills the IDE + browser. The
+        # picks below match the docker-specific guidance in
+        # `.cursor/rules/process-hygiene.mdc` (nproc-6 jobs, 50%
+        # MemTotal) so the developer's box keeps ~half its RAM and 6
+        # cores for everything else. Honor caller overrides so a
+        # workstation with more headroom can still scale up.
+        if [ -z "${BAZEL_JOBS:-}" ]; then
+          n=$(nproc 2>/dev/null || echo 4)
+          if [ "$n" -gt 8 ]; then BAZEL_JOBS=$((n - 6)); else BAZEL_JOBS=2; fi
+          export BAZEL_JOBS
+        fi
+        if [ -z "${BAZEL_MEM_MB:-}" ] && [ -r /proc/meminfo ]; then
+          BAZEL_MEM_MB=$(awk '/^MemTotal:/ { mb = int($2 / 2 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo)
+          export BAZEL_MEM_MB
+        fi
+        # Runtime cap so the running container (engine + gateway)
+        # cannot itself eat the host. Defaults to ~80% of MemTotal
+        # rounded down to whole MiB; the engine + gateway are normally
+        # well under that, the cap only matters when a pathological
+        # query trips GoogleSQL's analyzer.
+        if [ -z "${BIGQUERY_EMULATOR_MEM_LIMIT:-}" ] && [ -r /proc/meminfo ]; then
+          BIGQUERY_EMULATOR_MEM_LIMIT=$(awk '/^MemTotal:/ { mb = int($2 * 4 / 5 / 1024); if (mb < 2048) mb = 2048; printf "%dm", mb }' /proc/meminfo)
+          export BIGQUERY_EMULATOR_MEM_LIMIT
+        fi
+        if [ -z "${BIGQUERY_EMULATOR_CPUS:-}" ]; then
+          n=$(nproc 2>/dev/null || echo 4)
+          # Leave ~2 cores for the host scheduler / IDE.
+          if [ "$n" -gt 4 ]; then BIGQUERY_EMULATOR_CPUS="$((n - 2)).0"; else BIGQUERY_EMULATOR_CPUS="2.0"; fi
+          export BIGQUERY_EMULATOR_CPUS
+        fi
+        echo "thirdparty:emulator-up: BAZEL_JOBS=${BAZEL_JOBS:-<dockerfile-default>} BAZEL_MEM_MB=${BAZEL_MEM_MB:-<dockerfile-default>} mem_limit=${BIGQUERY_EMULATOR_MEM_LIMIT} cpus=${BIGQUERY_EMULATOR_CPUS}"
         docker compose up -d bigquery-emulator
         deadline=$(( $(date +%s) + 120 ))
         while :; do
