@@ -1,6 +1,6 @@
 # Third-party client sample test trees
 
-This directory vendors the four BigQuery client-library sample suites that
+This directory vendors the five BigQuery client-library sample suites that
 [`go-googlesql`](https://github.com/vantaboard/go-googlesql) exposes as its
 "third-party" conformance lane. They are kept here as a sibling to the
 in-repo SQL-fixture conformance harness:
@@ -8,7 +8,7 @@ in-repo SQL-fixture conformance harness:
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
-| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. |
+| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane is currently compile-only (no live ITs); the others run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -20,7 +20,7 @@ sync from upstream. Refresh them by re-running the same `rsync` recipe used
 in the original import (caches under `__pycache__/`, `.nox/`, `.venv/`,
 `node_modules/` are excluded by `.gitignore`).
 
-`task thirdparty` (alias `task thirdparty:default`) runs all four suites in
+`task thirdparty` (alias `task thirdparty:default`) runs all five suites in
 order. See `taskfiles/thirdparty.yml` for the per-suite knobs.
 
 ## Bootstrapping the emulator + storage stack
@@ -219,6 +219,89 @@ With emulator + fake-gcs: `BIGQUERY_EMULATOR_HOST`,
 `scripts/preflight_node_samples_gcs.sh` first so a stale fake-gcs body
 (empty or truncated `us-states.csv`) fails fast instead of running the
 full Mocha suite.
+
+## `java-bigquery-tests`
+
+Vendored from
+[`googleapis/google-cloud-java`](https://github.com/googleapis/google-cloud-java)
+HEAD `java-bigquery/samples/`. **Slim path:** the sample snippets resolve
+`com.google.cloud:google-cloud-bigquery` from
+[`libraries-bom`](https://github.com/GoogleCloudPlatform/cloud-opensource-java/wiki/The-Google-Cloud-Platform-Libraries-BOM)
+26.73.0 on Maven Central, so this tree does **not** vendor the Java client
+itself, the BigQuery Storage client, or any patched Java sources (which
+go-googlesql experimented with and removed in
+[`94048be5b`](https://github.com/vantaboard/go-googlesql/commit/94048be5b3e4c55b0daab48fb092c75a3032e39c)
+/ [`78d8e0529`](https://github.com/vantaboard/go-googlesql/commit/78d8e0529714f8368be9c1b396495e3a97ca2e62)
+once the maintenance cost became clear).
+
+```bash
+task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on snippets/
+```
+
+The task `cd`s into
+`third_party/java-bigquery-tests/java-bigquery/samples/snippets` and runs
+Maven from there directly — no parent reactor, no `-am`. The two sibling
+modules (`samples/install-without-bom`, `samples/snapshot`) are vendored
+verbatim but are not built by the task; the `snapshot` POM still pins a
+deliberate `2.67.0-SNAPSHOT` for upstream's pre-release smoke and is
+filtered out by leaving the parent reactor untouched.
+
+### Compile-only contract
+
+The upstream `src/test/java/**/*IT.java` suite (≈140 Failsafe ITs) is
+preserved verbatim, but it expects ADC + a real BigQuery project, so it
+cannot run in this emulator's PR lane today. Two levers keep it
+quiescent:
+
+1. The local POM tweak in
+   [`samples/snippets/pom.xml`](java-bigquery-tests/java-bigquery/samples/snippets/pom.xml)
+   sets `<maven.test.skip>true</maven.test.skip>` and
+   `<skipTests>true</skipTests>` so a bare `mvn package` from inside the
+   module also skips test-compile.
+2. The Task wrapper passes `-DskipTests=true -Dmaven.test.skip=true` on
+   the CLI as belt-and-suspenders.
+
+The CI job
+[`java-bigquery-tests-compile`](../.github/workflows/thirdparty-samples.yml)
+exercises the same path on every push/PR with Temurin 17 (matches the
+`actions/setup-java@v4` cache layout). Promotion to a live ITs lane is a
+follow-up once the emulator's Java surface is proven.
+
+### Emulator wiring
+
+The published `google-cloud-bigquery` does **not** auto-read
+`BIGQUERY_EMULATOR_HOST` (unlike the Go client, which the Go suite drives
+through `bqopts`). Sample drivers that want to talk to this emulator
+must route through the helper at
+[`BqOpts.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/BqOpts.java):
+
+```java
+import com.example.bigquery.BqOpts;
+import com.google.cloud.bigquery.BigQuery;
+
+BigQuery bq = BqOpts.builder().build().getService();
+```
+
+`BqOpts.builder()` reads `BIGQUERY_EMULATOR_HOST` (normalises schemeless
+`host:port` to `http://`), forces `NoCredentials` when an emulator host
+is present, and resolves the project id from
+`GOOGLE_CLOUD_PROJECT` / `GCLOUD_PROJECT` /
+`GOLANG_SAMPLES_PROJECT_ID`. Without those env vars it falls through to
+`BigQueryOptions.newBuilder()` which uses ADC (live BigQuery).
+
+### Toolchain
+
+JDK 17+ (Temurin 17 in CI). The task prefers `JAVA_HOME` and falls back
+to `mise x -- mvn` when unset (run `mise install` to activate the
+project's Java per `mise.toml`). Maven artifacts under
+`third_party/java-bigquery-tests/**/target/` are gitignored; running
+`task thirdparty:java-bigquery-tests` populates a local `~/.m2/repository`
+mirror of the libraries-bom on first run.
+
+| Knob | Default | Purpose |
+|------|---------|---------|
+| `JAVA_BQ_MAVEN_GOALS` | `package` | Maven goals run on the snippets module. Override to `compile`, `verify`, etc. |
+| `JAVA_BQ_SKIP_TESTS` | `true` | When `false`, drops `-Dmaven.test.skip=true` so test-compile + Failsafe execute (only useful with a `BqOpts`-routed IT and a live emulator). |
 
 ## `python-bigquery-dataframes-tests`
 
