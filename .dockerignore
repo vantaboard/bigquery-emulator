@@ -7,6 +7,13 @@ cloud-spanner-emulator/
 
 # Build outputs
 bin/
+# Allow the two engine artifacts through when the release workflow
+# (or anyone passing `--build-arg ENGINE_SOURCE=prebuilt`) has staged
+# them on the host. The Dockerfile's `engine-builder-prebuilt` stage
+# COPYs these from the build context; the default `bazel` stage
+# ignores them.
+!bin/emulator_main
+!bin/libduckdb.so
 build-out/
 out/
 *.o

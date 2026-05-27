@@ -201,8 +201,17 @@ jobs:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # ENGINE_SOURCE=prebuilt tells the Dockerfile to skip the
+          # in-container Bazel build and COPY `bin/emulator_main` +
+          # `bin/libduckdb.so` from the build context — the previous
+          # `task emulator:build-engine:bazel` step already staged both.
+          # Without this, the workflow does the cold-cache GoogleSQL +
+          # gRPC compile twice (once on the host, once inside the
+          # `engine-builder` stage) and blows past the job timeout.
+          # See the cancelled run gh#26485361700 for context.
           build-args: |
             VERSION=${{ inputs.ref || github.ref_name }}
+            ENGINE_SOURCE=prebuilt
 
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@v6

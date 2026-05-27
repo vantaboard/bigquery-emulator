@@ -19,10 +19,14 @@
 # image. Today the gateway is a thin REST shim around the engine's gRPC
 # surface; the binary is small (<30 MB) and the build is short.
 #
-# Stage 3 is the runtime image: `debian:bookworm-slim` plus libstdc++6
+# Stage 3 is the runtime image: `ubuntu:24.04` plus libstdc++6
 # (the engine `cc_binary` link-options statically link libgcc but
 # cannot fully avoid libstdc++.so.6 once GoogleSQL's transitive deps
-# are linked in) and `wget` (used by the HEALTHCHECK directive). The
+# are linked in) and `wget` (used by the HEALTHCHECK directive). Ubuntu
+# 24.04 ships GLIBC 2.39, which matches the
+# `github-hosted ubuntu-latest` runner so an engine binary built on
+# the host (via `ENGINE_SOURCE=prebuilt`) loads cleanly — bookworm's
+# GLIBC 2.36 is too old. The
 # engine binary and its sibling `libduckdb.so` live under
 # `/opt/bigquery-emulator/`; the binary's `-Wl,-rpath,$ORIGIN`
 # linkopt finds the `.so` next to it without `LD_LIBRARY_PATH`. A
@@ -50,10 +54,26 @@ ARG GOOGLESQL_VERSION=2026.01.1
 ARG GOOGLESQL_VERSION_PATCHED=2026.1.1
 ARG BAZELISK_VERSION=v1.27.0
 
+# Engine source selector. Two valid values:
+#   * `bazel` (default): run the canonical `cc_binary` build inside the
+#     image; self-contained, slow first cut (~25-55 min cold cache).
+#     What `docker build .` does without any extra setup.
+#   * `prebuilt`: skip the in-container Bazel build and COPY the engine
+#     binary + libduckdb.so from the host build context (under `bin/`).
+#     Used by `.github/workflows/release.yml` so the release runner does
+#     not rebuild the engine twice (once on the host, once inside the
+#     container) and blow past the job timeout. `bin/emulator_main` +
+#     `bin/libduckdb.so` must be staged before `docker build` runs;
+#     `task emulator:build-engine:bazel` produces both.
+ARG ENGINE_SOURCE=bazel
+
 ###############################################################################
-# Stage 1: C++ engine (canonical Bazel build, full GoogleSQL + DuckDB)
+# Stage 1a: C++ engine (canonical Bazel build, full GoogleSQL + DuckDB)
+#
+# Selected when ENGINE_SOURCE=bazel (the default). Self-contained: no
+# pre-staged host binaries required.
 ###############################################################################
-FROM debian:${DEBIAN_VERSION}-slim AS engine-builder
+FROM debian:${DEBIAN_VERSION}-slim AS engine-builder-bazel
 
 # Build deps: clang-18 (from apt.llvm.org) + libstdc++ headers + JDK
 # (Bazel needs Java) + git/curl/unzip for fetching bazelisk and the
@@ -161,6 +181,32 @@ RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clan
     bazel shutdown || true
 
 ###############################################################################
+# Stage 1b: Pre-built engine pass-through
+#
+# Selected when ENGINE_SOURCE=prebuilt. Skips the full Bazel toolchain
+# install + compile and simply lifts `bin/emulator_main` +
+# `bin/libduckdb.so` from the build context into `/out/` so the runtime
+# stage's `COPY --from=engine-builder` keeps working unchanged. The
+# release workflow stages these files via
+# `task emulator:build-engine:bazel` on the host before invoking
+# `docker build`; .dockerignore allows the two specific files through.
+###############################################################################
+FROM debian:${DEBIAN_VERSION}-slim AS engine-builder-prebuilt
+
+WORKDIR /out
+COPY bin/emulator_main /out/emulator_main
+COPY bin/libduckdb.so /out/libduckdb.so
+
+###############################################################################
+# Stage 1: engine-builder selector
+#
+# `FROM ${ENGINE_SOURCE}` chooses between the bazel and prebuilt stages
+# above. The runtime stage's `COPY --from=engine-builder` indirection
+# isolates the rest of the Dockerfile from the choice.
+###############################################################################
+FROM engine-builder-${ENGINE_SOURCE} AS engine-builder
+
+###############################################################################
 # Stage 2: Go gateway
 ###############################################################################
 FROM golang:${GO_VERSION}-${DEBIAN_VERSION} AS gateway-builder
@@ -185,8 +231,16 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 ###############################################################################
 # Stage 3: runtime image
+#
+# `ubuntu:24.04` is pinned (not `${DEBIAN_VERSION}-slim`) because
+# `ENGINE_SOURCE=prebuilt` lifts a binary built on the GitHub
+# `ubuntu-latest` runner (Ubuntu 24.04, GLIBC 2.39); a Debian
+# bookworm runtime (GLIBC 2.36) refuses to load it. Ubuntu 24.04
+# matches the build host and stays GLIBC-compatible with binaries
+# built in the `engine-builder-bazel` stage too (which targets
+# bookworm's 2.36 — forward-compatible on 2.39).
 ###############################################################################
-FROM debian:${DEBIAN_VERSION}-slim AS runtime
+FROM ubuntu:24.04 AS runtime
 
 # Image labels are filled at build time. `VERSION` defaults to `dev`
 # locally and is overridden by the release pipeline (plan 44).
