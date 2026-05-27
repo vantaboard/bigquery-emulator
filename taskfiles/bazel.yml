@@ -179,3 +179,39 @@ tasks:
               {{.TEST_FLAGS}} \
               {{.TARGETS}}
         '
+
+  coverage:
+    desc: |
+      Throttled `bazel coverage` wrapper. Set TARGETS="//path/to:target ..."
+      (required; usually the output of `bazel query 'kind(cc_test, //...)'`).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Emits a single
+      combined lcov report at `bazel-out/_coverage/_coverage_report.dat`
+      via `--combined_report=lcov`, which Codecov ingests directly.
+      Runs `bazel shutdown` on exit (success, failure, or signal).
+    vars:
+      TARGETS: '{{.TARGETS | default ""}}'
+      COVERAGE_FLAGS: '{{.COVERAGE_FLAGS | default "--combined_report=lcov --test_output=errors"}}'
+    cmds:
+      # Same wrap-in-bash trick as `bazel:test`: Task's mvdan/sh shell
+      # does not accept symbolic signal names in `trap`, so the daemon
+      # shutdown trap has to live inside a real bash invocation.
+      - |
+        bash -c '
+          set -eo pipefail
+          if [ -z "{{.TARGETS}}" ]; then
+            echo "task bazel:coverage requires TARGETS=//path/to:target" >&2
+            exit 2
+          fi
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
+            bazel coverage \
+              --jobs={{.BAZEL_JOBS}} \
+              --local_resources=cpu={{.BAZEL_JOBS}} \
+              --local_resources=memory={{.BAZEL_MEM_MB}} \
+              --action_env=CC={{.BAZEL_CC}} \
+              --action_env=CXX={{.BAZEL_CXX}} \
+              {{.COVERAGE_FLAGS}} \
+              {{.TARGETS}}
+        '

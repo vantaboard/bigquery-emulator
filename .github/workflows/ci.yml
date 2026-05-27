@@ -91,7 +91,11 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      # arm64 keeps the cheap emulator_main-only build as the cross-arch
+      # gate. The amd64 leg below replaces this with a coverage-instrumented
+      # build that also links + runs the GoogleTest binaries through ctest.
       - name: Build C++ engine (emulator_main)
+        if: matrix.arch == 'arm64'
         run: |
           cmake -S . -B build-out \
             -G Ninja \
@@ -99,6 +103,67 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++
           cmake --build build-out --target emulator_main -j
+
+      # ---------------------------------------------------------------
+      # C++ coverage (CMake/ctest path, amd64 only)
+      # ---------------------------------------------------------------
+      #
+      # Reconfigures into build-cov/ with BIGQUERY_EMULATOR_ENABLE_COVERAGE
+      # so every CMake target gets compiled with `--coverage`. Builds the
+      # whole tree (not just emulator_main) so the GoogleTest binaries
+      # registered in CMakeLists.txt link, then drives them through ctest.
+      # gcovr collapses the .gcda/.gcno data into a Codecov-shaped
+      # cobertura XML, filtered to first-party sources.
+      #
+      # The Bazel coverage path lives in a dedicated workflow
+      # (.github/workflows/coverage-bazel.yml) because the GoogleSQL
+      # link is hours-cold and would crowd out the build-and-test gate
+      # if added here.
+      # `gcovr` defaults to the system `gcov` (from gcc), which cannot
+      # read `.gcno` files produced by clang. Install `llvm` so
+      # `/usr/bin/llvm-cov` (clang's gcov-compatible front-end) is on
+      # the PATH; the gcovr step below passes
+      # `--gcov-executable 'llvm-cov gcov'` so the two halves of the
+      # toolchain match.
+      - name: Install gcovr + llvm-cov
+        if: matrix.arch == 'amd64'
+        run: sudo apt-get install -y --no-install-recommends gcovr llvm
+
+      - name: Build C++ with coverage instrumentation (emulator_main + tests)
+        if: matrix.arch == 'amd64'
+        run: |
+          cmake -S . -B build-cov \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBIGQUERY_EMULATOR_ENABLE_COVERAGE=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build-cov -j
+
+      - name: Run C++ tests (ctest)
+        if: matrix.arch == 'amd64'
+        run: ctest --test-dir build-cov --output-on-failure
+
+      - name: Generate gcovr cobertura report
+        if: matrix.arch == 'amd64'
+        run: |
+          gcovr --root . \
+            --gcov-executable 'llvm-cov gcov' \
+            --filter '^(backend|frontend|binaries)/' \
+            --exclude '.*_test\.cc$' \
+            --exclude '.*\.pb\.(h|cc)$' \
+            --exclude 'third_party/.*' \
+            --xml-pretty -o coverage-cpp-cmake.xml
+
+      - name: Upload C++ coverage to Codecov
+        if: matrix.arch == 'amd64'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-cpp-cmake.xml
+          flags: cpp-cmake-amd64
+          name: cpp-cmake-amd64
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       # ---------------------------------------------------------------
       # Bazel build of emulator_main (canonical, full GoogleSQL)

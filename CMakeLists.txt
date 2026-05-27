@@ -26,6 +26,37 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+# ---------------------------------------------------------------------------
+# Coverage instrumentation (opt-in)
+#
+# When ON, compile + link with `--coverage` (clang and gcc both accept the
+# umbrella flag, which expands to `-fprofile-arcs -ftest-coverage` at compile
+# time and links the matching profiling runtime). Hot path:
+#
+#   cmake -S . -B build-cov \
+#     -DCMAKE_BUILD_TYPE=Debug \
+#     -DBIGQUERY_EMULATOR_ENABLE_COVERAGE=ON \
+#     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+#   cmake --build build-cov -j
+#   ctest --test-dir build-cov --output-on-failure
+#   gcovr --root . --filter '^(backend|frontend|binaries)/' \
+#     --exclude '.*_test\.cc$' --exclude '.*\.pb\.(h|cc)$' \
+#     --exclude 'third_party/.*' --xml-pretty -o coverage-cpp-cmake.xml
+#
+# `.github/workflows/ci.yml` drives the amd64 path through Codecov; keep
+# the default OFF so non-CI builds (Bazel, release, smoke) are not
+# silently paying the instrumented-binary cost.
+# ---------------------------------------------------------------------------
+
+option(BIGQUERY_EMULATOR_ENABLE_COVERAGE
+  "Compile and link with --coverage (gcov/llvm-cov) instrumentation"
+  OFF)
+
+if(BIGQUERY_EMULATOR_ENABLE_COVERAGE)
+  add_compile_options(--coverage -O0 -g)
+  add_link_options(--coverage)
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR})
 
 # ---------------------------------------------------------------------------

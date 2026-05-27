@@ -1,0 +1,135 @@
+# Bazel coverage workflow for the BigQuery emulator's C++ engine.
+#
+# Mirrors `.github/workflows/conformance.yml`'s setup posture (sibling
+# googlesql checkout, setup-bazel with a dedicated disk-cache key) and
+# runs `bazel coverage` over every `cc_test` target discovered via
+# `bazel query 'kind(cc_test, //...)'`. The aggregated lcov report at
+# `bazel-out/_coverage/_coverage_report.dat` is uploaded to Codecov with
+# the `cpp-bazel-amd64` flag so the result sits alongside the Go (`go-amd64`)
+# and CMake/ctest (`cpp-cmake-amd64`) flags on the same project page.
+#
+# Why a separate workflow (not folded into ci.yml):
+#   * `bazel coverage` instrumentation roughly doubles the cold-link
+#     cost of the already-slow GoogleSQL build (~25-55 min cold in
+#     ci.yml; coverage drives that to the 60-120 min range).
+#   * Adding it to ci.yml would crowd out the build/test gate; a coverage
+#     regression should not block a build/test merge and vice versa.
+#   * Same split rationale documented at the top of conformance.yml.
+#
+# amd64-only for the same reason ci.yml's Bazel build is amd64-only:
+# the GoogleSQL hermetic LLVM toolchain only ships amd64 binaries today.
+
+name: coverage-bazel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-bazel-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bazel-coverage:
+    name: bazel-coverage
+    runs-on: ubuntu-latest
+    # Cold cache is the long pole. The ci.yml Bazel build lands at
+    # ~25-55 min on a warm-ish cache; coverage instrumentation grows
+    # both compile and link time, so the timeout mirrors release.yml's
+    # 180 min ceiling rather than conformance.yml's tighter budget.
+    # Warm-cache runs (sharing `disk-cache: coverage-bazel`) should
+    # drop into the 15-40 min range.
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            cmake \
+            make \
+            ninja-build \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc \
+            lcov
+
+      # `bazel coverage` shells out to `lcov` (installed above) to merge
+      # per-test .gcda data into the combined report. Keep this cache
+      # group distinct from `ci` / `conformance` / `release` so a
+      # coverage rebuild does not invalidate the on-PR build cache.
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          disk-cache: coverage-bazel
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (for local_path_override)
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: 2026.01.1
+          path: googlesql-sibling
+
+      - name: Stage googlesql at ../googlesql
+        run: |
+          mv googlesql-sibling ../googlesql
+          # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
+          # strict semver parser ("leading zero"); see the long note
+          # at the top of //MODULE.bazel for the rationale. Mirror the
+          # ci.yml / conformance.yml workflows' patch.
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Enumerate cc_test targets
+        id: targets
+        run: |
+          set -euo pipefail
+          targets="$(bazel query 'kind(cc_test, //...)' | tr '\n' ' ')"
+          if [ -z "${targets// }" ]; then
+            echo "no cc_test targets found via 'bazel query kind(cc_test, //...)'" >&2
+            exit 1
+          fi
+          echo "targets=${targets}" >> "$GITHUB_OUTPUT"
+
+      - name: Run bazel coverage
+        run: |
+          task bazel:coverage \
+            TARGETS="${{ steps.targets.outputs.targets }}" \
+            COVERAGE_FLAGS="--combined_report=lcov --test_output=errors"
+
+      - name: Upload C++ (Bazel) coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: bazel-out/_coverage/_coverage_report.dat
+          flags: cpp-bazel-amd64
+          name: cpp-bazel-amd64
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
