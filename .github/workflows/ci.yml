@@ -70,8 +70,26 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # amd64 produces a single coverage report that gets uploaded to
+      # Codecov below. arm64 keeps the plain `go test` invocation so we
+      # don't end up double-counting (and racing on) a second upload.
+      - name: go test (with coverage)
+        if: matrix.arch == 'amd64'
+        run: go test -covermode=atomic -coverprofile=coverage.out ./...
+
       - name: go test
+        if: matrix.arch != 'amd64'
         run: go test ./...
+
+      - name: Upload coverage to Codecov
+        if: matrix.arch == 'amd64'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+          flags: go-amd64
+          name: go-amd64
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build C++ engine (emulator_main)
         run: |

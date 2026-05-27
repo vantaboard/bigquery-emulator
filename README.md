@@ -1,5 +1,12 @@
 # BigQuery Emulator
 
+[![CI](https://github.com/vantaboard/bigquery-emulator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vantaboard/bigquery-emulator/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/vantaboard/bigquery-emulator/branch/main/graph/badge.svg)](https://codecov.io/gh/vantaboard/bigquery-emulator)
+[![Go version](https://img.shields.io/github/go-mod/go-version/vantaboard/bigquery-emulator)](go.mod)
+[![Top language](https://img.shields.io/github/languages/top/vantaboard/bigquery-emulator)](https://github.com/vantaboard/bigquery-emulator/search?l=go)
+[![Languages](https://img.shields.io/github/languages/count/vantaboard/bigquery-emulator)](https://github.com/vantaboard/bigquery-emulator)
+[![License](https://img.shields.io/github/license/vantaboard/bigquery-emulator)](LICENSE)
+
 A locally-runnable emulator of Google Cloud BigQuery, intended for local
 development and integration testing of applications that target the
 BigQuery REST API.
