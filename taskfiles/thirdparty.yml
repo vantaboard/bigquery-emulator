@@ -41,6 +41,11 @@
 #                                  defined in third_party/python-bigquery-tests/noxfile.py after sync
 #   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3)
 #   PYTHON_SAMPLES_CMD_TIMEOUT     wall-clock cap for the Python suite (default 30m)
+#   PYTHON_SAMPLES_PYTEST_ARGS     extra pytest flags appended after the task's defaults
+#                                  (`-v --durations=10`, plus `-n0` for the `snippets` session).
+#                                  Use `last-flag-wins` pytest semantics to tweak: e.g.
+#                                  `PYTHON_SAMPLES_PYTEST_ARGS='-vv --tb=short'` for even more detail,
+#                                  or `PYTHON_SAMPLES_PYTEST_ARGS='-q'` to silence per-test progress.
 #   NOX_DEFAULT_VENV_BACKEND       default `virtualenv` (upstream noxfile uses `python -m pip`, which
 #                                  is missing from uv-created venvs). Set to `uv|virtualenv` to opt into
 #                                  uv when running a custom noxfile that doesn't depend on pip.
@@ -357,15 +362,52 @@ tasks:
               ;;
           esac
         }
-        # Force serial pytest (`-n0`) for the emulator-driven `snippets`
-        # session: upstream's `snippets` calls `py.test -n=auto`, which
-        # deadlocks when multiple workers race a single emulator.
-        # pytest-xdist honors the last `-n` flag, so appended posargs
-        # override. Other sessions don't need this.
+        # Build the pytest posarg block. Two concerns layered on top of
+        # the nox session:
+        #   1. Per-test progress (`-v`) + slow-test summary
+        #      (`--durations=10`). Without `-v`, pytest prints a single
+        #      dot per test on one growing line, so a hung test is
+        #      invisible. With `-v`, pytest writes the nodeid + flushes
+        #      *before* running each test (pytest_runtest_logstart hook),
+        #      and `PYTHONUNBUFFERED=1` keeps the parent shell from
+        #      buffering — so the user sees which test is currently
+        #      running, not just which ones have completed. We apply
+        #      these defaults to every session that actually exercises
+        #      tests via pytest; lint/blacken/docs/cover etc. don't run
+        #      pytest themselves so the posargs would be inert there
+        #      (nox ignores unrecognized session args).
+        #   2. Force serial pytest (`-n0`) for the emulator-driven
+        #      `snippets` session: upstream's `snippets` calls
+        #      `py.test -n=auto`, which deadlocks when multiple workers
+        #      race a single emulator. pytest-xdist honors the last
+        #      `-n` flag, so the `-n0` we append wins.
+        # Caller-supplied PYTHON_SAMPLES_PYTEST_ARGS go LAST so they
+        # win the last-flag-wins fight (e.g. `-q` overrides our `-v`,
+        # or `-n=auto` overrides our `-n0` for a brave caller).
+        _py_samples_progress_args=("-v" "--durations=10")
         nox_posargs=()
         case "$nox_session" in
-          snippets) nox_posargs=("--" "-n0") ;;
+          snippets)
+            nox_posargs=("--" "-n0" "${_py_samples_progress_args[@]}")
+            ;;
+          system|unit|unit_noextras|prerelease_deps)
+            nox_posargs=("--" "${_py_samples_progress_args[@]}")
+            ;;
         esac
+        if [ -n "${PYTHON_SAMPLES_PYTEST_ARGS:-}" ]; then
+          # Word-split caller-supplied args the same way the shell
+          # would for an unquoted variable; callers expect to pass
+          # `'-vv --tb=short'` as a single env var. Avoid `arr+=(...)`
+          # so the array build works across both bash and mvdan/sh
+          # (Task's default shell).
+          if [ "${#nox_posargs[@]}" -eq 0 ]; then
+            # shellcheck disable=SC2206
+            nox_posargs=("--" ${PYTHON_SAMPLES_PYTEST_ARGS})
+          else
+            # shellcheck disable=SC2206
+            nox_posargs=("${nox_posargs[@]}" ${PYTHON_SAMPLES_PYTEST_ARGS})
+          fi
+        fi
         if command -v uv >/dev/null 2>&1; then
           # nox[pbs] lets Nox install missing CPython versions (plain uvx nox skips without pythonX.Y on PATH).
           _py_samples_run uvx --from 'nox[pbs]' nox -s "$nox_session" -p "$py" "${nox_posargs[@]}"

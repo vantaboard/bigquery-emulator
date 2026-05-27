@@ -200,11 +200,21 @@ Once `noxfile.py` is present, the task runs:
 
 ```bash
 task thirdparty:python-bigquery-tests
-# ↑ wraps `nox -s ${PYTHON_SAMPLES_NOX_SESSION:-snippets} -p $PYTHON_SAMPLES_PYTHON -- -n0`
+# ↑ wraps `nox -s ${PYTHON_SAMPLES_NOX_SESSION:-snippets} -p $PYTHON_SAMPLES_PYTHON \
+#         -- -n0 -v --durations=10 $PYTHON_SAMPLES_PYTEST_ARGS`
 # (the `-- -n0` posarg is appended automatically for the emulator-driven
 # `snippets` session; it overrides upstream's hard-coded `-n=auto` so a
 # single shared emulator process doesn't deadlock against pytest-xdist
 # workers — pytest-xdist honors the last `-n` flag.)
+#
+# `-v --durations=10` is appended for every pytest-driven session
+# (snippets / system / unit / unit_noextras / prerelease_deps) so each
+# test's nodeid prints (and flushes, via PYTHONUNBUFFERED=1) *before*
+# the test runs — a hung test then surfaces its nodeid in the live
+# output instead of stalling on a single `.ss…` progress line. Append
+# extra pytest flags via `PYTHON_SAMPLES_PYTEST_ARGS`; they go last so
+# pytest's last-flag-wins rules let you override (e.g. `-q` silences
+# per-test progress, `-vv` adds even more detail).
 ```
 
 The in-tree Python client reads `BIGQUERY_EMULATOR_HOST` directly in
