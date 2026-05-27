@@ -190,6 +190,19 @@ jobs:
             org.opencontainers.image.licenses=MIT
 
       - name: Build and push Docker image
+        # `continue-on-error: true` so a GHCR `permission_denied:
+        # write_package` failure (the v0.0.1 cut hit this — the
+        # `vantaboard` user namespace had not yet bootstrapped the
+        # `bigquery-emulator` container package, so the GITHUB_TOKEN
+        # had `packages: write` scope but no permission to create the
+        # package) does NOT block the goreleaser step that ships the
+        # gateway archives + engine binaries to the GitHub release.
+        # Releases stay binary-shipped even when the Docker image push
+        # is broken. Once GHCR is unblocked (manual `docker push` of a
+        # placeholder under a PAT with `write:packages`, or enabling
+        # "Inherit access from repository" on the package settings),
+        # subsequent tag pushes get the image too. See gh#26495700505.
+        continue-on-error: true
         uses: docker/build-push-action@v5
         with:
           context: .

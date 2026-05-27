@@ -254,6 +254,57 @@ The `-X main.version=…` ldflags injected by `.goreleaser.yml` are
 forward-compatible no-ops until that flag exists; nothing in plan 44
 needs to change when plan 45 wires the variable.
 
+#### v0.0.1 cut posture (after the manual ship)
+
+The first cut of `v0.0.1` exposed two design gaps that left the
+release in a **partially-shipped** state. Both are recorded here so the
+next release does not relearn them.
+
+| What shipped | Where |
+|--------------|-------|
+| 4 gateway archives (linux/{amd64,arm64} + darwin/{amd64,arm64}) bundling `bin/emulator_main` + `bin/libduckdb.so` + docs | <https://github.com/vantaboard/bigquery-emulator/releases/tag/v0.0.1> (5 assets, ~80 MB each + a 438-byte SHA256 checksums file) |
+| The `v0.0.1` annotated tag | `git rev-list -n 1 v0.0.1` → `27e2010` |
+
+| What did NOT ship | Why | Fix path |
+|-------------------|-----|----------|
+| `ghcr.io/vantaboard/bigquery-emulator:{v0.0.1,v0.0,v0,latest}` | First push to a user-namespace GHCR package by a workflow `GITHUB_TOKEN` is blocked with `denied: permission_denied: write_package` until the package exists. Login succeeded; create-and-push did not. The repo-level `default_workflow_permissions=write` flip (done during triage) was necessary but not sufficient. | Bootstrap once manually: `docker login ghcr.io -u vantaboard -p <PAT-with-write:packages>` then `docker push ghcr.io/vantaboard/bigquery-emulator:bootstrap`. Then on <https://github.com/users/vantaboard/packages/container/bigquery-emulator/settings> add the `vantaboard/bigquery-emulator` repo under "Manage Actions access" with `Write`. Subsequent tag pushes will succeed. |
+
+The release workflow's Docker-push step is now wrapped in
+`continue-on-error: true` so a GHCR denial does NOT block the
+`goreleaser` step that ships the gateway archives. The next release
+ships binaries even if GHCR is still broken; once GHCR is unblocked,
+the same step starts publishing images without further workflow
+changes.
+
+Lessons baked into the workflow + Dockerfile by the v0.0.1 cut:
+
+- **Bazel runs ONCE per release.** The Dockerfile's `engine-builder`
+  stage now switches between `engine-builder-bazel` (default,
+  self-contained) and `engine-builder-prebuilt` (lifts `bin/...` from
+  the build context) via a global `ENGINE_SOURCE` build arg.
+  `release.yml` passes `ENGINE_SOURCE=prebuilt` so the
+  cold-cache GoogleSQL+gRPC link runs once on the host (~125 min) and
+  the Docker push reuses the same binary in ~5 minutes — not the
+  ~250 min the original "build twice" path required.
+- **Runtime base flipped to `ubuntu:24.04`.** Bookworm's GLIBC 2.36 was
+  too old to load a binary built on the GitHub `ubuntu-latest` runner
+  (GLIBC 2.39). Ubuntu 24.04 matches the build host exactly and stays
+  GLIBC-compatible with binaries from the bookworm-based `bazel`
+  stage too (forward-compat on 2.39).
+- **Release job `timeout-minutes: 180`.** First cut hit `120` mid-Bazel
+  at `[5,120 / 5,389]` actions (~95% complete). Bumped to 180 so the
+  next cold cut finishes and the `setup-bazel` post-step uploads the
+  `disk-cache: release` for subsequent runs.
+
+The four GitHub runs from the v0.0.1 cut, for posterity:
+
+| Run | Outcome | Why |
+|-----|---------|-----|
+| `26480976029` | timed out at 120 min mid-Bazel | original timeout too tight; led to the 180-min bump |
+| `26485361700` | cancelled at 162 min mid-Docker | Docker stage was about to re-do the cold Bazel build a second time; led to the `ENGINE_SOURCE=prebuilt` refactor |
+| `26490598133` | failed at Docker push | GHCR `write_package` denial; led to the `default_workflow_permissions=write` flip |
+| `26495700505` | failed at Docker push (same denial) | repo-level flip was not enough; led to the manual goreleaser ship + `continue-on-error` workflow patch |
+
 ---
 
 ## 7. Key reference files (skim these as needed)
