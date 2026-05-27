@@ -20,7 +20,58 @@ import (
 func TestRouteTable(t *testing.T) {
 	srv := NewServer(Options{}, nil)
 
-	cases := []struct {
+	// BigQuery v2 endpoints are mounted under both the `/bigquery/v2`
+	// prefix and the bare path (see `mountBQv2` in server.go). The
+	// table records the bare path; the test exercises both forms.
+	bqV2 := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		// Projects
+		{"projects.list", "GET", "/projects"},
+		{"projects.getServiceAccount", "GET", "/projects/p/serviceAccount"},
+
+		// Datasets
+		{"datasets.list", "GET", "/projects/p/datasets"},
+		{"datasets.insert", "POST", "/projects/p/datasets"},
+		{"datasets.get", "GET", "/projects/p/datasets/d"},
+		{"datasets.update", "PUT", "/projects/p/datasets/d"},
+		{"datasets.patch", "PATCH", "/projects/p/datasets/d"},
+		{"datasets.delete", "DELETE", "/projects/p/datasets/d"},
+		{"datasets.undelete", "POST", "/projects/p/datasets/d:undelete"},
+
+		// Tables
+		{"tables.list", "GET", "/projects/p/datasets/d/tables"},
+		{"tables.insert", "POST", "/projects/p/datasets/d/tables"},
+		{"tables.get", "GET", "/projects/p/datasets/d/tables/t"},
+		{"tables.update", "PUT", "/projects/p/datasets/d/tables/t"},
+		{"tables.patch", "PATCH", "/projects/p/datasets/d/tables/t"},
+		{"tables.delete", "DELETE", "/projects/p/datasets/d/tables/t"},
+		{"tables.getIamPolicy", "POST", "/projects/p/datasets/d/tables/t:getIamPolicy"},
+		{"tables.setIamPolicy", "POST", "/projects/p/datasets/d/tables/t:setIamPolicy"},
+		{"tables.testIamPermissions", "POST", "/projects/p/datasets/d/tables/t:testIamPermissions"},
+
+		// Tabledata
+		{"tabledata.list", "GET", "/projects/p/datasets/d/tables/t/data"},
+		{"tabledata.insertAll", "POST", "/projects/p/datasets/d/tables/t/insertAll"},
+
+		// Jobs (excludes the media-upload variant, which lives at
+		// /upload/bigquery/v2/... only — see `other` below).
+		{"jobs.list", "GET", "/projects/p/jobs"},
+		{"jobs.insert", "POST", "/projects/p/jobs"},
+		{"jobs.get", "GET", "/projects/p/jobs/j"},
+		{"jobs.cancel", "POST", "/projects/p/jobs/j/cancel"},
+		{"jobs.delete", "DELETE", "/projects/p/jobs/j/delete"},
+
+		// Queries
+		{"jobs.query", "POST", "/projects/p/queries"},
+		{"jobs.getQueryResults", "GET", "/projects/p/queries/j"},
+	}
+
+	// Non-BigQuery-v2 endpoints (or fixed-prefix variants of v2) are
+	// registered exactly once, at the literal path documented here.
+	other := []struct {
 		name   string
 		method string
 		path   string
@@ -32,90 +83,80 @@ func TestRouteTable(t *testing.T) {
 		// Discovery
 		{"discovery", "GET", "/discovery/v1/apis/bigquery/v2/rest"},
 
-		// Projects
-		{"projects.list", "GET", "/bigquery/v2/projects"},
-		{"projects.getServiceAccount", "GET", "/bigquery/v2/projects/p/serviceAccount"},
-
-		// Datasets
-		{"datasets.list", "GET", "/bigquery/v2/projects/p/datasets"},
-		{"datasets.insert", "POST", "/bigquery/v2/projects/p/datasets"},
-		{"datasets.get", "GET", "/bigquery/v2/projects/p/datasets/d"},
-		{"datasets.update", "PUT", "/bigquery/v2/projects/p/datasets/d"},
-		{"datasets.patch", "PATCH", "/bigquery/v2/projects/p/datasets/d"},
-		{"datasets.delete", "DELETE", "/bigquery/v2/projects/p/datasets/d"},
-		{"datasets.undelete", "POST", "/bigquery/v2/projects/p/datasets/d:undelete"},
-
-		// Tables
-		{"tables.list", "GET", "/bigquery/v2/projects/p/datasets/d/tables"},
-		{"tables.insert", "POST", "/bigquery/v2/projects/p/datasets/d/tables"},
-		{"tables.get", "GET", "/bigquery/v2/projects/p/datasets/d/tables/t"},
-		{"tables.update", "PUT", "/bigquery/v2/projects/p/datasets/d/tables/t"},
-		{"tables.patch", "PATCH", "/bigquery/v2/projects/p/datasets/d/tables/t"},
-		{"tables.delete", "DELETE", "/bigquery/v2/projects/p/datasets/d/tables/t"},
-		{"tables.getIamPolicy", "POST", "/bigquery/v2/projects/p/datasets/d/tables/t:getIamPolicy"},
-		{"tables.setIamPolicy", "POST", "/bigquery/v2/projects/p/datasets/d/tables/t:setIamPolicy"},
-		{"tables.testIamPermissions", "POST", "/bigquery/v2/projects/p/datasets/d/tables/t:testIamPermissions"},
-
-		// Tabledata
-		{"tabledata.list", "GET", "/bigquery/v2/projects/p/datasets/d/tables/t/data"},
-		{"tabledata.insertAll", "POST", "/bigquery/v2/projects/p/datasets/d/tables/t/insertAll"},
-
-		// Jobs
-		{"jobs.list", "GET", "/bigquery/v2/projects/p/jobs"},
-		{"jobs.insert", "POST", "/bigquery/v2/projects/p/jobs"},
+		// jobs.insert media-upload variant — the public API hard-codes
+		// the /upload prefix, so it is not mirrored at /.../jobs.
 		{"jobs.insert-upload", "POST", "/upload/bigquery/v2/projects/p/jobs"},
-		{"jobs.get", "GET", "/bigquery/v2/projects/p/jobs/j"},
-		{"jobs.cancel", "POST", "/bigquery/v2/projects/p/jobs/j/cancel"},
-		{"jobs.delete", "DELETE", "/bigquery/v2/projects/p/jobs/j/delete"},
-
-		// Queries
-		{"jobs.query", "POST", "/bigquery/v2/projects/p/queries"},
-		{"jobs.getQueryResults", "GET", "/bigquery/v2/projects/p/queries/j"},
 	}
 
-	for _, tc := range cases {
+	check := func(t *testing.T, method, path string) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code == http.StatusNotFound &&
+			strings.Contains(rec.Body.String(), "No route matches") {
+			t.Fatalf("%s %s returned 404 from the route catch-all; "+
+				"route is missing", method, path)
+		}
+	}
+
+	for _, tc := range bqV2 {
+		// `/bigquery/v2` prefix: the form gcloud, bq, and clients
+		// pointed at *.googleapis.com use.
+		t.Run("prefixed/"+tc.name, func(t *testing.T) {
+			check(t, tc.method, "/bigquery/v2"+tc.path)
+		})
+		// Bare form: required because the official client libraries
+		// (e.g. @google-cloud/bigquery v8) treat BIGQUERY_EMULATOR_HOST
+		// as the verbatim baseUrl with no version segment.
+		t.Run("bare/"+tc.name, func(t *testing.T) {
+			check(t, tc.method, tc.path)
+		})
+	}
+
+	for _, tc := range other {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, tc.path, nil)
-			rec := httptest.NewRecorder()
-			srv.ServeHTTP(rec, req)
-			if rec.Code == http.StatusNotFound &&
-				strings.Contains(rec.Body.String(), "No route matches") {
-				t.Fatalf("%s %s returned 404 from the route catch-all; "+
-					"route is missing", tc.method, tc.path)
-			}
+			check(t, tc.method, tc.path)
 		})
 	}
 }
 
 // TestUnknownColonOpReturns404 verifies the dispatcher returns a
 // BigQuery-shaped 404 (not a 501) when a client invokes an unknown
-// custom method on a dataset or table resource.
+// custom method on a dataset or table resource. Both the `/bigquery/v2`
+// prefix and the bare form are covered because clients pointed at
+// BIGQUERY_EMULATOR_HOST hit the bare form.
 func TestUnknownColonOpReturns404(t *testing.T) {
 	srv := NewServer(Options{}, nil)
-	cases := []string{
-		"/bigquery/v2/projects/p/datasets/d:nosuchop",
-		"/bigquery/v2/projects/p/datasets/d/tables/t:nosuchop",
+	bareCases := []string{
+		"/projects/p/datasets/d:nosuchop",
+		"/projects/p/datasets/d/tables/t:nosuchop",
 	}
-	for _, path := range cases {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
-		rec := httptest.NewRecorder()
-		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("POST %s -> %d, want 404", path, rec.Code)
+	for _, path := range bareCases {
+		for _, full := range []string{"/bigquery/v2" + path, path} {
+			req := httptest.NewRequest(http.MethodPost, full, nil)
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("POST %s -> %d, want 404", full, rec.Code)
+			}
 		}
 	}
 }
 
 // TestRemovedProjectGetIs404 guards against re-introducing the bogus
 // `GET /bigquery/v2/projects/{projectId}` route that an early scaffold
-// registered. There is no such endpoint in the public BigQuery API.
+// registered. There is no such endpoint in the public BigQuery API,
+// in either the prefixed or the bare form.
 func TestRemovedProjectGetIs404(t *testing.T) {
 	srv := NewServer(Options{}, nil)
-	req := httptest.NewRequest(http.MethodGet, "/bigquery/v2/projects/p", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("GET /bigquery/v2/projects/p -> %d, want 404 (endpoint does not exist)", rec.Code)
+	for _, path := range []string{"/bigquery/v2/projects/p", "/projects/p"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s -> %d, want 404 (endpoint does not exist)", path, rec.Code)
+		}
 	}
 }
 

@@ -53,120 +53,86 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 
 	mux.HandleFunc("GET /discovery/v1/apis/bigquery/v2/rest", handlers.Discovery(deps))
 
-	mux.HandleFunc("GET /bigquery/v2/projects", handlers.ProjectList(deps))
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/serviceAccount", handlers.ProjectGetServiceAccount(deps))
+	// mountBQv2 registers every BigQuery v2 endpoint under both the
+	// `/bigquery/v2/...` prefix (what gcloud, bq, and clients pointed at
+	// real `*.googleapis.com` use) AND the bare `/...` form. The bare
+	// form is required because the official client libraries treat
+	// BIGQUERY_EMULATOR_HOST as the verbatim baseUrl with no version
+	// segment — for example @google-cloud/bigquery v8's bigquery.js
+	// sets `baseUrl = EMULATOR_HOST || ${apiEndpoint}/bigquery/v2`,
+	// which means a client configured via BIGQUERY_EMULATOR_HOST issues
+	// `POST /projects/{p}/queries` (no `/bigquery/v2`). Mirroring both
+	// forms keeps the public REST surface working for both invocation
+	// styles without a StripPrefix middleware that would have to fork
+	// on the other top-level prefixes (`/discovery/...`, `/upload/...`,
+	// `/v2alpha/...`, `/v2/...`, `/v1/...`, `/healthz`).
+	mountBQv2 := func(method, path string, h http.HandlerFunc) {
+		mux.HandleFunc(method+" /bigquery/v2"+path, h)
+		mux.HandleFunc(method+" "+path, h)
+	}
 
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets", handlers.DatasetList(deps))
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets", handlers.DatasetInsert(deps))
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetGet(deps))
-	mux.HandleFunc("PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetUpdate(deps))
-	mux.HandleFunc("PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetPatch(deps))
-	mux.HandleFunc("DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}", handlers.DatasetDelete(deps))
+	mountBQv2("GET", "/projects", handlers.ProjectList(deps))
+	mountBQv2("GET", "/projects/{projectId}/serviceAccount", handlers.ProjectGetServiceAccount(deps))
+
+	mountBQv2("GET", "/projects/{projectId}/datasets", handlers.DatasetList(deps))
+	mountBQv2("POST", "/projects/{projectId}/datasets", handlers.DatasetInsert(deps))
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}", handlers.DatasetGet(deps))
+	mountBQv2("PUT", "/projects/{projectId}/datasets/{datasetId}", handlers.DatasetUpdate(deps))
+	mountBQv2("PATCH", "/projects/{projectId}/datasets/{datasetId}", handlers.DatasetPatch(deps))
+	mountBQv2("DELETE", "/projects/{projectId}/datasets/{datasetId}", handlers.DatasetDelete(deps))
 	// datasets.undelete: POST /datasets/{datasetId}:undelete, dispatched
 	// on the trailing :undelete in the wildcard.
-	mux.HandleFunc(
-		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}",
-		handlers.DatasetCustomMethodPOST(deps),
-	)
+	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}", handlers.DatasetCustomMethodPOST(deps))
 
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableList(deps))
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableInsert(deps))
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
-		handlers.TableGet(deps),
-	)
-	mux.HandleFunc(
-		"PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
-		handlers.TableUpdate(deps),
-	)
-	mux.HandleFunc(
-		"PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
-		handlers.TablePatch(deps),
-	)
-	mux.HandleFunc(
-		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
-		handlers.TableDelete(deps),
-	)
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableList(deps))
+	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/tables", handlers.TableInsert(deps))
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableGet(deps))
+	mountBQv2("PUT", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableUpdate(deps))
+	mountBQv2("PATCH", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TablePatch(deps))
+	mountBQv2("DELETE", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableDelete(deps))
 	// tables IAM custom methods: POST /tables/{tableId}:getIamPolicy,
 	// :setIamPolicy, :testIamPermissions. Dispatched on trailing :op.
-	mux.HandleFunc(
-		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
-		handlers.TableCustomMethodPOST(deps),
-	)
+	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableCustomMethodPOST(deps))
 
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data",
-		handlers.TableDataList(deps),
-	)
-	mux.HandleFunc(
-		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll",
-		handlers.TableDataInsertAll(deps),
-	)
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data", handlers.TableDataList(deps))
+	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll", handlers.TableDataInsertAll(deps))
 
 	// Models (BQML). Engine has no model store; list returns the
 	// BigQuery-shaped empty page so client probes succeed, get/delete
 	// return 404 so list-get-delete sample loops behave predictably.
 	// See gateway/handlers/models.go.
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models",
-		handlers.ModelList(deps),
-	)
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
-		handlers.ModelGet(deps),
-	)
-	mux.HandleFunc(
-		"PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
-		handlers.ModelPatch(deps),
-	)
-	mux.HandleFunc(
-		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}",
-		handlers.ModelDelete(deps),
-	)
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/models", handlers.ModelList(deps))
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/models/{modelId}", handlers.ModelGet(deps))
+	mountBQv2("PATCH", "/projects/{projectId}/datasets/{datasetId}/models/{modelId}", handlers.ModelPatch(deps))
+	mountBQv2("DELETE", "/projects/{projectId}/datasets/{datasetId}/models/{modelId}", handlers.ModelDelete(deps))
 
 	// Routines (UDFs / TVFs / stored procedures). Same wired-stub
 	// posture as models. See gateway/handlers/routines.go.
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines",
-		handlers.RoutineList(deps),
-	)
-	mux.HandleFunc(
-		"POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines",
-		handlers.RoutineInsert(deps),
-	)
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
-		handlers.RoutineGet(deps),
-	)
-	mux.HandleFunc(
-		"PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
-		handlers.RoutineUpdate(deps),
-	)
-	mux.HandleFunc(
-		"DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
-		handlers.RoutineDelete(deps),
-	)
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/routines", handlers.RoutineList(deps))
+	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/routines", handlers.RoutineInsert(deps))
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/routines/{routineId}", handlers.RoutineGet(deps))
+	mountBQv2("PUT", "/projects/{projectId}/datasets/{datasetId}/routines/{routineId}", handlers.RoutineUpdate(deps))
+	mountBQv2("DELETE", "/projects/{projectId}/datasets/{datasetId}/routines/{routineId}", handlers.RoutineDelete(deps))
 
 	// Row-access policies (table-scoped row-level security). No
 	// policy store yet; list returns the empty page, IAM custom
 	// methods return 501. See gateway/handlers/row_access_policies.go.
-	mux.HandleFunc(
-		"GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
-		handlers.RowAccessPolicyList(deps),
-	)
+	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies", handlers.RowAccessPolicyList(deps))
 
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/jobs", handlers.JobList(deps))
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/jobs", handlers.JobInsert(deps))
-	// jobs.insert media-upload variant.
+	mountBQv2("GET", "/projects/{projectId}/jobs", handlers.JobList(deps))
+	mountBQv2("POST", "/projects/{projectId}/jobs", handlers.JobInsert(deps))
+	// jobs.insert media-upload variant. The upload prefix is fixed by
+	// the public BigQuery API and the client libraries hardcode it, so
+	// only the `/upload/bigquery/v2/...` form is registered here.
 	mux.HandleFunc("POST /upload/bigquery/v2/projects/{projectId}/jobs", handlers.JobInsertUpload(deps))
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/jobs/{jobId}", handlers.JobGet(deps))
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel", handlers.JobCancel(deps))
+	mountBQv2("GET", "/projects/{projectId}/jobs/{jobId}", handlers.JobGet(deps))
+	mountBQv2("POST", "/projects/{projectId}/jobs/{jobId}/cancel", handlers.JobCancel(deps))
 	// jobs.delete: literal "/delete" suffix is not a typo, see
 	// docs/bigquery/docs/reference/rest/v2/jobs/delete.md.
-	mux.HandleFunc("DELETE /bigquery/v2/projects/{projectId}/jobs/{jobId}/delete", handlers.JobDelete(deps))
+	mountBQv2("DELETE", "/projects/{projectId}/jobs/{jobId}/delete", handlers.JobDelete(deps))
 
-	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/queries", handlers.QueryRun(deps))
-	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/queries/{jobId}", handlers.QueryGetResults(deps))
+	mountBQv2("POST", "/projects/{projectId}/queries", handlers.QueryRun(deps))
+	mountBQv2("GET", "/projects/{projectId}/queries/{jobId}", handlers.QueryGetResults(deps))
 
 	// BigQuery Migration v2alpha (alias-served at v2 too). The official
 	// client libraries read BIGQUERY_MIGRATION_EMULATOR_HOST and fall
