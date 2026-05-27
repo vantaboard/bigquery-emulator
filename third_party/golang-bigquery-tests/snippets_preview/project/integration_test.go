@@ -1,0 +1,69 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// package project demonstrates interactions with the BigQuery project RPCs, namely
+// interrogating the project for service account information.
+package project
+
+import (
+	"context"
+	"io"
+	"os"
+	"testing"
+	"time"
+
+	"cloud.google.com/go/bigquery/v2/apiv2_client"
+	"github.com/GoogleCloudPlatform/golang-samples/bigquery/bqopts"
+	"github.com/GoogleCloudPlatform/golang-samples/bigquery/internal/testutil"
+)
+
+const testTimeout = 30 * time.Second
+
+func TestProject(t *testing.T) {
+	tc := testutil.SystemTest(t)
+	projID := tc.ProjectID
+	names := []string{"gRPC", "REST"}
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+			defer cancel()
+			// Setup client.
+			var client *apiv2_client.Client
+			var err error
+			if name == "gRPC" {
+				if os.Getenv("BIGQUERY_EMULATOR_HOST") != "" {
+					v2 := bqopts.BigQueryV2GRPCClientOptions()
+					if len(v2) == 0 {
+						t.Skip("BigQuery v2 gRPC against the emulator requires BIGQUERY_V2_GRPC_ENDPOINT or BIGQUERY_STORAGE_GRPC_ENDPOINT")
+					}
+					client, err = apiv2_client.NewClient(ctx, v2...)
+				} else {
+					client, err = apiv2_client.NewClient(ctx)
+				}
+			} else {
+				client, err = apiv2_client.NewRESTClient(ctx, bqopts.ClientOptions()...)
+			}
+			if err != nil {
+				t.Fatalf("client creation failed: %v", err)
+			}
+			defer client.Close()
+
+			if err := getServiceAccount(client, io.Discard, projID); err != nil {
+				t.Fatalf("getServiceAccount(%q): %v", projID, err)
+			}
+		})
+	}
+}

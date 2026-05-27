@@ -21,28 +21,49 @@ tasks:
   run:
     aliases: [check]
     desc: Fast pre-commit gate (gofmt + go vet). Used by the auto-commit workflow.
+    # gofmt scans every Go file under the worktree, so vendored upstream
+    # trees in third_party/ would otherwise leak findings here even though
+    # `.golangci.yml` already excludes them from the slow pass. Use a
+    # find-based pruning list to skip the same paths in the fast gate
+    # so `task lint:run` agrees with `task lint:go`.
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        if [ -n "$(gofmt -s -l .)" ]; then
-          echo 'gofmt would reformat:' >&2
-          gofmt -s -l . >&2
-          exit 1
+        gofmt_targets=$(find . \
+          \( -path './third_party' -o -path './gen' -o -path './vendor' -o -path './node_modules' -o -path './bazel-*' \) -prune -o \
+          -type f -name '*.go' -print)
+        if [ -z "$gofmt_targets" ]; then
+          echo "lint:run: no .go files outside excluded paths" >&2
+        else
+          # shellcheck disable=SC2086  # word-split is intentional for the target list
+          if [ -n "$(printf '%s\n' $gofmt_targets | xargs gofmt -s -l)" ]; then
+            echo 'gofmt would reformat:' >&2
+            printf '%s\n' $gofmt_targets | xargs gofmt -s -l >&2
+            exit 1
+          fi
         fi
         go vet ./...
 
   fix:
     desc: Apply auto-fixable lints from the fast gate (gofmt -s -w + go vet)
+    # Match `lint:run`'s exclusions so we never reformat vendored
+    # upstream trees in third_party/ (or generated code under gen/).
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        gofmt -s -w .
+        gofmt_targets=$(find . \
+          \( -path './third_party' -o -path './gen' -o -path './vendor' -o -path './node_modules' -o -path './bazel-*' \) -prune -o \
+          -type f -name '*.go' -print)
+        if [ -n "$gofmt_targets" ]; then
+          # shellcheck disable=SC2086  # word-split is intentional for the target list
+          printf '%s\n' $gofmt_targets | xargs gofmt -s -w
+        fi
         go vet ./...
 
   go:

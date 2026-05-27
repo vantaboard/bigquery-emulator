@@ -37,3 +37,26 @@ vendor/
 .idea/
 *.swp
 *~
+
+# Third-party client sample test trees (third_party/<lang>-bigquery-tests/).
+# Caches, virtualenvs, vendored sample data, and test runner artifacts that
+# any local run of `task thirdparty:*` regenerates. Patterns are scoped so
+# they only apply under third_party/ and do not catch repo-owned Python or
+# Node sources elsewhere.
+third_party/**/__pycache__/
+third_party/**/.nox/
+third_party/**/.nox-install-tmp/
+third_party/**/.venv/
+third_party/**/.pytest_cache/
+third_party/**/.mypy_cache/
+third_party/**/.ruff_cache/
+third_party/**/.tox/
+third_party/**/*.egg-info/
+third_party/**/sponge_log.xml
+third_party/**/.coverage
+third_party/**/node_modules/
+
+# Local fake-gcs-server seed mirror populated by
+# `task testdata:fake-gcs-sync`. Treated as a cache: large public
+# objects, not source. Sync on demand; do not commit.
+/testdata/fake-gcs-data/
