@@ -31,15 +31,50 @@ url="${base}/storage/v1/b/cloud-samples-data/o/bigquery%2Fus-states%2Fus-states.
 readonly MIN_US_STATES_CSV_BYTES="${MIN_US_STATES_CSV_BYTES:-400}"
 
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
-size="$(curl -fsS -o "$tmp" --connect-timeout 3 --max-time 30 -w '%{size_download}' "$url" 2>/dev/null || true)"
-if [[ -z "$size" ]]; then
-  echo "preflight: could not reach fake-gcs at ${base} (start: docker compose up -d fake-gcs-server)" >&2
+err="$(mktemp)"
+trap 'rm -f "$tmp" "$err"' EXIT
+
+# curl -w '%{size_download}' writes "0" even when the connection is refused or
+# DNS fails, so an empty $size never fires; capture the exit code separately
+# (set +e around curl) and inspect it for transport-level failures (couldn't
+# connect, DNS, timeout) before falling through to the body-length checks.
+# This split lets the script tell "fake-gcs is down" apart from "fake-gcs is
+# up but the object body is empty", which were both being reported as
+# "returned empty body (0 bytes)" before.
+set +e
+size="$(curl -fsS -o "$tmp" --connect-timeout 3 --max-time 30 \
+  -w '%{size_download}' "$url" 2>"$err")"
+curl_rc=$?
+set -e
+
+# curl exit codes 6 (resolve host), 7 (connect), 28 (timeout) -- and the
+# catch-all for "anything other than a successful HTTP response" -- mean the
+# server isn't talking to us at all. Distinguish from "talking, but empty"
+# by always preferring the transport diagnostic when curl failed AND
+# nothing landed in $tmp; an HTTP error response (e.g. 404) still leaves
+# size_download=0 but is a different failure class than no listener.
+if [[ "$curl_rc" -ne 0 && ! -s "$tmp" ]]; then
+  case "$curl_rc" in
+    6|7|28)
+      echo "preflight: could not reach fake-gcs at ${base} (curl rc=${curl_rc})." >&2
+      echo "  Start it: docker compose --profile thirdparty up -d fake-gcs-server" >&2
+      ;;
+    *)
+      echo "preflight: HTTP request to ${url} failed (curl rc=${curl_rc})." >&2
+      if [[ -s "$err" ]]; then
+        sed 's/^/  curl: /' "$err" >&2
+      fi
+      echo "  Verify fake-gcs is healthy: docker ps --filter name=fake-gcs" >&2
+      ;;
+  esac
   exit 1
 fi
 if [[ -z "$size" || "$size" == "0" ]]; then
-  echo "preflight: ${url} returned empty body (${size:-0} bytes). Re-seed testdata (task testdata:fake-gcs-sync) or recreate the container:" >&2
-  echo "  docker compose up -d --force-recreate fake-gcs-server" >&2
+  echo "preflight: ${url} returned empty body (${size:-0} bytes)." >&2
+  echo "  fake-gcs is reachable but the object is missing or zero-length." >&2
+  echo "  Re-seed testdata and recreate the container:" >&2
+  echo "    task testdata:fake-gcs-sync" >&2
+  echo "    docker compose --profile thirdparty up -d --force-recreate fake-gcs-server" >&2
   exit 1
 fi
 if [[ "$size" -lt "$MIN_US_STATES_CSV_BYTES" ]]; then

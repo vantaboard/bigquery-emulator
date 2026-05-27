@@ -29,3 +29,19 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         ./scripts/sync_fake_gcs_public_samples.sh
+
+  # Loopback check that fake-gcs-server is reachable AND serving the
+  # canonical us-states.csv fixture. Wraps the node preflight so any
+  # task lane that needs fake-gcs (golang/node/dataframes thirdparty
+  # suites, ad-hoc smoke tests) can fail fast with the same diagnostic
+  # the node suite uses, without having to invoke the npm runner. Reads
+  # FAKE_GCS_PORT and STORAGE_EMULATOR_HOST the same way the preflight
+  # script does.
+  fake-gcs-verify:
+    desc: Verify fake-gcs-server is serving the seeded us-states.csv fixture
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        bash scripts/preflight_node_samples_gcs.sh

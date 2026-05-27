@@ -152,9 +152,22 @@ tasks:
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        if [ ! -d testdata/fake-gcs-data ]; then
-          echo "thirdparty:fake-gcs-up: testdata/fake-gcs-data/ is empty (gitignored)." >&2
-          echo "  Run 'task testdata:fake-gcs-sync' first if you need seeded sample objects." >&2
+        # Refuse to start fake-gcs against an empty/missing bind mount.
+        # Previous behavior silently `mkdir -p`-ed testdata/fake-gcs-data
+        # so the container would come up "healthy" but serve 0-byte objects
+        # for every `gs://` URI the suites hit, which surfaced as a
+        # misleading "returned empty body" preflight failure instead of a
+        # clear "you forgot to seed". Detect "directory missing or empty"
+        # and exit 1 with the canonical fix command. Set FAKE_GCS_ALLOW_EMPTY=1
+        # to opt out (useful when callers genuinely want an empty bucket).
+        if [ ! -d testdata/fake-gcs-data ] || [ -z "$(ls -A testdata/fake-gcs-data 2>/dev/null)" ]; then
+          if [ "${FAKE_GCS_ALLOW_EMPTY:-0}" != "1" ]; then
+            echo "thirdparty:fake-gcs-up: testdata/fake-gcs-data/ is missing or empty (gitignored)." >&2
+            echo "  Seed it first so fake-gcs serves the public cloud-samples-data fixtures:" >&2
+            echo "    task testdata:fake-gcs-sync" >&2
+            echo "  Then re-run this task. Set FAKE_GCS_ALLOW_EMPTY=1 to start with an empty bucket anyway." >&2
+            exit 1
+          fi
           mkdir -p testdata/fake-gcs-data
         fi
         docker compose --profile thirdparty up -d fake-gcs-server
