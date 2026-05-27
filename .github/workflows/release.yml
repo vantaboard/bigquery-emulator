@@ -27,10 +27,15 @@
 #      push opened. Engine binary is bundled into all four archives
 #      per the plan-44 user decision.
 #
-# Time budget: the cold Bazel cache dominates (~25-55 min on a fresh
-# runner). `bazel-contrib/setup-bazel@0.13.0` shares cache across
-# runs of this workflow via `disk-cache: release`, so a re-run after
-# the first cold cut should land in minutes.
+# Time budget: the cold Bazel cache dominates. The first-ever release
+# run on v0.0.1 (`gh run 26480976029`) reached `[5,120 / 5,389]`
+# compile actions (~95%) in 119 min on a 4-vCPU/7-GB runner before
+# being SIGKILL'd by the previous 120-min job timeout — no OOM, no
+# compile errors, just genuinely slow GoogleSQL+gRPC link with
+# auto-detected jobs=2. Bumped to 180 min so the next cold cut
+# finishes and the `setup-bazel` post-step actually uploads the disk
+# cache; subsequent re-cuts via `disk-cache: release` should drop to
+# the 10-25 min range.
 #
 # Concurrency: scoped to the ref so a force-push to a tag (rare) does
 # not race itself; `cancel-in-progress: false` because release
@@ -61,7 +66,7 @@ jobs:
   release:
     name: release
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
