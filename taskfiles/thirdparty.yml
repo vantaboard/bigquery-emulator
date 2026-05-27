@@ -10,6 +10,8 @@
 #
 # Usage:
 #   task thirdparty                              # run every suite in order
+#   task thirdparty:emulator-up                  # bigquery-emulator via docker compose (alias: emulator)
+#   task thirdparty:emulator-down                # stop the docker compose emulator container
 #   task thirdparty:golang-bigquery-tests        # Go sample integration tests
 #   task thirdparty:python-bigquery-tests        # nox snippets/unit (PYTHON_SAMPLES_NOX_SESSION=...)
 #   task thirdparty:node-bigquery-tests          # npm install + npm test (Mocha)
@@ -18,6 +20,14 @@
 #                                                # bigframes nox `py` session
 #   task thirdparty:python-bigquery-dataframes-snippet-gate
 #                                                # narrow CI-friendly bigframes allowlist
+#
+# Bring-up contract: each suite task below calls `task emulator-up`
+# after its own vendor-tree existence check, so a fresh clone gets a
+# running emulator (via docker-compose.yml) before any client wiring
+# runs. Task dedupes the call within a single `task thirdparty` run,
+# so the container only starts once. The container is left running
+# between invocations (compose-keep-up posture); use
+# `task thirdparty:emulator-down` for explicit teardown.
 #
 # Environment overrides:
 #   GO_TEST_FLAGS                  extra flags for the Go suite
@@ -64,6 +74,58 @@ tasks:
   # from `task emulator:run-full` because tests can run against the
   # gateway alone when STORAGE_EMULATOR_HOST is unset (the GCS-backed
   # subtests skip rather than fail; see third_party/README.md).
+  #
+  # `emulator-up` boots the runtime image declared in docker-compose.yml
+  # and polls /healthz so each suite task below has a ready listener
+  # before it executes any client wiring. The container is left running
+  # across suites (matches the `compose-keep-up` posture documented in
+  # third_party/README.md); use `emulator-down` for explicit teardown.
+  # The poll loop mirrors `task docker:smoke` to keep cold-start
+  # diagnostics consistent across local + CI lanes.
+  emulator-up:
+    aliases: [emulator]
+    desc: Start bigquery-emulator via docker compose and wait for /healthz (idempotent)
+    # `run: once` collapses the five suite-level invocations during
+    # `task thirdparty` to a single bringup, so we do not re-poll
+    # /healthz between suites. `docker compose up -d` is itself
+    # idempotent, so an explicit `task thirdparty:emulator-up` outside
+    # the aggregator is still a no-op when the container is already
+    # serving.
+    run: once
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        port="${EMULATOR_HTTP_PORT:-9050}"
+        docker compose up -d bigquery-emulator
+        deadline=$(( $(date +%s) + 120 ))
+        while :; do
+          if curl -fsS -o /dev/null "http://localhost:${port}/healthz"; then
+            echo "thirdparty:emulator-up: bigquery-emulator healthy at http://localhost:${port}"
+            break
+          fi
+          if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "thirdparty:emulator-up: /healthz did not return 200 within 120s" >&2
+            echo "  docker compose ps:" >&2
+            docker compose ps >&2 || true
+            echo "  docker compose logs --tail=200 bigquery-emulator:" >&2
+            docker compose logs --tail=200 bigquery-emulator >&2 || true
+            exit 1
+          fi
+          sleep 2
+        done
+
+  emulator-down:
+    desc: Stop the bigquery-emulator docker compose service (named volume preserved)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker compose stop bigquery-emulator || true
+        docker compose rm -f bigquery-emulator || true
+
   fake-gcs-up:
     aliases: [fake-gcs]
     desc: Start fake-gcs-server via docker compose --profile thirdparty (mounts testdata/fake-gcs-data/)
@@ -105,7 +167,11 @@ tasks:
           echo "third_party/golang-bigquery-tests missing" >&2
           exit 1
         fi
-        cd third_party/golang-bigquery-tests
+      - task: emulator-up
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root/third_party/golang-bigquery-tests"
         go test ./... -count=1 {{.GO_TEST_FLAGS}}
 
   # The vendored python-bigquery-tests tree mirrors go-googlesql's
@@ -127,6 +193,7 @@ tasks:
           echo "  See third_party/README.md (python-bigquery-tests section)." >&2
           exit 1
         fi
+      - task: emulator-up
       - |
         set -e
         root="$(git rev-parse --show-toplevel)"
@@ -218,6 +285,11 @@ tasks:
           echo "third_party/node-bigquery-tests missing" >&2
           exit 1
         fi
+      - task: emulator-up
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
         bash scripts/preflight_node_samples_gcs.sh
         _st="${STORAGE_EMULATOR_HOST:-}"
         if [ -n "$_st" ] && ! printf '%s' "$_st" | grep -qE '^https?://'; then
@@ -247,6 +319,11 @@ tasks:
           echo "  Re-vendor java-bigquery/samples from googleapis/google-cloud-java HEAD." >&2
           exit 1
         fi
+      - task: emulator-up
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
         goals="${JAVA_BQ_MAVEN_GOALS:-{{.JAVA_BQ_MAVEN_GOALS}}}"
         skip="${JAVA_BQ_SKIP_TESTS:-{{.JAVA_BQ_SKIP_TESTS}}}"
         mvn_test_flags="-DskipTests=${skip}"
@@ -290,6 +367,11 @@ tasks:
           echo "third_party/python-bigquery-dataframes-tests missing" >&2
           exit 1
         fi
+      - task: emulator-up
+      - |
+        set -e
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
         if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
           bash "${root}/scripts/preflight_python_samples_emulator.sh"
         fi
