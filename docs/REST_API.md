@@ -129,6 +129,48 @@ IAM custom methods return 501.
 |---|---|---|---|
 | `rowAccessPolicies.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies` | wired | [`gateway/handlers/row_access_policies.go::RowAccessPolicyList`][rowaccess] |
 
+### Migration (`bigquerymigration.v2alpha`)
+
+Served from the **same** HTTP listener as the BigQuery v2 surface. The
+official client libraries
+(`cloud.google.com/go/bigquery/migration/apiv2alpha`,
+`google-cloud-bigquery-migration` for Python/Node/Java) read
+`BIGQUERY_MIGRATION_EMULATOR_HOST` and fall back to
+`BIGQUERY_EMULATOR_HOST`. Routes are registered under both `v2alpha`
+and `v2` (alias parity with go-googlesql). Engine has no workflow
+state, AST translator, or LRO store yet — list returns the documented
+empty page, get/delete return 404, create / `:start` return 501.
+
+| Method | Path | Status | Handler |
+|---|---|---|---|
+| `migration.workflows.list` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowList`][migration] |
+| `migration.workflows.create` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowCreate`][migration] |
+| `migration.workflows.get` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowGet`][migration] |
+| `migration.workflows.delete` | `DELETE /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowDelete`][migration] |
+| `migration.workflows.start` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}:start` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowCustomMethodPOST`][migration] |
+
+### Data Transfer Service (`bigquerydatatransfer.v1`)
+
+Served from the same listener via `BIGQUERY_EMULATOR_HOST`. No data
+source catalog or transfer config store exists yet, so the standard
+list endpoints return the documented empty page, specific-resource
+gets return 404, and `transferConfigs.create` returns 501. Both
+project-scoped and location-scoped variants are wired (client
+libraries pick whichever the user's API region demands).
+
+| Method | Path | Status | Handler |
+|---|---|---|---|
+| `dataSources.list` | `GET /v1/projects/{projectId}/dataSources` | wired | [`gateway/handlers/data_transfer.go::DataTransferDataSourceList`][datatransfer] |
+| `dataSources.list` (regional) | `GET /v1/projects/{projectId}/locations/{location}/dataSources` | wired | [`gateway/handlers/data_transfer.go::DataTransferDataSourceList`][datatransfer] |
+| `dataSources.get` | `GET /v1/projects/{projectId}/dataSources/{dataSourceId}` | wired | [`gateway/handlers/data_transfer.go::DataTransferDataSourceGet`][datatransfer] |
+| `dataSources.get` (regional) | `GET /v1/projects/{projectId}/locations/{location}/dataSources/{dataSourceId}` | wired | [`gateway/handlers/data_transfer.go::DataTransferDataSourceGet`][datatransfer] |
+| `transferConfigs.list` | `GET /v1/projects/{projectId}/transferConfigs` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigList`][datatransfer] |
+| `transferConfigs.list` (regional) | `GET /v1/projects/{projectId}/locations/{location}/transferConfigs` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigList`][datatransfer] |
+| `transferConfigs.get` | `GET /v1/projects/{projectId}/transferConfigs/{configId}` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigGet`][datatransfer] |
+| `transferConfigs.get` (regional) | `GET /v1/projects/{projectId}/locations/{location}/transferConfigs/{configId}` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigGet`][datatransfer] |
+| `transferConfigs.create` | `POST /v1/projects/{projectId}/transferConfigs` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigCreate`][datatransfer] |
+| `transferConfigs.create` (regional) | `POST /v1/projects/{projectId}/locations/{location}/transferConfigs` | wired | [`gateway/handlers/data_transfer.go::DataTransferConfigCreate`][datatransfer] |
+
 ### Discovery and health
 
 | Method | Path | Status | Handler |
@@ -145,6 +187,8 @@ IAM custom methods return 501.
 [models]: ../gateway/handlers/models.go
 [routines]: ../gateway/handlers/routines.go
 [rowaccess]: ../gateway/handlers/row_access_policies.go
+[migration]: ../gateway/handlers/migration.go
+[datatransfer]: ../gateway/handlers/data_transfer.go
 [handlers]: ../gateway/handlers/handlers.go
 [discovery]: ../gateway/handlers/discovery.go
 

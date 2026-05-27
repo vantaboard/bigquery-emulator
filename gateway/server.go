@@ -168,6 +168,68 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mux.HandleFunc("POST /bigquery/v2/projects/{projectId}/queries", handlers.QueryRun(deps))
 	mux.HandleFunc("GET /bigquery/v2/projects/{projectId}/queries/{jobId}", handlers.QueryGetResults(deps))
 
+	// BigQuery Migration v2alpha (alias-served at v2 too). The official
+	// client libraries read BIGQUERY_MIGRATION_EMULATOR_HOST and fall
+	// back to BIGQUERY_EMULATOR_HOST, so this gateway covers both
+	// surfaces from the same listener. List returns the empty page so
+	// startup probes succeed; create/start/get/delete return the
+	// documented 404/501. See gateway/handlers/migration.go.
+	for _, ver := range []string{"v2alpha", "v2"} {
+		base := "/" + ver + "/projects/{projectId}/locations/{location}/workflows"
+		mux.HandleFunc("GET "+base, handlers.MigrationWorkflowList(deps))
+		mux.HandleFunc("POST "+base, handlers.MigrationWorkflowCreate(deps))
+		mux.HandleFunc("GET "+base+"/{workflowId}", handlers.MigrationWorkflowGet(deps))
+		mux.HandleFunc("DELETE "+base+"/{workflowId}", handlers.MigrationWorkflowDelete(deps))
+		// AIP-136 custom methods (only :start today) — Go's mux can't
+		// match `{workflowId}:start` directly, so dispatch in-handler.
+		mux.HandleFunc("POST "+base+"/{workflowId}", handlers.MigrationWorkflowCustomMethodPOST(deps))
+	}
+
+	// BigQuery Data Transfer Service v1. Same shell posture as the
+	// migration surface: empty list pages so client probes succeed,
+	// 404 for specific resources, 501 for create.
+	// See gateway/handlers/data_transfer.go.
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/dataSources",
+		handlers.DataTransferDataSourceList(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/dataSources/{dataSourceId}",
+		handlers.DataTransferDataSourceGet(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/locations/{location}/dataSources",
+		handlers.DataTransferDataSourceList(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/locations/{location}/dataSources/{dataSourceId}",
+		handlers.DataTransferDataSourceGet(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/transferConfigs",
+		handlers.DataTransferConfigList(deps),
+	)
+	mux.HandleFunc(
+		"POST /v1/projects/{projectId}/transferConfigs",
+		handlers.DataTransferConfigCreate(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/transferConfigs/{configId}",
+		handlers.DataTransferConfigGet(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/locations/{location}/transferConfigs",
+		handlers.DataTransferConfigList(deps),
+	)
+	mux.HandleFunc(
+		"POST /v1/projects/{projectId}/locations/{location}/transferConfigs",
+		handlers.DataTransferConfigCreate(deps),
+	)
+	mux.HandleFunc(
+		"GET /v1/projects/{projectId}/locations/{location}/transferConfigs/{configId}",
+		handlers.DataTransferConfigGet(deps),
+	)
+
 	// Seed API: registered only when explicitly enabled via
 	// --enable-seed-api. The routes refuse non-loopback callers
 	// by default; an operator who needs CI/CD reach must combine
