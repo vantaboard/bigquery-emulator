@@ -80,6 +80,46 @@ jobs:
           BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
           STORAGE_EMULATOR_HOST: ""
 
+  # Slim-path Java compile lane: `mvn package -Dmaven.test.skip=true`
+  # on java-bigquery/samples/snippets. Same posture as the Go lane —
+  # never starts the emulator, exercises only Maven dependency
+  # resolution + javac on the snippet sources. Catches upstream API
+  # drift in the published google-cloud-bigquery (libraries-bom
+  # 26.73.0) without paying for a Bazel build. The vendored
+  # src/test/java/**/*IT.java is kept verbatim from upstream but is
+  # not test-compiled (pom.xml sets <maven.test.skip>true</...>).
+  java-bigquery-tests-compile:
+    name: java-bigquery-tests (compile + skip)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: third_party/java-bigquery-tests/**/pom.xml
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run thirdparty:java-bigquery-tests (no emulator)
+        run: task thirdparty:java-bigquery-tests
+        env:
+          # Mirror the Go lane: keep the emulator vars unset so the
+          # task does not attempt any live preflight even if a
+          # future change adds one.
+          BIGQUERY_EMULATOR_HOST: ""
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
+          STORAGE_EMULATOR_HOST: ""
+
   # Live integration lane against a built gateway + engine. Disabled
   # by default because it pays the full Bazel + GoogleSQL build budget
   # (~30-50min cold, see ci.yml for the cache contract). Trigger

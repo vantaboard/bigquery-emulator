@@ -13,6 +13,7 @@
 #   task thirdparty:golang-bigquery-tests        # Go sample integration tests
 #   task thirdparty:python-bigquery-tests        # nox snippets/unit (PYTHON_SAMPLES_NOX_SESSION=...)
 #   task thirdparty:node-bigquery-tests          # npm install + npm test (Mocha)
+#   task thirdparty:java-bigquery-tests          # mvn package on java-bigquery/samples/snippets (compile-only)
 #   task thirdparty:python-bigquery-dataframes-tests
 #                                                # bigframes nox `py` session
 #   task thirdparty:python-bigquery-dataframes-snippet-gate
@@ -23,6 +24,8 @@
 #   PYTHON_SAMPLES_NOX_SESSION     default snippets_full; also unit, snippets, unit_noextras
 #   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3)
 #   PYTHON_SAMPLES_CMD_TIMEOUT     wall-clock cap for the Python suite (default 30m)
+#   JAVA_BQ_MAVEN_GOALS            override Maven goals for the Java snippets module (default: package)
+#   JAVA_BQ_SKIP_TESTS             "true" (default) builds compile-only; "false" runs Failsafe ITs
 #   DATAFRAME_SAMPLES_PYTHON       override interpreter for bigframes snippets
 #   DATAFRAME_SAMPLES_PYTEST_ARGS  extra `-- ...` pytest args appended to nox
 #   DATAFRAME_SAMPLES_TMPDIR       override TMPDIR for nox installs
@@ -38,14 +41,20 @@ vars:
   GO_TEST_FLAGS: ""
   PYTHON_SAMPLES_NOX_SESSION: "snippets_full"
   PYTHON_SAMPLES_PYTHON: ""
+  # Slim-path Java snippets lane: third_party/java-bigquery-tests/java-bigquery/samples/snippets.
+  # Only the snippets module is built; install-without-bom and snapshot are vendored verbatim
+  # but stay outside the task. Default goals/skip match the compile-on-PR CI lane.
+  JAVA_BQ_MAVEN_GOALS: "package"
+  JAVA_BQ_SKIP_TESTS: "true"
 
 tasks:
   default:
-    desc: Run golang-, python-, node-, and python-bigquery-dataframes BigQuery third-party suites in order
+    desc: Run golang-, python-, node-, java-, and python-bigquery-dataframes BigQuery third-party suites in order
     cmds:
       - task: golang-bigquery-tests
       - task: python-bigquery-tests
       - task: node-bigquery-tests
+      - task: java-bigquery-tests
       - task: python-bigquery-dataframes-tests
 
   # Convenience helpers for the docker compose `thirdparty` profile.
@@ -215,6 +224,47 @@ tasks:
           export STORAGE_EMULATOR_HOST="http://${_st#//}"
         fi
         cd third_party/node-bigquery-tests && npm install && npm test
+
+  # Slim-path Java snippets lane. Vendors only google-cloud-java's
+  # java-bigquery/samples/ tree; google-cloud-bigquery itself comes
+  # from libraries-bom 26.73.0 on Maven Central (no vendored Java
+  # reactor and no client patches, unlike go-googlesql's pre-94048be5b
+  # shape). The upstream src/test/java/**/*IT.java is kept verbatim
+  # but maven.test.skip=true in the snippets POM (and the CLI flags
+  # below) keeps test-compile and Failsafe out of the loop. JDK 17+
+  # required; falls back to `mise x -- mvn` when JAVA_HOME is unset.
+  # See third_party/README.md (Java section) and
+  # third_party/java-bigquery-tests/java-bigquery/samples/EMULATOR.md.
+  java-bigquery-tests:
+    desc: Maven compile/package for vendored Java BigQuery samples (snippets module only; see JAVA_BQ_* vars)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f third_party/java-bigquery-tests/java-bigquery/samples/snippets/pom.xml ]; then
+          echo "third_party/java-bigquery-tests/java-bigquery/samples/snippets/pom.xml missing" >&2
+          echo "  Re-vendor java-bigquery/samples from googleapis/google-cloud-java HEAD." >&2
+          exit 1
+        fi
+        goals="${JAVA_BQ_MAVEN_GOALS:-{{.JAVA_BQ_MAVEN_GOALS}}}"
+        skip="${JAVA_BQ_SKIP_TESTS:-{{.JAVA_BQ_SKIP_TESTS}}}"
+        mvn_test_flags="-DskipTests=${skip}"
+        if [ "$skip" = "true" ]; then
+          mvn_test_flags="-DskipTests=true -Dmaven.test.skip=true"
+        fi
+        # Prefer the user's JAVA_HOME, fall back to mise (`mise install` activates Temurin
+        # 17 from mise.toml when present). Match CI's setup-java@v4 by requiring 17+.
+        if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+          ( cd third_party/java-bigquery-tests/java-bigquery/samples/snippets && \
+              mvn -B "$goals" $mvn_test_flags )
+        elif command -v mise >/dev/null 2>&1; then
+          mise x -- sh -ec "cd third_party/java-bigquery-tests/java-bigquery/samples/snippets && mvn -B \"$goals\" $mvn_test_flags"
+        else
+          echo "java-bigquery-tests: JAVA_HOME must point to a JDK 17+ (Temurin 17 to match CI)." >&2
+          echo "  Fix: export JAVA_HOME, or install https://mise.jdx.dev and run: mise install" >&2
+          exit 1
+        fi
 
   # bigframes snippet allowlist gate. CI uses this to keep the
   # signal narrow until BigFrames SQL parity grows; local devs can
