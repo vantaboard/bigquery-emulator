@@ -9,11 +9,34 @@ local emulator gateway, and where to find the rest of the contract.
 
 ```bash
 task emulator:run-full                # start gateway + engine on :9050 / :9060
-task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true (snippets)
+task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on every JAVA_BQ_SAMPLE_PATHS module
 ```
 
 The sibling `install-without-bom/` and `snapshot/` modules are vendored verbatim
 but are not built by the Task; only `snippets/` is in the loop.
+
+## Companion snippet trees in this directory
+
+`task thirdparty:java-bigquery-tests` no longer builds **only** `java-bigquery/`.
+The parent `third_party/java-bigquery-tests/` directory now also vendors three
+sibling snippet trees so the cloud.google.com sample IDs in those product areas
+are present and stay compile-clean against upstream API drift:
+
+| Tree | Upstream | Built by the task? |
+|------|----------|--------------------|
+| `java-bigquery/samples/snippets` (this dir) | `googleapis/google-cloud-java` HEAD | yes |
+| `java-bigquerystorage/samples/snippets` | `googleapis/google-cloud-java` HEAD | yes |
+| `java-docs-samples/bigquery/bigqueryconnection/snippets` | `GoogleCloudPlatform/java-docs-samples` HEAD | yes |
+| `java-docs-samples/bigquery/bigquerydatatransfer/snippets` | `GoogleCloudPlatform/java-docs-samples` HEAD | yes |
+
+Importantly, the bigquery-emulator does **not** implement the
+`bigqueryconnection`, `bigquerydatatransfer`, or `bigquerystorage` gRPC
+backends, so the latter three trees stay strictly compile-only — they
+exist to catch upstream API drift in the libraries-bom-resolved
+client artifacts, not to drive live ITs against this emulator.
+Promotion of any of them to a live IT lane is a follow-up tracked by the
+top-level `third_party/README.md`. The full sample-ID-to-class index lives
+in that README's "Sample coverage" sub-section.
 
 ## Compile-only by default
 

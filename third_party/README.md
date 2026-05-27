@@ -222,49 +222,65 @@ full Mocha suite.
 
 ## `java-bigquery-tests`
 
-Vendored from
-[`googleapis/google-cloud-java`](https://github.com/googleapis/google-cloud-java)
-HEAD `java-bigquery/samples/`. **Slim path:** the sample snippets resolve
-`com.google.cloud:google-cloud-bigquery` from
+Vendored from **two** upstreams under `third_party/java-bigquery-tests/`:
+
+| Subtree | Upstream | Snippet module | Sample IDs covered |
+|---------|----------|----------------|--------------------|
+| `java-bigquery/samples/` | [`googleapis/google-cloud-java`](https://github.com/googleapis/google-cloud-java) HEAD `java-bigquery/samples/` | `java-bigquery/samples/snippets` | `bigquery-*` (core BigQuery REST samples) |
+| `java-bigquerystorage/samples/` | [`googleapis/google-cloud-java`](https://github.com/googleapis/google-cloud-java) HEAD `java-bigquerystorage/samples/` | `java-bigquerystorage/samples/snippets` | `bigquerystorage-*` (Storage Read/Write API + Arrow) |
+| `java-docs-samples/bigquery/bigqueryconnection/` | [`GoogleCloudPlatform/java-docs-samples`](https://github.com/GoogleCloudPlatform/java-docs-samples) HEAD `bigquery/bigqueryconnection/snippets/` | `java-docs-samples/bigquery/bigqueryconnection/snippets` | `bigqueryconnection-*` |
+| `java-docs-samples/bigquery/bigquerydatatransfer/` | [`GoogleCloudPlatform/java-docs-samples`](https://github.com/GoogleCloudPlatform/java-docs-samples) HEAD `bigquery/bigquerydatatransfer/snippets/` | `java-docs-samples/bigquery/bigquerydatatransfer/snippets` | `bigquerydatatransfer-*` |
+
+**Slim path:** every sample resolves its `google-cloud-*` dependency from
 [`libraries-bom`](https://github.com/GoogleCloudPlatform/cloud-opensource-java/wiki/The-Google-Cloud-Platform-Libraries-BOM)
-26.73.0 on Maven Central, so this tree does **not** vendor the Java client
-itself, the BigQuery Storage client, or any patched Java sources (which
-go-googlesql experimented with and removed in
+on Maven Central (BOM version pinned per upstream — currently 26.73.0 for
+`java-bigquery/samples/snippets`, 26.70.0 for the storage tree, and
+26.32.0 for the two `java-docs-samples` modules). This tree does **not**
+vendor any Java client jars or patched sources — that heavier path was
+explored by go-googlesql and removed in
 [`94048be5b`](https://github.com/vantaboard/go-googlesql/commit/94048be5b3e4c55b0daab48fb092c75a3032e39c)
 / [`78d8e0529`](https://github.com/vantaboard/go-googlesql/commit/78d8e0529714f8368be9c1b396495e3a97ca2e62)
-once the maintenance cost became clear).
+once the maintenance cost became clear.
 
 ```bash
-task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on snippets/
+task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on every snippets/ POM
 ```
 
-The task `cd`s into
-`third_party/java-bigquery-tests/java-bigquery/samples/snippets` and runs
-Maven from there directly — no parent reactor, no `-am`. The two sibling
-modules (`samples/install-without-bom`, `samples/snapshot`) are vendored
-verbatim but are not built by the task; the `snapshot` POM still pins a
-deliberate `2.67.0-SNAPSHOT` for upstream's pre-release smoke and is
-filtered out by leaving the parent reactor untouched.
+The task fans out across `JAVA_BQ_SAMPLE_PATHS`, `cd`-ing into each
+listed snippets module (no parent reactor, no `-am`). Sibling modules
+shipped under the upstream `samples/` parents (`install-without-bom`,
+`snapshot`) are kept verbatim but not built — the `snapshot` POMs still
+pin a deliberate `*-SNAPSHOT` BigQuery client version for upstream's
+pre-release smoke and would only resolve from upstream's internal
+artifact host.
 
 ### Compile-only contract
 
-The upstream `src/test/java/**/*IT.java` suite (≈140 Failsafe ITs) is
-preserved verbatim, but it expects ADC + a real BigQuery project, so it
-cannot run in this emulator's PR lane today. Two levers keep it
-quiescent:
+Each upstream snippets module ships a full `src/test/java/**/*IT.java`
+suite alongside the sample sources. Across all four modules that is
+≈190 Failsafe ITs, every one of which expects ADC + a real backend
+(BigQuery, BigQuery Storage, BigQuery Connection, or BigQuery Data
+Transfer Service — none of which the emulator implements today, except
+for partial REST coverage of core BigQuery itself). Two levers keep
+those tests quiescent so the lane only exercises Maven dependency
+resolution + javac on the sample sources:
 
-1. The local POM tweak in
-   [`samples/snippets/pom.xml`](java-bigquery-tests/java-bigquery/samples/snippets/pom.xml)
-   sets `<maven.test.skip>true</maven.test.skip>` and
-   `<skipTests>true</skipTests>` so a bare `mvn package` from inside the
-   module also skips test-compile.
+1. Each `snippets/pom.xml` is patched in-tree to set
+   `<maven.test.skip>true</maven.test.skip>` and
+   `<skipTests>true</skipTests>` so a bare `mvn package` from inside
+   any module also skips test-compile. The patched POMs are:
+   - [`java-bigquery/samples/snippets/pom.xml`](java-bigquery-tests/java-bigquery/samples/snippets/pom.xml)
+   - [`java-bigquerystorage/samples/snippets/pom.xml`](java-bigquery-tests/java-bigquerystorage/samples/snippets/pom.xml)
+   - [`java-docs-samples/bigquery/bigqueryconnection/snippets/pom.xml`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/pom.xml)
+   - [`java-docs-samples/bigquery/bigquerydatatransfer/snippets/pom.xml`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/pom.xml)
 2. The Task wrapper passes `-DskipTests=true -Dmaven.test.skip=true` on
    the CLI as belt-and-suspenders.
 
 The CI job
 [`java-bigquery-tests-compile`](../.github/workflows/thirdparty-samples.yml)
-exercises the same path on every push/PR with Temurin 17 (matches the
-`actions/setup-java@v4` cache layout). Promotion to a live ITs lane is a
+exercises the same fan-out on every push/PR with Temurin 17 (matches
+the `actions/setup-java@v4` cache layout, whose `**/pom.xml` glob
+already covers all four POMs). Promotion to a live ITs lane is a
 follow-up once the emulator's Java surface is proven.
 
 ### Emulator wiring
@@ -300,8 +316,42 @@ mirror of the libraries-bom on first run.
 
 | Knob | Default | Purpose |
 |------|---------|---------|
-| `JAVA_BQ_MAVEN_GOALS` | `package` | Maven goals run on the snippets module. Override to `compile`, `verify`, etc. |
+| `JAVA_BQ_MAVEN_GOALS` | `package` | Maven goals run on every snippets module in the fan-out. Override to `compile`, `verify`, etc. |
 | `JAVA_BQ_SKIP_TESTS` | `true` | When `false`, drops `-Dmaven.test.skip=true` so test-compile + Failsafe execute (only useful with a `BqOpts`-routed IT and a live emulator). |
+| `JAVA_BQ_SAMPLE_PATHS` | the four paths in the upstream table above (whitespace-separated) | Snippet module paths relative to `third_party/java-bigquery-tests/`. Override to narrow the fan-out (e.g. `JAVA_BQ_SAMPLE_PATHS=java-bigquery/samples/snippets` while iterating on a single tree). |
+
+### Sample coverage
+
+Quick lookup for `https://docs.cloud.google.com/bigquery/docs/samples/<id>`
+sample IDs against the vendored class. Use this when triaging "is sample X
+available?"; rerun the table when adding more.
+
+| Sample ID | Vendored class |
+|-----------|----------------|
+| `bigquery-authorized-dataset` | [`AuthorizeDataset.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/AuthorizeDataset.java) |
+| `bigquery-delete-dataset-and-contents` | [`DeleteDatasetAndContents.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/DeleteDatasetAndContents.java) |
+| `bigquery-query-external-bigtable-perm` | [`QueryExternalBigtablePerm.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtablePerm.java) |
+| `bigquery-query-external-bigtable-temp` | [`QueryExternalBigtableTemp.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtableTemp.java) |
+| `bigquery-query-materialized-view` | [`QueryMaterializedView.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryMaterializedView.java) |
+| `bigquery-set-hivepartitioningoptions` | `[START bigquery_set_hivepartitioningoptions]` region inside [`CreateTableExternalHivePartitioned.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/CreateTableExternalHivePartitioned.java) |
+| `bigqueryconnection-create-aws-connection` | [`CreateAwsConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/CreateAwsConnection.java) |
+| `bigqueryconnection-delete-connection` | [`DeleteConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/DeleteConnection.java) |
+| `bigqueryconnection-get-connection` | [`GetConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/GetConnection.java) |
+| `bigqueryconnection-share-connection` | [`ShareConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/ShareConnection.java) |
+| `bigqueryconnection-update-connection` | [`UpdateConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/UpdateConnection.java) |
+| `bigquerydatatransfer-create-admanager-transfer` | [`CreateAdManagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdManagerTransfer.java) |
+| `bigquerydatatransfer-create-ads-transfer` | [`CreateAdsTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdsTransfer.java) |
+| `bigquerydatatransfer-create-amazons3-transfer` | [`CreateAmazonS3Transfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAmazonS3Transfer.java) |
+| `bigquerydatatransfer-create-campaignmanager-transfer` | [`CreateCampaignmanagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransfer.java) |
+| `bigquerydatatransfer-create-play-transfer` | [`CreatePlayTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreatePlayTransfer.java) |
+| `bigquerydatatransfer-create-redshift-transfer` | [`CreateRedshiftTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateRedshiftTransfer.java) |
+| `bigquerydatatransfer-create-teradata-transfer` | [`CreateTeradataTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateTeradataTransfer.java) |
+| `bigquerydatatransfer-create-youtubechannel-transfer` | [`CreateYoutubeChannelTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransfer.java) |
+| `bigquerydatatransfer-create-youtubecontentowner-transfer` | [`CreateYoutubeContentOwnerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransfer.java) |
+| `bigquerydatatransfer-disable-transfer` | [`DisableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/DisableTransferConfig.java) |
+| `bigquerydatatransfer-reenable-transfer` | [`ReEnableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/ReEnableTransferConfig.java) |
+| `bigquerystorage-arrow-quickstart` | [`StorageArrowSample.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/StorageArrowSample.java) |
+| `bigquerystorage-jsonstreamwriter-buffered` | [`WriteBufferedStream.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/WriteBufferedStream.java) |
 
 ## `python-bigquery-dataframes-tests`
 
