@@ -1,0 +1,215 @@
+# Third-party BigQuery client sample suites.
+#
+# Conservative first cut: the goal here is a stable signal that the
+# imported go-googlesql client trees still *compile* and produce
+# meaningful skip output against this emulator's REST + gRPC surface,
+# without paying for a full Bazel + GoogleSQL rebuild on every push.
+# We start with a single fast lane (golang-bigquery-tests, compile +
+# default-skip behavior) and leave hooks for the heavier lanes that
+# need a live emulator + fake-gcs.
+#
+# Stays in its own workflow (not folded into ci.yml or
+# conformance.yml) so an upstream sample regression — or a missing
+# emulator surface — does not block the build/test or fixture-
+# conformance gates, and vice versa. Mirrors how
+# `.github/workflows/conformance.yml` is split off from
+# `.github/workflows/ci.yml`.
+#
+# Local task equivalent: `task thirdparty:golang-bigquery-tests`.
+# Add new lanes (node, bigframes, ...) as the wiring + emulator
+# surfaces stabilize; see third_party/README.md for the env-var
+# matrix and skip rules each suite expects.
+
+name: thirdparty-samples
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: "Also run the live emulator lane (Bazel build, ~30-50min cold)"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thirdparty-samples-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Compile + run the vendored Go suite without exporting
+  # BIGQUERY_EMULATOR_HOST or any gRPC endpoint. The suite's system
+  # tests skip in that mode but the build path (and bqopts unit
+  # tests) still exercises every package, which catches upstream
+  # API drift or missing transitive dependencies long before we pay
+  # to spin up a live emulator. This mirrors go-googlesql's
+  # `.github/workflows/go.yml` posture for the same tree.
+  golang-bigquery-tests-compile:
+    name: golang-bigquery-tests (compile + skip)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: third_party/golang-bigquery-tests/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run thirdparty:golang-bigquery-tests (no emulator)
+        run: task thirdparty:golang-bigquery-tests
+        env:
+          # Explicitly unset so any default in the runner image does
+          # not turn this from a compile/skip job into a live
+          # integration job that would 404 against nothing.
+          BIGQUERY_EMULATOR_HOST: ""
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
+          STORAGE_EMULATOR_HOST: ""
+
+  # Live integration lane against a built gateway + engine. Disabled
+  # by default because it pays the full Bazel + GoogleSQL build budget
+  # (~30-50min cold, see ci.yml for the cache contract). Trigger
+  # manually via the workflow_dispatch input below until we are
+  # confident in the fake-gcs + seeded-data wiring on this emulator.
+  golang-bigquery-tests-live:
+    name: golang-bigquery-tests (live emulator)
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_live == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            cmake \
+            make \
+            ninja-build \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          disk-cache: thirdparty
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (for local_path_override)
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: 2026.01.1
+          path: googlesql-sibling
+
+      - name: Stage googlesql at ../googlesql
+        run: |
+          mv googlesql-sibling ../googlesql
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Build C++ engine via Bazel
+        run: task emulator:build-engine:bazel
+
+      - name: Build Go gateway (gateway_main)
+        run: task emulator:build
+
+      - name: Start gateway with engine subprocess
+        run: |
+          set -euo pipefail
+          ./bin/gateway_main \
+            --hostname=127.0.0.1 \
+            --http_port=9050 \
+            --grpc_port=9060 \
+            --engine_binary=./bin/emulator_main \
+            --log_requests \
+            >gateway.log 2>&1 &
+          echo $! > gateway.pid
+          for _ in $(seq 1 90); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:9050/healthz" 2>/dev/null; then
+              echo "gateway ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "gateway did not become ready on :9050" >&2
+          tail -200 gateway.log >&2 || true
+          exit 1
+
+      - name: Start fake-gcs-server (seeded testdata)
+        run: |
+          set -euo pipefail
+          mkdir -p testdata/fake-gcs-data
+          docker compose --profile thirdparty up -d fake-gcs-server
+
+      - name: Run thirdparty:golang-bigquery-tests (live)
+        env:
+          BIGQUERY_EMULATOR_HOST: "127.0.0.1:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "127.0.0.1:9060"
+          BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT: "127.0.0.1:9060"
+          STORAGE_EMULATOR_HOST: "127.0.0.1:4443"
+          GOLANG_SAMPLES_PROJECT_ID: "dev"
+          GOLANG_SAMPLES_E2E_TEST: "1"
+          GOOGLE_CLOUD_PROJECT: "dev"
+          GCLOUD_PROJECT: "dev"
+          EMULATOR_PROJECT_ID: "dev"
+          FAKE_GCS_PORT: "4443"
+        run: task thirdparty:golang-bigquery-tests
+
+      - name: Stop gateway
+        if: always()
+        run: |
+          if [ -f gateway.pid ]; then
+            kill "$(cat gateway.pid)" 2>/dev/null || true
+          fi
+          docker compose down -v --remove-orphans 2>/dev/null || true
+
+      - name: Upload gateway log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thirdparty-gateway-log
+          path: gateway.log
+          if-no-files-found: warn
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
+
+# Manual triggers can flip the live lane on per-run; the default push
+# / pull_request triggers only run the cheap compile lane above. As
+# more lanes (node, python-dataframes) stabilize, follow this pattern:
+# add a job, gate it on a workflow_dispatch input until proven, then
+# promote it to push/pull_request once warm-cache wall clock and
+# expected skip set are well understood.
