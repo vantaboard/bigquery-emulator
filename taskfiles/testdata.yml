@@ -1,0 +1,31 @@
+# Sample testdata helpers for the third-party suites.
+#
+# Today only `task testdata:fake-gcs-sync` is wired: it mirrors the
+# subset of public Google Cloud Storage objects that the vendored
+# golang-, node-, and python-bigquery-dataframes-tests load against
+# fake-gcs-server (see `docker-compose.yml` and
+# `third_party/README.md`). The mirror lands under
+# `testdata/fake-gcs-data/` which is gitignored — the data is large
+# (hundreds of MB) and is the kind of thing every developer fetches
+# on demand instead of committing.
+#
+# The script prefers `gcloud storage cp` for parallelism + auth
+# fallthrough, and falls back to a stdlib HTTPS mirror when gcloud
+# isn't on PATH (`scripts/sync_fake_gcs_public_samples_http.py`).
+version: "3"
+
+tasks:
+  default:
+    desc: List testdata helpers
+    cmds:
+      - task --list-all | grep '^* testdata:'
+    silent: true
+
+  fake-gcs-sync:
+    desc: Mirror public GCS samples into testdata/fake-gcs-data (see third_party/README.md)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        ./scripts/sync_fake_gcs_public_samples.sh

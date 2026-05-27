@@ -1,0 +1,285 @@
+# Third-party BigQuery client sample suites. Drives `go test`,
+# `nox`, and `npm test` against the four upstream sample trees
+# vendored under `third_party/<lang>-bigquery-tests/`.
+#
+# Mirrors the go-googlesql `task thirdparty:*` lane: each suite gets
+# its own task plus a `default` aggregator, env vars steer which nox
+# session / Python interpreter / pytest selector runs, and shell
+# preflights under `scripts/` fail fast when the emulator or
+# fake-gcs is unreachable.
+#
+# Usage:
+#   task thirdparty                              # run every suite in order
+#   task thirdparty:golang-bigquery-tests        # Go sample integration tests
+#   task thirdparty:python-bigquery-tests        # nox snippets/unit (PYTHON_SAMPLES_NOX_SESSION=...)
+#   task thirdparty:node-bigquery-tests          # npm install + npm test (Mocha)
+#   task thirdparty:python-bigquery-dataframes-tests
+#                                                # bigframes nox `py` session
+#   task thirdparty:python-bigquery-dataframes-snippet-gate
+#                                                # narrow CI-friendly bigframes allowlist
+#
+# Environment overrides:
+#   GO_TEST_FLAGS                  extra flags for the Go suite
+#   PYTHON_SAMPLES_NOX_SESSION     default snippets_full; also unit, snippets, unit_noextras
+#   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3)
+#   PYTHON_SAMPLES_CMD_TIMEOUT     wall-clock cap for the Python suite (default 30m)
+#   DATAFRAME_SAMPLES_PYTHON       override interpreter for bigframes snippets
+#   DATAFRAME_SAMPLES_PYTEST_ARGS  extra `-- ...` pytest args appended to nox
+#   DATAFRAME_SAMPLES_TMPDIR       override TMPDIR for nox installs
+#   DATAFRAME_SAMPLES_CMD_TIMEOUT  wall-clock cap for the bigframes suite
+#   FAKE_GCS_PORT                  fake-gcs-server port (default 4443; preflight)
+#
+# See `third_party/README.md` for the wiring contract: emulator env
+# vars (BIGQUERY_EMULATOR_HOST, BIGQUERY_STORAGE_GRPC_ENDPOINT, ...),
+# fake-gcs requirements, and which surfaces skip when missing.
+version: "3"
+
+vars:
+  GO_TEST_FLAGS: ""
+  PYTHON_SAMPLES_NOX_SESSION: "snippets_full"
+  PYTHON_SAMPLES_PYTHON: ""
+
+tasks:
+  default:
+    desc: Run golang-, python-, node-, and python-bigquery-dataframes BigQuery third-party suites in order
+    cmds:
+      - task: golang-bigquery-tests
+      - task: python-bigquery-tests
+      - task: node-bigquery-tests
+      - task: python-bigquery-dataframes-tests
+
+  # third_party/golang-bigquery-tests is a fully vendored Go module
+  # (see go.mod). When BIGQUERY_EMULATOR_HOST is unset the suite
+  # mostly compiles + skips system tests; with the emulator + gRPC
+  # endpoints exported it runs against the gateway. See
+  # third_party/README.md for the env-var matrix.
+  golang-bigquery-tests:
+    desc: Run vendored golang-bigquery-tests go test (bqopts + BIGQUERY_EMULATOR_HOST; see third_party/README.md)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f third_party/golang-bigquery-tests/go.mod ]; then
+          echo "third_party/golang-bigquery-tests missing" >&2
+          exit 1
+        fi
+        cd third_party/golang-bigquery-tests
+        go test ./... -count=1 {{.GO_TEST_FLAGS}}
+
+  # The vendored python-bigquery-tests tree mirrors go-googlesql's
+  # layout (LICENSE, samples/, tests/data) but the upstream `*.py`
+  # source — including noxfile.py — is intentionally not vendored
+  # to match upstream's ignore policy. The task fails fast with a
+  # pointer to the sync workflow rather than running an empty nox.
+  python-bigquery-tests:
+    desc: Run vendored python-bigquery-tests nox session (default snippets_full; see third_party/README.md)
+    cmds:
+      - |
+        set -e
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f third_party/python-bigquery-tests/noxfile.py ]; then
+          echo "third_party/python-bigquery-tests/noxfile.py is missing." >&2
+          echo "  This tree vendors the upstream layout but not the *.py source." >&2
+          echo "  Sync a noxfile.py + sample sources before running this task." >&2
+          echo "  See third_party/README.md (python-bigquery-tests section)." >&2
+          exit 1
+        fi
+      - |
+        set -e
+        root="$(git rev-parse --show-toplevel)"
+        nox_session="{{.PYTHON_SAMPLES_NOX_SESSION}}"
+        case "$nox_session" in
+          snippets|snippets_docs|snippets_subdirectory|snippets_full)
+            if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+              bash "${root}/scripts/preflight_python_samples_emulator.sh"
+            fi
+            ;;
+        esac
+        cd "${root}/third_party/python-bigquery-tests"
+        py="${PYTHON_SAMPLES_PYTHON:-}"
+        if [ -z "$py" ]; then
+          py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+        fi
+        case "$nox_session" in
+          unit|unit_noextras)
+            case "$py" in
+              3.9|3.10|3.11|3.12|3.13|3.14) ;;
+              *)
+                echo "nox session unit requires Python 3.9-3.14 (got ${py}). Set PYTHON_SAMPLES_PYTHON." >&2
+                exit 1
+                ;;
+            esac
+            ;;
+          snippets|snippets_docs|snippets_subdirectory|snippets_full)
+            case "$py" in
+              3.9|3.11|3.12|3.13) ;;
+              *)
+                echo "nox session ${nox_session} requires Python 3.9, 3.11, 3.12, or 3.13 (got ${py}); export PYTHON_SAMPLES_PYTHON=3.13 (see .envrc) or use PYTHON_SAMPLES_NOX_SESSION=unit for 3.9-3.14." >&2
+                exit 1
+                ;;
+            esac
+            ;;
+          *)
+            case "$py" in
+              3.9|3.14) ;;
+              *)
+                echo "nox session ${nox_session} requires Python 3.9 or 3.14 (got ${py}). Set PYTHON_SAMPLES_PYTHON." >&2
+                exit 1
+                ;;
+            esac
+            ;;
+        esac
+        export NOX_DEFAULT_VENV_BACKEND='uv|virtualenv'
+        export PYTHONUNBUFFERED=1
+        # Wall-clock cap so a dead emulator / hung RPC does not block indefinitely (GNU coreutils timeout(1)).
+        _py_samples_to="${PYTHON_SAMPLES_CMD_TIMEOUT:-30m}"
+        _py_samples_run() {
+          case "${_py_samples_to}" in
+            0|off|none) "$@" ;;
+            *)
+              if command -v timeout >/dev/null 2>&1; then
+                if timeout --help 2>&1 | grep -q -- '--foreground'; then
+                  timeout --foreground -k 30s "${_py_samples_to}" "$@"
+                else
+                  timeout -k 30s "${_py_samples_to}" "$@"
+                fi
+              else
+                echo "python-bigquery-tests: PYTHON_SAMPLES_CMD_TIMEOUT=${_py_samples_to} but timeout(1) not on PATH; running without wall-clock cap." >&2
+                "$@"
+              fi
+              ;;
+          esac
+        }
+        if command -v uv >/dev/null 2>&1; then
+          # nox[pbs] lets Nox install missing CPython versions (plain uvx nox skips without pythonX.Y on PATH).
+          _py_samples_run uvx --from 'nox[pbs]' nox -s "$nox_session" -p "$py"
+        elif command -v nox >/dev/null 2>&1; then
+          _py_samples_run nox -s "$nox_session" -p "$py"
+        else
+          echo "Install uv (https://docs.astral.sh/uv/) for 'uvx --from nox[pbs] nox', or install 'nox[pbs]' on PATH." >&2
+          exit 1
+        fi
+
+  # node-bigquery-tests (vendored). Test setup auto-prefixes
+  # STORAGE_EMULATOR_HOST with http:// for @google-cloud/storage v7.
+  # Preflight verifies fake-gcs is serving the seeded us-states.csv
+  # fixture so the load samples don't fail with empty bodies.
+  node-bigquery-tests:
+    desc: Run vendored node-bigquery-tests Mocha suite (npm install && npm test; see third_party/node-bigquery-tests/EMULATOR.md)
+    cmds:
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f third_party/node-bigquery-tests/package.json ]; then
+          echo "third_party/node-bigquery-tests missing" >&2
+          exit 1
+        fi
+        bash scripts/preflight_node_samples_gcs.sh
+        _st="${STORAGE_EMULATOR_HOST:-}"
+        if [ -n "$_st" ] && ! printf '%s' "$_st" | grep -qE '^https?://'; then
+          export STORAGE_EMULATOR_HOST="http://${_st#//}"
+        fi
+        cd third_party/node-bigquery-tests && npm install && npm test
+
+  # bigframes snippet allowlist gate. CI uses this to keep the
+  # signal narrow until BigFrames SQL parity grows; local devs can
+  # widen by setting DATAFRAME_SAMPLES_PYTEST_ARGS or running
+  # `python-bigquery-dataframes-tests` directly.
+  python-bigquery-dataframes-snippet-gate:
+    desc: Run bigframes emulator snippet tests known to pass; requires emulator + optional fake-gcs
+    env:
+      DATAFRAME_SAMPLES_PYTEST_ARGS: >-
+        -k 'test_bigquery_dataframes_set_options or test_bigquery_dataframes_load_data_from_bigquery or test_bigquery_dataframes_pandas_methods or test_performance_optimizations or test_clustering_model'
+        --tb=short
+    cmds:
+      - task: python-bigquery-dataframes-tests
+
+  python-bigquery-dataframes-tests:
+    desc: Run python-bigquery-dataframes samples/snippets nox py (emulator or GCP; see third_party/README.md)
+    cmds:
+      - |
+        set -e
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f third_party/python-bigquery-dataframes-tests/samples/snippets/noxfile.py ]; then
+          echo "third_party/python-bigquery-dataframes-tests missing" >&2
+          exit 1
+        fi
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+          bash "${root}/scripts/preflight_python_samples_emulator.sh"
+        fi
+        if [ -n "${STORAGE_EMULATOR_HOST:-}" ]; then
+          bash "${root}/scripts/preflight_dataframe_samples_gcs.sh"
+        fi
+        cd third_party/python-bigquery-dataframes-tests/samples/snippets
+        # Pip writes INSTALLER*.tmp under site-packages during wheel installs; keeping
+        # TMPDIR on the same filesystem as .nox avoids sporadic ENOENT when system /tmp
+        # is cleaned, is a different mount, or races with other tooling.
+        export TMPDIR="${DATAFRAME_SAMPLES_TMPDIR:-$(pwd)/.nox-install-tmp}"
+        mkdir -p "${TMPDIR}"
+        export INSTALL_LIBRARY_FROM_SOURCE=True
+        py="${DATAFRAME_SAMPLES_PYTHON:-}"
+        if [ -z "$py" ]; then
+          py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+        fi
+        # bigframes 1.42.x + pyarrow 15.x do not support CPython 3.14; prefer another interpreter.
+        case "$py" in
+          3.14)
+            _df_py_found=""
+            for _v in 3.12 3.13 3.11 3.10; do
+              if command -v "python${_v}" >/dev/null 2>&1; then
+                py="${_v}"
+                _df_py_found=1
+                echo "python-bigquery-dataframes-tests: default Python is 3.14 (unsupported by vendored bigframes pins); using $(command -v "python${_v}")." >&2
+                break
+              fi
+            done
+            if [ -z "${_df_py_found}" ]; then
+              echo "python-bigquery-dataframes-tests: Python 3.14 is unsupported (bigframes/pyarrow stack). Install python3.12-3.13 or set DATAFRAME_SAMPLES_PYTHON=3.12." >&2
+              exit 1
+            fi
+            ;;
+        esac
+        case "$py" in
+          3.10|3.11|3.12|3.13) ;;
+          *)
+            echo "python-bigquery-dataframes-tests: nox py requires Python 3.10-3.13 (got ${py}). Set DATAFRAME_SAMPLES_PYTHON." >&2
+            exit 1
+            ;;
+        esac
+        _df_to="${DATAFRAME_SAMPLES_CMD_TIMEOUT:-${PYTHON_SAMPLES_CMD_TIMEOUT:-30m}}"
+        _df_run() {
+          case "${_df_to}" in
+            0|off|none) "$@" ;;
+            *)
+              if command -v timeout >/dev/null 2>&1; then
+                timeout -k 30s "${_df_to}" "$@"
+              else
+                echo "python-bigquery-dataframes-tests: timeout not on PATH; running without wall-clock cap." >&2
+                "$@"
+              fi
+              ;;
+          esac
+        }
+        _df_pytest_extra="${DATAFRAME_SAMPLES_PYTEST_ARGS:-}"
+        if command -v uv >/dev/null 2>&1; then
+          if [ -n "$_df_pytest_extra" ]; then
+            # shellcheck disable=SC2086
+            _df_run uvx --from 'nox[pbs]' nox -s py -p "$py" -- $_df_pytest_extra
+          else
+            _df_run uvx --from 'nox[pbs]' nox -s py -p "$py"
+          fi
+        elif command -v nox >/dev/null 2>&1; then
+          if [ -n "$_df_pytest_extra" ]; then
+            # shellcheck disable=SC2086
+            _df_run nox -s py -p "$py" -- $_df_pytest_extra
+          else
+            _df_run nox -s py -p "$py"
+          fi
+        else
+          echo "Install uv (https://docs.astral.sh/uv/) for 'uvx --from nox[pbs] nox', or install 'nox[pbs]' on PATH." >&2
+          exit 1
+        fi

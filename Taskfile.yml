@@ -18,6 +18,8 @@ includes:
   bazel: ./taskfiles/bazel.yml
   conformance: ./taskfiles/conformance.yml
   release: ./taskfiles/release.yml
+  thirdparty: ./taskfiles/thirdparty.yml
+  testdata: ./taskfiles/testdata.yml
 
 tasks:
   default:
