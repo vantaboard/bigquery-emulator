@@ -1,0 +1,46 @@
+# Convenience helpers for the `thirdparty`-profiled docker compose
+# services. Mirrors `go-googlesql`'s `task-compose.yml` so a developer
+# who already knows that repo can `task compose:gcs` /
+# `task compose:pubsub` here without thinking about profile flags or
+# the longer `thirdparty:fake-gcs-up` lane.
+#
+# The underlying services live in docker-compose.yml under the
+# `thirdparty` profile so the default `docker compose up` (and
+# `task docker:smoke`) do not start anything beyond `bigquery-emulator`.
+# `task compose:gcs` intentionally calls through `thirdparty:fake-gcs-up`
+# (rather than `docker compose up` directly) so the "missing/empty
+# testdata/fake-gcs-data/" guard documented in
+# `taskfiles/thirdparty.yml` still fires; `task compose:pubsub` skips
+# that guard because Pub/Sub does not need a bind-mounted fixture tree.
+version: "3"
+
+tasks:
+  default:
+    desc: Bring up every thirdparty-profile service (fake-gcs + pubsub)
+    cmds:
+      - task: gcs
+      - task: pubsub
+
+  gcs:
+    desc: Start fake-gcs-server (delegates to thirdparty:fake-gcs-up so the seed-data guard fires)
+    cmds:
+      - task: thirdparty:fake-gcs-up
+
+  pubsub:
+    desc: Start the Pub/Sub emulator (PUBSUB_EMULATOR_HOST=127.0.0.1:8085)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker compose --profile thirdparty up -d pubsub-emulator
+
+  pubsub-down:
+    desc: Stop the Pub/Sub emulator (other compose services keep running)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker compose stop pubsub-emulator || true
+        docker compose rm -f pubsub-emulator || true

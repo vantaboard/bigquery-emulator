@@ -74,6 +74,9 @@ works against either emulator without code changes.
 | `BIGQUERY_EMULATOR_CLIENT_API_REGION` | unset | Sends `X-BigQuery-Emulator-Api-Region` header so regional dataset rules apply when the real Host is loopback. |
 | `STORAGE_EMULATOR_HOST` | `127.0.0.1:4443` (when fake-gcs is up) | fake-gcs-server JSON API. Go: `host:port`. Node: `http://...` (the Node task auto-prefixes). |
 | `FAKE_GCS_PORT` | `4443` | Compose port mapping for `fake-gcs-server`. |
+| `PUBSUB_EMULATOR_HOST` | `127.0.0.1:8085` (when `task compose:pubsub` is up) | Official `gcloud beta emulators pubsub`. Opt-in via the `thirdparty` compose profile; default `docker compose up` does not start it. |
+| `PUBSUB_EMULATOR_PORT` | `8085` | Compose port mapping for `pubsub-emulator`. |
+| `PUBSUB_PROJECT_ID` | `dev` | Project the Pub/Sub emulator initializes (matches `BIGQUERY_EMULATOR_PROJECT`). |
 | `GOLANG_SAMPLES_PROJECT_ID` | `dev` | Project ID seen by the upstream Go samples. |
 | `GOLANG_SAMPLES_E2E_TEST` | `1` | Enables system-test branches in the Go suite. |
 | `GOOGLE_CLOUD_PROJECT` / `GCLOUD_PROJECT` | `dev` (aligned by Mocha `test/setup.js`) | Node + Python clients. |

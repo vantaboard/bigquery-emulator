@@ -20,6 +20,7 @@ includes:
   release: ./taskfiles/release.yml
   thirdparty: ./taskfiles/thirdparty.yml
   testdata: ./taskfiles/testdata.yml
+  compose: ./taskfiles/compose.yml
 
 tasks:
   default:
