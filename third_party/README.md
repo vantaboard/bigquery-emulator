@@ -200,25 +200,66 @@ Once `noxfile.py` is present, the task runs:
 
 ```bash
 task thirdparty:python-bigquery-tests
-# ↑ wraps `nox -s ${PYTHON_SAMPLES_NOX_SESSION:-snippets_full} -p $PYTHON_SAMPLES_PYTHON`
+# ↑ wraps `nox -s ${PYTHON_SAMPLES_NOX_SESSION:-snippets} -p $PYTHON_SAMPLES_PYTHON -- -n0`
+# (the `-- -n0` posarg is appended automatically for the emulator-driven
+# `snippets` session; it overrides upstream's hard-coded `-n=auto` so a
+# single shared emulator process doesn't deadlock against pytest-xdist
+# workers — pytest-xdist honors the last `-n` flag.)
 ```
 
 The in-tree Python client reads `BIGQUERY_EMULATOR_HOST` directly in
-`google.cloud.bigquery._helpers` (prepends `http://` for `host:port`).
-Snippet tests under `samples/tests/` and `samples/snippets/` use
-`samples/emulator_client.py` (`AnonymousCredentials`) when the emulator
-is set.
+`google.cloud.bigquery._helpers._get_bigquery_host()`, which returns the
+env var **verbatim** — it does not prepend `http://`. The Task wrapper
+normalizes a bare `host:port` value to `http://host:port` before
+launching nox (mirroring what `node-bigquery-tests` does for
+`STORAGE_EMULATOR_HOST`), so the env mutation only affects the child
+nox process and the surrounding `task thirdparty:default` chain still
+sees the bare form their Go/Node clients expect. Snippet tests under
+`samples/tests/` use `AnonymousCredentials` when the emulator host is
+set.
 
-| Nox session | What runs |
-|-------------|-----------|
-| `unit` | Mocked `tests/unit` (good first CI gate) |
-| `snippets_docs` | `docs/snippets.py` only (fast emulator check) |
-| `snippets_full` | `docs/snippets.py` + `samples/` + `samples/snippets/` (default) |
-| `unit_noextras` | Minimal extras (many skips) |
+The default session is `snippets` (upstream-defined; emulator-driven).
+Override via the Task CLI: `task thirdparty:python-bigquery-tests
+PYTHON_SAMPLES_NOX_SESSION=unit`. Sessions defined by upstream's
+`noxfile.py`:
 
-`samples/` and `samples/snippets/` invocations use `-n0`: a single emulator
-process is shared, so `-n auto` often stalls or deadlocks after parallel
-errors.
+| Nox session | What runs | Hits emulator? |
+|-------------|-----------|----------------|
+| `snippets` | `docs/snippets.py` + top-level `samples/` (excludes per-subdir noxfile dirs: `samples/snippets`, `samples/desktopapp`, `samples/magics`, `samples/geography`, `samples/notebooks`). **Default.** | Yes |
+| `system` | `tests/system/` integration suite | Yes |
+| `prerelease_deps` | Same coverage as `snippets`/`system` against pre-release dependency pins | Yes |
+| `unit` | Mocked `tests/unit/` with all extras (`pytest -n=8`) | No |
+| `unit_noextras` | Mocked `tests/unit/`, minimal extras (many subtests skip) | No |
+| `mypy` / `mypy_samples` / `pytype` | Type-check the library and samples | No |
+| `cover` | Coverage report (run after `unit`) | No |
+| `lint` / `lint_setup_py` / `blacken` | Style/lint gates | No |
+| `docs` / `docfx` | Build sphinx + docfx outputs (Python 3.10) | No |
+
+The per-subdir noxfiles under `samples/<subdir>/noxfile.py` (`snippets`,
+`desktopapp`, `magics`, `geography`, `notebooks`) define their own `py`
+session and are intentionally **not** invoked by the top-level
+`snippets` session. Run them explicitly when you need that coverage:
+
+```bash
+cd third_party/python-bigquery-tests/samples/snippets && \
+    NOX_DEFAULT_VENV_BACKEND=virtualenv uvx --from 'nox[pbs]' nox -s py -- -n0
+```
+
+**Backend:** the task defaults `NOX_DEFAULT_VENV_BACKEND=virtualenv`
+because upstream's `noxfile.py` invokes `python -m pip` in every
+session and uv-created venvs ship without pip. Set
+`NOX_DEFAULT_VENV_BACKEND='uv|virtualenv'` to opt back into uv when you
+have a custom noxfile that doesn't need pip.
+
+**Known env interaction (unit/unit_noextras only):** the upstream
+`unit` session does not clear `BIGQUERY_EMULATOR_HOST`; two constructor
+tests (`test_ctor_defaults`, `test_ctor_w_empty_client_options`) assert
+the default endpoint is `https://bigquery.googleapis.com` and fail when
+that env var is set. `mise.toml` and `.envrc` export it for the
+emulator-driven sessions, so the failures are expected when you run
+`unit` from an env that has it set; unset it (`env -u
+BIGQUERY_EMULATOR_HOST task thirdparty:python-bigquery-tests
+PYTHON_SAMPLES_NOX_SESSION=unit`) to get a clean unit run.
 
 ## `node-bigquery-tests`
 

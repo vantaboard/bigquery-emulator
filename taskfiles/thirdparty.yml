@@ -36,9 +36,14 @@
 #
 # Environment overrides:
 #   GO_TEST_FLAGS                  extra flags for the Go suite
-#   PYTHON_SAMPLES_NOX_SESSION     default snippets_full; also unit, snippets, unit_noextras
+#   PYTHON_SAMPLES_NOX_SESSION     default `snippets` (upstream emulator-driven session: docs/snippets.py + samples/);
+#                                  also unit / unit_noextras (mocked) and any other upstream session
+#                                  defined in third_party/python-bigquery-tests/noxfile.py after sync
 #   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3)
 #   PYTHON_SAMPLES_CMD_TIMEOUT     wall-clock cap for the Python suite (default 30m)
+#   NOX_DEFAULT_VENV_BACKEND       default `virtualenv` (upstream noxfile uses `python -m pip`, which
+#                                  is missing from uv-created venvs). Set to `uv|virtualenv` to opt into
+#                                  uv when running a custom noxfile that doesn't depend on pip.
 #   JAVA_BQ_MAVEN_GOALS            override Maven goals for each Java snippets module (default: package)
 #   JAVA_BQ_SKIP_TESTS             "true" (default) builds compile-only; "false" runs Failsafe ITs
 #   JAVA_BQ_SAMPLE_PATHS           whitespace-separated snippet module paths under
@@ -59,7 +64,16 @@ version: "3"
 
 vars:
   GO_TEST_FLAGS: ""
-  PYTHON_SAMPLES_NOX_SESSION: "snippets_full"
+  # Default nox session for python-bigquery-tests is the upstream
+  # `snippets` session (docs/snippets.py + samples/, excluding
+  # samples/snippets which has its own per-directory noxfile). It
+  # exercises the BigQuery emulator end-to-end. Override via the Task
+  # CLI: `task thirdparty:python-bigquery-tests PYTHON_SAMPLES_NOX_SESSION=unit`.
+  # Available upstream sessions: unit, unit_noextras, snippets, system,
+  # mypy_samples, mypy, pytype, cover, prerelease_deps, lint, blacken,
+  # docs, docfx (see third_party/python-bigquery-tests/noxfile.py after
+  # running scripts/sync_python_bigquery_tests.sh).
+  PYTHON_SAMPLES_NOX_SESSION: "snippets"
   PYTHON_SAMPLES_PYTHON: ""
   # Slim-path Java snippets lane: each path below is a Maven snippets module under
   # third_party/java-bigquery-tests. install-without-bom and snapshot are vendored
@@ -216,13 +230,30 @@ tasks:
         cd "$root/third_party/golang-bigquery-tests"
         go test ./... -count=1 {{.GO_TEST_FLAGS}}
 
-  # The vendored python-bigquery-tests tree mirrors go-googlesql's
-  # layout (LICENSE, samples/, tests/data) but the upstream `*.py`
-  # source — including noxfile.py — is intentionally not vendored
-  # to match upstream's ignore policy. The task fails fast with a
-  # pointer to the sync workflow rather than running an empty nox.
+  # The vendored python-bigquery-tests tree mirrors upstream's layout
+  # (LICENSE, samples/, tests/data) but the upstream `*.py` source —
+  # including noxfile.py — is intentionally not vendored. Run
+  # scripts/sync_python_bigquery_tests.sh (default ref: main) to
+  # populate the tree from googleapis/python-bigquery before running
+  # this task; the precondition check below fails fast and points at
+  # that workflow when noxfile.py is missing.
+  #
+  # Default session is upstream's `snippets` — emulator-driven coverage
+  # over `docs/snippets.py + samples/` (samples/snippets/ has its own
+  # per-directory noxfile and is intentionally excluded by upstream).
+  # The task forces `-n0` (serial pytest) onto the nox invocation
+  # because the upstream `snippets` session hard-codes `-n=auto`, which
+  # deadlocks against a single shared emulator process; pytest-xdist
+  # honors the last `-n` flag, so appended posargs win.
+  #
+  # Backend: defaults to `virtualenv` (overridable via
+  # NOX_DEFAULT_VENV_BACKEND). Upstream noxfile invokes `python -m pip
+  # freeze` in every session, which fails on uv-created venvs (uv
+  # bootstraps without pip). Callers using a custom noxfile that
+  # doesn't need pip can opt back in:
+  #   NOX_DEFAULT_VENV_BACKEND='uv|virtualenv' task thirdparty:python-bigquery-tests
   python-bigquery-tests:
-    desc: Run vendored python-bigquery-tests nox session (default snippets_full; see third_party/README.md)
+    desc: Run vendored python-bigquery-tests nox session (default snippets, emulator-driven; see third_party/README.md)
     cmds:
       - |
         set -e
@@ -231,7 +262,7 @@ tasks:
         if [ ! -f third_party/python-bigquery-tests/noxfile.py ]; then
           echo "third_party/python-bigquery-tests/noxfile.py is missing." >&2
           echo "  This tree vendors the upstream layout but not the *.py source." >&2
-          echo "  Sync a noxfile.py + sample sources before running this task." >&2
+          echo "  Run: scripts/sync_python_bigquery_tests.sh (default ref: main)" >&2
           echo "  See third_party/README.md (python-bigquery-tests section)." >&2
           exit 1
         fi
@@ -240,8 +271,11 @@ tasks:
         set -e
         root="$(git rev-parse --show-toplevel)"
         nox_session="{{.PYTHON_SAMPLES_NOX_SESSION}}"
+        # Sessions that hit the emulator: preflight verifies the
+        # gateway is reachable so a dead/half-up emulator fails fast
+        # instead of producing 500-page pytest stack traces.
         case "$nox_session" in
-          snippets|snippets_docs|snippets_subdirectory|snippets_full)
+          snippets|system)
             if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
               bash "${root}/scripts/preflight_python_samples_emulator.sh"
             fi
@@ -252,17 +286,21 @@ tasks:
         if [ -z "$py" ]; then
           py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
         fi
+        # Python-version requirements come from upstream's noxfile
+        # session decorators. UNIT_TEST_PYTHON_VERSIONS = 3.9-3.14;
+        # SYSTEM_TEST_PYTHON_VERSIONS = 3.9, 3.11-3.13;
+        # DEFAULT_PYTHON_VERSION = 3.9 / 3.14 for everything else.
         case "$nox_session" in
           unit|unit_noextras)
             case "$py" in
               3.9|3.10|3.11|3.12|3.13|3.14) ;;
               *)
-                echo "nox session unit requires Python 3.9-3.14 (got ${py}). Set PYTHON_SAMPLES_PYTHON." >&2
+                echo "nox session ${nox_session} requires Python 3.9-3.14 (got ${py}). Set PYTHON_SAMPLES_PYTHON." >&2
                 exit 1
                 ;;
             esac
             ;;
-          snippets|snippets_docs|snippets_subdirectory|snippets_full)
+          snippets|system|prerelease_deps)
             case "$py" in
               3.9|3.11|3.12|3.13) ;;
               *)
@@ -281,8 +319,25 @@ tasks:
             esac
             ;;
         esac
-        export NOX_DEFAULT_VENV_BACKEND='uv|virtualenv'
+        # Default backend is virtualenv because upstream's noxfile
+        # invokes `python -m pip` everywhere; uv-created venvs ship
+        # without pip. Caller can opt back in:
+        #   NOX_DEFAULT_VENV_BACKEND='uv|virtualenv' task ...
+        export NOX_DEFAULT_VENV_BACKEND="${NOX_DEFAULT_VENV_BACKEND:-virtualenv}"
         export PYTHONUNBUFFERED=1
+        # Upstream's google.cloud.bigquery._helpers._get_bigquery_host
+        # returns BIGQUERY_EMULATOR_HOST verbatim; the python `requests`
+        # adapter then fails with InvalidSchema on the bare `host:port`
+        # form mise/.envrc exports. Mirror the node-bigquery-tests
+        # pattern (STORAGE_EMULATOR_HOST normalization above) and
+        # prepend http:// when the env value lacks a scheme. The export
+        # only mutates the child nox process env, so the surrounding
+        # `task thirdparty:default` chain (golang/node/java) still sees
+        # the bare `host:port` form their clients expect.
+        _bqhost="${BIGQUERY_EMULATOR_HOST:-}"
+        if [ -n "$_bqhost" ] && ! printf '%s' "$_bqhost" | grep -qE '^https?://'; then
+          export BIGQUERY_EMULATOR_HOST="http://${_bqhost#//}"
+        fi
         # Wall-clock cap so a dead emulator / hung RPC does not block indefinitely (GNU coreutils timeout(1)).
         _py_samples_to="${PYTHON_SAMPLES_CMD_TIMEOUT:-30m}"
         _py_samples_run() {
@@ -302,11 +357,20 @@ tasks:
               ;;
           esac
         }
+        # Force serial pytest (`-n0`) for the emulator-driven `snippets`
+        # session: upstream's `snippets` calls `py.test -n=auto`, which
+        # deadlocks when multiple workers race a single emulator.
+        # pytest-xdist honors the last `-n` flag, so appended posargs
+        # override. Other sessions don't need this.
+        nox_posargs=()
+        case "$nox_session" in
+          snippets) nox_posargs=("--" "-n0") ;;
+        esac
         if command -v uv >/dev/null 2>&1; then
           # nox[pbs] lets Nox install missing CPython versions (plain uvx nox skips without pythonX.Y on PATH).
-          _py_samples_run uvx --from 'nox[pbs]' nox -s "$nox_session" -p "$py"
+          _py_samples_run uvx --from 'nox[pbs]' nox -s "$nox_session" -p "$py" "${nox_posargs[@]}"
         elif command -v nox >/dev/null 2>&1; then
-          _py_samples_run nox -s "$nox_session" -p "$py"
+          _py_samples_run nox -s "$nox_session" -p "$py" "${nox_posargs[@]}"
         else
           echo "Install uv (https://docs.astral.sh/uv/) for 'uvx --from nox[pbs] nox', or install 'nox[pbs]' on PATH." >&2
           exit 1
