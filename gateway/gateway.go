@@ -48,6 +48,14 @@ type Options struct {
 	// is still being scaffolded; queries will return Unimplemented).
 	EngineBinary string
 
+	// EngineArgs is the additional flag list passed to the engine
+	// subprocess after `--host_port`. Use this to forward
+	// `--engine`, `--storage`, `--profile`, `--data_dir`, and
+	// `--on_unknown_fn` from gateway-level CLI flags through to
+	// `emulator_main` without the gateway needing to know each
+	// flag's semantics.
+	EngineArgs []string
+
 	// CopyEngineStdout / CopyEngineStderr forward the engine subprocess's
 	// streams to the gateway's own streams.
 	CopyEngineStdout bool
@@ -55,6 +63,53 @@ type Options struct {
 
 	// LogRequests prints each REST request and response.
 	LogRequests bool
+
+	// DefaultProjectID is the project clients are assumed to be acting
+	// against when seeding or other gateway-level operations need a
+	// fallback project. Mirrors `--project-id` in go-googlesql.
+	DefaultProjectID string
+
+	// DefaultDatasetLocation is the BigQuery location used as the
+	// fallback when a dataset is created without an explicit location
+	// (US, EU, regional). Mirrors `--default-dataset-location`.
+	DefaultDatasetLocation string
+
+	// EnableSeedAPI registers `POST /api/emulator/seed` and the
+	// matching `GET .../operations/{operationId}` endpoints so a
+	// caller can copy live production BigQuery metadata + rows into
+	// this emulator. Default false (off) for local safety.
+	EnableSeedAPI bool
+
+	// SeedAPIAllowRemote allows non-loopback callers to hit the seed
+	// API when true. When false (the default), seed routes refuse
+	// any request whose RemoteAddr is not loopback.
+	SeedAPIAllowRemote bool
+
+	// SeedAPISeedToken, when non-empty, requires matching header
+	// `X-BigQuery-Emulator-Seed-Token` on every seed API request.
+	// Loaded from `BIGQUERY_EMULATOR_SEED_TOKEN` when the flag is
+	// empty (see binaries/gateway_main).
+	SeedAPISeedToken string
+
+	// SeedFiles is the optional list of YAML seed-data file paths
+	// the gateway applies after the engine reports SERVING but
+	// before it starts accepting public traffic. See
+	// gateway/seedfile for the schema.
+	SeedFiles []string
+
+	// DataDir is the persistent storage root the engine uses when
+	// `--storage=duckdb` is selected. Mirrors `--data-dir`; the
+	// gateway passes it through via `--data_dir` in EngineArgs.
+	DataDir string
+
+	// InitialDataDir is an optional template directory the gateway
+	// copies into DataDir on startup when DataDir does not yet
+	// contain an initialized catalog (`catalog.duckdb` missing).
+	// Mirrors `--initial-data-dir` in go-googlesql.
+	InitialDataDir string
+
+	// Debug enables verbose request and lifecycle logging.
+	Debug bool
 }
 
 // Gateway is the top-level BigQuery emulator gateway.
@@ -66,6 +121,18 @@ type Gateway struct {
 	// engineClient is the long-lived gRPC channel to the engine
 	// subprocess. nil when EngineBinary is empty (Phase 1 stub mode).
 	engineClient *engine.Client
+
+	// preStartHook runs once just before the engine subprocess is
+	// spawned. Use it for filesystem prep that must complete before
+	// the engine touches DataDir (e.g. materializing a template tree
+	// into an empty data directory).
+	preStartHook func(Options) error
+
+	// postEngineHook runs once after the engine reports SERVING but
+	// before the gateway begins serving HTTP traffic. Use it for
+	// startup-time seeding from YAML files that needs the
+	// CatalogClient to be reachable.
+	postEngineHook func(Options, *engine.Client) error
 }
 
 // New constructs a Gateway. Run actually starts it.
@@ -73,11 +140,44 @@ func New(opts Options) *Gateway {
 	return &Gateway{opts: opts}
 }
 
+// WithPreStartHook installs a callback executed once before the engine
+// subprocess is spawned. The hook runs synchronously on the Run
+// goroutine and a non-nil error aborts startup without touching the
+// engine.
+func (g *Gateway) WithPreStartHook(hook func(Options) error) *Gateway {
+	g.preStartHook = hook
+	return g
+}
+
+// WithPostEngineHook installs a callback executed once after the
+// engine reports SERVING but before the HTTP gateway accepts traffic.
+// The hook receives the long-lived *engine.Client so it can use the
+// CatalogClient / QueryClient to mutate state (e.g. apply YAML seed
+// files). A non-nil error from the hook tears down the engine and
+// aborts Run.
+func (g *Gateway) WithPostEngineHook(hook func(Options, *engine.Client) error) *Gateway {
+	g.postEngineHook = hook
+	return g
+}
+
 // Run starts the engine subprocess (if configured) and the HTTP server,
 // then blocks until either terminates or a signal arrives.
 func (g *Gateway) Run() error {
+	if g.preStartHook != nil {
+		if err := g.preStartHook(g.opts); err != nil {
+			return fmt.Errorf("pre-start hook: %w", err)
+		}
+	}
+
 	if err := g.startEngine(); err != nil {
 		return fmt.Errorf("start engine: %w", err)
+	}
+
+	if g.postEngineHook != nil {
+		if err := g.postEngineHook(g.opts, g.engineClient); err != nil {
+			g.stopEngine()
+			return fmt.Errorf("post-engine hook: %w", err)
+		}
 	}
 
 	srv := &http.Server{
@@ -129,6 +229,7 @@ func (g *Gateway) startEngine() error {
 	args := []string{
 		"--host_port", g.opts.EngineAddress,
 	}
+	args = append(args, g.opts.EngineArgs...)
 	cmd := exec.Command(g.opts.EngineBinary, args...)
 	if g.opts.CopyEngineStdout {
 		cmd.Stdout = os.Stdout
