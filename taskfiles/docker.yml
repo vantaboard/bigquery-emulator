@@ -18,52 +18,6 @@ vars:
     sh: echo "${EMULATOR_HTTP_PORT:-9050}"
   EMULATOR_GRPC_PORT:
     sh: echo "${EMULATOR_GRPC_PORT:-9060}"
-  # Throttled defaults for the in-container Bazel build (engine-builder-bazel
-  # stage). Without these the Dockerfile auto-detects the host's full nproc
-  # / MemTotal, forks ~nproc parallel clang++ processes during the
-  # `//binaries/emulator_main` link, and routinely OOM-kills the host's IDE
-  # + browser. Picks match the docker-specific guidance in
-  # `.cursor/rules/process-hygiene.mdc`: nproc-6 jobs (floor 2), 50% MemTotal
-  # (floor 4 GiB) so the developer's box keeps half its RAM and ~6 cores for
-  # everything else. Override on the CLI to scale up on dedicated runners:
-  #   BAZEL_JOBS=12 BAZEL_MEM_MB=16384 task docker:build
-  DOCKER_BAZEL_JOBS:
-    sh: |
-      if [ -n "${BAZEL_JOBS:-}" ]; then
-        echo "$BAZEL_JOBS"
-      else
-        n=$(nproc 2>/dev/null || echo 4)
-        if [ "$n" -gt 8 ]; then echo $((n - 6)); else echo 2; fi
-      fi
-  DOCKER_BAZEL_MEM_MB:
-    sh: |
-      if [ -n "${BAZEL_MEM_MB:-}" ]; then
-        echo "$BAZEL_MEM_MB"
-      elif [ -r /proc/meminfo ]; then
-        awk '/^MemTotal:/ { mb = int($2 / 2 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo
-      else
-        echo 4096
-      fi
-  # Runtime caps consumed by docker-compose.yml's mem_limit / cpus on
-  # `docker compose up`. The defaults below are auto-derived from the
-  # current host so `task docker:smoke` cannot evict the IDE either.
-  DOCKER_RUN_MEM_LIMIT:
-    sh: |
-      if [ -n "${BIGQUERY_EMULATOR_MEM_LIMIT:-}" ]; then
-        echo "$BIGQUERY_EMULATOR_MEM_LIMIT"
-      elif [ -r /proc/meminfo ]; then
-        awk '/^MemTotal:/ { mb = int($2 * 4 / 5 / 1024); if (mb < 2048) mb = 2048; printf "%dm", mb }' /proc/meminfo
-      else
-        echo 8192m
-      fi
-  DOCKER_RUN_CPUS:
-    sh: |
-      if [ -n "${BIGQUERY_EMULATOR_CPUS:-}" ]; then
-        echo "$BIGQUERY_EMULATOR_CPUS"
-      else
-        n=$(nproc 2>/dev/null || echo 4)
-        if [ "$n" -gt 4 ]; then echo "$((n - 2)).0"; else echo "2.0"; fi
-      fi
 
 tasks:
   default:
@@ -74,18 +28,20 @@ tasks:
   build:
     desc: |
       Build the runtime image with both binaries (tag {{.DOCKER_IMAGE}}).
-      Forwards BAZEL_JOBS / BAZEL_MEM_MB build args so the in-container
-      Bazel build cannot OOM the host (auto-detect picks nproc-6 jobs and
-      50% MemTotal; override via env vars).
+      Forwards BAZEL_JOBS / BAZEL_MEM_MB build args derived from the live
+      host's MemAvailable / nproc by `scripts/compute_docker_throttle.sh`
+      so the in-container Bazel build cannot OOM the host. Override on
+      the CLI to scale up on dedicated runners:
+        BAZEL_JOBS=12 BAZEL_MEM_MB=16384 task docker:build
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        echo "[docker:build] throttling: BAZEL_JOBS={{.DOCKER_BAZEL_JOBS}} BAZEL_MEM_MB={{.DOCKER_BAZEL_MEM_MB}}"
+        eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
         docker build \
-          --build-arg BAZEL_JOBS={{.DOCKER_BAZEL_JOBS}} \
-          --build-arg BAZEL_MEM_MB={{.DOCKER_BAZEL_MEM_MB}} \
+          --build-arg BAZEL_JOBS="${BAZEL_JOBS}" \
+          --build-arg BAZEL_MEM_MB="${BAZEL_MEM_MB}" \
           -t {{.DOCKER_IMAGE}} .
 
   run:
@@ -121,16 +77,14 @@ tasks:
           trap cleanup EXIT INT TERM
 
           # Throttle the in-container Bazel build + the running
-          # container so the smoke test never OOM-kills the host.
-          # See the var block at the top of this file for derivation;
-          # CLI overrides (BAZEL_JOBS, BAZEL_MEM_MB,
-          # BIGQUERY_EMULATOR_MEM_LIMIT, BIGQUERY_EMULATOR_CPUS) still
-          # win because docker-compose.yml uses `${VAR:-default}`.
-          export BAZEL_JOBS="{{.DOCKER_BAZEL_JOBS}}"
-          export BAZEL_MEM_MB="{{.DOCKER_BAZEL_MEM_MB}}"
-          export BIGQUERY_EMULATOR_MEM_LIMIT="{{.DOCKER_RUN_MEM_LIMIT}}"
-          export BIGQUERY_EMULATOR_CPUS="{{.DOCKER_RUN_CPUS}}"
-          echo "[docker:smoke] throttling: BAZEL_JOBS=${BAZEL_JOBS} BAZEL_MEM_MB=${BAZEL_MEM_MB} mem_limit=${BIGQUERY_EMULATOR_MEM_LIMIT} cpus=${BIGQUERY_EMULATOR_CPUS}"
+          # container against the live host so the smoke test never
+          # OOM-kills the IDE. CLI overrides (BAZEL_JOBS / BAZEL_MEM_MB /
+          # BIGQUERY_EMULATOR_MEM_LIMIT / BIGQUERY_EMULATOR_CPUS, plus
+          # the BAZEL_PER_JOB_MEM_MB / BAZEL_AVAIL_PCT / BAZEL_CPU_RESERVE
+          # tuning knobs) still win because docker-compose.yml uses
+          # `${VAR:-default}` and the helper honors caller env. See
+          # `scripts/compute_docker_throttle.sh` for the derivation.
+          eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
 
           echo "[docker:smoke] docker compose up --build -d"
           docker compose up --build -d
