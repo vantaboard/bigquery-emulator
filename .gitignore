@@ -90,3 +90,9 @@ third_party/**/.flattened-pom.xml
 # entry in `.bazelrc`. Typically 6-10 GiB after a full cold engine build;
 # wipe with `task bazel:cache:clear` to reclaim space.
 /.cache/bazel-disk/
+
+# Clang-tidy compilation database produced by
+# `task lint:cpp:compile-commands` (and consumed by `task lint:cpp:tidy`).
+# Regenerated from `bazel aquery`; the file path list embeds absolute
+# repo paths and changes whenever the engine's dep graph does.
+/compile_commands.json

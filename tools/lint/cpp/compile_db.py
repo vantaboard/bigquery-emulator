@@ -98,26 +98,15 @@ def _run_aquery(target: str) -> dict:
 def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
     """Translate `aquery` actions into a JSON compilation database.
 
-    The aquery JSON encoding stores artifacts and arguments
-    separately so a single string-table reuses paths across
-    actions. We resolve each action's source TU by matching its
-    `inputDepSetIds` against the artifact table.
+    Each `CppCompile` action carries the source translation unit
+    inline as the `-c <path>` argument pair, so we can resolve the
+    source path from `arguments` alone without walking the
+    `artifacts` / `pathFragments` tables. That keeps the code
+    forward-compatible across Bazel releases (the artifact-table
+    schema has changed several times — e.g. older versions emit
+    `execPath` inline while newer ones emit `pathFragmentId`
+    references that need a separate walk).
     """
-
-    artifacts = {a["id"]: a["execPath"] for a in aquery.get("artifacts", [])}
-    path_fragments = {f["id"]: f for f in aquery.get("pathFragments", [])}
-
-    def resolve(frag_id: int) -> str:
-        # Path fragments form a linked list of components; walking
-        # them yields the full repo-relative artifact path that
-        # `compile_commands.json` needs for clang-tidy to find the
-        # source file.
-        parts: list[str] = []
-        while frag_id:
-            frag = path_fragments[frag_id]
-            parts.append(frag["label"])
-            frag_id = frag.get("parentId", 0)
-        return "/".join(reversed(parts))
 
     out: list[dict] = []
     for action in aquery.get("actions", []):
