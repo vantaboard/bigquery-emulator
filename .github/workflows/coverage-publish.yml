@@ -1,0 +1,327 @@
+# Coverage publish/gate workflow for the BigQuery emulator.
+#
+# This is the self-hosted Codecov replacement: when the upstream
+# `ci.yml` (Go test coverage) or `coverage-bazel.yml` (C++ Bazel
+# coverage) workflows finish, this workflow looks for both partner
+# runs on the same head SHA, aggregates the artifacts via the
+# in-repo `tools/coverage` binary, and either:
+#
+#   * publishes the resulting summary, badge JSONs, HTML reports, and
+#     baseline.json to the `gh-pages` branch (push to main only), or
+#   * compares the current summary to the published baseline and
+#     fails the workflow if any tracked field regressed beyond the
+#     configured tolerance (every other event, including PRs).
+#
+# Why `workflow_run`:
+#   * Triggers fire after the producer workflow finishes, regardless of
+#     whether the producer was a push or pull_request. That keeps the
+#     producer workflows narrowly scoped to "build + test" and lets
+#     this one focus on publication + gating.
+#   * Jobs triggered by `workflow_run` execute in the *base* repo's
+#     context, with the base repo's secrets and the GITHUB_TOKEN. That
+#     is what lets us publish to gh-pages even for PRs originating
+#     from forks (the producer artifacts are downloaded via the API
+#     using GITHUB_TOKEN, the gate then runs against the same data the
+#     publish step would).
+#   * `workflow_run` only allows reading artifacts via the REST API; we
+#     therefore look up the partner workflow's most recent successful
+#     run for the same SHA (rather than firing twice and racing each
+#     other).
+#
+# Bootstrap (one-time, see plan):
+#   1. After the first push to main, this workflow creates the
+#      gh-pages branch via `peaceiris/actions-gh-pages@v4`.
+#   2. Repo Settings -> Pages: pick `gh-pages` / `/ (root)` as the
+#      source. The README badges then resolve via shields.io.
+#   3. The gate treats a missing baseline.json as bootstrap (no
+#      regression check, exit 0) so the first few PRs after rollout
+#      do not fail just because gh-pages has not been populated yet.
+
+name: coverage-publish
+
+on:
+  workflow_run:
+    workflows: [ci, coverage-bazel]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize per (head_branch, head_sha) so the second producer
+  # workflow's trigger does not race the first one. We do NOT
+  # cancel-in-progress: the partner run's data may have just landed,
+  # so finishing the in-flight publish then starting a fresh one
+  # produces the right final state.
+  group: coverage-publish-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+env:
+  # Tolerance defaults match `taskfiles/coverage.yml`: a PR may drop
+  # any field by up to 1.0 percentage points before the gate fails.
+  # Override at the workflow level once main has stabilised numbers.
+  COVERAGE_TOLERANCE: "1.0"
+  COVERAGE_FLOOR: "0"
+
+jobs:
+  publish:
+    name: publish (${{ github.event.workflow_run.name }})
+    # Bail out cleanly when the producer workflow itself failed: a
+    # red CI run does not produce trustworthy coverage data, and we
+    # do not want a stale-by-accident publish to overwrite the
+    # baseline.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      # Identify both producer runs for this commit. `workflow_run`
+      # fires once per producer, so we resolve the partner via the
+      # REST API and download whatever artifacts each side published.
+      # When only one side is available, we still publish a partial
+      # summary (the missing flag renders as "n/a"); the next trigger
+      # for the same SHA overwrites it with the full data.
+      - name: Locate sibling coverage runs
+        id: locate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head_sha: sha,
+                status: 'completed',
+                per_page: 100,
+              },
+            );
+            function latestSuccess(name) {
+              const matches = runs.filter(
+                r => r.name === name && r.conclusion === 'success',
+              );
+              if (matches.length === 0) return '';
+              matches.sort(
+                (a, b) => new Date(b.updated_at) - new Date(a.updated_at),
+              );
+              return String(matches[0].id);
+            }
+            const ciId = latestSuccess('ci');
+            const covId = latestSuccess('coverage-bazel');
+            core.info(`ci_run_id=${ciId} coverage_bazel_run_id=${covId}`);
+            core.setOutput('ci_run_id', ciId);
+            core.setOutput('coverage_bazel_run_id', covId);
+
+      - name: Download Go coverage artifact
+        if: steps.locate.outputs.ci_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: go-coverage
+          path: artifacts/go
+          run-id: ${{ steps.locate.outputs.ci_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Download C++ Bazel coverage artifact
+        if: steps.locate.outputs.coverage_bazel_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: cpp-bazel-coverage
+          path: artifacts/cpp
+          run-id: ${{ steps.locate.outputs.coverage_bazel_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Detect inputs
+        id: inputs
+        run: |
+          set -eo pipefail
+          has_go=false
+          has_cpp=false
+          [ -f artifacts/go/coverage.out ] && has_go=true
+          [ -f artifacts/cpp/_coverage_report.dat ] && has_cpp=true
+          {
+            echo "has_go=$has_go"
+            echo "has_cpp=$has_cpp"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$has_go" = false ] && [ "$has_cpp" = false ]; then
+            echo "::warning::No coverage artifacts found for ${{ github.event.workflow_run.head_sha }}; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build coverage aggregator
+        if: steps.inputs.outputs.skip != 'true'
+        run: go build -o /tmp/coverage ./tools/coverage
+
+      - name: Summarize
+        if: steps.inputs.outputs.skip != 'true'
+        run: |
+          set -eo pipefail
+          args=()
+          if [ "${{ steps.inputs.outputs.has_go }}" = true ]; then
+            args+=("--go=artifacts/go/coverage.out")
+          fi
+          if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
+            args+=("--lcov=artifacts/cpp/_coverage_report.dat")
+          fi
+          /tmp/coverage summarize \
+            "${args[@]}" \
+            --commit=${{ github.event.workflow_run.head_sha }} \
+            --out=summary.json
+          echo "## Coverage summary" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # Generate the three shields.io endpoint JSONs that the README
+      # badges resolve via `https://img.shields.io/endpoint?url=...`.
+      # Combined badge first (`badge.json`), then per-suite badges
+      # so a contributor can see the Go vs C++ split at a glance.
+      - name: Generate badge JSONs
+        if: steps.inputs.outputs.skip != 'true'
+        run: |
+          set -eo pipefail
+          mkdir -p html
+          /tmp/coverage badge --in=summary.json --field=total \
+            --label=coverage --out=html/badge.json
+          /tmp/coverage badge --in=summary.json --field=go \
+            --label="coverage (go)" --out=html/badge-go.json
+          /tmp/coverage badge --in=summary.json --field=cpp \
+            --label="coverage (cpp)" --out=html/badge-cpp.json
+          cp summary.json html/summary.json
+
+      # `lcov` is needed for `genhtml`. Skip the install step when
+      # there is no LCOV input — keeps the Go-only path fast.
+      - name: Install lcov for genhtml
+        if: |
+          steps.inputs.outputs.skip != 'true' &&
+          steps.inputs.outputs.has_cpp == 'true'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lcov
+
+      - name: Render HTML reports
+        if: steps.inputs.outputs.skip != 'true'
+        run: |
+          set -eo pipefail
+          if [ "${{ steps.inputs.outputs.has_go }}" = true ]; then
+            go tool cover -html=artifacts/go/coverage.out -o html/go.html
+          fi
+          if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
+            genhtml --quiet --output-directory html/cpp \
+              artifacts/cpp/_coverage_report.dat
+          fi
+          cat > html/index.html <<'INDEX'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>BigQuery Emulator coverage</title>
+              <style>
+                body { font-family: system-ui, sans-serif; max-width: 720px;
+                       margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+                code { background: #f4f4f4; padding: 0 0.25rem; border-radius: 3px; }
+                ul { padding-left: 1.25rem; }
+              </style>
+            </head>
+            <body>
+              <h1>BigQuery Emulator coverage</h1>
+              <p>
+                Auto-generated by
+                <code>.github/workflows/coverage-publish.yml</code>;
+                updated on every push to <code>main</code>.
+              </p>
+              <h2>Browsable reports</h2>
+              <ul>
+                <li><a href="go.html">Go suite (<code>go test</code>)</a></li>
+                <li><a href="cpp/index.html">C++ engine (<code>bazel coverage</code>)</a></li>
+              </ul>
+              <h2>Badge endpoints (shields.io)</h2>
+              <ul>
+                <li><a href="badge.json">badge.json</a> &mdash; combined</li>
+                <li><a href="badge-go.json">badge-go.json</a> &mdash; Go suite</li>
+                <li><a href="badge-cpp.json">badge-cpp.json</a> &mdash; C++ engine</li>
+              </ul>
+              <h2>Raw data</h2>
+              <ul>
+                <li><a href="summary.json">summary.json</a> &mdash; current commit</li>
+                <li><a href="baseline.json">baseline.json</a> &mdash; last main publish</li>
+              </ul>
+            </body>
+          </html>
+          INDEX
+
+      # Baseline file: gh-pages expects `baseline.json` to live at the
+      # root, so the gate can `git show origin/gh-pages:baseline.json`
+      # in subsequent runs. We always write it next to summary.json
+      # so the publish step picks it up by path.
+      - name: Stage baseline for gh-pages
+        if: |
+          steps.inputs.outputs.skip != 'true' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main'
+        run: cp summary.json html/baseline.json
+
+      - name: Publish to gh-pages
+        if: |
+          steps.inputs.outputs.skip != 'true' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./html
+          publish_branch: gh-pages
+          enable_jekyll: false
+          # `keep_files: false` is the default but spelled out here
+          # because the design relies on it: each main publish is a
+          # full overwrite, no history accretion. Time-series trends
+          # are explicitly out of scope (see plan).
+          keep_files: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: "chore(coverage): publish ${{ github.event.workflow_run.head_sha }}"
+
+      # PR gate: fetch the last-published baseline (if any) and let
+      # `coverage gate` decide pass/fail. The gate handles the
+      # "baseline missing" bootstrap case internally (warns + passes)
+      # so a fresh repo or a first-PR-after-rollout does not get
+      # blocked by absent gh-pages data.
+      - name: Fetch baseline from gh-pages
+        if: |
+          steps.inputs.outputs.skip != 'true' &&
+          github.event.workflow_run.event == 'pull_request'
+        run: |
+          set -eo pipefail
+          if git fetch --no-tags --depth=1 origin gh-pages 2>/dev/null; then
+            if git show origin/gh-pages:baseline.json > baseline.json 2>/dev/null; then
+              echo "fetched baseline.json from origin/gh-pages"
+            else
+              echo "::notice::origin/gh-pages exists but baseline.json is missing; gate will treat this as bootstrap."
+              rm -f baseline.json
+            fi
+          else
+            echo "::notice::gh-pages branch not found; gate will treat this as bootstrap."
+          fi
+
+      - name: Run coverage gate
+        if: |
+          steps.inputs.outputs.skip != 'true' &&
+          github.event.workflow_run.event == 'pull_request'
+        run: |
+          set -eo pipefail
+          /tmp/coverage gate \
+            --current=summary.json \
+            --baseline=baseline.json \
+            --tolerance=${{ env.COVERAGE_TOLERANCE }} \
+            --floor=${{ env.COVERAGE_FLOOR }} \
+            | tee -a "$GITHUB_STEP_SUMMARY"
