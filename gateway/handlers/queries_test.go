@@ -61,15 +61,15 @@ func TestQueryRunRejectsLegacySQL(t *testing.T) {
 	if env.Error.Code != http.StatusBadRequest {
 		t.Fatalf("error.code = %d, want %d", env.Error.Code, http.StatusBadRequest)
 	}
-	if env.Error.Status != "invalidQuery" {
-		t.Fatalf("error.status = %q, want %q", env.Error.Status, "invalidQuery")
+	if env.Error.Status != reasonInvalidQuery {
+		t.Fatalf("error.status = %q, want %q", env.Error.Status, reasonInvalidQuery)
 	}
 	if len(env.Error.Errors) == 0 {
 		t.Fatal("error.errors is empty; BigQuery clients expect a detail")
 	}
-	if env.Error.Errors[0].Reason != "invalidQuery" {
+	if env.Error.Errors[0].Reason != reasonInvalidQuery {
 		t.Fatalf("error.errors[0].reason = %q, want %q",
-			env.Error.Errors[0].Reason, "invalidQuery")
+			env.Error.Errors[0].Reason, reasonInvalidQuery)
 	}
 }
 
@@ -141,8 +141,8 @@ func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 			return &enginepb.DryRunResponse{
 				Schema: &enginepb.TableSchema{
 					Fields: []*enginepb.FieldSchema{
-						{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-						{Name: "name", Type: "STRING", Mode: "NULLABLE"},
+						{Name: "id", Type: sqlTypeINT64, Mode: sqlModeRequired},
+						{Name: testColumnName, Type: sqlTypeSTRING, Mode: sqlModeNullable},
 					},
 				},
 				EstimatedBytesProcessed: 4096,
@@ -151,7 +151,7 @@ func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 	}
 	deps := Dependencies{Query: fake}
 	body := `{"query":"SELECT id, name FROM ds.t","dryRun":true,"useLegacySql":false,"defaultDataset":{"datasetId":"ds"}}`
-	rec := runQueryWithDeps(t, "proj", deps, body)
+	rec := runQueryWithDeps(t, testProjectID, deps, body)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
@@ -159,8 +159,8 @@ func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 	if fake.lastDryRun == nil {
 		t.Fatal("Query.DryRun was not called")
 	}
-	if got := fake.lastDryRun.GetProjectId(); got != "proj" {
-		t.Errorf("project_id forwarded = %q, want %q", got, "proj")
+	if got := fake.lastDryRun.GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
 	}
 	if got := fake.lastDryRun.GetDefaultDatasetId(); got != "ds" {
 		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
@@ -189,10 +189,10 @@ func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
 		t.Fatalf("schema not propagated: %+v", resp.Schema)
 	}
-	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != "INT64" {
+	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
 		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
 	}
-	if resp.Schema.Fields[1].Name != "name" || resp.Schema.Fields[1].Type != "STRING" {
+	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
 		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
 	}
 	if len(resp.Rows) != 0 {
@@ -213,7 +213,7 @@ func TestQueryRunDryRunInvalidArgumentMapsToInvalidQuery(t *testing.T) {
 	}
 	deps := Dependencies{Query: fake}
 	body := `{"query":"SELECT FROM","dryRun":true,"useLegacySql":false}`
-	rec := runQueryWithDeps(t, "proj", deps, body)
+	rec := runQueryWithDeps(t, testProjectID, deps, body)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
@@ -222,10 +222,10 @@ func TestQueryRunDryRunInvalidArgumentMapsToInvalidQuery(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if env.Error.Status != "invalidQuery" {
-		t.Errorf("error.status = %q, want %q", env.Error.Status, "invalidQuery")
+	if env.Error.Status != reasonInvalidQuery {
+		t.Errorf("error.status = %q, want %q", env.Error.Status, reasonInvalidQuery)
 	}
-	if len(env.Error.Errors) == 0 || env.Error.Errors[0].Reason != "invalidQuery" {
+	if len(env.Error.Errors) == 0 || env.Error.Errors[0].Reason != reasonInvalidQuery {
 		t.Errorf("error.errors = %+v, want [{reason:invalidQuery}]", env.Error.Errors)
 	}
 	if !strings.Contains(env.Error.Message, "Syntax error") {
@@ -239,7 +239,7 @@ func TestQueryRunDryRunInvalidArgumentMapsToInvalidQuery(t *testing.T) {
 // structured 501 envelope.
 func TestQueryRunDryRunWithoutEngineFallsBackTo501(t *testing.T) {
 	body := `{"query":"SELECT 1","dryRun":true,"useLegacySql":false}`
-	rec := runQueryWithDeps(t, "proj", Dependencies{}, body)
+	rec := runQueryWithDeps(t, testProjectID, Dependencies{}, body)
 
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want %d (deps.Query==nil must degrade gracefully)",
@@ -260,7 +260,7 @@ func TestQueryRunDryRunUnimplementedFromEngine(t *testing.T) {
 	}
 	deps := Dependencies{Query: fake}
 	body := `{"query":"SELECT 1","dryRun":true,"useLegacySql":false}`
-	rec := runQueryWithDeps(t, "proj", deps, body)
+	rec := runQueryWithDeps(t, testProjectID, deps, body)
 
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", rec.Code)
@@ -269,8 +269,8 @@ func TestQueryRunDryRunUnimplementedFromEngine(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if env.Error.Status != "notImplemented" {
-		t.Errorf("error.status = %q, want %q", env.Error.Status, "notImplemented")
+	if env.Error.Status != reasonNotImplemented {
+		t.Errorf("error.status = %q, want %q", env.Error.Status, reasonNotImplemented)
 	}
 }
 
@@ -286,13 +286,13 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 		msgs: []*enginepb.QueryResultRow{
 			{Schema: &enginepb.TableSchema{
 				Fields: []*enginepb.FieldSchema{
-					{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-					{Name: "name", Type: "STRING", Mode: "NULLABLE"},
+					{Name: "id", Type: sqlTypeINT64, Mode: sqlModeRequired},
+					{Name: testColumnName, Type: sqlTypeSTRING, Mode: sqlModeNullable},
 				},
 			}},
 			{Cells: []*enginepb.Cell{
 				{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
-				{Value: &enginepb.Cell_StringValue{StringValue: "alice"}},
+				{Value: &enginepb.Cell_StringValue{StringValue: testUserAlice}},
 			}},
 			{Cells: []*enginepb.Cell{
 				{Value: &enginepb.Cell_StringValue{StringValue: "2"}},
@@ -307,7 +307,7 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	}
 	deps := Dependencies{Query: fake}
 	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false,"defaultDataset":{"datasetId":"ds"},"location":"US"}`
-	rec := runQueryWithDeps(t, "proj", deps, body)
+	rec := runQueryWithDeps(t, testProjectID, deps, body)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
@@ -315,8 +315,8 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	if fake.lastExecuteQuery == nil {
 		t.Fatal("Query.ExecuteQuery was not called")
 	}
-	if got := fake.lastExecuteQuery.GetProjectId(); got != "proj" {
-		t.Errorf("project_id forwarded = %q, want %q", got, "proj")
+	if got := fake.lastExecuteQuery.GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
 	}
 	if got := fake.lastExecuteQuery.GetDefaultDatasetId(); got != "ds" {
 		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
@@ -344,9 +344,9 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	if resp.JobReference == nil {
 		t.Fatal("jobReference is nil; jobs.query must always emit one")
 	}
-	if resp.JobReference.ProjectID != "proj" {
+	if resp.JobReference.ProjectID != testProjectID {
 		t.Errorf("jobReference.projectId = %q, want %q",
-			resp.JobReference.ProjectID, "proj")
+			resp.JobReference.ProjectID, testProjectID)
 	}
 	if !strings.HasPrefix(resp.JobReference.JobID, "job_") {
 		t.Errorf("jobReference.jobId = %q, want a job_-prefixed id",
@@ -359,10 +359,10 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
 		t.Fatalf("schema not propagated: %+v", resp.Schema)
 	}
-	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != "INT64" {
+	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
 		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
 	}
-	if resp.Schema.Fields[1].Name != "name" || resp.Schema.Fields[1].Type != "STRING" {
+	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
 		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
 	}
 	if len(resp.Rows) != 2 {
@@ -371,8 +371,8 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	if got := resp.Rows[0].F[0].V; got != "1" {
 		t.Errorf("rows[0].f[0].v = %v, want %q", got, "1")
 	}
-	if got := resp.Rows[0].F[1].V; got != "alice" {
-		t.Errorf("rows[0].f[1].v = %v, want %q", got, "alice")
+	if got := resp.Rows[0].F[1].V; got != testUserAlice {
+		t.Errorf("rows[0].f[1].v = %v, want %q", got, testUserAlice)
 	}
 	if got := resp.Rows[1].F[0].V; got != "2" {
 		t.Errorf("rows[1].f[0].v = %v, want %q", got, "2")
@@ -396,7 +396,7 @@ func TestQueryRunExecuteJSONShape(t *testing.T) {
 		msgs: []*enginepb.QueryResultRow{
 			{Schema: &enginepb.TableSchema{
 				Fields: []*enginepb.FieldSchema{
-					{Name: "n", Type: "INT64", Mode: "REQUIRED"},
+					{Name: "n", Type: sqlTypeINT64, Mode: sqlModeRequired},
 				},
 			}},
 			{Cells: []*enginepb.Cell{
@@ -413,7 +413,7 @@ func TestQueryRunExecuteJSONShape(t *testing.T) {
 		},
 	}
 	deps := Dependencies{Query: fake}
-	rec := runQueryWithDeps(t, "proj", deps, `{"query":"SELECT n FROM t","useLegacySql":false}`)
+	rec := runQueryWithDeps(t, testProjectID, deps, `{"query":"SELECT n FROM t","useLegacySql":false}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
@@ -433,8 +433,8 @@ func TestQueryRunExecuteJSONShape(t *testing.T) {
 	if ref == nil {
 		t.Fatalf("jobReference missing or wrong type: %#v", out["jobReference"])
 	}
-	if ref["projectId"] != "proj" {
-		t.Errorf("jobReference.projectId = %v, want %q", ref["projectId"], "proj")
+	if ref["projectId"] != testProjectID {
+		t.Errorf("jobReference.projectId = %v, want %q", ref["projectId"], testProjectID)
 	}
 	if _, ok := ref["jobId"].(string); !ok {
 		t.Errorf("jobReference.jobId must be a string, got %T", ref["jobId"])
@@ -461,7 +461,7 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 	stream := &fakeQueryResultStream{
 		msgs: []*enginepb.QueryResultRow{
 			{Schema: &enginepb.TableSchema{
-				Fields: []*enginepb.FieldSchema{{Name: "v", Type: "INT64"}},
+				Fields: []*enginepb.FieldSchema{{Name: "v", Type: sqlTypeINT64}},
 			}},
 			{Cells: []*enginepb.Cell{
 				{Value: &enginepb.Cell_StringValue{StringValue: "42"}},
@@ -475,7 +475,7 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 	}
 	registry := jobs.NewRegistry()
 	deps := Dependencies{Query: fake, Jobs: registry}
-	rec := runQueryWithDeps(t, "proj", deps, `{"query":"SELECT 42","useLegacySql":false}`)
+	rec := runQueryWithDeps(t, testProjectID, deps, `{"query":"SELECT 42","useLegacySql":false}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
@@ -494,8 +494,8 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 	if stored.Status.State != "DONE" {
 		t.Errorf("stored job state = %q, want %q", stored.Status.State, "DONE")
 	}
-	if stored.JobReference.ProjectID != "proj" {
-		t.Errorf("stored job project = %q, want %q", stored.JobReference.ProjectID, "proj")
+	if stored.JobReference.ProjectID != testProjectID {
+		t.Errorf("stored job project = %q, want %q", stored.JobReference.ProjectID, testProjectID)
 	}
 }
 
@@ -511,7 +511,7 @@ func TestQueryRunExecuteUnimplementedFromEngine(t *testing.T) {
 		},
 	}
 	deps := Dependencies{Query: fake}
-	rec := runQueryWithDeps(t, "proj", deps,
+	rec := runQueryWithDeps(t, testProjectID, deps,
 		`{"query":"SELECT 1","useLegacySql":false}`)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want %d; body=%s",
@@ -527,7 +527,7 @@ func TestQueryRunExecuteUnimplementedFromEngine(t *testing.T) {
 // job is reachable on the read.
 func runQueryAndGetResults(t *testing.T, deps Dependencies, queryBody, query string) *bqtypes.QueryResponse {
 	t.Helper()
-	rec := runQueryWithDeps(t, "proj", deps, queryBody)
+	rec := runQueryWithDeps(t, testProjectID, deps, queryBody)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("QueryRun status = %d, want 200; body=%s",
 			rec.Code, rec.Body.String())
@@ -543,7 +543,7 @@ func runQueryAndGetResults(t *testing.T, deps Dependencies, queryBody, query str
 	getRec := httptest.NewRecorder()
 	getReq := httptest.NewRequest(http.MethodGet,
 		"/bigquery/v2/projects/proj/queries/"+run.JobReference.JobID+query, nil)
-	getReq.SetPathValue("projectId", "proj")
+	getReq.SetPathValue("projectId", testProjectID)
 	getReq.SetPathValue("jobId", run.JobReference.JobID)
 	QueryGetResults(deps)(getRec, getReq)
 	if getRec.Code != http.StatusOK {
@@ -565,13 +565,13 @@ func twoRowExecuteStream() *fakeQueryResultStream {
 		msgs: []*enginepb.QueryResultRow{
 			{Schema: &enginepb.TableSchema{
 				Fields: []*enginepb.FieldSchema{
-					{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-					{Name: "name", Type: "STRING", Mode: "NULLABLE"},
+					{Name: "id", Type: sqlTypeINT64, Mode: sqlModeRequired},
+					{Name: testColumnName, Type: sqlTypeSTRING, Mode: sqlModeNullable},
 				},
 			}},
 			{Cells: []*enginepb.Cell{
 				{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
-				{Value: &enginepb.Cell_StringValue{StringValue: "alice"}},
+				{Value: &enginepb.Cell_StringValue{StringValue: testUserAlice}},
 			}},
 			{Cells: []*enginepb.Cell{
 				{Value: &enginepb.Cell_StringValue{StringValue: "2"}},
@@ -608,9 +608,9 @@ func TestQueryGetResultsReturnsCachedRows(t *testing.T) {
 	if resp.JobReference == nil {
 		t.Fatal("jobReference missing on getResults response")
 	}
-	if resp.JobReference.ProjectID != "proj" {
+	if resp.JobReference.ProjectID != testProjectID {
 		t.Errorf("jobReference.projectId = %q, want %q",
-			resp.JobReference.ProjectID, "proj")
+			resp.JobReference.ProjectID, testProjectID)
 	}
 	if resp.JobReference.Location != "US" {
 		t.Errorf("jobReference.location = %q, want %q",
@@ -625,8 +625,8 @@ func TestQueryGetResultsReturnsCachedRows(t *testing.T) {
 	if got := resp.Rows[0].F[0].V; got != "1" {
 		t.Errorf("rows[0].f[0].v = %v, want %q", got, "1")
 	}
-	if got := resp.Rows[0].F[1].V; got != "alice" {
-		t.Errorf("rows[0].f[1].v = %v, want %q", got, "alice")
+	if got := resp.Rows[0].F[1].V; got != testUserAlice {
+		t.Errorf("rows[0].f[1].v = %v, want %q", got, testUserAlice)
 	}
 	if got := resp.Rows[1].F[0].V; got != "2" {
 		t.Errorf("rows[1].f[0].v = %v, want %q", got, "2")
@@ -734,7 +734,7 @@ func TestQueryRunDmlStatsResponseShape(t *testing.T) {
 		},
 	}
 	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
-	rec := runQueryWithDeps(t, "proj", deps,
+	rec := runQueryWithDeps(t, testProjectID, deps,
 		`{"query":"DELETE FROM ds.t WHERE id < 10","useLegacySql":false}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s",
@@ -825,7 +825,7 @@ func TestQueryGetResultsUnknownJobReturns404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet,
 		"/bigquery/v2/projects/proj/queries/job_does_not_exist", nil)
-	req.SetPathValue("projectId", "proj")
+	req.SetPathValue("projectId", testProjectID)
 	req.SetPathValue("jobId", "job_does_not_exist")
 	QueryGetResults(deps)(rec, req)
 	if rec.Code != http.StatusNotFound {
@@ -835,8 +835,8 @@ func TestQueryGetResultsUnknownJobReturns404(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if env.Error.Status != "notFound" {
-		t.Errorf("error.status = %q, want %q", env.Error.Status, "notFound")
+	if env.Error.Status != reasonNotFound {
+		t.Errorf("error.status = %q, want %q", env.Error.Status, reasonNotFound)
 	}
 }
 
@@ -885,7 +885,7 @@ func TestQueryGetResultsLocationMismatchReturns404(t *testing.T) {
 		},
 	}
 	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
-	rec := runQueryWithDeps(t, "proj", deps,
+	rec := runQueryWithDeps(t, testProjectID, deps,
 		`{"query":"SELECT 1","useLegacySql":false,"location":"US"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("setup QueryRun status = %d, want 200; body=%s",
@@ -899,7 +899,7 @@ func TestQueryGetResultsLocationMismatchReturns404(t *testing.T) {
 	getRec := httptest.NewRecorder()
 	getReq := httptest.NewRequest(http.MethodGet,
 		"/bigquery/v2/projects/proj/queries/"+run.JobReference.JobID+"?location=EU", nil)
-	getReq.SetPathValue("projectId", "proj")
+	getReq.SetPathValue("projectId", testProjectID)
 	getReq.SetPathValue("jobId", run.JobReference.JobID)
 	QueryGetResults(deps)(getRec, getReq)
 	if getRec.Code != http.StatusNotFound {
@@ -917,7 +917,7 @@ func TestQueryGetResultsNilJobsLazyInit(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet,
 		"/bigquery/v2/projects/proj/queries/job_anything", nil)
-	req.SetPathValue("projectId", "proj")
+	req.SetPathValue("projectId", testProjectID)
 	req.SetPathValue("jobId", "job_anything")
 	QueryGetResults(Dependencies{})(rec, req)
 	if rec.Code != http.StatusNotFound {

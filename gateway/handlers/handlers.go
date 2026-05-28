@@ -58,7 +58,7 @@ func Health(w http.ResponseWriter, r *http.Request) {
 // NotImplemented returns a BigQuery-shaped 501 response. Used by routes
 // that are registered but not yet implemented.
 func NotImplemented(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "notImplemented",
+	writeError(w, http.StatusNotImplemented, reasonNotImplemented,
 		"This BigQuery emulator route is registered but not yet implemented. "+
 			"See ROADMAP.md.")
 }
@@ -66,7 +66,7 @@ func NotImplemented(w http.ResponseWriter, r *http.Request) {
 // NotFound is the catch-all handler for paths not in the route table. It
 // returns a BigQuery-shaped 404 so client libraries see a structured error.
 func NotFound(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotFound, "notFound",
+	writeError(w, http.StatusNotFound, reasonNotFound,
 		"No route matches "+r.Method+" "+r.URL.Path+".")
 }
 
@@ -144,36 +144,36 @@ func grpcToHTTPError(w http.ResponseWriter, err error) bool {
 	}
 	st, ok := status.FromError(err)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "internalError",
+		writeError(w, http.StatusInternalServerError, reasonInternalError,
 			"Engine RPC failed: "+err.Error())
 		return true
 	}
-	httpStatus, reason := http.StatusInternalServerError, "internalError"
+	httpStatus, reason := http.StatusInternalServerError, reasonInternalError
 	switch st.Code() {
 	case codes.OK:
 		return false
 	case codes.NotFound:
-		httpStatus, reason = http.StatusNotFound, "notFound"
+		httpStatus, reason = http.StatusNotFound, reasonNotFound
 	case codes.AlreadyExists:
-		httpStatus, reason = http.StatusConflict, "duplicate"
+		httpStatus, reason = http.StatusConflict, reasonDuplicate
 	case codes.InvalidArgument:
-		httpStatus, reason = http.StatusBadRequest, "invalid"
+		httpStatus, reason = http.StatusBadRequest, reasonInvalid
 	case codes.FailedPrecondition:
-		httpStatus, reason = http.StatusBadRequest, "failedPrecondition"
+		httpStatus, reason = http.StatusBadRequest, reasonFailedPrecondition
 	case codes.PermissionDenied:
-		httpStatus, reason = http.StatusForbidden, "accessDenied"
+		httpStatus, reason = http.StatusForbidden, reasonAccessDenied
 	case codes.Unauthenticated:
 		// The emulator never authenticates so this is unlikely, but
 		// map it so a buggy engine doesn't crash through to 500.
-		httpStatus, reason = http.StatusUnauthorized, "authError"
+		httpStatus, reason = http.StatusUnauthorized, reasonAuthError
 	case codes.Unimplemented:
-		httpStatus, reason = http.StatusNotImplemented, "notImplemented"
+		httpStatus, reason = http.StatusNotImplemented, reasonNotImplemented
 	case codes.Unavailable:
-		httpStatus, reason = http.StatusServiceUnavailable, "backendError"
+		httpStatus, reason = http.StatusServiceUnavailable, reasonBackendError
 	case codes.DeadlineExceeded:
-		httpStatus, reason = http.StatusGatewayTimeout, "backendError"
+		httpStatus, reason = http.StatusGatewayTimeout, reasonBackendError
 	case codes.ResourceExhausted:
-		httpStatus, reason = http.StatusTooManyRequests, "quotaExceeded"
+		httpStatus, reason = http.StatusTooManyRequests, reasonQuotaExceeded
 	}
 	writeError(w, httpStatus, reason, st.Message())
 	return true

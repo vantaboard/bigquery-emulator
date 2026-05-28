@@ -48,7 +48,7 @@ func TestTableInsertForwardsSchema(t *testing.T) {
             ]}
         ]}
     }`
-	req := newTableReq(http.MethodPost, "proj", "ds1", "", body)
+	req := newTableReq(http.MethodPost, testProjectID, testDatasetID, "", body)
 	rec := httptest.NewRecorder()
 	TableInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -58,14 +58,15 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 	if fake.lastRegisterTable == nil {
 		t.Fatal("Catalog.RegisterTable was not called")
 	}
-	if got := fake.lastRegisterTable.GetTable().GetTableId(); got != "t1" {
-		t.Errorf("table_id forwarded = %q, want %q", got, "t1")
+	if got := fake.lastRegisterTable.GetTable().GetTableId(); got != testTableID {
+		t.Errorf("table_id forwarded = %q, want %q", got, testTableID)
 	}
 	schema := fake.lastRegisterTable.GetSchema()
 	if schema == nil || len(schema.Fields) != 2 {
 		t.Fatalf("schema not forwarded correctly: %+v", schema)
 	}
-	if schema.Fields[0].Name != "id" || schema.Fields[0].Type != "INT64" || schema.Fields[0].Mode != "REQUIRED" {
+	if schema.Fields[0].Name != "id" || schema.Fields[0].Type != sqlTypeINT64 ||
+		schema.Fields[0].Mode != sqlModeRequired {
 		t.Errorf("top-level field mismatch: %+v", schema.Fields[0])
 	}
 	if len(schema.Fields[1].Fields) != 1 || schema.Fields[1].Fields[0].Name != "k" {
@@ -94,7 +95,7 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 // RPC is issued, mirroring the upstream documented requirement.
 func TestTableInsertRequiresTableID(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newTableReq(http.MethodPost, "proj", "ds1", "", `{}`)
+	req := newTableReq(http.MethodPost, testProjectID, testDatasetID, "", `{}`)
 	rec := httptest.NewRecorder()
 	TableInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -114,20 +115,20 @@ func TestTableGetUsesDescribeTable(t *testing.T) {
 			return &enginepb.DescribeTableResponse{
 				Schema: &enginepb.TableSchema{
 					Fields: []*enginepb.FieldSchema{{
-						Name: "id", Type: "INT64", Mode: "REQUIRED",
+						Name: "id", Type: sqlTypeINT64, Mode: sqlModeRequired,
 					}},
 				},
 			}, nil
 		},
 	}
-	req := newTableReq(http.MethodGet, "proj", "ds1", "t1", "")
+	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, testTableID, "")
 	rec := httptest.NewRecorder()
 	TableGet(Dependencies{Catalog: fake})(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if fake.lastDescribeTable.GetTable().GetTableId() != "t1" {
+	if fake.lastDescribeTable.GetTable().GetTableId() != testTableID {
 		t.Errorf("DescribeTable not called for the requested table_id; got %q",
 			fake.lastDescribeTable.GetTable().GetTableId())
 	}
@@ -139,7 +140,7 @@ func TestTableGetUsesDescribeTable(t *testing.T) {
 	if tbl.Schema == nil || len(tbl.Schema.Fields) != 1 {
 		t.Fatalf("schema not round-tripped: %+v", tbl.Schema)
 	}
-	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != "INT64" {
+	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != sqlTypeINT64 {
 		t.Errorf("schema field round-trip mismatch: %+v", tbl.Schema.Fields[0])
 	}
 }
@@ -152,7 +153,7 @@ func TestTableGetNotFound(t *testing.T) {
 			return nil, status.Error(codes.NotFound, "table not found")
 		},
 	}
-	req := newTableReq(http.MethodGet, "proj", "ds1", "missing", "")
+	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, "missing", "")
 	rec := httptest.NewRecorder()
 	TableGet(Dependencies{Catalog: fake})(rec, req)
 
@@ -165,7 +166,7 @@ func TestTableGetNotFound(t *testing.T) {
 // triple forwarded to the engine on a delete.
 func TestTableDeleteForwardsTableRef(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newTableReq(http.MethodDelete, "proj", "ds1", "t1", "")
+	req := newTableReq(http.MethodDelete, testProjectID, testDatasetID, testTableID, "")
 	rec := httptest.NewRecorder()
 	TableDelete(Dependencies{Catalog: fake})(rec, req)
 
@@ -176,14 +177,14 @@ func TestTableDeleteForwardsTableRef(t *testing.T) {
 		t.Fatal("Catalog.DropTable was not called")
 	}
 	tr := fake.lastDropTable.GetTable()
-	if tr.GetProjectId() != "proj" || tr.GetDatasetId() != "ds1" || tr.GetTableId() != "t1" {
+	if tr.GetProjectId() != testProjectID || tr.GetDatasetId() != testDatasetID || tr.GetTableId() != testTableID {
 		t.Errorf("TableRef forwarded = %+v, want {proj, ds1, t1}", tr)
 	}
 }
 
 // TestTableListReturnsEmptyPage pins the empty-page shape.
 func TestTableListReturnsEmptyPage(t *testing.T) {
-	req := newTableReq(http.MethodGet, "proj", "ds1", "", "")
+	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, "", "")
 	rec := httptest.NewRecorder()
 	TableList(Dependencies{})(rec, req)
 

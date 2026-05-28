@@ -2,6 +2,11 @@ package runner
 
 import "sort"
 
+// ProfileDuckDB is the canonical conformance-profile identifier for
+// the DuckDB-backed runtime. Hoisted to a package const so fixtures,
+// the CLI, and the runner all reference the same spelling.
+const ProfileDuckDB = "duckdb"
+
 // Profile is one named runtime configuration the runner can drive.
 // Today there is only one (`duckdb`) since the emulator collapsed
 // onto DuckDB-only engine + storage; the type is kept around so the
@@ -31,7 +36,7 @@ func (p Profile) EmulatorMainArgs() []string {
 
 var profiles = []Profile{
 	{
-		Name: "duckdb",
+		Name: ProfileDuckDB,
 	},
 }
 

@@ -72,8 +72,8 @@ func ProjectList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		projectID := defaultProjectIDFromEnv()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind": projectListKind,
-			"projects": []projectResource{{
+			resourceKeyKind: projectListKind,
+			resourceKeyProjects: []projectResource{{
 				Kind: projectKind,
 				ID:   projectID,
 				ProjectReference: projectReference{
@@ -104,8 +104,8 @@ func ProjectGetServiceAccount(_ Dependencies) http.HandlerFunc {
 			projectID = defaultProjectIDFromEnv()
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":  serviceAccountKind,
-			"email": "bigquery-emulator@" + projectID + ".iam.gserviceaccount.com",
+			resourceKeyKind: serviceAccountKind,
+			"email":         "bigquery-emulator@" + projectID + ".iam.gserviceaccount.com",
 		})
 	}
 }

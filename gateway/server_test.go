@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// Shared synthetic REST paths used by the route-table smoke test.
+const (
+	datasetsPath = "/projects/p/datasets"
+	datasetPath  = "/projects/p/datasets/d"
+	tablePath    = "/projects/p/datasets/d/tables/t"
+)
+
 // TestRouteTable smoke-tests that every documented BigQuery v2 REST
 // endpoint reaches a handler (not the 404 catch-all). Originally
 // every handler returned 501 so the test simply asserted "code != 404",
@@ -29,44 +36,44 @@ func TestRouteTable(t *testing.T) {
 		path   string
 	}{
 		// Projects
-		{"projects.list", "GET", "/projects"},
-		{"projects.getServiceAccount", "GET", "/projects/p/serviceAccount"},
+		{"projects.list", http.MethodGet, "/projects"},
+		{"projects.getServiceAccount", http.MethodGet, "/projects/p/serviceAccount"},
 
 		// Datasets
-		{"datasets.list", "GET", "/projects/p/datasets"},
-		{"datasets.insert", "POST", "/projects/p/datasets"},
-		{"datasets.get", "GET", "/projects/p/datasets/d"},
-		{"datasets.update", "PUT", "/projects/p/datasets/d"},
-		{"datasets.patch", "PATCH", "/projects/p/datasets/d"},
-		{"datasets.delete", "DELETE", "/projects/p/datasets/d"},
-		{"datasets.undelete", "POST", "/projects/p/datasets/d:undelete"},
+		{"datasets.list", http.MethodGet, datasetsPath},
+		{"datasets.insert", http.MethodPost, datasetsPath},
+		{"datasets.get", http.MethodGet, datasetPath},
+		{"datasets.update", http.MethodPut, datasetPath},
+		{"datasets.patch", http.MethodPatch, datasetPath},
+		{"datasets.delete", http.MethodDelete, datasetPath},
+		{"datasets.undelete", http.MethodPost, datasetPath + ":undelete"},
 
 		// Tables
-		{"tables.list", "GET", "/projects/p/datasets/d/tables"},
-		{"tables.insert", "POST", "/projects/p/datasets/d/tables"},
-		{"tables.get", "GET", "/projects/p/datasets/d/tables/t"},
-		{"tables.update", "PUT", "/projects/p/datasets/d/tables/t"},
-		{"tables.patch", "PATCH", "/projects/p/datasets/d/tables/t"},
-		{"tables.delete", "DELETE", "/projects/p/datasets/d/tables/t"},
-		{"tables.getIamPolicy", "POST", "/projects/p/datasets/d/tables/t:getIamPolicy"},
-		{"tables.setIamPolicy", "POST", "/projects/p/datasets/d/tables/t:setIamPolicy"},
-		{"tables.testIamPermissions", "POST", "/projects/p/datasets/d/tables/t:testIamPermissions"},
+		{"tables.list", http.MethodGet, datasetPath + "/tables"},
+		{"tables.insert", http.MethodPost, datasetPath + "/tables"},
+		{"tables.get", http.MethodGet, tablePath},
+		{"tables.update", http.MethodPut, tablePath},
+		{"tables.patch", http.MethodPatch, tablePath},
+		{"tables.delete", http.MethodDelete, tablePath},
+		{"tables.getIamPolicy", http.MethodPost, tablePath + ":getIamPolicy"},
+		{"tables.setIamPolicy", http.MethodPost, tablePath + ":setIamPolicy"},
+		{"tables.testIamPermissions", http.MethodPost, tablePath + ":testIamPermissions"},
 
 		// Tabledata
-		{"tabledata.list", "GET", "/projects/p/datasets/d/tables/t/data"},
-		{"tabledata.insertAll", "POST", "/projects/p/datasets/d/tables/t/insertAll"},
+		{"tabledata.list", http.MethodGet, tablePath + "/data"},
+		{"tabledata.insertAll", http.MethodPost, tablePath + "/insertAll"},
 
 		// Jobs (excludes the media-upload variant, which lives at
 		// /upload/bigquery/v2/... only — see `other` below).
-		{"jobs.list", "GET", "/projects/p/jobs"},
-		{"jobs.insert", "POST", "/projects/p/jobs"},
-		{"jobs.get", "GET", "/projects/p/jobs/j"},
-		{"jobs.cancel", "POST", "/projects/p/jobs/j/cancel"},
-		{"jobs.delete", "DELETE", "/projects/p/jobs/j/delete"},
+		{"jobs.list", http.MethodGet, "/projects/p/jobs"},
+		{"jobs.insert", http.MethodPost, "/projects/p/jobs"},
+		{"jobs.get", http.MethodGet, "/projects/p/jobs/j"},
+		{"jobs.cancel", http.MethodPost, "/projects/p/jobs/j/cancel"},
+		{"jobs.delete", http.MethodDelete, "/projects/p/jobs/j/delete"},
 
 		// Queries
-		{"jobs.query", "POST", "/projects/p/queries"},
-		{"jobs.getQueryResults", "GET", "/projects/p/queries/j"},
+		{"jobs.query", http.MethodPost, "/projects/p/queries"},
+		{"jobs.getQueryResults", http.MethodGet, "/projects/p/queries/j"},
 	}
 
 	// Non-BigQuery-v2 endpoints (or fixed-prefix variants of v2) are
@@ -77,15 +84,15 @@ func TestRouteTable(t *testing.T) {
 		path   string
 	}{
 		// Health
-		{"health-root", "GET", "/"},
-		{"health-z", "GET", "/healthz"},
+		{"health-root", http.MethodGet, "/"},
+		{"health-z", http.MethodGet, "/healthz"},
 
 		// Discovery
-		{"discovery", "GET", "/discovery/v1/apis/bigquery/v2/rest"},
+		{"discovery", http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest"},
 
 		// jobs.insert media-upload variant — the public API hard-codes
 		// the /upload prefix, so it is not mirrored at /.../jobs.
-		{"jobs.insert-upload", "POST", "/upload/bigquery/v2/projects/p/jobs"},
+		{"jobs.insert-upload", http.MethodPost, "/upload/bigquery/v2/projects/p/jobs"},
 	}
 
 	check := func(t *testing.T, method, path string) {

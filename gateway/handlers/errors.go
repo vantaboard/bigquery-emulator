@@ -46,30 +46,30 @@ func queryGRPCToHTTPError(w http.ResponseWriter, err error) bool {
 	}
 	st, ok := status.FromError(err)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "internalError",
+		writeError(w, http.StatusInternalServerError, reasonInternalError,
 			"Engine RPC failed: "+err.Error())
 		return true
 	}
-	httpStatus, reason := http.StatusInternalServerError, "internalError"
+	httpStatus, reason := http.StatusInternalServerError, reasonInternalError
 	switch st.Code() {
 	case codes.OK:
 		return false
 	case codes.InvalidArgument, codes.FailedPrecondition:
-		httpStatus, reason = http.StatusBadRequest, "invalidQuery"
+		httpStatus, reason = http.StatusBadRequest, reasonInvalidQuery
 	case codes.NotFound:
-		httpStatus, reason = http.StatusNotFound, "notFound"
+		httpStatus, reason = http.StatusNotFound, reasonNotFound
 	case codes.PermissionDenied:
-		httpStatus, reason = http.StatusForbidden, "accessDenied"
+		httpStatus, reason = http.StatusForbidden, reasonAccessDenied
 	case codes.Unauthenticated:
-		httpStatus, reason = http.StatusUnauthorized, "authError"
+		httpStatus, reason = http.StatusUnauthorized, reasonAuthError
 	case codes.Unimplemented:
-		httpStatus, reason = http.StatusNotImplemented, "notImplemented"
+		httpStatus, reason = http.StatusNotImplemented, reasonNotImplemented
 	case codes.Unavailable:
-		httpStatus, reason = http.StatusServiceUnavailable, "backendError"
+		httpStatus, reason = http.StatusServiceUnavailable, reasonBackendError
 	case codes.DeadlineExceeded:
-		httpStatus, reason = http.StatusGatewayTimeout, "backendError"
+		httpStatus, reason = http.StatusGatewayTimeout, reasonBackendError
 	case codes.ResourceExhausted:
-		httpStatus, reason = http.StatusTooManyRequests, "quotaExceeded"
+		httpStatus, reason = http.StatusTooManyRequests, reasonQuotaExceeded
 	}
 	writeError(w, httpStatus, reason, st.Message())
 	return true

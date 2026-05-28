@@ -345,15 +345,15 @@ func cellsEqual(expected, actual any, fieldType string) bool {
 		return false
 	}
 	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
-	case "INT64", "INTEGER", "NUMERIC", "BIGNUMERIC":
+	case bqTypeINT64, "INTEGER", "NUMERIC", "BIGNUMERIC":
 		return numericEqual(expected, actual)
-	case "FLOAT64", "FLOAT":
+	case bqTypeFLOAT64, "FLOAT":
 		return floatEqual(expected, actual)
 	case "BOOL", "BOOLEAN":
 		return boolEqual(expected, actual)
 	case "TIMESTAMP", "DATE", "DATETIME", "TIME":
 		return timeEqual(expected, actual)
-	case "STRING", "BYTES":
+	case bqTypeSTRING, "BYTES":
 		return stringForm(expected) == stringForm(actual)
 	default:
 		// Unknown / empty type (e.g. STRUCT/REPEATED at the top
@@ -620,9 +620,9 @@ func stringForm(v any) string {
 		return x
 	case bool:
 		if x {
-			return "true"
+			return boolLiteralTrue
 		}
-		return "false"
+		return boolLiteralFalse
 	case int, int32, int64, uint, uint32, uint64:
 		return fmt.Sprintf("%d", x)
 	case float32, float64:
@@ -730,11 +730,11 @@ func canonicalCell(v any, fieldType string) string {
 		return "<NULL>"
 	}
 	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
-	case "INT64", "INTEGER", "NUMERIC", "BIGNUMERIC":
+	case bqTypeINT64, "INTEGER", "NUMERIC", "BIGNUMERIC":
 		if r := toRat(v); r != nil {
 			return r.RatString()
 		}
-	case "FLOAT64", "FLOAT":
+	case bqTypeFLOAT64, "FLOAT":
 		if f, ok := toFloat(v); ok {
 			// 12 significant digits absorbs ~1e-12 relative
 			// drift; ordered-mode epsilon still applies for
@@ -744,9 +744,9 @@ func canonicalCell(v any, fieldType string) string {
 	case "BOOL", "BOOLEAN":
 		if b, ok := toBool(v); ok {
 			if b {
-				return "true"
+				return boolLiteralTrue
 			}
-			return "false"
+			return boolLiteralFalse
 		}
 	case "TIMESTAMP", "DATE", "DATETIME", "TIME":
 		if t, ok := toTime(v); ok {

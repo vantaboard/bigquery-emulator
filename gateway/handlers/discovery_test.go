@@ -19,7 +19,7 @@ func TestDiscoveryShape(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+	if ct := rec.Header().Get("Content-Type"); ct != contentTypeJSON {
 		t.Fatalf("Content-Type = %q, want application/json", ct)
 	}
 
@@ -48,7 +48,13 @@ func TestDiscoveryShape(t *testing.T) {
 func TestDiscoveryListsRoutedMethods(t *testing.T) {
 	doc := buildDiscoveryDocument()
 
-	wantResources := []string{"projects", "datasets", "tables", "tabledata", "jobs"}
+	wantResources := []string{
+		discoveryResourceProjects,
+		discoveryResourceDatasets,
+		discoveryResourceTables,
+		discoveryResourceTabledata,
+		discoveryResourceJobs,
+	}
 	for _, name := range wantResources {
 		res, ok := doc.Resources[name]
 		if !ok {

@@ -141,9 +141,9 @@ func fieldFromProto(f *enginepb.FieldSchema) bqtypes.TableFieldSchema {
 func TableList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":       tableListKind,
-			"tables":     []bqtypes.Table{},
-			"totalItems": 0,
+			resourceKeyKind:   tableListKind,
+			resourceKeyTables: []bqtypes.Table{},
+			"totalItems":      0,
 		})
 	}
 }

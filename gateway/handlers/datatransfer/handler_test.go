@@ -30,6 +30,16 @@ const (
 	jsonCreateScheduledQuerySelect1 = `{"displayName":"q","dataSourceId":"scheduled_query","params":{"query":"SELECT 1"}}`
 )
 
+// Test-fixture mirrors of the datatransfer package's unexported
+// dataSourceID consts. Kept in lockstep with the production values in
+// gateway/handlers/datatransfer/handler.go; goconst flagged the
+// scheduled-query / amazon-s3 spellings here without a single source
+// of truth.
+const (
+	dataSourceScheduledQuery = "scheduled_query"
+	dataSourceAmazonS3       = "amazon_s3"
+)
+
 func newTestMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -176,7 +186,7 @@ func TestDataTransferAmazonS3Create(t *testing.T) {
 	if name == "" {
 		t.Fatalf("create: empty name")
 	}
-	if ds := created["dataSourceId"]; ds != "amazon_s3" {
+	if ds := created["dataSourceId"]; ds != dataSourceAmazonS3 {
 		t.Errorf("dataSourceId = %v, want amazon_s3", ds)
 	}
 }
@@ -229,7 +239,7 @@ func TestDataTransferListDataSources(t *testing.T) {
 			ids[id] = struct{}{}
 		}
 	}
-	for _, want := range []string{"scheduled_query", "amazon_s3"} {
+	for _, want := range []string{dataSourceScheduledQuery, dataSourceAmazonS3} {
 		if _, ok := ids[want]; !ok {
 			t.Errorf("dataSources missing %q (got %v)", want, ids)
 		}
@@ -263,8 +273,8 @@ func TestDataTransferListDataSourcesThirdPartyConnectors(t *testing.T) {
 	}
 	wantIDs := []string{
 		// Initial shallow-emulator baseline.
-		"scheduled_query",
-		"amazon_s3",
+		dataSourceScheduledQuery,
+		dataSourceAmazonS3,
 		// Third-party connector stubs.
 		"dfp_dt",
 		"adwords",
@@ -330,7 +340,7 @@ func TestDataTransferGetDataSourceAmazonS3AuthorizationPlaceholder(t *testing.T)
 		t.Fatalf("get dataSource: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	body := decodeMap(t, rec)
-	if got, _ := body["dataSourceId"].(string); got != "amazon_s3" {
+	if got, _ := body["dataSourceId"].(string); got != dataSourceAmazonS3 {
 		t.Errorf("dataSourceId = %q, want amazon_s3", got)
 	}
 	if got, _ := body["authorizationUrl"].(string); !strings.Contains(got, "oauth-emulator.invalid") {

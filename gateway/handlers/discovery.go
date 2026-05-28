@@ -55,9 +55,9 @@ var buildDiscoveryDocument = sync.OnceValue(func() discoveryDocument {
 		BatchPath:   "batch/bigquery/v2",
 		Parameters:  commonParameters(),
 		Resources: map[string]discoveryResource{
-			"projects": {
+			discoveryResourceProjects: {
 				Methods: map[string]discoveryMethod{
-					"list": {
+					discoveryMethodList: {
 						ID:         "bigquery.projects.list",
 						Path:       "projects",
 						HTTPMethod: http.MethodGet,
@@ -66,74 +66,74 @@ var buildDiscoveryDocument = sync.OnceValue(func() discoveryDocument {
 						ID:             "bigquery.projects.getServiceAccount",
 						Path:           "projects/{projectId}/serviceAccount",
 						HTTPMethod:     http.MethodGet,
-						ParameterOrder: []string{"projectId"},
+						ParameterOrder: []string{paramProjectID},
 						Parameters: map[string]discoveryParameter{
-							"projectId": pathString("projectId"),
+							paramProjectID: pathString(paramProjectID),
 						},
 					},
 				},
 			},
-			"datasets": {
+			discoveryResourceDatasets: {
 				Methods: map[string]discoveryMethod{
-					"list":     datasetsListMethod(),
-					"insert":   datasetsInsertMethod(),
-					"get":      datasetsGetMethod(),
-					"update":   datasetsUpdateMethod(),
-					"patch":    datasetsPatchMethod(),
-					"delete":   datasetsDeleteMethod(),
-					"undelete": datasetsUndeleteMethod(),
+					discoveryMethodList:   datasetsListMethod(),
+					discoveryMethodInsert: datasetsInsertMethod(),
+					discoveryMethodGet:    datasetsGetMethod(),
+					discoveryMethodUpdate: datasetsUpdateMethod(),
+					discoveryMethodPatch:  datasetsPatchMethod(),
+					discoveryMethodDelete: datasetsDeleteMethod(),
+					"undelete":            datasetsUndeleteMethod(),
 				},
 			},
-			"tables": {
+			discoveryResourceTables: {
 				Methods: map[string]discoveryMethod{
-					"list":               tablesListMethod(),
-					"insert":             tablesInsertMethod(),
-					"get":                tablesGetMethod(),
-					"update":             tablesUpdateMethod(),
-					"patch":              tablesPatchMethod(),
-					"delete":             tablesDeleteMethod(),
-					"getIamPolicy":       tablesIamMethod("getIamPolicy"),
-					"setIamPolicy":       tablesIamMethod("setIamPolicy"),
-					"testIamPermissions": tablesIamMethod("testIamPermissions"),
+					discoveryMethodList:   tablesListMethod(),
+					discoveryMethodInsert: tablesInsertMethod(),
+					discoveryMethodGet:    tablesGetMethod(),
+					discoveryMethodUpdate: tablesUpdateMethod(),
+					discoveryMethodPatch:  tablesPatchMethod(),
+					discoveryMethodDelete: tablesDeleteMethod(),
+					"getIamPolicy":        tablesIamMethod("getIamPolicy"),
+					"setIamPolicy":        tablesIamMethod("setIamPolicy"),
+					"testIamPermissions":  tablesIamMethod("testIamPermissions"),
 				},
 			},
-			"tabledata": {
+			discoveryResourceTabledata: {
 				Methods: map[string]discoveryMethod{
-					"list":      tabledataListMethod(),
-					"insertAll": tabledataInsertAllMethod(),
+					discoveryMethodList: tabledataListMethod(),
+					"insertAll":         tabledataInsertAllMethod(),
 				},
 			},
-			"jobs": {
+			discoveryResourceJobs: {
 				Methods: map[string]discoveryMethod{
-					"list":            jobsListMethod(),
-					"insert":          jobsInsertMethod(),
-					"get":             jobsGetMethod(),
-					"cancel":          jobsCancelMethod(),
-					"delete":          jobsDeleteMethod(),
-					"query":           jobsQueryMethod(),
-					"getQueryResults": jobsGetQueryResultsMethod(),
+					discoveryMethodList:   jobsListMethod(),
+					discoveryMethodInsert: jobsInsertMethod(),
+					discoveryMethodGet:    jobsGetMethod(),
+					"cancel":              jobsCancelMethod(),
+					discoveryMethodDelete: jobsDeleteMethod(),
+					discoveryMethodQuery:  jobsQueryMethod(),
+					"getQueryResults":     jobsGetQueryResultsMethod(),
 				},
 			},
-			"models": {
+			discoveryResourceModels: {
 				Methods: map[string]discoveryMethod{
-					"list":   modelsListMethod(),
-					"get":    modelsGetMethod(),
-					"patch":  modelsPatchMethod(),
-					"delete": modelsDeleteMethod(),
+					discoveryMethodList:   modelsListMethod(),
+					discoveryMethodGet:    modelsGetMethod(),
+					discoveryMethodPatch:  modelsPatchMethod(),
+					discoveryMethodDelete: modelsDeleteMethod(),
 				},
 			},
-			"routines": {
+			discoveryResourceRoutines: {
 				Methods: map[string]discoveryMethod{
-					"list":   routinesListMethod(),
-					"insert": routinesInsertMethod(),
-					"get":    routinesGetMethod(),
-					"update": routinesUpdateMethod(),
-					"delete": routinesDeleteMethod(),
+					discoveryMethodList:   routinesListMethod(),
+					discoveryMethodInsert: routinesInsertMethod(),
+					discoveryMethodGet:    routinesGetMethod(),
+					discoveryMethodUpdate: routinesUpdateMethod(),
+					discoveryMethodDelete: routinesDeleteMethod(),
 				},
 			},
-			"rowAccessPolicies": {
+			discoveryResourceRowPolicy: {
 				Methods: map[string]discoveryMethod{
-					"list": rowAccessPoliciesListMethod(),
+					discoveryMethodList: rowAccessPoliciesListMethod(),
 				},
 			},
 		},
@@ -144,6 +144,44 @@ var buildDiscoveryDocument = sync.OnceValue(func() discoveryDocument {
 // every restDescription. The verification command (`jq .kind`) asserts
 // this exact string, so it must not drift.
 const discoveryKind = "discovery#restDescription"
+
+// Discovery-document path-parameter names. The upstream BigQuery REST
+// API exposes resources keyed off these {…} segments and the
+// discovery JSON has to spell them out verbatim, which is why the same
+// string repeats dozens of times across the method tables. Hoisted to
+// consts so the JSON wire shape stays a single source of truth.
+const (
+	paramProjectID = "projectId"
+	paramDatasetID = "datasetId"
+	paramTableID   = "tableId"
+	paramJobID     = "jobId"
+	paramModelID   = "modelId"
+	paramRoutineID = "routineId"
+)
+
+// Discovery-document resource keys. These are the JSON-object keys
+// inside the document's top-level `resources` map; client libraries
+// dispatch on them to find the method tables for each REST resource.
+const (
+	discoveryResourceProjects   = "projects"
+	discoveryResourceDatasets   = "datasets"
+	discoveryResourceTables     = "tables"
+	discoveryResourceTabledata  = "tabledata"
+	discoveryResourceJobs       = "jobs"
+	discoveryResourceModels     = "models"
+	discoveryResourceRoutines   = "routines"
+	discoveryResourceRowPolicy  = "rowAccessPolicies"
+	discoveryMethodList         = "list"
+	discoveryMethodGet          = "get"
+	discoveryMethodInsert       = "insert"
+	discoveryMethodUpdate       = "update"
+	discoveryMethodPatch        = "patch"
+	discoveryMethodDelete       = "delete"
+	discoveryMethodQuery        = "query"
+	discoveryParamTypeString    = "string"
+	discoveryParamLocationPath  = "path"
+	discoveryParamLocationQuery = "query"
+)
 
 // discoveryDocument is the trimmed-down restDescription served by the
 // emulator. It models only the fields client libraries actually consult
@@ -193,8 +231,8 @@ type discoveryParameter struct {
 // readable.
 func pathString(name string) discoveryParameter {
 	return discoveryParameter{
-		Type:        "string",
-		Location:    "path",
+		Type:        discoveryParamTypeString,
+		Location:    discoveryParamLocationPath,
 		Required:    true,
 		Description: name,
 	}
@@ -206,23 +244,23 @@ func pathString(name string) discoveryParameter {
 func commonParameters() map[string]discoveryParameter {
 	return map[string]discoveryParameter{
 		"alt": {
-			Type:        "string",
-			Location:    "query",
+			Type:        discoveryParamTypeString,
+			Location:    discoveryParamLocationQuery,
 			Description: "Data format for the response.",
 		},
 		"prettyPrint": {
 			Type:        "boolean",
-			Location:    "query",
+			Location:    discoveryParamLocationQuery,
 			Description: "Returns response with indentations and line breaks.",
 		},
 		"key": {
-			Type:        "string",
-			Location:    "query",
+			Type:        discoveryParamTypeString,
+			Location:    discoveryParamLocationQuery,
 			Description: "API key. Ignored by the emulator.",
 		},
 		"access_token": {
-			Type:        "string",
-			Location:    "query",
+			Type:        discoveryParamTypeString,
+			Location:    discoveryParamLocationQuery,
 			Description: "OAuth access token. Ignored by the emulator.",
 		},
 	}
@@ -238,8 +276,8 @@ func datasetsListMethod() discoveryMethod {
 		ID:             "bigquery.datasets.list",
 		Path:           "projects/{projectId}/datasets",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId"},
-		Parameters:     map[string]discoveryParameter{"projectId": pathString("projectId")},
+		ParameterOrder: []string{paramProjectID},
+		Parameters:     map[string]discoveryParameter{paramProjectID: pathString(paramProjectID)},
 	}
 }
 
@@ -248,8 +286,8 @@ func datasetsInsertMethod() discoveryMethod {
 		ID:             "bigquery.datasets.insert",
 		Path:           "projects/{projectId}/datasets",
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId"},
-		Parameters:     map[string]discoveryParameter{"projectId": pathString("projectId")},
+		ParameterOrder: []string{paramProjectID},
+		Parameters:     map[string]discoveryParameter{paramProjectID: pathString(paramProjectID)},
 	}
 }
 
@@ -258,10 +296,10 @@ func datasetsGetMethod() discoveryMethod {
 		ID:             "bigquery.datasets.get",
 		Path:           "projects/{projectId}/datasets/{datasetId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"datasetId": pathString("datasetId"),
+			paramProjectID: pathString(paramProjectID),
+			paramDatasetID: pathString(paramDatasetID),
 		},
 	}
 }
@@ -292,19 +330,19 @@ func datasetsUndeleteMethod() discoveryMethod {
 		ID:             "bigquery.datasets.undelete",
 		Path:           "projects/{projectId}/datasets/{datasetId}:undelete",
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId", "datasetId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"datasetId": pathString("datasetId"),
+			paramProjectID: pathString(paramProjectID),
+			paramDatasetID: pathString(paramDatasetID),
 		},
 	}
 }
 
 func tableScopedParams() map[string]discoveryParameter {
 	return map[string]discoveryParameter{
-		"projectId": pathString("projectId"),
-		"datasetId": pathString("datasetId"),
-		"tableId":   pathString("tableId"),
+		paramProjectID: pathString(paramProjectID),
+		paramDatasetID: pathString(paramDatasetID),
+		paramTableID:   pathString(paramTableID),
 	}
 }
 
@@ -313,10 +351,10 @@ func tablesListMethod() discoveryMethod {
 		ID:             "bigquery.tables.list",
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"datasetId": pathString("datasetId"),
+			paramProjectID: pathString(paramProjectID),
+			paramDatasetID: pathString(paramDatasetID),
 		},
 	}
 }
@@ -333,7 +371,7 @@ func tablesGetMethod() discoveryMethod {
 		ID:             "bigquery.tables.get",
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramTableID},
 		Parameters:     tableScopedParams(),
 	}
 }
@@ -364,7 +402,7 @@ func tablesIamMethod(op string) discoveryMethod {
 		ID:             "bigquery.tables." + op,
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}:" + op,
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramTableID},
 		Parameters:     tableScopedParams(),
 	}
 }
@@ -374,7 +412,7 @@ func tabledataListMethod() discoveryMethod {
 		ID:             "bigquery.tabledata.list",
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramTableID},
 		Parameters:     tableScopedParams(),
 	}
 }
@@ -384,7 +422,7 @@ func tabledataInsertAllMethod() discoveryMethod {
 		ID:             "bigquery.tabledata.insertAll",
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll",
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramTableID},
 		Parameters:     tableScopedParams(),
 	}
 }
@@ -394,8 +432,8 @@ func jobsListMethod() discoveryMethod {
 		ID:             "bigquery.jobs.list",
 		Path:           "projects/{projectId}/jobs",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId"},
-		Parameters:     map[string]discoveryParameter{"projectId": pathString("projectId")},
+		ParameterOrder: []string{paramProjectID},
+		Parameters:     map[string]discoveryParameter{paramProjectID: pathString(paramProjectID)},
 	}
 }
 
@@ -411,10 +449,10 @@ func jobsGetMethod() discoveryMethod {
 		ID:             "bigquery.jobs.get",
 		Path:           "projects/{projectId}/jobs/{jobId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "jobId"},
+		ParameterOrder: []string{paramProjectID, paramJobID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"jobId":     pathString("jobId"),
+			paramProjectID: pathString(paramProjectID),
+			paramJobID:     pathString(paramJobID),
 		},
 	}
 }
@@ -424,10 +462,10 @@ func jobsCancelMethod() discoveryMethod {
 		ID:             "bigquery.jobs.cancel",
 		Path:           "projects/{projectId}/jobs/{jobId}/cancel",
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId", "jobId"},
+		ParameterOrder: []string{paramProjectID, paramJobID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"jobId":     pathString("jobId"),
+			paramProjectID: pathString(paramProjectID),
+			paramJobID:     pathString(paramJobID),
 		},
 	}
 }
@@ -437,10 +475,10 @@ func jobsDeleteMethod() discoveryMethod {
 		ID:             "bigquery.jobs.delete",
 		Path:           "projects/{projectId}/jobs/{jobId}/delete",
 		HTTPMethod:     http.MethodDelete,
-		ParameterOrder: []string{"projectId", "jobId"},
+		ParameterOrder: []string{paramProjectID, paramJobID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"jobId":     pathString("jobId"),
+			paramProjectID: pathString(paramProjectID),
+			paramJobID:     pathString(paramJobID),
 		},
 	}
 }
@@ -450,8 +488,8 @@ func jobsQueryMethod() discoveryMethod {
 		ID:             "bigquery.jobs.query",
 		Path:           "projects/{projectId}/queries",
 		HTTPMethod:     http.MethodPost,
-		ParameterOrder: []string{"projectId"},
-		Parameters:     map[string]discoveryParameter{"projectId": pathString("projectId")},
+		ParameterOrder: []string{paramProjectID},
+		Parameters:     map[string]discoveryParameter{paramProjectID: pathString(paramProjectID)},
 	}
 }
 
@@ -460,10 +498,10 @@ func jobsGetQueryResultsMethod() discoveryMethod {
 		ID:             "bigquery.jobs.getQueryResults",
 		Path:           "projects/{projectId}/queries/{jobId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "jobId"},
+		ParameterOrder: []string{paramProjectID, paramJobID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"jobId":     pathString("jobId"),
+			paramProjectID: pathString(paramProjectID),
+			paramJobID:     pathString(paramJobID),
 		},
 	}
 }
@@ -472,9 +510,9 @@ func jobsGetQueryResultsMethod() discoveryMethod {
 // bigquery.models.* method that targets a specific model.
 func modelScopedParams() map[string]discoveryParameter {
 	return map[string]discoveryParameter{
-		"projectId": pathString("projectId"),
-		"datasetId": pathString("datasetId"),
-		"modelId":   pathString("modelId"),
+		paramProjectID: pathString(paramProjectID),
+		paramDatasetID: pathString(paramDatasetID),
+		paramModelID:   pathString(paramModelID),
 	}
 }
 
@@ -483,10 +521,10 @@ func modelsListMethod() discoveryMethod {
 		ID:             "bigquery.models.list",
 		Path:           "projects/{projectId}/datasets/{datasetId}/models",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"datasetId": pathString("datasetId"),
+			paramProjectID: pathString(paramProjectID),
+			paramDatasetID: pathString(paramDatasetID),
 		},
 	}
 }
@@ -496,7 +534,7 @@ func modelsGetMethod() discoveryMethod {
 		ID:             "bigquery.models.get",
 		Path:           "projects/{projectId}/datasets/{datasetId}/models/{modelId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId", "modelId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramModelID},
 		Parameters:     modelScopedParams(),
 	}
 }
@@ -519,9 +557,9 @@ func modelsDeleteMethod() discoveryMethod {
 // bigquery.routines.* method that targets a specific routine.
 func routineScopedParams() map[string]discoveryParameter {
 	return map[string]discoveryParameter{
-		"projectId": pathString("projectId"),
-		"datasetId": pathString("datasetId"),
-		"routineId": pathString("routineId"),
+		paramProjectID: pathString(paramProjectID),
+		paramDatasetID: pathString(paramDatasetID),
+		paramRoutineID: pathString(paramRoutineID),
 	}
 }
 
@@ -530,10 +568,10 @@ func routinesListMethod() discoveryMethod {
 		ID:             "bigquery.routines.list",
 		Path:           "projects/{projectId}/datasets/{datasetId}/routines",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID},
 		Parameters: map[string]discoveryParameter{
-			"projectId": pathString("projectId"),
-			"datasetId": pathString("datasetId"),
+			paramProjectID: pathString(paramProjectID),
+			paramDatasetID: pathString(paramDatasetID),
 		},
 	}
 }
@@ -550,7 +588,7 @@ func routinesGetMethod() discoveryMethod {
 		ID:             "bigquery.routines.get",
 		Path:           "projects/{projectId}/datasets/{datasetId}/routines/{routineId}",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId", "routineId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramRoutineID},
 		Parameters:     routineScopedParams(),
 	}
 }
@@ -574,7 +612,7 @@ func rowAccessPoliciesListMethod() discoveryMethod {
 		ID:             "bigquery.rowAccessPolicies.list",
 		Path:           "projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
 		HTTPMethod:     http.MethodGet,
-		ParameterOrder: []string{"projectId", "datasetId", "tableId"},
+		ParameterOrder: []string{paramProjectID, paramDatasetID, paramTableID},
 		Parameters:     tableScopedParams(),
 	}
 }

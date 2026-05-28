@@ -220,7 +220,7 @@ type ExpectedError struct {
 // defaultProfiles is the set Fixture.Profiles defaults to when the
 // fixture omits it. Keep alphabetized so iteration order is stable
 // across the matrix.
-var defaultProfiles = []string{"duckdb"}
+var defaultProfiles = []string{ProfileDuckDB}
 
 // Load parses a single YAML file into a Fixture. It validates the
 // shape (required fields, exclusivity of expectation, known profile

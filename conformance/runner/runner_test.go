@@ -9,6 +9,19 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
+// Per-package test consts. Several conformance-runner tests assert on
+// the same BigQuery TypeKind spellings or the same synthetic-name
+// fixtures; promoting them to consts stops goconst from flagging the
+// repeats and pins the spelling to a single source of truth.
+const (
+	testTypeINT64   = bqTypeINT64
+	testTypeFLOAT64 = bqTypeFLOAT64
+	testTypeSTRING  = bqTypeSTRING
+	testNameAda     = "ada"
+	testNameLinus   = "linus"
+	testColumnName  = "name"
+)
+
 // TestLoadValidFixture pins the happy-path load for every seed
 // fixture: every file under `conformance/fixtures/` must parse, have
 // at least one declared profile, and pass the schema validation
@@ -228,12 +241,12 @@ func rowOf(values ...any) bqtypes.Row {
 func TestRowDiffOrderedMatchesEqualRows(t *testing.T) {
 	exp := Expectation{
 		Rows: []map[string]any{
-			{"id": "1", "name": "ada"},
-			{"id": "2", "name": "linus"},
+			{"id": "1", testColumnName: testNameAda},
+			{"id": "2", testColumnName: testNameLinus},
 		},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
-	actual := []bqtypes.Row{rowOf("1", "ada"), rowOf("2", "linus")}
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
+	actual := []bqtypes.Row{rowOf("1", testNameAda), rowOf("2", testNameLinus)}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty (match), got:\n%s", diff)
 	}
@@ -241,15 +254,15 @@ func TestRowDiffOrderedMatchesEqualRows(t *testing.T) {
 
 func TestRowDiffOrderedDetectsCellValueDifference(t *testing.T) {
 	exp := Expectation{
-		Rows: []map[string]any{{"id": "1", "name": "ada"}},
+		Rows: []map[string]any{{"id": "1", testColumnName: testNameAda}},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
 	actual := []bqtypes.Row{rowOf("1", "augusta")}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("rowDiff: want non-empty diff, got empty")
 	}
-	if !strings.Contains(diff, "ada") || !strings.Contains(diff, "augusta") {
+	if !strings.Contains(diff, testNameAda) || !strings.Contains(diff, "augusta") {
 		t.Fatalf("diff missing one of the cell values:\n%s", diff)
 	}
 }
@@ -258,7 +271,7 @@ func TestRowDiffOrderedDetectsRowCountMismatch(t *testing.T) {
 	exp := Expectation{
 		Rows: []map[string]any{{"id": "1"}, {"id": "2"}},
 	}
-	schema := schemaWith("id", "INT64")
+	schema := schemaWith("id", testTypeINT64)
 	actual := []bqtypes.Row{rowOf("1")}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
@@ -275,7 +288,7 @@ func TestRowDiffIntCoercesYAMLNumeric(t *testing.T) {
 	exp := Expectation{
 		Rows: []map[string]any{{"id": 1}},
 	}
-	schema := schemaWith("id", "INT64")
+	schema := schemaWith("id", testTypeINT64)
 	actual := []bqtypes.Row{rowOf("1")}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty for typed INT coercion, got:\n%s", diff)
@@ -302,7 +315,7 @@ func TestRowDiffFloatWithinEpsilonPasses(t *testing.T) {
 	exp := Expectation{
 		Rows: []map[string]any{{"v": "1.0"}},
 	}
-	schema := schemaWith("v", "FLOAT64")
+	schema := schemaWith("v", testTypeFLOAT64)
 	actual := []bqtypes.Row{rowOf("1.000000000001")}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty for float within epsilon, got:\n%s", diff)
@@ -314,7 +327,7 @@ func TestRowDiffFloatOutsideEpsilonFails(t *testing.T) {
 	exp := Expectation{
 		Rows: []map[string]any{{"v": "1.0"}},
 	}
-	schema := schemaWith("v", "FLOAT64")
+	schema := schemaWith("v", testTypeFLOAT64)
 	actual := []bqtypes.Row{rowOf("1.001")}
 	if diff := rowDiff(exp, schema, actual); diff == "" {
 		t.Fatal("rowDiff: want non-empty diff for float outside epsilon")
@@ -348,9 +361,9 @@ func TestRowDiffTimestampParsesRFC3339(t *testing.T) {
 
 func TestRowDiffNullMatchesNull(t *testing.T) {
 	exp := Expectation{
-		Rows: []map[string]any{{"name": nil}},
+		Rows: []map[string]any{{testColumnName: nil}},
 	}
-	schema := schemaWith("name", "STRING")
+	schema := schemaWith(testColumnName, testTypeSTRING)
 	actual := []bqtypes.Row{rowOf(nil)}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty for NULL == NULL, got:\n%s", diff)
@@ -359,10 +372,10 @@ func TestRowDiffNullMatchesNull(t *testing.T) {
 
 func TestRowDiffNullVsValueMismatch(t *testing.T) {
 	exp := Expectation{
-		Rows: []map[string]any{{"name": nil}},
+		Rows: []map[string]any{{testColumnName: nil}},
 	}
-	schema := schemaWith("name", "STRING")
-	actual := []bqtypes.Row{rowOf("ada")}
+	schema := schemaWith(testColumnName, testTypeSTRING)
+	actual := []bqtypes.Row{rowOf(testNameAda)}
 	if diff := rowDiff(exp, schema, actual); diff == "" {
 		t.Fatal("rowDiff: want non-empty diff for NULL vs value")
 	}
@@ -373,9 +386,9 @@ func TestRowDiffNullVsLiteralStringMismatch(t *testing.T) {
 	// "NULL" on the expected side; the diff would otherwise mask
 	// a fixture writer's mistake.
 	exp := Expectation{
-		Rows: []map[string]any{{"name": "NULL"}},
+		Rows: []map[string]any{{testColumnName: "NULL"}},
 	}
-	schema := schemaWith("name", "STRING")
+	schema := schemaWith(testColumnName, testTypeSTRING)
 	actual := []bqtypes.Row{rowOf(nil)}
 	if diff := rowDiff(exp, schema, actual); diff == "" {
 		t.Fatal(`rowDiff: want non-empty diff for "NULL" string vs NULL cell`)
@@ -388,12 +401,12 @@ func TestRowDiffUnorderedMatchesShuffled(t *testing.T) {
 	exp := Expectation{
 		Match: MatchUnordered,
 		Rows: []map[string]any{
-			{"id": "1", "name": "ada"},
-			{"id": "2", "name": "linus"},
+			{"id": "1", testColumnName: testNameAda},
+			{"id": "2", testColumnName: testNameLinus},
 		},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
-	actual := []bqtypes.Row{rowOf("2", "linus"), rowOf("1", "ada")}
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
+	actual := []bqtypes.Row{rowOf("2", testNameLinus), rowOf("1", testNameAda)}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff: want empty for shuffled-equal multiset, got:\n%s", diff)
 	}
@@ -403,14 +416,14 @@ func TestRowDiffUnorderedDetectsSwap(t *testing.T) {
 	exp := Expectation{
 		Match: MatchUnordered,
 		Rows: []map[string]any{
-			{"id": "1", "name": "ada"},
-			{"id": "2", "name": "linus"},
+			{"id": "1", testColumnName: testNameAda},
+			{"id": "2", testColumnName: testNameLinus},
 		},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
 	// id=2 row's name swapped for "grace"; this should surface
 	// as one missing (linus) and one extra (grace).
-	actual := []bqtypes.Row{rowOf("1", "ada"), rowOf("2", "grace")}
+	actual := []bqtypes.Row{rowOf("1", testNameAda), rowOf("2", "grace")}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("rowDiff: want non-empty diff for swapped row")
@@ -418,7 +431,7 @@ func TestRowDiffUnorderedDetectsSwap(t *testing.T) {
 	if !strings.Contains(diff, "missing") || !strings.Contains(diff, "extra") {
 		t.Fatalf("unordered diff missing missing/extra sections:\n%s", diff)
 	}
-	if !strings.Contains(diff, "linus") {
+	if !strings.Contains(diff, testNameLinus) {
 		t.Fatalf("expected 'linus' in missing section:\n%s", diff)
 	}
 	if !strings.Contains(diff, "grace") {
@@ -434,7 +447,7 @@ func TestRowDiffUnorderedRowCountMismatch(t *testing.T) {
 			{"id": "2"},
 		},
 	}
-	schema := schemaWith("id", "INT64")
+	schema := schemaWith("id", testTypeINT64)
 	actual := []bqtypes.Row{rowOf("1")}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
@@ -452,11 +465,11 @@ func TestRowDiffSchemaOnlyMatchesDifferentRows(t *testing.T) {
 	exp := Expectation{
 		Match: MatchSchemaOnly,
 		Schema: []ExpectedColumn{
-			{Name: "id", Type: "INT64"},
-			{Name: "name", Type: "STRING"},
+			{Name: "id", Type: testTypeINT64},
+			{Name: testColumnName, Type: testTypeSTRING},
 		},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
 	actual := []bqtypes.Row{
 		rowOf("7", "henrietta"),
 		rowOf("8", "grace"),
@@ -470,18 +483,18 @@ func TestRowDiffSchemaOnlyDetectsColumnNameMismatch(t *testing.T) {
 	exp := Expectation{
 		Match: MatchSchemaOnly,
 		Schema: []ExpectedColumn{
-			{Name: "id", Type: "INT64"},
-			{Name: "name", Type: "STRING"},
+			{Name: "id", Type: testTypeINT64},
+			{Name: testColumnName, Type: testTypeSTRING},
 		},
 	}
-	// Actual has "id" + "label" (not "name").
-	schema := schemaWith("id", "INT64", "label", "STRING")
-	actual := []bqtypes.Row{rowOf("1", "ada")}
+	// Actual has "id" + "label" (not testColumnName).
+	schema := schemaWith("id", testTypeINT64, "label", testTypeSTRING)
+	actual := []bqtypes.Row{rowOf("1", testNameAda)}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("rowDiff schema_only: want non-empty diff for column-name mismatch")
 	}
-	if !strings.Contains(diff, "name") || !strings.Contains(diff, "label") {
+	if !strings.Contains(diff, testColumnName) || !strings.Contains(diff, "label") {
 		t.Fatalf("schema_only diff missing column names:\n%s", diff)
 	}
 }
@@ -490,10 +503,10 @@ func TestRowDiffSchemaOnlyDetectsTypeMismatch(t *testing.T) {
 	exp := Expectation{
 		Match: MatchSchemaOnly,
 		Schema: []ExpectedColumn{
-			{Name: "amount", Type: "FLOAT64"},
+			{Name: "amount", Type: testTypeFLOAT64},
 		},
 	}
-	schema := schemaWith("amount", "INT64")
+	schema := schemaWith("amount", testTypeINT64)
 	if diff := rowDiff(exp, schema, nil); diff == "" {
 		t.Fatal("rowDiff schema_only: want non-empty diff for type mismatch")
 	}
@@ -504,9 +517,9 @@ func TestRowDiffSchemaOnlyFallsBackToRowKeys(t *testing.T) {
 	// still pin the column-name set from those keys.
 	exp := Expectation{
 		Match: MatchSchemaOnly,
-		Rows:  []map[string]any{{"id": 0, "name": ""}},
+		Rows:  []map[string]any{{"id": 0, testColumnName: ""}},
 	}
-	schema := schemaWith("id", "INT64", "name", "STRING")
+	schema := schemaWith("id", testTypeINT64, testColumnName, testTypeSTRING)
 	actual := []bqtypes.Row{rowOf("42", "anything")}
 	if diff := rowDiff(exp, schema, actual); diff != "" {
 		t.Fatalf("rowDiff schema_only (rows fallback): want empty, got:\n%s", diff)
@@ -521,14 +534,14 @@ func TestExpectedSchemaPreflightCatchesColumnDrift(t *testing.T) {
 	exp := Expectation{
 		Match: MatchOrdered,
 		Schema: []ExpectedColumn{
-			{Name: "id", Type: "INT64"},
-			{Name: "name", Type: "STRING"},
+			{Name: "id", Type: testTypeINT64},
+			{Name: testColumnName, Type: testTypeSTRING},
 		},
-		Rows: []map[string]any{{"id": "1", "label": "ada"}},
+		Rows: []map[string]any{{"id": "1", "label": testNameAda}},
 	}
-	// Actual schema has "label" instead of "name".
-	schema := schemaWith("id", "INT64", "label", "STRING")
-	actual := []bqtypes.Row{rowOf("1", "ada")}
+	// Actual schema has "label" instead of testColumnName.
+	schema := schemaWith("id", testTypeINT64, "label", testTypeSTRING)
+	actual := []bqtypes.Row{rowOf("1", testNameAda)}
 	diff := rowDiff(exp, schema, actual)
 	if diff == "" {
 		t.Fatal("preflight: want non-empty diff for schema drift")
@@ -608,11 +621,11 @@ func TestResolveProfilesDefaultsToAll(t *testing.T) {
 }
 
 func TestResolveProfilesFiltersToSubset(t *testing.T) {
-	got, err := resolveProfiles([]string{"duckdb"})
+	got, err := resolveProfiles([]string{ProfileDuckDB})
 	if err != nil {
 		t.Fatalf("resolveProfiles: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "duckdb" {
+	if len(got) != 1 || got[0].Name != ProfileDuckDB {
 		t.Fatalf("got=%v, want [duckdb]", got)
 	}
 }

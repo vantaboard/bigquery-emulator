@@ -20,6 +20,12 @@ import (
 	"strings"
 )
 
+// authTypeOAuth is the BigQuery DataTransfer `authorizationType` value
+// for connectors that authenticate via OAuth. Hoisted to a package
+// const so the (otherwise repetitive) catalog entries below all
+// reference the same source of truth.
+const authTypeOAuth = "AUTHORIZATION_TYPE_OAUTH"
+
 // DataSourceCatalogEntry describes a connector surfaced in the
 // dataSources list/get responses. AuthorizationURLPlaceholder is
 // emitted as JSON `authorizationUrl` when non-empty (an inert .invalid
@@ -70,7 +76,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceAmazonS3,
 			DisplayName:                    "Amazon S3 (emulator catalog stub)",
 			Description:                    "Metadata-only stub for third-party connector discovery; transfer execution and credential validation are not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -78,7 +84,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceAdManager,
 			DisplayName:                    "Google Ad Manager (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the dfp_dt connector used by CreateAdManagerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -86,7 +92,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceGoogleAds,
 			DisplayName:                    "Google Ads (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the adwords connector used by CreateAdsTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -94,7 +100,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceCampaignManager,
 			DisplayName:                    "Campaign Manager (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the dcm_dt connector used by CreateCampaignmanagerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -102,7 +108,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourcePlay,
 			DisplayName:                    "Google Play (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the play connector used by CreatePlayTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -110,7 +116,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceRedshift,
 			DisplayName:                    "Amazon Redshift (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the redshift connector used by CreateRedshiftTransfer; transfer execution and credential validation are not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -118,7 +124,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceOnPremises,
 			DisplayName:                    "Teradata / on-premises (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the on_premises connector used by CreateTeradataTransfer; transfer execution and Teradata agent integration are not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -126,7 +132,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceYoutubeChannel,
 			DisplayName:                    "YouTube Channel (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the youtube_channel connector used by CreateYoutubeChannelTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
@@ -134,7 +140,7 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			DataSourceID:                   dataSourceYoutubeContentOwner,
 			DisplayName:                    "YouTube Content Owner (emulator catalog stub)",
 			Description:                    "Metadata-only stub for the youtube_content_owner connector used by CreateYoutubeContentOwnerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			AuthorizationType:              authTypeOAuth,
 			DefaultDataRefreshIntervalDays: 1,
 			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},

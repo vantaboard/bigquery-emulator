@@ -23,17 +23,17 @@ import (
 func TestFilterFirstParty(t *testing.T) {
 	in := []string{
 		// First party — must pass.
-		"backend/engine/engine.cc",
+		SentinelEngine,
 		"backend/engine/engine.h",
 		"backend/engine/duckdb/duckdb_engine.cc",
 		"backend/storage/duckdb/duckdb_storage.cc",
-		"binaries/emulator_main/main.cc",
-		"binaries/emulator_main/version.h",
-		"binaries/emulator_main/version_test.cc",
+		SentinelEmulatorMain,
+		SentinelEmulatorVersionH,
+		SentinelEmulatorVersionT,
 		"frontend/handlers/query.cc",
 		"frontend/handlers/query.h",
 		"frontend/server/server.cc",
-		"tools/googlesql-prebuilt/smoke/smoke.cc",
+		SentinelSmoke,
 		"tools/googlesql-prebuilt/smoke/smoke_wrappers.cc",
 
 		// Genrule outputs — explicit exclude.
@@ -66,16 +66,16 @@ func TestFilterFirstParty(t *testing.T) {
 	}
 	want := []string{
 		"backend/engine/duckdb/duckdb_engine.cc",
-		"backend/engine/engine.cc",
+		SentinelEngine,
 		"backend/engine/engine.h",
 		"backend/storage/duckdb/duckdb_storage.cc",
-		"binaries/emulator_main/main.cc",
-		"binaries/emulator_main/version.h",
-		"binaries/emulator_main/version_test.cc",
+		SentinelEmulatorMain,
+		SentinelEmulatorVersionH,
+		SentinelEmulatorVersionT,
 		"frontend/handlers/query.cc",
 		"frontend/handlers/query.h",
 		"frontend/server/server.cc",
-		"tools/googlesql-prebuilt/smoke/smoke.cc",
+		SentinelSmoke,
 		"tools/googlesql-prebuilt/smoke/smoke_wrappers.cc",
 	}
 	got := filterFirstParty(in)
@@ -93,7 +93,7 @@ func TestFilterFirstParty_NormalisesSeparators(t *testing.T) {
 	got := filterFirstParty([]string{
 		`backend\engine\engine.cc`,
 	})
-	want := []string{"backend/engine/engine.cc"}
+	want := []string{SentinelEngine}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("backslash normalisation mismatch:\n got: %v\nwant: %v", got, want)
 	}
@@ -105,10 +105,10 @@ func TestFilterFirstParty_NormalisesSeparators(t *testing.T) {
 func TestFilterFirstParty_DoesNotOverlapDirectoryPrefix(t *testing.T) {
 	got := filterFirstParty([]string{
 		"backend2/engine.cc",
-		"backend/engine/engine.cc",
+		SentinelEngine,
 		"binaries2/emulator_main/main.cc",
 	})
-	want := []string{"backend/engine/engine.cc"}
+	want := []string{SentinelEngine}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("prefix overlap leaked:\n got: %v\nwant: %v", got, want)
 	}
@@ -121,11 +121,11 @@ func TestIsTestFile(t *testing.T) {
 		path string
 		want bool
 	}{
-		{"backend/engine/engine.cc", false},
+		{SentinelEngine, false},
 		{"backend/engine/engine_test.cc", true},
 		{"frontend/handlers/storage_read_test.cc", true},
-		{"binaries/emulator_main/version.h", false},
-		{"binaries/emulator_main/version_test.cc", true},
+		{SentinelEmulatorVersionH, false},
+		{SentinelEmulatorVersionT, true},
 		{"tools/lint/cpp/foo_test.cpp", true},
 	}
 	for _, c := range cases {
@@ -164,9 +164,8 @@ func TestRunList_LiveRepo(t *testing.T) {
 	if !sort.StringsAreSorted(files) {
 		t.Errorf("list output is not sorted: %v", files)
 	}
-	const sentinel = "binaries/emulator_main/main.cc"
-	if !contains(files, sentinel) {
-		t.Errorf("expected %q in list output, got %v", sentinel, files)
+	if !contains(files, SentinelEmulatorMain) {
+		t.Errorf("expected %q in list output, got %v", SentinelEmulatorMain, files)
 	}
 	for _, f := range files {
 		if strings.HasPrefix(f, "third_party/") {
@@ -212,7 +211,7 @@ func TestRunList_NoTests(t *testing.T) {
 // downstream callers feed these to `os.ReadFile`, which on Windows
 // would otherwise reject forward-slash paths.
 func TestResolveAgainstRoot(t *testing.T) {
-	got := resolveAgainstRoot("/repo", "backend/engine/engine.cc")
+	got := resolveAgainstRoot("/repo", SentinelEngine)
 	want := filepath.FromSlash("/repo/backend/engine/engine.cc")
 	if got != want {
 		t.Errorf("resolveAgainstRoot = %q, want %q", got, want)

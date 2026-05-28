@@ -22,7 +22,7 @@ func TestProjectListReturnsDefaultProject(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+	if ct := rec.Header().Get("Content-Type"); ct != contentTypeJSON {
 		t.Fatalf("Content-Type = %q, want application/json", ct)
 	}
 
@@ -107,7 +107,7 @@ func TestProjectGetServiceAccountUsesPathProject(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+	if ct := rec.Header().Get("Content-Type"); ct != contentTypeJSON {
 		t.Fatalf("Content-Type = %q, want application/json", ct)
 	}
 	var doc map[string]any

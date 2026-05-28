@@ -35,9 +35,9 @@ func newTabledataReq(method, projectID, datasetID, tableID, suffix, body string)
 func peopleSchema() *enginepb.TableSchema {
 	return &enginepb.TableSchema{
 		Fields: []*enginepb.FieldSchema{
-			{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-			{Name: "name", Type: "STRING", Mode: "NULLABLE"},
-			{Name: "tags", Type: "STRING", Mode: "REPEATED"},
+			{Name: "id", Type: sqlTypeINT64, Mode: sqlModeRequired},
+			{Name: testColumnName, Type: sqlTypeSTRING, Mode: sqlModeNullable},
+			{Name: "tags", Type: sqlTypeSTRING, Mode: "REPEATED"},
 		},
 	}
 }
@@ -59,7 +59,7 @@ func TestTableDataInsertAllRoundTrip(t *testing.T) {
             {"insertId":"b","json":{"id":2,"name":null,"tags":[]}}
         ]
     }`
-	req := newTabledataReq(http.MethodPost, "proj", "ds1", "t1", "insertAll", body)
+	req := newTabledataReq(http.MethodPost, testProjectID, testDatasetID, testTableID, "insertAll", body)
 	rec := httptest.NewRecorder()
 	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
 
@@ -69,8 +69,8 @@ func TestTableDataInsertAllRoundTrip(t *testing.T) {
 	if fake.lastInsertRows == nil {
 		t.Fatal("Catalog.InsertRows was not called")
 	}
-	if got := fake.lastInsertRows.GetTable().GetTableId(); got != "t1" {
-		t.Errorf("table_id forwarded = %q, want %q", got, "t1")
+	if got := fake.lastInsertRows.GetTable().GetTableId(); got != testTableID {
+		t.Errorf("table_id forwarded = %q, want %q", got, testTableID)
 	}
 	rows := fake.lastInsertRows.GetRows()
 	if len(rows) != 2 {
@@ -82,8 +82,8 @@ func TestTableDataInsertAllRoundTrip(t *testing.T) {
 		if got := cells[0].GetStringValue(); got != "1" {
 			t.Errorf("row[0].id = %q, want %q", got, "1")
 		}
-		if got := cells[1].GetStringValue(); got != "alice" {
-			t.Errorf("row[0].name = %q, want %q", got, "alice")
+		if got := cells[1].GetStringValue(); got != testUserAlice {
+			t.Errorf("row[0].name = %q, want %q", got, testUserAlice)
 		}
 		if cells[2].GetArray() == nil {
 			t.Errorf("row[0].tags should be Array; got %+v", cells[2])
@@ -115,7 +115,7 @@ func TestTableDataInsertAllMissingFieldsBecomeNull(t *testing.T) {
 		},
 	}
 	body := `{"rows":[{"json":{"id":7}}]}`
-	req := newTabledataReq(http.MethodPost, "proj", "ds1", "t1", "insertAll", body)
+	req := newTabledataReq(http.MethodPost, testProjectID, testDatasetID, testTableID, "insertAll", body)
 	rec := httptest.NewRecorder()
 	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
 
@@ -148,7 +148,7 @@ func TestTableDataInsertAllEmptyRowsSkipsRPC(t *testing.T) {
 			return &enginepb.DescribeTableResponse{Schema: peopleSchema()}, nil
 		},
 	}
-	req := newTabledataReq(http.MethodPost, "proj", "ds1", "t1", "insertAll", `{"rows":[]}`)
+	req := newTabledataReq(http.MethodPost, testProjectID, testDatasetID, testTableID, "insertAll", `{"rows":[]}`)
 	rec := httptest.NewRecorder()
 	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
 
@@ -170,7 +170,7 @@ func TestTableDataInsertAllPropagatesNotFound(t *testing.T) {
 		},
 	}
 	body := `{"rows":[{"json":{"id":1}}]}`
-	req := newTabledataReq(http.MethodPost, "proj", "ds1", "ghost", "insertAll", body)
+	req := newTabledataReq(http.MethodPost, testProjectID, testDatasetID, "ghost", "insertAll", body)
 	rec := httptest.NewRecorder()
 	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
 
@@ -208,7 +208,14 @@ func TestTableDataListPaginationParams(t *testing.T) {
 			}, nil
 		},
 	}
-	req := newTabledataReq(http.MethodGet, "proj", "ds1", "t1", "data?startIndex=5&maxResults=2", "")
+	req := newTabledataReq(
+		http.MethodGet,
+		testProjectID,
+		testDatasetID,
+		testTableID,
+		"data?startIndex=5&maxResults=2",
+		"",
+	)
 	rec := httptest.NewRecorder()
 	TableDataList(Dependencies{Catalog: fake})(rec, req)
 
@@ -252,7 +259,14 @@ func TestTableDataListPageTokenOverridesStartIndex(t *testing.T) {
 			return &enginepb.ListRowsResponse{TotalRows: 9, NextStartIndex: 9}, nil
 		},
 	}
-	req := newTabledataReq(http.MethodGet, "proj", "ds1", "t1", "data?startIndex=2&pageToken=9", "")
+	req := newTabledataReq(
+		http.MethodGet,
+		testProjectID,
+		testDatasetID,
+		testTableID,
+		"data?startIndex=2&pageToken=9",
+		"",
+	)
 	rec := httptest.NewRecorder()
 	TableDataList(Dependencies{Catalog: fake})(rec, req)
 	if rec.Code != http.StatusOK {
@@ -273,7 +287,7 @@ func TestTableDataListPageTokenOverridesStartIndex(t *testing.T) {
 // RPC when startIndex / maxResults fail to parse.
 func TestTableDataListMalformedParam(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newTabledataReq(http.MethodGet, "proj", "ds1", "t1", "data?startIndex=oops", "")
+	req := newTabledataReq(http.MethodGet, testProjectID, testDatasetID, testTableID, "data?startIndex=oops", "")
 	rec := httptest.NewRecorder()
 	TableDataList(Dependencies{Catalog: fake})(rec, req)
 	if rec.Code != http.StatusBadRequest {

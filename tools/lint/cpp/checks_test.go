@@ -69,7 +69,7 @@ void Bad() {
   obj->printf("arrow member call must NOT be flagged");
 }
 `)
-	got := checkBannedLogging("backend/engine/engine.cc", splitLines(body))
+	got := checkBannedLogging(SentinelEngine, splitLines(body))
 	if len(got) != 5 {
 		for _, f := range got {
 			t.Logf("finding: %s", f.Format())
@@ -94,8 +94,8 @@ func TestCheckBannedLogging_Tests(t *testing.T) {
 `)
 	for _, path := range []string{
 		"backend/engine/engine_test.cc",
-		"binaries/emulator_main/main.cc",
-		"tools/googlesql-prebuilt/smoke/smoke.cc",
+		SentinelEmulatorMain,
+		SentinelSmoke,
 	} {
 		if got := checkBannedLogging(path, splitLines(body)); len(got) != 0 {
 			t.Errorf("%s: unexpected findings %v", path, got)

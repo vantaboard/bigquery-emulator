@@ -21,7 +21,7 @@ const rowAccessPolicyListKind = "bigquery#listRowAccessPoliciesResponse"
 func RowAccessPolicyList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":              rowAccessPolicyListKind,
+			resourceKeyKind:     rowAccessPolicyListKind,
 			"rowAccessPolicies": []any{},
 		})
 	}

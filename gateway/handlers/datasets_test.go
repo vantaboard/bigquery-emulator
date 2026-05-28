@@ -43,7 +43,7 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 	fake := &fakeCatalogClient{}
 	deps := Dependencies{Catalog: fake}
 
-	req := newDatasetReq(http.MethodPost, "proj", "",
+	req := newDatasetReq(http.MethodPost, testProjectID, "",
 		`{"datasetReference":{"datasetId":"ds1"},"location":"US","friendlyName":"hello"}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(deps)(rec, req)
@@ -54,11 +54,11 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 	if fake.lastRegisterDataset == nil {
 		t.Fatal("Catalog.RegisterDataset was not called")
 	}
-	if got := fake.lastRegisterDataset.GetDataset().GetProjectId(); got != "proj" {
-		t.Errorf("project_id forwarded = %q, want %q", got, "proj")
+	if got := fake.lastRegisterDataset.GetDataset().GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
 	}
-	if got := fake.lastRegisterDataset.GetDataset().GetDatasetId(); got != "ds1" {
-		t.Errorf("dataset_id forwarded = %q, want %q", got, "ds1")
+	if got := fake.lastRegisterDataset.GetDataset().GetDatasetId(); got != testDatasetID {
+		t.Errorf("dataset_id forwarded = %q, want %q", got, testDatasetID)
 	}
 	if got := fake.lastRegisterDataset.GetLocation(); got != "US" {
 		t.Errorf("location forwarded = %q, want %q", got, "US")
@@ -74,7 +74,7 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 	if ds.ID != "proj:ds1" {
 		t.Errorf("id = %q, want %q", ds.ID, "proj:ds1")
 	}
-	if ds.DatasetReference.ProjectID != "proj" || ds.DatasetReference.DatasetID != "ds1" {
+	if ds.DatasetReference.ProjectID != testProjectID || ds.DatasetReference.DatasetID != testDatasetID {
 		t.Errorf("datasetReference = %+v, want {proj, ds1}", ds.DatasetReference)
 	}
 	if ds.FriendlyName != "hello" {
@@ -92,7 +92,7 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 // RPC is issued.
 func TestDatasetInsertRequiresDatasetID(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newDatasetReq(http.MethodPost, "proj", "", `{"location":"US"}`)
+	req := newDatasetReq(http.MethodPost, testProjectID, "", `{"location":"US"}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -113,7 +113,7 @@ func TestDatasetInsertEnginePropagatesAlreadyExists(t *testing.T) {
 			return nil, status.Error(codes.AlreadyExists, "dataset already exists")
 		},
 	}
-	req := newDatasetReq(http.MethodPost, "proj", "",
+	req := newDatasetReq(http.MethodPost, testProjectID, "",
 		`{"datasetReference":{"datasetId":"ds1"}}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{Catalog: fake})(rec, req)
@@ -134,7 +134,7 @@ func TestDatasetInsertEnginePropagatesAlreadyExists(t *testing.T) {
 // nil-Catalog behaviour so the route table tests keep working in
 // pure gateway-only mode.
 func TestDatasetInsertWithoutCatalogFallsBackTo501(t *testing.T) {
-	req := newDatasetReq(http.MethodPost, "proj", "",
+	req := newDatasetReq(http.MethodPost, testProjectID, "",
 		`{"datasetReference":{"datasetId":"ds1"}}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{})(rec, req)
@@ -152,8 +152,8 @@ func TestDatasetDeleteForwardsDeleteContents(t *testing.T) {
 	fake := &fakeCatalogClient{}
 	req := httptest.NewRequest(http.MethodDelete,
 		"/bigquery/v2/projects/proj/datasets/ds1?deleteContents=true", nil)
-	req.SetPathValue("projectId", "proj")
-	req.SetPathValue("datasetId", "ds1")
+	req.SetPathValue("projectId", testProjectID)
+	req.SetPathValue("datasetId", testDatasetID)
 	rec := httptest.NewRecorder()
 	DatasetDelete(Dependencies{Catalog: fake})(rec, req)
 
@@ -166,8 +166,8 @@ func TestDatasetDeleteForwardsDeleteContents(t *testing.T) {
 	if !fake.lastDropDataset.GetDeleteContents() {
 		t.Error("delete_contents was not forwarded as true")
 	}
-	if got := fake.lastDropDataset.GetDataset().GetDatasetId(); got != "ds1" {
-		t.Errorf("dataset_id = %q, want %q", got, "ds1")
+	if got := fake.lastDropDataset.GetDataset().GetDatasetId(); got != testDatasetID {
+		t.Errorf("dataset_id = %q, want %q", got, testDatasetID)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 			return nil, status.Error(codes.NotFound, "dataset not found")
 		},
 	}
-	req := newDatasetReq(http.MethodDelete, "proj", "ds1", "")
+	req := newDatasetReq(http.MethodDelete, testProjectID, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetDelete(Dependencies{Catalog: fake})(rec, req)
 
@@ -201,7 +201,7 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 // Storage grows a DescribeDataset method this test will need
 // updating.
 func TestDatasetGetSynthesizesResource(t *testing.T) {
-	req := newDatasetReq(http.MethodGet, "proj", "ds1", "")
+	req := newDatasetReq(http.MethodGet, testProjectID, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetGet(Dependencies{})(rec, req)
 
@@ -215,7 +215,7 @@ func TestDatasetGetSynthesizesResource(t *testing.T) {
 	if ds.Kind != "bigquery#dataset" {
 		t.Errorf("kind = %q, want %q", ds.Kind, "bigquery#dataset")
 	}
-	if ds.DatasetReference.ProjectID != "proj" || ds.DatasetReference.DatasetID != "ds1" {
+	if ds.DatasetReference.ProjectID != testProjectID || ds.DatasetReference.DatasetID != testDatasetID {
 		t.Errorf("datasetReference = %+v, want {proj, ds1}", ds.DatasetReference)
 	}
 }
@@ -227,7 +227,7 @@ func TestDatasetGetSynthesizesResource(t *testing.T) {
 // Live BigQuery returns `access: []` for newly-created datasets; the
 // emulator must do the same.
 func TestDatasetGetAccessIsEmptyArrayNotNull(t *testing.T) {
-	req := newDatasetReq(http.MethodGet, "proj", "ds1", "")
+	req := newDatasetReq(http.MethodGet, testProjectID, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetGet(Dependencies{})(rec, req)
 
@@ -258,7 +258,7 @@ func TestDatasetGetAccessIsEmptyArrayNotNull(t *testing.T) {
 // returns until Storage grows a list RPC.
 func TestDatasetListReturnsEmptyPage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/bigquery/v2/projects/proj/datasets", nil)
-	req.SetPathValue("projectId", "proj")
+	req.SetPathValue("projectId", testProjectID)
 	rec := httptest.NewRecorder()
 	DatasetList(Dependencies{})(rec, req)
 

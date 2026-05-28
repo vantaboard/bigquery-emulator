@@ -10,6 +10,16 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
+// StandardSqlDataType TypeKind spellings asserted by the wire-shape
+// regression tests. Promoted from inline literals so goconst stops
+// flagging the repeats and the wire spelling stays a single source of
+// truth.
+const (
+	typeKindINT64   = "INT64"
+	typeKindFLOAT64 = "FLOAT64"
+	typeKindSTRING  = "STRING"
+)
+
 // stringCell wraps a raw engine string-typed cell. It is the most
 // common shape: the engine has already serialized the value per
 // StandardSqlDataType.TypeKind.
@@ -48,16 +58,16 @@ func TestWireValueToCellScalars(t *testing.T) {
 		in      *enginepb.Cell
 		wantV   any
 	}{
-		{"INT64", "INT64", stringCell("42"), "42"},
-		{"INT64_negative", "INT64", stringCell("-9223372036854775808"), "-9223372036854775808"},
-		{"FLOAT64_decimal", "FLOAT64", stringCell("3.14"), "3.14"},
-		{"FLOAT64_NaN", "FLOAT64", stringCell("NaN"), "NaN"},
-		{"FLOAT64_PosInf", "FLOAT64", stringCell("Infinity"), "Infinity"},
-		{"FLOAT64_NegInf", "FLOAT64", stringCell("-Infinity"), "-Infinity"},
+		{"INT64", typeKindINT64, stringCell("42"), "42"},
+		{"INT64_negative", typeKindINT64, stringCell("-9223372036854775808"), "-9223372036854775808"},
+		{"FLOAT64_decimal", typeKindFLOAT64, stringCell("3.14"), "3.14"},
+		{"FLOAT64_NaN", typeKindFLOAT64, stringCell("NaN"), "NaN"},
+		{"FLOAT64_PosInf", typeKindFLOAT64, stringCell("Infinity"), "Infinity"},
+		{"FLOAT64_NegInf", typeKindFLOAT64, stringCell("-Infinity"), "-Infinity"},
 		{"BOOL_true", "BOOL", stringCell("true"), "true"},
 		{"BOOL_false", "BOOL", stringCell("false"), "false"},
-		{"STRING", "STRING", stringCell("hello world"), "hello world"},
-		{"STRING_empty", "STRING", stringCell(""), ""},
+		{"STRING", typeKindSTRING, stringCell("hello world"), "hello world"},
+		{"STRING_empty", typeKindSTRING, stringCell(""), ""},
 		{
 			"BYTES", "BYTES",
 			stringCell(base64.StdEncoding.EncodeToString([]byte{0xDE, 0xAD, 0xBE, 0xEF})),

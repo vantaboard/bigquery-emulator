@@ -98,8 +98,8 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 func DatasetList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":     datasetListKind,
-			"datasets": []bqtypes.Dataset{},
+			resourceKeyKind:     datasetListKind,
+			resourceKeyDatasets: []bqtypes.Dataset{},
 		})
 	}
 }

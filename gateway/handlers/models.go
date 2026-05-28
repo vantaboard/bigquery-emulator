@@ -22,8 +22,8 @@ const modelListKind = "bigquery#listModelsResponse"
 func ModelList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":   modelListKind,
-			"models": []any{},
+			resourceKeyKind: modelListKind,
+			"models":        []any{},
 		})
 	}
 }
@@ -41,7 +41,7 @@ func ModelGet(_ Dependencies) http.HandlerFunc {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
 		modelID := r.PathValue("modelId")
-		writeError(w, http.StatusNotFound, "notFound",
+		writeError(w, http.StatusNotFound, reasonNotFound,
 			"Not found: Model "+projectID+":"+datasetID+"."+modelID)
 	}
 }
@@ -68,7 +68,7 @@ func ModelDelete(_ Dependencies) http.HandlerFunc {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
 		modelID := r.PathValue("modelId")
-		writeError(w, http.StatusNotFound, "notFound",
+		writeError(w, http.StatusNotFound, reasonNotFound,
 			"Not found: Model "+projectID+":"+datasetID+"."+modelID)
 	}
 }

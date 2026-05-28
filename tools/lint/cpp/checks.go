@@ -366,7 +366,7 @@ func isLoggingAllowed(path string) bool {
 	if strings.HasPrefix(path, "tools/googlesql-prebuilt/smoke/") {
 		return true
 	}
-	if path == "binaries/emulator_main/main.cc" {
+	if path == SentinelEmulatorMain {
 		return true
 	}
 	return false

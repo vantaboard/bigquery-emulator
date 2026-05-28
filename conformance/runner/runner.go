@@ -29,6 +29,11 @@ const (
 // pivots on. Bumped only on a breaking output-shape change.
 const JSONSchemaVersion = 1
 
+// outputFormatText is the runner's default --output format: a
+// human-readable text renderer. Hoisted to a const so the default,
+// the validator, and the dispatcher all reference one source of truth.
+const outputFormatText = "text"
+
 // Result is one fixture x profile outcome. The JSON tags mirror what
 // plan-41's diff CI consumes; keep them stable.
 type Result struct {
@@ -105,9 +110,9 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 		opts.Err = os.Stderr
 	}
 	if opts.Output == "" {
-		opts.Output = "text"
+		opts.Output = outputFormatText
 	}
-	if opts.Output != "text" && opts.Output != "json" {
+	if opts.Output != outputFormatText && opts.Output != "json" {
 		return nil, fmt.Errorf("unknown --output %q (want text or json)",
 			opts.Output)
 	}
@@ -145,7 +150,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 			case StatusSkip:
 				report.Summary.Skipped++
 			}
-			if opts.Output == "text" {
+			if opts.Output == outputFormatText {
 				writeTextResult(opts.Out, result)
 			}
 		}

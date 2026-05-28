@@ -21,8 +21,8 @@ const routineListKind = "bigquery#listRoutinesResponse"
 func RoutineList(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":     routineListKind,
-			"routines": []any{},
+			resourceKeyKind: routineListKind,
+			"routines":      []any{},
 		})
 	}
 }
@@ -41,7 +41,7 @@ func RoutineGet(_ Dependencies) http.HandlerFunc {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
 		routineID := r.PathValue("routineId")
-		writeError(w, http.StatusNotFound, "notFound",
+		writeError(w, http.StatusNotFound, reasonNotFound,
 			"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
 	}
 }
@@ -77,7 +77,7 @@ func RoutineDelete(_ Dependencies) http.HandlerFunc {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
 		routineID := r.PathValue("routineId")
-		writeError(w, http.StatusNotFound, "notFound",
+		writeError(w, http.StatusNotFound, reasonNotFound,
 			"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
 	}
 }
