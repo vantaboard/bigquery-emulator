@@ -1,0 +1,252 @@
+# GoogleSQL build-mode helpers (Phase 3 of the `googlesql-prebuilt`
+# rollout — see `docs/dev/googlesql-prebuilt/README.md`).
+#
+# The emulator's Bazel build supports two explicit `@googlesql//...`
+# label-space modes (see `.bazelrc`):
+#
+#   - `--config=googlesql-source`    Sibling checkout at ../googlesql/
+#                                    (the `local_path_override` in
+#                                    `MODULE.bazel`). Default today.
+#   - `--config=googlesql-prebuilt`  Unpacked Phase 2 prebuilt
+#                                    artifact under
+#                                    .cache/googlesql-prebuilt/.
+#
+# These tasks populate / inspect / clean that cache directory. They
+# are the ONLY supported way to put bytes there: every task verifies
+# the artifact's SHA-256 before writing into the cache, so a Bazel
+# invocation with `--config=googlesql-prebuilt` can trust the cache.
+#
+# Phase 3 deliberately does NOT change `task emulator:build-engine:bazel`'s
+# default. Source mode is still the default; this file just makes the
+# prebuilt path AVAILABLE.
+
+version: "3"
+
+vars:
+  PREBUILT_REPO_NAME: "googlesql_prebuilt_linux_amd64"
+  CACHE_DIR:
+    sh: |
+      root="$(git rev-parse --show-toplevel)"
+      echo "$root/.cache/googlesql-prebuilt"
+
+tasks:
+  default:
+    desc: List googlesql helper tasks
+    cmds:
+      - task --list-all | grep '^* googlesql:'
+    silent: true
+
+  status:
+    desc: Print which GoogleSQL mode is active and what's in the prebuilt cache
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        echo "=== googlesql mode ==="
+        echo "Default selection (no --config flag): source (MODULE.bazel local_path_override)"
+        echo
+        echo "Selectors:"
+        echo "  --config=googlesql-source    : explicit no-op (matches default)"
+        echo "  --config=googlesql-prebuilt  : --override_module=googlesql=<cache>"
+        echo
+        echo "Sibling source checkout at ../googlesql/:"
+        if [ -f ../googlesql/MODULE.bazel ]; then
+          ver="$(grep -E '^\s*version = ' ../googlesql/MODULE.bazel | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          sha="$(git -C ../googlesql rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+          echo "  present (version=$ver, commit=$sha)"
+        else
+          echo "  ABSENT — source mode will fail. Clone google/googlesql at ../googlesql/."
+        fi
+        echo
+        echo "Prebuilt cache at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/:"
+        if [ -d "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" ]; then
+          mod_name="$(grep -E '^\s*name = ' "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/MODULE.bazel" 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "?")"
+          mod_ver="$(grep -E '^\s*version = ' "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/MODULE.bazel" 2>/dev/null | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "?")"
+          echo "  present"
+          echo "  module: $mod_name $mod_ver"
+          if [ -f "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/manifest.json" ]; then
+            artifact_ver="$(python3 -c "import json,sys; print(json.load(open('{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/manifest.json'))['artifact_version'])" 2>/dev/null || echo "?")"
+            gs_commit="$(python3 -c "import json,sys; print(json.load(open('{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/manifest.json'))['googlesql']['commit'][:12])" 2>/dev/null || echo "?")"
+            echo "  artifact_version: $artifact_ver"
+            echo "  googlesql commit: $gs_commit"
+          fi
+          if [ -n "$mod_name" ] && [ "$mod_name" != "googlesql" ]; then
+            echo "  WARNING: module name is '$mod_name', not 'googlesql'."
+            echo "  --config=googlesql-prebuilt will fail (--override_module needs name match)."
+            echo "  Re-stage the artifact: 'task googlesql:stage-bazel' or 'task googlesql:stage-fixture'."
+          fi
+        else
+          echo "  empty (run 'task googlesql:fetch-prebuilt URL=... SHA256=...' or 'task googlesql:stage-fixture')"
+        fi
+
+  fetch-prebuilt:
+    desc: |
+      Download a published GoogleSQL prebuilt tarball, verify SHA-256, and unpack into the cache.
+      Required: URL=<asset url> SHA256=<64 hex chars>.
+      Optional: ARTIFACT_VERSION=<x.y.z> (records expected version; not enforced).
+    vars:
+      URL: '{{.URL | default ""}}'
+      SHA256: '{{.SHA256 | default ""}}'
+      ARTIFACT_VERSION: '{{.ARTIFACT_VERSION | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ -z "{{.URL}}" ] || [ -z "{{.SHA256}}" ]; then
+          echo "task googlesql:fetch-prebuilt requires URL=... SHA256=..." >&2
+          echo "  example: task googlesql:fetch-prebuilt \\" >&2
+          echo "    URL=https://github.com/<owner>/<repo>/releases/download/googlesql-prebuilt/v0.1.0+gs-<sha>/googlesql-prebuilt-linux-amd64-clang18-<sha>-v0.1.0.tar.gz \\" >&2
+          echo "    SHA256=<64 hex>" >&2
+          exit 2
+        fi
+        if ! [[ "{{.SHA256}}" =~ ^[0-9a-f]{64}$ ]]; then
+          echo "SHA256 must be 64 hex chars; got {{.SHA256}}" >&2
+          exit 2
+        fi
+        # Refusal-grade SHA gate: download to a tmpfile, verify, only then commit
+        # to the cache. If verification fails, we leave the cache alone — no silent
+        # fallback to a stale artifact.
+        mkdir -p {{.CACHE_DIR}}
+        tmp="$(mktemp -d -p "{{.CACHE_DIR}}" .fetch-XXXXXX)"
+        trap 'rm -rf "$tmp"' EXIT INT TERM
+        tarball="$tmp/artifact.tar.gz"
+        echo "fetching {{.URL}} -> $tarball"
+        if command -v curl >/dev/null 2>&1; then
+          curl --fail --location --show-error --silent --output "$tarball" "{{.URL}}"
+        elif command -v wget >/dev/null 2>&1; then
+          wget --quiet --output-document="$tarball" "{{.URL}}"
+        else
+          echo "ERROR: neither curl nor wget is available on PATH" >&2
+          exit 1
+        fi
+        actual_sha="$(sha256sum "$tarball" | awk '{print $1}')"
+        if [ "$actual_sha" != "{{.SHA256}}" ]; then
+          echo "ERROR: SHA-256 mismatch on {{.URL}}" >&2
+          echo "  expected: {{.SHA256}}" >&2
+          echo "  actual:   $actual_sha" >&2
+          echo "  cache left untouched at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" >&2
+          echo "  refusing to unpack a tarball whose hash does not match the pin" >&2
+          exit 1
+        fi
+        echo "SHA-256 OK"
+        # Path-traversal gate (mirrors verify.sh) before extraction.
+        while IFS= read -r path; do
+          case "$path" in
+            /*|*..*) echo "ERROR: tarball path-escape entry: $path" >&2; exit 1 ;;
+          esac
+        done < <(tar -tzf "$tarball")
+        # Extract into a sibling tmp dir, only swap into the cache if the
+        # unpacked tree looks valid (top-level dir matches expected name AND
+        # MODULE.bazel declares module(name = "googlesql", ...)).
+        unpack="$tmp/unpack"
+        mkdir -p "$unpack"
+        tar -xzf "$tarball" -C "$unpack"
+        if [ ! -d "$unpack/{{.PREBUILT_REPO_NAME}}" ]; then
+          echo "ERROR: tarball did not contain top-level dir '{{.PREBUILT_REPO_NAME}}/'" >&2
+          ls -la "$unpack" >&2
+          exit 1
+        fi
+        mod_name="$(grep -E '^\s*name = ' "$unpack/{{.PREBUILT_REPO_NAME}}/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+        if [ "$mod_name" != "googlesql" ]; then
+          echo "ERROR: artifact's MODULE.bazel declares module(name = \"$mod_name\", ...); expected \"googlesql\"" >&2
+          echo "  the prebuilt artifact must advertise itself as the 'googlesql' module so" >&2
+          echo "  --override_module=googlesql=<cache> can resolve. The producer template at" >&2
+          echo "  tools/googlesql-prebuilt/templates/MODULE.bazel.tmpl pins this." >&2
+          exit 1
+        fi
+        # Verify manifest schema as a defense-in-depth gate. We rely on
+        # the manifest_writer's --validate-only flag (closed schema).
+        python3 tools/googlesql-prebuilt/manifest_writer.py \
+          --validate-only "$unpack/{{.PREBUILT_REPO_NAME}}/manifest.json"
+        # Commit to cache: remove old contents, move new in.
+        rm -rf "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
+        mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
+        echo "{{.SHA256}}  artifact.tar.gz" > "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}.tarball.sha256"
+        echo "OK: prebuilt artifact ready at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/"
+        echo "  invoke 'task emulator:build-engine:bazel GOOGLESQL_SOURCE=prebuilt' to use it."
+
+  stage-fixture:
+    desc: |
+      Build a fixture prebuilt artifact via tools/googlesql-prebuilt/package.sh --mode=fixture
+      (stub static archives — fast; cannot link emulator_main but exercises the wiring).
+    vars:
+      ARTIFACT_VERSION: '{{.ARTIFACT_VERSION | default "0.0.0"}}'
+      GOOGLESQL_SRC: '{{.GOOGLESQL_SRC | default "../googlesql"}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f "{{.GOOGLESQL_SRC}}/MODULE.bazel" ]; then
+          echo "ERROR: GOOGLESQL_SRC={{.GOOGLESQL_SRC}} does not contain MODULE.bazel" >&2
+          echo "  override with GOOGLESQL_SRC=path/to/googlesql or clone google/googlesql at ../googlesql/" >&2
+          exit 1
+        fi
+        out_dir="$(mktemp -d -t gsq-prebuilt-stage-XXXXXX)"
+        ./tools/googlesql-prebuilt/package.sh \
+          --mode=fixture \
+          --googlesql-src "{{.GOOGLESQL_SRC}}" \
+          --emulator-src . \
+          --artifact-version "{{.ARTIFACT_VERSION}}" \
+          --out-dir "$out_dir" \
+          --workflow-id manual \
+          --run-id 0
+        tarball="$(ls "$out_dir"/googlesql-prebuilt-*.tar.gz | head -1)"
+        sha="$(awk '{print $1}' "$tarball.sha256")"
+        echo "fixture artifact ready: $tarball (sha256 $sha)"
+        # Re-use fetch-prebuilt's gates: feed our own tarball back through the
+        # SHA + module-name + manifest-schema verifier, then it lands in the
+        # cache. file:// urls are honored by curl/wget on linux.
+        task googlesql:fetch-prebuilt \
+          URL="file://$tarball" \
+          SHA256="$sha" \
+          ARTIFACT_VERSION="{{.ARTIFACT_VERSION}}"
+        rm -rf "$out_dir"
+
+  stage-bazel:
+    desc: |
+      Build a real prebuilt artifact via tools/googlesql-prebuilt/package.sh --mode=bazel
+      (full GoogleSQL bazel build of ../googlesql, ~25-55 min cold cache).
+      Throttled per bazel-process-hygiene (jobs / mem caps from BAZEL_JOBS / BAZEL_MEM_MB).
+    vars:
+      ARTIFACT_VERSION: '{{.ARTIFACT_VERSION | default "0.1.0-localdev"}}'
+      GOOGLESQL_SRC: '{{.GOOGLESQL_SRC | default "../googlesql"}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f "{{.GOOGLESQL_SRC}}/MODULE.bazel" ]; then
+          echo "ERROR: GOOGLESQL_SRC={{.GOOGLESQL_SRC}} does not contain MODULE.bazel" >&2
+          exit 1
+        fi
+        out_dir="$(mktemp -d -t gsq-prebuilt-stage-XXXXXX)"
+        # package.sh --mode=bazel installs its own trap to shut down the bazel
+        # daemon on exit/INT/TERM (per bazel-process-hygiene.mdc), so we do not
+        # need to wrap an additional trap here.
+        ./tools/googlesql-prebuilt/package.sh \
+          --mode=bazel \
+          --googlesql-src "{{.GOOGLESQL_SRC}}" \
+          --emulator-src . \
+          --artifact-version "{{.ARTIFACT_VERSION}}" \
+          --out-dir "$out_dir" \
+          --workflow-id local-task \
+          --run-id 0
+        tarball="$(ls "$out_dir"/googlesql-prebuilt-*.tar.gz | head -1)"
+        sha="$(awk '{print $1}' "$tarball.sha256")"
+        echo "real artifact ready: $tarball (sha256 $sha)"
+        task googlesql:fetch-prebuilt \
+          URL="file://$tarball" \
+          SHA256="$sha" \
+          ARTIFACT_VERSION="{{.ARTIFACT_VERSION}}"
+        rm -rf "$out_dir"
+
+  clean:
+    desc: Remove the prebuilt cache (.cache/googlesql-prebuilt). Safe; no Bazel state touched.
+    cmds:
+      - |
+        set -eo pipefail
+        rm -rf "{{.CACHE_DIR}}"
+        echo "removed {{.CACHE_DIR}}"

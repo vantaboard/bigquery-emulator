@@ -16,6 +16,7 @@ includes:
   tools: ./taskfiles/tools.yml
   proto: ./taskfiles/proto.yml
   bazel: ./taskfiles/bazel.yml
+  googlesql: ./taskfiles/googlesql.yml
   conformance: ./taskfiles/conformance.yml
   release: ./taskfiles/release.yml
   thirdparty: ./taskfiles/thirdparty.yml

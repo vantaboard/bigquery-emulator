@@ -58,3 +58,62 @@ run   --cxxopt=-std=c++20 --host_cxxopt=-std=c++20 --config=clang --java_runtime
 # targets in this repo (proto, schema, storage, the in-progress
 # Bazel migration of the engine scaffolds) do not need it.
 build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
+
+# ---------------------------------------------------------------------------
+# GoogleSQL build-mode selection (Phase 3 of the `googlesql-prebuilt`
+# rollout, see `docs/dev/googlesql-prebuilt/README.md`).
+#
+# The emulator's Bazel build supports two explicit modes for the
+# `@googlesql//...` label space:
+#
+#   --config=googlesql-source    Use a sibling source checkout at
+#                                ../googlesql/. This is the DEFAULT
+#                                today — `MODULE.bazel`'s
+#                                `local_path_override(module_name =
+#                                "googlesql", path = "../googlesql")`
+#                                already resolves the source tree, so
+#                                `--config=googlesql-source` is an
+#                                explicit no-op marker that documents
+#                                "I deliberately want the source build,
+#                                not a prebuilt artifact".
+#
+#   --config=googlesql-prebuilt  Use the Phase 2 prebuilt artifact.
+#                                `--override_module=googlesql=...`
+#                                points Bazel's resolver at the
+#                                unpacked tarball under
+#                                `%workspace%/.cache/googlesql-prebuilt/
+#                                googlesql_prebuilt_linux_amd64`. The
+#                                cache is populated by
+#                                `task googlesql:fetch-prebuilt` (real
+#                                published artifact) or
+#                                `task googlesql:stage-fixture` /
+#                                `task googlesql:stage-bazel` (local
+#                                producer runs). Both populate the
+#                                cache only after a SHA gate succeeds.
+#
+# Selection is EXPLICIT. There is no silent fallback: if
+# `--config=googlesql-prebuilt` is active and the cache directory does
+# not exist (or its `MODULE.bazel` does not declare
+# `module(name = "googlesql", ...)`), Bazel refuses to start. Phase 4
+# owns flipping defaults, CI lanes, Docker, and release plumbing onto
+# `--config=googlesql-prebuilt`; Phase 3 only makes the mode available.
+# ---------------------------------------------------------------------------
+
+# Source mode is a no-op marker today: the repo's `MODULE.bazel`
+# already declares the `local_path_override` for `../googlesql`, so
+# the existing `task emulator:build-engine:bazel` invocation keeps
+# building from source. The marker exists so a caller can write
+# `--config=googlesql-source` to make the mode visible in build logs
+# / CI configuration.
+build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
+
+# Prebuilt mode points the `googlesql` module at the on-disk
+# unpacked artifact. The path is `%workspace%`-relative so the same
+# config works regardless of where the repo is checked out. The
+# cache is populated by `task googlesql:fetch-prebuilt` /
+# `task googlesql:stage-bazel` / `task googlesql:stage-fixture`
+# (see `taskfiles/googlesql.yml`) — those helpers verify the
+# artifact's SHA-256 BEFORE writing into the cache, so a build under
+# `--config=googlesql-prebuilt` can trust the cache contents.
+build:googlesql-prebuilt --override_module=googlesql=%workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
+build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt

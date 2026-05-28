@@ -6,15 +6,52 @@
 # `cloud-spanner-emulator` builds the same way, so the C++ engine of
 # bigquery-emulator follows suit.
 #
-# `googlesql` is vendored via a `bazel_dep` + a `local_path_override`
-# pointing at a sibling checkout of
-# https://github.com/google/googlesql. The override is the
-# `cloud-spanner-emulator`-style developer workflow — every contributor
-# clones googlesql next to bigquery-emulator (sibling path
-# `../googlesql/`), so the Bazel build always sees a real on-disk
-# repository rather than a tarball pinned by the central registry. The
-# version we pin to (`2026.01.1`) matches the upstream module name +
-# version in `../googlesql/MODULE.bazel`.
+# GoogleSQL — two-mode dependency selection (Phase 3 of the
+# `googlesql-prebuilt` rollout, see
+# `docs/dev/googlesql-prebuilt/README.md`).
+#
+# Mode 1: source (DEFAULT, the path declared below).
+#   `bazel_dep(name = "googlesql", ...)` + `local_path_override` to a
+#   sibling checkout at `../googlesql/`. This is the
+#   cloud-spanner-emulator-style developer workflow: every
+#   contributor clones googlesql next to bigquery-emulator and the
+#   Bazel build sees a real on-disk repository (no tarball, no
+#   registry hop). Used today by `task emulator:build-engine:bazel`
+#   and the existing CI/Docker/release lanes.
+#
+# Mode 2: prebuilt (OPTIONAL, opt-in for now; Phase 4 owns the broad
+#         rollout of switching defaults / CI / Docker / release).
+#   The Phase 2 producer
+#   (`tools/googlesql-prebuilt/`) publishes a `linux/amd64` tarball
+#   per `(artifact_version, googlesql_sha)` pair. The unpacked
+#   tarball declares `module(name = "googlesql", version = ...)` so a
+#   single `--override_module=googlesql=<unpacked_path>` (or an
+#   equivalent `archive_override`) flips the @googlesql label space
+#   onto the prebuilt artifact's wrapper `cc_library` targets without
+#   editing any emulator `BUILD.bazel`.
+#
+#   The opt-in mechanism today is the `--config=googlesql-prebuilt`
+#   group in `.bazelrc` plus the `task googlesql:*` helpers
+#   (`taskfiles/googlesql.yml`) that fetch / verify / unpack the
+#   artifact under `.cache/googlesql-prebuilt/`. See
+#   `docs/dev/googlesql-prebuilt/README.md` for the consumer
+#   contract and `tools/googlesql-prebuilt/README.md` for the
+#   producer/local-exercise workflow.
+#
+# Selection is explicit. There is no silent fallback from prebuilt to
+# source: a missing or checksum-mismatched prebuilt artifact in
+# prebuilt mode is a hard error before the build starts (the
+# `task googlesql:fetch-prebuilt` / `task googlesql:stage-bazel`
+# helpers refuse to populate the cache on a SHA mismatch, and Bazel
+# refuses to start when `--override_module` points at a path that is
+# missing or has the wrong `module(name = ...)` field).
+#
+# The version we pin to (`2026.01.1`) matches the upstream module
+# name + version in `../googlesql/MODULE.bazel`. (Same string
+# resolves the prebuilt artifact's `module(name = "googlesql",
+# version = ...)` field; the prebuilt's version is the producer-side
+# `artifact_version` for tracking, but Bazel uses whichever override
+# wins to locate the on-disk module.)
 #
 # Abseil is pinned to the version GoogleSQL pins (20240722.1). Older
 # Abseil is required by GoogleSQL because newer releases removed the
@@ -27,24 +64,31 @@ module(
     version = "0.0.0",
 )
 
-# GoogleSQL — name resolution / analyzer / reference-impl. Built from
-# the sibling checkout (`../googlesql`).
+# GoogleSQL — name resolution / analyzer / reference-impl.
 #
-# Dev workflow: clone https://github.com/google/googlesql at the
-# tag matching the version below into `../googlesql/`. Bumping the
-# local checkout is enough to bump the build (no registry hop needed).
+# Default mode: SOURCE. Built from the sibling checkout
+# (`../googlesql`) via `local_path_override`. Override at build time
+# (e.g. `--config=googlesql-prebuilt` from `.bazelrc`) to consume the
+# Phase 2 prebuilt artifact instead — see the file header for the
+# two-mode story.
 #
-# IMPORTANT (one-time dev setup): upstream GoogleSQL tags its
-# `MODULE.bazel:module(version = ...)` as `2026.01.1`. That string is
-# not strict semver — the leading zero in `01` trips a hard `fail()`
-# inside `gazelle` (`internal/bzlmod/semver.bzl:30`,
-# "Numeric identifiers in semantic version strings must not include
-# leading zeroes"). The version is parsed eagerly by gazelle's
-# `go_deps` extension for every Bazel module in the resolved graph,
-# regardless of whether anything actually uses the Go side, so a
-# fresh checkout will refuse to build until the `2026.01.1` is
-# rewritten to `2026.1.1` (or another strict-semver alias). Apply
-# the patch in `../googlesql/` directly:
+# Dev workflow (source mode): clone
+# https://github.com/google/googlesql at the tag matching the version
+# below into `../googlesql/`. Bumping the local checkout is enough to
+# bump the build (no registry hop needed).
+#
+# IMPORTANT (one-time dev setup, source mode): upstream GoogleSQL
+# tags its `MODULE.bazel:module(version = ...)` as `2026.01.1`. That
+# string is not strict semver — the leading zero in `01` trips a
+# hard `fail()` inside `gazelle`
+# (`internal/bzlmod/semver.bzl:30`, "Numeric identifiers in semantic
+# version strings must not include leading zeroes"). The version is
+# parsed eagerly by gazelle's `go_deps` extension for every Bazel
+# module in the resolved graph, regardless of whether anything
+# actually uses the Go side, so a fresh checkout will refuse to
+# build until the `2026.01.1` is rewritten to `2026.1.1` (or
+# another strict-semver alias). Apply the patch in `../googlesql/`
+# directly:
 #
 #     sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' \
 #         ../googlesql/MODULE.bazel
@@ -53,6 +97,9 @@ module(
 # bumps the leading zero or gazelle gets a non-strict semver mode
 # (https://github.com/bazel-contrib/bazel-gazelle/issues — track and
 # remove this note when fixed).
+#
+# Prebuilt mode bypasses this patch: the published artifact ships a
+# strict-semver `module(name = "googlesql", version = ...)` already.
 bazel_dep(name = "googlesql", version = "2026.1.1")
 local_path_override(
     module_name = "googlesql",

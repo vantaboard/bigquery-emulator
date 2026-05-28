@@ -60,3 +60,12 @@ third_party/**/.flattened-pom.xml
 # `task testdata:fake-gcs-sync`. Treated as a cache: large public
 # objects, not source. Sync on demand; do not commit.
 /testdata/fake-gcs-data/
+
+# Prebuilt GoogleSQL artifact cache populated by
+# `task googlesql:fetch-prebuilt`, `task googlesql:stage-bazel`, or
+# `task googlesql:stage-fixture`. The unpacked artifact is large
+# (header tree + multi-hundred-MB static archives) and reproducible
+# from an `(artifact_version, googlesql_sha)` pair, so we never check
+# it in. See `.bazelrc` `--config=googlesql-prebuilt` and
+# `taskfiles/googlesql.yml` for how it is populated.
+/.cache/googlesql-prebuilt/
