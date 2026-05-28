@@ -122,10 +122,10 @@ Run `task --list` for the full set of namespaces (`emulator:`, `lint:`,
 
 The C++ engine is built with Bazel. Run
 `task emulator:build-engine:bazel` (alias: `task emulator:build-engine`).
-This links GoogleSQL's analyzer + reference-impl evaluator along with the
-DuckDB storage backend and gRPC, producing a binary that serves
-`Query.DryRun` and `Query.ExecuteQuery` end-to-end. The integration
-tests under `gateway/e2e/` drive this binary directly.
+This links GoogleSQL's analyzer with the DuckDB engine + DuckDB storage
+backend and gRPC, producing a binary that serves `Query.DryRun` and
+`Query.ExecuteQuery` end-to-end. The integration tests under
+`gateway/e2e/` drive this binary directly.
 
 GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a
 prebuilt tarball through `http_archive` (see
@@ -218,7 +218,7 @@ GoogleSQL pin, releasing) start at the
 The repo ships a multi-stage [`Dockerfile`](./Dockerfile) that builds
 both the Go gateway and the C++ engine (the canonical Bazel
 `//binaries/emulator_main:emulator_main` target, which links the full
-GoogleSQL analyzer + reference-impl evaluator + DuckDB) and packages
+GoogleSQL analyzer + DuckDB engine + DuckDB storage) and packages
 them into a single runtime image. The layout mirrors the
 `gcr.io/cloud-spanner-emulator/emulator` image. A
 `docker/gateway_main.sh` shim injects `--hostname=0.0.0.0` inside the
@@ -376,8 +376,8 @@ is intentionally **not** modeled.
 
 BigQuery's `useLegacySql` field defaults to `true` on the wire (older
 clients still rely on this). The emulator only supports GoogleSQL,
-because the engine is GoogleSQL's analyzer + reference impl. The query
-handlers will:
+because the engine is GoogleSQL's analyzer feeding the DuckDB engine.
+The query handlers will:
 
 - Treat `useLegacySql` unset or `false` as GoogleSQL.
 - Reject `useLegacySql=true` with HTTP 400 + `reason: invalidQuery`.
@@ -395,8 +395,9 @@ The repository runs two parallel conformance lanes against the same
 gateway:
 
 1. **Fixture conformance** — `task conformance:*` drives YAML fixtures
-   through the in-repo runner and pins SQL semantics for both the
-   `memory` and `duckdb` profiles. See
+   through the in-repo runner and pins SQL semantics for the
+   `duckdb` profile (the only profile today; see
+   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)). See
    [`conformance/README.md`](./conformance/README.md) for the fixture
    schema, profile matrix, and authoring guide.
 2. **Third-party client conformance** — `task thirdparty:*` runs the

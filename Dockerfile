@@ -6,7 +6,7 @@
 #
 # Stage 1 (`engine-builder`) builds the canonical Bazel `cc_binary`
 # `//binaries/emulator_main:emulator_main`, which links the full
-# GoogleSQL analyzer + reference-impl evaluator + DuckDB storage +
+# GoogleSQL analyzer + DuckDB engine + DuckDB storage +
 # gRPC. GoogleSQL is consumed via `MODULE.bazel`'s `local_path_override`
 # at sibling path `../googlesql`, so the stage shallow-clones the
 # tagged upstream tree at `/googlesql` and applies the same one-line

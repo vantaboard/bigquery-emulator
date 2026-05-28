@@ -4,9 +4,10 @@ This document tracks the implementation roadmap for `bigquery-emulator`, a
 locally-runnable emulator of the BigQuery REST API. The architecture is
 deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
-- The **engine is C++** and links GoogleSQL directly. This is the source of
-  truth for SQL parsing, name resolution, type inference, analysis, and
-  reference-impl execution. We do not re-port any of it to Go.
+- The **engine is C++** and links GoogleSQL directly. GoogleSQL is the
+  source of truth for SQL parsing, name resolution, type inference, and
+  analysis; the DuckDB engine lowers the resolved AST to DuckDB SQL for
+  execution. We do not re-port any of it to Go.
 - The **frontend is a Go HTTP server** that implements BigQuery's public REST
   surface (projects/datasets/tables/jobs/queries/insertAll/...) and forwards
   query work to the C++ engine over an internal gRPC channel.
@@ -24,8 +25,8 @@ per plan). Start with the index:
 
 - [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — full catalog, dependency graph, subagent template
 
-Each plan maps to a slice of a ROADMAP phase and includes filled-in todos,
-verification commands, and done criteria.
+Each plan maps to a slice of one of the capability areas below and includes
+filled-in todos, verification commands, and done criteria.
 
 ## Engine and storage
 
@@ -60,7 +61,7 @@ dependency, and honest about what is "in" vs. "vendored from upstream."
 
 ---
 
-## Phase 0 - Repo bootstrap
+## Repo bootstrap
 
 Goal: a buildable skeleton that runs an empty HTTP server and an empty C++
 gRPC engine, with the gateway lifecycle wiring them together.
@@ -79,7 +80,7 @@ gRPC engine, with the gateway lifecycle wiring them together.
 - ⏳ CI: build matrix (linux/amd64, linux/arm64), `go vet`, `go test`,
   C++ build smoke test
 
-## Phase 1 - Gateway HTTP surface (Go-only, stubs)
+## Gateway HTTP surface (Go-only, stubs)
 
 Goal: every BigQuery REST endpoint we plan to support has a route registered
 and returns a structurally-valid (possibly empty) response or `501 Not
@@ -145,7 +146,7 @@ that document is cross-referenced against the upstream documentation under
   `TIMESTAMP`/`DATE`/`TIME`/`DATETIME` are RFC 3339, `STRUCT` is a
   positional list, etc.
 
-## Phase 2 - Internal gRPC contract (Go <-> C++)
+## Internal gRPC contract (Go <-> C++)
 
 Goal: nail down the wire format the gateway uses to talk to the engine. This
 is what isolates the messy "compile GoogleSQL" question from the "implement
@@ -163,12 +164,15 @@ BigQuery REST" question.
 - ⏳ Gateway helper that retries until engine is ready (cf. spanner's
   `waitForReady`)
 
-## Phase 3 - Catalog, Storage, and Engine abstractions (C++)
+## Catalog, Storage, and Engine abstractions (C++)
 
-Goal: define the two pluggable interfaces, ship in-memory + DuckDB
-implementations of `Storage`, scaffold both `Engine` impls (filled in by
-Phase 5), and wire `tabledata.insertAll` / `tabledata.list` end-to-end
-against both stores.
+Goal: define the two pluggable interfaces, ship the DuckDB
+implementation of `Storage`, scaffold the DuckDB `Engine` impl (filled
+in by the query-execution work below), and wire `tabledata.insertAll`
+/ `tabledata.list` end-to-end against `DuckDBStorage`. The interfaces
+stay narrow so a future second implementation (e.g. a remote engine,
+an alternate storage layout) can land without disturbing the gateway
+or the gRPC contract; today there is exactly one impl behind each.
 
 ### Interfaces
 
@@ -178,14 +182,9 @@ against both stores.
   signatures)
 - ⏳ `backend/engine/engine.h`: `Engine` interface
   (`Analyze`, `DryRun`, `ExecuteQuery(resolved_ast, catalog) -> RowSource`)
-- ⏳ Engine + Storage selection: `--engine=reference_impl|duckdb` and
-  `--storage=memory|duckdb` flags, plus a `--profile=ci|dev` shorthand
-  for the two common combos
 
-### Storage implementations
+### Storage implementation
 
-- ⏳ `backend/storage/memory/`: `InMemoryStorage` impl, volatile arena
-  store with simple row iterators
 - ⏳ Vendor `libduckdb` (Bazel), pin a stable DuckDB version,
   link the C++ amalgamation, surface its Arrow APIs to our build
 - ⏳ `backend/storage/duckdb/`: `DuckDBStorage` impl backed by `.parquet`
@@ -207,22 +206,19 @@ against both stores.
 
 ### Catalog wiring
 
-- ⏳ Wire `Catalog` gRPC handlers to both storage impls behind the
-  `--storage` flag (default `memory` for CI, `duckdb` for the published
-  Docker image)
-- ⏳ Implement `tabledata.insertAll` end-to-end (Go REST -> gRPC -> store)
-  against both stores
+- ⏳ Wire `Catalog` gRPC handlers to `DuckDBStorage` (the only storage
+  impl today)
+- ⏳ Implement `tabledata.insertAll` end-to-end (Go REST -> gRPC ->
+  `DuckDBStorage`)
 - ⏳ Implement `tabledata.list` end-to-end (paginated reads), using
-  Arrow-batched scans on `DuckDBStorage` and naive iterators on memory
+  Arrow-batched scans on `DuckDBStorage`
 
 ### Engine scaffolding
 
-- ⏳ `backend/engine/reference_impl/`: minimal scaffold; real wiring lands
-  in Phase 5.A
 - ⏳ `backend/engine/duckdb/`: minimal scaffold; transpiler + execution
-  land in Phase 5.B
+  land in the DuckDB execution work below
 
-## Phase 4 - Query analysis (C++ via GoogleSQL)
+## Query analysis (C++ via GoogleSQL)
 
 Goal: a syntactically-valid query produces a resolved AST and a plan, without
 yet executing.
@@ -235,35 +231,12 @@ yet executing.
 - ⏳ `jobs.query?dryRun=true` works end-to-end against an empty catalog
 - ⏳ Type/schema reflection (BQ `STANDARD_SQL` types <-> GoogleSQL types)
 
-## Phase 5 - Query execution
+## Query execution
 
-Goal: run real queries through both engines. This phase is split into two
-parallelizable tracks because the engines have very different work
-surfaces. The gateway code is identical between them — the choice is made
-at engine-construction time and only the C++ side cares.
-
-### Phase 5.A - Reference Impl execution (semantic source of truth)
-
-Wires GoogleSQL's reference impl directly. Slow but correct; the yardstick
-we measure DuckDB's transpiler against in the conformance harness.
-
-- ⏳ Wire `googlesql::reference_impl::Algebrizer` + `Evaluator` to read
-  from `Storage` via a `googlesql::Table` adapter that delegates to
-  whichever store is active
-- ⏳ Execute `SELECT 1` end-to-end via `jobs.query`
-- ⏳ Execute single-table `SELECT * FROM ds.t` end-to-end
-- ⏳ Joins, GROUP BY, ORDER BY (the reference impl handles these for free
-  once the adapter feeds it rows)
-- ⏳ Result row marshaling: GoogleSQL `Value` -> BigQuery REST row
-  (`f`/`v` shape, structured types, NULLs)
-- ⏳ Job lifecycle: `pending` -> `running` -> `done`, statistics
-  (`creationTime`, `startTime`, `endTime`, `totalBytesProcessed`)
-
-### Phase 5.B - DuckDB execution (transpiled fast path)
-
-Lowers the ZetaSQL `ResolvedAST` into DuckDB SQL and executes it via the
-DuckDB C++ client. Needed for any non-trivial workload to feel remotely
-BigQuery-like in latency.
+Goal: run real queries through the DuckDB engine. The gateway forwards
+analyzed queries to `emulator_main` over gRPC and never branches on
+engine choice. The engine lowers the ZetaSQL `ResolvedAST` into DuckDB
+SQL and executes it via the DuckDB C++ client.
 
 - ⏳ `backend/engine/duckdb/transpiler/`: a `googlesql::ResolvedASTVisitor`
   that emits DuckDB SQL strings. Implemented one node kind at a time,
@@ -280,31 +253,33 @@ BigQuery-like in latency.
 - ⏳ Built-in function mapping table. Start with the 80%
   (`SAFE_CAST`, `IFNULL`/`COALESCE`, `STRUCT()`, `ARRAY_AGG`,
   `STRING_AGG`, `DATE_TRUNC`, `EXTRACT`, regex, common approx
-  aggregates). Per-function disposition: `map | polyfill | fallback |
-  error`. `fallback` re-runs the query through the Reference Impl
-  engine; policy is configurable via `--on_unknown_fn`
+  aggregates). Per-function disposition: `map | polyfill | error`.
+  Functions without a mapping return `UNIMPLEMENTED` so the
+  conformance harness pins the gap rather than silently misbehaving
 - ⏳ DuckDB execution path: open an in-memory or file-backed connection
   per query, attach the storage's Parquet/Arrow files as DuckDB tables,
   run the transpiled SQL, capture errors and translate them back to
   BigQuery's error envelope
 - ⏳ Result marshaling: DuckDB Arrow `RecordBatch` -> BigQuery REST row
   JSON (column-major Arrow walked into the row-major `f`/`v` shape;
-  NULL bitmap honored; nested STRUCTs/ARRAYs recursed). Phase 7 reuses
-  the Arrow batches directly without this conversion
-- ⏳ Job lifecycle parity with 5.A so the gateway never branches on
-  engine choice
-- ⏳ Conformance harness pin: per-test engine override via a session
-  label, so we can keep DuckDB-failing shapes on Reference Impl while
-  the transpiler catches up
+  NULL bitmap honored; nested STRUCTs/ARRAYs recursed). The Storage
+  Read API surface reuses the Arrow batches directly without this
+  conversion
+- ⏳ Job lifecycle: `pending` -> `running` -> `done`, statistics
+  (`creationTime`, `startTime`, `endTime`, `totalBytesProcessed`)
 
-## Phase 6 - DML / DDL
+## DML / DDL
 
-- ⏳ `INSERT`, `UPDATE`, `DELETE`, `MERGE` via reference impl
+- ⏳ `INSERT`, `UPDATE`, `DELETE`, `MERGE` lowered through the DuckDB
+  transpiler. `MERGE`, `CREATE TABLE`, `CREATE TABLE AS SELECT`, and
+  `DROP TABLE` are implemented today; `INSERT VALUES` /
+  `INSERT ... SELECT`, `UPDATE`, and `DELETE` still return
+  `UNIMPLEMENTED` (see `docs/ENGINE_POLICY.md`)
 - ⏳ `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `CREATE VIEW`
 - ⏳ `CREATE TEMP FUNCTION`, scripting basics
 - ⏳ Job stats: `numDmlAffectedRows`
 
-## Phase 7 - Storage Read API (gRPC)
+## Storage Read API (gRPC)
 
 Goal: support BigQuery client libraries that prefer the Storage Read API
 (`google.cloud.bigquery.storage.v1`) for fast reads.
@@ -312,21 +287,19 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
 - ⏳ Implement `BigQueryRead` gRPC service (`CreateReadSession`,
   `ReadRows`, `SplitReadStream`)
 - ⏳ Avro and Arrow output formats
-- ⏳ **Native Arrow fast path when the DuckDB engine is active.** DuckDB
-  already produces Arrow `RecordBatch`es as its native result format; on
-  `ReadRows` we stream those batches straight onto the gRPC wire
-  (`ArrowRecordBatch` / `ArrowSchema` messages) without ever round-tripping
-  through the BigQuery REST `f`/`v` row shape. This sidesteps the
-  manual row-by-row serialization in Phase 5.B and is the single
-  biggest performance win on the read path
-- ⏳ When the Reference Impl engine is active, results are row-by-row
-  GoogleSQL `Value`s and we serialize them through an explicit Arrow
-  encoder; slower, but used in the conformance harness
+- ⏳ **Native Arrow fast path.** DuckDB already produces Arrow
+  `RecordBatch`es as its native result format; on `ReadRows` we stream
+  those batches straight onto the gRPC wire (`ArrowRecordBatch` /
+  `ArrowSchema` messages) without ever round-tripping through the
+  BigQuery REST `f`/`v` row shape. This sidesteps the manual
+  row-by-row serialization that the DuckDB execution path uses for
+  REST results and is the single biggest performance win on the read
+  path
 - ⏳ Single-stream sessions only at first (no parallelism); document the
   limit. DuckDB's parallel scan + Arrow output makes multi-stream a
-  tractable Phase 9 add-on
+  tractable post-distribution add-on
 
-## Phase 8 - Conformance harness
+## Conformance harness
 
 Goal: prove that real BigQuery client libraries work against the emulator.
 
@@ -339,7 +312,7 @@ Goal: prove that real BigQuery client libraries work against the emulator.
   whenever GoogleSQL is upgraded)
 - ⏳ Skiplist + drain tracker similar to `go-googlesql`'s
 
-## Phase 9 - Distribution
+## Distribution
 
 - ✅ `Dockerfile` that ships both binaries in one image
   (mirrors `gcr.io/cloud-spanner-emulator/emulator`)
@@ -416,18 +389,20 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   Spanner's posture. Document `BIGQUERY_EMULATOR_HOST` env var contract.
 - **Streaming inserts vs. Write API.** `tabledata.insertAll` is the legacy
   path; `Storage Write API` (`google.cloud.bigquery.storage.v1`) is the new
-  one. Phase 6/7 should make a deliberate call on which to support first.
-- **Dialect translation friction (ZetaSQL <-> DuckDB).** The transpiler in
-  Phase 5.B is the single riskiest piece of the project; semantic drift
+  one. The DML/DDL and Storage Read API tracks should make a deliberate
+  call on which to support first.
+- **Dialect translation friction (ZetaSQL <-> DuckDB).** The DuckDB
+  transpiler is the single riskiest piece of the project; semantic drift
   between BigQuery and DuckDB is real and unevenly distributed. Known
   hazards we'll have to design around:
   - **`MERGE`.** GoogleSQL's `MERGE` permits `INSERT`, `UPDATE`, `DELETE`,
     and conditional branches on `WHEN MATCHED`, `WHEN NOT MATCHED BY
     SOURCE`, and `WHEN NOT MATCHED BY TARGET`. DuckDB's `INSERT ... ON
     CONFLICT` plus separate `UPDATE` / `DELETE` statements doesn't cover
-    the full matrix. Likely path: lower complex `MERGE`s into a
-    transactional sequence of statements, or refuse them and fall back to
-    Reference Impl per the function-disposition policy.
+    the full matrix. The current path lowers `MERGE` into a
+    transactional sequence of statements where possible; shapes the
+    transpiler can't yet model return `UNIMPLEMENTED` so the gap is
+    pinned by the conformance harness.
   - **Deep STRUCT mutations.** `UPDATE t SET s.a.b = ...` is well-defined
     in BigQuery but DuckDB's struct field updates are limited; we'll need
     to rewrite as `s = struct_update(s, ...)` and chain. Worse, deeply
@@ -437,8 +412,9 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     `ML.*`, `BIT_COUNT`, `NET.*`, `KEYS.NEW_KEYSET`, GIS / GEOGRAPHY
     functions, and date-arithmetic edge cases (`DATE_ADD(d, INTERVAL 1
     MONTH)` semantics on month-end) often have no DuckDB analog. The
-    function-disposition table absorbs this; the Reference Impl is the
-    default fallback when no mapping is possible.
+    function-disposition table absorbs the ones we can map or
+    polyfill; the rest return `UNIMPLEMENTED` so the conformance
+    harness pins each gap.
   - **NULL-equality, ordering, and float corner cases** between the two
     engines are subtly different (e.g., NaN ordering, `IS NULL` in joins,
     integer overflow behavior) and need explicit conformance coverage
@@ -447,6 +423,7 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     functions are mostly portable, but precisely-typed JSON (`JSON` vs.
     `STRING`-encoded JSON) and the dot/path navigators have lookalike
     DuckDB functions that aren't quite the same.
-  - The pragmatic answer to most of the above is per-shape and per-function
-    disposition tables, an honest skiplist for what DuckDB can't yet
-    handle, and the Reference Impl as the always-available escape hatch.
+  - The pragmatic answer to most of the above is per-shape and
+    per-function disposition tables and an honest skiplist for what
+    DuckDB can't yet handle; unmapped shapes return `UNIMPLEMENTED`
+    rather than silently degrading.

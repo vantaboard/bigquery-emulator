@@ -242,7 +242,7 @@ subset of the table in the upstream
 
 BigQuery's wire field `useLegacySql` defaults to `true` (legacy SQL).
 The emulator only supports GoogleSQL because the engine is GoogleSQL's
-own analyzer + reference impl. The
+own analyzer feeding the DuckDB engine. The
 [`jobs.query`](../gateway/handlers/queries.go) handler:
 
 - Treats `useLegacySql` unset or `false` as GoogleSQL (the supported
