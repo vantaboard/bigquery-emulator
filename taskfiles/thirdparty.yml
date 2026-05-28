@@ -538,9 +538,20 @@ tasks:
         goals="${JAVA_BQ_MAVEN_GOALS:-{{.JAVA_BQ_MAVEN_GOALS}}}"
         skip="${JAVA_BQ_SKIP_TESTS:-{{.JAVA_BQ_SKIP_TESTS}}}"
         sample_paths="${JAVA_BQ_SAMPLE_PATHS:-{{.JAVA_BQ_SAMPLE_PATHS}}}"
-        mvn_test_flags="-DskipTests=${skip}"
         if [ "$skip" = "true" ]; then
+          # Legacy compile-only posture (belt-and-suspenders even though the
+          # POMs no longer carry <maven.test.skip>).
           mvn_test_flags="-DskipTests=true -Dmaven.test.skip=true"
+        else
+          # Live-IT posture: keep Failsafe (`failsafe.skipTests=false`,
+          # `skipITs=false`) but mute Surefire (`surefire.skipTests=true`).
+          # Upstream snippets ship unit tests (e.g. SetUserAgentTest) that
+          # `assertNotNull(System.getenv("GOOGLE_CLOUD_PROJECT"))` at
+          # @BeforeClass and therefore fail before any IT gets a chance to
+          # run. The live-IT track only cares about the Failsafe slice; the
+          # Surefire surface is out of scope until upstream-side wiring grows
+          # an emulator-aware variant of those unit tests.
+          mvn_test_flags="-DskipTests=false -Dsurefire.skipTests=true -DskipITs=false"
         fi
         # Live-IT child-env exports: the BqOpts variants read these so the
         # snippets/ITs construct service clients pointed at the local emulator
@@ -548,9 +559,27 @@ tasks:
         # docker-compose.yml). The exports only mutate the child Maven process
         # env so the surrounding `task thirdparty:default` chain (golang/node/
         # python) still sees whatever value the caller / mise.toml provides for
-        # its own clients.
+        # its own clients. GOOGLE_CLOUD_PROJECT default matches the dev project
+        # convention exported by node-bigquery-tests / docker-compose.yml so the
+        # ITs' `requireEnvVar("GOOGLE_CLOUD_PROJECT")` checks pass with the
+        # emulator's default project.
         export BIGQUERY_EMULATOR_HOST="${BIGQUERY_EMULATOR_HOST:-http://localhost:9050}"
         export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
+        export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
+        export BIGQUERY_DATASET_NAME="${BIGQUERY_DATASET_NAME:-test_dataset}"
+        # Pre-create the dataset so ITs whose fixtures assume an existing
+        # BIGQUERY_DATASET_NAME (e.g. QueryMaterializedViewIT) can land their
+        # tables. The emulator's REST POST /bigquery/v2/projects/<p>/datasets
+        # accepts a minimal body; the response is ignored (idempotent on
+        # 409 Already Exists).
+        if [ "$skip" != "true" ]; then
+          _host_root="${BIGQUERY_EMULATOR_HOST%/}"
+          curl -fsS -o /dev/null \
+              -X POST -H 'Content-Type: application/json' \
+              -d "{\"datasetReference\":{\"projectId\":\"${GOOGLE_CLOUD_PROJECT}\",\"datasetId\":\"${BIGQUERY_DATASET_NAME}\"}}" \
+              "${_host_root}/bigquery/v2/projects/${GOOGLE_CLOUD_PROJECT}/datasets" \
+              2>/dev/null || true
+        fi
         # Prefer the user's JAVA_HOME, fall back to mise (`mise install` activates
         # Temurin 17 from mise.toml when present). Match CI's setup-java@v4 by
         # requiring 17+.
@@ -560,15 +589,51 @@ tasks:
           echo "  Fix: export JAVA_HOME, or install https://mise.jdx.dev and run: mise install" >&2
           exit 1
         fi
-        for rel in $sample_paths; do
-          target="third_party/java-bigquery-tests/${rel}"
-          echo "==> mvn -B ${goals} ${mvn_test_flags} (in ${target})"
-          if _java_home_ok; then
-            ( cd "$target" && mvn -B "$goals" $mvn_test_flags )
-          else
-            mise x -- sh -ec "cd \"$target\" && mvn -B \"$goals\" $mvn_test_flags"
+        # Live-IT posture: do NOT stop the fan-out on the first per-module
+        # failure. Until the shallow gRPC backends land in Phase B
+        # (`java-its-shallow-emulators_b8c9d0e1.plan.md`), the
+        # bigqueryconnection / bigquerydatatransfer / bigquerystorage modules
+        # are expected to surface NOT_IMPLEMENTED-shaped errors out of
+        # Failsafe; we still want the java-bigquery module's verdict and the
+        # downstream modules' verdicts to land in the same run. We mirror the
+        # `task thirdparty:default` posture: keep going, summarize at the end,
+        # exit non-zero if any module failed. JAVA_BQ_FAIL_FAST=true reverts
+        # to the strict per-module loop (the legacy compile-only path).
+        failed=""
+        if [ "$skip" = "true" ] || [ "${JAVA_BQ_FAIL_FAST:-false}" = "true" ]; then
+          for rel in $sample_paths; do
+            target="third_party/java-bigquery-tests/${rel}"
+            echo "==> mvn -B ${goals} ${mvn_test_flags} (in ${target})"
+            if _java_home_ok; then
+              ( cd "$target" && mvn -B "$goals" $mvn_test_flags )
+            else
+              mise x -- sh -ec "cd \"$target\" && mvn -B \"$goals\" $mvn_test_flags"
+            fi
+          done
+        else
+          set +e
+          for rel in $sample_paths; do
+            target="third_party/java-bigquery-tests/${rel}"
+            echo "==> mvn -B ${goals} ${mvn_test_flags} (in ${target})"
+            if _java_home_ok; then
+              ( cd "$target" && mvn -B "$goals" $mvn_test_flags )
+            else
+              mise x -- sh -ec "cd \"$target\" && mvn -B \"$goals\" $mvn_test_flags"
+            fi
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              echo "java-bigquery-tests: ${rel} mvn ${goals} FAILED (exit=${rc})" >&2
+              failed="${failed:+${failed} }${rel}"
+            fi
+          done
+          set -e
+          if [ -n "$failed" ]; then
+            echo ""
+            echo "java-bigquery-tests: failed modules:" >&2
+            for rel in $failed; do echo "  - $rel" >&2; done
+            exit 1
           fi
-        done
+        fi
 
   # bigframes snippet allowlist gate. CI uses this to keep the
   # signal narrow until BigFrames SQL parity grows; local devs can
