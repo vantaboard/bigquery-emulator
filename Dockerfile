@@ -95,6 +95,15 @@ ARG GOOGLESQL_PREBUILT_SHA256=""
 ###############################################################################
 FROM debian:${DEBIAN_VERSION}-slim AS engine-builder-bazel
 
+# Stage-wide SHELL switch to bash with `pipefail`. The very next RUN
+# pipes `curl ... | gpg --dearmor` to register the LLVM apt key; without
+# `pipefail`, dash would only report `gpg`'s exit status and a curl
+# failure (404, network blip, MITM rejection by `--fail`) would silently
+# install an empty/garbage keyring. The later RUN at the GoogleSQL
+# fetch step also needs bash for `<(...)` process substitution, so this
+# directive doubles as that stage's shell baseline.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Build deps: clang-18 (from apt.llvm.org) + libstdc++ headers + JDK
 # (Bazel needs Java) + git/curl/unzip for fetching bazelisk and the
 # googlesql sibling. Python 3 + zip are required by some of the Bazel
@@ -178,12 +187,11 @@ ARG GOOGLESQL_VERSION
 ARG GOOGLESQL_VERSION_PATCHED
 ARG GOOGLESQL_PREBUILT_URL
 ARG GOOGLESQL_PREBUILT_SHA256
-# Use bash for the fetch step: it relies on `<(...)` process
-# substitution and a few other constructs `dash` does not implement.
-# `-o pipefail` ensures pipelines (e.g. `sha256sum | awk`, `grep | head
-# | sed`) propagate upstream failures instead of swallowing them in the
-# last stage's exit code.
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# Bash + pipefail is already set at the top of this stage (see the
+# stage-level SHELL directive). The fetch RUN below relies on both:
+# `<(...)` process substitution for the tarball-entry validation loop,
+# and pipefail for the `sha256sum | awk` and `grep | head | sed`
+# pipelines.
 RUN set -eux; \
     if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then \
         if ! [[ "${GOOGLESQL_PREBUILT_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then \
