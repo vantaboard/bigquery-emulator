@@ -81,21 +81,23 @@ Header filter: `^(backend|binaries|frontend|tools/googlesql-prebuilt/smoke)/.*\.
 Without it, every Abseil / GoogleSQL / gRPC header pulled in by an
 include would emit findings the rule set was never tuned for.
 
-Posture: warning-only today. The CI job
+Posture: every configured check runs as an error
+(`WarningsAsErrors: '*'` in `.clang-tidy`, `-warnings-as-errors='*'`
+on the CLI in `task lint:cpp:tidy`). A finding fails CI; clear it
+in-tree or scope a `// NOLINT(check-name)` suppression with a
+reason. The CI job
 ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml))
-runs the lane with `continue-on-error: true`; the rollout plan
-flips the gate to required once the first sweep is clean and any
-intentional findings have been baselined.
+gates on this lane (no `continue-on-error`).
 
 ### `cppcheck` (`task lint:cpp:cppcheck`)
 
 Profile in [`taskfiles/lint.yml`](../../taskfiles/lint.yml):
 `--enable=warning,style,performance,portability` with
 `--inline-suppr` and `--error-exitcode=1`. Runs in the same slow
-CI lane as clang-tidy. cppcheck is well-positioned to find
-uninitialised state, bounds issues, resource leaks, and
-null-handling mistakes that the templated abstractions in
-clang-tidy can occasionally miss.
+CI lane as clang-tidy and is likewise blocking. cppcheck is
+well-positioned to find uninitialised state, bounds issues,
+resource leaks, and null-handling mistakes that the templated
+abstractions in clang-tidy can occasionally miss.
 
 ### Source-only checker (`task lint:cpp:source`)
 
@@ -207,10 +209,10 @@ using either: a bare `NOLINT` is rarely the right answer.
 | Job | Workflow | Posture |
 |---|---|---|
 | `build-and-test` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++) and `task lint:cpp:test`. |
-| `cpp-analysis` | [`ci.yml`](../../.github/workflows/ci.yml) | `continue-on-error: true`. Runs `task lint:cpp:cppcheck` today; the rollout plan adds `task lint:cpp:tidy` once the compile-commands generator is settled and the first sweep is clean. |
+| `cpp-analysis` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
 
-The local mirror is `task ci:run` (required-equivalent) and
-`task ci:cpp-analysis` (warning-only).
+The local mirror is `task ci:run`; the analysis lane on its own is
+`task ci:cpp-analysis`.
 
 ## Adding a new first-party C++ tree
 

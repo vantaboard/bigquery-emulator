@@ -5,14 +5,14 @@
 # (`tools/lint/cpp list`); the editor picks it up automatically
 # through clangd's `--clang-tidy` flag in `.vscode/settings.json`.
 #
-# Scope and rollout posture:
+# Scope:
 #
-#   * The plan (.cursor/plans/cpp_lint_rollout_*.plan.md) starts
-#     clang-tidy in WARNING-ONLY mode. CI does NOT enable
-#     `-warnings-as-errors=*` yet — the Taskfile leaves that flag
-#     off so the slow lane reports findings without blocking PRs
-#     until the first sweep is clean and selected checks have been
-#     baselined.
+#   * Every enabled check runs as an error. `WarningsAsErrors: '*'`
+#     below promotes the configured `Checks:` set to hard failures
+#     so a finding fails CI and the local pre-push gate. The user
+#     plans to clear remaining findings before each release and
+#     would rather catch them on the gating side than read them as
+#     advisory output.
 #   * Checks are picked from four buckets:
 #       1. correctness / runtime risk (clang-analyzer, bugprone,
 #          select cppcoreguidelines), 2. complexity (readability-function-size,
@@ -112,7 +112,12 @@ Checks: >
   google-runtime-int,
   google-runtime-operator,
 
-WarningsAsErrors: ''
+# Promote every configured check to an error. The `Checks:` list
+# above is the SOLE source of truth for what runs; this flag just
+# decides whether a hit is reported as a warning or as a hard
+# failure. We pick "error" so CI's slow lane is gating, not
+# advisory.
+WarningsAsErrors: '*'
 
 # Limit diagnostics to first-party headers. Without this, every
 # `#include` of an Abseil / gRPC / GoogleSQL header would emit a

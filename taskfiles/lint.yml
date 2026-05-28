@@ -231,13 +231,13 @@ tasks:
           echo 'lint:cpp:tidy: no first-party C++ files found' >&2
           exit 0
         fi
-        # `-warnings-as-errors=*` is intentionally NOT set here yet —
-        # the rollout plan (.cursor/plans/cpp_lint_rollout_*.plan.md)
-        # treats clang-tidy as warning-only until the first run is
-        # clean and selected checks have been baselined. CI sets the
-        # flag once that gate is reached.
+        # `-warnings-as-errors=*` mirrors the same flag baked into
+        # `.clang-tidy`; we set it on the CLI as well so an explicit
+        # `clang-tidy ...` invocation that happens to pick up a
+        # different config file still treats every finding as a
+        # hard failure.
         # shellcheck disable=SC2086  # intentional word-split for the file list
-        clang-tidy -p . $files
+        clang-tidy -p . -warnings-as-errors='*' $files
 
   cpp:compile-commands:
     desc: |

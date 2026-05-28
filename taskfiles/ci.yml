@@ -2,36 +2,43 @@
 # that runs in CI should also run via `task ci:run`, and vice versa.
 #
 # Usage: task ci (or task ci:run)
-#        task ci:cpp-analysis (the slow, warning-only C++ lane)
+#        task ci:cpp-analysis (the slow C++ lane on its own)
 version: "3"
 
 tasks:
   default:
-    desc: Run the same checks CI runs (lint:run, test, emulator:build-engine-bazel, emulator:build)
+    desc: Run the same checks CI runs (lint:run, test, emulator:build-engine-bazel, lint:cpp:test, cpp-analysis, emulator:build)
     cmds:
       - task: run
 
   run:
-    desc: Full CI gate (lint:run, test, emulator:build-engine-bazel, lint:cpp:test, emulator:build)
+    desc: Full CI gate (lint:run, test, emulator:build-engine-bazel, lint:cpp:test, cpp-analysis, emulator:build)
     # `lint:run` covers the fast Go + C++ format/source checks;
-    # `cpp-analysis` is intentionally NOT pulled into the blocking
-    # gate today (matches `.github/workflows/ci.yml`'s
-    # `continue-on-error: true` posture for that job). Run
-    # `task ci:cpp-analysis` locally when iterating on cppcheck /
-    # clang-tidy findings before promoting the lane to required.
+    # `cpp-analysis` is the slow but blocking secondary-analysis
+    # lane (cppcheck), which mirrors CI's required `cpp-analysis`
+    # job.
     #
-    # `lint:cpp:test` runs after the engine build so the Bazel disk
-    # cache is already warm; running it before the build would
-    # double the cold-build cost of the C++ tree.
+    # Order:
+    #   1. fast lint (gofmt, go vet, clang-format, source-only C++)
+    #   2. Go tests
+    #   3. Bazel engine build (warms the disk cache)
+    #   4. cc_test discovery + run (re-uses the warm cache)
+    #   5. cpp-analysis (cppcheck on first-party tree)
+    #   6. Go gateway build
+    #
+    # `lint:cpp:test` and `cpp-analysis` run after the engine build
+    # so the Bazel disk cache is already warm; running them before
+    # the build would double the cold-build cost of the C++ tree.
     cmds:
       - task: :lint:run
       - task: :test:run
       - task: :emulator:build-engine-bazel
       - task: :lint:cpp:test
+      - task: cpp-analysis
       - task: :emulator:build
 
   cpp-analysis:
-    desc: Slow C++ analysis lane (cppcheck; warning-only mirror of CI's `cpp-analysis` job)
+    desc: Slow C++ analysis lane (cppcheck mirror of CI's `cpp-analysis` job)
     # Mirror of the `cpp-analysis` job in `.github/workflows/ci.yml`.
     # clang-tidy is NOT included here because it requires a
     # `compile_commands.json` (`task lint:cpp:compile-commands`); CI

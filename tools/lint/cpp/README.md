@@ -39,13 +39,13 @@ well in this repo:
      the canonical pattern (`if (!s.ok()) return s.status();
      auto v = std::move(s).value();`) does not generate noise.
 
-These are deliberately conservative checks. The long-term mechanism
-for the same concerns is `clang-tidy`'s
+These are deliberately conservative checks. The compile-aware
+mechanism for the same concerns is `clang-tidy`'s
 `bugprone-unused-return-value`, `bugprone-unchecked-optional-access`,
-and the matching `[[nodiscard]]` annotations on first-party headers.
-The Go binary keeps `task lint:run` snappy and the rules
-language-agnostic-friendly, the way `tools/coverage` does for the
-coverage pipeline.
+and the matching `[[nodiscard]]` annotations on first-party headers
+(both gating in the slow CI lane). The Go binary keeps
+`task lint:run` snappy and the rules language-agnostic-friendly,
+the way `tools/coverage` does for the coverage pipeline.
 
 ## Subcommands
 

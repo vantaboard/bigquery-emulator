@@ -135,20 +135,8 @@ jobs:
         id: googlesql
         uses: ./.github/actions/setup-googlesql
         with:
-          # The `fromJSON(toJSON(vars))` round-trip silences the
-          # "Context access might be invalid" warning that the GitHub
-          # Actions VS Code extension (and the underlying
-          # actions/languageservices linter) emits for `vars.NAME`
-          # reads when it cannot prove the variable exists — typically
-          # because the editor is not authenticated against the repo
-          # (see github/vscode-github-actions#96, #222). The cast
-          # erases the static shape of the `vars` context, so the
-          # linter falls back to "any" and stops warning. Both repo
-          # vars are optional: when either is unset, the composite
-          # action sees an empty string and falls back to building
-          # GoogleSQL from a sibling source checkout.
-          prebuilt-url: ${{ fromJSON(toJSON(vars)).GOOGLESQL_PREBUILT_URL }}
-          prebuilt-sha256: ${{ fromJSON(toJSON(vars)).GOOGLESQL_PREBUILT_SHA256 }}
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
         env:
@@ -181,15 +169,11 @@ jobs:
 
   cpp-analysis:
     # Slow C++ analysis lane. Runs in parallel with `build-and-test`
-    # and does NOT block PRs while the rollout is bedding in:
-    # `continue-on-error: true` keeps the job's failure status from
-    # marking the workflow as failed. Once we have demonstrated a
-    # clean run on `main` and triaged the existing findings, flip
-    # this to required (and remove the `continue-on-error` flag) per
-    # the rollout plan in `.cursor/plans/cpp_lint_rollout_*.plan.md`.
-    name: cpp-analysis (cppcheck, warning-only)
+    # and is REQUIRED — a finding fails the workflow. The user
+    # plans to clear remaining findings before each release and
+    # would rather have the gate enforced than read advisory output.
+    name: cpp-analysis (cppcheck)
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       contents: read
     steps:
