@@ -7,6 +7,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers/datatransfer"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 	"github.com/vantaboard/bigquery-emulator/gateway/seed"
@@ -151,50 +152,15 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		mux.HandleFunc("POST "+base+"/{workflowId}", handlers.MigrationWorkflowCustomMethodPOST(deps))
 	}
 
-	// BigQuery Data Transfer Service v1. Same shell posture as the
-	// migration surface: empty list pages so client probes succeed,
-	// 404 for specific resources, 501 for create.
-	// See gateway/handlers/data_transfer.go.
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/dataSources",
-		handlers.DataTransferDataSourceList(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/dataSources/{dataSourceId}",
-		handlers.DataTransferDataSourceGet(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/locations/{location}/dataSources",
-		handlers.DataTransferDataSourceList(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/locations/{location}/dataSources/{dataSourceId}",
-		handlers.DataTransferDataSourceGet(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/transferConfigs",
-		handlers.DataTransferConfigList(deps),
-	)
-	mux.HandleFunc(
-		"POST /v1/projects/{projectId}/transferConfigs",
-		handlers.DataTransferConfigCreate(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/transferConfigs/{configId}",
-		handlers.DataTransferConfigGet(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/locations/{location}/transferConfigs",
-		handlers.DataTransferConfigList(deps),
-	)
-	mux.HandleFunc(
-		"POST /v1/projects/{projectId}/locations/{location}/transferConfigs",
-		handlers.DataTransferConfigCreate(deps),
-	)
-	mux.HandleFunc(
-		"GET /v1/projects/{projectId}/locations/{location}/transferConfigs/{configId}",
-		handlers.DataTransferConfigGet(deps),
-	)
+	// BigQuery Data Transfer Service v1. The Phase B port of
+	// go-googlesql's `api/datatransfer/` package replaces the empty
+	// shell that lived in gateway/handlers/data_transfer.go: dataSources
+	// catalog (`scheduled_query`, `amazon_s3`), in-memory CRUD for
+	// transferConfigs + transferRuns, and the AIP-136 custom methods
+	// (`scheduleRuns`, `checkValidCreds`, `startManualRuns`). See
+	// `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`.
+	dts := datatransfer.NewHandler(nil)
+	dts.Register(mux)
 
 	// Seed API: registered only when explicitly enabled via
 	// --enable-seed-api. The routes refuse non-loopback callers
