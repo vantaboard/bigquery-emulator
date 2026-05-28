@@ -89,6 +89,37 @@ bigquery-emulator/
   LICENSE               # MIT
 ```
 
+## Local development setup
+
+Most of the toolchain is pinned in [`mise.toml`](./mise.toml) and
+fetched by a single command:
+
+```bash
+mise install   # or: task tools:install
+```
+
+That covers Go, Bazel, `task`, `clang` (the build toolchain `mise`
+materializes for editor / dev use; Bazel itself still pins the system
+`/usr/bin/clang` for hermeticity), `buf`, `golangci-lint`,
+`shellcheck`, `goreleaser`, `gcloud`, `hadolint`, the Maven / Java
+JDK, and the Python interpreter used by the third-party harnesses.
+
+A few C++ tooling packages are **not** distributed via `mise` and have
+to be installed through the system package manager. On Ubuntu / Debian:
+
+```bash
+sudo apt install clang-format clang-tidy cppcheck
+```
+
+These are required for the C++ lint gates (`task lint:cpp:format`,
+`task lint:cpp:tidy`, `task lint:cpp:cppcheck`) and for matching what
+runs in [CI](./.github/workflows/ci.yml). On macOS use Homebrew
+(`brew install clang-format llvm cppcheck`); other distributions
+ship equivalent packages under similar names.
+
+For the full lint policy — commands, thresholds, baselines, and
+suppression markers — see [`docs/dev/cpp-lint.md`](./docs/dev/cpp-lint.md).
+
 ## Quickstart
 
 > Right now only the Go side builds and runs. Engine wiring is Phase 2 in
