@@ -226,6 +226,8 @@ var defaultProfiles = []string{ProfileDuckDB}
 // shape (required fields, exclusivity of expectation, known profile
 // names) so callers can rely on the returned Fixture being usable.
 func Load(path string) (*Fixture, error) {
+	// #nosec G304 -- path is fixture-discovery output controlled by
+	// --fixtures flag in a CLI dev tool.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)

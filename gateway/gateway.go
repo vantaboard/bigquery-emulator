@@ -248,6 +248,8 @@ func (g *Gateway) startEngine(ctx context.Context) error {
 		"--host_port", g.opts.EngineAddress,
 	}
 	args = append(args, g.opts.EngineArgs...)
+	// #nosec G204 -- engine binary path is operator-supplied via
+	// --engine_binary.
 	cmd := exec.Command(g.opts.EngineBinary, args...)
 	if g.opts.CopyEngineStdout {
 		cmd.Stdout = os.Stdout

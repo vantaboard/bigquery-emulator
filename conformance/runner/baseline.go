@@ -91,7 +91,7 @@ func writeFixture(fx *Fixture) error {
 		return fmt.Errorf("marshal fixture: %w", err)
 	}
 	tmp := fx.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, fx.Path); err != nil {

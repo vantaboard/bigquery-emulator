@@ -249,6 +249,8 @@ func prepareSpawnArgs(opts HarnessOptions, p Profile) (args []string, dataDir, a
 // launchEngine fires up the configured engine binary with the
 // pre-built argv and the operator-supplied stdio sinks.
 func launchEngine(opts HarnessOptions, args []string) (*exec.Cmd, error) {
+	// #nosec G204 -- emulator binary path is operator-supplied via
+	// --engine-binary; runner is a CLI dev tool.
 	cmd := exec.Command(opts.EngineBinary, args...)
 	cmd.Stdout = opts.EngineStdout
 	cmd.Stderr = opts.EngineStderr

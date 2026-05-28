@@ -126,6 +126,8 @@ func repoRoot() (string, error) {
 // "first party" means. Filtering server-side via globs would let a
 // pattern bug silently include vendored code.
 func gitLsFiles(dir string) ([]string, error) {
+	// #nosec G204 -- 'git' is a fixed binary; dir is the lint tool's
+	// repo root.
 	cmd := exec.Command("git", "-C", dir, "ls-files")
 	out, err := cmd.Output()
 	if err != nil {
