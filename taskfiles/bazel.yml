@@ -180,6 +180,54 @@ tasks:
               {{.TARGETS}}
         '
 
+  cache:status:
+    desc: |
+      Print disk usage of the local Bazel disk cache and the unpacked
+      googlesql-prebuilt cache (the two `.cache/` directories the build
+      writes to). Reads `du -sh` on each path, plus the action count for
+      the disk cache so you can tell at a glance whether it is warm.
+    cmds:
+      - |
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        echo "=== .cache/bazel-disk (--disk_cache, see .bazelrc) ==="
+        if [ -d .cache/bazel-disk ]; then
+          du -sh .cache/bazel-disk 2>/dev/null || true
+          n=$(find .cache/bazel-disk -type f 2>/dev/null | wc -l)
+          echo "action cache entries: $n"
+        else
+          echo "(absent — populated on next bazel build/test/run/coverage)"
+        fi
+        echo
+        echo "=== .cache/googlesql-prebuilt (--config=googlesql-prebuilt) ==="
+        if [ -d .cache/googlesql-prebuilt ]; then
+          du -sh .cache/googlesql-prebuilt 2>/dev/null || true
+        else
+          echo "(absent — populate with task googlesql:fetch-prebuilt or task googlesql:stage-bazel)"
+        fi
+
+  cache:clear:
+    desc: |
+      Wipe the local Bazel disk cache at .cache/bazel-disk. Use when
+      reclaiming disk space or when a corrupt action output needs to be
+      evicted (rare; usually a `bazel clean` is enough). Does NOT touch
+      `.cache/googlesql-prebuilt/` — use `task googlesql:clean-cache`
+      for that (or `rm -rf .cache/googlesql-prebuilt/`). Does NOT shut
+      down the running bazel server; run `task bazel:shutdown` first if
+      you want to invalidate any in-memory action cache too.
+    cmds:
+      - |
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -d .cache/bazel-disk ]; then
+          echo "(.cache/bazel-disk does not exist — nothing to clear)"
+          exit 0
+        fi
+        before=$(du -sh .cache/bazel-disk 2>/dev/null | awk '{print $1}')
+        echo "before: $before in .cache/bazel-disk"
+        rm -rf .cache/bazel-disk
+        echo "after:  (cache cleared; will repopulate on next bazel build)"
+
   coverage:
     desc: |
       Throttled `bazel coverage` wrapper. Set TARGETS="//path/to:target ..."

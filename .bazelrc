@@ -117,3 +117,43 @@ build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 # `--config=googlesql-prebuilt` can trust the cache contents.
 build:googlesql-prebuilt --override_module=googlesql=%workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
+
+# ---------------------------------------------------------------------------
+# Local disk cache.
+#
+# Even with `--config=googlesql-prebuilt` we still compile the full
+# Abseil / Protobuf (runtime + protoc) / gRPC / BoringSSL / RE2 / GoogleTest
+# trees from source on a cold tree — that's intentional (see
+# `docs/dev/googlesql-prebuilt/headers-and-libraries.md` for why those
+# third-party deps stay Bzlmod-resolved instead of bundled into
+# `libgooglesql.a`). The lever for "don't pay that cost on every cold
+# checkout" is Bazel's local disk cache: action outputs land here keyed
+# by their action cache hash, so the second build of any of those TUs is
+# a cache hit even across `bazel clean` and across fresh worktrees.
+#
+# Path is workspace-relative on purpose:
+#   - Different workspaces / branches may pin different MODULE.bazel
+#     versions; sharing a single global cache across workspaces would
+#     just create thrash on every dep bump.
+#   - `task bazel:cache:clear` should only ever delete THIS workspace's
+#     cache, never a sibling clone's.
+#   - The `.cache/` prefix matches the existing googlesql-prebuilt cache
+#     location (see `.gitignore` and `--config=googlesql-prebuilt`
+#     above), so a single `rm -rf .cache/` resets every Bazel-related
+#     local cache in one command.
+#
+# Sizing: a full cold `task emulator:build-engine:bazel` populates
+# roughly 6-10 GiB. Bazel does NOT garbage-collect this directory
+# automatically (https://github.com/bazelbuild/bazel/issues/5139); use
+# `task bazel:cache:clear` to reclaim space when needed.
+#
+# Why this is also under `build:` (not `common:`): action-cache hashes
+# differ between `bazel build`, `bazel test`, and `bazel coverage` due
+# to coverage instrumentation and test runfiles. Sharing a single disk
+# cache across all three is correct (Bazel keys by hash), so this lives
+# under `build` so the `test`/`run`/`coverage` lines below also inherit
+# it via Bazel's flag inheritance.
+build --disk_cache=%workspace%/.cache/bazel-disk
+test  --disk_cache=%workspace%/.cache/bazel-disk
+run   --disk_cache=%workspace%/.cache/bazel-disk
+coverage --disk_cache=%workspace%/.cache/bazel-disk
