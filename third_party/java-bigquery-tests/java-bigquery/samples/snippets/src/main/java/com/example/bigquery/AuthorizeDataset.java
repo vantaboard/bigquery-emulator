@@ -20,7 +20,6 @@ package com.example.bigquery;
 import com.google.cloud.bigquery.Acl;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.Dataset;
 import com.google.cloud.bigquery.DatasetId;
 import com.google.common.collect.ImmutableList;
@@ -43,7 +42,7 @@ public class AuthorizeDataset {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
 
       // Get both source and user dataset's references
       Dataset sourceDataset = bigquery.getDataset(sourceDatasetId);

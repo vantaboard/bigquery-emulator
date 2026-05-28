@@ -19,7 +19,6 @@ package com.example.bigquery;
 // [START bigquery_delete_table]
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.TableId;
 
 public class DeleteTable {
@@ -35,7 +34,7 @@ public class DeleteTable {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
       boolean success = bigquery.delete(TableId.of(datasetName, tableName));
       if (success) {
         System.out.println("Table deleted successfully");

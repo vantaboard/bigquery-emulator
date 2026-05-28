@@ -20,7 +20,6 @@ package com.example.bigquery;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQuery.DatasetDeleteOption;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.DatasetId;
 
 public class DeleteDataset {
@@ -36,7 +35,7 @@ public class DeleteDataset {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
 
       DatasetId datasetId = DatasetId.of(projectId, datasetName);
       boolean success = bigquery.delete(datasetId, DatasetDeleteOption.deleteContents());

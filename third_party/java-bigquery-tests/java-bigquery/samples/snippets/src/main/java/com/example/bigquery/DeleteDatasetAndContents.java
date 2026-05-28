@@ -19,7 +19,6 @@ package com.example.bigquery;
 // [START bigquery_delete_dataset_and_contents]
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.DatasetId;
 
 // Sample to delete dataset with contents.
@@ -36,7 +35,7 @@ public class DeleteDatasetAndContents {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
 
       DatasetId datasetId = DatasetId.of(projectId, datasetName);
       // Use the force parameter to delete a dataset and its contents

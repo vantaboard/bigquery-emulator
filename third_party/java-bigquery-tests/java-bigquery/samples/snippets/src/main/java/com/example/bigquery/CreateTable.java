@@ -19,7 +19,6 @@ package com.example.bigquery;
 // [START bigquery_create_table]
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.Schema;
 import com.google.cloud.bigquery.StandardSQLTypeName;
@@ -45,7 +44,7 @@ public class CreateTable {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
 
       TableId tableId = TableId.of(datasetName, tableName);
       TableDefinition tableDefinition = StandardTableDefinition.of(schema);

@@ -19,7 +19,6 @@ package com.example.bigquery;
 // [START bigquery_query_materialized_view]
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
-import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.QueryJobConfiguration;
 import com.google.cloud.bigquery.TableResult;
 
@@ -37,7 +36,7 @@ public class QueryMaterializedView {
     try {
       // Initialize client that will be used to send requests. This client only needs to be created
       // once, and can be reused for multiple requests.
-      BigQuery bigquery = BigQueryOptions.getDefaultInstance().getService();
+      BigQuery bigquery = BqOpts.builder().build().getService();
 
       TableResult results = bigquery.query(QueryJobConfiguration.of(query));
       results
