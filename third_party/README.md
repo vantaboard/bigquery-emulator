@@ -432,17 +432,63 @@ available?"; rerun the table when adding more.
 In-tree BigQuery DataFrames library and snippet tests at
 [`python-bigquery-dataframes-tests`](python-bigquery-dataframes-tests).
 
-Only `samples/snippets` (nox session `py`) is kept; the tree includes
-`bigframes/` and `third_party/bigframes_vendored/` for editable
-`pip install -e`. `samples/snippets/conftest.py` wires anonymous BigQuery
-+ Storage clients, gRPC overrides from `BIGQUERY_STORAGE_GRPC_ENDPOINT`,
-and an allowlist when `BIGQUERY_EMULATOR_HOST` is set.
+**Status: scaffold + on-demand sync.** The committed tree mirrors the
+upstream layout (`LICENSE`, `README.rst`, stub `pyproject.toml`,
+`samples/snippets/{noxfile.py,noxfile_config.py,requirements.txt}`,
+`bigframes/` directory shells, `third_party/bigframes_vendored/`
+license/metadata stubs) but the actual `.py` source — including
+`samples/snippets/*_test.py` and the `bigframes/` package itself — is
+*not* checked in, matching the sibling `python-bigquery-tests` policy.
+`task thirdparty:python-bigquery-dataframes-tests` fails fast at the
+`samples/snippets/*_test.py` precondition and asks you to populate the
+tree first; without the sync, the noxfile's discovery glob would
+silently print "No tests found, skipping directory." and exit 0.
+
+To populate (or refresh) the `.py` source, run the sync script from the
+repo root:
+
+```bash
+./scripts/sync_python_bigquery_dataframes_tests.sh                          # ref=main (default)
+DATAFRAME_BIGQUERY_REF=v1.42.0 ./scripts/sync_python_bigquery_dataframes_tests.sh   # pin to a tag
+DATAFRAME_BIGQUERY_REF=abcd1234 ./scripts/sync_python_bigquery_dataframes_tests.sh  # pin to a SHA
+./scripts/sync_python_bigquery_dataframes_tests.sh --dry-run                # preview only
+```
+
+The script clones [`googleapis/python-bigquery-dataframes`](https://github.com/googleapis/python-bigquery-dataframes)
+into a temp dir at `${DATAFRAME_BIGQUERY_REF:-main}`, rsyncs only `*.py`
+files under `bigframes/`, `samples/`, `tests/`, and
+`third_party/bigframes_vendored/`, plus root-level `noxfile.py` /
+`noxfile_config.py` / `conftest.py` / `setup.py`, then prints the
+resolved upstream commit SHA. It also pulls `samples/*/requirements*.txt`
+and `testing/constraints-*.txt` (the latter only when present). It
+never overwrites the curated scaffold (stub `pyproject.toml`, `LICENSE`,
+`README.rst`, vendored license/metadata under
+`third_party/bigframes_vendored/`), so refreshes stay diff-bounded.
+Synced `*.py` files are committed to the repo (same policy as the
+sibling `python-bigquery-tests` tree); `.gitignore` only covers
+`__pycache__/`, `.nox/`, `.venv/`, and similar regenerable caches.
+
+`setup.py` is part of the top-level allowlist because the committed
+scaffold ships only a 3-line stub `pyproject.toml`. With upstream's
+`setup.py` present, `INSTALL_LIBRARY_FROM_SOURCE=True` (set by the
+Task target) makes the noxfile's `_get_repo_root()` walker stop at the
+scaffold root and `pip install -e .` resolves to bigframes-from-source
+instead of walking up to `bigquery-emulator/.git`.
+
+Once the snippets are present, the task runs:
 
 ```bash
 task thirdparty:python-bigquery-dataframes-tests
-# Narrow CI gate (single allowlisted snippet):
+# Narrow CI gate (curated emulator-passing allowlist):
 task thirdparty:python-bigquery-dataframes-snippet-gate
 ```
+
+Only `samples/snippets` (nox session `py`) is invoked; the post-sync
+tree includes `bigframes/` and `third_party/bigframes_vendored/` for
+editable `pip install -e`. `samples/snippets/conftest.py` wires
+anonymous BigQuery + Storage clients, gRPC overrides from
+`BIGQUERY_STORAGE_GRPC_ENDPOINT`, and an allowlist when
+`BIGQUERY_EMULATOR_HOST` is set.
 
 Python **3.10–3.13** (vendored bigframes pins do not support 3.14); set
 `DATAFRAME_SAMPLES_PYTHON` if your default `python3` is 3.14. The task

@@ -573,8 +573,22 @@ tasks:
         set -e
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        if [ ! -f third_party/python-bigquery-dataframes-tests/samples/snippets/noxfile.py ]; then
-          echo "third_party/python-bigquery-dataframes-tests missing" >&2
+        scaffold="third_party/python-bigquery-dataframes-tests"
+        if [ ! -f "${scaffold}/samples/snippets/noxfile.py" ]; then
+          echo "${scaffold} scaffold missing" >&2
+          exit 1
+        fi
+        # The scaffold ships only license/metadata stubs; without a sync,
+        # nox would silently print "No tests found, skipping directory."
+        # and exit 0 (the noxfile globs **/test_*.py / **/*_test.py).
+        # Mirror the sibling python-bigquery-tests fail-fast UX so callers
+        # get a clear "run the sync script" pointer instead of a no-op.
+        if ! find "${scaffold}/samples/snippets" -maxdepth 4 \
+             \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit | grep -q .; then
+          echo "${scaffold}/samples/snippets has no *_test.py yet." >&2
+          echo "  This tree vendors the scaffold but not the upstream snippets." >&2
+          echo "  Run: scripts/sync_python_bigquery_dataframes_tests.sh (default ref: main)" >&2
+          echo "  See third_party/README.md (python-bigquery-dataframes-tests section)." >&2
           exit 1
         fi
       - task: emulator-up
