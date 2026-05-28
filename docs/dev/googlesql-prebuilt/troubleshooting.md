@@ -1,7 +1,7 @@
-# GoogleSQL Prebuilt — Troubleshooting (Phase 6)
+# GoogleSQL Prebuilt — Troubleshooting
 
 Short troubleshooting reference for the GoogleSQL prebuilt path.
-Routes the Phase 5 validator's `FAIL_*` tokens (emitted by
+Routes the safety-gate validator's `FAIL_*` tokens (emitted by
 [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py))
 and the most common operator-visible failure shapes to the **likely
 owner** so the right person picks it up. This page intentionally
@@ -16,7 +16,7 @@ actually do about it" step, follow the links into
 | **Artifact producer** | The `.tar.gz` + `manifest.json` published under `googlesql-prebuilt/v<...>+gs-<...>` GitHub Release. | When the artifact itself is corrupt, drifted from its manifest, or mis-claimed its platform / identity / schema. |
 | **Consumer pin** | `vars.GOOGLESQL_PREBUILT_URL` / `_SHA256` (CI) and `env.RELEASE_GOOGLESQL_PREBUILT_URL` / `_SHA256` (release.yml). | When the pin references the wrong artifact (URL points at a stale release, SHA mismatches the asset, or no pin is set on a `fail-on-source-fallback: true` lane). |
 | **Local environment** | The developer machine. The prebuilt cache at `.cache/googlesql-prebuilt/`, the sibling `../googlesql/` checkout, the host's libc / compiler / `nproc` / `MemTotal`. | When the failure reproduces only on one host, or the cache state is the suspect. |
-| **Compatibility surface** | The Phase 1 docs under this directory. | When the artifact is structurally fine but the consumer expects more labels / headers / manifest fields than the artifact carries (or vice versa). |
+| **Compatibility surface** | The compatibility-surface docs under this directory. | When the artifact is structurally fine but the consumer expects more labels / headers / manifest fields than the artifact carries (or vice versa). |
 
 ## Validator FAIL_* tokens
 
@@ -127,7 +127,7 @@ consumer side — diagnose normally; the prebuilt pin is fine.
 ### Engine boot fails (`emulator_main --version` crashes) after a pin bump
 
 **Likely owner: artifact producer (ABI drift).** Engine startup is
-the Phase 5 smoke gate. A regression here strongly implies a
+the safety-gate smoke check. A regression here strongly implies a
 libstdc++ / abseil / protobuf ABI drift between the new artifact and
 the runtime environment. Repin to the prior artifact; if the
 regression persists, the change is in the emulator and the prebuilt
@@ -167,7 +167,7 @@ itself names the supported escape hatches in every failure block:
 
 ## See also
 
-- [`rollback.md`](rollback.md) — Phase 5 rollback playbook (full per-token rollback procedure, parity-failure response, revert-prebuilt-adoption procedure).
+- [`rollback.md`](rollback.md) — safety-gate rollback playbook (full per-token rollback procedure, parity-failure response, revert-prebuilt-adoption procedure).
 - [`maintainer-runbook.md`](maintainer-runbook.md) — publish / pin / verify (the "how do I get a clean known-good artifact" flow).
 - [`upgrade-procedure.md`](upgrade-procedure.md) — full upgrade flow (when a `FAIL_SCHEMA` or `FAIL_PLATFORM` traces back to an upstream bump that broke the surface).
 - [`performance.md`](performance.md) — for the "build is slow" symptoms that are **not** the prebuilt path's fault.

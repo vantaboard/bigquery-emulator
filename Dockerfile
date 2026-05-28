@@ -50,7 +50,7 @@ ARG DEBIAN_VERSION=bookworm
 # match the version pinned in MODULE.bazel. The patched value works
 # around gazelle's strict semver parser; see the top-of-file note in
 # MODULE.bazel and the same patch applied in `.github/workflows/ci.yml`
-# and `.github/workflows/conformance.yml`. With the Phase 4
+# and `.github/workflows/conformance.yml`. With the
 # `GOOGLESQL_PREBUILT_URL` build arg set, this is unused.
 ARG GOOGLESQL_VERSION=2026.01.1
 ARG GOOGLESQL_VERSION_PATCHED=2026.1.1
@@ -59,7 +59,7 @@ ARG BAZELISK_VERSION=v1.27.0
 # Engine source selector. Two valid values:
 #   * `bazel` (default): run the canonical `cc_binary` build inside the
 #     image. By default this consumes a published GoogleSQL prebuilt
-#     artifact via the Phase 4 `GOOGLESQL_PREBUILT_URL` /
+#     artifact via the `GOOGLESQL_PREBUILT_URL` /
 #     `GOOGLESQL_PREBUILT_SHA256` build args; if those are unset, falls
 #     back to a sibling `google/googlesql` clone (slow first cut,
 #     ~25-55 min cold cache). What `docker build .` does without any
@@ -73,7 +73,7 @@ ARG BAZELISK_VERSION=v1.27.0
 #     `task emulator:build-engine:bazel` produces both.
 ARG ENGINE_SOURCE=bazel
 
-# Phase 4 of the `googlesql-prebuilt` rollout: when both args are set,
+# CI/Docker/release prebuilt-mode wiring: when both args are set,
 # the `engine-builder-bazel` stage downloads the published GoogleSQL
 # prebuilt artifact, verifies its SHA-256, and unpacks it into the
 # `.cache/googlesql-prebuilt/` cache the `--config=googlesql-prebuilt`
@@ -148,15 +148,17 @@ COPY frontend ./frontend
 COPY proto ./proto
 COPY third_party ./third_party
 
-# Phase 5 centralized validator. Copied in BEFORE the GoogleSQL fetch
-# step so the in-container fetch can run the same Schema/identity/payload
-# gates the host-side `task googlesql:fetch-prebuilt` runs. Touching any
-# of these tools busts only the validate step's layer — the (expensive)
-# bazel build layer below stays cached.
+# Centralized safety-gate validator. Copied in BEFORE the GoogleSQL
+# fetch step so the in-container fetch can run the same
+# Schema/identity/payload gates the host-side
+# `task googlesql:fetch-prebuilt` runs. Touching any of these tools
+# busts only the validate step's layer — the (expensive) bazel build
+# layer below stays cached.
 COPY tools/googlesql-prebuilt ./tools/googlesql-prebuilt
 
-# Resolve a GoogleSQL build mode (Phase 4 of the `googlesql-prebuilt`
-# rollout — see `docs/dev/googlesql-prebuilt/README.md`):
+# Resolve a GoogleSQL build mode (the CI/Docker/release track of the
+# `googlesql-prebuilt` rollout — see
+# `docs/dev/googlesql-prebuilt/README.md`):
 #
 #   * If `GOOGLESQL_PREBUILT_URL` + `GOOGLESQL_PREBUILT_SHA256` are
 #     set, fetch + verify (SHA gate) + unpack into
@@ -220,10 +222,10 @@ RUN set -eux; \
         mv "$unpack/googlesql_prebuilt_linux_amd64" "$cache_root/googlesql_prebuilt_linux_amd64"; \
         echo "${GOOGLESQL_PREBUILT_SHA256}  artifact.tar.gz" > "$cache_root/googlesql_prebuilt_linux_amd64.tarball.sha256"; \
         rm -rf "$tmp"; \
-        # Phase 5 centralized validator — schema, identity, platform,
-        # payload SHA, wrapper-presence gates. Anything failing here is
-        # a hard error: the Dockerfile refuses to proceed to the bazel
-        # build with a partially-valid cache.
+        # Centralized safety-gate validator — schema, identity,
+        # platform, payload SHA, wrapper-presence gates. Anything
+        # failing here is a hard error: the Dockerfile refuses to
+        # proceed to the bazel build with a partially-valid cache.
         python3 tools/googlesql-prebuilt/validate_artifact.py \
             --repo-root "$cache_root/googlesql_prebuilt_linux_amd64" \
             --summary-line \

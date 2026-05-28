@@ -1,5 +1,5 @@
-# GoogleSQL prebuilt artifact producer (Phase 2 of the
-# `googlesql-prebuilt` rollout — see
+# GoogleSQL prebuilt artifact producer (the artifact-producer
+# pipeline of the `googlesql-prebuilt` rollout — see
 # `docs/dev/googlesql-prebuilt/README.md`).
 #
 # This workflow builds the @googlesql_prebuilt_linux_amd64 external
@@ -10,15 +10,16 @@
 # Manual dispatch only for now. Automatic triggers (e.g. on a
 # `googlesql-prebuilt/*` tag push) can be added once the artifact
 # naming, retention, and overwrite semantics have shipped in a real
-# release. Phase 2 deliberately does NOT change normal emulator
-# builds, the CI lane in `ci.yml`, the conformance lane, the release
-# workflow, or Docker builds. Consumer adoption is Phase 3+.
+# release. The producer pipeline deliberately does NOT change
+# normal emulator builds, the CI lane in `ci.yml`, the conformance
+# lane, the release workflow, or Docker builds. Consumer adoption
+# follows in the consumer-wiring + CI/Docker/release tracks.
 #
 # Publication medium decision: GitHub Release assets (single .tar.gz +
 # sidecar .manifest.json + .sha256). Rationale (also in
 # `tools/googlesql-prebuilt/README.md`):
 #
-#   - The Phase 1 manifest contract (`manifest.md`) names `.tar.gz` as
+#   - The compatibility-surface manifest contract (`manifest.md`) names `.tar.gz` as
 #     the on-disk distribution format and pins the consumer via
 #     `http_archive(sha256 = ..., strip_prefix = ...)`. GitHub Release
 #     assets fit `http_archive` directly: each asset has a stable URL
@@ -28,7 +29,7 @@
 #   - GHCR OCI artifacts are appealing for digest-pinning but require
 #     consumers to wire an OCI puller (`oras`, `crane`, or Bazel's
 #     experimental `oci` rule) into their MODULE.bazel resolution
-#     path. We may layer GHCR on top later — a Phase 5 addendum —
+#     path. We may layer GHCR on top later — a safety-gate addendum —
 #     when source-vs-prebuilt parity is in CI and the consumer side
 #     is stable enough that introducing a second medium is safe.
 #   - GitHub Releases retain artifacts indefinitely by default and
@@ -200,14 +201,14 @@ jobs:
             --expected-artifact-version "${{ inputs.artifact_version }}" \
             --smoke-mode=link
 
-      - name: Verify via Bazel wrappers (full Phase 3 consume path)
+      - name: Verify via Bazel wrappers (full consumer-wiring consume path)
         # Second smoke variant: build a tiny cc_binary against the
         # UNPACKED artifact's wrapper cc_library targets. This is the
         # strongest test of the layout — it exercises the cc_import
         # private archive deps, the strip_include_prefix, and the
         # Bzlmod-resolved abseil/protobuf pins. Continue-on-error
         # is intentionally OFF: failing this means the artifact is
-        # not Phase 3-consumable, so we should not publish.
+        # not consumer-wiring-consumable, so we should not publish.
         run: |
           set -euo pipefail
           cd bigquery-emulator

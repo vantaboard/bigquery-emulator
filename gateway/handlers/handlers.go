@@ -4,7 +4,8 @@
 // return http.StatusNotImplemented. They exist so that:
 //
 //   - The route table in gateway/server.go is exhaustive and easy to scan,
-//     which doubles as a checklist for ROADMAP.md Phase 1.
+//     which doubles as a checklist for the gateway-HTTP-surface section of
+//     ROADMAP.md.
 //   - Client libraries get a structurally-valid BigQuery error envelope
 //     instead of a 404 when they hit something we have not implemented yet.
 //   - Each handler can be flipped to a real implementation in isolation.
@@ -26,8 +27,8 @@ import (
 //
 // Catalog and Query are the engine-side gRPC clients defined in
 // proto/emulator.proto; both are nil when the gateway is started with
-// --engine_binary="" (Phase 1 / unit-test mode) and handlers must
-// nil-check before dispatching to them.
+// --engine_binary="" (gateway-only / unit-test mode) and handlers
+// must nil-check before dispatching to them.
 type Dependencies struct {
 	// Catalog is the gRPC client used by datasets/tables/tabledata
 	// handlers to mirror catalog mutations into the engine.

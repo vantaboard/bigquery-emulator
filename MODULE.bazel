@@ -6,8 +6,8 @@
 # `cloud-spanner-emulator` builds the same way, so the C++ engine of
 # bigquery-emulator follows suit.
 #
-# GoogleSQL — two-mode dependency selection (Phase 3 of the
-# `googlesql-prebuilt` rollout, see
+# GoogleSQL — two-mode dependency selection (the consumer-wiring
+# track of the `googlesql-prebuilt` rollout, see
 # `docs/dev/googlesql-prebuilt/README.md`).
 #
 # Mode 1: source (DEFAULT, the path declared below).
@@ -19,9 +19,10 @@
 #   registry hop). Used today by `task emulator:build-engine:bazel`
 #   and the existing CI/Docker/release lanes.
 #
-# Mode 2: prebuilt (OPTIONAL, opt-in for now; Phase 4 owns the broad
-#         rollout of switching defaults / CI / Docker / release).
-#   The Phase 2 producer
+# Mode 2: prebuilt (OPTIONAL, opt-in for now; the CI/Docker/release
+#         track owns the broad rollout of switching defaults / CI /
+#         Docker / release).
+#   The artifact-producer pipeline
 #   (`tools/googlesql-prebuilt/`) publishes a `linux/amd64` tarball
 #   per `(artifact_version, googlesql_sha)` pair. The unpacked
 #   tarball declares `module(name = "googlesql", version = ...)` so a
@@ -69,7 +70,7 @@ module(
 # Default mode: SOURCE. Built from the sibling checkout
 # (`../googlesql`) via `local_path_override`. Override at build time
 # (e.g. `--config=googlesql-prebuilt` from `.bazelrc`) to consume the
-# Phase 2 prebuilt artifact instead — see the file header for the
+# prebuilt artifact instead — see the file header for the
 # two-mode story.
 #
 # Dev workflow (source mode): clone

@@ -93,7 +93,7 @@ func (e *EmulatorEnv) Close() error {
 }
 
 // HarnessOptions configures how the runner spins up the emulator for
-// one fixture × profile execution. Callers either set EngineBinary
+// one fixture x profile execution. Callers either set EngineBinary
 // (the runner spawns its own emulator subprocess and tears it down
 // after the fixture) or ConnectAddress (the runner dials an
 // already-running engine on `host:port`).

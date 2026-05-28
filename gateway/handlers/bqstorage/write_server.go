@@ -1,7 +1,7 @@
-// Package bqstorage is the Phase B skeleton for the BigQuery Storage
-// Write API surface (gRPC, exposed at the storage gRPC port per
-// docker-compose.yml).  The gRPC layer is intentionally NOT
-// registered in this skeleton because doing so would require:
+// Package bqstorage is the shallow-emulator skeleton for the
+// BigQuery Storage Write API surface (gRPC, exposed at the storage
+// gRPC port per docker-compose.yml). The gRPC layer is intentionally
+// NOT registered in this skeleton because doing so would require:
 //
 //  1. Adding `cloud.google.com/go/bigquery/storage/apiv1/storagepb`
 //     (~30 generated proto files for the streaming Write API) and the
@@ -13,12 +13,12 @@
 //     natural integration point; that surface does not yet expose
 //     a streaming-friendly entry from the Go gateway.
 //
-// Both are well outside Phase B's "shallow port" budget per
+// Both are well outside the shallow-emulator port budget per
 // `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`. The
-// surface-mapping table below records which Phase A IT each
+// surface-mapping table below records which failing-IT each
 // go-googlesql `api/bqstorage/` symbol satisfies.
 //
-// Phase A failing-IT → go-googlesql source mapping (Phase B intake table):
+// Failing-IT → go-googlesql source mapping (shallow-emulator intake table):
 //
 //	WriteBufferedStreamIT
 //	  → BigQueryWrite.CreateWriteStream
@@ -35,14 +35,16 @@
 //	  → BigQueryWrite.BatchCommitWriteStreams
 //	      ⇒ api/bqstorage/write_streams.go: (s *WriteServer).BatchCommitWriteStreams
 //
-// Out of scope for Phase B (deferred to a Storage Read phase): the
-// entire `api/bqstorage/read*.go` family, plus `avro_arrow.go`,
-// `tableschema.go`, `read_partition*.go`, `read_projection.go`,
-// `read_rows.go`, `read_session_contract_test.go`, `read_source.go`,
-// `read_view_parquet.go`. The emulator's existing `proto/storage_read.proto`
-// surface (`gateway/enginepb/storage_read*.go`) covers the limited
-// Storage Read surface today; Phase D will fold in any remaining
-// gaps.
+// Out of scope for the shallow-emulator port (deferred to the
+// Storage Read follow-up): the entire `api/bqstorage/read*.go`
+// family, plus `avro_arrow.go`, `tableschema.go`, `read_partition*.go`,
+// `read_projection.go`, `read_rows.go`,
+// `read_session_contract_test.go`, `read_source.go`,
+// `read_view_parquet.go`. The emulator's existing
+// `proto/storage_read.proto` surface
+// (`gateway/enginepb/storage_read*.go`) covers the limited Storage
+// Read surface today; the gRPC-server follow-up will fold in any
+// remaining gaps.
 package bqstorage
 
 import (

@@ -86,10 +86,11 @@ jobs:
           disk-cache: coverage-bazel
           repository-cache: true
 
-      # Phase 4 of the `googlesql-prebuilt` rollout: prefer the
-      # published prebuilt artifact and fall back to a sibling source
-      # checkout when the repo vars are unset. See `.github/actions/
-      # setup-googlesql/action.yml` for the resolution rules.
+      # CI/Docker/release prebuilt-mode wiring: prefer the published
+      # prebuilt artifact and fall back to a sibling source checkout
+      # when the repo vars are unset. See
+      # `.github/actions/setup-googlesql/action.yml` for the
+      # resolution rules.
       - name: Resolve GoogleSQL build mode
         id: googlesql
         uses: ./.github/actions/setup-googlesql

@@ -150,7 +150,7 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 //
 // The Catalog gRPC service does not yet expose a Get RPC (only
 // Register/Drop), so this handler returns a synthesized Dataset
-// resource derived from the path parameters. It is a Phase-3 stub
+// resource derived from the path parameters. It is a catalog stub
 // that satisfies clients which only need the reference + kind to
 // proceed; a true existence check lands when Storage grows a
 // DescribeDataset method.

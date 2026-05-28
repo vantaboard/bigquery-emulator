@@ -1,4 +1,4 @@
-# Release helpers (plan 44, phase 9b).
+# Release helpers (release-packaging work).
 #
 # Today releases are cut by hand: tag the commit with `vX.Y.Z` and
 # push the tag. The push triggers `.github/workflows/release.yml`,

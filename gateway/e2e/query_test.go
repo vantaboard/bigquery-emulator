@@ -10,8 +10,8 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestQuerySelectOneRoundTrip is the Phase 5e end-to-end story for
-// trivial constant queries: a `SELECT 1` against a real running
+// TestQuerySelectOneRoundTrip is the end-to-end story for trivial
+// constant queries: a `SELECT 1` against a real running
 // emulator_main returns a single-row, single-column page on the
 // `jobs.query` response, and the same row replays on
 // `jobs.getQueryResults` keyed on the freshly-minted jobReference.
@@ -97,8 +97,8 @@ func TestQuerySelectOneRoundTrip(t *testing.T) {
 	}
 }
 
-// TestQuerySelectStarAfterInsertAll is the Phase 5e end-to-end story
-// for table reads: stream rows in via tabledata.insertAll, then run
+// TestQuerySelectStarAfterInsertAll is the end-to-end story for
+// table reads: stream rows in via tabledata.insertAll, then run
 // `SELECT * FROM ds.t` over the synchronous query API and confirm
 // the rows round-trip with the same cell values. Exercises the full
 // REST -> gRPC -> Query.ExecuteQuery -> DuckDB engine ->

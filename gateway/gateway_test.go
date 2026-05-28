@@ -76,8 +76,8 @@ func freeTCPPort(t *testing.T) int {
 	return port
 }
 
-// TestGatewayConnectsToEmulatorMain exercises the full Phase 2c
-// readiness path end-to-end:
+// TestGatewayConnectsToEmulatorMain exercises the full
+// engine-readiness path end-to-end:
 //
 //  1. Spawn the real C++ emulator_main subprocess on a free loopback port.
 //  2. Dial it with engine.Dial and run WaitForReady.

@@ -163,7 +163,7 @@ The previous subagent explicitly **deferred MERGE**. Its rationale, baked into a
 
 > The GoogleSQL reference-impl algebrizer does not yet support `RESOLVED_MERGE_STMT` at the statement root (see `googlesql/reference_impl/algebrizer.cc::AlgebrizeStatement`'s `// TODO: Add MERGE support.`). `PreparedModify::Execute` therefore cannot drive MERGE end-to-end. The engine returns `UNIMPLEMENTED` with the standard prefix.
 
-Plan 34's `merge-basic` to-do says: *"MERGE INTO WHEN MATCHED/NOT MATCHED single-table target; document BQ limitations."* The previous agent's interpretation: the "document limitations" half is fulfilled by the unimplemented-error message + the pinning E2E test, and the MERGE implementation work moves to a new "Phase 6c" plan.
+Plan 34's `merge-basic` to-do says: *"MERGE INTO WHEN MATCHED/NOT MATCHED single-table target; document BQ limitations."* The previous agent's interpretation: the "document limitations" half is fulfilled by the unimplemented-error message + the pinning E2E test, and the MERGE implementation work moves to a separate `merge-scan-and-diff` plan.
 
 **Three viable paths forward — pause and ask the user before picking one:**
 
@@ -231,21 +231,21 @@ PLAN_RESULT/PLAN_ID/COMMITS/NOTES sentinel block.
 
 ## 6. Remaining roadmap (plans 34 → 45)
 
-| # | Plan | Phase | Notes |
-|---|------|-------|-------|
-| 34 | [`dml-update-delete`](.cursor/plans/dml-update-delete_f3c4d5e6.plan.md) | 6b | **IN-FLIGHT** — see §4. |
-| 35 | [`ddl-statements`](.cursor/plans/ddl-statements_g4d5e6f7.plan.md) | 6c | CREATE/DROP/ALTER TABLE on both engines. |
-| 36 | [`dml-ddl-e2e`](.cursor/plans/dml-ddl-e2e_h5e6f7a8.plan.md) | 6d | E2E coverage of the combined DML+DDL surface. |
-| 37 | [`storage-read-proto`](.cursor/plans/storage-read-proto_i6f7a8b9.plan.md) | 7a | Proto definitions for the BigQuery Storage Read API. |
-| 38 | [`storage-read-rows`](.cursor/plans/storage-read-rows_j7a8b9c0.plan.md) | 7b | Row-stream impl. |
-| 39 | [`storage-read-gateway-e2e`](.cursor/plans/storage-read-gateway_e2e_k8b9c0d1.plan.md) | 7c | Gateway+E2E for Storage Read API. |
-| 40 | [`conformance-fixtures-runner`](.cursor/plans/conformance-fixtures-runner_l9c0d1e2.plan.md) | 8a | Conformance harness skeleton. |
-| 41 | [`conformance-diff-ci`](.cursor/plans/conformance-diff-ci_m0d1e2f3.plan.md) | 8b | CI-side diffing of expected vs. actual fixtures. |
-| 42 | [`conformance-seed-docs`](.cursor/plans/conformance-seed-docs_n1e2f3a4.plan.md) | 8c | Document fixture authoring + seed initial set. |
-| 43 | [`docker-compose-smoke`](.cursor/plans/docker-compose-smoke_o2f3a4b5.plan.md) | 9a | docker-compose smoke test of the multi-stage image. |
+| # | Plan | Capability area | Notes |
+|---|------|-----------------|-------|
+| 34 | [`dml-update-delete`](.cursor/plans/dml-update-delete_f3c4d5e6.plan.md) | DML | **IN-FLIGHT** — see §4. |
+| 35 | [`ddl-statements`](.cursor/plans/ddl-statements_g4d5e6f7.plan.md) | DDL | CREATE/DROP/ALTER TABLE on both engines. |
+| 36 | [`dml-ddl-e2e`](.cursor/plans/dml-ddl-e2e_h5e6f7a8.plan.md) | DML/DDL E2E | E2E coverage of the combined DML+DDL surface. |
+| 37 | [`storage-read-proto`](.cursor/plans/storage-read-proto_i6f7a8b9.plan.md) | Storage Read API | Proto definitions for the BigQuery Storage Read API. |
+| 38 | [`storage-read-rows`](.cursor/plans/storage-read-rows_j7a8b9c0.plan.md) | Storage Read API | Row-stream impl. |
+| 39 | [`storage-read-gateway-e2e`](.cursor/plans/storage-read-gateway_e2e_k8b9c0d1.plan.md) | Storage Read API | Gateway+E2E for Storage Read API. |
+| 40 | [`conformance-fixtures-runner`](.cursor/plans/conformance-fixtures-runner_l9c0d1e2.plan.md) | Conformance | Conformance harness skeleton. |
+| 41 | [`conformance-diff-ci`](.cursor/plans/conformance-diff-ci_m0d1e2f3.plan.md) | Conformance | CI-side diffing of expected vs. actual fixtures. |
+| 42 | [`conformance-seed-docs`](.cursor/plans/conformance-seed-docs_n1e2f3a4.plan.md) | Conformance | Document fixture authoring + seed initial set. |
+| 43 | [`docker-compose-smoke`](.cursor/plans/docker-compose-smoke_o2f3a4b5.plan.md) | Distribution | docker-compose smoke test of the multi-stage image. |
 | **PAUSE** | — | — | **Confirm with user**: release tag scheme + GHCR image targets. |
-| 44 | [`goreleaser-release`](.cursor/plans/goreleaser-release_p3a4b5c6.plan.md) | 9b | goreleaser config + GHCR push. |
-| 45 | [`profile-docs-version`](.cursor/plans/profile-docs-version_q4b5c6d7.plan.md) | 9c | Final docs/version polish. |
+| 44 | [`goreleaser-release`](.cursor/plans/goreleaser-release_p3a4b5c6.plan.md) | Distribution | goreleaser config + GHCR push. |
+| 45 | [`profile-docs-version`](.cursor/plans/profile-docs-version_q4b5c6d7.plan.md) | Distribution | Final docs/version polish. |
 
 After plan 45 the orchestrator should print a summary (total commits, wall time, next-step pointers) and stop.
 
@@ -328,7 +328,7 @@ The four GitHub runs from the v0.0.1 cut, for posterity:
 
 ## 7. Key reference files (skim these as needed)
 
-- [`ROADMAP.md`](ROADMAP.md) — full architecture & phase narrative.
+- [`ROADMAP.md`](ROADMAP.md) — full architecture & capability-area narrative.
 - [`CLAUDE.md`](CLAUDE.md) — auto-commit workflow (conventional commits, hunk-staging rules, breaking-change footers).
 - [`.cursor/rules/pre-commit-lint.mdc`](.cursor/rules/pre-commit-lint.mdc) — when to gate commits on lint vs. when to skip.
 - [`.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md`](.cursor/plans/bigquery-emulator-roadmap-index_a1b2c3d4.plan.md) — per-plan progress + dependency graph.

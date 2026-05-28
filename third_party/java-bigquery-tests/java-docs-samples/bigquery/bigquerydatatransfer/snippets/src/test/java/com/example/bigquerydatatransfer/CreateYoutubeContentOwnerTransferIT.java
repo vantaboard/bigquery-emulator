@@ -47,7 +47,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * bigquery-emulator Phase C live-IT: smoke for {@link CreateYoutubeContentOwnerTransfer}. Same
+ * bigquery-emulator missing-tests-follow-up live-IT: smoke for {@link CreateYoutubeContentOwnerTransfer}. Same
  * shape as {@link CreateAdManagerTransferIT}; see that class for the DTS-gRPC-UNIMPLEMENTED caveat.
  */
 public class CreateYoutubeContentOwnerTransferIT {

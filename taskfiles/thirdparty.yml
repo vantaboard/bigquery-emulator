@@ -196,7 +196,7 @@ tasks:
         port="${EMULATOR_HTTP_PORT:-9050}"
         # Throttle the in-container Bazel build (engine-builder-bazel
         # stage) AND the running container against the live host's
-        # MemAvailable / nproc so neither phase can OOM-kill the IDE.
+        # MemAvailable / nproc so neither stage can OOM-kill the IDE.
         # The helper bounds Bazel job count by `MemAvailable * 80% /
         # 3 GiB-per-job` because `--local_resources=memory=N` is a
         # *scheduling hint*, not an OS cap, and heavy GoogleSQL
@@ -647,12 +647,12 @@ tasks:
         # bigquerydatatransfer ITs require at <clinit> / @BeforeClass.
         # Without these the static initializers raise an
         # AssertionError before the test method ever opens a gRPC/REST
-        # channel — which means even Phase B's shallow backends never
-        # see traffic from those ITs. The values themselves are inert
+        # channel — which means even the shallow-emulator backends
+        # never see traffic from those ITs. The values themselves are inert
         # (the emulator does not talk to AWS / MySQL / DTS); they only
         # exist so JUnit's `requireEnvVar` short-circuits stop firing.
         # See `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`
-        # (Phase A baseline rows 8–15) for the precondition matrix.
+        # (failing-IT baseline rows 8–15) for the precondition matrix.
         export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-000000000000}"
         export AWS_ROLE_ID="${AWS_ROLE_ID:-emulator-role}"
         export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-EMULATOR_FAKE_ACCESS_KEY}"
@@ -662,8 +662,8 @@ tasks:
         export MY_SQL_INSTANCE="${MY_SQL_INSTANCE:-emulator-fake-instance}"
         # DB_USER / DB_PWD are required at <clinit> by the
         # bigqueryconnection Cloud-SQL family (DeleteConnectionIT,
-        # GetConnectionIT, ShareConnectionIT, UpdateConnectionIT). Phase C
-        # extension of the Phase B env-var stubbing pattern; emulator does
+        # GetConnectionIT, ShareConnectionIT, UpdateConnectionIT). Extends
+        # the shallow-emulator env-var stubbing pattern; emulator does
         # not talk to Cloud SQL, so any non-empty values short-circuit the
         # `requireEnvVar` assertion and let the ITs reach the real gRPC
         # UNIMPLEMENTED shape from the not-yet-wired bqconnection backend.
@@ -672,7 +672,7 @@ tasks:
         # DTS_TRANSFER_CONFIG_NAME points at a transfer config the
         # DisableTransferConfigIT / ReEnableTransferConfigIT ITs read
         # by name. The emulator's datatransfer handler matches on the
-        # full resource name, so Phase B pre-creates a fixture config
+        # full resource name, so the shallow-emulator pre-creates a fixture config
         # via the REST POST below (best-effort; ignored if the route
         # isn't yet wired or the listener is unreachable).
         export DTS_TRANSFER_CONFIG_NAME="${DTS_TRANSFER_CONFIG_NAME:-projects/${GOOGLE_CLOUD_PROJECT}/locations/us/transferConfigs/emulator-fixture}"
@@ -693,7 +693,7 @@ tasks:
           # ReEnableTransferConfigIT). The fixture id matches the
           # DTS_TRANSFER_CONFIG_NAME default exported above. Best
           # effort: fails open when the datatransfer handler is not
-          # yet wired (Phase A) or returns 501 (legacy shell).
+          # yet wired (failing-IT baseline) or returns 501 (legacy shell).
           curl -fsS -o /dev/null \
               -X POST -H 'Content-Type: application/json' \
               -d "{\"name\":\"projects/${GOOGLE_CLOUD_PROJECT}/locations/us/transferConfigs/emulator-fixture\",\"displayName\":\"emulator fixture\",\"dataSourceId\":\"scheduled_query\",\"schedule\":\"every 24 hours\",\"disableAutoScheduling\":true,\"params\":{\"query\":\"SELECT 1\"}}" \
@@ -710,7 +710,7 @@ tasks:
           exit 1
         fi
         # Live-IT posture: do NOT stop the fan-out on the first per-module
-        # failure. Until the shallow gRPC backends land in Phase B
+        # failure. Until the shallow gRPC backends land
         # (`java-its-shallow-emulators_b8c9d0e1.plan.md`), the
         # bigqueryconnection / bigquerydatatransfer / bigquerystorage modules
         # are expected to surface NOT_IMPLEMENTED-shaped errors out of

@@ -46,11 +46,12 @@ func buildAuthorizationPlaceholder(template, project, location, dataSourceID str
 
 // builtinDataSourceCatalog returns the connectors the emulator
 // surfaces by default. `scheduled_query` exists as the canonical
-// SQL-execution surface (Phase C will wire a Runner). `amazon_s3`
-// satisfies CreateAmazonS3TransferIT's catalog probe even though no
-// transfer is actually performed — the IT only asserts the create
-// returned a name. The remaining entries cover the Phase C
-// `Create*Transfer.java` driver classes; each is a metadata-only
+// SQL-execution surface (the SQL runner follow-up will wire a
+// Runner). `amazon_s3` satisfies CreateAmazonS3TransferIT's catalog
+// probe even though no transfer is actually performed — the IT only
+// asserts the create returned a name. The remaining entries cover
+// the third-party `Create*Transfer.java` driver classes; each is a
+// metadata-only
 // stub (no transfer execution; no third-party traffic).
 //
 // All third-party rows use the same inert .invalid authorization-URL

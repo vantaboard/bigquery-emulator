@@ -82,7 +82,7 @@ jobs:
           disk-cache: conformance
           repository-cache: true
 
-      # Phase 4 of the `googlesql-prebuilt` rollout: prefer the
+      # CI/Docker/release prebuilt-mode wiring: prefer the
       # published prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL`
       # and `vars.GOOGLESQL_PREBUILT_SHA256` at the repository level)
       # and fall back to a sibling source checkout otherwise. The

@@ -8,8 +8,8 @@
 // and confirms the build + link succeeds.
 //
 // This variant DOES depend on a real GoogleSQL header
-// (`error_helpers.h`) so the verifier validates the full Phase 3
-// consume path:
+// (`error_helpers.h`) so the verifier validates the full
+// consumer-wiring consume path:
 //
 //   - The wrapper repo's `BUILD.bazel` declares the right `hdrs` set.
 //   - `strip_include_prefix = "/include"` reroots the include path.
@@ -21,10 +21,10 @@
 #include "googlesql/public/error_helpers.h"
 
 int main(int /*argc*/, char** /*argv*/) {
-    // Just take the address of one symbol from the included header so
-    // the linker is FORCED to resolve at least one googlesql object.
-    // FormatError is part of googlesql/public/error_helpers.h's
-    // public surface (per Phase 1 label inventory).
-    auto* fn = &::googlesql::FormatError;
-    return reinterpret_cast<std::intptr_t>(fn) != 0 ? 0 : 1;
+  // Just take the address of one symbol from the included header so
+  // the linker is FORCED to resolve at least one googlesql object.
+  // FormatError is part of googlesql/public/error_helpers.h's
+  // public surface (per the GoogleSQL prebuilt label inventory).
+  auto* fn = &::googlesql::FormatError;
+  return reinterpret_cast<std::intptr_t>(fn) != 0 ? 0 : 1;
 }

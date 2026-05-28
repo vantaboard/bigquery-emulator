@@ -17,34 +17,37 @@ task thirdparty:java-bigquery-tests   # mvn -B verify on every JAVA_BQ_SAMPLE_PA
 
 `snippets/pom.xml` binds `maven-failsafe-plugin` 3.2.5 to the
 `integration-test` + `verify` goals with a `<includes>` allowlist that
-names exactly the live-IT-track-targeted classes for this module. After
-Phase C
-(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) the allowlist
-covers **2** classes:
+names exactly the live-IT-track-targeted classes for this module.
+After the missing-tests follow-up
+(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) the
+allowlist covers **2** classes:
 
 | Sample ID | IT |
 |-----------|----|
-| `bigquerystorage-jsonstreamwriter-buffered` | `WriteBufferedStreamIT` (Phase A) |
-| `bigquerystorage-arrow-quickstart` | `StorageArrowSampleIT` (Phase C) |
+| `bigquerystorage-jsonstreamwriter-buffered` | `WriteBufferedStreamIT` |
+| `bigquerystorage-arrow-quickstart` | `StorageArrowSampleIT` |
 
 ## Expected status
 
 Both ITs currently **FAIL** with
 `io.grpc.StatusRuntimeException: UNIMPLEMENTED`:
 
-- `WriteBufferedStreamIT` (row 7 of the Phase B verdict table) — the
-  gzip middleware unblocked the `@Before` `POST /datasets` REST call;
-  the test now reaches `BigQueryWrite.CreateWriteStream` which the
-  Phase B `gateway/handlers/bqstorage/` skeleton does not implement.
-- `StorageArrowSampleIT` (Phase C addition) — the snippet calls
-  `BigQueryRead.CreateReadSession`; the same Phase B skeleton package
-  has no Read-path implementation (Phase B explicitly deferred the
-  Read path; see the Phase B "Side-quests deferred" notes).
+- `WriteBufferedStreamIT` (row 7 of the shallow-emulator verdict
+  table) — the gzip middleware unblocked the `@Before`
+  `POST /datasets` REST call; the test now reaches
+  `BigQueryWrite.CreateWriteStream` which the
+  `gateway/handlers/bqstorage/` skeleton does not implement.
+- `StorageArrowSampleIT` (added by the missing-tests follow-up) —
+  the snippet calls `BigQueryRead.CreateReadSession`; the same
+  shallow-emulator skeleton package has no Read-path implementation
+  (the shallow-emulator port explicitly deferred the Read path; see
+  the shallow-emulator "Side-quests deferred" notes).
 
-Phase D will port the streaming Write API (`write*.go`) and a minimal
-Read path (`read*.go`) from go-googlesql to land the matching gRPC
-backends. The Phase B skeleton's `doc.go` carries the per-IT mapping
-so the re-port has a one-to-one target.
+The gRPC-server follow-up will port the streaming Write API
+(`write*.go`) and a minimal Read path (`read*.go`) from
+go-googlesql to land the matching gRPC backends. The
+shallow-emulator skeleton's `doc.go` carries the per-IT mapping so
+the re-port has a one-to-one target.
 
 ## Emulator wiring (BqStorageOpts)
 
@@ -64,9 +67,11 @@ from `bigquery-public-data` and does not need a fixture.
   [`third_party/README.md`](../../README.md) (Java section).
 - Sibling EMULATOR.md (core BigQuery wiring):
   [`java-bigquery/samples/EMULATOR.md`](../../java-bigquery/samples/EMULATOR.md).
-- Phase B `bqstorage` skeleton package (and its per-IT mapping):
+- Shallow-emulator `bqstorage` skeleton package (and its per-IT
+  mapping):
   [`gateway/handlers/bqstorage/`](../../../../gateway/handlers/bqstorage/).
 - Local Task: [`taskfiles/thirdparty.yml`](../../../taskfiles/thirdparty.yml)
   (`thirdparty:java-bigquery-tests`).
-- Per-IT verdict baselines (Phase A / B / C):
+- Per-IT verdict baselines (failing-IT inventory / shallow-emulator
+  port / missing-tests follow-up):
   [`.cursor/plans/java-its-*.plan.md`](../../../.cursor/plans/).

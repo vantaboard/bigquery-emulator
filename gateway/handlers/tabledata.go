@@ -67,8 +67,9 @@ func decodeInsertAllBody(w http.ResponseWriter, r *http.Request) (bqtypes.TableD
 //
 // The conversion is intentionally lossy: a `Cell.string_value` is
 // enough to round-trip through Storage::Value::String on the engine
-// side because Phase 3 only requires the bytes to come back out
-// shape-preserved. Phase 5 will tighten typing via the resolved AST.
+// side because the catalog/storage path only requires the bytes to
+// come back out shape-preserved. Typing tightens later via the
+// resolved AST.
 func jsonToCell(v interface{}) *enginepb.Cell {
 	if v == nil {
 		return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
@@ -133,7 +134,8 @@ func jsonToCell(v interface{}) *enginepb.Cell {
 // count always matches the column count Storage::AppendRows expects.
 // Extra fields not present in the schema are dropped (BigQuery's
 // ignoreUnknownValues=false is approximated here by always ignoring;
-// stricter semantics land alongside row-level validation in Phase 5).
+// stricter semantics land alongside row-level validation in the
+// query-execution work).
 func jsonRowToProto(schema *enginepb.TableSchema, row map[string]interface{}) *enginepb.DataRow {
 	out := &enginepb.DataRow{Cells: make([]*enginepb.Cell, 0, len(schema.GetFields()))}
 	for _, f := range schema.GetFields() {
@@ -267,7 +269,7 @@ func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 // decimal string encoding the next start row index, mirroring what
 // `next_start_index` we return from the engine's ListRows.
 // `selectedFields` and `formatOptions` are parsed but ignored until
-// Phase 5.
+// the query-execution work hooks them up.
 //
 // See docs/bigquery/docs/reference/rest/v2/tabledata/list.md.
 func TableDataList(deps Dependencies) http.HandlerFunc {

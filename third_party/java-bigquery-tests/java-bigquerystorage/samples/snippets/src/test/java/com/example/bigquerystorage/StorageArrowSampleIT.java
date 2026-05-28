@@ -29,13 +29,14 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * bigquery-emulator Phase C live-IT: smoke for {@link StorageArrowSample}
+ * bigquery-emulator missing-tests-follow-up live-IT: smoke for {@link StorageArrowSample}
  * (`bigquerystorage-arrow-quickstart`). Models on {@link QuickstartArrowSampleIT}.
  *
  * <p>The driver routes through {@link BqStorageOpts#newReadClient()} so the Storage Read client
  * dials the local emulator's storage gRPC listener when {@code BIGQUERY_STORAGE_GRPC_ENDPOINT}
- * (or {@code BIGQUERY_EMULATOR_HOST}) is set. Until Phase D lands a {@code BigQueryRead}
- * gRPC handler (the Phase B {@code bqstorage} skeleton has no Read-path implementation),
+ * (or {@code BIGQUERY_EMULATOR_HOST}) is set. Until the gRPC-server follow-up lands a
+ * {@code BigQueryRead} gRPC handler (the shallow-emulator {@code bqstorage} skeleton has no
+ * Read-path implementation),
  * {@link StorageArrowSample#main(String...)} will surface an
  * {@code io.grpc.StatusRuntimeException: UNIMPLEMENTED} from {@code CreateReadSession} and
  * this test is expected to fail. The IT is committed today so Failsafe discovers it the

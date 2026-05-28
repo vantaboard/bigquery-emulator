@@ -1,13 +1,13 @@
-# GoogleSQL Prebuilt — External Repo Layout (Phase 1 — Section 3)
+# GoogleSQL Prebuilt — External Repo Layout
 
 This file freezes the on-disk layout of the unpacked prebuilt artifact and
-the wrapper `BUILD.bazel` targets the consumer (Phase 3) sees. The producer
-(Phase 2) must produce exactly this layout; the consumer must not assume
-anything beyond it.
+the wrapper `BUILD.bazel` targets the consumer-wiring track sees. The
+artifact-producer pipeline must produce exactly this layout; the consumer
+must not assume anything beyond it.
 
 The repo is named `@googlesql_prebuilt_linux_amd64` in the consumer's Bzlmod
-graph. Phase 3 wires it via `http_archive` (or, for local dev, an
-equivalent local override) — that wiring is **not** designed here.
+graph. The consumer-wiring track wires it via `http_archive` (or, for local
+dev, an equivalent local override) — that wiring is **not** designed here.
 
 ## File tree
 
@@ -135,7 +135,7 @@ Notes:
   same way today).
 - `MODULE.bazel` inside the prebuilt repo declares the same Abseil /
   Protobuf / gRPC version pins as this repo's root `MODULE.bazel`. Mismatches
-  are rejected at consume time by Phase 5 manifest validation.
+  are rejected at consume time by the safety-gate manifest validator.
 
 ### Repo-internal `:_archive` target
 
@@ -172,16 +172,16 @@ restricts them to `//:__subpackages__`).
   make sense if multiple GoogleSQL versions had to coexist in the same Bazel
   graph (they don't).
 - The repo name is `googlesql_prebuilt_linux_amd64`. The
-  `linux_amd64` suffix is load-bearing: Phase 1 explicitly scopes to that
-  platform. When (if) an `arm64` artifact ships later, it will be a
-  **sibling** repo named `googlesql_prebuilt_linux_arm64`; the consumer's
+  `linux_amd64` suffix is load-bearing: the compatibility surface explicitly
+  scopes to that platform. When (if) an `arm64` artifact ships later, it will
+  be a **sibling** repo named `googlesql_prebuilt_linux_arm64`; the consumer's
   `select()` chooses between them. Renaming the existing `linux_amd64` repo
-  is a breaking change for every Phase 3+ consumer.
+  is a breaking change for every consumer-wiring and downstream consumer.
 
-## Consumer-side wiring (preview, owned by Phase 3)
+## Consumer-side wiring (preview, owned by the consumer-wiring track)
 
-This is **not** decided in Phase 1, but the wrapper layout above forces a
-specific consume-time shape. For context:
+This is **not** decided here, but the wrapper layout above forces a specific
+consume-time shape. For context:
 
 - `MODULE.bazel` in this repo gains a `bazel_dep(name = "googlesql_prebuilt_linux_amd64", ...)`
   (or equivalent `http_archive` + repo override) behind a build setting that
@@ -193,5 +193,5 @@ specific consume-time shape. For context:
 - The `local_path_override` to `../googlesql/` survives behind an explicit
   "source mode" knob, off by default.
 
-Phase 3 will design the alias / override mechanic. Phase 1 only freezes the
-wrapper-side shape it has to plug into.
+The consumer-wiring track will design the alias / override mechanic. The
+compatibility surface only freezes the wrapper-side shape it has to plug into.

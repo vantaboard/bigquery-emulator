@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// writeTextResult prints one fixture × profile result in human-readable
+// writeTextResult prints one fixture x profile result in human-readable
 // form. The format is intentionally short so a sweep over hundreds of
 // fixtures stays scannable.
 func writeTextResult(w io.Writer, r Result) {

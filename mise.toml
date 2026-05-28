@@ -28,8 +28,8 @@ clang = "22.1.6"
 bazelisk = "1.27.0"
 
 # Internal gRPC contract (proto/emulator.proto). protoc handles raw
-# codegen today; buf is the front-end we'll switch to once Phase 2 lands
-# the generation step. `grpcurl` is the manual smoke-test driver for
+# codegen today; buf is the front-end we'll switch to once the
+# generation step lands. `grpcurl` is the manual smoke-test driver for
 # the engine's reflection-enabled gRPC server (see
 # `frontend/server/server.cc`); it's how plans 37+ poke ReadRows /
 # ExecuteQuery against a running `emulator_main` without writing a

@@ -51,7 +51,7 @@ services:
         # values for the developer's machine and export them.
         BAZEL_JOBS: ${BAZEL_JOBS:-}
         BAZEL_MEM_MB: ${BAZEL_MEM_MB:-}
-        # Phase 4: forward the GoogleSQL prebuilt artifact pin so the
+        # Forward the GoogleSQL prebuilt artifact pin so the
         # Dockerfile's `engine-builder-bazel` stage skips the multi-GB
         # GoogleSQL source compile. Both must be set together; a
         # missing pair drops back to the source fallback.

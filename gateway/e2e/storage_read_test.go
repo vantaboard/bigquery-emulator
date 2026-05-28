@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// TestStorageReadRoundTrip is the Phase 7c end-to-end story for the
+// TestStorageReadRoundTrip is the end-to-end story for the
 // Storage Read API: stand up the emulator, insertAll rows through the
 // REST gateway, then open a dedicated gRPC channel to the engine and
 // round-trip those rows through `CreateReadSession` + `ReadRows`.

@@ -1,8 +1,8 @@
-# GoogleSQL Label Inventory (Phase 1 — Section 1)
+# GoogleSQL Label Inventory
 
 This file freezes the **exact** set of `@googlesql//` labels referenced by the
-emulator's Bazel build. The prebuilt artifact's wrapper repo (Phase 3) must
-preserve every label in [§ Direct labels](#direct-labels) as an importable
+emulator's Bazel build. The prebuilt artifact's consumer-wiring wrapper repo
+must preserve every label in [§ Direct labels](#direct-labels) as an importable
 target. Indirect / transitive labels (§ Indirect) are packaged in the artifact's
 combined archive but not exposed as wrapper targets.
 
@@ -26,8 +26,8 @@ Run from a clean checkout, that query yields **18 distinct labels** spanning
 | `frontend/handlers/BUILD.bazel`                                     | `query_handler`                       |
 
 If a future commit lands a new direct label not in [§ Direct labels](#direct-labels),
-Phase 1 has been broken and the change must be classified before it can ship.
-See [`upgrade-rules.md`](upgrade-rules.md) for the procedure.
+the compatibility surface has been broken and the change must be classified
+before it can ship. See [`upgrade-rules.md`](upgrade-rules.md) for the procedure.
 
 ## Direct labels
 
@@ -71,9 +71,10 @@ combined archive must contain their compiled objects and the prebuilt headers
 must include their `hdrs`, because the **direct** labels' headers `#include`
 them.
 
-The complete transitive list is large and frozen by the Phase 2 producer
-(it materialises whatever `bazel build @googlesql//...` resolves at the pinned
-upstream commit). For Phase 1, the load-bearing transitive packages are:
+The complete transitive list is large and frozen by the artifact-producer
+pipeline (it materialises whatever `bazel build @googlesql//...` resolves at
+the pinned upstream commit). The load-bearing transitive packages, for the
+purposes of this inventory, are:
 
 - `@googlesql//googlesql/public/types` (`type_factory.h`, `struct_type.h`,
   `array_type.h`, `enum_type.h`, `proto_type.h`, `range_type.h`, …) — pulled in
@@ -98,13 +99,13 @@ upstream commit). For Phase 1, the load-bearing transitive packages are:
 - 5 emulator BUILD files reference GoogleSQL directly.
 - 16 unique direct `@googlesql//` labels (14 in `googlesql/public`, 2 in
   `googlesql/resolved_ast`).
-- All 18 are classified **Expose** in this phase (no Alias / Defer).
+- All 18 are classified **Expose** in this inventory (no Alias / Defer).
 
 The "all Expose" decision is deliberate: the emulator BUILDs already name these
-labels, the surface is small, and Phase 3 must not silently move emulator code
-to new label names. Aliasing would only buy us future renaming flexibility, and
-we explicitly do not want renaming flexibility this rollout — that's what the
-[upgrade rules](upgrade-rules.md) gate.
+labels, the surface is small, and the consumer-wiring track must not silently
+move emulator code to new label names. Aliasing would only buy us future
+renaming flexibility, and we explicitly do not want renaming flexibility for
+this rollout — that's what the [upgrade rules](upgrade-rules.md) gate.
 
 ## How to keep this file honest
 
@@ -117,4 +118,4 @@ If you change a `BUILD.bazel` in the emulator to add or remove a
    stays 1:1 with the inventory.
 4. Bump the prebuilt artifact's **compatibility** version in
    [`manifest.md`](manifest.md) — adding or removing an exposed label is a
-   Phase-3-breaking change.
+   breaking change for the consumer-wiring track.

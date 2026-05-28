@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Emit `manifest.json` for the GoogleSQL prebuilt artifact.
 
-Schema is frozen in `docs/dev/googlesql-prebuilt/manifest.md` (Phase 1).
+Schema is frozen in `docs/dev/googlesql-prebuilt/manifest.md`
+(the GoogleSQL prebuilt compatibility surface).
 This script walks the staged repo root, computes SHA-256 of every file
 shipped under `include/`, `lib/`, plus the wrapper extras (BUILD.bazel,
 MODULE.bazel, LICENSES/), and writes a single `manifest.json` with the
@@ -55,11 +56,11 @@ import sys
 SCHEMA_VERSION = "1"
 
 
-# Frozen `compat.labels` set. Per Phase 1
+# Frozen `compat.labels` set. Per the compatibility surface
 # (`docs/dev/googlesql-prebuilt/label-inventory.md` + `manifest.md`),
 # these are the 18 direct labels the prebuilt artifact must expose.
 # Adding or removing a row here without also touching the label
-# inventory and the wrapper BUILD files is a Phase 1 break.
+# inventory and the wrapper BUILD files breaks the compatibility surface.
 COMPAT_LABELS: list[str] = [
     "//googlesql/public:analyzer",
     "//googlesql/public:analyzer_options",
@@ -83,7 +84,7 @@ COMPAT_LABELS: list[str] = [
 
 
 # Closed top-level field set. The manifest schema is deliberately
-# closed (Phase 1 manifest.md: "unknown top-level fields are a Phase-5
+# closed (manifest.md: "unknown top-level fields are a safety-gate
 # validation error"); the producer refuses to emit a manifest with an
 # unknown key, and the verifier refuses to load one.
 TOP_LEVEL_FIELDS = frozenset(
@@ -259,8 +260,8 @@ def validate_config(config: dict) -> None:
         )
     if pf["os"] != "linux" or pf["arch"] != "amd64":
         raise SystemExit(
-            "manifest_writer: Phase 1 freezes platform to linux/amd64; "
-            f"got {pf['os']}/{pf['arch']}"
+            "manifest_writer: the compatibility surface freezes platform to "
+            f"linux/amd64; got {pf['os']}/{pf['arch']}"
         )
 
     tc = config["toolchain"]
@@ -277,7 +278,8 @@ def validate_config(config: dict) -> None:
         )
     if tc["compiler"] != "clang":
         raise SystemExit(
-            "manifest_writer: Phase 1 freezes toolchain.compiler to clang"
+            "manifest_writer: the compatibility surface freezes "
+            "toolchain.compiler to clang"
         )
     for fld in ("cflags", "linkflags"):
         if not isinstance(tc[fld], list):
@@ -330,8 +332,8 @@ def validate_manifest(manifest: dict) -> None:
         )
     if list(manifest["compat"]["labels"]) != COMPAT_LABELS:
         raise SystemExit(
-            "manifest_writer: compat.labels diverged from the Phase 1 set "
-            "(label-inventory.md). Expected sequence:\n"
+            "manifest_writer: compat.labels diverged from the "
+            "compatibility-surface set (label-inventory.md). Expected sequence:\n"
             + "\n".join(f"  - {label}" for label in COMPAT_LABELS)
             + "\nGot:\n"
             + "\n".join(

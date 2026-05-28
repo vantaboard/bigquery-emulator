@@ -195,7 +195,7 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 // Resolves the table via Catalog.DescribeTable so a missing table
 // surfaces as 404. The response composites the (Kind, TableReference,
 // schema) into a Table resource; other metadata is left empty until
-// Storage tracks it (Phase 6).
+// Storage tracks it.
 func TableGet(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, tableID := tableIDFromPath(r)
@@ -240,7 +240,7 @@ func TableUpdate(_ Dependencies) http.HandlerFunc {
 //
 //	PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 //
-// Sparse update; same Phase-3 echo behavior as TableUpdate.
+// Sparse update; same echo behavior as TableUpdate.
 func TablePatch(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, tableID := tableIDFromPath(r)

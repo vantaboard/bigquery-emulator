@@ -47,11 +47,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * bigquery-emulator Phase C live-IT: smoke for {@link CreateAdManagerTransfer}. Models on
- * {@link CreateAmazonS3TransferIT} and routes the BigQuery client through the env-var-aware helper
- * so the setUp dataset/table land in the local emulator instead of live BigQuery. The DTS client
- * itself is constructed by the snippet driver through {@link BqDataTransferOpts}; until Phase D
- * lands a DataTransferService gRPC handler, the assertion below is expected to fail with
+ * bigquery-emulator missing-tests-follow-up live-IT: smoke for {@link CreateAdManagerTransfer}.
+ * Models on {@link CreateAmazonS3TransferIT} and routes the BigQuery client through the
+ * env-var-aware helper so the setUp dataset/table land in the local emulator instead of live
+ * BigQuery. The DTS client itself is constructed by the snippet driver through
+ * {@link BqDataTransferOpts}; until the gRPC-server follow-up lands a DataTransferService gRPC
+ * handler, the assertion below is expected to fail with
  * io.grpc.StatusRuntimeException: UNIMPLEMENTED. See
  * {@code .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md} for the per-IT verdict baseline.
  */

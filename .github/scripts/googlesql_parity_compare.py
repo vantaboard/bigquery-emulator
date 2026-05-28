@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare GoogleSQL source-vs-prebuilt parity-job results (Phase 5).
+"""Compare GoogleSQL source-vs-prebuilt parity-job results (safety-gate parity check).
 
 The two parity legs (`build-prebuilt` and `build-source` in
 `.github/workflows/googlesql-parity.yml`) each emit:
@@ -19,7 +19,7 @@ This script aggregates those into:
   * A workflow summary block (markdown) showing the per-mode identity
     + per-stage status side-by-side.
   * A per-fixture diff for any conformance lane where the two modes
-    disagreed (PASS vs FAIL on the same fixture × profile).
+    disagreed (PASS vs FAIL on the same fixture x profile).
   * A workflow-level exit code: non-zero on any divergence, missing
     leg, or unexpected schema_version mismatch in the reports.
 

@@ -28,7 +28,7 @@ const (
 // pivots on. Bumped only on a breaking output-shape change.
 const JSONSchemaVersion = 1
 
-// Result is one fixture × profile outcome. The JSON tags mirror what
+// Result is one fixture x profile outcome. The JSON tags mirror what
 // plan-41's diff CI consumes; keep them stable.
 type Result struct {
 	Fixture    string `json:"fixture"`
@@ -158,7 +158,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 	}
 	if opts.UpdateBaselines {
 		// `--update-baselines` rewrites fixtures in-place; the
-		// rewrite is wired into runOne (one rewrite per fixture ×
+		// rewrite is wired into runOne (one rewrite per fixture x
 		// profile is harmless because subsequent rewrites land on
 		// the same canonical form).
 		_, _ = io.WriteString(opts.Err,
@@ -180,7 +180,7 @@ func (r *Report) ExitCode() int {
 	return 0
 }
 
-// runOne executes a single fixture × profile cell. The result is
+// runOne executes a single fixture x profile cell. The result is
 // always non-nil; status is FAIL on any mismatch or runner-internal
 // error during the lifecycle. The lifecycle is:
 //

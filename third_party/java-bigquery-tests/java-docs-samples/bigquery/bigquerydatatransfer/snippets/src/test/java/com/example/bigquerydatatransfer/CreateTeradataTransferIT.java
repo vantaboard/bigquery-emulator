@@ -47,7 +47,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * bigquery-emulator Phase C live-IT: smoke for {@link CreateTeradataTransfer}. Same shape as
+ * bigquery-emulator missing-tests-follow-up live-IT: smoke for {@link CreateTeradataTransfer}. Same shape as
  * {@link CreateAdManagerTransferIT}; see that class for the DTS-gRPC-UNIMPLEMENTED caveat. The
  * upstream snippet uses the `on_premises` connector ID, not `teradata`.
  */

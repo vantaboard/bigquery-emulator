@@ -2,28 +2,30 @@
 
 Pinned by tools/googlesql-prebuilt/package.sh. Placeholders ({{...}})
 are substituted at package time with the artifact's actual versions so
-the consumer (Phase 3) can match Bzlmod dep pins to the source build's
+consumer-wiring callers can match Bzlmod dep pins to the source build's
 MODULE.bazel.
 
-Naming (Phase 1 doc clarification, see
+Naming (compatibility-surface clarification, see
 tools/googlesql-prebuilt/README.md "Naming clarification"):
 
-- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (Phase 1 freeze).
-- GitHub Release asset name    : `googlesql-prebuilt-linux-amd64-...` (Phase 2 contract).
+- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (compatibility-surface freeze).
+- GitHub Release asset name    : `googlesql-prebuilt-linux-amd64-...` (artifact-producer contract).
 - Module name in MODULE.bazel  : `googlesql` (the consumer-facing identity).
 
 Why the module name is `googlesql` and not `googlesql_prebuilt_linux_amd64`:
 the emulator's `BUILD.bazel` files reference `@googlesql//googlesql/public:*`
 and `@googlesql//googlesql/resolved_ast:*` directly. Those references
-are frozen by Phase 1 (label-inventory.md) and must not change between
-source mode and prebuilt mode. By declaring this artifact's MODULE.bazel
-identity as `googlesql`, a consumer can flip between source mode (the
-existing `local_path_override` to `../googlesql`) and prebuilt mode
+are frozen by the compatibility surface (label-inventory.md) and must
+not change between source mode and prebuilt mode. By declaring this
+artifact's MODULE.bazel identity as `googlesql`, a consumer can flip
+between source mode (the existing `local_path_override` to
+`../googlesql`) and prebuilt mode
 (`--override_module=googlesql=<unpacked_artifact_path>` or an
 equivalent `archive_override`) without editing any emulator BUILD file.
 
-Phase 3 owns the consumer-side wiring; this file declares what the
-prebuilt repo NEEDS at compile + link time. The header tree under
+The consumer-wiring track owns the consumer-side wiring; this file
+declares what the prebuilt repo NEEDS at compile + link time. The
+header tree under
 `include/googlesql/...` `#include`s symbols from these third-party
 trees, and the static archives in `lib/` (linked at producer-side
 build time) carry unresolved external references into them, so the
@@ -36,7 +38,7 @@ module(
 )
 
 # Mirrors the source-side //MODULE.bazel pins. Mismatches between the
-# consumer's resolved version and these declarations are a Phase 5
+# consumer's resolved version and these declarations are a safety-gate
 # parity error: the static archives in lib/ were linked against these
 # exact versions, so resolving a different version would produce
 # multiple-definition link errors or ODR violations at runtime.
@@ -46,7 +48,7 @@ bazel_dep(name = "protobuf", version = "{{PROTOBUF_VERSION}}", repo_name = "com_
 bazel_dep(name = "grpc", version = "{{GRPC_VERSION}}", repo_name = "com_github_grpc_grpc")
 
 # Third-party deps reached transitively from the artifact's exported
-# header tree. Discovered during Phase 3 verification when prebuilt
+# header tree. Discovered during consumer-wiring verification when prebuilt
 # mode tried to compile a consumer TU that pulled the `:type` wrapper:
 # `googlesql/public/types/...` -> `googlesql/common/multiprecision_int.h`
 # -> `googlesql/base/bits.h` `#include`s `gtest/gtest_prod.h`, and
@@ -89,7 +91,7 @@ bazel_dep(name = "googleapis-cc", version = "{{GOOGLEAPIS_CC_VERSION}}")
 # by `tools/googlesql-prebuilt/package.sh`), so they do NOT appear as
 # `bazel_dep`s here. The manifest's `bundled_thirdparty_deps`
 # enumerates the bundled versions for source-vs-prebuilt parity
-# checking (Phase 5). Rationale:
+# checking (the safety-gate parity check). Rationale:
 #
 #   - Upstream GoogleSQL fetches ICU via its own
 #     `googlesql/bazel/http_archive_deps.bzl` extension at the pinned

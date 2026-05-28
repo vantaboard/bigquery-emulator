@@ -1,5 +1,6 @@
-# GoogleSQL build-mode helpers (Phase 3 of the `googlesql-prebuilt`
-# rollout — see `docs/dev/googlesql-prebuilt/README.md`).
+# GoogleSQL build-mode helpers (the consumer-wiring track of the
+# `googlesql-prebuilt` rollout — see
+# `docs/dev/googlesql-prebuilt/README.md`).
 #
 # The emulator's Bazel build supports two explicit `@googlesql//...`
 # label-space modes (see `.bazelrc`):
@@ -7,7 +8,7 @@
 #   - `--config=googlesql-source`    Sibling checkout at ../googlesql/
 #                                    (the `local_path_override` in
 #                                    `MODULE.bazel`). Default today.
-#   - `--config=googlesql-prebuilt`  Unpacked Phase 2 prebuilt
+#   - `--config=googlesql-prebuilt`  Unpacked published prebuilt
 #                                    artifact under
 #                                    .cache/googlesql-prebuilt/.
 #
@@ -16,8 +17,9 @@
 # the artifact's SHA-256 before writing into the cache, so a Bazel
 # invocation with `--config=googlesql-prebuilt` can trust the cache.
 #
-# Phase 4 flips the default to PREBUILT for `task emulator:build-engine:bazel`
-# (see `taskfiles/emulator.yml`). These helpers populate / inspect /
+# The CI/Docker/release track flips the default to PREBUILT for
+# `task emulator:build-engine:bazel` (see `taskfiles/emulator.yml`).
+# These helpers populate / inspect /
 # clean the cache that prebuilt mode reads from. Source mode remains
 # one explicit env var away (`GOOGLESQL_SOURCE=local task ...`) for
 # upstream upgrades and producer debugging.
@@ -46,7 +48,7 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         echo "=== googlesql mode ==="
-        echo "Phase 4 default for 'task emulator:build-engine:bazel': prebuilt"
+        echo "Default for 'task emulator:build-engine:bazel': prebuilt"
         echo "  override with: GOOGLESQL_SOURCE=local task emulator:build-engine:bazel"
         echo
         echo "Bazel selectors (apply with --config=...):"
@@ -167,11 +169,12 @@ tasks:
             echo "  tools/googlesql-prebuilt/templates/MODULE.bazel.tmpl pins this." >&2
             exit 1
           fi
-          # Full Phase 5 validator: closed-schema gate, identity pins
-          # (platform/toolchain), payload existence + per-file SHA-256,
-          # wrapper-BUILD presence, no-unaccounted-file rule. Same
-          # validator the CI composite action, Dockerfile, and producer
-          # verify.sh call into so every consumer applies the same gates.
+          # Full safety-gate validator: closed-schema gate, identity
+          # pins (platform/toolchain), payload existence + per-file
+          # SHA-256, wrapper-BUILD presence, no-unaccounted-file rule.
+          # Same validator the CI composite action, Dockerfile, and
+          # producer verify.sh call into so every consumer applies
+          # the same gates.
           python3 tools/googlesql-prebuilt/validate_artifact.py \
             --repo-root "$unpack/{{.PREBUILT_REPO_NAME}}" \
             --summary-line
@@ -180,7 +183,7 @@ tasks:
           mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
           echo "$SHA256  artifact.tar.gz" > "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}.tarball.sha256"
           echo "OK: prebuilt artifact ready at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/"
-          echo "  task emulator:build-engine:bazel will pick this up by default (Phase 4)."
+          echo "  task emulator:build-engine:bazel will pick this up by default."
         '
 
   stage-fixture:
@@ -261,7 +264,7 @@ tasks:
 
   validate:
     desc: |
-      Run the Phase 5 centralized validator against the currently staged
+      Run the centralized safety-gate validator against the currently staged
       prebuilt cache. Optional pin args: EXPECTED_GOOGLESQL_SHA, EXPECTED_ARTIFACT_VERSION,
       EXPECTED_GOOGLESQL_TAG, EXPECTED_LIBC. Exits non-zero with an actionable
       diagnostic on the FIRST failing gate. Prints a one-line summary on success.

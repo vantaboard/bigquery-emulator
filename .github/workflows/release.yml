@@ -1,4 +1,4 @@
-# Release workflow (plan 44, phase 9b).
+# Release workflow (release-packaging work).
 #
 # Cuts a release on tag push (`vX.Y.Z`) or via manual dispatch
 # (`inputs.ref` lets the operator re-release a previously pushed tag
@@ -10,7 +10,7 @@
 # Steps in order:
 #   1. Checkout the triggering ref (or `inputs.ref` for dispatch).
 #   2. Set up Go + Task + Bazelisk and resolve a pinned GoogleSQL
-#      prebuilt artifact (Phase 4 of `googlesql-prebuilt`; see
+#      prebuilt artifact (CI/Docker/release prebuilt-mode wiring; see
 #      `docs/dev/googlesql-prebuilt/README.md`). The pin lives in
 #      `env.RELEASE_GOOGLESQL_PREBUILT_*` below; the release maintainer
 #      updates both values whenever a new GoogleSQL prebuilt is
@@ -47,7 +47,7 @@
 # release on GHCR or Releases.
 #
 # ---------------------------------------------------------------------
-# Release maintainer playbook (Phase 4):
+# Release maintainer playbook:
 # ---------------------------------------------------------------------
 #
 # 1. Build + verify a new GoogleSQL prebuilt:
@@ -101,7 +101,7 @@ concurrency:
 
 env:
   # ------------------------------------------------------------------
-  # GoogleSQL prebuilt pin (Phase 4).
+  # GoogleSQL prebuilt pin (CI/Docker/release prebuilt-mode wiring).
   #
   # Both values must be filled in by the release maintainer (see the
   # playbook in this workflow's header) before a tag-push release.
@@ -174,8 +174,9 @@ jobs:
       - name: Validate GoogleSQL prebuilt pin
         # Refuse to run a tag-pushed release when both pin values are
         # empty: tag-push releases cannot silently fall back to source
-        # builds (per Phase 4 done criteria — "Source fallback is not
-        # used unless the release operator explicitly selects it").
+        # builds (per the prebuilt-mode done criteria — "Source
+        # fallback is not used unless the release operator explicitly
+        # selects it").
         # `workflow_dispatch` runs may opt into source mode by setting
         # `inputs.googlesql_source=true`; tag pushes cannot.
         env:
@@ -210,8 +211,9 @@ jobs:
         # `inputs.googlesql_source=true` debug path passes empty
         # strings; the action then falls back to a source clone.
         #
-        # Phase 5 (`fail-on-source-fallback: true` for the normal release
-        # path): when the operator has NOT opted into `googlesql_source=true`
+        # Safety gate (`fail-on-source-fallback: true` for the normal
+        # release path): when the operator has NOT opted into
+        # `googlesql_source=true`
         # but the env pin is somehow empty (defensive — the "Validate
         # GoogleSQL prebuilt pin" step above already refuses that case),
         # the composite action fails fast instead of silently falling back
@@ -334,8 +336,8 @@ jobs:
         # same pin. `gh release edit --notes` overwrites the existing
         # notes, so first read goreleaser's output then append.
         #
-        # Phase 5 widens the surfaced identity: in addition to the URL +
-        # SHA-256, we now publish the upstream tag, manifest
+        # The safety-gate identity widening: in addition to the URL
+        # + SHA-256, we now publish the upstream tag, manifest
         # `schema_version`, `platform.libc`, and the compiler
         # `<name>-<version>` so a release reader can fully trace the
         # build back to a specific GoogleSQL artifact contract.
@@ -360,7 +362,7 @@ jobs:
             printf '%s\n' "$existing"
             printf '\n---\n\n## GoogleSQL build provenance\n\n'
             if [ "$GSQ_MODE" = "prebuilt" ]; then
-              printf -- '- mode: **prebuilt** (Phase 4 pin, Phase 5 validated)\n'
+              printf -- '- mode: **prebuilt** (release-pinned, safety-gate validated)\n'
               printf -- '- artifact_version: `%s`\n' "${GSQ_VER:-?}"
               printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
               printf -- '- googlesql upstream tag: `%s`\n' "${GSQ_TAG:-?}"

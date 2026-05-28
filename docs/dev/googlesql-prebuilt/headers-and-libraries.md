@@ -1,8 +1,8 @@
-# GoogleSQL Prebuilt — Headers and Libraries (Phase 1 — Section 2)
+# GoogleSQL Prebuilt — Headers and Libraries
 
-This file freezes the **shape** of the payload the Phase 2 producer must
-publish for the prebuilt artifact. Phase 3 (consume wiring) will encode the
-matching `cc_import` / `cc_library` wrappers; this file is what both sides
+This file freezes the **shape** of the payload the artifact-producer pipeline
+must publish for the prebuilt artifact. The consumer-wiring track will encode
+the matching `cc_import` / `cc_library` wrappers; this file is what both sides
 agree on.
 
 ## Decision summary
@@ -28,8 +28,8 @@ static `.a` archive that gets linked into the consumer's `cc_binary` /
 `cc_library` exactly the same way the source build does today.
 
 If a measured rebuild-time or binary-size blocker appears, we may revisit
-shared linking in a later phase, but Phase 1 freezes static as the default.
-Changing to shared is a **breaking** change (see
+shared linking later, but the compatibility surface freezes static as the
+default. Changing to shared is a **breaking** change (see
 [`upgrade-rules.md`](upgrade-rules.md)).
 
 ### One combined archive
@@ -67,7 +67,7 @@ producer-pinned `icu_76::` symbols carried by the archive; there is no BCR
 `farmhash` module at all; and `differential-privacy` is not published in
 BCR. The manifest's `bundled_thirdparty_deps` reports the pinned identities
 (`icu@76.1`, `farmhash@<commit>`, `differential-privacy@<version>`) so the
-Phase 5 parity gate can verify the consumer is not double-linking any of
+safety-gate parity check can verify the consumer is not double-linking any of
 them through some other path.
 
 ### Include-root layout (`include/googlesql/...`)
@@ -108,15 +108,16 @@ object code is part of the combined archive. The consumer does **not** rerun
 exact `protoc` / `protobuf` versions in the manifest.
 
 If the consumer's `MODULE.bazel` Protobuf pin diverges from the producer's
-manifest pin, the wrapper repo refuses to build (Phase 5 validation). For
-Phase 1, the matching pin is `protobuf 29.0` (from this repo's `MODULE.bazel`).
+manifest pin, the wrapper repo refuses to build (the safety-gate validator
+catches this). The matching pin is `protobuf 29.0` (from this repo's
+`MODULE.bazel`).
 
 ## Header coverage requirement
 
 The producer must ship **every** header referenced by an emulator
 `#include "googlesql/..."` line (direct), **plus** every header those headers
-transitively include from the GoogleSQL tree. The Phase 1 grep that proves
-direct coverage:
+transitively include from the GoogleSQL tree. The grep that proves direct
+coverage:
 
 ```bash
 rg '#include "googlesql/' \
@@ -156,18 +157,18 @@ Today that yields:
 These 25 headers are the **direct** emulator surface. The transitive set
 (closure of `#include`s reachable from these 25 headers within the GoogleSQL
 source tree) is what the producer must materialise under
-`include/googlesql/...`. Phase 2 will enumerate the closure mechanically;
-Phase 1 freezes the rule: **transitive closure of these 25, no more, no
-less**.
+`include/googlesql/...`. The artifact-producer pipeline enumerates the closure
+mechanically; the compatibility surface freezes the rule: **transitive closure
+of these 25, no more, no less**.
 
 If a new emulator `.cc` / `.h` adds a `#include "googlesql/..."` line outside
-this set, Phase 1 has been broken and the new include must be reconciled
-before the prebuilt artifact is published. See
+this set, the compatibility surface has been broken and the new include must
+be reconciled before the prebuilt artifact is published. See
 [`upgrade-rules.md`](upgrade-rules.md) for the procedure.
 
 ## Library files in the artifact
 
-The Phase 2 producer ships exactly two static libraries:
+The artifact-producer pipeline ships exactly two static libraries:
 
 | File                      | Contains                                                                                                                                                                                                                                                                                                                                          |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -180,8 +181,9 @@ producer pins `-fPIC` and records it in the manifest's `compile_flags` field.
 
 ## Linking contract for the consumer
 
-The Phase 3 wrapper `cc_library` targets that wrap each of the 16 direct
-labels do **not** redeclare the per-label header subset — they all expose the
+The consumer-wiring wrapper `cc_library` targets that wrap each of the 16
+direct labels do **not** redeclare the per-label header subset — they all
+expose the
 **same** `include/` root via `includes = ["include"]`. Per-label `hdrs = [...]`
 selection is what produces the strict-deps narrowing the emulator
 `BUILD.bazel` targets rely on. Each wrapper `cc_library` lists exactly the

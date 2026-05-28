@@ -17,7 +17,7 @@ vars:
 
 tasks:
   default:
-    desc: Build and run the gateway (engine subprocess disabled until Phase 2)
+    desc: Build and run the gateway (engine subprocess disabled in gateway-only mode)
     cmds:
       - task: run
 
@@ -77,11 +77,11 @@ tasks:
   # `LD_LIBRARY_PATH`. The integration tests (`go test -tags=integration
   # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`.
   #
-  # GoogleSQL build-mode selection (Phase 4 of the `googlesql-prebuilt`
-  # rollout flips the default to prebuilt, see
-  # `docs/dev/googlesql-prebuilt/README.md`):
+  # GoogleSQL build-mode selection (the CI/Docker/release track of
+  # the `googlesql-prebuilt` rollout flips the default to prebuilt,
+  # see `docs/dev/googlesql-prebuilt/README.md`):
   #
-  #   GOOGLESQL_SOURCE=prebuilt   DEFAULT. Consume the Phase 2 prebuilt
+  #   GOOGLESQL_SOURCE=prebuilt   DEFAULT. Consume the published prebuilt
   #                               artifact at
   #                               .cache/googlesql-prebuilt/. The
   #                               cache must be populated first by
@@ -165,9 +165,9 @@ tasks:
               ;;
           esac
       # Pre-flight gate for prebuilt mode. If GOOGLESQL_SOURCE=prebuilt
-      # (the Phase 4 default) but the cache is empty / wrong-named,
-      # refuse with an actionable message before bazel starts. Source
-      # mode evaluates this as a no-op.
+      # (the CI/Docker/release default) but the cache is empty /
+      # wrong-named, refuse with an actionable message before bazel
+      # starts. Source mode evaluates this as a no-op.
       _GOOGLESQL_PREBUILT_CHECK:
         sh: |
           # `_GOOGLESQL_SOURCE_RAW` is the raw user-facing value
@@ -181,7 +181,7 @@ tasks:
           root="$(git rev-parse --show-toplevel)"
           cache="$root/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64"
           if [ ! -f "$cache/MODULE.bazel" ]; then
-            echo "GOOGLESQL_SOURCE=prebuilt (Phase 4 default) but the cache is empty at:" >&2
+            echo "GOOGLESQL_SOURCE=prebuilt (CI/Docker/release default) but the cache is empty at:" >&2
             echo "  $cache" >&2
             echo "Populate it first (one of):" >&2
             echo "  task googlesql:fetch-prebuilt URL=... SHA256=...   # published artifact" >&2
@@ -191,7 +191,7 @@ tasks:
             echo "  GOOGLESQL_SOURCE=local task emulator:build-engine:bazel" >&2
             exit 1
           fi
-          # Run the Phase 5 centralized validator before bazel starts. The
+          # Run the centralized safety-gate validator before bazel starts. The
           # validator is the single source of truth for schema, identity,
           # platform, payload-integrity, and wrapper-presence gates. Any
           # of those failing here is a hard error — bazel never runs.
@@ -338,7 +338,7 @@ tasks:
 
   run:
     aliases: [start]
-    desc: Build and run the gateway with the engine subprocess disabled (Phase 1 stub)
+    desc: Build and run the gateway with the engine subprocess disabled (gateway-only stub)
     deps: [build]
     cmds:
       - |

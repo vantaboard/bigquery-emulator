@@ -88,7 +88,7 @@ func TestRunFixturesAgainstEmulatorMain(t *testing.T) {
 	fixtures := filepath.Join(root, "conformance", "fixtures")
 
 	// 90s budget covers `emulator_main` cold-start (~1-2s per spawn)
-	// for the 4 fixtures × 2 profiles = 8 invocations on a developer
+	// for the 4 fixtures x 2 profiles = 8 invocations on a developer
 	// laptop, with headroom for slower CI. If the suite outgrows this
 	// budget (plan 42 lands the 20-fixture corpus), bump explicitly
 	// here rather than papering over a hang.

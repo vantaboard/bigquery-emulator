@@ -223,8 +223,9 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// Record the completed job (with its rows + schema cached)
 	// before assembling the response so the jobReference we emit
 	// is the same one a later jobs.get / jobs.getQueryResults will
-	// find. Phase 5d does not track engine-side bytes-processed
-	// yet, so we stamp 0; Phase 6 wires the real metric.
+	// find. The current registry does not track engine-side
+	// bytes-processed yet, so we stamp 0; the long-running-jobs
+	// follow-up wires the real metric.
 	restSchema := schemaFromProto(schema)
 	// Build the bqtypes.DmlStats envelope once so the synchronous
 	// response and the cached `QueryResult` (replayed by
@@ -293,12 +294,13 @@ const getQueryResultsKind = "bigquery#getQueryResultsResponse"
 //	GET /bigquery/v2/projects/{projectId}/queries/{jobId}
 //
 // Replays the cached rows + schema for a previously-run synchronous
-// query. The Phase 5e charter (`.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`)
-// limits this handler to single-page reads: the registry holds the
-// entire result set in memory at job-completion time and this
-// endpoint emits it back in one response. Real cursored pagination
-// (multi-page `pageToken` lifecycle, partial reads from a streaming
-// engine) is deferred to Phase 6 alongside long-running async jobs.
+// query. The query-select-e2e charter
+// (`.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`) limits this
+// handler to single-page reads: the registry holds the entire
+// result set in memory at job-completion time and this endpoint
+// emits it back in one response. Real cursored pagination (multi-page
+// `pageToken` lifecycle, partial reads from a streaming engine) is
+// deferred to a later change alongside long-running async jobs.
 //
 // Documented query parameters and current behavior:
 //

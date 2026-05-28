@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package the GoogleSQL prebuilt artifact (Phase 2 producer).
+# Package the GoogleSQL prebuilt artifact (artifact-producer pipeline).
 #
 # Stages the exact `@googlesql_prebuilt_linux_amd64` repo layout frozen
 # in docs/dev/googlesql-prebuilt/repo-layout.md, generates the wrapper
@@ -169,7 +169,7 @@ GRPC_VERSION="$(read_bazel_dep_version 'grpc')"
 [ -n "$ABSEIL_VERSION" ] && [ -n "$PROTOBUF_VERSION" ] && [ -n "$GRPC_VERSION" ] \
     || die "failed to read abseil/protobuf/grpc pins from $EMULATOR_SRC/MODULE.bazel"
 
-# Phase 3 verification surfaced three more transitive third-party
+# Consumer-wiring verification surfaced three more transitive third-party
 # Bzlmod modules referenced by the artifact's exported header tree
 # (gtest_prod.h, openssl/bn.h, re2/re2.h). Read them from the
 # upstream googlesql/MODULE.bazel rather than the consumer's, since
@@ -239,8 +239,8 @@ else
 fi
 
 # Detect compiler version. The clang in the producer's PATH must match
-# the host the artifact will run on. Phase 5 (consume-time validation)
-# warns on mismatch, but for now we just record what we saw.
+# the host the artifact will run on. The safety-gate consume-time
+# validator warns on mismatch, but for now we just record what we saw.
 #
 # Prefer system clang at /usr/bin/clang (pinned to clang-18 per
 # bazel-process-hygiene.mdc — the mise toolchain's clang ships without
@@ -265,7 +265,7 @@ else
     CLANG_VERSION="unknown"
 fi
 
-# Detect libc / OS release. Phase 1 manifest schema expects glibc-<MAJ.MIN>.
+# Detect libc / OS release. The manifest schema expects glibc-<MAJ.MIN>.
 # Same pipefail caveat as above: read the full ldd --version output into
 # a variable before slicing it.
 LIBC_VERSION="unknown"
@@ -354,7 +354,7 @@ EOF
 
 stage_fixture() {
     log "MODE=fixture: copying hand-picked headers from $GOOGLESQL_SRC"
-    # The 25 direct headers frozen by Phase 1
+    # The 25 direct headers frozen by the compatibility surface
     # (headers-and-libraries.md "Today that yields:"). We additionally
     # copy a generous closure of types/, proto/, resolved_ast/, base/,
     # common/ headers so the manifest payload looks realistic. The
@@ -506,8 +506,8 @@ stage_bazel() {
     log "MODE=bazel: building googlesql in-place at $GOOGLESQL_SRC"
     log "  jobs=$jobs memory_mb=$memory_mb cc=/usr/bin/clang"
 
-    # The compatibility surface to build. Phase 1
-    # (`headers-and-libraries.md`) says: closure of `:analyzer`,
+    # The compatibility surface to build. The compatibility-surface
+    # docs (`headers-and-libraries.md`) say: closure of `:analyzer`,
     # `:evaluator`, `:resolved_ast`. Add `:simple_catalog`, `:type`,
     # `:value` so their headers are visible at link time (they would
     # come in transitively via deps, but listing them explicitly makes
@@ -549,8 +549,8 @@ stage_bazel() {
     # basic_string`), so producer + consumer end up with incompatible
     # C++ runtime layouts and the emulator_main link fails with
     # thousands of "undefined reference to absl::lts_20240722::...
-    # std::__1::basic_string..." errors. Phase 3 prebuilt-mode link
-    # verification caught it.
+    # std::__1::basic_string..." errors. Consumer-wiring prebuilt-mode
+    # link verification caught it.
     #
     # `--ignore_dev_dependency` would skip the registration, but it
     # also drops the `single_version_override` overrides marked
@@ -686,8 +686,8 @@ PY
     # The earlier explicit allowlist (`public/types`, `base`, ...) missed
     # transitive headers like `googlesql/parser/parse_tree.h`, which the
     # public-facing `:analyzer` wrapper reaches via the analyzer's
-    # `analyzer.h` `#include`. Phase 3 prebuilt-mode link verification
-    # caught the gap.
+    # `analyzer.h` `#include`. Consumer-wiring prebuilt-mode link
+    # verification caught the gap.
     #
     # Excluded directories: `bazel-*` symlinks (output trees) — we
     # harvest those separately as "generated" headers below. The
@@ -717,7 +717,7 @@ PY
     #      the `resolved_ast_*_visitor.h` family, etc.). These are
     #      `*.h` (not `*.pb.h`) and are required by consumers via the
     #      `:resolved_ast` wrapper. The earlier `*.pb.h`-only filter
-    #      missed them and Phase 3 prebuilt-mode link verification
+    #      missed them and consumer-wiring prebuilt-mode link verification
     #      caught the gap (`fatal error: 'googlesql/resolved_ast/
     #      resolved_ast.h' file not found`).
     #
@@ -855,12 +855,14 @@ PY
     # the same `libgooglesql.a` removes the consumer's burden of
     # vendoring an extension.
     #
-    # This violates the Phase 1 default of `bundled_thirdparty_deps = []`
-    # (see `docs/dev/googlesql-prebuilt/headers-and-libraries.md` and
-    # `manifest.md`). The Phase 1 surface docs have been updated in the
-    # same change set to allow ICU + farmhash bundling; the manifest's
-    # `bundled_thirdparty_deps` field below reports the bundled versions
-    # so the Phase 5 parity gate can diff source vs. prebuilt linkage.
+    # This violates the original compatibility-surface default of
+    # `bundled_thirdparty_deps = []` (see
+    # `docs/dev/googlesql-prebuilt/headers-and-libraries.md` and
+    # `manifest.md`). The compatibility-surface docs have been updated in
+    # the same change set to allow ICU + farmhash bundling; the
+    # manifest's `bundled_thirdparty_deps` field below reports the
+    # bundled versions so the safety-gate parity check can diff source
+    # vs. prebuilt linkage.
     #
     # Abseil, Protobuf, gRPC, BoringSSL, RE2, GoogleTest remain
     # consumer-resolved through Bzlmod (`bazel_dep` in the prebuilt
@@ -1029,7 +1031,7 @@ GS_MODULE_VERSION="$(grep -E '^\s*version = ' "$GOOGLESQL_SRC/MODULE.bazel" \
     | sed -E 's/.*"([^"]+)".*/\1/')"
 [ -n "$GS_MODULE_VERSION" ] || die "could not parse googlesql module version"
 # Fall back to upstream_tag heuristic: the leading-zero form is the tag
-# we used to check out the source. Phase 1 docs pin 2026.01.1.
+# we used to check out the source. Compatibility-surface docs pin 2026.01.1.
 GS_UPSTREAM_TAG="2026.01.1"
 
 cat > "$MANIFEST_CONFIG" <<EOF

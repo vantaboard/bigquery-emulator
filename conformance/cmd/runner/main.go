@@ -1,5 +1,5 @@
 // Binary runner is the conformance harness's CLI. It loads YAML
-// fixtures, iterates the engine × storage profile matrix, and emits
+// fixtures, iterates the engine x storage profile matrix, and emits
 // PASS / FAIL records (or a JSON report). See `conformance/README.md`
 // for the fixture schema and worked examples; this file is just flag
 // parsing and exit-code wiring.
@@ -62,7 +62,7 @@ func run() error {
 
 Run the BigQuery emulator conformance fixtures and diff against
 expected rows or errors. By default the runner spawns its own
-emulator_main subprocess per fixture × profile; --connect HOST:PORT
+emulator_main subprocess per fixture x profile; --connect HOST:PORT
 reaches an already-running gateway (used by CI).
 
 Flags:`)
@@ -72,8 +72,8 @@ Profiles:
   duckdb   duckdb engine + duckdb storage  (only profile today)
 
 Exit codes:
-  0   every fixture × profile PASSed
-  1   at least one fixture × profile FAILed
+  0   every fixture x profile PASSed
+  1   at least one fixture x profile FAILed
   2   runner-internal error (bad YAML, can't start engine, etc)
 
 See conformance/README.md for the fixture schema and JSON output

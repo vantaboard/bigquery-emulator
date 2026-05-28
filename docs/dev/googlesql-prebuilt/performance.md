@@ -1,11 +1,10 @@
-# GoogleSQL Prebuilt — Cache and Performance Expectations (Phase 6)
+# GoogleSQL Prebuilt — Cache and Performance Expectations
 
-This doc records what Phase 4's flip to a prebuilt-default GoogleSQL
-actually changes about build-time, cache, Docker, and CI behavior —
-and, importantly, what it does **not** change. The point is to set
-honest expectations so a maintainer triaging a slow build can tell
-"prebuilt didn't help here because <X>" apart from "prebuilt is
-broken."
+This doc records what the flip to a prebuilt-default GoogleSQL actually
+changes about build-time, cache, Docker, and CI behavior — and,
+importantly, what it does **not** change. The point is to set honest
+expectations so a maintainer triaging a slow build can tell "prebuilt
+didn't help here because <X>" apart from "prebuilt is broken."
 
 No specific wall-clock numbers are promised. Cold-vs-warm
 multipliers do not scale linearly with `--jobs` or RAM, and
@@ -216,7 +215,7 @@ Some examples:
 
 ## See also
 
-- [`README.md`](README.md) — Phase 1 compatibility surface index.
+- [`README.md`](README.md) — compatibility surface index.
 - [`maintainer-runbook.md`](maintainer-runbook.md) — publish / pin / verify / roll back.
 - [`troubleshooting.md`](troubleshooting.md) — `FAIL_*` validator-token map.
 - [`taskfiles/emulator.yml`](../../../taskfiles/emulator.yml) — `task emulator:build-engine:bazel` definition + throttling.

@@ -2,9 +2,10 @@
 
 The conformance harness drives the BigQuery emulator through its REST
 gateway with declarative YAML fixtures and diffs the resulting rows (or
-errors) against the values pinned in each file. The harness is Phase 8
-of `ROADMAP.md`; the runner CLI is the deliverable of plan 40
-(`conformance-fixtures-runner`) and the seed fixture set is plan 42
+errors) against the values pinned in each file. The harness is the
+conformance-harness capability area of `ROADMAP.md`; the runner CLI is
+the deliverable of plan 40 (`conformance-fixtures-runner`) and the seed
+fixture set is plan 42
 (`conformance-seed-docs`). At time of writing the directory contains
 **24 fixtures** spanning SELECT shapes, GROUP BY / aggregates, JOINs,
 DML, structural errors, DDL, and a schema-only smoke check; see the
@@ -26,7 +27,7 @@ task emulator:build-engine:bazel
 
 # 2. Run every fixture in conformance/fixtures against the active
 #    profile set (DuckDB-only today), spawning a fresh emulator per
-#    fixture × profile.
+#    fixture x profile.
 task conformance:run
 # (equivalent to `go run ./conformance/cmd/runner`)
 
@@ -264,8 +265,8 @@ Flags:
 
 Exit codes:
 
-- `0` — every fixture × profile PASSed.
-- `1` — at least one fixture × profile FAILed.
+- `0` — every fixture x profile PASSed.
+- `1` — at least one fixture x profile FAILed.
 - `2` — runner-internal error (bad YAML, can't start engine, etc).
 
 ### JSON output shape (consumed by plan 41)

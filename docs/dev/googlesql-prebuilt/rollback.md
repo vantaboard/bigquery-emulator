@@ -1,16 +1,17 @@
-# GoogleSQL Prebuilt — Rollback Criteria (Phase 5)
+# GoogleSQL Prebuilt — Rollback Criteria
 
 This document specifies **when** and **how** to revert the default GoogleSQL
-prebuilt adoption, or to repin to a different artifact. Phase 6 will weave
-this into the broader maintainer / operator runbook; Phase 5 owns the
-machine-checkable rules and the maintainer-facing escape hatches.
+prebuilt adoption, or to repin to a different artifact. The maintainer
+runbook weaves this into the broader operator surface; the safety-gate
+track owns the machine-checkable rules and the maintainer-facing escape
+hatches captured here.
 
 ## Scope
 
 In scope:
 
 - Reverting `task emulator:build-engine:bazel` from prebuilt-default to
-  source-default (the Phase 4 flip).
+  source-default (the entrypoints / consumer-default flip).
 - Repinning `env.RELEASE_GOOGLESQL_PREBUILT_URL` /
   `env.RELEASE_GOOGLESQL_PREBUILT_SHA256` in
   [`.github/workflows/release.yml`](../../.github/workflows/release.yml) and
@@ -45,7 +46,7 @@ known-good artifact (cheap, reversible) before reverting prebuilt adoption
 | Signal | Where it surfaces | Default response |
 |--------|-------------------|------------------|
 | Conformance lane (`.github/workflows/conformance.yml`) flips one or more fixtures from PASS to FAIL after a GoogleSQL artifact pin bump. | Conformance job; per-profile `conformance-<profile>.json` artifact. | **Repin** to the previous artifact. If the regression survives the repin, the change is in the emulator, not the artifact — diagnose normally. |
-| Engine `--version` start fails or the engine crashes during gateway boot after a pin bump. | `task docker:smoke` / `ci.yml` build step / `release.yml` `docker-smoke` step. | Repin. Engine startup is the Phase 5 smoke gate — a regression here implies a libstdc++ / abseil / protobuf ABI drift in the new artifact and the prior artifact is the safe fallback. |
+| Engine `--version` start fails or the engine crashes during gateway boot after a pin bump. | `task docker:smoke` / `ci.yml` build step / `release.yml` `docker-smoke` step. | Repin. Engine startup is the safety-gate smoke check — a regression here implies a libstdc++ / abseil / protobuf ABI drift in the new artifact and the prior artifact is the safe fallback. |
 
 ### 3. Link / runtime ABI mismatch
 
@@ -134,7 +135,7 @@ debugging session does **not** need a repository-wide rollback.
   the sibling `../googlesql/` checkout. The pre-flight refuses to touch the
   prebuilt cache.
 - `BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1 task emulator:build-engine:bazel`
-  — skip the Phase 5 validator pre-flight (still requires the cache to
+  — skip the safety-gate validator pre-flight (still requires the cache to
   contain `MODULE.bazel`). Use ONLY when debugging the validator itself; the
   cache contents are still expected to be correct.
 - `gh workflow run release.yml -f ref=<tag> -f googlesql_source=true` —
@@ -182,7 +183,7 @@ You are done rolling back when:
 
 ## See also
 
-- [`README.md`](README.md) — Phase 1 compatibility surface index.
+- [`README.md`](README.md) — compatibility surface index.
 - [`manifest.md`](manifest.md) — manifest schema this rollback workflow defends.
 - [`upgrade-rules.md`](upgrade-rules.md) — when a contract change is allowed
   and what footer it requires.

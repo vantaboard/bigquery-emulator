@@ -34,8 +34,9 @@ tasks:
       the CLI to scale up on dedicated runners:
         BAZEL_JOBS=12 BAZEL_MEM_MB=16384 task docker:build
       
-      Phase 4 of the `googlesql-prebuilt` rollout: the Dockerfile
-      consumes a published GoogleSQL prebuilt artifact when
+      The CI/Docker/release track of the `googlesql-prebuilt`
+      rollout: the Dockerfile consumes a published GoogleSQL
+      prebuilt artifact when
       GOOGLESQL_PREBUILT_URL + GOOGLESQL_PREBUILT_SHA256 are set in
       the environment, and falls back to a sibling source clone
       otherwise. Both env vars are forwarded as `--build-arg`s when

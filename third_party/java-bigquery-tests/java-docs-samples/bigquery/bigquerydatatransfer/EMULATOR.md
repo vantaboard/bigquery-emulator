@@ -17,56 +17,62 @@ task thirdparty:java-bigquery-tests   # mvn -B verify on every JAVA_BQ_SAMPLE_PA
 
 `snippets/pom.xml` binds `maven-failsafe-plugin` 3.2.5 to the
 `integration-test` + `verify` goals with a `<includes>` allowlist that
-names exactly the live-IT-track-targeted classes for this module. After
-Phase C
-(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) the allowlist
-covers **11** classes — Phase A patched 3, Phase C authored 8 new
-`Create*TransferIT` smoke ITs:
+names exactly the live-IT-track-targeted classes for this module.
+After the missing-tests follow-up
+(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) the
+allowlist covers **11** classes — the failing-IT inventory patched 3,
+the missing-tests follow-up authored 8 new `Create*TransferIT` smoke
+ITs:
 
 | Sample ID | IT |
 |-----------|----|
-| `bigquerydatatransfer-create-amazons3-transfer` | `CreateAmazonS3TransferIT` (Phase A) |
-| `bigquerydatatransfer-disable-transfer` | `DisableTransferConfigIT` (Phase A) |
-| `bigquerydatatransfer-reenable-transfer` | `ReEnableTransferConfigIT` (Phase A) |
-| `bigquerydatatransfer-create-admanager-transfer` | `CreateAdManagerTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-ads-transfer` | `CreateAdsTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-campaignmanager-transfer` | `CreateCampaignmanagerTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-play-transfer` | `CreatePlayTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-redshift-transfer` | `CreateRedshiftTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-teradata-transfer` | `CreateTeradataTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-youtubechannel-transfer` | `CreateYoutubeChannelTransferIT` (Phase C) |
-| `bigquerydatatransfer-create-youtubecontentowner-transfer` | `CreateYoutubeContentOwnerTransferIT` (Phase C) |
+| `bigquerydatatransfer-create-amazons3-transfer` | `CreateAmazonS3TransferIT` |
+| `bigquerydatatransfer-disable-transfer` | `DisableTransferConfigIT` |
+| `bigquerydatatransfer-reenable-transfer` | `ReEnableTransferConfigIT` |
+| `bigquerydatatransfer-create-admanager-transfer` | `CreateAdManagerTransferIT` |
+| `bigquerydatatransfer-create-ads-transfer` | `CreateAdsTransferIT` |
+| `bigquerydatatransfer-create-campaignmanager-transfer` | `CreateCampaignmanagerTransferIT` |
+| `bigquerydatatransfer-create-play-transfer` | `CreatePlayTransferIT` |
+| `bigquerydatatransfer-create-redshift-transfer` | `CreateRedshiftTransferIT` |
+| `bigquerydatatransfer-create-teradata-transfer` | `CreateTeradataTransferIT` |
+| `bigquerydatatransfer-create-youtubechannel-transfer` | `CreateYoutubeChannelTransferIT` |
+| `bigquerydatatransfer-create-youtubecontentowner-transfer` | `CreateYoutubeContentOwnerTransferIT` |
 
 ## Expected status
 
 All 11 ITs currently **FAIL** with
 `io.grpc.StatusRuntimeException: UNIMPLEMENTED` against the local
-emulator — the gapic `DataTransferServiceClient` dials gRPC, not REST,
-and Phase B's `gateway/handlers/datatransfer/` package serves the REST
-surface only. Phase D will land a DTS gRPC bridge (either by re-porting
-go-googlesql's gRPC handlers or by translating gRPC calls back into REST
-handler calls). When that lands, the 8 Phase C smokes are expected to
-PASS (the emulator's catalog already accepts every connector ID the 8
-drivers send — see
+emulator — the gapic `DataTransferServiceClient` dials gRPC, not
+REST, and the shallow-emulator `gateway/handlers/datatransfer/`
+package serves the REST surface only. The gRPC-server follow-up will
+land a DTS gRPC bridge (either by re-porting go-googlesql's gRPC
+handlers or by translating gRPC calls back into REST handler calls).
+When that lands, the 8 third-party-connector smokes are expected to
+PASS (the emulator's catalog already accepts every connector ID the
+8 drivers send — see
 [`gateway/handlers/datatransfer/catalog.go`](../../../../../gateway/handlers/datatransfer/catalog.go)).
 
-Two ITs have additional Phase B / Phase C notes:
+Two ITs have additional shallow-emulator / missing-tests-follow-up
+notes:
 
-- `CreateAmazonS3TransferIT` (row 13 of the Phase B verdict table) —
-  the IT's `setUp` issues `bigquery.create(DatasetInfo.of(...))` and
-  used to land on live BigQuery (401). Root cause: the upstream POM
-  pinned `libraries-bom` 26.32.0, which resolves `google-cloud-core`
-  to 2.32.0, whose `ServiceOptions.getResolvedApiaryHost()`
+- `CreateAmazonS3TransferIT` (row 13 of the shallow-emulator verdict
+  table) — the IT's `setUp` issues
+  `bigquery.create(DatasetInfo.of(...))` and used to land on live
+  BigQuery (401). Root cause: the upstream POM pinned
+  `libraries-bom` 26.32.0, which resolves `google-cloud-core` to
+  2.32.0, whose `ServiceOptions.getResolvedApiaryHost()`
   unconditionally returns `https://<service>.googleapis.com/` and
   ignores any custom host set via
-  `BigQueryOptions.Builder.setHost()`. Phase C bumped the BOM to
-  26.73.0 (`google-cloud-core` 2.62.2 honors the configured host),
-  which is the snippet-side BIGQUERY_EMULATOR_HOST honoring fix the
-  Phase B deferral list called out. After the bump, `setUp` succeeds
-  against the emulator and the test method reaches the gRPC layer.
-- `DisableTransferConfigIT` / `ReEnableTransferConfigIT` (rows 14, 15
-  of the Phase B verdict table) — `taskfiles/thirdparty.yml` exports
-  a default `DTS_TRANSFER_CONFIG_NAME`
+  `BigQueryOptions.Builder.setHost()`. The missing-tests follow-up
+  bumped the BOM to 26.73.0 (`google-cloud-core` 2.62.2 honors the
+  configured host), which is the snippet-side
+  BIGQUERY_EMULATOR_HOST honoring fix the shallow-emulator deferral
+  list called out. After the bump, `setUp` succeeds against the
+  emulator and the test method reaches the gRPC layer.
+- `DisableTransferConfigIT` / `ReEnableTransferConfigIT` (rows 14,
+  15 of the shallow-emulator verdict table) —
+  `taskfiles/thirdparty.yml` exports a default
+  `DTS_TRANSFER_CONFIG_NAME`
   (`projects/${PROJECT}/locations/us/transferConfigs/emulator-fixture`)
   and pre-creates the fixture via curl POST to the new datatransfer
   REST handler. The gapic patch / disable call still dials gRPC and
@@ -92,5 +98,6 @@ in the local emulator.
   [`java-bigquery/samples/EMULATOR.md`](../../../java-bigquery/samples/EMULATOR.md).
 - Local Task: [`taskfiles/thirdparty.yml`](../../../../taskfiles/thirdparty.yml)
   (`thirdparty:java-bigquery-tests`).
-- Per-IT verdict baselines (Phase A / B / C):
+- Per-IT verdict baselines (failing-IT inventory / shallow-emulator
+  port / missing-tests follow-up):
   [`.cursor/plans/java-its-*.plan.md`](../../../../.cursor/plans/).

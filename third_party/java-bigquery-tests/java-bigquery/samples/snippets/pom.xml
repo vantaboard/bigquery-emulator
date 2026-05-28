@@ -163,7 +163,7 @@
       <!--
         bigquery-emulator live-IT lane: bind Failsafe to integration-test +
         verify. Restrict <includes> to the curated ITs targeted by the Java
-        live-IT track (Phase A baseline in
+        live-IT track (failing-IT inventory in
         .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md); the rest of
         the upstream IT suite expects ADC + real BigQuery and is intentionally
         out of scope. System properties forward the emulator + storage gRPC

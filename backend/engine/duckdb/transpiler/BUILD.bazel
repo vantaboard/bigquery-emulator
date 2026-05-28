@@ -1,4 +1,4 @@
-# Bazel build for the DuckDB transpiler skeleton (Phase 5.B).
+# Bazel build for the DuckDB transpiler skeleton.
 #
 # The transpiler walks a GoogleSQL `ResolvedAST` and lowers it to a
 # DuckDB-flavored SQL string the DuckDB C++ client can execute. This

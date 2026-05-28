@@ -1,4 +1,4 @@
-# GoReleaser config for bigquery-emulator (plan 44, phase 9b).
+# GoReleaser config for bigquery-emulator (release-packaging work).
 #
 # Cuts release archives + checksums for the Go REST gateway across the
 # four supported gateway platforms (linux/{amd64,arm64} +
@@ -141,7 +141,7 @@ release:
     > releases. Stable promises arrive at `v1.0.0`. See
     > [`HANDOFF.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/HANDOFF.md)
     > for the active roadmap and the [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
-    > phase narrative.
+    > capability-area narrative.
     >
     > **Engine binary is linux/amd64 only.** macOS + linux/arm64
     > archives include the gateway binary but no engine. On those

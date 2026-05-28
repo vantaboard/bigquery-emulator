@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Centralized GoogleSQL prebuilt artifact validator (Phase 5).
+"""Centralized GoogleSQL prebuilt artifact validator (safety gate).
 
 This is the single validator every prebuilt-consumer points at. The
 existing surfaces that previously open-coded slices of this work:
@@ -10,12 +10,12 @@ existing surfaces that previously open-coded slices of this work:
   - `.github/actions/setup-googlesql/action.yml` (manifest field lift)
 
 All now delegate to `validate_artifact.py validate` so the gates are
-applied uniformly and a Phase 1 schema bump only needs to flow through
-this file. The validator never recompiles GoogleSQL; it operates on the
-already-unpacked artifact root (typically
+applied uniformly and a compatibility-surface schema bump only needs to
+flow through this file. The validator never recompiles GoogleSQL; it
+operates on the already-unpacked artifact root (typically
 `.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/`).
 
-Failure model (the Phase 5 "no silent prebuilt->source fallback" contract):
+Failure model (the safety-gate "no silent prebuilt->source fallback" contract):
 
   - Every gate is a hard error. The CLI exits non-zero on the first
     failing gate.
@@ -49,17 +49,18 @@ import sys
 from typing import Iterable
 
 # Re-use the closed-schema validator + canonical compat-label set the
-# producer already enforces. Phase 5 reuses these so a schema drift can
-# only flow through `manifest_writer.py`.
+# producer already enforces. The safety gate reuses these so a schema
+# drift can only flow through `manifest_writer.py`.
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 import manifest_writer  # noqa: E402  (sibling import after sys.path tweak)
 
 
-# Phase 1 freezes platform = linux/amd64 and toolchain.compiler = clang.
-# Phase 5 enforces "consumer expects what the artifact claims"; the
-# defaults below are the consumer-side expectations and match what every
-# entrypoint (local task, CI, Docker, release) targets today. A future
+# The compatibility surface freezes platform = linux/amd64 and
+# toolchain.compiler = clang. The safety gate enforces "consumer expects
+# what the artifact claims"; the defaults below are the consumer-side
+# expectations and match what every entrypoint (local task, CI, Docker,
+# release) targets today. A future
 # arm64 lane (per upgrade-rules.md) lights up by extending this map.
 EXPECTED_PLATFORM = {
     "os": "linux",
@@ -232,7 +233,7 @@ def _check_pin(
 
 
 def _check_platform(manifest: dict, pin: ExpectedPin) -> None:
-    """OS/arch/libc/compiler gates. Defaults stay Phase 1 (linux/amd64/clang)."""
+    """OS/arch/libc/compiler gates. Defaults stay linux/amd64/clang per the compatibility surface."""
     platform = manifest.get("platform", {})
     expected_os = pin.os or EXPECTED_PLATFORM["os"]
     expected_arch = pin.arch or EXPECTED_PLATFORM["arch"]

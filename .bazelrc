@@ -67,8 +67,9 @@ run   --cxxopt=-std=c++20 --host_cxxopt=-std=c++20 --config=clang --java_runtime
 build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 
 # ---------------------------------------------------------------------------
-# GoogleSQL build-mode selection (Phase 3 of the `googlesql-prebuilt`
-# rollout, see `docs/dev/googlesql-prebuilt/README.md`).
+# GoogleSQL build-mode selection (the consumer-wiring track of the
+# `googlesql-prebuilt` rollout, see
+# `docs/dev/googlesql-prebuilt/README.md`).
 #
 # The emulator's Bazel build supports two explicit modes for the
 # `@googlesql//...` label space:
@@ -84,7 +85,7 @@ build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 #                                "I deliberately want the source build,
 #                                not a prebuilt artifact".
 #
-#   --config=googlesql-prebuilt  Use the Phase 2 prebuilt artifact.
+#   --config=googlesql-prebuilt  Use the published prebuilt artifact.
 #                                `--override_module=googlesql=...`
 #                                points Bazel's resolver at the
 #                                unpacked tarball under
@@ -101,9 +102,10 @@ build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 # Selection is EXPLICIT. There is no silent fallback: if
 # `--config=googlesql-prebuilt` is active and the cache directory does
 # not exist (or its `MODULE.bazel` does not declare
-# `module(name = "googlesql", ...)`), Bazel refuses to start. Phase 4
-# owns flipping defaults, CI lanes, Docker, and release plumbing onto
-# `--config=googlesql-prebuilt`; Phase 3 only makes the mode available.
+# `module(name = "googlesql", ...)`), Bazel refuses to start. The
+# CI/Docker/release track owns flipping defaults, CI lanes, Docker,
+# and release plumbing onto `--config=googlesql-prebuilt`; the
+# consumer-wiring track only makes the mode available.
 # ---------------------------------------------------------------------------
 
 # Source mode is a no-op marker today: the repo's `MODULE.bazel`
@@ -124,7 +126,7 @@ build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 # `--config=googlesql-prebuilt` can trust the cache contents.
 build:googlesql-prebuilt --override_module=googlesql=%workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
-# ABI parity with the prebuilt artifact. The Phase 1 manifest commits
+# ABI parity with the prebuilt artifact. The compatibility-surface manifest commits
 # the producer to `-DNDEBUG` (see
 # `docs/dev/googlesql-prebuilt/manifest.md`'s `cflags` field), which
 # elides `googlesql/public/id_string.h`'s `IdString::CheckAlive() ->
@@ -139,7 +141,7 @@ build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
 # expose for inline use.
 #
 # This flag flips between modes (source mode keeps the default
-# fastbuild ABI). Phase 4 owns standardising the default mode.
+# fastbuild ABI). The CI/Docker/release track owns standardising the default mode.
 build:googlesql-prebuilt --copt=-DNDEBUG
 build:googlesql-prebuilt --host_copt=-DNDEBUG
 

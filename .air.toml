@@ -1,7 +1,7 @@
 # Hot-reload config for `task emulator:watch` (alias: `task emulator:dev`).
 # Watches the Go side of the gateway and rebuilds + restarts it; the
 # C++ engine subprocess is left disabled (matches `task emulator:run`),
-# so this is only useful while Phase 2 wiring is being scaffolded.
+# so this is only useful while the engine wiring is being scaffolded.
 # Build artifacts land in ./tmp/ and are .gitignored.
 
 root    = "."

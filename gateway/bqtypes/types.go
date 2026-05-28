@@ -36,7 +36,7 @@ type JobReference struct {
 // response, which NPEs when the field is null. Live BigQuery returns
 // an empty array for newly-created datasets; the emulator must
 // preserve that shape so AuthorizeDatasetIT-style ACL-mutation flows
-// work end-to-end. See the Phase A baseline note in
+// work end-to-end. See the failing-IT inventory in
 // `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`.
 type Dataset struct {
 	Kind                     string                   `json:"kind,omitempty"` // bigquery#dataset

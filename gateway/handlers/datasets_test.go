@@ -132,7 +132,7 @@ func TestDatasetInsertEnginePropagatesAlreadyExists(t *testing.T) {
 
 // TestDatasetInsertWithoutCatalogFallsBackTo501 documents the
 // nil-Catalog behaviour so the route table tests keep working in
-// pure-Phase-1 mode.
+// pure gateway-only mode.
 func TestDatasetInsertWithoutCatalogFallsBackTo501(t *testing.T) {
 	req := newDatasetReq(http.MethodPost, "proj", "",
 		`{"datasetReference":{"datasetId":"ds1"}}`)
@@ -195,10 +195,11 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 	}
 }
 
-// TestDatasetGetSynthesizesResource pins the Phase-3 behavior: the
-// engine has no Get RPC yet, so the handler returns a synthesized
-// resource derived from the path parameters. Once Storage grows a
-// DescribeDataset method this test will need updating.
+// TestDatasetGetSynthesizesResource pins the catalog stub behavior:
+// the engine has no Get RPC yet, so the handler returns a
+// synthesized resource derived from the path parameters. Once
+// Storage grows a DescribeDataset method this test will need
+// updating.
 func TestDatasetGetSynthesizesResource(t *testing.T) {
 	req := newDatasetReq(http.MethodGet, "proj", "ds1", "")
 	rec := httptest.NewRecorder()

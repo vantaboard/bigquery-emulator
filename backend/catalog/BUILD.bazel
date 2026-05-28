@@ -1,4 +1,4 @@
-# Bazel build for the GoogleSQL-facing catalog adapter (Phase 4a).
+# Bazel build for the GoogleSQL-facing catalog adapter.
 #
 # The adapter is the bridge between GoogleSQL's `Catalog` interface
 # (which name-resolution / analysis call) and the engine-agnostic

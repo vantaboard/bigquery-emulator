@@ -24,8 +24,8 @@
       bigquery-emulator live-IT lane: a curated subset of the upstream
       src/test/java/**/*IT.java suite runs against the local emulator's
       bigquerydatatransfer gRPC listener via maven-failsafe-plugin (configured
-      below). Until Phase B lands the shallow DataTransfer backend, these ITs
-      fail with NOT_IMPLEMENTED-shaped errors; see
+      below). Until the shallow DataTransfer backend lands, these ITs fail
+      with NOT_IMPLEMENTED-shaped errors; see
       third_party/README.md (Java section) for the verdict baseline.
     -->
   </properties>
@@ -99,7 +99,7 @@
       <!--
         bigquery-emulator live-IT lane: bind Failsafe to integration-test +
         verify. Restrict <includes> to the curated ITs targeted by the Java
-        live-IT track (Phase A baseline in
+        live-IT track (failing-IT inventory in
         .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md). System
         properties forward the emulator + storage gRPC endpoints;
         BqDataTransferOpts reads them in the forked JVM.
@@ -122,13 +122,14 @@
             <include>**/DisableTransferConfigIT.java</include>
             <include>**/ReEnableTransferConfigIT.java</include>
             <!--
-              Phase C additions (see
+              Missing-tests follow-up additions (see
               .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md): smoke ITs
               for the 8 third-party connector Create*Transfer samples. Expected
               to fail with io.grpc.StatusRuntimeException: UNIMPLEMENTED from
-              the gapic DataTransferService client until Phase D lands the DTS
-              gRPC bridge; committed today so Failsafe discovers them and the
-              per-IT mapping carries the implementation target.
+              the gapic DataTransferService client until the gRPC-server
+              follow-up lands the DTS gRPC bridge; committed today so Failsafe
+              discovers them and the per-IT mapping carries the implementation
+              target.
             -->
             <include>**/CreateAdManagerTransferIT.java</include>
             <include>**/CreateAdsTransferIT.java</include>

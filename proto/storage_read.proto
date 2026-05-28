@@ -45,10 +45,10 @@ option cc_enable_arenas = true;
 //   * `ReadRows` streams `DataRow` messages off one of the session's
 //     streams.
 //
-// Plan 37 (this proto + the session-creation handler) keeps the
-// session shape minimal: one session, one stream, no parallel reads.
-// Phase 7c will revisit parallelism once the conformance suite asks
-// for it.
+// The initial cut (this proto + the session-creation handler) keeps
+// the session shape minimal: one session, one stream, no parallel
+// reads. Parallel reads will follow once the conformance suite asks
+// for them.
 // ---------------------------------------------------------------------------
 
 service StorageRead {

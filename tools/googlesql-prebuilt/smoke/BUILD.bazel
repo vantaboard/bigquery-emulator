@@ -10,8 +10,9 @@ cc_binary(
     name = "smoke",
     srcs = ["smoke_wrappers.cc"],
     deps = [
-        # Phase 1 inventory row: `:error_helpers` is one of the 18
-        # frozen direct labels. Linking against this wrapper exercises
+        # Compatibility-surface inventory row: `:error_helpers` is one
+        # of the 18 frozen direct labels. Linking against this wrapper
+        # exercises
         # the strict-deps narrowing (only `error_helpers.h` is
         # visible), the `:_archive` private cc_import, and the third-
         # party absl/strings deps the wrapper exposes.

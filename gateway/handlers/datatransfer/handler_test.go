@@ -153,8 +153,9 @@ func TestDataTransferProjectScopedCreateRoutesToUS(t *testing.T) {
 	}
 }
 
-// TestDataTransferAmazonS3Create pins the Phase A row 13 happy path
-// (CreateAmazonS3TransferIT). Once env vars are stubbed and the gRPC
+// TestDataTransferAmazonS3Create pins the happy path for the
+// CreateAmazonS3TransferIT failing-IT row 13. Once env vars are
+// stubbed and the gRPC
 // transport is HTTP/JSON-shaped, this is the route the IT lands on.
 // We accept both project-scoped (no location segment, gapic Go REST)
 // and location-scoped (gapic Java) shapes.
@@ -231,15 +232,15 @@ func TestDataTransferListDataSources(t *testing.T) {
 	}
 }
 
-// TestDataTransferListDataSourcesPhaseCConnectors pins the Phase C
-// catalog extension: the 8 connector IDs that the upstream
-// `Create*Transfer.java` driver classes send on CreateTransferConfig
-// must all surface from `dataSources.list` so the catalog accurately
-// represents what the emulator accepts. The IDs match the
-// `setDataSourceId(...)` literals in each driver (see
+// TestDataTransferListDataSourcesThirdPartyConnectors pins the
+// catalog extension: the 8 third-party connector IDs that the
+// upstream `Create*Transfer.java` driver classes send on
+// CreateTransferConfig must all surface from `dataSources.list` so
+// the catalog accurately represents what the emulator accepts. The
+// IDs match the `setDataSourceId(...)` literals in each driver (see
 // CreateAdManagerTransfer → `dfp_dt`, CreateAdsTransfer → `adwords`,
 // CreateTeradataTransfer → `on_premises`).
-func TestDataTransferListDataSourcesPhaseCConnectors(t *testing.T) {
+func TestDataTransferListDataSourcesThirdPartyConnectors(t *testing.T) {
 	mux := newTestMux(t)
 	req := httptest.NewRequest(http.MethodGet, "/v1/projects/p1/locations/us/dataSources", nil)
 	rec := httptest.NewRecorder()
@@ -257,10 +258,10 @@ func TestDataTransferListDataSourcesPhaseCConnectors(t *testing.T) {
 		}
 	}
 	wantIDs := []string{
-		// Phase B baseline.
+		// Initial shallow-emulator baseline.
 		"scheduled_query",
 		"amazon_s3",
-		// Phase C: 8 new third-party connector stubs.
+		// Third-party connector stubs.
 		"dfp_dt",
 		"adwords",
 		"dcm_dt",
@@ -277,14 +278,14 @@ func TestDataTransferListDataSourcesPhaseCConnectors(t *testing.T) {
 	}
 }
 
-// TestDataTransferCreateConfigPhaseCConnectorsSucceed pins that
-// CreateTransferConfig succeeds for each of the 8 Phase C connector
-// IDs. The emulator does not perform the transfer; it only persists
-// the config so the IT's GetTransferConfig probe finds it. This is
-// the REST-side surface contract the 8 Create*TransferIT ITs depend
-// on (the gapic clients ultimately dial gRPC, which is Phase D
-// scope; this test fixes the REST shape today).
-func TestDataTransferCreateConfigPhaseCConnectorsSucceed(t *testing.T) {
+// TestDataTransferCreateConfigThirdPartyConnectorsSucceed pins that
+// CreateTransferConfig succeeds for each of the 8 third-party
+// connector IDs. The emulator does not perform the transfer; it only
+// persists the config so the IT's GetTransferConfig probe finds it.
+// This is the REST-side surface contract the 8 Create*TransferIT
+// ITs depend on (the gapic clients ultimately dial gRPC, which is
+// the gRPC-server follow-up; this test fixes the REST shape today).
+func TestDataTransferCreateConfigThirdPartyConnectorsSucceed(t *testing.T) {
 	mux := newTestMux(t)
 	for _, ds := range []string{
 		"dfp_dt",
@@ -368,8 +369,8 @@ func TestDataTransferCheckValidCredsNoLiveOAuth(t *testing.T) {
 }
 
 // TestDataTransferStartManualRunsUnsupportedWithoutRunner pins the
-// 501 for :startManualRuns when no Runner is wired (Phase B keeps
-// the SQL execution path off; Phase C wires it).
+// 501 for :startManualRuns when no Runner is wired (the shallow
+// emulator keeps the SQL execution path off; the SQL runner wires it).
 func TestDataTransferStartManualRunsUnsupportedWithoutRunner(t *testing.T) {
 	mux := newTestMux(t)
 	rec := postJSON(t, mux, pathP1USConfigs, jsonCreateScheduledQuerySelect1)

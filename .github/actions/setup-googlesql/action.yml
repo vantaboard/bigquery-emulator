@@ -1,7 +1,8 @@
 # Resolve a GoogleSQL build mode for the emulator's Bazel build.
 # Centralises the prebuilt-vs-source decision that every CI workflow
-# making an engine build needs (Phase 4 of the `googlesql-prebuilt`
-# rollout — see `docs/dev/googlesql-prebuilt/README.md` and
+# making an engine build needs (the CI/Docker/release track of the
+# `googlesql-prebuilt` rollout — see
+# `docs/dev/googlesql-prebuilt/README.md` and
 # `.github/workflows/ci.yml`).
 #
 # Two ways to pick a mode:
@@ -12,7 +13,7 @@
 #      bump on every prebuilt artifact publish). The action downloads,
 #      verifies, and unpacks the artifact under
 #      `.cache/googlesql-prebuilt/`. The caller then runs
-#      `task emulator:build-engine:bazel` with the Phase 4 default
+#      `task emulator:build-engine:bazel` with the default
 #      (`GOOGLESQL_SOURCE=prebuilt`) and the cache is consumed.
 #
 #   2. Leave both empty (e.g. before maintainers populate the repo
@@ -89,8 +90,8 @@ outputs:
     description: |
       Value to pass as the `GOOGLESQL_SOURCE` env var to
       `task emulator:build-engine:bazel`. `prebuilt` for prebuilt mode,
-      `local` for source mode. Phase 4's default matches `prebuilt`,
-      but exporting it explicitly keeps the workflow free of mode
+      `local` for source mode. The default matches `prebuilt`, but
+      exporting it explicitly keeps the workflow free of mode
       ambiguity.
     value: ${{ steps.resolve.outputs.googlesql-source }}
   artifact-version:
@@ -105,7 +106,7 @@ outputs:
       against `../googlesql/HEAD` in source mode.
     value: ${{ steps.identity.outputs.googlesql-commit }}
   googlesql-commit-full:
-    description: 40-hex full upstream GoogleSQL commit (Phase 5 identity surface).
+    description: 40-hex full upstream GoogleSQL commit (safety-gate identity surface).
     value: ${{ steps.identity.outputs.googlesql-commit-full }}
   googlesql-tag:
     description: |
@@ -113,15 +114,15 @@ outputs:
       the resolved git ref in source mode).
     value: ${{ steps.identity.outputs.googlesql-tag }}
   schema-version:
-    description: Manifest schema version (Phase 5; empty in source mode).
+    description: Manifest schema version (safety-gate identity; empty in source mode).
     value: ${{ steps.identity.outputs.schema-version }}
   platform-libc:
-    description: Producer-pinned libc string (Phase 5; empty in source mode).
+    description: Producer-pinned libc string (safety-gate identity; empty in source mode).
     value: ${{ steps.identity.outputs.platform-libc }}
   compiler:
     description: |
-      Compiler + version string (e.g. `clang-18.1.3`; Phase 5;
-      empty in source mode).
+      Compiler + version string (e.g. `clang-18.1.3`; safety-gate
+      identity; empty in source mode).
     value: ${{ steps.identity.outputs.compiler }}
   tarball-url:
     description: |
@@ -161,7 +162,7 @@ runs:
           fi
           echo "mode=source" >> "$GITHUB_OUTPUT"
           echo "googlesql-source=local" >> "$GITHUB_OUTPUT"
-          echo "::warning::vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower). Set the repo vars to switch CI lanes onto the Phase 4 default (prebuilt)."
+          echo "::warning::vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower). Set the repo vars to switch CI lanes onto the prebuilt default."
         fi
 
     - name: Fetch + verify + unpack prebuilt artifact
@@ -174,7 +175,7 @@ runs:
         # + manifest-schema gates the local helper enforces, so a
         # tampered or stale tarball cannot land in the cache. Requires
         # `arduino/setup-task` to have run earlier in the calling job.
-        # The task also invokes the Phase 5 centralized validator
+        # The task also invokes the centralized safety-gate validator
         # (`tools/googlesql-prebuilt/validate_artifact.py`) before
         # committing to the cache, so an artifact that passes this step
         # has already cleared the full identity + payload integrity gates.
@@ -182,7 +183,7 @@ runs:
           URL='${{ inputs.prebuilt-url }}' \
           SHA256='${{ inputs.prebuilt-sha256 }}'
 
-    - name: Validate prebuilt artifact identity (Phase 5 pins)
+    - name: Validate prebuilt artifact identity (safety-gate pins)
       if: steps.resolve.outputs.mode == 'prebuilt'
       shell: bash
       working-directory: ${{ github.workspace }}

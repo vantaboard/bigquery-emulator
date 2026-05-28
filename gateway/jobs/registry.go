@@ -4,7 +4,7 @@
 // timing statistics it must emit alongside rows) and is the source
 // of truth `jobs.get` / `jobs.list` will read from once those land.
 //
-// Scope today (Phase 5d):
+// Scope today:
 //
 //   - One process-local Registry per gateway. State is volatile;
 //     restarts wipe the table. Spanner-emulator does the same with
@@ -12,12 +12,12 @@
 //   - Jobs are minted by `jobs.query` (the sync query API) only.
 //     `jobs.insert` -- the metadata-only POST that creates query /
 //     load / copy / extract jobs asynchronously -- still returns the
-//     Phase 1 NotImplemented stub.
+//     gateway-only NotImplemented stub.
 //   - Jobs are recorded as `DONE` straight away. The emulator runs
 //     each query synchronously, so a pending/running window never
 //     exists on the wire from the caller's perspective. Async
-//     execution lands later in Phase 6 when DML / long-running jobs
-//     need real lifecycle transitions.
+//     execution lands later when DML / long-running jobs need real
+//     lifecycle transitions.
 //
 // The shape of `Job`, `Status`, and `Statistics` mirrors the subset of
 // `https://docs.cloud.google.com/bigquery/docs/reference/rest/v2/jobs#Job`
@@ -82,10 +82,10 @@ type Statistics struct {
 // emit them verbatim.
 //
 // The registry holds the entire result set in memory; this matches
-// the Phase 5e "single-page only" charter from
+// the "single-page only" charter from
 // `.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`. Pagination
 // (real `pageToken` lifecycle, cursored reads from a streaming
-// engine) is deferred until Phase 6, when long-running jobs land.
+// engine) is deferred until long-running jobs land.
 type QueryResult struct {
 	Schema *bqtypes.TableSchema
 	Rows   []bqtypes.Row
@@ -126,7 +126,7 @@ type Job struct {
 //
 // The map only holds successful or terminally-failed jobs because
 // the emulator does not (yet) maintain a pending queue; see the
-// package-level doc for why DONE-on-arrival is fine for Phase 5d.
+// package-level doc for why DONE-on-arrival is fine today.
 type Registry struct {
 	counter uint64
 	jobs    sync.Map

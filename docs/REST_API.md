@@ -6,8 +6,8 @@ documentation under [`docs/bigquery/docs/reference/rest/v2/`][refdir].
 
 The goal of this document is operational: when you're staring at a client
 library that's failing against the emulator, you want to know exactly
-which file to open. Keep this in sync with `gateway/server.go` and
-ROADMAP.md Phase 1.
+which file to open. Keep this in sync with `gateway/server.go` and the
+gateway-HTTP-surface section of `ROADMAP.md`.
 
 [refdir]: ./bigquery/docs/reference/rest/v2/
 
@@ -281,12 +281,13 @@ For result marshaling, types follow
 | `RANGE<T>` | pair `[start, end)` formatted with the inner type |
 
 `f`/`v` rows are always strings/objects/arrays at the wire level — even
-`INT64` arrives as a decimal string. Phase 5 marshalers should never
-emit numeric types as JSON numbers except for `FLOAT64`.
+`INT64` arrives as a decimal string. The query-execution row marshalers
+should never emit numeric types as JSON numbers except for `FLOAT64`.
 
 ## Storage Read API
 
-Phase 7 implements `google.cloud.bigquery.storage.v1.BigQueryRead`. The
+The Storage Read API surface implements
+`google.cloud.bigquery.storage.v1.BigQueryRead`. The
 gRPC service surface and the Avro/Arrow type tables are documented in
 [`docs/bigquery/docs/reference/storage.md`][storage] and the per-method
 RPC reference under [`docs/bigquery/docs/reference/storage/rpc/`][storagerpc].

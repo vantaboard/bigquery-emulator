@@ -8,7 +8,7 @@ in-repo SQL-fixture conformance harness:
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
-| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until Phase B lands the shallow backends — see the per-IT baseline in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
+| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see the per-IT baseline in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -135,8 +135,8 @@ unset so GCS-backed subtests skip cleanly.
 
 When `BIGQUERY_EMULATOR_HOST` points at this emulator, tests **skip**
 rather than fail when they require unsupported surfaces. The list below is
-inherited from go-googlesql; deltas specific to this emulator's Phase 8
-state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
+inherited from go-googlesql; deltas specific to this emulator's
+conformance-harness state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 
 | Area | Behavior with `BIGQUERY_EMULATOR_HOST` set |
 |------|---------------------------------------------|
@@ -362,15 +362,15 @@ drivers + IT-side BigQuery client construction at the local emulator:
 - [`com.example.bigquerydatatransfer.BqDataTransferOpts`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/BqDataTransferOpts.java)
   — `DataTransferServiceSettings` (same gRPC endpoint).
 
-Expected fail states per surface (Phase A baseline; see
+Expected fail states per surface (initial-baseline; see
 `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`):
 
 | Surface | Expectation |
 |---------|-------------|
 | `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets, see the per-IT verdict in the plan). |
-| `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B (`java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the shallow ConnectionService backend. |
-| `bigquerydatatransfer` (3 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B lands the shallow DataTransferService backend. |
-| `bigquerystorage` (1 IT, `WriteBufferedStreamIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B lands BigQuery Write API parity. |
+| `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work (`java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the shallow ConnectionService backend. |
+| `bigquerydatatransfer` (3 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands the shallow DataTransferService backend. |
+| `bigquerystorage` (1 IT, `WriteBufferedStreamIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands BigQuery Write API parity. |
 
 Setting `JAVA_BQ_SKIP_TESTS=true` reverts to the legacy compile-only
 posture (`-DskipTests=true -Dmaven.test.skip=true`); useful when you
@@ -378,9 +378,9 @@ just want the libraries-bom drift check.
 
 The CI job
 [`java-bigquery-tests-live`](../.github/workflows/thirdparty-samples.yml)
-exercises the same fan-out on every push/PR with Temurin 17. Until
-Phase B lands, the job tolerates the 9 expected-fail ITs via a
-`JAVA_BQ_ALLOW_FAILING_ITS` allowlist (see the workflow for the
+exercises the same fan-out on every push/PR with Temurin 17. Until the
+shallow-emulators work lands, the job tolerates the 9 expected-fail ITs
+via a `JAVA_BQ_ALLOW_FAILING_ITS` allowlist (see the workflow for the
 expected diagnostic).
 
 ### Emulator wiring
@@ -427,7 +427,7 @@ sample IDs against the vendored class and its IT (when an IT is shipped).
 Use this when triaging "is sample X available?" or "is sample X exercised
 end-to-end?"; rerun the table when adding more.
 
-After Phase C of the Java live-IT track
+After the missing-tests follow-up of the Java live-IT track
 ([java-its-missing-tests_c9d0e1f2.plan.md](../.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md))
 all 24 target samples ship a Failsafe IT. The current verdict is
 **2 PASS + 20 FAIL + 2 SKIP**: the 2 PASS rows
@@ -435,19 +435,19 @@ all 24 target samples ship a Failsafe IT. The current verdict is
 round-trip cleanly against the emulator, the 2 SKIP rows
 (`QueryExternalBigtable{Perm,Temp}IT`) `@Assume` Bigtable env vars
 that the emulator does not provide, and the 20 FAIL rows surface
-deferred-to-Phase-D root causes:
+deferred-to-gRPC-server-follow-ups root causes:
 
 - 18 hit gRPC `UNIMPLEMENTED` because the bqconnection /
   `BigQueryRead` / `BigQueryWrite` / `DataTransferService` gRPC
-  servers are not yet wired (Phase B landed REST handlers for
-  datatransfer, but the Java gapic clients use gRPC).
+  servers are not yet wired (the shallow-emulators work landed REST
+  handlers for datatransfer, but the Java gapic clients use gRPC).
 - `AuthorizeDatasetIT` fails on the bare `POST /datasets/{id}` legacy
   PATCH path the emulator currently rejects.
 - `QueryMaterializedViewIT` fails on the GoogleSQL engine bug where
   `SELECT *` over a materialized view resolves to zero columns.
 
-See the Phase B + Phase C plan files for the per-IT verdict tables
-and Phase D follow-ups.
+See the shallow-emulators plan and the missing-tests follow-up plan for
+the per-IT verdict tables and the queued gRPC-server follow-ups.
 
 | Sample ID | Vendored class | IT shipped |
 |-----------|----------------|------------|
@@ -462,18 +462,18 @@ and Phase D follow-ups.
 | `bigqueryconnection-get-connection` | [`GetConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/GetConnection.java) | [`GetConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/GetConnectionIT.java) |
 | `bigqueryconnection-share-connection` | [`ShareConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/ShareConnection.java) | [`ShareConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/ShareConnectionIT.java) |
 | `bigqueryconnection-update-connection` | [`UpdateConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/UpdateConnection.java) | [`UpdateConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/UpdateConnectionIT.java) |
-| `bigquerydatatransfer-create-admanager-transfer` | [`CreateAdManagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdManagerTransfer.java) | [`CreateAdManagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdManagerTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-ads-transfer` | [`CreateAdsTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdsTransfer.java) | [`CreateAdsTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdsTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-admanager-transfer` | [`CreateAdManagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdManagerTransfer.java) | [`CreateAdManagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdManagerTransferIT.java) |
+| `bigquerydatatransfer-create-ads-transfer` | [`CreateAdsTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdsTransfer.java) | [`CreateAdsTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdsTransferIT.java) |
 | `bigquerydatatransfer-create-amazons3-transfer` | [`CreateAmazonS3Transfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAmazonS3Transfer.java) | [`CreateAmazonS3TransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAmazonS3TransferIT.java) |
-| `bigquerydatatransfer-create-campaignmanager-transfer` | [`CreateCampaignmanagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransfer.java) | [`CreateCampaignmanagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-play-transfer` | [`CreatePlayTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreatePlayTransfer.java) | [`CreatePlayTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreatePlayTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-redshift-transfer` | [`CreateRedshiftTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateRedshiftTransfer.java) | [`CreateRedshiftTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateRedshiftTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-teradata-transfer` | [`CreateTeradataTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateTeradataTransfer.java) | [`CreateTeradataTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateTeradataTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-youtubechannel-transfer` | [`CreateYoutubeChannelTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransfer.java) | [`CreateYoutubeChannelTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransferIT.java) (Phase C) |
-| `bigquerydatatransfer-create-youtubecontentowner-transfer` | [`CreateYoutubeContentOwnerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransfer.java) | [`CreateYoutubeContentOwnerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-campaignmanager-transfer` | [`CreateCampaignmanagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransfer.java) | [`CreateCampaignmanagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransferIT.java) |
+| `bigquerydatatransfer-create-play-transfer` | [`CreatePlayTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreatePlayTransfer.java) | [`CreatePlayTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreatePlayTransferIT.java) |
+| `bigquerydatatransfer-create-redshift-transfer` | [`CreateRedshiftTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateRedshiftTransfer.java) | [`CreateRedshiftTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateRedshiftTransferIT.java) |
+| `bigquerydatatransfer-create-teradata-transfer` | [`CreateTeradataTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateTeradataTransfer.java) | [`CreateTeradataTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateTeradataTransferIT.java) |
+| `bigquerydatatransfer-create-youtubechannel-transfer` | [`CreateYoutubeChannelTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransfer.java) | [`CreateYoutubeChannelTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransferIT.java) |
+| `bigquerydatatransfer-create-youtubecontentowner-transfer` | [`CreateYoutubeContentOwnerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransfer.java) | [`CreateYoutubeContentOwnerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransferIT.java) |
 | `bigquerydatatransfer-disable-transfer` | [`DisableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/DisableTransferConfig.java) | [`DisableTransferConfigIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/DisableTransferConfigIT.java) |
 | `bigquerydatatransfer-reenable-transfer` | [`ReEnableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/ReEnableTransferConfig.java) | [`ReEnableTransferConfigIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/ReEnableTransferConfigIT.java) |
-| `bigquerystorage-arrow-quickstart` | [`StorageArrowSample.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/StorageArrowSample.java) | [`StorageArrowSampleIT.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/test/java/com/example/bigquerystorage/StorageArrowSampleIT.java) (Phase C) |
+| `bigquerystorage-arrow-quickstart` | [`StorageArrowSample.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/StorageArrowSample.java) | [`StorageArrowSampleIT.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/test/java/com/example/bigquerystorage/StorageArrowSampleIT.java) |
 | `bigquerystorage-jsonstreamwriter-buffered` | [`WriteBufferedStream.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/WriteBufferedStream.java) | [`WriteBufferedStreamIT.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/test/java/com/example/bigquerystorage/WriteBufferedStreamIT.java) |
 
 ## `python-bigquery-dataframes-tests`

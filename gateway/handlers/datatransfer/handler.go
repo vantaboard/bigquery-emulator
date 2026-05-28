@@ -57,11 +57,12 @@ const transferStateFailed = "FAILED"
 
 // dataSourceScheduledQuery is the dataSourceId for the scheduled SQL
 // connector. The emulator only executes this surface when a Runner is
-// wired (Phase C).
+// wired (the SQL runner follow-up).
 const dataSourceScheduledQuery = "scheduled_query"
 
-// dataSourceAmazonS3 is a metadata-only stub for third-party connector
-// discovery (Phase A baseline row 13: CreateAmazonS3TransferIT).
+// dataSourceAmazonS3 is a metadata-only stub for third-party
+// connector discovery (the failing-IT baseline row 13:
+// CreateAmazonS3TransferIT).
 const dataSourceAmazonS3 = "amazon_s3"
 
 // The following dataSourceId constants are the connector identifiers
@@ -70,10 +71,11 @@ const dataSourceAmazonS3 = "amazon_s3"
 // does not perform any third-party traffic. The connector IDs come
 // directly from the snippet drivers (see e.g. CreateAdManagerTransfer
 // → `dfp_dt`, CreateAdsTransfer → `adwords`, CreateTeradataTransfer →
-// `on_premises`). Phase C's plan listed three IDs that diverge from
-// what the drivers send (`admanager_transfer`, `google_ads`,
-// `teradata`); registering the driver-side IDs is what actually moves
-// CreateTransferConfig forward, so we follow the drivers here.
+// `on_premises`). The earlier shallow-emulator design listed three
+// IDs that diverge from what the drivers send (`admanager_transfer`,
+// `google_ads`, `teradata`); registering the driver-side IDs is what
+// actually moves CreateTransferConfig forward, so we follow the
+// drivers here.
 const (
 	dataSourceAdManager           = "dfp_dt"
 	dataSourceGoogleAds           = "adwords"
@@ -92,9 +94,10 @@ func transferRunErrorPayload(msg string) map[string]any {
 }
 
 // ScheduledQueryRunner executes scheduled_query transfer SQL against
-// the emulator catalog. Phase B keeps this as a hook the gateway can
-// fill in once `gateway/handlers/queries.go` is reachable from the
-// gRPC-free unit-test path; left nil for now (no SQL execution).
+// the emulator catalog. The shallow-emulator port keeps this as a
+// hook the gateway can fill in once `gateway/handlers/queries.go` is
+// reachable from the gRPC-free unit-test path; left nil for now (no
+// SQL execution).
 type ScheduledQueryRunner interface {
 	RunScheduledQueryTransfer(project, location, sql, defaultDatasetID string) error
 }
@@ -163,7 +166,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 // transfer config. Mirrors the proto3 field names the upstream gapic
 // clients emit (camelCase). Disabled is *bool (not bool) so the patch
 // path can distinguish "not in mask" from "set to false" — that is the
-// fix Phase A row 14 (DisableTransferConfigIT) and 15
+// fix the failing-IT rows 14 (DisableTransferConfigIT) and 15
 // (ReEnableTransferConfigIT) exercise.
 type transferConfigResource struct {
 	Name                 string         `json:"name,omitempty"`
@@ -483,13 +486,15 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 // handlePatchConfig honors the `disabled` field on the request body;
 // because Disabled is *bool, an explicit `"disabled": false` flips a
-// disabled config back on (Phase A row 15: ReEnableTransferConfigIT)
-// and `"disabled": true` disables it (row 14:
-// DisableTransferConfigIT). Other fields update only when non-zero.
+// disabled config back on (failing-IT row 15:
+// ReEnableTransferConfigIT) and `"disabled": true` disables it (row
+// 14: DisableTransferConfigIT). Other fields update only when
+// non-zero.
 //
 // updateMask is parsed from the `updateMask` query parameter (gapic
-// REST clients append it). Phase B keeps the mask advisory: the mask
-// names are not enforced, the body's non-zero fields drive the patch.
+// REST clients append it). The shallow-emulator port keeps the mask
+// advisory: the mask names are not enforced, the body's non-zero
+// fields drive the patch.
 // That matches the existing emulator pattern for other PATCH
 // endpoints.
 func (h *Handler) handlePatchConfig(w http.ResponseWriter, r *http.Request) {

@@ -83,8 +83,8 @@ jobs:
   # Java live-IT lane: `mvn -B verify` on each snippets POM, running
   # the curated 15-IT Failsafe set against a freshly built emulator
   # (gateway + engine on :9050 / :9060). Mirrors the live golang job
-  # below but on the Java side. Until Phase B lands the shallow
-  # bigqueryconnection / bigquerydatatransfer / bigquerystorage
+  # below but on the Java side. Until the shallow-emulator port lands
+  # the shallow bigqueryconnection / bigquerydatatransfer / bigquerystorage
   # backends, 9 of the 15 ITs are expected to fail with
   # NOT_IMPLEMENTED-shaped errors; `JAVA_BQ_ALLOW_FAILING_ITS` (or
   # `continue-on-error` below) keeps the lane green while still
@@ -126,18 +126,19 @@ jobs:
           done
 
       - name: Run thirdparty:java-bigquery-tests (live ITs)
-        # Phase A: 9 of the 15 curated ITs are known-fail until the
-        # shallow gRPC backends land in Phase B. Tolerate the failure
-        # at the workflow level; the per-IT diagnostic is what gates
-        # promotion (see the plan above for the allowlist).
+        # 9 of the 15 curated ITs are known-fail until the shallow
+        # gRPC backends land. Tolerate the failure at the workflow
+        # level; the per-IT diagnostic is what gates promotion (see
+        # the plan above for the allowlist).
         continue-on-error: true
         run: task thirdparty:java-bigquery-tests
         env:
           BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
           BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
-          # Phase A allowlist: until Phase B (`java-its-shallow-emulators`)
-          # implements the shallow Connection / DataTransfer / Storage Write
-          # backends, expect the 9 non-java-bigquery ITs to fail. Phase B
+          # Failing-IT allowlist: until the shallow-emulator port
+          # (`java-its-shallow-emulators`) implements the shallow
+          # Connection / DataTransfer / Storage Write backends,
+          # expect the 9 non-java-bigquery ITs to fail. Shallow-emulator
           # consumers can read this list to know which surfaces to grow.
           JAVA_BQ_ALLOW_FAILING_ITS: >-
             CreateAwsConnectionIT,DeleteConnectionIT,GetConnectionIT,
@@ -193,9 +194,9 @@ jobs:
           disk-cache: thirdparty
           repository-cache: true
 
-      # Phase 4 of the `googlesql-prebuilt` rollout: prefer the
-      # published prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL`
-      # / `_SHA256` at the repository level) and fall back to a sibling
+      # CI/Docker/release prebuilt-mode wiring: prefer the published
+      # prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL` /
+      # `_SHA256` at the repository level) and fall back to a sibling
       # source checkout when the repo vars are unset.
       - name: Resolve GoogleSQL build mode
         id: googlesql

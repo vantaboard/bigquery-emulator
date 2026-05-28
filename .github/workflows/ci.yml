@@ -109,9 +109,10 @@ jobs:
       # Bazel build of emulator_main (canonical, full GoogleSQL)
       # ---------------------------------------------------------------
       #
-      # Phase 4 of the `googlesql-prebuilt` rollout (see
-      # `docs/dev/googlesql-prebuilt/README.md`) consumes a pinned
-      # prebuilt artifact instead of recompiling GoogleSQL from source.
+      # The CI/Docker/release track of the `googlesql-prebuilt`
+      # rollout (see `docs/dev/googlesql-prebuilt/README.md`) consumes
+      # a pinned prebuilt artifact instead of recompiling GoogleSQL
+      # from source.
       # The composite action below resolves the mode:
       #
       #   * If `vars.GOOGLESQL_PREBUILT_URL` and

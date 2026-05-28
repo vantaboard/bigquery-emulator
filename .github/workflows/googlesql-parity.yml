@@ -1,5 +1,6 @@
-# GoogleSQL source-vs-prebuilt parity (Phase 5 of the
-# `googlesql-prebuilt` rollout — see `docs/dev/googlesql-prebuilt/README.md`).
+# GoogleSQL source-vs-prebuilt parity (the safety-gate parity check
+# of the `googlesql-prebuilt` rollout — see
+# `docs/dev/googlesql-prebuilt/README.md`).
 #
 # Builds the same emulator commit twice, once against the pinned
 # GoogleSQL prebuilt artifact and once against an upstream source
@@ -31,8 +32,9 @@
 # Mode handoff details. Each "mode" leg is a dedicated job so a single
 # leg's slowness does not block the other; the comparator job aggregates
 # both legs and is the workflow-level pass/fail signal. The prebuilt leg
-# reuses the standard `setup-googlesql` composite (which Phase 5 wired
-# the centralized `validate_artifact.py` into); the source leg pinpoints
+# reuses the standard `setup-googlesql` composite (which the
+# safety-gate parity check wired the centralized
+# `validate_artifact.py` into); the source leg pinpoints
 # `googlesql-ref` so the same upstream commit drives both legs.
 #
 # Why this workflow exists separately from `ci.yml` / `conformance.yml`:
@@ -44,7 +46,7 @@
 # parity lane off temporarily without weakening the per-PR build gate.
 #
 # Source fallback during the pre-publish window: when the repo vars
-# `GOOGLESQL_PREBUILT_URL`/`_SHA256` are still empty (Phase 4's release
+# `GOOGLESQL_PREBUILT_URL`/`_SHA256` are still empty (the release
 # maintainer follow-up has not landed a real artifact yet), the prebuilt
 # leg's `setup-googlesql` call hits `fail-on-source-fallback: true` and
 # refuses to run — the parity comparator then surfaces a workflow-level

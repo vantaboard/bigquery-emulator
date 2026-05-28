@@ -11,7 +11,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestDMLInsertValuesRoundTrip is the Phase 6a end-to-end story for
+// TestDMLInsertValuesRoundTrip is the end-to-end story for
 // INSERT VALUES: create a dataset and a typed table over REST, run
 // `INSERT INTO ds.t (...) VALUES (...)` through `jobs.query`, confirm
 // the response carries the expected `dmlStats` / `numDmlAffectedRows`
@@ -164,9 +164,9 @@ func TestDMLInsertSelectRoundTrip(t *testing.T) {
 
 	// Populate the source table via INSERT VALUES rather than
 	// `tabledata.insertAll`. The latter goes through the gateway's
-	// `jsonToCell` shim that stringifies every numeric value (Phase
-	// 3's intentional simplification, see
-	// `gateway/handlers/tabledata.go::jsonToCell`); rows it lands
+	// `jsonToCell` shim that stringifies every numeric value (an
+	// intentional simplification of the tabledata insertAll path,
+	// see `gateway/handlers/tabledata.go::jsonToCell`); rows it lands
 	// would carry STRING cells in the INT64 `id` column and trip
 	// the analyzer's struct-type check on the inner SELECT during
 	// `INSERT ... SELECT`. Going through DML keeps the

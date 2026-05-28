@@ -118,7 +118,7 @@ type Gateway struct {
 	engineDone chan struct{}
 
 	// engineClient is the long-lived gRPC channel to the engine
-	// subprocess. nil when EngineBinary is empty (Phase 1 stub mode).
+	// subprocess. nil when EngineBinary is empty (gateway-only stub mode).
 	engineClient *engine.Client
 
 	// preStartHook runs once just before the engine subprocess is
@@ -258,9 +258,10 @@ func (g *Gateway) startEngine() error {
 
 // connectAndWaitForEngine dials the engine's gRPC port and polls
 // grpc.health.v1.Health.Check until it reports SERVING (or
-// engineReadyTimeout fires). Replaces the Phase 1 sleep-and-pray stub
-// with a real readiness probe so the gateway's HTTP listener never
-// accepts traffic before the engine is actually able to answer it.
+// engineReadyTimeout fires). Replaces the earlier sleep-and-pray
+// stub with a real readiness probe so the gateway's HTTP listener
+// never accepts traffic before the engine is actually able to answer
+// it.
 //
 // Stores the live *engine.Client on the receiver for the lifetime of
 // the gateway; the connection is reused for every business RPC and torn

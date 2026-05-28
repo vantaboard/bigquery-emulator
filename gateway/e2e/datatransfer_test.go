@@ -96,7 +96,7 @@ func TestDataTransferCRUDOverGateway(t *testing.T) {
 
 // TestDataTransferDataSourceCatalogOverGateway pins the seed
 // dataSources catalog (scheduled_query + amazon_s3) over the live
-// gateway. Phase A row 13 (CreateAmazonS3TransferIT) needs the
+// gateway. The CreateAmazonS3TransferIT failing-IT row 13 needs the
 // catalog probe to surface the amazon_s3 entry before the IT
 // proceeds to POST /transferConfigs.
 func TestDataTransferDataSourceCatalogOverGateway(t *testing.T) {

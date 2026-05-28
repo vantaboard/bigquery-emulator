@@ -16,7 +16,7 @@ BigQuery REST API.
 > **Status:** very early scaffold. The Go REST gateway boots, answers a
 > health probe, and registers every documented BigQuery v2 REST endpoint
 > as a 501 stub. The C++ engine is a placeholder. See
-> [`ROADMAP.md`](./ROADMAP.md) for the phased plan and
+> [`ROADMAP.md`](./ROADMAP.md) for the capability-area plan and
 > [`docs/REST_API.md`](./docs/REST_API.md) for the per-endpoint mapping
 > and current status.
 
@@ -84,7 +84,7 @@ bigquery-emulator/
     bigquery/             # Vendored copy of the upstream BigQuery docs
                           # corpus, used as the source of truth when
                           # verifying request/response shapes
-  ROADMAP.md            # Phased plan (read this first)
+  ROADMAP.md            # Capability-area plan (read this first)
   README.md
   LICENSE               # MIT
 ```
@@ -122,8 +122,8 @@ suppression markers — see [`docs/dev/cpp-lint.md`](./docs/dev/cpp-lint.md).
 
 ## Quickstart
 
-> Right now only the Go side builds and runs. Engine wiring is Phase 2 in
-> [`ROADMAP.md`](./ROADMAP.md).
+> Right now only the Go side builds and runs. Engine wiring is the
+> internal-gRPC-contract work tracked in [`ROADMAP.md`](./ROADMAP.md).
 
 ```bash
 # Build the gateway.
@@ -138,8 +138,8 @@ curl -sS http://localhost:9050/        # health check
 curl -sS http://localhost:9050/bigquery/v2/projects/test/datasets
 ```
 
-When the C++ side starts being implemented (Phase 2 onward), the default
-flow becomes:
+When the C++ side starts being implemented (once the internal gRPC
+contract lands), the default flow becomes:
 
 ```bash
 task emulator:build-all   # build both gateway_main and emulator_main
@@ -237,7 +237,7 @@ if you are building the engine yourself.
 If the build refuses to start, the diagnostic line names the gate
 that tripped. Common shapes:
 
-- `GOOGLESQL_SOURCE=prebuilt (Phase 4 default) but the cache is empty at: <path>` — the cache has not been populated. Run `task googlesql:fetch-prebuilt URL=... SHA256=...` or fall back to source mode explicitly.
+- `GOOGLESQL_SOURCE=prebuilt (default) but the cache is empty at: <path>` — the cache has not been populated. Run `task googlesql:fetch-prebuilt URL=... SHA256=...` or fall back to source mode explicitly.
 - `validate_artifact: FAIL_PAYLOAD_SHA` (or any other `FAIL_*` token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The [GoogleSQL prebuilt troubleshooting guide](./docs/dev/googlesql-prebuilt/troubleshooting.md) maps every `FAIL_*` token to the likely owner and the next step; the [rollback playbook](./docs/dev/googlesql-prebuilt/rollback.md) covers the matching repin / revert procedures.
 
 For the full maintainer flow (publishing new artifacts, bumping the
@@ -418,7 +418,7 @@ If you're using the official Go client, explicitly set
 
 Python (`google-cloud-bigquery`), Java, and Node.js clients all support
 the analogous endpoint override. We document each one as the relevant
-smoke tests pass in Phase 8.
+smoke tests pass under the conformance harness.
 
 ### Test lanes
 

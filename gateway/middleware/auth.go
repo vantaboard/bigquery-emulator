@@ -3,8 +3,9 @@
 // follows cloud-spanner-emulator's posture and parses but does not
 // validate authentication credentials.
 //
-// See docs/REST_API.md ("Authentication posture") and ROADMAP.md Phase 1
-// for the rationale: clients reuse their real BigQuery code paths by
+// See docs/REST_API.md ("Authentication posture") and the
+// gateway-HTTP-surface section of ROADMAP.md for the rationale:
+// clients reuse their real BigQuery code paths by
 // pointing at the emulator, and that code unconditionally sends a bearer
 // token. Rejecting those tokens would force every client to special-case
 // the emulator, which we explicitly want to avoid.

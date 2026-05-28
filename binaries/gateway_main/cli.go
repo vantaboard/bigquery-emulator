@@ -61,8 +61,8 @@ type Config struct {
 	GRPCPort int
 
 	// EngineBinary is the absolute or basename path to the C++ engine
-	// subprocess. Empty disables the subprocess (Phase 1 / unit-test
-	// mode). Maps to `--engine-binary` / `--engine_binary`.
+	// subprocess. Empty disables the subprocess (gateway-only /
+	// unit-test mode). Maps to `--engine-binary` / `--engine_binary`.
 	EngineBinary string
 
 	// DataDir is the persistent storage root. Forwarded to the engine

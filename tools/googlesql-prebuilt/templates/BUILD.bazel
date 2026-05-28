@@ -64,8 +64,8 @@ cc_library(
     hdrs = glob(["include/googlesql/**/*.h"]),
     strip_include_prefix = "/include",
     # Third-party header packages reached transitively from the
-    # exported `googlesql/...` include tree. Discovered during Phase 3
-    # prebuilt-mode link verification: e.g. `googlesql/base/bits.h`
+    # exported `googlesql/...` include tree. Discovered during
+    # consumer-wiring prebuilt-mode link verification: e.g. `googlesql/base/bits.h`
     # `#include`s `gtest/gtest_prod.h`, `googlesql/base/exactfloat.h`
     # `#include`s `openssl/bn.h`, `googlesql/public/functions/regexp.h`
     # `#include`s `re2/re2.h`. Adding them here lets every wrapper
@@ -157,7 +157,7 @@ cc_library(
     deps = [":_archive_protos_raw"],
 )
 
-# Convenience filegroup so the Phase 5 parity gate can diff the
+# Convenience filegroup so the safety-gate parity check can diff the
 # shipped archives byte-for-byte against a source-mode rebuild without
 # having to know each `.a` path.
 filegroup(

@@ -1,7 +1,7 @@
-// Package bqconnection is the Phase B skeleton for the BigQuery
-// Connection API surface (gRPC, exposed at the storage gRPC port per
-// docker-compose.yml). The gRPC layer is intentionally NOT registered
-// in this skeleton because doing so would require:
+// Package bqconnection is the shallow-emulator skeleton for the
+// BigQuery Connection API surface (gRPC, exposed at the storage gRPC
+// port per docker-compose.yml). The gRPC layer is intentionally NOT
+// registered in this skeleton because doing so would require:
 //
 //  1. Adding `cloud.google.com/go/bigquery/connection/apiv1/connectionpb`
 //     and the associated `cloud.google.com/go/iam/apiv1/iampb` Go
@@ -11,13 +11,14 @@
 //     `backend/catalog/` is C++ and does not yet model connection
 //     records).
 //
-// Both are explicitly larger than Phase B's "shallow port" budget per
-// `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`. The
-// surface-mapping table below documents which Phase A IT each go-googlesql
-// `api/bqconnection/` symbol satisfies, so the follow-up ports a one-to-one
-// mapping rather than a free-form rebuild.
+// Both are explicitly larger than the shallow-emulator port budget
+// per `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`.
+// The surface-mapping table below documents which failing-IT each
+// go-googlesql `api/bqconnection/` symbol satisfies, so the
+// follow-up ports a one-to-one mapping rather than a free-form
+// rebuild.
 //
-// Phase A failing-IT → go-googlesql source mapping (Phase B intake table):
+// Failing-IT → go-googlesql source mapping (shallow-emulator intake table):
 //
 //	CreateAwsConnectionIT  → connectionpb.ConnectionService.CreateConnection
 //	                          ⇒ api/bqconnection/server.go: (s *Server).CreateConnection
@@ -39,8 +40,8 @@
 // `storage.{ConnectionRecord,GetConnectionRecord,PutConnectionRecord,
 // ListConnectionRecords,DeleteConnectionRecord,IsNotFound}` map onto
 // this repo's `backend/storage/` once a connections table lands. The
-// initial Phase C cut should keep them in-process (a `sync.Map`-backed
-// store is fine for the live-IT track) and add a SQLite-backed
+// initial cut should keep them in-process (a `sync.Map`-backed store
+// is fine for the live-IT track) and add a SQLite-backed
 // implementation only when persistence becomes necessary.
 package bqconnection
 
@@ -59,7 +60,7 @@ func Register(_ *http.ServeMux) {}
 // existing gateway/handlers.NotImplemented helper would do; this
 // indirection keeps the package self-contained.
 func NotImplementedHTTP(w http.ResponseWriter, _ *http.Request) {
-	const body = `{"error":{"code":501,"message":"BigQuery Connection API is not yet implemented by the emulator. See .cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md for the Phase B intake table.","status":"notImplemented","errors":[{"reason":"notImplemented","message":"BigQuery Connection API is not yet implemented by the emulator.","domain":"global"}]}}`
+	const body = `{"error":{"code":501,"message":"BigQuery Connection API is not yet implemented by the emulator. See .cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md for the shallow-emulator intake table.","status":"notImplemented","errors":[{"reason":"notImplemented","message":"BigQuery Connection API is not yet implemented by the emulator.","domain":"global"}]}}`
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusNotImplemented)
 	_, _ = w.Write([]byte(body))

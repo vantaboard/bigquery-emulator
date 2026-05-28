@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Emit the wrapper-package BUILD.bazel files for the GoogleSQL prebuilt artifact.
 
-Phase 1 freezes 18 direct `@googlesql//` labels (16 in `googlesql/public`,
-2 in `googlesql/resolved_ast`) — see
+The compatibility surface freezes 18 direct `@googlesql//` labels
+(16 in `googlesql/public`, 2 in `googlesql/resolved_ast`) — see
 `docs/dev/googlesql-prebuilt/label-inventory.md` and `repo-layout.md`.
 
 The label inventory is STATIC, but the `hdrs = [...]` lists for the

@@ -1,7 +1,7 @@
-# GoogleSQL Prebuilt — Maintainer Artifact Runbook (Phase 6)
+# GoogleSQL Prebuilt — Maintainer Artifact Runbook
 
-This runbook is the operational counterpart to the Phase 1
-[compatibility surface](README.md) and the Phase 5
+This runbook is the operational counterpart to the
+[compatibility surface](README.md) and the
 [rollback playbook](rollback.md). It covers the steady-state
 "publish a new artifact, pin it, verify it, roll back if needed"
 workflow that maintainers run between upgrades (the upgrade flow
@@ -12,11 +12,11 @@ repo today; no placeholders. Cross-reference the source if in doubt:
 
 - Producer: [`.github/workflows/googlesql-prebuilt.yml`](../../../.github/workflows/googlesql-prebuilt.yml)
 - Producer scripts: [`tools/googlesql-prebuilt/package.sh`](../../../tools/googlesql-prebuilt/package.sh) and [`verify.sh`](../../../tools/googlesql-prebuilt/verify.sh)
-- Validator (Phase 5): [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py)
+- Safety-gate validator: [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py)
 - Consumer setup composite: [`.github/actions/setup-googlesql/action.yml`](../../../.github/actions/setup-googlesql/action.yml)
 - Local cache helpers: [`taskfiles/googlesql.yml`](../../../taskfiles/googlesql.yml)
 - Release pin: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml) (`env.RELEASE_GOOGLESQL_PREBUILT_URL` / `_SHA256`)
-- Parity job (Phase 5): [`.github/workflows/googlesql-parity.yml`](../../../.github/workflows/googlesql-parity.yml)
+- Safety-gate parity job: [`.github/workflows/googlesql-parity.yml`](../../../.github/workflows/googlesql-parity.yml)
 
 ## Roles at a glance
 
@@ -25,7 +25,7 @@ repo today; no placeholders. Cross-reference the source if in doubt:
 | **Artifact producer** | The producer workflow + scripts, the `.tar.gz` + `manifest.json` + `.tar.gz.sha256` triple under the `googlesql-prebuilt/v<...>+gs-<...>` GitHub Release. |
 | **Consumer-pin owner** | `vars.GOOGLESQL_PREBUILT_URL` + `vars.GOOGLESQL_PREBUILT_SHA256` (every CI workflow's pin), and `env.RELEASE_GOOGLESQL_PREBUILT_URL` / `_SHA256` in `release.yml` (the release pin). |
 | **Local environment** | The developer's machine — `.cache/googlesql-prebuilt/` and the sibling `../googlesql/` checkout. |
-| **Compatibility surface** | The Phase 1 docs under this directory: label inventory, manifest schema, repo layout, upgrade rules. Bumping this surface is a breaking change (see [`upgrade-rules.md`](upgrade-rules.md)). |
+| **Compatibility surface** | The compatibility-surface docs under this directory: label inventory, manifest schema, repo layout, upgrade rules. Bumping this surface is a breaking change (see [`upgrade-rules.md`](upgrade-rules.md)). |
 
 The [troubleshooting guide](troubleshooting.md) routes every validator
 `FAIL_*` token to the owner above so the right person is on point.
@@ -47,7 +47,7 @@ Inputs:
 
 | Input | Required | Meaning |
 |---|---|---|
-| `googlesql_ref` | yes | Upstream GoogleSQL git ref (tag or commit). The producer shallow-clones `google/googlesql` at this ref. Defaults to `2026.01.1` (the Phase 1-frozen pin). |
+| `googlesql_ref` | yes | Upstream GoogleSQL git ref (tag or commit). The producer shallow-clones `google/googlesql` at this ref. Defaults to `2026.01.1` (the compatibility-surface frozen pin). |
 | `artifact_version` | yes | Strict-semver string (e.g. `0.1.0`). Bumped whenever the artifact's payload, header set, wrapper layout, or compatibility contract changes. See [`upgrade-rules.md`](upgrade-rules.md) for what kinds of change require which kind of bump. |
 | `publish` | no (default `false`) | If `true`, the workflow uploads the verified artifact to a GitHub Release. Leave it `false` for trial / verification-only runs; the workflow's "Upload workflow artifacts" step always preserves the tarball + manifest as a workflow artifact for 30 days regardless. |
 
@@ -58,7 +58,7 @@ are the source of truth — this is a summary):
 2. Checks out `google/googlesql` at `googlesql_ref` and applies the gazelle leading-zero patch.
 3. Refuses to start if `publish=true` and a release asset for the same `(artifact_version, googlesql_short_sha)` pair already exists. The producer's contract is immutable artifacts — there is no `--clobber`.
 4. Runs `tools/googlesql-prebuilt/package.sh --mode=bazel` to produce the `.tar.gz` + sidecar `manifest.json` + `.sha256`.
-5. Runs `verify.sh --smoke-mode=link` (clang link smoke) then `--smoke-mode=bazel` (full wrapper-target build) against the unpacked artifact. **Both must pass before publish.** Phase 5 hooked these into `validate_artifact.py` so the same gates the consumer applies are enforced here.
+5. Runs `verify.sh --smoke-mode=link` (clang link smoke) then `--smoke-mode=bazel` (full wrapper-target build) against the unpacked artifact. **Both must pass before publish.** The safety-gate validator hooks these into `validate_artifact.py` so the same gates the consumer applies are enforced here.
 6. Uploads the tarball + sidecar manifest + summary as a 30-day workflow artifact (success or failure — failed runs still leave a forensic trail).
 7. If `publish=true`: creates the release `googlesql-prebuilt/v<artifact_version>+gs-<googlesql_short_sha>` and uploads three assets:
    - `googlesql-prebuilt-linux-amd64-clang18-<short>-v<version>.tar.gz`
@@ -248,7 +248,7 @@ gh workflow run googlesql-parity.yml -f tier=release
 
 The release-tier comparator adds the duckdb conformance lane on top
 of the scheduled-tier memory lane. A `matched` result on every stage
-is the gate. A `DIVERGED` result is a Phase 5 hard rollback signal
+is the gate. A `DIVERGED` result is a safety-gate hard rollback signal
 ([`rollback.md`](rollback.md#1-parity-job-failures)).
 
 ## 8. Roll back
@@ -297,9 +297,9 @@ task bazel:status
 
 ## See also
 
-- [`README.md`](README.md) — Phase 1 compatibility-surface index.
+- [`README.md`](README.md) — compatibility-surface index.
 - [`upgrade-procedure.md`](upgrade-procedure.md) — full GoogleSQL upgrade flow (compatibility-surface review through release pin).
 - [`performance.md`](performance.md) — cache and build-time expectations.
 - [`troubleshooting.md`](troubleshooting.md) — `FAIL_*` validator-token map.
-- [`rollback.md`](rollback.md) — Phase 5 rollback playbook.
+- [`rollback.md`](rollback.md) — safety-gate rollback playbook.
 - [`manifest.md`](manifest.md) — manifest schema reference.

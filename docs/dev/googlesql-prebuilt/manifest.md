@@ -1,34 +1,35 @@
-# GoogleSQL Prebuilt — Manifest Contract (Phase 1 — Section 4)
+# GoogleSQL Prebuilt — Manifest Contract
 
 This file freezes the schema of `manifest.json`, the machine-readable contract
 that ships next to every published GoogleSQL prebuilt artifact. The manifest
-exists so the consumer (Phase 3) and the parity gates (Phase 5) can verify
-**source identity**, **platform compatibility**, and **payload integrity**
-without performing a network query or rebuilding GoogleSQL from source.
+exists so the consumer-wiring track and the safety-gate parity checks can
+verify **source identity**, **platform compatibility**, and **payload
+integrity** without performing a network query or rebuilding GoogleSQL from
+source.
 
 ## Field schema
 
 `manifest.json` is a single JSON object. Every field below is required unless
 explicitly marked optional. The schema is **closed**: unknown top-level fields
-are a Phase-5 validation error.
+are a safety-gate validation error.
 
 | Field                                 | Type    | Description |
 |---------------------------------------|---------|-------------|
-| `schema_version`                      | string  | Manifest schema version. Pin to `"1"` for the initial rollout; bumps require a Phase 5 validator change. |
+| `schema_version`                      | string  | Manifest schema version. Pin to `"1"` for the initial rollout; bumps require a safety-gate validator change. |
 | `artifact_version`                    | string  | Producer-assigned version of *this* prebuilt artifact. Strict-semver-aliased (`MAJOR.MINOR.PATCH`). Bumped whenever any header, library, or wrapper layout changes (see [`upgrade-rules.md`](upgrade-rules.md)). |
 | `googlesql.module_version`            | string  | Upstream GoogleSQL `MODULE.bazel` version (`2026.1.1`). |
 | `googlesql.upstream_tag`              | string  | Upstream git tag (`2026.01.1` — leading zero preserved, distinct from the strict-semver alias). |
 | `googlesql.commit`                    | string  | Immutable upstream commit SHA the artifact was built from (40 hex chars). |
 | `googlesql.repo_url`                  | string  | Upstream remote URL (`https://github.com/google/googlesql`). |
 | `googlesql.patches`                   | array   | Ordered list of patch SHA-256s (and short descriptions) that were applied to the upstream tree before build. Empty array if no patches. The Gazelle leading-zero workaround patch documented in `MODULE.bazel` lives here if applied. |
-| `emulator.min_commit`                 | string  | Minimum bigquery-emulator git commit that is compatible with this artifact. Phase 3 enforces this — older emulator checkouts refuse to consume the artifact. |
-| `emulator.max_commit`                 | string\|null | Optional inclusive upper bound. Use `null` to mean "no known upper bound at publish time". Phase 5 may rewrite this as part of an incompatibility annotation. |
+| `emulator.min_commit`                 | string  | Minimum bigquery-emulator git commit that is compatible with this artifact. The consumer-wiring track enforces this — older emulator checkouts refuse to consume the artifact. |
+| `emulator.max_commit`                 | string\|null | Optional inclusive upper bound. Use `null` to mean "no known upper bound at publish time". The safety-gate validator may rewrite this as part of an incompatibility annotation. |
 | `compat.labels`                       | array   | Verbatim list of exposed wrapper labels (e.g. `"//googlesql/public:analyzer"`). Must match exactly the labels enumerated in [`label-inventory.md`](label-inventory.md). |
-| `platform.os`                         | string  | `linux` only for Phase 1. |
-| `platform.arch`                       | string  | `amd64` only for Phase 1. |
-| `platform.libc`                       | string  | `glibc-2.31` (or whichever the producer's hermetic toolchain links against). Phase 5 checks the consumer's libc against this; mismatch is a hard error. |
+| `platform.os`                         | string  | `linux` only for the current rollout. |
+| `platform.arch`                       | string  | `amd64` only for the current rollout. |
+| `platform.libc`                       | string  | `glibc-2.31` (or whichever the producer's hermetic toolchain links against). The safety-gate validator checks the consumer's libc against this; mismatch is a hard error. |
 | `platform.cxx_abi`                    | string  | C++ ABI tag the artifact was compiled with (e.g. `cxx11`). |
-| `toolchain.compiler`                  | string  | `clang` only for Phase 1. |
+| `toolchain.compiler`                  | string  | `clang` only for the current rollout. |
 | `toolchain.compiler_version`          | string  | Full compiler version string (e.g. `18.1.8`). |
 | `toolchain.bazel_version`             | string  | Bazel/bazelisk version used to build the artifact (e.g. `7.6.1` matching upstream `.bazelversion`). |
 | `toolchain.cflags`                    | array   | The compile flags pinned by the producer (`["-O2", "-fPIC", "-fno-omit-frame-pointer", ...]`). |
@@ -40,12 +41,13 @@ are a Phase-5 validation error.
 | `producer.run_id`                     | string  | CI run identifier (GitHub `${{ github.run_id }}` or equivalent). |
 | `producer.build_timestamp`            | string  | RFC 3339 UTC timestamp the artifact was finalised. |
 | `producer.host_os_release`            | string  | `lsb_release -ds` (or equivalent) of the producer host. Useful for diagnosing libc-mismatch reports. |
-| `bundled_thirdparty_deps`             | array   | List of third-party libraries **statically** bundled into `lib/libgooglesql.a`, in `"<name>@<version-or-commit>"` form. Phase 1 default ships `["icu@76.1", "farmhash@<commit>", "differential-privacy@<version>"]` — all three are bundled because none has a Bzlmod-resolvable equivalent at the producer-pinned ABI (BCR `icu` is 78.x; no BCR `farmhash`; no BCR `differential-privacy`). All other transitively-linked third-party deps (Abseil, Protobuf, gRPC, BoringSSL, RE2, GoogleTest, googleapis) are NOT bundled and are listed as `bazel_dep`s in the prebuilt repo's `MODULE.bazel` for the consumer to resolve. |
+| `bundled_thirdparty_deps`             | array   | List of third-party libraries **statically** bundled into `lib/libgooglesql.a`, in `"<name>@<version-or-commit>"` form. The current rollout ships `["icu@76.1", "farmhash@<commit>", "differential-privacy@<version>"]` — all three are bundled because none has a Bzlmod-resolvable equivalent at the producer-pinned ABI (BCR `icu` is 78.x; no BCR `farmhash`; no BCR `differential-privacy`). All other transitively-linked third-party deps (Abseil, Protobuf, gRPC, BoringSSL, RE2, GoogleTest, googleapis) are NOT bundled and are listed as `bazel_dep`s in the prebuilt repo's `MODULE.bazel` for the consumer to resolve. |
 
 ## Example manifest
 
 The example below is illustrative — all SHAs and bytes are dummies. The
-producer (Phase 2) populates them mechanically from the actual build outputs.
+artifact-producer pipeline populates them mechanically from the actual build
+outputs.
 
 ```json
 {
@@ -154,32 +156,33 @@ producer (Phase 2) populates them mechanically from the actual build outputs.
 }
 ```
 
-## Fields pinned by Phase 3 (consume-time)
+## Fields pinned at consume-time
 
-Phase 3 wires the consumer side. At consume time, the wrapper repo's loader
-**must** pin / verify the following fields. Any mismatch is a Phase 5 fatal
-error (`bazel build` fails, with a diagnostic that names the offending field).
+The consumer-wiring track wires the consumer side. At consume time, the
+wrapper repo's loader **must** pin / verify the following fields. Any mismatch
+is a safety-gate fatal error (`bazel build` fails, with a diagnostic that
+names the offending field).
 
-| Field                          | Phase 3 / 5 behaviour |
-|--------------------------------|-----------------------|
-| `schema_version`               | Phase 3 hard-codes `"1"`. Mismatch = the consumer is older than the artifact. |
-| `googlesql.commit`             | Phase 5 parity check compares this against the consumer-pinned source SHA when source-vs-prebuilt parity testing runs. Mismatch is informational unless the consumer is in parity-CI mode (where it is fatal). |
-| `compat.labels`                | Phase 3 asserts the wrapper repo's actual `BUILD.bazel` declares exactly this set of labels. Mismatch = the producer drifted from this design doc. |
-| `emulator.min_commit`          | Phase 3 reads it once at extension load. If the consumer's emulator HEAD is older, the load fails with a fatal "artifact too new for this emulator checkout". |
-| `platform.os`, `.arch`         | Phase 3 selects the artifact based on `@platforms//os:linux` and `@platforms//cpu:x86_64`. Mismatch = the wrong artifact was downloaded. |
-| `platform.libc`                | Phase 5 checks the consumer host's libc against this. Mismatch on a release build is fatal; on a developer build it's a warning. |
-| `toolchain.compiler`, `.compiler_version` | Phase 5 parity check; mismatch logged but not fatal (cross-toolchain builds are explicitly allowed). |
-| `payload.libraries[*].sha256`  | Phase 3 wraps each library in a `cc_import` that is registered with `urls = [...]` and `sha256 = ...`. **A checksum failure is a hard error**: `bazel build` refuses to start. |
-| `payload.headers[*].sha256`    | Phase 5 spot-checks (full audit on parity-CI runs); a header mismatch fails the lane. |
+| Field                          | Consumer / safety-gate behaviour |
+|--------------------------------|-----------------------------------|
+| `schema_version`               | The consumer hard-codes `"1"`. Mismatch = the consumer is older than the artifact. |
+| `googlesql.commit`             | Safety-gate parity check compares this against the consumer-pinned source SHA when source-vs-prebuilt parity testing runs. Mismatch is informational unless the consumer is in parity-CI mode (where it is fatal). |
+| `compat.labels`                | The consumer asserts the wrapper repo's actual `BUILD.bazel` declares exactly this set of labels. Mismatch = the producer drifted from this design doc. |
+| `emulator.min_commit`          | The consumer reads it once at extension load. If the consumer's emulator HEAD is older, the load fails with a fatal "artifact too new for this emulator checkout". |
+| `platform.os`, `.arch`         | The consumer selects the artifact based on `@platforms//os:linux` and `@platforms//cpu:x86_64`. Mismatch = the wrong artifact was downloaded. |
+| `platform.libc`                | Safety-gate check of the consumer host's libc against this. Mismatch on a release build is fatal; on a developer build it's a warning. |
+| `toolchain.compiler`, `.compiler_version` | Safety-gate parity check; mismatch logged but not fatal (cross-toolchain builds are explicitly allowed). |
+| `payload.libraries[*].sha256`  | The consumer wraps each library in a `cc_import` that is registered with `urls = [...]` and `sha256 = ...`. **A checksum failure is a hard error**: `bazel build` refuses to start. |
+| `payload.headers[*].sha256`    | Safety-gate spot-checks (full audit on parity-CI runs); a header mismatch fails the lane. |
 
 ## Checksum semantics
 
 - **Every** file shipped under the artifact's repo root has an entry in
   `payload.headers`, `payload.libraries`, or `payload.extras`.
 - **Every** entry includes a SHA-256 digest of the file's raw bytes.
-- Phase 3 verifies the top-level archive's SHA-256 via the `http_archive`'s
-  `sha256` attribute. **Inside** the unpacked archive, Phase 5's `goldens`
-  job verifies file-level SHAs against `manifest.json`.
+- The consumer-wiring track verifies the top-level archive's SHA-256 via the
+  `http_archive`'s `sha256` attribute. **Inside** the unpacked archive, the
+  safety-gate `goldens` job verifies file-level SHAs against `manifest.json`.
 - A checksum mismatch — at the archive level or any file inside it — is a
   **hard error**. The wrapper repo refuses to load and no build proceeds.
   This rule is non-negotiable for the entire rollout. The error message must
@@ -188,14 +191,16 @@ error (`bazel build` fails, with a diagnostic that names the offending field).
   authenticity is established by the top-level archive's SHA (which the
   consumer pins via `http_archive(sha256 = ...)` in `MODULE.bazel`). A
   separate detached signature (e.g. `manifest.json.minisig`) may ship later
-  but is **not** required for Phase 1.
+  but is **not** required for the current rollout.
 
 ## Distribution format
 
 The producer publishes a single `.tar.gz` per release. The archive's
 top-level directory matches the repo name
-(`googlesql_prebuilt_linux_amd64/`). Phase 3 consumes it via Bzlmod's
-`http_archive` rule with `strip_prefix = "googlesql_prebuilt_linux_amd64"`.
+(`googlesql_prebuilt_linux_amd64/`). The consumer-wiring track consumes it via
+Bzlmod's `http_archive` rule with
+`strip_prefix = "googlesql_prebuilt_linux_amd64"`.
 
-Publication channel (GitHub Releases vs. a generic asset store) is Phase 2's
-decision. Phase 1 only freezes the on-disk shape of what gets published.
+Publication channel (GitHub Releases vs. a generic asset store) is the
+artifact-producer pipeline's decision. The compatibility surface only freezes
+the on-disk shape of what gets published.

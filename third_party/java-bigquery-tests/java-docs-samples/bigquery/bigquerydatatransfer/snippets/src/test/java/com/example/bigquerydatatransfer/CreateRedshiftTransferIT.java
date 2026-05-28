@@ -47,7 +47,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
- * bigquery-emulator Phase C live-IT: smoke for {@link CreateRedshiftTransfer}. Same shape as
+ * bigquery-emulator missing-tests-follow-up live-IT: smoke for {@link CreateRedshiftTransfer}. Same shape as
  * {@link CreateAdManagerTransferIT}; see that class for the DTS-gRPC-UNIMPLEMENTED caveat. AWS
  * credentials below are inline placeholders (never used because the emulator does not perform any
  * Redshift traffic — the CreateTransferConfig is the only RPC under test).

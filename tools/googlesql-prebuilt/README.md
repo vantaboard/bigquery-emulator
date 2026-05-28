@@ -1,16 +1,15 @@
-# `tools/googlesql-prebuilt/` — Phase 2 producer
+# `tools/googlesql-prebuilt/` — artifact producer
 
 This directory holds the producer-side tooling for the
-[GoogleSQL prebuilt rollout](../../docs/dev/googlesql-prebuilt/README.md)
-(Phase 2 of the 6-phase plan). It builds the
-`@googlesql_prebuilt_linux_amd64` external repo described in
+[GoogleSQL prebuilt rollout](../../docs/dev/googlesql-prebuilt/README.md).
+It builds the `@googlesql_prebuilt_linux_amd64` external repo described in
 [`repo-layout.md`](../../docs/dev/googlesql-prebuilt/repo-layout.md),
 verifies it independently of the source checkout, and (via the
 matching workflow) publishes the artifact as a GitHub Release asset.
 
-Phase 2 does **not** flip normal emulator builds onto the prebuilt
-artifact — that lives in Phase 3 (consume wiring). Phase 2 only
-delivers the producer + verifier.
+The artifact-producer pipeline does **not** flip normal emulator builds
+onto the prebuilt artifact — that lives in the consumer-wiring track. The
+producer only delivers the producer scripts + verifier.
 
 ## Publication medium
 
@@ -18,8 +17,8 @@ delivers the producer + verifier.
 `googlesql-prebuilt/vX.Y.Z+gs-<short_sha>` tag per `(artifact_version,
 googlesql_sha)` pair. Rationale:
 
-1. **Fits `http_archive` natively.** The Phase 1 manifest contract
-   (`manifest.md`) names `.tar.gz` as the distribution format and
+1. **Fits `http_archive` natively.** The compatibility-surface manifest
+   contract (`manifest.md`) names `.tar.gz` as the distribution format and
    tells the consumer to pin via
    `http_archive(sha256 = ..., strip_prefix = ...)`. GitHub Release
    assets have stable, immutable URLs of the form
@@ -32,14 +31,14 @@ googlesql_sha)` pair. Rationale:
 3. **No extra OCI tooling on the consumer side.** GHCR OCI artifacts
    would be attractive for digest-pinning, but consumers would need
    to wire an OCI puller (`oras`, `crane`, or Bazel's experimental
-   `oci` rule) into their `MODULE.bazel` extension. Phase 3 is
-   already non-trivial; introducing a second medium at the same
-   time is unnecessary risk.
+   `oci` rule) into their `MODULE.bazel` extension. The consumer-wiring
+   track is already non-trivial; introducing a second medium at the
+   same time is unnecessary risk.
 
-GHCR / OCI may be layered ON TOP of releases in a later phase if a
-measured benefit appears (per-digest immutability guarantees,
-multi-arch fanout, etc.). The producer's contract — manifest schema,
-tarball shape, checksum semantics — is medium-agnostic.
+GHCR / OCI may be layered ON TOP of releases later if a measured
+benefit appears (per-digest immutability guarantees, multi-arch fanout,
+etc.). The producer's contract — manifest schema, tarball shape,
+checksum semantics — is medium-agnostic.
 
 ## Tools
 
@@ -47,7 +46,7 @@ tarball shape, checksum semantics — is medium-agnostic.
 |-----------------------------------------------|----------------------------------------------------------------------|
 | [`package.sh`](package.sh)                    | Orchestrator. Stages the repo layout, runs `bazel build` (or stages a stub fixture), generates wrapper BUILDs + manifest, tarballs the staged tree. |
 | [`verify.sh`](verify.sh)                      | Refusal-grade verifier. Unpacks the tarball into a clean tmpdir, validates manifest schema, re-checksums every payload entry, and runs a smoke binary against the packaged wrappers. |
-| [`manifest_writer.py`](manifest_writer.py)    | Emits `manifest.json` per the closed Phase 1 schema. Also exposes `--validate-only PATH` for the verifier. |
+| [`manifest_writer.py`](manifest_writer.py)    | Emits `manifest.json` per the closed compatibility-surface schema. Also exposes `--validate-only PATH` for the verifier. |
 | [`wrapper_writer.py`](wrapper_writer.py)      | Emits `googlesql/public/BUILD.bazel` and `googlesql/resolved_ast/BUILD.bazel` for the staged artifact (the `hdrs` for `:type` and `:resolved_ast` are dynamic, so the producer materialises them at package time). |
 | [`templates/`](templates/)                    | Static template files (root `BUILD.bazel`, `MODULE.bazel.tmpl`). Shipped verbatim into the artifact. |
 | [`smoke/`](smoke/)                            | Source for the two smoke variants the verifier runs (portable clang link + bazel-wrappers).            |
@@ -61,7 +60,7 @@ exactly. Validated by `verify.sh` after each package run.
 googlesql_prebuilt_linux_amd64/
 ├── BUILD.bazel               # :_archive private cc_imports + exports_files
 ├── MODULE.bazel              # version pins (artifact + absl/protobuf/grpc)
-├── manifest.json             # Phase 1 closed schema
+├── manifest.json             # compatibility-surface closed schema
 ├── LICENSES/
 │   ├── googlesql-LICENSE     # upstream license verbatim
 │   └── thirdparty-NOTICE     # consumer-resolved dep notice
@@ -76,10 +75,10 @@ googlesql_prebuilt_linux_amd64/
     └── BUILD.bazel           # 2 wrapper cc_library targets
 ```
 
-## Phase 1 doc clarification: wrapper BUILD files live in subpackages
+## Compatibility-surface clarification: wrapper BUILD files live in subpackages
 
-The Phase 1 layout doc states "The top-level `BUILD.bazel` is the
-only `BUILD` file in the prebuilt repo." That's slightly inaccurate
+The compatibility-surface layout doc states "The top-level `BUILD.bazel`
+is the only `BUILD` file in the prebuilt repo." That's slightly inaccurate
 given the label space frozen in
 [`manifest.md`](../../docs/dev/googlesql-prebuilt/manifest.md)'s
 `compat.labels` (which uses `//googlesql/public:analyzer` and
@@ -92,30 +91,30 @@ This producer therefore emits a small `BUILD.bazel` under
 `googlesql/public/` and `googlesql/resolved_ast/` in addition to the
 root. The label space (`//googlesql/public:analyzer` etc.), the
 strict-deps narrowing semantics, and the consumer-side wiring all
-remain identical to the Phase 1 intent. The producer's hdrs / deps
-lists for each wrapper match
+remain identical to the compatibility-surface intent. The producer's
+hdrs / deps lists for each wrapper match
 [`label-inventory.md`](../../docs/dev/googlesql-prebuilt/label-inventory.md)
 row-for-row. The doc text in
 [`repo-layout.md`](../../docs/dev/googlesql-prebuilt/repo-layout.md)
-should be updated to reflect this when the Phase 1 docs next see an
-intentional change (the producer hasn't touched the docs because the
-contract — what `compat.labels` says — is what matters).
+should be updated to reflect this when the compatibility-surface docs
+next see an intentional change (the producer hasn't touched the docs
+because the contract — what `compat.labels` says — is what matters).
 
-## Phase 1 doc clarification: artifact MODULE.bazel identity is `googlesql`
+## Compatibility-surface clarification: artifact MODULE.bazel identity is `googlesql`
 
 [`repo-layout.md`](../../docs/dev/googlesql-prebuilt/repo-layout.md)
 says "The repo is named `@googlesql_prebuilt_linux_amd64` in the
 consumer's Bzlmod graph" and goes on to claim a consumer "can swap
 `@googlesql//` for `@googlesql_prebuilt_linux_amd64//` in a single
-`bazel mod` extension and everything resolves." That swap is not
-how Phase 3 wires consumption.
+`bazel mod` extension and everything resolves." That swap is not how
+the consumer-wiring track wires consumption.
 
-Phase 1's
+The compatibility-surface
 [`label-inventory.md`](../../docs/dev/googlesql-prebuilt/label-inventory.md)
 froze 18 emulator-side `@googlesql//...` references and explicitly
 disallowed renaming them: rewriting every emulator `BUILD.bazel` to
 the prebuilt repo's name would be label churn the rollout was
-designed to avoid. The clean two-mode story (Phase 3:
+designed to avoid. The clean two-mode story (consumer-wiring plan
 [`googlesql-prebuilt-consume-wiring_3b4c5d6e.plan.md`](../../docs/dev/googlesql-prebuilt/upgrade-rules.md))
 needs **the same** `@googlesql//` label space in both modes so the
 emulator BUILDs do not change. That is only possible if the prebuilt
@@ -126,9 +125,9 @@ This producer therefore emits a `module(name = "googlesql", ...)`
 declaration in the artifact's `MODULE.bazel`. The other three names
 the rollout pins are unchanged:
 
-- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (Phase 1 freeze).
-- GitHub Release asset prefix  : `googlesql-prebuilt-linux-amd64-...` (Phase 2 contract).
-- Tarball/Release tag           : `googlesql-prebuilt/v<version>+gs-<short_sha>` (Phase 2 contract).
+- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (compatibility-surface freeze).
+- GitHub Release asset prefix  : `googlesql-prebuilt-linux-amd64-...` (artifact-producer contract).
+- Tarball/Release tag           : `googlesql-prebuilt/v<version>+gs-<short_sha>` (artifact-producer contract).
 
 Only the in-Bzlmod identity (the `module(name = ...)` field that
 `bazel_dep` and `--override_module` resolve against) is `googlesql`.
@@ -140,7 +139,7 @@ selection between platforms still happens at the consumer's
 `select()` (or via a per-platform `archive_override`).
 
 The
-[Phase 1 upgrade rules](../../docs/dev/googlesql-prebuilt/upgrade-rules.md)
+[compatibility-surface upgrade rules](../../docs/dev/googlesql-prebuilt/upgrade-rules.md)
 do not classify this clarification as breaking: no exposed wrapper
 label changed, no payload bytes changed, no manifest field changed.
 What changed is which name the consumer's `bazel_dep` resolves to,
@@ -226,5 +225,5 @@ the following gates fail. Each refusal cites the offending field.
 | Overwrite gate (publish only)                     | A Release asset for the same `(artifact_version, googlesql_sha)` already exists.                                          |
 
 Once all gates pass, the workflow surfaces the artifact URL +
-SHA-256 in the run's GitHub Step Summary so a Phase 3 consumer can
-copy-paste it into a `MODULE.bazel`.
+SHA-256 in the run's GitHub Step Summary so a consumer-wiring caller
+can copy-paste it into a `MODULE.bazel`.

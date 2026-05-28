@@ -11,7 +11,8 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestDryRunReturnsAnalyzedSchema is the Phase 4c end-to-end story:
+// TestDryRunReturnsAnalyzedSchema is the end-to-end story for
+// `jobs.query?dryRun=true`:
 // register a dataset and a typed table over REST, run
 // `jobs.query?dryRun=true` against `SELECT * FROM ds.t`, and confirm
 // the analyzed schema returned by `googlesql::Analyzer` matches the

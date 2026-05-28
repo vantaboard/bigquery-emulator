@@ -24,8 +24,8 @@ import (
 // Every endpoint listed in docs/REST_API.md is registered here, even if
 // the handler currently returns http.StatusNotImplemented. That gives
 // client libraries a stable surface to probe and lets us flip handlers
-// from stub to real one resource at a time, exactly the way Phase 1 of
-// ROADMAP.md prescribes.
+// from stub to real one resource at a time, exactly the way the
+// gateway-HTTP-surface section of ROADMAP.md prescribes.
 //
 // Custom-method endpoints (the AIP-136 "{resource}:operation" shape used
 // by datasets.undelete and the three tables IAM endpoints) cannot be
@@ -40,10 +40,10 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	deps := handlers.Dependencies{Jobs: jobs.NewRegistry()}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to
-		// handlers. When eng is nil (Phase 1 / unit tests / `task
-		// emulator:run` with --engine_binary=""), Dependencies stays
-		// zero-valued and handlers fall back to their NotImplemented
-		// stubs.
+		// handlers. When eng is nil (gateway-only mode / unit tests /
+		// `task emulator:run` with --engine_binary=""), Dependencies
+		// stays zero-valued and handlers fall back to their
+		// NotImplemented stubs.
 		deps.Catalog = eng.Catalog
 		deps.Query = eng.Query
 	}
@@ -152,8 +152,8 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		mux.HandleFunc("POST "+base+"/{workflowId}", handlers.MigrationWorkflowCustomMethodPOST(deps))
 	}
 
-	// BigQuery Data Transfer Service v1. The Phase B port of
-	// go-googlesql's `api/datatransfer/` package replaces the empty
+	// BigQuery Data Transfer Service v1. The shallow-emulator port
+	// of go-googlesql's `api/datatransfer/` package replaces the empty
 	// shell that lived in gateway/handlers/data_transfer.go: dataSources
 	// catalog (`scheduled_query`, `amazon_s3`), in-memory CRUD for
 	// transferConfigs + transferRuns, and the AIP-136 custom methods
@@ -197,8 +197,9 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	handler := middleware.WithGunzipRequestBody(mux)
 	// Auth middleware always runs: it parses (but never validates) the
 	// Authorization header and attaches a synthetic principal to the
-	// request context. Per docs/REST_API.md and ROADMAP.md Phase 1,
-	// the emulator must never 401, so this is permissive by design.
+	// request context. Per docs/REST_API.md and the
+	// gateway-HTTP-surface section of ROADMAP.md, the emulator must
+	// never 401, so this is permissive by design.
 	handler = middleware.WithAuth(handler)
 	if opts.LogRequests {
 		handler = loggingMiddleware(handler)

@@ -77,7 +77,7 @@ jobs:
           # task run hits the pre-built image.
           DOCKER_BUILDKIT: "1"
           COMPOSE_DOCKER_CLI_BUILD: "1"
-          # Phase 4: when these repo vars are set, the Dockerfile's
+          # When these repo vars are set, the Dockerfile's
           # `engine-builder-bazel` stage consumes the published
           # GoogleSQL prebuilt artifact instead of cloning the source
           # tree. Empty values leave the source fallback in place.
@@ -101,7 +101,7 @@ jobs:
           else
             echo "::warning::docker-smoke: vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower)"
           fi
-          # Phase 5 step-summary surface: the Dockerfile's
+          # Safety-gate step-summary surface: the Dockerfile's
           # `engine-builder-bazel` stage already echoes
           # `artifact_version` + `googlesql commit` to its build log
           # (and runs `validate_artifact.py --summary-line` for the

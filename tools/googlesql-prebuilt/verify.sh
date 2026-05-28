@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Verify a GoogleSQL prebuilt artifact (Phase 2 producer gate).
+# Verify a GoogleSQL prebuilt artifact (artifact-producer gate).
 #
 # Unpacks the tarball into a CLEAN tmp dir (never against the source
-# checkout), validates `manifest.json` against the closed Phase 1
-# schema, re-checksums every payload entry, asserts no path escapes
+# checkout), validates `manifest.json` against the closed
+# compatibility-surface schema, re-checksums every payload entry,
+# asserts no path escapes
 # the artifact root, and runs a smoke binary against the packaged
 # wrapper layout.
 #
@@ -34,8 +35,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Phase 5: the closed-schema validator + identity / payload / wrapper
-# gates all live in validate_artifact.py. manifest_writer.py is still
+# Safety-gate validator: the closed-schema validator + identity / payload /
+# wrapper gates all live in validate_artifact.py. manifest_writer.py is still
 # the schema source of truth (and the producer's only writer), but it
 # is no longer invoked directly from this script — the validator does.
 VALIDATOR="$SCRIPT_DIR/validate_artifact.py"
@@ -143,7 +144,7 @@ fi
 log "extracting to $TMPDIR"
 
 # Use `tar -t` first to assert no path escapes the artifact root. The
-# Phase 1 contract is "no unpacked path escapes the artifact root".
+# compatibility-surface contract is "no unpacked path escapes the artifact root".
 # Any entry starting with `/`, or containing `..`, fails the gate.
 while IFS= read -r path; do
     case "$path" in
@@ -164,7 +165,7 @@ log "extracted repo root: $REPO_ROOT"
 
 # ---------------------------------------------------------------------------
 # Gate 3 + 4: manifest schema + identity pins + per-file payload integrity.
-# Delegated to tools/googlesql-prebuilt/validate_artifact.py (the Phase 5
+# Delegated to tools/googlesql-prebuilt/validate_artifact.py (the safety-gate
 # single-source-of-truth validator). The validator applies the same gates
 # the local task, CI composite action, and Dockerfile invoke, so producer
 # verification cannot diverge from consumer expectations.

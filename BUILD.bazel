@@ -1,5 +1,6 @@
-# Top-level Bazel BUILD file. Empty for now; Phase 2 of ROADMAP.md adds
-# proper rules for `binaries/gateway_main`, `binaries/emulator_main`, and
-# the proto-generated bindings, mirroring cloud-spanner-emulator's layout.
+# Top-level Bazel BUILD file. Empty for now; the build-scaffold work
+# in ROADMAP.md adds proper rules for `binaries/gateway_main`,
+# `binaries/emulator_main`, and the proto-generated bindings,
+# mirroring cloud-spanner-emulator's layout.
 
 package(default_visibility = ["//visibility:public"])

@@ -1,10 +1,11 @@
-# GoogleSQL Prebuilt — Upgrade Procedure (Phase 6)
+# GoogleSQL Prebuilt — Upgrade Procedure
 
 This is the ordered checklist for bumping the upstream GoogleSQL pin
 end to end — from picking a source SHA candidate through landing the
-new release pin. Stay on the checklist; each step exists because
-earlier rollouts (Phase 1 through Phase 5) front-loaded specific
-gates that the upgrade has to clear.
+new release pin. Stay on the checklist; each step exists because the
+compatibility-surface, artifact-producer, consumer-wiring,
+CI/Docker/release, and safety-gate tracks front-loaded specific gates
+that the upgrade has to clear.
 
 For day-to-day publish / pin / verify (no upstream bump), use the
 [maintainer runbook](maintainer-runbook.md) instead.
@@ -31,12 +32,12 @@ explicitly defer to that doc for the breaking-change classification.
   call this out in the commit message — it's allowed but it makes
   bisecting harder later.
 
-## 2. Re-run the Phase 1 label inventory
+## 2. Re-run the label inventory
 
-The Phase 1 [compatibility surface](README.md) freezes which
-`@googlesql//...` Bazel labels the emulator depends on. A GoogleSQL
-upstream change can remove, rename, or split labels — silently if
-nothing forces a check. Re-run the Phase 1 verification:
+The [compatibility surface](README.md) freezes which `@googlesql//...`
+Bazel labels the emulator depends on. A GoogleSQL upstream change can
+remove, rename, or split labels — silently if nothing forces a check.
+Re-run the inventory verification:
 
 ```bash
 # Every @googlesql// label currently referenced by emulator BUILD files
@@ -46,7 +47,7 @@ rg '@googlesql//' /home/brighten-tompkins/Code/bigquery-emulator \
 ```
 
 Cross-reference the output against [`label-inventory.md`](label-inventory.md).
-Treat any divergence as a Phase 1 surface change and read
+Treat any divergence as a compatibility-surface change and read
 [`upgrade-rules.md`](upgrade-rules.md) "Change taxonomy" to classify it:
 
 - **Added** emulator reference to a new `@googlesql//some/new:label` →
@@ -67,7 +68,7 @@ an existing label, see step 3.
 
 ## 3. Update wrapper layout or manifest schema (only if needed)
 
-If step 2 found a Phase-1-surface change OR the upstream bump
+If step 2 found a compatibility-surface change OR the upstream bump
 introduces any of:
 
 - New required libraries (e.g. a new `lib/libgooglesql_*.a` split)
@@ -77,8 +78,8 @@ introduces any of:
   Bzlmod resolution to bundled-in-`libgooglesql.a`)
 - A manifest field addition / rename / removal
 
-… then update **before** you produce. The Phase 1 docs that need
-edits:
+… then update **before** you produce. The compatibility-surface docs
+that need edits:
 
 | Change kind | Files |
 |---|---|
@@ -99,7 +100,7 @@ When the manifest schema bumps, the closed-schema validator in
 [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py)
 needs the matching update too (the validator delegates to
 `manifest_writer.validate_manifest`, which carries the field
-schema). Phase 5 logic-tests live next to the validator.
+schema). Safety-gate logic tests live next to the validator.
 
 ## 4. Produce the new artifact
 
@@ -219,7 +220,7 @@ gh workflow run googlesql-parity.yml -f tier=release -f googlesql_ref=<new>
 
 Read the comparator job's "compare prebuilt vs source" workflow
 summary. `matched` on every stage is required to move on. A
-`DIVERGED` result is a Phase 5 hard rollback signal — see
+`DIVERGED` result is a safety-gate hard rollback signal — see
 [`rollback.md`](rollback.md#1-parity-job-failures) for the response.
 
 The scheduled tier also runs nightly on cron; if you have time
@@ -248,7 +249,7 @@ pin (step 6) + the parity job (step 7) — none can be skipped.
 | Removed or renamed `@googlesql//...` label | Update [`label-inventory.md`](label-inventory.md) + [`repo-layout.md`](repo-layout.md) + every emulator `BUILD.bazel` that references the old label in **one atomic commit**, then produce + repin. |
 | New required library or header | Update [`headers-and-libraries.md`](headers-and-libraries.md). Producer's `package.sh` must pick up the new label/header set; verify with `verify.sh --smoke-mode=bazel`. |
 | Toolchain (compiler / libc / Bazel) change | Update [`manifest.md`](manifest.md) `platform.libc` / `toolchain.*`. Re-evaluate `setup-googlesql`'s `expected-*` defaults. Document the runtime impact in the release notes (especially for libc — a glibc bump can lock out older base images). |
-| Platform tuple (linux/arm64, darwin/...) added or dropped | Sibling `@googlesql_prebuilt_<os>_<arch>` repo. Producer workflow becomes a matrix. Phase 3 wrapper `select()` lights up. |
+| Platform tuple (linux/arm64, darwin/...) added or dropped | Sibling `@googlesql_prebuilt_<os>_<arch>` repo. Producer workflow becomes a matrix. Consumer-wiring wrapper `select()` lights up. |
 | `manifest.json` schema change (field add/rename/remove, `schema_version` bump) | Update [`manifest.md`](manifest.md), `tools/googlesql-prebuilt/manifest_writer.py` (closed-schema validator), and [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py). Producer regenerates artifacts under the new schema. Existing pins keep using the old schema until they expire. |
 
 ## See also
@@ -257,4 +258,4 @@ pin (step 6) + the parity job (step 7) — none can be skipped.
 - [`maintainer-runbook.md`](maintainer-runbook.md) — steady-state publish / pin / verify / roll-back flow without an upstream bump.
 - [`performance.md`](performance.md) — what improves and what doesn't after the bump lands.
 - [`troubleshooting.md`](troubleshooting.md) — `FAIL_*` validator-token map for unblocking step-5 / step-7 failures.
-- [`rollback.md`](rollback.md) — Phase 5 rollback playbook (parity-failure response).
+- [`rollback.md`](rollback.md) — safety-gate rollback playbook (parity-failure response).

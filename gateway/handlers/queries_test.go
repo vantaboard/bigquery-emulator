@@ -255,7 +255,7 @@ func TestQueryRunDryRunUnimplementedFromEngine(t *testing.T) {
 	fake := &fakeQueryClient{
 		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
 			return nil, status.Error(codes.Unimplemented,
-				"Query.DryRun is not implemented yet (Phase 4 of ROADMAP.md)")
+				"Query.DryRun is not implemented yet")
 		},
 	}
 	deps := Dependencies{Query: fake}
@@ -585,7 +585,7 @@ func twoRowExecuteStream() *fakeQueryResultStream {
 // jobs.query stores schema+rows on the registry, and a follow-up
 // jobs.getQueryResults replays them with a getQueryResultsResponse-
 // shaped body (kind, jobReference, schema, totalRows, jobComplete,
-// rows). This pins the Phase 5e "single-page replay" contract.
+// rows). This pins the "single-page replay" contract.
 func TestQueryGetResultsReturnsCachedRows(t *testing.T) {
 	fake := &fakeQueryClient{
 		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
@@ -701,7 +701,7 @@ func TestQueryGetResultsPageTokenReturnsEmptyPage(t *testing.T) {
 			len(got.Rows))
 	}
 	if got.PageToken != "" {
-		t.Errorf("pageToken = %q, want empty (Phase 5e: never mint one)",
+		t.Errorf("pageToken = %q, want empty (single-page replay never mints one)",
 			got.PageToken)
 	}
 }
@@ -775,7 +775,7 @@ func TestQueryRunDmlStatsResponseShape(t *testing.T) {
 	}
 }
 
-// TestQueryGetResultsReplaysDmlStats pins the Phase 6d contract that
+// TestQueryGetResultsReplaysDmlStats pins the contract that
 // `jobs.getQueryResults` re-emits the same `dmlStats` /
 // `numDmlAffectedRows` envelope that `jobs.query` returned at submit
 // time. Polling BigQuery clients (e.g. the Go SDK's `JobIterator`)
