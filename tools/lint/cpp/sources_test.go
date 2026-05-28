@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -239,7 +240,7 @@ func TestSetRepoRoot_RoundTrips(t *testing.T) {
 // blanks. Used by tests that consume `cpp-lint list` output.
 func nonEmptyLines(s string) []string {
 	var out []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -250,12 +251,7 @@ func nonEmptyLines(s string) []string {
 }
 
 func contains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 // helper kept to silence "unused import" if a platform-specific

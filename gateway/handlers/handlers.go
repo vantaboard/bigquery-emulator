@@ -78,7 +78,7 @@ func NotFound(w http.ResponseWriter, r *http.Request) {
 // because Go's net/http mux cannot match a literal segment after a
 // wildcard.
 func splitColonOp(segment string) (resource, op string) {
-	for i := 0; i < len(segment); i++ {
+	for i := range len(segment) {
 		if segment[i] == ':' {
 			return segment[:i], segment[i+1:]
 		}

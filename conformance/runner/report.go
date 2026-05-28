@@ -29,7 +29,7 @@ func writeTextResult(w io.Writer, r Result) {
 		fmt.Fprintf(w, "       %s\n", r.Message)
 	}
 	if r.Diff != "" {
-		for _, line := range strings.Split(strings.TrimRight(r.Diff, "\n"), "\n") {
+		for line := range strings.SplitSeq(strings.TrimRight(r.Diff, "\n"), "\n") {
 			fmt.Fprintf(w, "       %s\n", line)
 		}
 	}

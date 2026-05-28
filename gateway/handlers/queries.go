@@ -103,7 +103,8 @@ func QueryRun(deps Dependencies) http.HandlerFunc {
 // route table uses, so unit-mode runs (`task emulator:run
 // --engine_binary=""`) keep returning a structured error envelope.
 func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
-	req *bqtypes.QueryRequest) {
+	req *bqtypes.QueryRequest,
+) {
 	if deps.Query == nil {
 		NotImplemented(w, r)
 		return
@@ -159,7 +160,8 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 // emulator:run --engine_binary=""`) keep returning a BigQuery-
 // shaped error envelope instead of a panic.
 func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
-	req *bqtypes.QueryRequest) {
+	req *bqtypes.QueryRequest,
+) {
 	if deps.Query == nil {
 		NotImplemented(w, r)
 		return
@@ -380,10 +382,7 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 			if start > total {
 				start = total
 			}
-			end := start + limit
-			if end > total {
-				end = total
-			}
+			end := min(start+limit, total)
 			pageRows = allRows[start:end]
 		}
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -474,10 +475,5 @@ func resolveProfiles(names []string) ([]Profile, error) {
 }
 
 func contains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }

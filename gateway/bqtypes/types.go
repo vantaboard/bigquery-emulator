@@ -39,18 +39,18 @@ type JobReference struct {
 // work end-to-end. See the failing-IT inventory in
 // `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`.
 type Dataset struct {
-	Kind                     string                   `json:"kind,omitempty"` // bigquery#dataset
-	ID                       string                   `json:"id,omitempty"`
-	DatasetReference         DatasetReference         `json:"datasetReference"`
-	FriendlyName             string                   `json:"friendlyName,omitempty"`
-	Description              string                   `json:"description,omitempty"`
-	Location                 string                   `json:"location,omitempty"`
-	Etag                     string                   `json:"etag,omitempty"`
-	CreationTime             string                   `json:"creationTime,omitempty"`
-	LastModifiedTime         string                   `json:"lastModifiedTime,omitempty"`
-	Access                   []map[string]interface{} `json:"access"`
-	Labels                   map[string]string        `json:"labels,omitempty"`
-	DefaultTableExpirationMs string                   `json:"defaultTableExpirationMs,omitempty"`
+	Kind                     string            `json:"kind,omitempty"` // bigquery#dataset
+	ID                       string            `json:"id,omitempty"`
+	DatasetReference         DatasetReference  `json:"datasetReference"`
+	FriendlyName             string            `json:"friendlyName,omitempty"`
+	Description              string            `json:"description,omitempty"`
+	Location                 string            `json:"location,omitempty"`
+	Etag                     string            `json:"etag,omitempty"`
+	CreationTime             string            `json:"creationTime,omitempty"`
+	LastModifiedTime         string            `json:"lastModifiedTime,omitempty"`
+	Access                   []map[string]any  `json:"access"`
+	Labels                   map[string]string `json:"labels,omitempty"`
+	DefaultTableExpirationMs string            `json:"defaultTableExpirationMs,omitempty"`
 }
 
 // Table is the BigQuery Table resource (subset).
@@ -90,29 +90,29 @@ type TableFieldSchema struct {
 // emulator does not honor today are still parsed so client libraries
 // don't get unmarshal errors.
 type QueryRequest struct {
-	Kind                               string                 `json:"kind,omitempty"` // bigquery#queryRequest
-	Query                              string                 `json:"query"`
-	MaxResults                         uint32                 `json:"maxResults,omitempty"`
-	DefaultDataset                     *DatasetReference      `json:"defaultDataset,omitempty"`
-	TimeoutMs                          uint32                 `json:"timeoutMs,omitempty"`
-	DestinationEncryptionConfiguration map[string]interface{} `json:"destinationEncryptionConfiguration,omitempty"`
-	DryRun                             bool                   `json:"dryRun,omitempty"`
+	Kind                               string            `json:"kind,omitempty"` // bigquery#queryRequest
+	Query                              string            `json:"query"`
+	MaxResults                         uint32            `json:"maxResults,omitempty"`
+	DefaultDataset                     *DatasetReference `json:"defaultDataset,omitempty"`
+	TimeoutMs                          uint32            `json:"timeoutMs,omitempty"`
+	DestinationEncryptionConfiguration map[string]any    `json:"destinationEncryptionConfiguration,omitempty"`
+	DryRun                             bool              `json:"dryRun,omitempty"`
 	// PreserveNulls is deprecated upstream but still parsed.
-	PreserveNulls      *bool                  `json:"preserveNulls,omitempty"`
-	UseQueryCache      *bool                  `json:"useQueryCache,omitempty"`
-	UseLegacySQL       *bool                  `json:"useLegacySql,omitempty"`
-	ParameterMode      string                 `json:"parameterMode,omitempty"`
-	Parameters         []QueryParameter       `json:"queryParameters,omitempty"`
-	Location           string                 `json:"location,omitempty"`
-	FormatOptions      map[string]interface{} `json:"formatOptions,omitempty"`
-	ConnProperties     []ConnectionProperty   `json:"connectionProperties,omitempty"`
-	Labels             map[string]string      `json:"labels,omitempty"`
-	MaximumBytesBilled string                 `json:"maximumBytesBilled,omitempty"`
-	RequestID          string                 `json:"requestId,omitempty"`
-	CreateSession      bool                   `json:"createSession,omitempty"`
-	JobCreationMode    string                 `json:"jobCreationMode,omitempty"`
-	JobTimeoutMs       string                 `json:"jobTimeoutMs,omitempty"`
-	Reservation        string                 `json:"reservation,omitempty"`
+	PreserveNulls      *bool                `json:"preserveNulls,omitempty"`
+	UseQueryCache      *bool                `json:"useQueryCache,omitempty"`
+	UseLegacySQL       *bool                `json:"useLegacySql,omitempty"`
+	ParameterMode      string               `json:"parameterMode,omitempty"`
+	Parameters         []QueryParameter     `json:"queryParameters,omitempty"`
+	Location           string               `json:"location,omitempty"`
+	FormatOptions      map[string]any       `json:"formatOptions,omitempty"`
+	ConnProperties     []ConnectionProperty `json:"connectionProperties,omitempty"`
+	Labels             map[string]string    `json:"labels,omitempty"`
+	MaximumBytesBilled string               `json:"maximumBytesBilled,omitempty"`
+	RequestID          string               `json:"requestId,omitempty"`
+	CreateSession      bool                 `json:"createSession,omitempty"`
+	JobCreationMode    string               `json:"jobCreationMode,omitempty"`
+	JobTimeoutMs       string               `json:"jobTimeoutMs,omitempty"`
+	Reservation        string               `json:"reservation,omitempty"`
 }
 
 // QueryResponse is the body of POST /bigquery/v2/projects/{projectId}/queries.
@@ -120,27 +120,27 @@ type QueryRequest struct {
 // Mirrors the QueryResponse definition under
 // docs/bigquery/docs/reference/rest/v2/jobs/query.md.
 type QueryResponse struct {
-	Kind                string                 `json:"kind,omitempty"` // bigquery#queryResponse
-	Schema              *TableSchema           `json:"schema,omitempty"`
-	JobReference        *JobReference          `json:"jobReference,omitempty"`
-	JobCreationReason   map[string]interface{} `json:"jobCreationReason,omitempty"`
-	QueryID             string                 `json:"queryId,omitempty"`
-	Location            string                 `json:"location,omitempty"`
-	TotalRows           string                 `json:"totalRows,omitempty"`
-	PageToken           string                 `json:"pageToken,omitempty"`
-	Rows                []Row                  `json:"rows,omitempty"`
-	TotalBytesProcessed string                 `json:"totalBytesProcessed,omitempty"`
-	JobComplete         bool                   `json:"jobComplete"`
-	Errors              []ErrorProto           `json:"errors,omitempty"`
-	CacheHit            bool                   `json:"cacheHit,omitempty"`
-	NumDmlAffectedRows  string                 `json:"numDmlAffectedRows,omitempty"`
-	SessionInfo         *SessionInfo           `json:"sessionInfo,omitempty"`
-	DmlStats            *DmlStats              `json:"dmlStats,omitempty"`
-	TotalBytesBilled    string                 `json:"totalBytesBilled,omitempty"`
-	TotalSlotMs         string                 `json:"totalSlotMs,omitempty"`
-	CreationTime        string                 `json:"creationTime,omitempty"`
-	StartTime           string                 `json:"startTime,omitempty"`
-	EndTime             string                 `json:"endTime,omitempty"`
+	Kind                string         `json:"kind,omitempty"` // bigquery#queryResponse
+	Schema              *TableSchema   `json:"schema,omitempty"`
+	JobReference        *JobReference  `json:"jobReference,omitempty"`
+	JobCreationReason   map[string]any `json:"jobCreationReason,omitempty"`
+	QueryID             string         `json:"queryId,omitempty"`
+	Location            string         `json:"location,omitempty"`
+	TotalRows           string         `json:"totalRows,omitempty"`
+	PageToken           string         `json:"pageToken,omitempty"`
+	Rows                []Row          `json:"rows,omitempty"`
+	TotalBytesProcessed string         `json:"totalBytesProcessed,omitempty"`
+	JobComplete         bool           `json:"jobComplete"`
+	Errors              []ErrorProto   `json:"errors,omitempty"`
+	CacheHit            bool           `json:"cacheHit,omitempty"`
+	NumDmlAffectedRows  string         `json:"numDmlAffectedRows,omitempty"`
+	SessionInfo         *SessionInfo   `json:"sessionInfo,omitempty"`
+	DmlStats            *DmlStats      `json:"dmlStats,omitempty"`
+	TotalBytesBilled    string         `json:"totalBytesBilled,omitempty"`
+	TotalSlotMs         string         `json:"totalSlotMs,omitempty"`
+	CreationTime        string         `json:"creationTime,omitempty"`
+	StartTime           string         `json:"startTime,omitempty"`
+	EndTime             string         `json:"endTime,omitempty"`
 }
 
 // SessionInfo tracks the session a query is running under, when sessions
@@ -200,7 +200,7 @@ type Row struct {
 // nested Row, or a list (for REPEATED) -- BigQuery encodes everything as
 // strings/objects/arrays at the wire level.
 type Cell struct {
-	V interface{} `json:"v"`
+	V any `json:"v"`
 }
 
 // ErrorProto is BigQuery's per-error detail object.
@@ -228,8 +228,8 @@ type TableDataInsertAllRequest struct {
 // per-row payload; we keep the JSON tag as-is so unmarshaling works
 // against the official client libraries.
 type TableDataInsertAllRequestRow struct {
-	InsertID string                 `json:"insertId,omitempty"`
-	JSON     map[string]interface{} `json:"json"`
+	InsertID string         `json:"insertId,omitempty"`
+	JSON     map[string]any `json:"json"`
 }
 
 // TableDataInsertAllResponse is the response of insertAll. See

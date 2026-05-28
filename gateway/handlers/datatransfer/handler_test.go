@@ -141,8 +141,12 @@ func postPatch(t *testing.T, mux *http.ServeMux, path, body string) map[string]a
 // /locations/) lands the config at /locations/us/.
 func TestDataTransferProjectScopedCreateRoutesToUS(t *testing.T) {
 	mux := newTestMux(t)
-	rec := postJSON(t, mux, "/v1/projects/p1/transferConfigs",
-		`{"displayName":"q","dataSourceId":"scheduled_query","destinationDatasetId":"ds1","params":{"query":"SELECT 1"}}`)
+	rec := postJSON(
+		t,
+		mux,
+		"/v1/projects/p1/transferConfigs",
+		`{"displayName":"q","dataSourceId":"scheduled_query","destinationDatasetId":"ds1","params":{"query":"SELECT 1"}}`,
+	)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("create: status=%d body=%s", rec.Code, rec.Body.String())
 	}

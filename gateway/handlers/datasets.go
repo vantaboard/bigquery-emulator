@@ -81,7 +81,7 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 	}
 	ds.LastModifiedTime = nowMillis()
 	if ds.Access == nil {
-		ds.Access = []map[string]interface{}{}
+		ds.Access = []map[string]any{}
 	}
 	return ds
 }

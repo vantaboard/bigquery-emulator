@@ -46,14 +46,30 @@ func run() error {
 	fs.SetOutput(os.Stderr)
 
 	var (
-		fixtures        = fs.String("fixtures", "conformance/fixtures", "directory or file containing fixture YAML")
-		engineBinary    = fs.String("engine-binary", "./bin/emulator_main", "path to emulator_main; mutually exclusive with --connect")
-		connect         = fs.String("connect", "", "HOST:PORT of an already-running engine to dial instead of spawning emulator_main")
-		updateBaselines = fs.Bool("update-baselines", false, "overwrite each fixture's expected: block with the captured response (bootstrap mode)")
-		output          = fs.String("output", "text", "output format: text or json")
-		outputFile      = fs.String("output-file", "", "if non-empty, write the rendered report to this file (atomic write) in addition to stdout")
-		profiles        stringSliceFlag
-		showHelp        = fs.Bool("help", false, "print usage and exit")
+		fixtures     = fs.String("fixtures", "conformance/fixtures", "directory or file containing fixture YAML")
+		engineBinary = fs.String(
+			"engine-binary",
+			"./bin/emulator_main",
+			"path to emulator_main; mutually exclusive with --connect",
+		)
+		connect = fs.String(
+			"connect",
+			"",
+			"HOST:PORT of an already-running engine to dial instead of spawning emulator_main",
+		)
+		updateBaselines = fs.Bool(
+			"update-baselines",
+			false,
+			"overwrite each fixture's expected: block with the captured response (bootstrap mode)",
+		)
+		output     = fs.String("output", "text", "output format: text or json")
+		outputFile = fs.String(
+			"output-file",
+			"",
+			"if non-empty, write the rendered report to this file (atomic write) in addition to stdout",
+		)
+		profiles stringSliceFlag
+		showHelp = fs.Bool("help", false, "print usage and exit")
 	)
 	fs.Var(&profiles, "profile", "restrict the matrix to one profile (repeatable). Default: all known profiles")
 

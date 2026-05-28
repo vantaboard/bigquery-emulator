@@ -99,7 +99,9 @@ func TestGatewayConnectsToEmulatorMain(t *testing.T) {
 	}
 	bin := emulatorBinaryPath(t)
 	if bin == "" {
-		t.Skip("emulator_main binary not found; run `task emulator:build-engine` (or set BIGQUERY_EMULATOR_BIN) to enable this integration test")
+		t.Skip(
+			"emulator_main binary not found; run `task emulator:build-engine` (or set BIGQUERY_EMULATOR_BIN) to enable this integration test",
+		)
 	}
 
 	port := freeTCPPort(t)

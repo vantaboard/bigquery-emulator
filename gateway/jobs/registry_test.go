@@ -37,14 +37,12 @@ func TestNewJobIDUnique(t *testing.T) {
 	const goroutines, perG = 32, 64
 	got := make(chan string, goroutines*perG)
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < perG; j++ {
+	for range goroutines {
+		wg.Go(func() {
+			for range perG {
 				got <- r.NewJobID()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(got)

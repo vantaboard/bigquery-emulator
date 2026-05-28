@@ -70,7 +70,7 @@ func decodeInsertAllBody(w http.ResponseWriter, r *http.Request) (bqtypes.TableD
 // side because the catalog/storage path only requires the bytes to
 // come back out shape-preserved. Typing tightens later via the
 // resolved AST.
-func jsonToCell(v interface{}) *enginepb.Cell {
+func jsonToCell(v any) *enginepb.Cell {
 	if v == nil {
 		return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
 	}
@@ -109,13 +109,13 @@ func jsonToCell(v interface{}) *enginepb.Cell {
 		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{
 			StringValue: base64.StdEncoding.EncodeToString(val),
 		}}
-	case []interface{}:
+	case []any:
 		arr := &enginepb.Array{Elements: make([]*enginepb.Cell, 0, len(val))}
 		for _, el := range val {
 			arr.Elements = append(arr.Elements, jsonToCell(el))
 		}
 		return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: arr}}
-	case map[string]interface{}:
+	case map[string]any:
 		st := &enginepb.Struct{Fields: make([]*enginepb.Cell, 0, len(val))}
 		for _, fv := range val {
 			st.Fields = append(st.Fields, jsonToCell(fv))
@@ -136,7 +136,7 @@ func jsonToCell(v interface{}) *enginepb.Cell {
 // ignoreUnknownValues=false is approximated here by always ignoring;
 // stricter semantics land alongside row-level validation in the
 // query-execution work).
-func jsonRowToProto(schema *enginepb.TableSchema, row map[string]interface{}) *enginepb.DataRow {
+func jsonRowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.DataRow {
 	out := &enginepb.DataRow{Cells: make([]*enginepb.Cell, 0, len(schema.GetFields()))}
 	for _, f := range schema.GetFields() {
 		v, ok := row[f.GetName()]
@@ -156,7 +156,7 @@ func jsonRowToProto(schema *enginepb.TableSchema, row map[string]interface{}) *e
 // `v` field of the f/v shape, so we map proto Cell variants straight
 // to their string representation; arrays and structs recurse into
 // the same shape so nested data round-trips.
-func cellToJSON(c *enginepb.Cell) interface{} {
+func cellToJSON(c *enginepb.Cell) any {
 	if c == nil {
 		return nil
 	}

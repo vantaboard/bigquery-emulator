@@ -128,7 +128,7 @@ type Job struct {
 // the emulator does not (yet) maintain a pending queue; see the
 // package-level doc for why DONE-on-arrival is fine today.
 type Registry struct {
-	counter uint64
+	counter atomic.Uint64
 	jobs    sync.Map
 }
 
@@ -147,7 +147,7 @@ func NewRegistry() *Registry {
 // on the same nanosecond, which can happen on coarse-resolution
 // clocks (Windows) under heavy concurrency.
 func (r *Registry) NewJobID() string {
-	seq := atomic.AddUint64(&r.counter, 1)
+	seq := r.counter.Add(1)
 	return "job_" +
 		strconv.FormatInt(time.Now().UnixNano(), 10) + "_" +
 		strconv.FormatUint(seq, 10)

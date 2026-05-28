@@ -29,7 +29,11 @@ type fakeQueryClient struct {
 	lastExecuteQuery *enginepb.QueryRequest
 }
 
-func (f *fakeQueryClient) DryRun(ctx context.Context, in *enginepb.QueryRequest, _ ...grpc.CallOption) (*enginepb.DryRunResponse, error) {
+func (f *fakeQueryClient) DryRun(
+	ctx context.Context,
+	in *enginepb.QueryRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DryRunResponse, error) {
 	f.lastDryRun = in
 	if f.dryRunFn != nil {
 		return f.dryRunFn(ctx, in)
@@ -37,7 +41,11 @@ func (f *fakeQueryClient) DryRun(ctx context.Context, in *enginepb.QueryRequest,
 	return &enginepb.DryRunResponse{}, nil
 }
 
-func (f *fakeQueryClient) ExecuteQuery(ctx context.Context, in *enginepb.QueryRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+func (f *fakeQueryClient) ExecuteQuery(
+	ctx context.Context,
+	in *enginepb.QueryRequest,
+	_ ...grpc.CallOption,
+) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
 	f.lastExecuteQuery = in
 	if f.executeQueryFn != nil {
 		return f.executeQueryFn(ctx, in)

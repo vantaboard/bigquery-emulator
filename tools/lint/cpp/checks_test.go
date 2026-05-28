@@ -27,7 +27,13 @@ func TestCheckFileLength_Threshold(t *testing.T) {
 	}
 
 	baseline := map[string]struct{}{"backend/foo.cc": {}}
-	if got := checkFileLength("backend/foo.cc", over, CheckOptions{MaxFileLines: 500, Baseline: baseline}); len(got) != 0 {
+	if got := checkFileLength(
+		"backend/foo.cc",
+		over,
+		CheckOptions{MaxFileLines: 500, Baseline: baseline},
+	); len(
+		got,
+	) != 0 {
 		t.Errorf("baselined file should pass, got %v", got)
 	}
 }
@@ -252,7 +258,7 @@ func TestRunOnce_SuppressionRequiresReason(t *testing.T) {
 // stable ordering so a re-run does not produce a different log.
 func TestRunOnce_Sorted(t *testing.T) {
 	body := bytes.Buffer{}
-	for i := 0; i < 600; i++ {
+	for range 600 {
 		body.WriteString("void f();\n")
 	}
 	body.WriteString(`std::cout << "x";

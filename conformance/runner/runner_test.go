@@ -22,7 +22,6 @@ func TestLoadValidFixture(t *testing.T) {
 		t.Fatal("no fixtures under ../fixtures")
 	}
 	for _, p := range matches {
-		p := p
 		t.Run(filepath.Base(p), func(t *testing.T) {
 			f, err := Load(p)
 			if err != nil {
@@ -560,7 +559,9 @@ func TestFloatEqualHandlesNaN(t *testing.T) {
 }
 
 func TestErrorDiffMatchesCodeAndMessage(t *testing.T) {
-	body := []byte(`{"error":{"code":400,"message":"Syntax error: missing FROM near bad","status":"invalidQuery","errors":[{"reason":"invalidQuery","message":"Syntax error: missing FROM near bad"}]}}`)
+	body := []byte(
+		`{"error":{"code":400,"message":"Syntax error: missing FROM near bad","status":"invalidQuery","errors":[{"reason":"invalidQuery","message":"Syntax error: missing FROM near bad"}]}}`,
+	)
 	expected := ExpectedError{Code: 400, MessageContains: "Syntax error"}
 	if msg := errorDiff(expected, 400, body); msg != "" {
 		t.Fatalf("errorDiff: want empty, got %q", msg)

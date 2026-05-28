@@ -146,7 +146,7 @@ func collectSuppressions(lines []string) map[int]suppression {
 
 func parseSuppressionRules(spec string) map[string]struct{} {
 	rules := map[string]struct{}{}
-	for _, r := range strings.Split(spec, ",") {
+	for r := range strings.SplitSeq(spec, ",") {
 		r = strings.TrimSpace(r)
 		if r == "" {
 			continue
@@ -233,11 +233,17 @@ func checkFileLength(path string, body []byte, opts CheckOptions) []Finding {
 	if _, baselined := opts.Baseline[path]; baselined {
 		return nil
 	}
-	return []Finding{{
-		Rule:    ruleFileLength,
-		Path:    path,
-		Message: fmt.Sprintf("file has %d lines (max %d); split it or add to tools/lint/cpp/baseline.txt with a follow-up issue", lines, opts.MaxFileLines),
-	}}
+	return []Finding{
+		{
+			Rule: ruleFileLength,
+			Path: path,
+			Message: fmt.Sprintf(
+				"file has %d lines (max %d); split it or add to tools/lint/cpp/baseline.txt with a follow-up issue",
+				lines,
+				opts.MaxFileLines,
+			),
+		},
+	}
 }
 
 // countLines returns the number of newline-terminated lines in the
@@ -273,11 +279,20 @@ var bannedLoggingPatterns = []struct {
 	needle  string
 	message string
 }{
-	{"std::cout", "std::cout is banned in production C++; use absl::Status / structured logging via the gRPC error envelope"},
+	{
+		"std::cout",
+		"std::cout is banned in production C++; use absl::Status / structured logging via the gRPC error envelope",
+	},
 	{"std::cerr", "std::cerr is banned in production C++; surface errors through absl::Status / grpc::Status instead"},
 	{"std::clog", "std::clog is banned in production C++; route diagnostics through absl::Status / grpc::Status"},
-	{"std::printf", "std::printf is banned in production C++; use absl::StrCat / absl::StrFormat and return errors via Status"},
-	{"std::fprintf", "std::fprintf is banned in production C++; surface diagnostics through absl::Status / grpc::Status"},
+	{
+		"std::printf",
+		"std::printf is banned in production C++; use absl::StrCat / absl::StrFormat and return errors via Status",
+	},
+	{
+		"std::fprintf",
+		"std::fprintf is banned in production C++; surface diagnostics through absl::Status / grpc::Status",
+	},
 }
 
 // printfWordRE matches a top-level `printf(` or `fprintf(` call
@@ -437,7 +452,9 @@ const (
 // this — but the regex catches the obvious case where someone
 // types `engine.ExecuteDdl(...)` and forgets to inspect the
 // result.
-var statusCallStmtRE = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z_0-9]*::)*([A-Za-z_][A-Za-z_0-9]*\s*\.\s*)?([A-Za-z_][A-Za-z_0-9]*)\(`)
+var statusCallStmtRE = regexp.MustCompile(
+	`^\s*([A-Za-z_][A-Za-z_0-9]*::)*([A-Za-z_][A-Za-z_0-9]*\s*\.\s*)?([A-Za-z_][A-Za-z_0-9]*)\(`,
+)
 
 // statusOrValueRE matches `.value()` invocations on a `StatusOr`
 // without a preceding `.ok()` guard on the same line. The check
@@ -549,13 +566,15 @@ func scanStatusOrValue(path string, line int, stripped string, lines []string) [
 		return nil
 	}
 	idx := statusOrValueRE.FindStringIndex(stripped)
-	return []Finding{{
-		Rule:    ruleStatusOrUnchecked,
-		Path:    path,
-		Line:    line,
-		Col:     idx[0] + 1,
-		Message: "StatusOr<T>::value() without a nearby .ok() guard; check status before unwrapping (or annotate with `// cpp-lint:allow(statusor-unchecked-value) -- reason` if intentional)",
-	}}
+	return []Finding{
+		{
+			Rule:    ruleStatusOrUnchecked,
+			Path:    path,
+			Line:    line,
+			Col:     idx[0] + 1,
+			Message: "StatusOr<T>::value() without a nearby .ok() guard; check status before unwrapping (or annotate with `// cpp-lint:allow(statusor-unchecked-value) -- reason` if intentional)",
+		},
+	}
 }
 
 // statusGuardRE matches the patterns we treat as a `.value()`
@@ -570,13 +589,12 @@ func scanStatusOrValue(path string, line int, stripped string, lines []string) [
 // finding because of a permissive guard pattern) are acceptable;
 // false positives (a screaming finding on already-safe code) are
 // not, because they erode trust in the rule.
-var statusGuardRE = regexp.MustCompile(`!\s*[A-Za-z_][A-Za-z_0-9]*\s*\.\s*ok\(\)|RETURN_IF_ERROR\s*\(|ASSIGN_OR_RETURN\s*\(|\.\s*status\(\)`)
+var statusGuardRE = regexp.MustCompile(
+	`!\s*[A-Za-z_][A-Za-z_0-9]*\s*\.\s*ok\(\)|RETURN_IF_ERROR\s*\(|ASSIGN_OR_RETURN\s*\(|\.\s*status\(\)`,
+)
 
 func hasNearbyStatusGuard(lines []string, line int) bool {
-	from := line - statusOrLookbackLines
-	if from < 1 {
-		from = 1
-	}
+	from := max(line-statusOrLookbackLines, 1)
 	for n := line - 1; n >= from; n-- {
 		stripped := stripCommentsAndStrings(lines[n-1])
 		if statusGuardRE.MatchString(stripped) {
@@ -600,7 +618,11 @@ func hasNearbyStatusGuard(lines []string, line int) bool {
 func runCheck(args []string, stdout, stderr io.Writer) error {
 	fs := flagSet("check", stderr)
 	maxLines := fs.Int("max-lines", 500, "fail when a first-party C++ file exceeds this many lines")
-	baselinePath := fs.String("baseline", filepath.FromSlash("tools/lint/cpp/baseline.txt"), "path to the file-length baseline")
+	baselinePath := fs.String(
+		"baseline",
+		filepath.FromSlash("tools/lint/cpp/baseline.txt"),
+		"path to the file-length baseline",
+	)
 	noBaseline := fs.Bool("no-baseline", false, "disable the file-length baseline (every offender fails)")
 	if err := fs.Parse(args); err != nil {
 		return errUsage

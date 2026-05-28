@@ -93,10 +93,18 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	mountBQv2("DELETE", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableDelete(deps))
 	// tables IAM custom methods: POST /tables/{tableId}:getIamPolicy,
 	// :setIamPolicy, :testIamPermissions. Dispatched on trailing :op.
-	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}", handlers.TableCustomMethodPOST(deps))
+	mountBQv2(
+		"POST",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}",
+		handlers.TableCustomMethodPOST(deps),
+	)
 
 	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data", handlers.TableDataList(deps))
-	mountBQv2("POST", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll", handlers.TableDataInsertAll(deps))
+	mountBQv2(
+		"POST",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll",
+		handlers.TableDataInsertAll(deps),
+	)
 
 	// Models (BQML). Engine has no model store; list returns the
 	// BigQuery-shaped empty page so client probes succeed, get/delete
@@ -118,7 +126,11 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	// Row-access policies (table-scoped row-level security). No
 	// policy store yet; list returns the empty page, IAM custom
 	// methods return 501. See gateway/handlers/row_access_policies.go.
-	mountBQv2("GET", "/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies", handlers.RowAccessPolicyList(deps))
+	mountBQv2(
+		"GET",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
+		handlers.RowAccessPolicyList(deps),
+	)
 
 	mountBQv2("GET", "/projects/{projectId}/jobs", handlers.JobList(deps))
 	mountBQv2("POST", "/projects/{projectId}/jobs", handlers.JobInsert(deps))

@@ -36,7 +36,11 @@ type fakeCatalogClient struct {
 	lastListRows        *enginepb.ListRowsRequest
 }
 
-func (f *fakeCatalogClient) RegisterDataset(ctx context.Context, in *enginepb.RegisterDatasetRequest, _ ...grpc.CallOption) (*enginepb.RegisterDatasetResponse, error) {
+func (f *fakeCatalogClient) RegisterDataset(
+	ctx context.Context,
+	in *enginepb.RegisterDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.RegisterDatasetResponse, error) {
 	f.lastRegisterDataset = in
 	if f.registerDatasetFn != nil {
 		return f.registerDatasetFn(ctx, in)
@@ -44,7 +48,11 @@ func (f *fakeCatalogClient) RegisterDataset(ctx context.Context, in *enginepb.Re
 	return &enginepb.RegisterDatasetResponse{}, nil
 }
 
-func (f *fakeCatalogClient) DropDataset(ctx context.Context, in *enginepb.DropDatasetRequest, _ ...grpc.CallOption) (*enginepb.DropDatasetResponse, error) {
+func (f *fakeCatalogClient) DropDataset(
+	ctx context.Context,
+	in *enginepb.DropDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DropDatasetResponse, error) {
 	f.lastDropDataset = in
 	if f.dropDatasetFn != nil {
 		return f.dropDatasetFn(ctx, in)
@@ -52,7 +60,11 @@ func (f *fakeCatalogClient) DropDataset(ctx context.Context, in *enginepb.DropDa
 	return &enginepb.DropDatasetResponse{}, nil
 }
 
-func (f *fakeCatalogClient) RegisterTable(ctx context.Context, in *enginepb.RegisterTableRequest, _ ...grpc.CallOption) (*enginepb.RegisterTableResponse, error) {
+func (f *fakeCatalogClient) RegisterTable(
+	ctx context.Context,
+	in *enginepb.RegisterTableRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.RegisterTableResponse, error) {
 	f.lastRegisterTable = in
 	if f.registerTableFn != nil {
 		return f.registerTableFn(ctx, in)
@@ -60,7 +72,11 @@ func (f *fakeCatalogClient) RegisterTable(ctx context.Context, in *enginepb.Regi
 	return &enginepb.RegisterTableResponse{}, nil
 }
 
-func (f *fakeCatalogClient) DropTable(ctx context.Context, in *enginepb.DropTableRequest, _ ...grpc.CallOption) (*enginepb.DropTableResponse, error) {
+func (f *fakeCatalogClient) DropTable(
+	ctx context.Context,
+	in *enginepb.DropTableRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DropTableResponse, error) {
 	f.lastDropTable = in
 	if f.dropTableFn != nil {
 		return f.dropTableFn(ctx, in)
@@ -68,7 +84,11 @@ func (f *fakeCatalogClient) DropTable(ctx context.Context, in *enginepb.DropTabl
 	return &enginepb.DropTableResponse{}, nil
 }
 
-func (f *fakeCatalogClient) DescribeTable(ctx context.Context, in *enginepb.DescribeTableRequest, _ ...grpc.CallOption) (*enginepb.DescribeTableResponse, error) {
+func (f *fakeCatalogClient) DescribeTable(
+	ctx context.Context,
+	in *enginepb.DescribeTableRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DescribeTableResponse, error) {
 	f.lastDescribeTable = in
 	if f.describeTableFn != nil {
 		return f.describeTableFn(ctx, in)
@@ -76,7 +96,11 @@ func (f *fakeCatalogClient) DescribeTable(ctx context.Context, in *enginepb.Desc
 	return &enginepb.DescribeTableResponse{}, nil
 }
 
-func (f *fakeCatalogClient) InsertRows(ctx context.Context, in *enginepb.InsertRowsRequest, _ ...grpc.CallOption) (*enginepb.InsertRowsResponse, error) {
+func (f *fakeCatalogClient) InsertRows(
+	ctx context.Context,
+	in *enginepb.InsertRowsRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.InsertRowsResponse, error) {
 	f.lastInsertRows = in
 	if f.insertRowsFn != nil {
 		return f.insertRowsFn(ctx, in)
@@ -84,7 +108,11 @@ func (f *fakeCatalogClient) InsertRows(ctx context.Context, in *enginepb.InsertR
 	return &enginepb.InsertRowsResponse{}, nil
 }
 
-func (f *fakeCatalogClient) ListRows(ctx context.Context, in *enginepb.ListRowsRequest, _ ...grpc.CallOption) (*enginepb.ListRowsResponse, error) {
+func (f *fakeCatalogClient) ListRows(
+	ctx context.Context,
+	in *enginepb.ListRowsRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRowsResponse, error) {
 	f.lastListRows = in
 	if f.listRowsFn != nil {
 		return f.listRowsFn(ctx, in)

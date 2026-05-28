@@ -23,7 +23,10 @@
 //	CreateAwsConnectionIT  → connectionpb.ConnectionService.CreateConnection
 //	                          ⇒ api/bqconnection/server.go: (s *Server).CreateConnection
 //	                          ⇒ api/bqconnection/rest_handler.go (HTTP/JSON variant)
-//	                          ⇒ api/bqconnection/connection_properties.go: applyCloudSQLFromCreate, validateConnectionPropertiesOneof
+//	                          ⇒ api/bqconnection/connection_properties.go: applyCloudSQLFromCreate,
+//
+// validateConnectionPropertiesOneof
+//
 //	DeleteConnectionIT     → connectionpb.ConnectionService.DeleteConnection
 //	                          ⇒ api/bqconnection/server.go: (s *Server).DeleteConnection
 //	GetConnectionIT        → connectionpb.ConnectionService.GetConnection

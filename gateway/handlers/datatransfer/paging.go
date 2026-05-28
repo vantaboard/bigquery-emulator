@@ -36,9 +36,6 @@ func pageWindow(lenNames int, pageSizeStr, pageToken string) (start, end int) {
 			start = off
 		}
 	}
-	end = start + pageSize
-	if end > lenNames {
-		end = lenNames
-	}
+	end = min(start+pageSize, lenNames)
 	return start, end
 }

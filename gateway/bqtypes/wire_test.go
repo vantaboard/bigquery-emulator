@@ -46,7 +46,7 @@ func TestWireValueToCellScalars(t *testing.T) {
 		name    string
 		typeKnd string
 		in      *enginepb.Cell
-		wantV   interface{}
+		wantV   any
 	}{
 		{"INT64", "INT64", stringCell("42"), "42"},
 		{"INT64_negative", "INT64", stringCell("-9223372036854775808"), "-9223372036854775808"},
@@ -58,21 +58,29 @@ func TestWireValueToCellScalars(t *testing.T) {
 		{"BOOL_false", "BOOL", stringCell("false"), "false"},
 		{"STRING", "STRING", stringCell("hello world"), "hello world"},
 		{"STRING_empty", "STRING", stringCell(""), ""},
-		{"BYTES", "BYTES",
+		{
+			"BYTES", "BYTES",
 			stringCell(base64.StdEncoding.EncodeToString([]byte{0xDE, 0xAD, 0xBE, 0xEF})),
-			"3q2+7w=="},
+			"3q2+7w==",
+		},
 		{"DATE", "DATE", stringCell("1985-04-12"), "1985-04-12"},
-		{"TIMESTAMP", "TIMESTAMP",
+		{
+			"TIMESTAMP", "TIMESTAMP",
 			stringCell("1985-04-12T23:20:50.520000Z"),
-			"1985-04-12T23:20:50.520000Z"},
-		{"DATETIME", "DATETIME",
+			"1985-04-12T23:20:50.520000Z",
+		},
+		{
+			"DATETIME", "DATETIME",
 			stringCell("1985-04-12 23:20:50.520000"),
-			"1985-04-12 23:20:50.520000"},
+			"1985-04-12 23:20:50.520000",
+		},
 		{"TIME", "TIME", stringCell("23:20:50.520000"), "23:20:50.520000"},
 		{"NUMERIC", "NUMERIC", stringCell("12345.6789"), "12345.6789"},
-		{"BIGNUMERIC", "BIGNUMERIC",
+		{
+			"BIGNUMERIC", "BIGNUMERIC",
 			stringCell("578960446186580977117854925043439539266.34992332820282019728792003956564819967"),
-			"578960446186580977117854925043439539266.34992332820282019728792003956564819967"},
+			"578960446186580977117854925043439539266.34992332820282019728792003956564819967",
+		},
 		{"GEOGRAPHY", "GEOGRAPHY", stringCell("POINT(1 2)"), "POINT(1 2)"},
 		{"JSON", "JSON", stringCell(`{"k":"v"}`), `{"k":"v"}`},
 	}

@@ -71,7 +71,11 @@ func stripBaselineLine(line string) string {
 func runBaseline(args []string, stdout, stderr io.Writer) error {
 	fs := flagSet("baseline", stderr)
 	maxLines := fs.Int("max-lines", 500, "the same line cap that 'check' enforces")
-	output := fs.String("output", filepath.FromSlash("tools/lint/cpp/baseline.txt"), "destination path for the rewritten baseline")
+	output := fs.String(
+		"output",
+		filepath.FromSlash("tools/lint/cpp/baseline.txt"),
+		"destination path for the rewritten baseline",
+	)
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}

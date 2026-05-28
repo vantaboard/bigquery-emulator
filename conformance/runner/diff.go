@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -230,13 +231,13 @@ func unorderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, ac
 	var missing, extra []string
 	for k, v := range expCanon {
 		have := actCanon[k]
-		for i := 0; i < v-have; i++ {
+		for range v - have {
 			missing = append(missing, k)
 		}
 	}
 	for k, v := range actCanon {
 		have := expCanon[k]
-		for i := 0; i < v-have; i++ {
+		for range v - have {
 			extra = append(extra, k)
 		}
 	}
@@ -576,8 +577,8 @@ func toTime(v any) (time.Time, bool) {
 		// TIMESTAMP; parse and split into sec + nsec rather
 		// than going through float (which loses precision past
 		// microseconds).
-		if dot := strings.Index(s, "."); dot >= 0 {
-			secStr, fracStr := s[:dot], s[dot+1:]
+		if before, after, ok := strings.Cut(s, "."); ok {
+			secStr, fracStr := before, after
 			if sec, err := strconv.ParseInt(secStr, 10, 64); err == nil {
 				// Pad / truncate the fractional part to 9
 				// digits so ParseInt sees a clean nsec.
@@ -850,10 +851,5 @@ func snippet(b []byte) string {
 }
 
 func containsString(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }

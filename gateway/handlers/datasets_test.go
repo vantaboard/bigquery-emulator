@@ -23,7 +23,7 @@ func newDatasetReq(method, projectID, datasetID, body string) *http.Request {
 	if datasetID != "" {
 		url += "/" + datasetID
 	}
-	var reqBody = strings.NewReader(body)
+	reqBody := strings.NewReader(body)
 	req := httptest.NewRequest(method, url, reqBody)
 	req.SetPathValue("projectId", projectID)
 	if datasetID != "" {
