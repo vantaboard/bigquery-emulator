@@ -1,0 +1,460 @@
+# GoogleSQL source-vs-prebuilt parity (Phase 5 of the
+# `googlesql-prebuilt` rollout — see `docs/dev/googlesql-prebuilt/README.md`).
+#
+# Builds the same emulator commit twice, once against the pinned
+# GoogleSQL prebuilt artifact and once against an upstream source
+# checkout, and diffs:
+#
+#   * Engine link success.
+#   * Basic engine startup (`emulator_main --version` + a tight
+#     `--profile=ci` boot smoke).
+#   * Conformance result for a deterministic smoke query subset.
+#   * Conformance result for the standard lane (scheduled / release
+#     tier only — the full suite is too expensive for every PR).
+#
+# Tiering (matches the work plan):
+#
+#   * PR tier              — `tier: pr` job. Fast: link + startup +
+#                            smoke query set. Runs on every PR and on
+#                            `main` pushes.
+#   * Scheduled tier       — `tier: scheduled` job. Adds the standard
+#                            conformance lane (memory profile) for both
+#                            modes. Runs on a nightly cron + on
+#                            `workflow_dispatch -f tier=scheduled`.
+#   * Release tier         — `tier: release` job. Adds the duckdb
+#                            conformance lane on top of scheduled.
+#                            Runs on `workflow_dispatch -f tier=release`
+#                            and is the gate the release workflow can
+#                            point to before publishing.
+#
+# Mode handoff details. Each "mode" leg is a dedicated job so a single
+# leg's slowness does not block the other; the comparator job aggregates
+# both legs and is the workflow-level pass/fail signal. The prebuilt leg
+# reuses the standard `setup-googlesql` composite (which Phase 5 wired
+# the centralized `validate_artifact.py` into); the source leg pinpoints
+# `googlesql-ref` so the same upstream commit drives both legs.
+#
+# Why this workflow exists separately from `ci.yml` / `conformance.yml`:
+# parity is a comparison signal, not a "did the build pass" signal.
+# Folding it into ci.yml would either (a) double the budget of every PR
+# (running both modes when we only need one to gate the build) or (b)
+# hide a parity regression behind the "main" build's pass/fail. Splitting
+# keeps each lane's purpose distinct and lets a maintainer flip the
+# parity lane off temporarily without weakening the per-PR build gate.
+#
+# Source fallback during the pre-publish window: when the repo vars
+# `GOOGLESQL_PREBUILT_URL`/`_SHA256` are still empty (Phase 4's release
+# maintainer follow-up has not landed a real artifact yet), the prebuilt
+# leg's `setup-googlesql` call hits `fail-on-source-fallback: true` and
+# refuses to run — the parity comparator then surfaces a workflow-level
+# error saying "no prebuilt pin published; parity cannot be measured".
+# That's intentional: the parity job is meaningless without a real
+# prebuilt artifact, and we'd rather see a red lane than a false green.
+
+name: googlesql-parity
+
+on:
+  schedule:
+    # Daily at 06:00 UTC — keeps the scheduled tier warm without hammering
+    # the project's GitHub-hosted runner minutes budget on every push.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Parity tier: pr (fast), scheduled (adds memory conformance), release (full)'
+        type: choice
+        required: true
+        default: pr
+        options:
+          - pr
+          - scheduled
+          - release
+      googlesql_ref:
+        description: 'Upstream GoogleSQL git ref for the source leg (default: matches the pin in MODULE.bazel)'
+        required: false
+        default: '2026.01.1'
+  pull_request:
+    # Only the PR (fast) tier runs on every PR; scheduled / release tiers
+    # are explicit dispatches.
+    paths:
+      - 'MODULE.bazel'
+      - 'MODULE.bazel.lock'
+      - '.bazelrc'
+      - 'tools/googlesql-prebuilt/**'
+      - 'taskfiles/googlesql.yml'
+      - 'taskfiles/emulator.yml'
+      - '.github/actions/setup-googlesql/**'
+      - '.github/workflows/googlesql-parity.yml'
+      - 'binaries/emulator_main/**'
+      - 'backend/**'
+      - 'frontend/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: googlesql-parity-${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.tier || 'pr' }}
+  cancel-in-progress: true
+
+env:
+  # Default tier discriminator. workflow_dispatch overrides via
+  # `github.event.inputs.tier`; cron uses 'scheduled'; pull_request uses
+  # 'pr'. The job-level `tier` env reads from this single source.
+  PARITY_TIER: >-
+    ${{
+      github.event.inputs.tier
+      || (github.event_name == 'schedule' && 'scheduled')
+      || 'pr'
+    }}
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Mode legs: same emulator commit, different GoogleSQL backing.
+  # ---------------------------------------------------------------------
+  build-prebuilt:
+    name: build (prebuilt)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      mode: prebuilt
+      artifact_version: ${{ steps.googlesql.outputs.artifact-version }}
+      googlesql_commit: ${{ steps.googlesql.outputs.googlesql-commit-full }}
+      googlesql_tag: ${{ steps.googlesql.outputs.googlesql-tag }}
+      schema_version: ${{ steps.googlesql.outputs.schema-version }}
+      compiler: ${{ steps.googlesql.outputs.compiler }}
+      smoke_status: ${{ steps.smoke.outcome }}
+      conformance_memory_status: ${{ steps.conformance_memory.outcome }}
+      conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          # Distinct disk-cache key from ci/conformance/coverage/release so
+          # the parity lane has its own warm cache; sharing with ci would
+          # let a parity-mode rebuild silently warm caches the per-PR
+          # builds also depend on (or vice versa: a per-PR cache hit
+          # would skip a parity-only TU recompile).
+          disk-cache: parity-prebuilt
+          repository-cache: true
+
+      - name: Resolve GoogleSQL (prebuilt)
+        id: googlesql
+        # `fail-on-source-fallback: true` — the parity lane is meaningless
+        # without a real prebuilt artifact. Refuse to run if the repo
+        # vars are unset.
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+          fail-on-source-fallback: 'true'
+
+      - name: Build C++ engine (prebuilt mode)
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          echo "::group::engine link (prebuilt)"
+          task emulator:build-engine:bazel
+          echo "::endgroup::"
+
+      - name: Build Go gateway
+        run: |
+          mkdir -p bin
+          go build -o bin/gateway_main ./binaries/gateway_main
+
+      - name: Engine startup smoke (prebuilt)
+        id: smoke
+        # `emulator_main --version` is the cheapest gate that proves the
+        # binary actually links + can initialize the static GoogleSQL
+        # globals (the analyzer's tzdata lookup, the absl flag parser,
+        # etc.). A binary that link-succeeds but cannot reach `main` is
+        # a parity-class regression we want to catch BEFORE conformance
+        # runs because conformance failures from a broken boot are
+        # opaque.
+        run: |
+          set -euo pipefail
+          ./bin/emulator_main --version
+          echo "prebuilt engine startup OK"
+
+      - name: Smoke query set (prebuilt)
+        # Tiny deterministic query batch curated from the existing
+        # conformance fixtures. Catches analyzer/catalog/runtime
+        # mismatches without paying for the full 24-fixture suite. PR
+        # tier stops here; scheduled/release tiers continue.
+        run: |
+          set -euo pipefail
+          # Stage the smoke subset into a tmp dir the runner picks up.
+          smoke=$(mktemp -d -t parity-smoke-XXXXXX)
+          cp conformance/fixtures/select_literal_value.yaml         "$smoke/" || true
+          cp conformance/fixtures/select_computed_expression.yaml   "$smoke/" || true
+          cp conformance/fixtures/aggregate_count_star.yaml         "$smoke/" || true
+          cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true
+          cp conformance/fixtures/error_unknown_table.yaml          "$smoke/" || true
+          task conformance:run \
+            PROFILE=memory \
+            FIXTURES="$smoke" \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-smoke-prebuilt.json
+          rm -rf "$smoke"
+
+      - name: Conformance — memory profile (prebuilt)
+        id: conformance_memory
+        # Scheduled and release tiers run the standard memory-profile
+        # conformance lane against both modes. The PR tier skips this
+        # to stay within a single-runner budget.
+        if: env.PARITY_TIER != 'pr'
+        run: |
+          set -euo pipefail
+          task conformance:run \
+            PROFILE=memory \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-memory-prebuilt.json
+
+      - name: Conformance — duckdb profile (prebuilt)
+        id: conformance_duckdb
+        # Release tier adds the duckdb profile — same conformance fixtures,
+        # different storage backing, used to certify the release binary
+        # also works against the persistent DuckDB engine.
+        if: env.PARITY_TIER == 'release'
+        run: |
+          set -euo pipefail
+          task conformance:run \
+            PROFILE=duckdb \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-duckdb-prebuilt.json
+
+      - name: Upload prebuilt-mode results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-prebuilt-results
+          path: |
+            conformance-*-prebuilt.json
+            /tmp/googlesql-validate.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
+
+  build-source:
+    name: build (source)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      mode: source
+      googlesql_commit: ${{ steps.googlesql.outputs.googlesql-commit-full }}
+      googlesql_tag: ${{ steps.googlesql.outputs.googlesql-tag }}
+      compiler: clang-host
+      smoke_status: ${{ steps.smoke.outcome }}
+      conformance_memory_status: ${{ steps.conformance_memory.outcome }}
+      conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          disk-cache: parity-source
+          repository-cache: true
+
+      - name: Resolve GoogleSQL (source)
+        id: googlesql
+        # Force source mode by passing empty pins and letting the
+        # composite's fallback take over. The same composite picks the
+        # right `googlesql-source=local` value for the build env.
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ''
+          prebuilt-sha256: ''
+          googlesql-ref: ${{ github.event.inputs.googlesql_ref || '2026.01.1' }}
+          fail-on-source-fallback: 'false'
+
+      - name: Build C++ engine (source mode)
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          echo "::group::engine link (source)"
+          task emulator:build-engine:bazel
+          echo "::endgroup::"
+
+      - name: Build Go gateway
+        run: |
+          mkdir -p bin
+          go build -o bin/gateway_main ./binaries/gateway_main
+
+      - name: Engine startup smoke (source)
+        id: smoke
+        run: |
+          set -euo pipefail
+          ./bin/emulator_main --version
+          echo "source engine startup OK"
+
+      - name: Smoke query set (source)
+        run: |
+          set -euo pipefail
+          smoke=$(mktemp -d -t parity-smoke-XXXXXX)
+          cp conformance/fixtures/select_literal_value.yaml         "$smoke/" || true
+          cp conformance/fixtures/select_computed_expression.yaml   "$smoke/" || true
+          cp conformance/fixtures/aggregate_count_star.yaml         "$smoke/" || true
+          cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true
+          cp conformance/fixtures/error_unknown_table.yaml          "$smoke/" || true
+          task conformance:run \
+            PROFILE=memory \
+            FIXTURES="$smoke" \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-smoke-source.json
+          rm -rf "$smoke"
+
+      - name: Conformance — memory profile (source)
+        id: conformance_memory
+        if: env.PARITY_TIER != 'pr'
+        run: |
+          set -euo pipefail
+          task conformance:run \
+            PROFILE=memory \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-memory-source.json
+
+      - name: Conformance — duckdb profile (source)
+        id: conformance_duckdb
+        if: env.PARITY_TIER == 'release'
+        run: |
+          set -euo pipefail
+          task conformance:run \
+            PROFILE=duckdb \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-duckdb-source.json
+
+      - name: Upload source-mode results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-source-results
+          path: |
+            conformance-*-source.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
+
+  # ---------------------------------------------------------------------
+  # Aggregator: diff the two legs and fail the workflow on divergence.
+  # ---------------------------------------------------------------------
+  compare:
+    name: compare prebuilt vs source
+    runs-on: ubuntu-latest
+    needs: [build-prebuilt, build-source]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download prebuilt-mode results
+        if: needs.build-prebuilt.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: parity-prebuilt-results
+          path: parity/prebuilt
+
+      - name: Download source-mode results
+        if: needs.build-source.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: parity-source-results
+          path: parity/source
+
+      - name: Compare and summarize
+        env:
+          TIER: ${{ env.PARITY_TIER }}
+          PREBUILT_RESULT: ${{ needs.build-prebuilt.result }}
+          SOURCE_RESULT: ${{ needs.build-source.result }}
+          PREBUILT_SMOKE: ${{ needs.build-prebuilt.outputs.smoke_status }}
+          SOURCE_SMOKE: ${{ needs.build-source.outputs.smoke_status }}
+          PREBUILT_CONF_MEM: ${{ needs.build-prebuilt.outputs.conformance_memory_status }}
+          SOURCE_CONF_MEM: ${{ needs.build-source.outputs.conformance_memory_status }}
+          PREBUILT_CONF_DUCKDB: ${{ needs.build-prebuilt.outputs.conformance_duckdb_status }}
+          SOURCE_CONF_DUCKDB: ${{ needs.build-source.outputs.conformance_duckdb_status }}
+          PREBUILT_GSQ: ${{ needs.build-prebuilt.outputs.googlesql_commit }}
+          SOURCE_GSQ: ${{ needs.build-source.outputs.googlesql_commit }}
+          PREBUILT_VER: ${{ needs.build-prebuilt.outputs.artifact_version }}
+          PREBUILT_TAG: ${{ needs.build-prebuilt.outputs.googlesql_tag }}
+          SOURCE_TAG: ${{ needs.build-source.outputs.googlesql_tag }}
+          PREBUILT_SCHEMA: ${{ needs.build-prebuilt.outputs.schema_version }}
+          PREBUILT_COMPILER: ${{ needs.build-prebuilt.outputs.compiler }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/googlesql_parity_compare.py \
+            --tier "$TIER" \
+            --prebuilt-result "$PREBUILT_RESULT" \
+            --source-result "$SOURCE_RESULT" \
+            --prebuilt-smoke "$PREBUILT_SMOKE" \
+            --source-smoke "$SOURCE_SMOKE" \
+            --prebuilt-conformance-memory "$PREBUILT_CONF_MEM" \
+            --source-conformance-memory "$SOURCE_CONF_MEM" \
+            --prebuilt-conformance-duckdb "$PREBUILT_CONF_DUCKDB" \
+            --source-conformance-duckdb "$SOURCE_CONF_DUCKDB" \
+            --prebuilt-googlesql-commit "$PREBUILT_GSQ" \
+            --source-googlesql-commit "$SOURCE_GSQ" \
+            --prebuilt-artifact-version "$PREBUILT_VER" \
+            --prebuilt-googlesql-tag "$PREBUILT_TAG" \
+            --source-googlesql-tag "$SOURCE_TAG" \
+            --prebuilt-schema-version "$PREBUILT_SCHEMA" \
+            --prebuilt-compiler "$PREBUILT_COMPILER" \
+            --prebuilt-results-dir parity/prebuilt \
+            --source-results-dir parity/source \
+            --github-step-summary "$GITHUB_STEP_SUMMARY"
