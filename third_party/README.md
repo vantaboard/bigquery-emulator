@@ -8,7 +8,7 @@ in-repo SQL-fixture conformance harness:
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
-| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane is currently compile-only (no live ITs); the others run live when `BIGQUERY_EMULATOR_HOST` is exported. |
+| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until Phase B lands the shallow backends — see the per-IT baseline in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -317,7 +317,7 @@ explored by go-googlesql and removed in
 once the maintenance cost became clear.
 
 ```bash
-task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on every snippets/ POM
+task thirdparty:java-bigquery-tests   # mvn -B verify on every snippets/ POM (Failsafe ITs against local emulator)
 ```
 
 The task fans out across `JAVA_BQ_SAMPLE_PATHS`, `cd`-ing into each
@@ -328,34 +328,48 @@ pin a deliberate `*-SNAPSHOT` BigQuery client version for upstream's
 pre-release smoke and would only resolve from upstream's internal
 artifact host.
 
-### Compile-only contract
+### Live-IT contract
 
 Each upstream snippets module ships a full `src/test/java/**/*IT.java`
-suite alongside the sample sources. Across all four modules that is
-≈190 Failsafe ITs, every one of which expects ADC + a real backend
-(BigQuery, BigQuery Storage, BigQuery Connection, or BigQuery Data
-Transfer Service — none of which the emulator implements today, except
-for partial REST coverage of core BigQuery itself). Two levers keep
-those tests quiescent so the lane only exercises Maven dependency
-resolution + javac on the sample sources:
+suite alongside the sample sources (≈190 Failsafe ITs across all four
+modules), every one of which expects ADC + a real backend by default.
+This repo curates a 15-IT subset — the ones whose underlying sample IDs
+the Java live-IT track targets — and binds maven-failsafe-plugin to the
+`integration-test` + `verify` goals with a `<includes>` allowlist of
+exactly those classes. Per-module BqOpts variants route the snippet
+drivers + IT-side BigQuery client construction at the local emulator:
 
-1. Each `snippets/pom.xml` is patched in-tree to set
-   `<maven.test.skip>true</maven.test.skip>` and
-   `<skipTests>true</skipTests>` so a bare `mvn package` from inside
-   any module also skips test-compile. The patched POMs are:
-   - [`java-bigquery/samples/snippets/pom.xml`](java-bigquery-tests/java-bigquery/samples/snippets/pom.xml)
-   - [`java-bigquerystorage/samples/snippets/pom.xml`](java-bigquery-tests/java-bigquerystorage/samples/snippets/pom.xml)
-   - [`java-docs-samples/bigquery/bigqueryconnection/snippets/pom.xml`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/pom.xml)
-   - [`java-docs-samples/bigquery/bigquerydatatransfer/snippets/pom.xml`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/pom.xml)
-2. The Task wrapper passes `-DskipTests=true -Dmaven.test.skip=true` on
-   the CLI as belt-and-suspenders.
+- `com.example.bigquery.BqOpts` — `google-cloud-bigquery` (REST gateway
+  on `BIGQUERY_EMULATOR_HOST`).
+- [`com.example.bigquerystorage.BqStorageOpts`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/BqStorageOpts.java)
+  — `BigQueryReadSettings` / `BigQueryWriteSettings` (storage gRPC on
+  `BIGQUERY_STORAGE_GRPC_ENDPOINT`, falling back to
+  `BIGQUERY_EMULATOR_HOST`).
+- [`com.example.bigqueryconnection.BqConnectionOpts`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/BqConnectionOpts.java)
+  — `ConnectionServiceSettings` (same gRPC endpoint).
+- [`com.example.bigquerydatatransfer.BqDataTransferOpts`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/BqDataTransferOpts.java)
+  — `DataTransferServiceSettings` (same gRPC endpoint).
+
+Expected fail states per surface (Phase A baseline; see
+`.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`):
+
+| Surface | Expectation |
+|---------|-------------|
+| `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets, see the per-IT verdict in the plan). |
+| `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B (`java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the shallow ConnectionService backend. |
+| `bigquerydatatransfer` (3 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B lands the shallow DataTransferService backend. |
+| `bigquerystorage` (1 IT, `WriteBufferedStreamIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until Phase B lands BigQuery Write API parity. |
+
+Setting `JAVA_BQ_SKIP_TESTS=true` reverts to the legacy compile-only
+posture (`-DskipTests=true -Dmaven.test.skip=true`); useful when you
+just want the libraries-bom drift check.
 
 The CI job
-[`java-bigquery-tests-compile`](../.github/workflows/thirdparty-samples.yml)
-exercises the same fan-out on every push/PR with Temurin 17 (matches
-the `actions/setup-java@v4` cache layout, whose `**/pom.xml` glob
-already covers all four POMs). Promotion to a live ITs lane is a
-follow-up once the emulator's Java surface is proven.
+[`java-bigquery-tests-live`](../.github/workflows/thirdparty-samples.yml)
+exercises the same fan-out on every push/PR with Temurin 17. Until
+Phase B lands, the job tolerates the 9 expected-fail ITs via a
+`JAVA_BQ_ALLOW_FAILING_ITS` allowlist (see the workflow for the
+expected diagnostic).
 
 ### Emulator wiring
 

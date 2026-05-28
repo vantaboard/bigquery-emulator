@@ -9,7 +9,7 @@ local emulator gateway, and where to find the rest of the contract.
 
 ```bash
 task emulator:run-full                # start gateway + engine on :9050 / :9060
-task thirdparty:java-bigquery-tests   # mvn -B package -Dmaven.test.skip=true on every JAVA_BQ_SAMPLE_PATHS module
+task thirdparty:java-bigquery-tests   # mvn -B verify on every JAVA_BQ_SAMPLE_PATHS module (Failsafe ITs against local emulator)
 ```
 
 The sibling `install-without-bom/` and `snapshot/` modules are vendored verbatim
@@ -29,24 +29,36 @@ are present and stay compile-clean against upstream API drift:
 | `java-docs-samples/bigquery/bigqueryconnection/snippets` | `GoogleCloudPlatform/java-docs-samples` HEAD | yes |
 | `java-docs-samples/bigquery/bigquerydatatransfer/snippets` | `GoogleCloudPlatform/java-docs-samples` HEAD | yes |
 
-Importantly, the bigquery-emulator does **not** implement the
-`bigqueryconnection`, `bigquerydatatransfer`, or `bigquerystorage` gRPC
-backends, so the latter three trees stay strictly compile-only — they
-exist to catch upstream API drift in the libraries-bom-resolved
-client artifacts, not to drive live ITs against this emulator.
-Promotion of any of them to a live IT lane is a follow-up tracked by the
-top-level `third_party/README.md`. The full sample-ID-to-class index lives
-in that README's "Sample coverage" sub-section.
+All four trees now drive a curated subset of their vendored
+`src/test/java/**/*IT.java` suite as live Failsafe ITs against this
+emulator. The four sibling snippet modules ship per-surface
+`Bq{Storage,Connection,DataTransfer}Opts` helpers (`BqOpts` for core
+BigQuery here) that route service-client construction at the local
+emulator when `BIGQUERY_EMULATOR_HOST` /
+`BIGQUERY_STORAGE_GRPC_ENDPOINT` are exported. The bigqueryconnection /
+bigquerydatatransfer / bigquerystorage trees currently fail with
+`NOT_IMPLEMENTED`-shaped errors until Phase B
+(`.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the
+matching shallow gRPC backends; the full per-IT verdict baseline lives
+in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`. The full
+sample-ID-to-class index lives in `third_party/README.md`'s "Sample
+coverage" sub-section.
 
-## Compile-only by default
+## Live Failsafe by default
 
-The vendored `src/test/java/**/*IT.java` suite expects ADC and a real BigQuery
-project, so the task and the GitHub workflow both build with
-`-Dmaven.test.skip=true`. The snippets POM also sets
-`<maven.test.skip>true</maven.test.skip>` so a raw `mvn package` matches the
-Task's behaviour. Promotion to a live emulator IT lane is a follow-up; see
-`third_party/README.md` (Java section) for the rationale and the link to the
-go-googlesql commits that walked back the heavier vendored-reactor approach.
+The vendored `src/test/java/**/*IT.java` suite no longer ships
+`<maven.test.skip>true</maven.test.skip>` / `<skipTests>true</skipTests>`
+in the snippets POM. Each POM instead binds
+`maven-failsafe-plugin` 3.2.5 to the `integration-test` + `verify`
+goals with a `<includes>` allowlist that names exactly the
+live-IT-track-targeted classes, plus `<systemPropertyVariables>` that
+forwards the emulator + storage gRPC endpoints into the forked test
+JVMs. A raw `mvn -B verify` from inside the module runs the same
+allowlist; the Task wrapper adds the env-var exports
+(`BIGQUERY_EMULATOR_HOST=http://localhost:9050`,
+`BIGQUERY_STORAGE_GRPC_ENDPOINT=localhost:9060`) and bring-up of the
+docker-compose emulator. Set `JAVA_BQ_SKIP_TESTS=true` to revert to the
+legacy compile-only posture.
 
 ## Emulator wiring (BqOpts)
 
