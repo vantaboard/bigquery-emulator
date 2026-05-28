@@ -7,8 +7,9 @@
 //
 // Runtime shape: the engine is always DuckDB and the storage backend is
 // always the DuckDB Parquet/Arrow store under `--data_dir`. The
-// `--host_port` flag selects the gRPC listen address; `--data_dir`
-// selects the persistent catalog root.
+// `--host_port` flag selects the gRPC listen address (default
+// `localhost:9060`); `--data_dir` selects the persistent catalog
+// root (default `$HOME/.bigquery-emulator`, see `DefaultDataDir`).
 
 #include <cstdio>
 #include <cstdlib>

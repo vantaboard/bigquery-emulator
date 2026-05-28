@@ -19,7 +19,9 @@ runtime selector and no fallback bridge; new work targets DuckDB.
 `emulator_main` no longer accepts `--engine`, `--storage`, or
 `--on_unknown_fn`; those flags were removed when the ReferenceImpl
 engine and in-memory storage were deleted. The only knobs are
-`--host_port` and `--data_dir`.
+`--host_port` (default `localhost:9060`) and `--data_dir` (default
+`$HOME/.bigquery-emulator`, with `./.bigquery-emulator` as the
+fallback when `HOME` is unset).
 
 ## What this means in practice
 
