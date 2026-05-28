@@ -34,7 +34,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFEST_WRITER="$SCRIPT_DIR/manifest_writer.py"
+# Phase 5: the closed-schema validator + identity / payload / wrapper
+# gates all live in validate_artifact.py. manifest_writer.py is still
+# the schema source of truth (and the producer's only writer), but it
+# is no longer invoked directly from this script — the validator does.
+VALIDATOR="$SCRIPT_DIR/validate_artifact.py"
 SMOKE_DIR="$SCRIPT_DIR/smoke"
 
 usage() {
@@ -159,113 +163,25 @@ REPO_ROOT="$TMPDIR/$REPO_NAME"
 log "extracted repo root: $REPO_ROOT"
 
 # ---------------------------------------------------------------------------
-# Gate 3: manifest schema + commit / version pins.
+# Gate 3 + 4: manifest schema + identity pins + per-file payload integrity.
+# Delegated to tools/googlesql-prebuilt/validate_artifact.py (the Phase 5
+# single-source-of-truth validator). The validator applies the same gates
+# the local task, CI composite action, and Dockerfile invoke, so producer
+# verification cannot diverge from consumer expectations.
 # ---------------------------------------------------------------------------
 
 MANIFEST="$REPO_ROOT/manifest.json"
 [ -f "$MANIFEST" ] || die "missing $MANIFEST in unpacked tarball"
 
-log "validating manifest schema"
-python3 "$MANIFEST_WRITER" --validate-only "$MANIFEST"
-
+log "running centralized validator (validate_artifact.py)"
+validator_args=( --repo-root "$REPO_ROOT" --summary-line )
 if [ -n "$EXPECTED_GS_SHA" ]; then
-    actual_gs_sha="$(python3 -c "import json; print(json.load(open('$MANIFEST'))['googlesql']['commit'])")"
-    if [ "$actual_gs_sha" != "$EXPECTED_GS_SHA" ]; then
-        die "manifest.googlesql.commit mismatch:
-  expected: $EXPECTED_GS_SHA
-  actual:   $actual_gs_sha"
-    fi
-    log "manifest.googlesql.commit matches expected: $actual_gs_sha"
+    validator_args+=( --expected-googlesql-sha "$EXPECTED_GS_SHA" )
 fi
 if [ -n "$EXPECTED_ARTIFACT_VERSION" ]; then
-    actual_version="$(python3 -c "import json; print(json.load(open('$MANIFEST'))['artifact_version'])")"
-    if [ "$actual_version" != "$EXPECTED_ARTIFACT_VERSION" ]; then
-        die "manifest.artifact_version mismatch:
-  expected: $EXPECTED_ARTIFACT_VERSION
-  actual:   $actual_version"
-    fi
-    log "manifest.artifact_version matches expected: $actual_version"
+    validator_args+=( --expected-artifact-version "$EXPECTED_ARTIFACT_VERSION" )
 fi
-
-# ---------------------------------------------------------------------------
-# Gate 4: per-file checksum re-verification.
-# ---------------------------------------------------------------------------
-
-log "re-checksumming every payload entry"
-python3 - "$REPO_ROOT" "$MANIFEST" <<'PY'
-import hashlib
-import json
-import pathlib
-import sys
-
-repo_root = pathlib.Path(sys.argv[1])
-manifest = json.loads(pathlib.Path(sys.argv[2]).read_text())
-
-def sha256_of(p):
-    h = hashlib.sha256()
-    with p.open('rb') as f:
-        for chunk in iter(lambda: f.read(65536), b''):
-            h.update(chunk)
-    return h.hexdigest()
-
-failures = []
-for section in ('headers', 'libraries', 'extras'):
-    for entry in manifest['payload'][section]:
-        rel = entry['path']
-        full = repo_root / rel
-        if not full.is_file():
-            failures.append(f"missing: {rel}")
-            continue
-        actual = sha256_of(full)
-        if actual != entry['sha256']:
-            failures.append(
-                f"sha256 mismatch on {rel}:\n"
-                f"  expected: {entry['sha256']}\n"
-                f"  actual:   {actual}"
-            )
-        if section == 'libraries':
-            actual_size = full.stat().st_size
-            if actual_size != entry['size_bytes']:
-                failures.append(
-                    f"size_bytes mismatch on {rel}: "
-                    f"expected {entry['size_bytes']}, "
-                    f"actual {actual_size}"
-                )
-
-# Also check: every file under repo_root (except manifest.json) is
-# accounted for in one of the three payload sections. The manifest
-# is closed; an unaccounted file on disk is a producer bug.
-accounted = {
-    e['path']
-    for sec in ('headers', 'libraries', 'extras')
-    for e in manifest['payload'][sec]
-}
-on_disk = {
-    str(p.relative_to(repo_root))
-    for p in repo_root.rglob('*')
-    if p.is_file() and p.relative_to(repo_root).as_posix() != 'manifest.json'
-}
-extra = on_disk - accounted
-missing = accounted - on_disk
-if extra:
-    failures.append(
-        "files on disk but NOT in manifest:\n  " + "\n  ".join(sorted(extra))
-    )
-if missing:
-    failures.append(
-        "manifest entries with NO file on disk:\n  "
-        + "\n  ".join(sorted(missing))
-    )
-
-if failures:
-    print('\n'.join(failures), file=sys.stderr)
-    sys.exit(1)
-print(
-    f"verified {len(manifest['payload']['headers'])} headers, "
-    f"{len(manifest['payload']['libraries'])} libraries, "
-    f"{len(manifest['payload']['extras'])} extras"
-)
-PY
+python3 "$VALIDATOR" "${validator_args[@]}"
 
 # ---------------------------------------------------------------------------
 # Gate 5: smoke.
