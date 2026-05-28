@@ -21,15 +21,13 @@
     <maven.compiler.source>1.8</maven.compiler.source>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!--
-      bigquery-emulator slim-path: vendored *IT.java suite expects ADC plus a real
-      BigQuery Connection backend (this emulator does not implement the
-      bigqueryconnection gRPC surface). Skip both test-compile and test execution
-      at the POM level so a bare `mvn package` matches
-      `task thirdparty:java-bigquery-tests`. See third_party/README.md (Java section)
-      and java-bigquery/samples/EMULATOR.md.
+      bigquery-emulator live-IT lane: a curated subset of the upstream
+      src/test/java/**/*IT.java suite runs against the local emulator's
+      bigqueryconnection gRPC listener via maven-failsafe-plugin (configured
+      below). Until Phase B lands the shallow Connection backend, these ITs
+      fail with NOT_IMPLEMENTED-shaped errors; see
+      third_party/README.md (Java section) for the verdict baseline.
     -->
-    <maven.test.skip>true</maven.test.skip>
-    <skipTests>true</skipTests>
   </properties>
 
   <dependencyManagement>
@@ -67,4 +65,43 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        bigquery-emulator live-IT lane: bind Failsafe to integration-test +
+        verify. Restrict <includes> to the curated ITs targeted by the Java
+        live-IT track (Phase A baseline in
+        .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md). System
+        properties forward the emulator + storage gRPC endpoints;
+        BqConnectionOpts reads them in the forked JVM.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.2.5</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <includes>
+            <include>**/CreateAwsConnectionIT.java</include>
+            <include>**/DeleteConnectionIT.java</include>
+            <include>**/GetConnectionIT.java</include>
+            <include>**/ShareConnectionIT.java</include>
+            <include>**/UpdateConnectionIT.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <BIGQUERY_EMULATOR_HOST>${env.BIGQUERY_EMULATOR_HOST}</BIGQUERY_EMULATOR_HOST>
+            <BIGQUERY_STORAGE_GRPC_ENDPOINT>${env.BIGQUERY_STORAGE_GRPC_ENDPOINT}</BIGQUERY_STORAGE_GRPC_ENDPOINT>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

@@ -37,14 +37,12 @@
     <maven.compiler.source>1.8</maven.compiler.source>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!--
-      bigquery-emulator slim-path: the upstream src/test/java/**/*IT.java suite is vendored
-      verbatim but expects ADC and a real BigQuery project, so it cannot run in our
-      compile-on-PR lane. Skip both test-compile and test execution at the POM level so
-      a bare `mvn package` matches `task thirdparty:java-bigquery-tests`. See
-      third_party/README.md and java-bigquery/samples/EMULATOR.md.
+      bigquery-emulator live-IT lane: a curated subset of the upstream
+      src/test/java/**/*IT.java suite runs against the local emulator gateway
+      via maven-failsafe-plugin (configured below). See third_party/README.md
+      (Java section) and java-bigquery/samples/EMULATOR.md for the BqOpts
+      wiring and per-IT verdict baseline.
     -->
-    <maven.test.skip>true</maven.test.skip>
-    <skipTests>true</skipTests>
   </properties>
 
   <!-- [START bigquery_install_with_bom] -->
@@ -160,6 +158,42 @@
         <version>1.7.0</version>
         <configuration>
           <skipNexusStagingDeployMojo>true</skipNexusStagingDeployMojo>
+        </configuration>
+      </plugin>
+      <!--
+        bigquery-emulator live-IT lane: bind Failsafe to integration-test +
+        verify. Restrict <includes> to the curated ITs targeted by the Java
+        live-IT track (Phase A baseline in
+        .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md); the rest of
+        the upstream IT suite expects ADC + real BigQuery and is intentionally
+        out of scope. System properties forward the emulator + storage gRPC
+        endpoints so BqOpts sees them in the forked JVM.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.2.5</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <includes>
+            <include>**/AuthorizeDatasetIT.java</include>
+            <include>**/DeleteDatasetAndContentsIT.java</include>
+            <include>**/QueryExternalBigtablePermIT.java</include>
+            <include>**/QueryExternalBigtableTempIT.java</include>
+            <include>**/QueryMaterializedViewIT.java</include>
+            <include>**/CreateTableExternalHivePartitionedIT.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <BIGQUERY_EMULATOR_HOST>${env.BIGQUERY_EMULATOR_HOST}</BIGQUERY_EMULATOR_HOST>
+            <BIGQUERY_STORAGE_GRPC_ENDPOINT>${env.BIGQUERY_STORAGE_GRPC_ENDPOINT}</BIGQUERY_STORAGE_GRPC_ENDPOINT>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
     </plugins>

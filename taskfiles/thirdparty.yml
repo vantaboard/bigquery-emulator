@@ -15,7 +15,7 @@
 #   task thirdparty:golang-bigquery-tests        # Go sample integration tests
 #   task thirdparty:python-bigquery-tests        # nox snippets/unit (PYTHON_SAMPLES_NOX_SESSION=...)
 #   task thirdparty:node-bigquery-tests          # npm install + npm test (Mocha)
-#   task thirdparty:java-bigquery-tests          # mvn package on java-bigquery/samples/snippets (compile-only)
+#   task thirdparty:java-bigquery-tests          # mvn verify on java-bigquery/samples/snippets (live Failsafe ITs)
 #   task thirdparty:python-bigquery-dataframes-tests
 #                                                # bigframes nox `py` session
 #   task thirdparty:python-bigquery-dataframes-snippet-gate
@@ -49,8 +49,9 @@
 #   NOX_DEFAULT_VENV_BACKEND       default `virtualenv` (upstream noxfile uses `python -m pip`, which
 #                                  is missing from uv-created venvs). Set to `uv|virtualenv` to opt into
 #                                  uv when running a custom noxfile that doesn't depend on pip.
-#   JAVA_BQ_MAVEN_GOALS            override Maven goals for each Java snippets module (default: package)
-#   JAVA_BQ_SKIP_TESTS             "true" (default) builds compile-only; "false" runs Failsafe ITs
+#   JAVA_BQ_MAVEN_GOALS            override Maven goals for each Java snippets module (default: verify)
+#   JAVA_BQ_SKIP_TESTS             "false" (default) runs Failsafe ITs against the local emulator;
+#                                  "true" reverts to compile-only (`-DskipTests=true -Dmaven.test.skip=true`)
 #   JAVA_BQ_SAMPLE_PATHS           whitespace-separated snippet module paths under
 #                                  third_party/java-bigquery-tests (default covers
 #                                  java-bigquery, java-bigquerystorage, and the two
@@ -82,11 +83,14 @@ vars:
   PYTHON_SAMPLES_PYTHON: ""
   # Slim-path Java snippets lane: each path below is a Maven snippets module under
   # third_party/java-bigquery-tests. install-without-bom and snapshot are vendored
-  # verbatim but stay outside the task. Default goals/skip match the compile-on-PR
-  # CI lane. Override JAVA_BQ_SAMPLE_PATHS to narrow the fan-out (e.g. for a quick
-  # local check while iterating on a single tree).
-  JAVA_BQ_MAVEN_GOALS: "package"
-  JAVA_BQ_SKIP_TESTS: "true"
+  # verbatim but stay outside the task. Default goals/skip drive the live Failsafe
+  # ITs against the local emulator gateway (BIGQUERY_EMULATOR_HOST=:9050) and
+  # storage gRPC listener (BIGQUERY_STORAGE_GRPC_ENDPOINT=:9060). Override
+  # JAVA_BQ_SAMPLE_PATHS to narrow the fan-out (e.g. for a quick local check while
+  # iterating on a single tree); set JAVA_BQ_SKIP_TESTS=true for the legacy
+  # compile-only posture.
+  JAVA_BQ_MAVEN_GOALS: "verify"
+  JAVA_BQ_SKIP_TESTS: "false"
   JAVA_BQ_SAMPLE_PATHS: >-
     java-bigquery/samples/snippets
     java-bigquerystorage/samples/snippets
@@ -490,18 +494,22 @@ tasks:
         export STORAGE_EMULATOR_HOST="$_st"
         cd third_party/node-bigquery-tests && npm install && npm test
 
-  # Slim-path Java snippets lane. Fans out across the snippet POMs listed in
+  # Live-IT Java snippets lane. Fans out across the snippet POMs listed in
   # JAVA_BQ_SAMPLE_PATHS; each one is a standalone Maven module that resolves
   # google-cloud-{bigquery,bigquerystorage,bigqueryconnection,bigquerydatatransfer}
   # from libraries-bom on Maven Central (no vendored Java reactor and no client
-  # patches, unlike go-googlesql's pre-94048be5b shape). The upstream
-  # src/test/java/**/*IT.java is kept verbatim per module but maven.test.skip=true
-  # in each snippets POM (and the CLI flags below) keeps test-compile and
-  # Failsafe out of the loop. JDK 17+ required; falls back to `mise x -- mvn`
-  # when JAVA_HOME is unset. See third_party/README.md (Java section) and
-  # third_party/java-bigquery-tests/java-bigquery/samples/EMULATOR.md.
+  # patches, unlike go-googlesql's pre-94048be5b shape). Each module's POM now
+  # binds maven-failsafe-plugin to the integration-test + verify goals so the
+  # vendored src/test/java/**/*IT.java suite runs against the local
+  # bigquery-emulator gateway/storage listeners. The targeted ITs construct
+  # their service clients through the per-surface BqOpts variants
+  # (BqOpts / BqStorageOpts / BqConnectionOpts / BqDataTransferOpts), so the
+  # exports below (BIGQUERY_EMULATOR_HOST + BIGQUERY_STORAGE_GRPC_ENDPOINT) point
+  # them at the same ports docker-compose.yml publishes. JDK 17+ required; falls
+  # back to `mise x -- mvn` when JAVA_HOME is unset. See third_party/README.md
+  # (Java section) and third_party/java-bigquery-tests/java-bigquery/samples/EMULATOR.md.
   java-bigquery-tests:
-    desc: Maven compile/package for vendored Java BigQuery + Storage + Connection + DataTransfer sample snippet modules (compile-only; see JAVA_BQ_* vars)
+    desc: Maven verify (Failsafe ITs) for vendored Java BigQuery + Storage + Connection + DataTransfer snippet modules against the local emulator (set JAVA_BQ_SKIP_TESTS=true for legacy compile-only; see JAVA_BQ_* vars)
     cmds:
       - |
         set -eo pipefail
@@ -534,6 +542,15 @@ tasks:
         if [ "$skip" = "true" ]; then
           mvn_test_flags="-DskipTests=true -Dmaven.test.skip=true"
         fi
+        # Live-IT child-env exports: the BqOpts variants read these so the
+        # snippets/ITs construct service clients pointed at the local emulator
+        # (REST gateway on :9050, storage gRPC on :9060 — mirror of
+        # docker-compose.yml). The exports only mutate the child Maven process
+        # env so the surrounding `task thirdparty:default` chain (golang/node/
+        # python) still sees whatever value the caller / mise.toml provides for
+        # its own clients.
+        export BIGQUERY_EMULATOR_HOST="${BIGQUERY_EMULATOR_HOST:-http://localhost:9050}"
+        export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
         # Prefer the user's JAVA_HOME, fall back to mise (`mise install` activates
         # Temurin 17 from mise.toml when present). Match CI's setup-java@v4 by
         # requiring 17+.
