@@ -4,7 +4,8 @@
 # C++ analysis (clang-tidy, cppcheck) for opt-in lanes.
 #
 # Usage: task lint:run             (fast gate, used by auto-commit + CI)
-#        task lint:fix             (apply gofmt / clang-format + re-run vet)
+#        task lint:fix             (apply gofmt + golangci-lint --fix +
+#                                   clang-format + re-run vet)
 #        task lint:check           (deep pass: golangci-lint + every C++ lane)
 #        task lint:go / lint:go-fix
 #                                  (full golangci-lint pass)
@@ -68,10 +69,19 @@ tasks:
       - task: cpp:source
 
   fix:
-    desc: Apply auto-fixable lints from the fast gate (gofmt -s -w, clang-format -i, go vet)
+    desc: Apply auto-fixable lints (gofmt -s -w, golangci-lint --fix, go vet, clang-format -i)
     # Match `lint:run`'s exclusions so we never reformat vendored
     # upstream trees in third_party/ (or generated code under gen/).
-    # The C++ half delegates to `task lint:cpp:format-fix`.
+    # Step order:
+    #   1. Inline gofmt + go vet — cheap, fast-fail on gross issues
+    #      before the slower golangci-lint pass starts.
+    #   2. `task: go-fix`        — `golangci-lint run --fix ./...`,
+    #      applies formatters + every auto-fixable linter declared in
+    #      `.golangci.yml`. Subsumes most of step 1 but is far slower;
+    #      we keep step 1 so a syntactically broken tree fails the
+    #      cheap check first.
+    #   3. `task: cpp:format-fix` — clang-format -i on the first-party
+    #      C++ file list.
     cmds:
       - |
         set -eo pipefail
@@ -86,6 +96,7 @@ tasks:
           printf '%s\n' $gofmt_targets | xargs gofmt -s -w
         fi
         go vet ./...
+      - task: go-fix
       - task: cpp:format-fix
 
   check:
