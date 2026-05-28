@@ -200,71 +200,90 @@ func unorderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, ac
 	cols := schemaColumns(schema)
 	types := schemaTypes(schema)
 
-	expCanon := make(map[string]int)
-	actCanon := make(map[string]int)
-	expLines := make([]string, 0, len(expected))
-	actLines := make([]string, 0, len(actualRows))
-	for _, r := range expected {
-		line := canonicalExpectedRow(r, cols, types)
-		expCanon[line]++
-		expLines = append(expLines, line)
-	}
-	for _, r := range actualRows {
-		line := canonicalActualRow(r, cols, types)
-		actCanon[line]++
-		actLines = append(actLines, line)
-	}
+	expCanon, expLines := groupExpected(expected, cols, types)
+	actCanon, actLines := groupActual(actualRows, cols, types)
 
-	allMatch := len(expCanon) == len(actCanon)
-	if allMatch {
-		for k, v := range expCanon {
-			if actCanon[k] != v {
-				allMatch = false
-				break
-			}
-		}
-	}
-	if allMatch {
+	if multisetsEqual(expCanon, actCanon) {
 		return ""
 	}
 
-	var missing, extra []string
-	for k, v := range expCanon {
-		have := actCanon[k]
-		for range v - have {
-			missing = append(missing, k)
-		}
-	}
-	for k, v := range actCanon {
-		have := expCanon[k]
-		for range v - have {
-			extra = append(extra, k)
-		}
-	}
+	missing, extra := diffMultiset(expCanon, actCanon)
 	sort.Strings(missing)
 	sort.Strings(extra)
 	sort.Strings(expLines)
 	sort.Strings(actLines)
+	return renderUnorderedDiff(expLines, actLines, missing, extra)
+}
 
+// groupExpected canonicalizes the expected rows and returns both the
+// per-line multiset and the original (canonical) line ordering. The
+// caller relies on the latter for the "expected (multiset)" stanza.
+func groupExpected(expected []map[string]any, cols, types []string) (map[string]int, []string) {
+	canon := make(map[string]int, len(expected))
+	lines := make([]string, 0, len(expected))
+	for _, r := range expected {
+		line := canonicalExpectedRow(r, cols, types)
+		canon[line]++
+		lines = append(lines, line)
+	}
+	return canon, lines
+}
+
+// groupActual mirrors groupExpected for the engine-emitted rows.
+func groupActual(actual []bqtypes.Row, cols, types []string) (map[string]int, []string) {
+	canon := make(map[string]int, len(actual))
+	lines := make([]string, 0, len(actual))
+	for _, r := range actual {
+		line := canonicalActualRow(r, cols, types)
+		canon[line]++
+		lines = append(lines, line)
+	}
+	return canon, lines
+}
+
+// multisetsEqual returns true when both line→count maps describe the
+// same multiset (both sizes and per-key counts agree).
+func multisetsEqual(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// diffMultiset returns the lines that appear too few times on the
+// actual side ("missing") and too many times on the actual side
+// ("extra"). Both slices are unsorted; the caller sorts for stable
+// diff output.
+func diffMultiset(exp, act map[string]int) (missing, extra []string) {
+	for k, v := range exp {
+		for range v - act[k] {
+			missing = append(missing, k)
+		}
+	}
+	for k, v := range act {
+		for range v - exp[k] {
+			extra = append(extra, k)
+		}
+	}
+	return missing, extra
+}
+
+// renderUnorderedDiff materializes the user-facing multiset-diff
+// string. Each stanza is emitted whether or not the corresponding
+// slice is empty, except `missing`/`extra` which are skipped when
+// the row count is zero (so a swap-only mismatch only prints the
+// two multisets without phantom "missing:" / "extra:" headers).
+func renderUnorderedDiff(expLines, actLines, missing, extra []string) string {
 	var b strings.Builder
 	b.WriteString("unordered row mismatch\nexpected (multiset):\n")
-	if len(expLines) == 0 {
-		b.WriteString("  (no rows)\n")
-	}
-	for _, line := range expLines {
-		b.WriteString("  ")
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
+	writeRowStanza(&b, expLines)
 	b.WriteString("actual (multiset):\n")
-	if len(actLines) == 0 {
-		b.WriteString("  (no rows)\n")
-	}
-	for _, line := range actLines {
-		b.WriteString("  ")
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
+	writeRowStanza(&b, actLines)
 	if len(missing) > 0 {
 		b.WriteString("missing (expected but not in actual):\n")
 		for _, line := range missing {
@@ -282,6 +301,22 @@ func unorderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, ac
 		}
 	}
 	return b.String()
+}
+
+// writeRowStanza emits the indented row block for one side of the
+// unordered diff, substituting the explicit "(no rows)" sentinel
+// when the slice is empty so the renderer never collapses an empty
+// section silently.
+func writeRowStanza(b *strings.Builder, lines []string) {
+	if len(lines) == 0 {
+		b.WriteString("  (no rows)\n")
+		return
+	}
+	for _, line := range lines {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
 }
 
 // rowMatchesTyped is the per-row typed comparator used by ordered
@@ -369,10 +404,7 @@ func cellsEqual(expected, actual any, fieldType string) bool {
 // and the literal string "NULL" (which a fixture would have to
 // quote explicitly).
 func isNullExpected(v any) bool {
-	if v == nil {
-		return true
-	}
-	return false
+	return v == nil
 }
 
 // numericEqual compares two values as exact rationals. INT64,
@@ -564,37 +596,8 @@ func toTime(v any) (time.Time, bool) {
 	case time.Time:
 		return x, true
 	case string:
-		s := strings.TrimSpace(x)
-		if s == "" {
-			return time.Time{}, false
-		}
-		for _, f := range timeFormats {
-			if t, err := time.Parse(f, s); err == nil {
-				return t.UTC(), true
-			}
-		}
-		// Unix-seconds-as-string is BigQuery's wire form for
-		// TIMESTAMP; parse and split into sec + nsec rather
-		// than going through float (which loses precision past
-		// microseconds).
-		if before, after, ok := strings.Cut(s, "."); ok {
-			secStr, fracStr := before, after
-			if sec, err := strconv.ParseInt(secStr, 10, 64); err == nil {
-				// Pad / truncate the fractional part to 9
-				// digits so ParseInt sees a clean nsec.
-				if len(fracStr) > 9 {
-					fracStr = fracStr[:9]
-				}
-				for len(fracStr) < 9 {
-					fracStr += "0"
-				}
-				if nsec, err := strconv.ParseInt(fracStr, 10, 64); err == nil {
-					return time.Unix(sec, nsec).UTC(), true
-				}
-			}
-		}
-		if sec, err := strconv.ParseInt(s, 10, 64); err == nil {
-			return time.Unix(sec, 0).UTC(), true
+		if t, ok := parseTimestampString(x); ok {
+			return t, true
 		}
 	case int:
 		return time.Unix(int64(x), 0).UTC(), true
@@ -606,6 +609,56 @@ func toTime(v any) (time.Time, bool) {
 		return time.Unix(sec, nsec).UTC(), true
 	}
 	return time.Time{}, false
+}
+
+// parseTimestampString tries the registered RFC formats first, then
+// falls back to BigQuery's TIMESTAMP wire form (Unix seconds with an
+// optional fractional component). Pulled out of toTime so the
+// fallback's natural conditional nesting stops tripping nestif.
+func parseTimestampString(raw string) (time.Time, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, f := range timeFormats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t.UTC(), true
+		}
+	}
+	if t, ok := parseUnixSecondsString(s); ok {
+		return t, true
+	}
+	if sec, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return time.Unix(sec, 0).UTC(), true
+	}
+	return time.Time{}, false
+}
+
+// parseUnixSecondsString parses BigQuery's `<sec>.<frac>` TIMESTAMP
+// wire encoding without going through float64 (which would drop
+// precision past microseconds). Returns ok=false when the input is
+// not in the dotted form.
+func parseUnixSecondsString(s string) (time.Time, bool) {
+	before, after, ok := strings.Cut(s, ".")
+	if !ok {
+		return time.Time{}, false
+	}
+	sec, err := strconv.ParseInt(before, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	frac := after
+	if len(frac) > 9 {
+		frac = frac[:9]
+	}
+	for len(frac) < 9 {
+		frac += "0"
+	}
+	nsec, err := strconv.ParseInt(frac, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(sec, nsec).UTC(), true
 }
 
 // stringForm returns the canonical scalar string for the diff

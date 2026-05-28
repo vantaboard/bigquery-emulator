@@ -62,7 +62,7 @@ func (e *EmulatorEnv) Close() error {
 		e.httpServer.Close()
 	}
 	if e.client != nil {
-		if err := e.client.Close(); err != nil && firstErr == nil {
+		if err := e.client.Close(); err != nil {
 			firstErr = err
 		}
 	}
@@ -184,28 +184,12 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 			"(build with `task emulator:build-engine:bazel` or pass "+
 			"--connect HOST:PORT)", opts.EngineBinary, err)
 	}
-	port, err := freePort()
+	args, dataDir, addr, err := prepareSpawnArgs(opts, p)
 	if err != nil {
-		return nil, fmt.Errorf("allocate engine port: %w", err)
+		return nil, err
 	}
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-	args := append([]string{"--host_port", addr}, p.EmulatorMainArgs()...)
-	// DuckDB storage always needs a persistent --data_dir; give each
-	// spawn its own temp directory so concurrent profile runs do not
-	// collide on the same catalog.
-	root := opts.DataDirRoot
-	if root == "" {
-		root = os.TempDir()
-	}
-	dataDir, err := os.MkdirTemp(root, "bq-conformance-")
+	cmd, err := launchEngine(opts, args)
 	if err != nil {
-		return nil, fmt.Errorf("create data_dir: %w", err)
-	}
-	args = append(args, "--data_dir", dataDir)
-	cmd := exec.Command(opts.EngineBinary, args...)
-	cmd.Stdout = opts.EngineStdout
-	cmd.Stderr = opts.EngineStderr
-	if err := cmd.Start(); err != nil {
 		if dataDir != "" {
 			_ = os.RemoveAll(dataDir)
 		}
@@ -218,14 +202,93 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 	var (
 		client *engine.Client
 		srv    *httptest.Server
-		once   sync.Once
 	)
-	cleanup := func() {
+	cleanup := newSpawnCleanup(cmd, dataDir, &client, &srv)
+
+	client, err = waitForReady(ctx, addr)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+
+	srv = httptest.NewServer(gateway.NewServer(gateway.Options{}, client))
+	return &EmulatorEnv{
+		BaseURL:    srv.URL,
+		httpServer: srv,
+		client:     client,
+		cmd:        cmd,
+		dataDir:    dataDir,
+	}, nil
+}
+
+// prepareSpawnArgs allocates a free port + scratch data_dir for a
+// fresh `emulator_main`, and assembles the argv. Errors are wrapped
+// so the caller can return them straight back.
+func prepareSpawnArgs(opts HarnessOptions, p Profile) (args []string, dataDir, addr string, err error) {
+	port, err := freePort()
+	if err != nil {
+		return nil, "", "", fmt.Errorf("allocate engine port: %w", err)
+	}
+	addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	args = append([]string{"--host_port", addr}, p.EmulatorMainArgs()...)
+	// DuckDB storage always needs a persistent --data_dir; give each
+	// spawn its own temp directory so concurrent profile runs do not
+	// collide on the same catalog.
+	root := opts.DataDirRoot
+	if root == "" {
+		root = os.TempDir()
+	}
+	dataDir, err = os.MkdirTemp(root, "bq-conformance-")
+	if err != nil {
+		return nil, "", "", fmt.Errorf("create data_dir: %w", err)
+	}
+	args = append(args, "--data_dir", dataDir)
+	return args, dataDir, addr, nil
+}
+
+// launchEngine fires up the configured engine binary with the
+// pre-built argv and the operator-supplied stdio sinks.
+func launchEngine(opts HarnessOptions, args []string) (*exec.Cmd, error) {
+	cmd := exec.Command(opts.EngineBinary, args...)
+	cmd.Stdout = opts.EngineStdout
+	cmd.Stderr = opts.EngineStderr
+	if startErr := cmd.Start(); startErr != nil {
+		return nil, startErr
+	}
+	return cmd, nil
+}
+
+// waitForReady dials the engine's gRPC port and blocks until the
+// health check flips to SERVING (or the engineReadyTimeout fires).
+// Returns an *engine.Client owned by the caller.
+func waitForReady(ctx context.Context, addr string) (*engine.Client, error) {
+	client, err := engine.Dial(addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %w", addr, err)
+	}
+	readyCtx, cancel := context.WithTimeout(ctx, engineReadyTimeout)
+	defer cancel()
+	if err := client.WaitForReady(readyCtx); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("emulator at %s not ready: %w", addr, err)
+	}
+	return client, nil
+}
+
+// newSpawnCleanup returns a sync.Once-guarded teardown closure that
+// reaps the engine subprocess (SIGINT, then KILL after a 5s budget),
+// unwires the gateway test server + grpc client if they made it that
+// far, and removes the scratch data_dir. The pointer-to-pointer
+// indirection lets startSpawned wire the closure before the client
+// and httptest.Server exist.
+func newSpawnCleanup(cmd *exec.Cmd, dataDir string, clientPtr **engine.Client, srvPtr **httptest.Server) func() {
+	var once sync.Once
+	return func() {
 		once.Do(func() {
-			if srv != nil {
+			if srv := *srvPtr; srv != nil {
 				srv.Close()
 			}
-			if client != nil {
+			if client := *clientPtr; client != nil {
 				_ = client.Close()
 			}
 			_ = cmd.Process.Signal(os.Interrupt)
@@ -245,28 +308,6 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 			}
 		})
 	}
-
-	client, err = engine.Dial(addr)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("dial %s: %w", addr, err)
-	}
-
-	readyCtx, cancel := context.WithTimeout(ctx, engineReadyTimeout)
-	defer cancel()
-	if err := client.WaitForReady(readyCtx); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("emulator at %s not ready: %w", addr, err)
-	}
-
-	srv = httptest.NewServer(gateway.NewServer(gateway.Options{}, client))
-	return &EmulatorEnv{
-		BaseURL:    srv.URL,
-		httpServer: srv,
-		client:     client,
-		cmd:        cmd,
-		dataDir:    dataDir,
-	}, nil
 }
 
 // freePort returns an available loopback TCP port. Mirrors the

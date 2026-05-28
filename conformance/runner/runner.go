@@ -103,6 +103,44 @@ type Options struct {
 // (1 vs 2). Callers that want the exit-code semantics call ExitCode
 // on the returned Report.
 func Run(ctx context.Context, opts Options) (*Report, error) {
+	opts, err := prepareOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	fixtures, err := LoadDir(opts.FixturesPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(fixtures) == 0 {
+		return nil, fmt.Errorf("no fixtures found under %s", opts.FixturesPath)
+	}
+	enabled, err := resolveProfiles(opts.Profiles)
+	if err != nil {
+		return nil, err
+	}
+	report := iterateMatrix(ctx, fixtures, enabled, opts)
+	if opts.Output == "json" {
+		if err := writeJSONReport(opts.Out, report); err != nil {
+			return report, fmt.Errorf("write json report: %w", err)
+		}
+	} else {
+		writeTextSummary(opts.Out, report)
+	}
+	if opts.UpdateBaselines {
+		// `--update-baselines` rewrites fixtures in-place; the
+		// rewrite is wired into runOne (one rewrite per fixture x
+		// profile is harmless because subsequent rewrites land on
+		// the same canonical form).
+		_, _ = io.WriteString(opts.Err,
+			"runner: --update-baselines overwrote `expected:` blocks; review the diff before committing\n")
+	}
+	return report, nil
+}
+
+// prepareOptions defaults the unset fields of Options and validates
+// the values that have a closed enum (currently just --output). Pulled
+// out of Run so the orchestrator stays a flat 13-line driver.
+func prepareOptions(opts Options) (Options, error) {
 	if opts.Out == nil {
 		opts.Out = os.Stdout
 	}
@@ -113,26 +151,19 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 		opts.Output = outputFormatText
 	}
 	if opts.Output != outputFormatText && opts.Output != "json" {
-		return nil, fmt.Errorf("unknown --output %q (want text or json)",
+		return opts, fmt.Errorf("unknown --output %q (want text or json)",
 			opts.Output)
 	}
 	if opts.FixturesPath == "" {
 		opts.FixturesPath = "conformance/fixtures"
 	}
+	return opts, nil
+}
 
-	fixtures, err := LoadDir(opts.FixturesPath)
-	if err != nil {
-		return nil, err
-	}
-	if len(fixtures) == 0 {
-		return nil, fmt.Errorf("no fixtures found under %s", opts.FixturesPath)
-	}
-
-	enabled, err := resolveProfiles(opts.Profiles)
-	if err != nil {
-		return nil, err
-	}
-
+// iterateMatrix is the profile x fixture cross product driver. It
+// fans each cell out to runOne, accumulates per-status counters, and
+// streams text-mode results to opts.Out as they complete.
+func iterateMatrix(ctx context.Context, fixtures []*Fixture, enabled []Profile, opts Options) *Report {
 	report := &Report{SchemaVersion: JSONSchemaVersion}
 	for _, p := range enabled {
 		for _, fx := range fixtures {
@@ -155,22 +186,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 			}
 		}
 	}
-	if opts.Output == "json" {
-		if err := writeJSONReport(opts.Out, report); err != nil {
-			return report, fmt.Errorf("write json report: %w", err)
-		}
-	} else {
-		writeTextSummary(opts.Out, report)
-	}
-	if opts.UpdateBaselines {
-		// `--update-baselines` rewrites fixtures in-place; the
-		// rewrite is wired into runOne (one rewrite per fixture x
-		// profile is harmless because subsequent rewrites land on
-		// the same canonical form).
-		_, _ = io.WriteString(opts.Err,
-			"runner: --update-baselines overwrote `expected:` blocks; review the diff before committing\n")
-	}
-	return report, nil
+	return report
 }
 
 // ExitCode is the recommended process exit code derived from a
@@ -209,11 +225,10 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 		Status:  StatusFail,
 	}
 
-	env, err := StartEmulator(ctx, opts.Harness, p)
-	if err != nil {
-		result.Message = "start emulator: " + err.Error()
-		result.DurationMs = time.Since(started).Milliseconds()
-		return result
+	env, startErr := StartEmulator(ctx, opts.Harness, p)
+	if startErr != nil {
+		result.Message = "start emulator: " + startErr.Error()
+		return markDuration(result, started)
 	}
 	defer func() {
 		_ = env.Close()
@@ -221,90 +236,98 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 
 	base := env.BaseURL + "/bigquery/v2/projects/" + fx.ProjectID
 	for i, step := range fx.Setup {
-		if err := runSetupStep(ctx, base, step); err != nil {
-			result.Message = fmt.Sprintf("setup[%d]: %v", i, err)
-			result.DurationMs = time.Since(started).Milliseconds()
-			return result
+		if stepErr := runSetupStep(ctx, base, step); stepErr != nil {
+			result.Message = fmt.Sprintf("setup[%d]: %v", i, stepErr)
+			return markDuration(result, started)
 		}
 	}
 
-	queryBody, err := json.Marshal(map[string]any{
+	queryBody, marshalErr := json.Marshal(map[string]any{
 		"query":        fx.Query,
 		"useLegacySql": false,
 	})
-	if err != nil {
-		result.Message = "marshal query: " + err.Error()
-		result.DurationMs = time.Since(started).Milliseconds()
-		return result
+	if marshalErr != nil {
+		result.Message = "marshal query: " + marshalErr.Error()
+		return markDuration(result, started)
 	}
-	status, body, err := doRequest(ctx, http.MethodPost,
+	status, body, queryErr := doRequest(ctx, http.MethodPost,
 		base+"/queries", queryBody)
-	if err != nil {
-		result.Message = "query rpc: " + err.Error()
-		result.DurationMs = time.Since(started).Milliseconds()
-		return result
+	if queryErr != nil {
+		result.Message = "query rpc: " + queryErr.Error()
+		return markDuration(result, started)
 	}
 
 	if fx.Expected.Error != nil {
-		// Error-path fixture.
-		if status >= 200 && status < 300 {
-			result.Message = "expected error, got success"
-			result.Diff = fmt.Sprintf("status: %d\nbody: %s",
-				status, snippet(body))
-			result.DurationMs = time.Since(started).Milliseconds()
-			if opts.UpdateBaselines {
-				// Record the actual success result as the new
-				// baseline (rows) so the fixture writer can flip
-				// the assertion mode.
-				_ = rewriteFixtureRows(fx, body)
-			}
-			return result
-		}
+		return markDuration(runErrorPath(fx, opts, result, status, body), started)
+	}
+	return markDuration(runRowPath(fx, opts, result, status, body), started)
+}
+
+// markDuration stamps the elapsed wall time onto a Result. Pulled out
+// of runOne so every early return can share the one-liner without
+// re-templating the time.Since math.
+func markDuration(r Result, started time.Time) Result {
+	r.DurationMs = time.Since(started).Milliseconds()
+	return r
+}
+
+// runErrorPath drives the error-mode branch of a fixture. It expects
+// the engine to have failed (non-2xx) and the error envelope to match
+// fx.Expected.Error; the --update-baselines mode rewrites the fixture
+// in place using the actual response.
+func runErrorPath(fx *Fixture, opts Options, result Result, status int, body []byte) Result {
+	if status >= 200 && status < 300 {
+		result.Message = "expected error, got success"
+		result.Diff = fmt.Sprintf("status: %d\nbody: %s",
+			status, snippet(body))
 		if opts.UpdateBaselines {
-			if err := rewriteFixtureError(fx, status, body); err != nil {
-				result.Message = "update-baselines: " + err.Error()
-				result.DurationMs = time.Since(started).Milliseconds()
-				return result
-			}
-			result.Status = StatusPass
-			result.Message = "baseline updated"
-			result.DurationMs = time.Since(started).Milliseconds()
-			return result
+			// Record the actual success result as the new
+			// baseline (rows) so the fixture writer can flip
+			// the assertion mode.
+			_ = rewriteFixtureRows(fx, body)
 		}
-		if diff := errorDiff(*fx.Expected.Error, status, body); diff != "" {
-			result.Message = "error mismatch"
-			result.Diff = diff
-			result.DurationMs = time.Since(started).Milliseconds()
+		return result
+	}
+	if opts.UpdateBaselines {
+		if err := rewriteFixtureError(fx, status, body); err != nil {
+			result.Message = "update-baselines: " + err.Error()
 			return result
 		}
 		result.Status = StatusPass
-		result.DurationMs = time.Since(started).Milliseconds()
+		result.Message = "baseline updated"
 		return result
 	}
+	if diff := errorDiff(*fx.Expected.Error, status, body); diff != "" {
+		result.Message = "error mismatch"
+		result.Diff = diff
+		return result
+	}
+	result.Status = StatusPass
+	return result
+}
 
-	// Row-path fixture.
+// runRowPath drives the row-mode branch of a fixture. It expects a
+// 2xx response carrying a QueryResponse, then either rewrites the
+// fixture (--update-baselines) or diffs the rows against fx.Expected.
+func runRowPath(fx *Fixture, opts Options, result Result, status int, body []byte) Result {
 	if status < 200 || status >= 300 {
 		result.Message = fmt.Sprintf("query failed with HTTP %d", status)
 		result.Diff = "body: " + snippet(body)
-		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
 	var run bqtypes.QueryResponse
 	if err := json.Unmarshal(body, &run); err != nil {
 		result.Message = "decode QueryResponse: " + err.Error()
 		result.Diff = "body: " + snippet(body)
-		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
 	if opts.UpdateBaselines {
 		if err := rewriteFixtureRows(fx, body); err != nil {
 			result.Message = "update-baselines: " + err.Error()
-			result.DurationMs = time.Since(started).Milliseconds()
 			return result
 		}
 		result.Status = StatusPass
 		result.Message = "baseline updated"
-		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
 	if diff := rowDiff(fx.Expected, run.Schema, run.Rows); diff != "" {
@@ -317,113 +340,137 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 			result.Message = "row mismatch"
 		}
 		result.Diff = diff
-		result.DurationMs = time.Since(started).Milliseconds()
 		return result
 	}
 	result.Status = StatusPass
-	result.DurationMs = time.Since(started).Milliseconds()
 	return result
 }
 
-// runSetupStep dispatches one setup step. Errors bubble up unchanged;
-// the caller wraps them with the step index for the diff message.
+// runSetupStep dispatches one setup step to the matching helper.
+// Errors bubble up unchanged; the caller wraps them with the step
+// index for the diff message.
 func runSetupStep(ctx context.Context, base string, step SetupStep) error {
 	switch {
 	case step.Dataset != "":
-		body := fmt.Sprintf(
-			`{"datasetReference":{"projectId":"%s","datasetId":"%s"},"location":"US"}`,
-			projectIDFromBase(base), step.Dataset)
-		status, respBody, err := doRequest(ctx, http.MethodPost,
-			base+"/datasets", []byte(body))
-		if err != nil {
-			return err
-		}
-		if status < 200 || status >= 300 {
-			return fmt.Errorf("datasets.insert -> %d: %s", status, snippet(respBody))
-		}
-		return nil
+		return setupDataset(ctx, base, step.Dataset)
 	case step.Table != nil:
-		tableBody := struct {
-			TableReference bqtypes.TableReference `json:"tableReference"`
-			Schema         struct {
-				Fields []bqtypes.TableFieldSchema `json:"fields"`
-			} `json:"schema"`
-		}{}
-		tableBody.TableReference = bqtypes.TableReference{
-			ProjectID: projectIDFromBase(base),
-			DatasetID: step.Table.Dataset,
-			TableID:   step.Table.ID,
-		}
-		for _, c := range step.Table.Schema {
-			tableBody.Schema.Fields = append(tableBody.Schema.Fields,
-				columnToTableField(c))
-		}
-		jsonBody, err := json.Marshal(tableBody)
-		if err != nil {
-			return fmt.Errorf("marshal table body: %w", err)
-		}
-		url := fmt.Sprintf("%s/datasets/%s/tables", base, step.Table.Dataset)
-		status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
-		if err != nil {
-			return err
-		}
-		if status < 200 || status >= 300 {
-			return fmt.Errorf("tables.insert -> %d: %s", status, snippet(respBody))
-		}
-		return nil
+		return setupTable(ctx, base, step.Table)
 	case step.Rows != nil:
-		// `tabledata.insertAll` is the only way to seed rows on
-		// the DuckDB engine today; INSERT VALUES returns
-		// UNIMPLEMENTED. The wire shape matches Google's REST API
-		// spec: each row is wrapped in `{json: {...}}`.
-		type insertAllRow struct {
-			JSON map[string]any `json:"json"`
-		}
-		body := struct {
-			Kind string         `json:"kind"`
-			Rows []insertAllRow `json:"rows"`
-		}{
-			Kind: "bigquery#tableDataInsertAllRequest",
-			Rows: make([]insertAllRow, 0, len(step.Rows.Rows)),
-		}
-		for _, r := range step.Rows.Rows {
-			body.Rows = append(body.Rows, insertAllRow{JSON: r})
-		}
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("marshal insertAll body: %w", err)
-		}
-		url := fmt.Sprintf("%s/datasets/%s/tables/%s/insertAll",
-			base, step.Rows.Dataset, step.Rows.Table)
-		status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
-		if err != nil {
-			return err
-		}
-		if status < 200 || status >= 300 {
-			return fmt.Errorf("tabledata.insertAll -> %d: %s",
-				status, snippet(respBody))
-		}
-		return nil
+		return setupRows(ctx, base, step.Rows)
 	case strings.TrimSpace(step.SQL) != "":
-		queryBody, err := json.Marshal(map[string]any{
-			"query":        step.SQL,
-			"useLegacySql": false,
-		})
-		if err != nil {
-			return fmt.Errorf("marshal sql body: %w", err)
-		}
-		status, respBody, err := doRequest(ctx, http.MethodPost,
-			base+"/queries", queryBody)
-		if err != nil {
-			return err
-		}
-		if status < 200 || status >= 300 {
-			return fmt.Errorf("setup sql -> %d: %s", status, snippet(respBody))
-		}
-		return nil
+		return setupSQL(ctx, base, step.SQL)
 	default:
 		return errors.New("empty setup step (validated at load time)")
 	}
+}
+
+// setupDataset issues a `datasets.insert` for the synthesized
+// fixture project / dataset pair. Location is hardcoded to US to
+// match the gateway's default; fixtures that want a different
+// location have to use a SQL setup step.
+func setupDataset(ctx context.Context, base, dataset string) error {
+	body := fmt.Sprintf(
+		`{"datasetReference":{"projectId":"%s","datasetId":"%s"},"location":"US"}`,
+		projectIDFromBase(base), dataset)
+	status, respBody, err := doRequest(ctx, http.MethodPost,
+		base+"/datasets", []byte(body))
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("datasets.insert -> %d: %s", status, snippet(respBody))
+	}
+	return nil
+}
+
+// setupTable issues a `tables.insert` with the fixture's column
+// schema. STRUCT children round-trip through columnToTableField.
+func setupTable(ctx context.Context, base string, t *TableSetup) error {
+	tableBody := struct {
+		TableReference bqtypes.TableReference `json:"tableReference"`
+		Schema         struct {
+			Fields []bqtypes.TableFieldSchema `json:"fields"`
+		} `json:"schema"`
+	}{}
+	tableBody.TableReference = bqtypes.TableReference{
+		ProjectID: projectIDFromBase(base),
+		DatasetID: t.Dataset,
+		TableID:   t.ID,
+	}
+	for _, c := range t.Schema {
+		tableBody.Schema.Fields = append(tableBody.Schema.Fields,
+			columnToTableField(c))
+	}
+	jsonBody, err := json.Marshal(tableBody)
+	if err != nil {
+		return fmt.Errorf("marshal table body: %w", err)
+	}
+	url := fmt.Sprintf("%s/datasets/%s/tables", base, t.Dataset)
+	status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("tables.insert -> %d: %s", status, snippet(respBody))
+	}
+	return nil
+}
+
+// setupRows issues a `tabledata.insertAll`. It is the only way to
+// seed rows on the DuckDB engine today: INSERT VALUES returns
+// UNIMPLEMENTED. The wire shape matches Google's REST API spec
+// (each row is wrapped in `{json: {...}}`).
+func setupRows(ctx context.Context, base string, rs *RowsSetup) error {
+	type insertAllRow struct {
+		JSON map[string]any `json:"json"`
+	}
+	body := struct {
+		Kind string         `json:"kind"`
+		Rows []insertAllRow `json:"rows"`
+	}{
+		Kind: "bigquery#tableDataInsertAllRequest",
+		Rows: make([]insertAllRow, 0, len(rs.Rows)),
+	}
+	for _, r := range rs.Rows {
+		body.Rows = append(body.Rows, insertAllRow{JSON: r})
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("marshal insertAll body: %w", err)
+	}
+	url := fmt.Sprintf("%s/datasets/%s/tables/%s/insertAll",
+		base, rs.Dataset, rs.Table)
+	status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("tabledata.insertAll -> %d: %s",
+			status, snippet(respBody))
+	}
+	return nil
+}
+
+// setupSQL runs an arbitrary statement through the gateway's
+// `/queries` endpoint. Used for setup phases that do not fit the
+// dataset/table/rows shape (e.g. preparing a temp UDF).
+func setupSQL(ctx context.Context, base, sql string) error {
+	queryBody, err := json.Marshal(map[string]any{
+		"query":        sql,
+		"useLegacySql": false,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal sql body: %w", err)
+	}
+	status, respBody, err := doRequest(ctx, http.MethodPost,
+		base+"/queries", queryBody)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("setup sql -> %d: %s", status, snippet(respBody))
+	}
+	return nil
 }
 
 // columnToTableField copies our YAML-decoded SchemaColumn onto the
