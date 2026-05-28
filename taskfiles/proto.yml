@@ -3,8 +3,8 @@
 # Go bindings under gateway/enginepb/ are produced by `buf generate`
 # using the local protoc-gen-go and protoc-gen-go-grpc plugins
 # (installed into ./bin via `go install`). C++ bindings are produced
-# separately by CMake (see CMakeLists.txt) and never land in the source
-# tree.
+# separately by Bazel (see //proto:emulator_cc_proto and
+# //proto:emulator_cc_grpc) and never land in the source tree.
 #
 # Usage:
 #   task proto:install   # one-shot: install the buf plugins

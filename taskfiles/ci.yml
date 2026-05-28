@@ -6,14 +6,14 @@ version: "3"
 
 tasks:
   default:
-    desc: Run the same checks CI runs (lint:run, test, emulator:build-engine, emulator:build)
+    desc: Run the same checks CI runs (lint:run, test, emulator:build-engine-bazel, emulator:build)
     cmds:
       - task: run
 
   run:
-    desc: Full CI gate (lint:run, test, emulator:build-engine, emulator:build)
+    desc: Full CI gate (lint:run, test, emulator:build-engine-bazel, emulator:build)
     cmds:
       - task: :lint:run
       - task: :test:run
-      - task: :emulator:build-engine
+      - task: :emulator:build-engine-bazel
       - task: :emulator:build

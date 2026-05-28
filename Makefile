@@ -1,10 +1,15 @@
 # Makefile for the BigQuery emulator. Mirrors Taskfile.yml for users who
 # don't have `task` installed.
+#
+# Gateway-only: the C++ engine builds exclusively via Bazel. Use
+# `task emulator:build-engine-bazel` (or `bazel build
+# //binaries/emulator_main:emulator_main` directly) to produce
+# `bin/emulator_main` + `bin/libduckdb.so`.
 
 BIN_DIR  := bin
 HTTP_PORT ?= 9050
 
-.PHONY: all build build-engine run run-full test vet fmt lint clean proto proto-install proto-lint
+.PHONY: all build run test vet fmt lint clean proto proto-install proto-lint
 
 all: build
 
@@ -12,16 +17,8 @@ build:
 	@mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/gateway_main ./binaries/gateway_main
 
-build-engine:
-	cmake -S . -B build-out -DCMAKE_BUILD_TYPE=Release
-	cmake --build build-out --target emulator_main -j
-
 run: build
 	$(BIN_DIR)/gateway_main --engine_binary= --http_port=$(HTTP_PORT) --log_requests
-
-run-full: build build-engine
-	cp build-out/emulator_main $(BIN_DIR)/emulator_main
-	$(BIN_DIR)/gateway_main --engine_binary=$(BIN_DIR)/emulator_main --http_port=$(HTTP_PORT) --log_requests
 
 test:
 	go test ./...
@@ -47,4 +44,4 @@ proto-lint:
 	buf lint
 
 clean:
-	rm -rf $(BIN_DIR) build-out
+	rm -rf $(BIN_DIR)

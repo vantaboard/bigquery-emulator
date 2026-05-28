@@ -3,7 +3,6 @@ cloud-spanner-emulator/
 
 # Build outputs
 /bin/
-/build-out/
 /dist/
 /out/
 /tmp/
@@ -19,12 +18,6 @@ cloud-spanner-emulator/
 # Leading slash anchors to repo root so this does not accidentally
 # match files like `.cursor/rules/bazel-process-hygiene.mdc`.
 /bazel-*
-
-# CMake
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile.cmake
 
 # Go
 *.test

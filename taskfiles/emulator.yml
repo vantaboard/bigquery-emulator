@@ -1,8 +1,9 @@
 # Build, run, and hot-reload the BigQuery emulator. Mirrors the
 # cloud-spanner-emulator gateway_main / emulator_main split: `build`
-# compiles the Go gateway, `build-engine` compiles the C++ engine via
-# CMake, and `build-all` materializes both halves into ./bin so the
-# spawn-engine code path has something to exec.
+# compiles the Go gateway, `build-engine-bazel` compiles the C++ engine
+# via Bazel (the canonical and only engine build path), and `build-all`
+# materializes both halves into ./bin so the spawn-engine code path has
+# something to exec.
 #
 # Usage: task emulator:run (gateway alone, engine subprocess disabled),
 #        task emulator:run-full (both halves), task emulator:watch (air).
@@ -66,29 +67,16 @@ tasks:
             -X main.date={{.GATEWAY_DATE}}" \
           -o ./bin/gateway_main ./binaries/gateway_main
 
-  build-engine:
-    desc: Build the C++ engine (emulator_main) via CMake into build-out/
-    cmds:
-      - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        cmake -S . -B build-out -DCMAKE_BUILD_TYPE=Release
-        cmake --build build-out --target emulator_main -j
-
   # build-engine-bazel is the canonical engine build: it links the full
   # GoogleSQL + reference_impl + DuckDB + gRPC stack, so the resulting
   # binary actually serves `Query.DryRun` / `Query.ExecuteQuery` end to
-  # end. The CMake `build-engine` target above stays for legacy /
-  # offline workflows but cannot link GoogleSQL today.
+  # end.
   #
   # After building, we stage both the binary and `libduckdb.so` into
   # ./bin/ side-by-side. The cc_binary sets `-Wl,-rpath,$ORIGIN`, so
   # `./bin/emulator_main` finds its sibling `./bin/libduckdb.so` without
   # `LD_LIBRARY_PATH`. The integration tests (`go test -tags=integration
-  # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`,
-  # which means the bazel build is the path that flips the SELECT E2E
-  # tests from auto-skip to live.
+  # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`.
   #
   # Process hygiene (see .cursor/rules/bazel-process-hygiene.mdc):
   #   - Throttled by `task bazel:*` shared defaults: jobs = nproc-2,
@@ -98,7 +86,7 @@ tasks:
   #   - Pinned to system clang-18; the `mise` clang-22 lacks libstdc++ hdrs.
   #   - `trap bazel shutdown` releases the daemon on signal / failure.
   build-engine-bazel:
-    aliases: [build-engine:bazel]
+    aliases: [build-engine, build-engine:bazel]
     desc: Build the C++ engine via Bazel (full GoogleSQL + DuckDB) and stage into ./bin
     vars:
       BAZEL_JOBS:
@@ -198,14 +186,9 @@ tasks:
 
   build-all:
     desc: Build both halves (gateway + engine) and stage the engine in ./bin
-    deps: [build, build-engine]
-    cmds:
-      - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        mkdir -p bin
-        cp build-out/emulator_main ./bin/emulator_main
+    # build-engine-bazel already stages bin/emulator_main + bin/libduckdb.so
+    # with `-Wl,-rpath,$ORIGIN`, so no extra cp step is needed here.
+    deps: [build, build-engine-bazel]
 
   run:
     aliases: [start]

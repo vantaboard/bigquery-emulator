@@ -30,10 +30,10 @@ tasks:
     silent: true
 
   clean:
-    desc: Remove build artifacts (bin/, build-out/, tmp/)
+    desc: Remove build artifacts (bin/, tmp/)
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        rm -rf bin tmp build-out
+        rm -rf bin tmp

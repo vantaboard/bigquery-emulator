@@ -1,35 +1,22 @@
 # third_party/duckdb
 
 Vendoring shim for [DuckDB](https://duckdb.org). The pin and SHA-256
-hashes live in [`VERSION`](./VERSION); the CMake plumbing that fetches
-the upstream `libduckdb-linux-{amd64,arm64}.zip` archive lives in
-[`CMakeLists.txt`](./CMakeLists.txt). The top-level `CMakeLists.txt`
-includes this directory whenever `BIGQUERY_EMULATOR_ENABLE_DUCKDB=ON`
-(the default) and exposes the resulting library as the
-[`duckdb::duckdb`](./CMakeLists.txt) imported target.
+hashes live in [`VERSION`](./VERSION); the Bazel plumbing that fetches
+the upstream `libduckdb-linux-amd64.zip` archive lives in
+[`MODULE.bazel`](../../MODULE.bazel) (the `http_archive` for
+`@duckdb_linux_amd64`) plus the two BUILD files in this directory:
 
-DuckDB powers two later phases of the roadmap:
+- [`BUILD.bazel`](./BUILD.bazel) exposes the public
+  `//third_party/duckdb:duckdb` target with an architecture
+  `select()` so non-amd64 builds fail with a clear message.
+- [`duckdb.BUILD.bazel`](./duckdb.BUILD.bazel) is injected into the
+  extracted tarball as its top-level BUILD file and exposes
+  `@duckdb_linux_amd64//:duckdb` (an `hdrs` + `cc_import(libduckdb.so)`
+  pair).
 
-- **DuckDB-backed `Storage`** (Phase 3e–3f) — Parquet / Arrow files
-  on disk, attached as DuckDB tables at query time.
-- **DuckDB engine** (Phase 5.B) — transpiled fast path for OLAP
-  workloads, sharing the same Arrow result format with the Storage
-  Read API in Phase 7.
+DuckDB powers two parts of the engine:
 
-This plan (`vendor-duckdb`) only wires the dependency. The next plan
-([`duckdb-storage-core`](../../.cursor/plans/duckdb-storage-core_o0d1e2f3.plan.md))
-is the first consumer.
-
-## Disabling DuckDB
-
-If you are working offline, cross-compiling, or otherwise want to skip
-the DuckDB fetch, configure with:
-
-```bash
-cmake -S . -B build-out -DBIGQUERY_EMULATOR_ENABLE_DUCKDB=OFF
-```
-
-With DuckDB disabled, `--engine=duckdb` and `--storage=duckdb` both
-return `UNIMPLEMENTED` at runtime (the scaffolds stay compiled in but
-never reference DuckDB symbols), and the rest of the build is
-unaffected.
+- **DuckDB-backed `Storage`** — Parquet / Arrow files on disk,
+  attached as DuckDB tables at query time.
+- **DuckDB engine** — transpiled fast path for OLAP workloads,
+  sharing the same Arrow result format with the Storage Read API.

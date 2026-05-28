@@ -14,7 +14,6 @@ bin/
 # ignores them.
 !bin/emulator_main
 !bin/libduckdb.so
-build-out/
 out/
 *.o
 *.obj
@@ -26,12 +25,6 @@ out/
 
 # Bazel
 bazel-*
-
-# CMake out-of-source caches in the source tree.
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile.cmake
 
 # Go test/profile artifacts.
 *.test

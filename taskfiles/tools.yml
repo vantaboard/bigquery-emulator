@@ -1,7 +1,7 @@
-# Toolchain bootstrap. Every tool the emulator uses (go, task, cmake,
-# ninja, buf, golangci-lint, shellcheck, air, gcloud, ...) is pinned in
-# mise.toml; `task tools:install` materializes them all for a fresh
-# checkout.
+# Toolchain bootstrap. Every tool the emulator uses (go, task,
+# bazelisk, clang, buf, golangci-lint, shellcheck, air, gcloud, ...)
+# is pinned in mise.toml; `task tools:install` materializes them all
+# for a fresh checkout.
 #
 # Usage: task tools:install, task tools:doctor
 version: "3"

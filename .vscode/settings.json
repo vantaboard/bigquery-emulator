@@ -23,16 +23,7 @@
     },
     "exp-vscode-go.testExplorer.enable": true,
 
-    "cmake.buildDirectory": "${workspaceFolder}/build-out",
-    "cmake.generator": "Ninja",
-    "cmake.configureArgs": [
-        "-DCMAKE_C_COMPILER=clang",
-        "-DCMAKE_CXX_COMPILER=clang++",
-        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-    ],
-    "cmake.configureOnOpen": false,
     "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}/build-out",
         "--background-index",
         "--clang-tidy"
     ],
