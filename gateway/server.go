@@ -222,11 +222,18 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		})
 	}
 
+	// Gunzip middleware runs FIRST so handlers see the inflated JSON
+	// body. The Java BigQuery client sets `Content-Encoding: gzip` on
+	// every POST/PUT/PATCH by default; without this the gateway's
+	// JSON decoders trip on the gzip framing magic byte (`\x1f`) and
+	// emit `invalid character '\x1f' looking for beginning of value`.
+	// See gateway/middleware/gunzip.go for the contract.
+	handler := middleware.WithGunzipRequestBody(mux)
 	// Auth middleware always runs: it parses (but never validates) the
 	// Authorization header and attaches a synthetic principal to the
 	// request context. Per docs/REST_API.md and ROADMAP.md Phase 1,
 	// the emulator must never 401, so this is permissive by design.
-	handler := middleware.WithAuth(mux)
+	handler = middleware.WithAuth(handler)
 	if opts.LogRequests {
 		handler = loggingMiddleware(handler)
 	}
