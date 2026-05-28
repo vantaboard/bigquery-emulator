@@ -92,13 +92,34 @@ jobs:
           # string", which trips the Dockerfile's path-traversal-style
           # arg validation if only one is set.
           gsq_args=()
+          gsq_mode=source
           if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+            gsq_mode=prebuilt
             echo "::notice::docker-smoke: GoogleSQL prebuilt artifact ($GOOGLESQL_PREBUILT_URL)"
           else
             echo "::warning::docker-smoke: vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower)"
           fi
+          # Phase 5 step-summary surface: the Dockerfile's
+          # `engine-builder-bazel` stage already echoes
+          # `artifact_version` + `googlesql commit` to its build log
+          # (and runs `validate_artifact.py --summary-line` for the
+          # full identity), but build logs are not as easy to find as
+          # the workflow summary. Stamp the consumer-side knobs here so
+          # the run page surfaces the mode + pin even before the build
+          # completes.
+          {
+            printf '### docker-smoke GoogleSQL provenance\n\n'
+            printf '| Field | Value |\n|---|---|\n'
+            printf '| mode | %s |\n' "$gsq_mode"
+            if [ "$gsq_mode" = "prebuilt" ]; then
+              printf '| prebuilt URL | %s |\n' "${GOOGLESQL_PREBUILT_URL}"
+              printf '| prebuilt SHA-256 | `%s` |\n' "${GOOGLESQL_PREBUILT_SHA256}"
+            else
+              printf '| fallback | source-mode clone of google/googlesql in-container |\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           # Pre-build with explicit cache backends so layers persist
           # across runs. compose's `--build` invocation in the task
           # then no-ops if the image is already up to date.

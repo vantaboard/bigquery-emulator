@@ -209,10 +209,18 @@ jobs:
         # `.cache/googlesql-prebuilt/`. The
         # `inputs.googlesql_source=true` debug path passes empty
         # strings; the action then falls back to a source clone.
+        #
+        # Phase 5 (`fail-on-source-fallback: true` for the normal release
+        # path): when the operator has NOT opted into `googlesql_source=true`
+        # but the env pin is somehow empty (defensive — the "Validate
+        # GoogleSQL prebuilt pin" step above already refuses that case),
+        # the composite action fails fast instead of silently falling back
+        # to source mode mid-release.
         uses: ./.github/actions/setup-googlesql
         with:
           prebuilt-url: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.RELEASE_GOOGLESQL_PREBUILT_URL }}
           prebuilt-sha256: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.RELEASE_GOOGLESQL_PREBUILT_SHA256 }}
+          fail-on-source-fallback: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && 'false' || 'true' }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
         # `task emulator:build-engine:bazel` reads BAZEL_JOBS /
@@ -325,12 +333,23 @@ jobs:
         # release was built against so consumers can rebuild from the
         # same pin. `gh release edit --notes` overwrites the existing
         # notes, so first read goreleaser's output then append.
+        #
+        # Phase 5 widens the surfaced identity: in addition to the URL +
+        # SHA-256, we now publish the upstream tag, manifest
+        # `schema_version`, `platform.libc`, and the compiler
+        # `<name>-<version>` so a release reader can fully trace the
+        # build back to a specific GoogleSQL artifact contract.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REL_TAG: ${{ inputs.ref || github.ref_name }}
           GSQ_MODE: ${{ steps.googlesql.outputs.mode }}
           GSQ_VER: ${{ steps.googlesql.outputs.artifact-version }}
           GSQ_COMMIT: ${{ steps.googlesql.outputs.googlesql-commit }}
+          GSQ_COMMIT_FULL: ${{ steps.googlesql.outputs.googlesql-commit-full }}
+          GSQ_TAG: ${{ steps.googlesql.outputs.googlesql-tag }}
+          GSQ_SCHEMA: ${{ steps.googlesql.outputs.schema-version }}
+          GSQ_LIBC: ${{ steps.googlesql.outputs.platform-libc }}
+          GSQ_COMPILER: ${{ steps.googlesql.outputs.compiler }}
           GSQ_URL: ${{ env.RELEASE_GOOGLESQL_PREBUILT_URL }}
           GSQ_SHA: ${{ env.RELEASE_GOOGLESQL_PREBUILT_SHA256 }}
         run: |
@@ -341,25 +360,37 @@ jobs:
             printf '%s\n' "$existing"
             printf '\n---\n\n## GoogleSQL build provenance\n\n'
             if [ "$GSQ_MODE" = "prebuilt" ]; then
-              printf -- '- mode: **prebuilt** (Phase 4 pin)\n'
+              printf -- '- mode: **prebuilt** (Phase 4 pin, Phase 5 validated)\n'
               printf -- '- artifact_version: `%s`\n' "${GSQ_VER:-?}"
-              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT:-?}"
+              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+              printf -- '- googlesql upstream tag: `%s`\n' "${GSQ_TAG:-?}"
+              printf -- '- manifest schema_version: `%s`\n' "${GSQ_SCHEMA:-?}"
+              printf -- '- platform.libc: `%s`\n' "${GSQ_LIBC:-?}"
+              printf -- '- compiler: `%s`\n' "${GSQ_COMPILER:-?}"
               printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
               printf -- '- artifact SHA-256: `%s`\n' "${GSQ_SHA:-?}"
               printf '\nReproduce locally with:\n\n```\ntask googlesql:fetch-prebuilt URL=%s SHA256=%s\ntask emulator:build-engine:bazel\n```\n' "${GSQ_URL}" "${GSQ_SHA}"
             else
               printf -- '- mode: **source** (debug rebuild; not the standard release path)\n'
-              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT:-?}"
+              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+              printf -- '- googlesql ref: `%s`\n' "${GSQ_TAG:-?}"
             fi
           } > "$appended"
           gh release edit "$REL_TAG" --notes-file "$appended"
           rm -f "$appended"
           # Also surface in the workflow summary so the run page shows it.
+          # The setup-googlesql composite already wrote a table; append a
+          # second block here that ties the build to the release tag.
           {
-            printf '## GoogleSQL build provenance\n\n'
+            printf '## Release-time GoogleSQL build provenance\n\n'
+            printf -- '- release tag: %s\n' "$REL_TAG"
             printf -- '- mode: %s\n' "$GSQ_MODE"
             printf -- '- artifact_version: %s\n' "${GSQ_VER:-?}"
-            printf -- '- googlesql commit: %s\n' "${GSQ_COMMIT:-?}"
+            printf -- '- googlesql commit: %s\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+            printf -- '- googlesql tag: %s\n' "${GSQ_TAG:-?}"
+            printf -- '- schema_version: %s\n' "${GSQ_SCHEMA:-?}"
+            printf -- '- platform.libc: %s\n' "${GSQ_LIBC:-?}"
+            printf -- '- compiler: %s\n' "${GSQ_COMPILER:-?}"
             printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
             printf -- '- artifact SHA-256: %s\n' "${GSQ_SHA:-?}"
           } >> "$GITHUB_STEP_SUMMARY"
