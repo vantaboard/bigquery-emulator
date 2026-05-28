@@ -49,8 +49,15 @@ func buildAuthorizationPlaceholder(template, project, location, dataSourceID str
 // SQL-execution surface (Phase C will wire a Runner). `amazon_s3`
 // satisfies CreateAmazonS3TransferIT's catalog probe even though no
 // transfer is actually performed — the IT only asserts the create
-// returned a name.
+// returned a name. The remaining entries cover the Phase C
+// `Create*Transfer.java` driver classes; each is a metadata-only
+// stub (no transfer execution; no third-party traffic).
+//
+// All third-party rows use the same inert .invalid authorization-URL
+// placeholder so `GET .../dataSources/{id}` returns a deterministic
+// `authorizationUrl` without ever performing OAuth.
 func builtinDataSourceCatalog() []DataSourceCatalogEntry {
+	const oauthPlaceholder = "https://oauth-emulator.invalid/authorize?response_type=code&client_id=emulator-not-configured&data_source_id=%[3]s&project=%[1]s&location=%[2]s"
 	return []DataSourceCatalogEntry{
 		{
 			DataSourceID:      dataSourceScheduledQuery,
@@ -64,7 +71,71 @@ func builtinDataSourceCatalog() []DataSourceCatalogEntry {
 			Description:                    "Metadata-only stub for third-party connector discovery; transfer execution and credential validation are not implemented.",
 			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
 			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    "https://oauth-emulator.invalid/authorize?response_type=code&client_id=emulator-not-configured&data_source_id=%[3]s&project=%[1]s&location=%[2]s",
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceAdManager,
+			DisplayName:                    "Google Ad Manager (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the dfp_dt connector used by CreateAdManagerTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceGoogleAds,
+			DisplayName:                    "Google Ads (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the adwords connector used by CreateAdsTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceCampaignManager,
+			DisplayName:                    "Campaign Manager (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the dcm_dt connector used by CreateCampaignmanagerTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourcePlay,
+			DisplayName:                    "Google Play (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the play connector used by CreatePlayTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceRedshift,
+			DisplayName:                    "Amazon Redshift (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the redshift connector used by CreateRedshiftTransfer; transfer execution and credential validation are not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceOnPremises,
+			DisplayName:                    "Teradata / on-premises (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the on_premises connector used by CreateTeradataTransfer; transfer execution and Teradata agent integration are not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceYoutubeChannel,
+			DisplayName:                    "YouTube Channel (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the youtube_channel connector used by CreateYoutubeChannelTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
+		},
+		{
+			DataSourceID:                   dataSourceYoutubeContentOwner,
+			DisplayName:                    "YouTube Content Owner (emulator catalog stub)",
+			Description:                    "Metadata-only stub for the youtube_content_owner connector used by CreateYoutubeContentOwnerTransfer; transfer execution is not implemented.",
+			AuthorizationType:              "AUTHORIZATION_TYPE_OAUTH",
+			DefaultDataRefreshIntervalDays: 1,
+			AuthorizationURLPlaceholder:    oauthPlaceholder,
 		},
 	}
 }

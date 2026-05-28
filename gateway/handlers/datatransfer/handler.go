@@ -64,6 +64,27 @@ const dataSourceScheduledQuery = "scheduled_query"
 // discovery (Phase A baseline row 13: CreateAmazonS3TransferIT).
 const dataSourceAmazonS3 = "amazon_s3"
 
+// The following dataSourceId constants are the connector identifiers
+// the upstream `Create*Transfer.java` driver classes send on
+// CreateTransferConfig. They are metadata-only stubs; the emulator
+// does not perform any third-party traffic. The connector IDs come
+// directly from the snippet drivers (see e.g. CreateAdManagerTransfer
+// → `dfp_dt`, CreateAdsTransfer → `adwords`, CreateTeradataTransfer →
+// `on_premises`). Phase C's plan listed three IDs that diverge from
+// what the drivers send (`admanager_transfer`, `google_ads`,
+// `teradata`); registering the driver-side IDs is what actually moves
+// CreateTransferConfig forward, so we follow the drivers here.
+const (
+	dataSourceAdManager           = "dfp_dt"
+	dataSourceGoogleAds           = "adwords"
+	dataSourceCampaignManager     = "dcm_dt"
+	dataSourcePlay                = "play"
+	dataSourceRedshift            = "redshift"
+	dataSourceOnPremises          = "on_premises"
+	dataSourceYoutubeChannel      = "youtube_channel"
+	dataSourceYoutubeContentOwner = "youtube_content_owner"
+)
+
 const transferRunErrorMessageKey = "message"
 
 func transferRunErrorPayload(msg string) map[string]any {

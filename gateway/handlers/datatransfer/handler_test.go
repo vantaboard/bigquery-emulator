@@ -231,6 +231,89 @@ func TestDataTransferListDataSources(t *testing.T) {
 	}
 }
 
+// TestDataTransferListDataSourcesPhaseCConnectors pins the Phase C
+// catalog extension: the 8 connector IDs that the upstream
+// `Create*Transfer.java` driver classes send on CreateTransferConfig
+// must all surface from `dataSources.list` so the catalog accurately
+// represents what the emulator accepts. The IDs match the
+// `setDataSourceId(...)` literals in each driver (see
+// CreateAdManagerTransfer → `dfp_dt`, CreateAdsTransfer → `adwords`,
+// CreateTeradataTransfer → `on_premises`).
+func TestDataTransferListDataSourcesPhaseCConnectors(t *testing.T) {
+	mux := newTestMux(t)
+	req := httptest.NewRequest(http.MethodGet, "/v1/projects/p1/locations/us/dataSources", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list dataSources: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := decodeMap(t, rec)
+	ds, _ := body["dataSources"].([]any)
+	ids := map[string]struct{}{}
+	for _, row := range ds {
+		m, _ := row.(map[string]any)
+		if id, _ := m["dataSourceId"].(string); id != "" {
+			ids[id] = struct{}{}
+		}
+	}
+	wantIDs := []string{
+		// Phase B baseline.
+		"scheduled_query",
+		"amazon_s3",
+		// Phase C: 8 new third-party connector stubs.
+		"dfp_dt",
+		"adwords",
+		"dcm_dt",
+		"play",
+		"redshift",
+		"on_premises",
+		"youtube_channel",
+		"youtube_content_owner",
+	}
+	for _, want := range wantIDs {
+		if _, ok := ids[want]; !ok {
+			t.Errorf("dataSources missing %q (got %v)", want, ids)
+		}
+	}
+}
+
+// TestDataTransferCreateConfigPhaseCConnectorsSucceed pins that
+// CreateTransferConfig succeeds for each of the 8 Phase C connector
+// IDs. The emulator does not perform the transfer; it only persists
+// the config so the IT's GetTransferConfig probe finds it. This is
+// the REST-side surface contract the 8 Create*TransferIT ITs depend
+// on (the gapic clients ultimately dial gRPC, which is Phase D
+// scope; this test fixes the REST shape today).
+func TestDataTransferCreateConfigPhaseCConnectorsSucceed(t *testing.T) {
+	mux := newTestMux(t)
+	for _, ds := range []string{
+		"dfp_dt",
+		"adwords",
+		"dcm_dt",
+		"play",
+		"redshift",
+		"on_premises",
+		"youtube_channel",
+		"youtube_content_owner",
+	} {
+		body := `{"displayName":"x","dataSourceId":"` + ds +
+			`","destinationDatasetId":"ds1","params":{"k":"v"}}`
+		rec := postJSON(t, mux, pathP1USConfigs, body)
+		if rec.Code != http.StatusOK {
+			t.Errorf("create %q: status=%d body=%s", ds, rec.Code, rec.Body.String())
+			continue
+		}
+		created := decodeMap(t, rec)
+		if got, _ := created["dataSourceId"].(string); got != ds {
+			t.Errorf("create %q: dataSourceId=%v, want %q", ds, got, ds)
+		}
+		name, _ := created["name"].(string)
+		if name == "" {
+			t.Errorf("create %q: empty name", ds)
+		}
+	}
+}
+
 // TestDataTransferGetDataSource_AmazonS3AuthorizationPlaceholder pins
 // the inert .invalid placeholder URL on the amazon_s3 catalog row.
 func TestDataTransferGetDataSourceAmazonS3AuthorizationPlaceholder(t *testing.T) {
