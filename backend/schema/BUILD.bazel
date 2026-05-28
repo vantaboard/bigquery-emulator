@@ -1,11 +1,10 @@
 # Bazel build for the engine-agnostic schema types
 # (`schema::ColumnType`, `schema::TableSchema`, the proto conversions,
-# and the DuckDB-name lowering). Mirrors the CMake `backend_schema`
-# target (`../../CMakeLists.txt`).
+# and the DuckDB-name lowering).
 #
-# Both build systems include this library; it sits below the gRPC
-# service boundary and below GoogleSQL, so neither needs to know
-# about the analyzer when round-tripping a `TableSchema` proto.
+# Sits below the gRPC service boundary and below GoogleSQL, so it
+# doesn't need to know about the analyzer when round-tripping a
+# `TableSchema` proto.
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
@@ -29,10 +28,6 @@ cc_library(
 # into a BigQuery `FieldSchema` proto. The Query DryRun handler in
 # `frontend/handlers/` uses it to build the
 # `Job.statistics.query.schema` response.
-#
-# Bazel-only because it links GoogleSQL. The CMake `backend_schema`
-# target does not include it; CMake's `frontend_server` still ships
-# a stub `Query.DryRun` that returns `UNIMPLEMENTED`.
 cc_library(
     name = "googlesql_to_bq",
     srcs = ["googlesql_to_bq.cc"],

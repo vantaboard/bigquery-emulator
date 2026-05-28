@@ -1,16 +1,9 @@
 # Bazel build for the gRPC handler implementations behind
 # `bigquery_emulator.v1.Catalog` and `bigquery_emulator.v1.Query`.
 #
-# The Query handler is the first piece of the C++ engine that links
-# GoogleSQL's analyzer (plan dryrun-cpp-rpc_v7e8f9a0). The CMake build
-# (`//CMakeLists.txt:frontend_server`) still compiles the same .cc but
-# without `BIGQUERY_EMULATOR_HAS_GOOGLESQL` defined, so `Query.DryRun`
-# falls back to `UNIMPLEMENTED` on that path. The Bazel build below
-# is the canonical one: it sets the define, links GoogleSQL, and
-# wires the analyzer end-to-end.
-#
-# Same split lives over in `backend/schema/BUILD.bazel` for
-# `googlesql_to_bq` (the type reflector the Query handler uses).
+# The Query handler links GoogleSQL's analyzer end-to-end; the
+# matching type reflector lives in `backend/schema/BUILD.bazel`
+# (`googlesql_to_bq`).
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
@@ -39,11 +32,11 @@ cc_library(
     hdrs = ["query.h"],
     deps = [
         "//backend/catalog:googlesql_catalog",
-        # `backend/engine` is needed unconditionally for the optional
-        # `Engine*` parameter on `QueryService` and `StreamQueryResults`
-        # (which the Phase 5i wiring path threads through from
+        # `backend/engine` carries the optional `Engine*` parameter on
+        # `QueryService` and `StreamQueryResults` (which the Phase 5i
+        # wiring path threads through from
         # `binaries/emulator_main/main.cc`). The reference-impl engine
-        # is the legacy default when no engine is supplied.
+        # is the default when no engine is supplied.
         "//backend/engine",
         "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/schema",

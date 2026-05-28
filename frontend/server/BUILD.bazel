@@ -1,12 +1,10 @@
 # Bazel build for the gRPC server entry point that owns the listening
-# socket and registers the Catalog + Query handlers. Mirrors the
-# `frontend_server` half of the CMake build that is *not* covered by
-# the per-handler `//frontend/handlers:*` targets — namely the
+# socket and registers the Catalog + Query handlers — namely the
 # `Server::Create` factory and the SIGINT/SIGTERM shutdown plumbing.
 #
-# The Bazel-built `emulator_main` cc_binary depends on `:server` to
-# pull the gRPC main loop in; the per-handler targets do not own the
-# listening socket themselves, only the service impls.
+# The `emulator_main` cc_binary depends on `:server` to pull the gRPC
+# main loop in; the per-handler targets do not own the listening
+# socket themselves, only the service impls.
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 

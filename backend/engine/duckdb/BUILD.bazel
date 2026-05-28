@@ -1,13 +1,9 @@
-# Bazel build for the DuckDB query engine. Mirrors the CMake
-# `backend_engine_duckdb` target (`//CMakeLists.txt`).
+# Bazel build for the DuckDB query engine.
 #
 # Phase 5i wires the engine end-to-end: open an in-memory DuckDB
 # connection per query, attach the storage's row stream as a DuckDB
 # table, run the transpiled SQL, and stream the results back as a
-# `RowSource`. The same translation unit compiles down to
-# UNIMPLEMENTED stubs in the CMake build (which doesn't link
-# GoogleSQL), identical to how `backend/engine/reference_impl/` flips
-# on `BIGQUERY_EMULATOR_HAS_GOOGLESQL`.
+# `RowSource`.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 

@@ -19,8 +19,7 @@ Authoritative project intro: [`ROADMAP.md`](ROADMAP.md). Read its first ~100 lin
 
 Build systems:
 
-- **Bazel** is canonical for anything that links GoogleSQL (the analyzer + reference-impl engine + DuckDB engine + the production `emulator_main`). GoogleSQL is Bazel-only and is consumed via `local_path_override` to a sibling checkout at `/home/brighten-tompkins/Code/go-googlesql` (see `MODULE.bazel`).
-- **CMake** is retained only for DuckDB-only engine builds that don't need GoogleSQL.
+- **Bazel** is the sole build system for the C++ engine (the analyzer + reference-impl engine + DuckDB engine + the production `emulator_main`). GoogleSQL is Bazel-only and is consumed via `local_path_override` to a sibling checkout at `/home/brighten-tompkins/Code/go-googlesql` (see `MODULE.bazel`).
 - **Go modules** for everything in `gateway/`.
 
 Tooling pins live in `mise.toml` (with `direnv` driving `.envrc`); `Taskfile.yml` exposes `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`, etc.
@@ -316,7 +315,7 @@ The four GitHub runs from the v0.0.1 cut, for posterity:
 - [`MODULE.bazel`](MODULE.bazel), [`.bazelrc`](.bazelrc), [`.bazelversion`](.bazelversion) — Bazel + GoogleSQL toolchain wiring.
 - [`Taskfile.yml`](Taskfile.yml) — `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`, `task release:*`.
 - [`.goreleaser.yml`](.goreleaser.yml), [`.releaserc.yml`](.releaserc.yml), [`.github/workflows/release.yml`](.github/workflows/release.yml) — release path (plan 44 deliverables; see §6.1).
-- [`mise.toml`](mise.toml), `.envrc` — toolchain pins (Go, golangci-lint, cmake, ninja, clang, bazel-via-bazelisk). `direnv` exposes them.
+- [`mise.toml`](mise.toml), `.envrc` — toolchain pins (Go, golangci-lint, clang, bazel-via-bazelisk). `direnv` exposes them.
 - `/home/brighten-tompkins/Code/go-googlesql/` — sibling GoogleSQL checkout; `MODULE.bazel` `local_path_override`s to it. Its `.envrc` was the reference for tooling setup.
 
 ---

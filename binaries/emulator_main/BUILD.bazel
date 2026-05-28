@@ -1,17 +1,14 @@
-# Canonical Bazel build for the BigQuery emulator's C++ engine entry
-# point. This `cc_binary` is the one that links the full GoogleSQL +
-# reference_impl + DuckDB + gRPC stack — the CMake fallback in
-# `//CMakeLists.txt` cannot do the same because GoogleSQL is a
-# Bazel-only build today (see ROADMAP.md "Build systems").
+# Bazel build for the BigQuery emulator's C++ engine entry point. This
+# `cc_binary` links the full GoogleSQL + reference_impl + DuckDB + gRPC
+# stack.
 #
 # Pull-in list mirrors the runtime factory in
 # `binaries/emulator_main/main.cc`: every storage backend the
 # `--storage` flag can pick (memory + duckdb), every engine backend
 # `--engine` can pick (reference_impl + duckdb), the gRPC front door,
-# and the catalog/query handlers it registers. The handlers transitively
-# pull in GoogleSQL's analyzer + the reference-impl evaluator with
-# `BIGQUERY_EMULATOR_HAS_GOOGLESQL=1` set (see
-# `//frontend/handlers:query_handler` and
+# and the catalog/query handlers it registers. The handlers
+# transitively pull in GoogleSQL's analyzer + the reference-impl
+# evaluator (see `//frontend/handlers:query_handler` and
 # `//backend/engine/reference_impl:reference_impl_engine`).
 #
 # Static C++/C linkage (`-static-libgcc` / `-static-libstdc++`) follows

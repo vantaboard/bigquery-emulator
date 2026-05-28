@@ -8,10 +8,8 @@
 # (`transpiler-emit-scans_d5a6b7c8`, ...) fill the bodies in one
 # node kind at a time.
 #
-# There is intentionally no CMake counterpart here -- GoogleSQL is
-# Bazel-only (see ROADMAP "Build systems"), and the transpiler is
-# the part of the DuckDB engine that needs GoogleSQL's resolved-AST
-# headers most heavily.
+# GoogleSQL provides the resolved-AST headers this visitor walks; see
+# `ROADMAP.md` ("Build systems") for how `@googlesql//` is wired.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 

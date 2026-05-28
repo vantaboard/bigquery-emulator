@@ -1,11 +1,7 @@
 # Bazel build for the `Storage` interface + the engine-agnostic
-# `Value`/`Row`/`RowIterator` types. Mirrors the CMake
-# `backend_storage` target (`../../CMakeLists.txt`).
+# `Value`/`Row`/`RowIterator` types.
 #
-# Only the abstract interface ships here; the concrete impls
-# (`backend/storage/memory/`, `backend/storage/duckdb/`) still build
-# from CMake until the Bazel migration reaches them. The
-# `googlesql_catalog` adapter in `backend/catalog/` consumes this
+# The `googlesql_catalog` adapter in `backend/catalog/` consumes this
 # header-only entry point and delegates to whichever `Storage` impl
 # the engine constructed at startup.
 
@@ -67,11 +63,10 @@ cc_library(
     ],
 )
 
-# in_memory_storage_test is the Bazel mirror of the CMake
-# `in_memory_storage_test` target. Covers AppendRows / ScanRows /
-# OverwriteRows shape checks plus the plan-38 CreateReadStream
-# row_limit / offset slicing. Build cost is low (no DuckDB on the
-# link line) so this stays in the default `task bazel:test` set.
+# Covers AppendRows / ScanRows / OverwriteRows shape checks plus the
+# plan-38 CreateReadStream row_limit / offset slicing. Build cost is
+# low (no DuckDB on the link line) so this stays in the default
+# `task bazel:test` set.
 cc_test(
     name = "in_memory_storage_test",
     srcs = ["memory/in_memory_storage_test.cc"],

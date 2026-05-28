@@ -238,26 +238,7 @@ func TestDuckDBParityAnalyticsNoFallback(t *testing.T) {
 		usersTable = "users"
 	)
 
-	// Probe with `SELECT * FROM ds.t` after seeding so a build
-	// without ExecuteQuery (the CMake-only checkout) skips cleanly.
-	// `SELECT 1` is not a viable probe under
-	// `--on_unknown_fn=unimplemented` because the DuckDB engine
-	// returns UNIMPLEMENTED for the wrapping computed-column
-	// ProjectScan; the probe needs a shape the transpiler covers.
 	seedDuckDBAnalyticsFixture(t, env, projectID, datasetID, usersTable)
-
-	probeQuery := "SELECT * FROM " + datasetID + "." + usersTable
-	probeStatus, probeBody := doJSON(t, http.MethodPost,
-		env.URL()+"/bigquery/v2/projects/"+projectID+"/queries",
-		[]byte(`{"query":"`+probeQuery+`","useLegacySql":false}`))
-	if probeStatus == http.StatusNotImplemented {
-		t.Skipf("emulator_main was built without an ExecuteQuery "+
-			"implementation (returns 501 notImplemented). "+
-			"Probe body: %s", string(probeBody))
-	}
-	if probeStatus != http.StatusOK {
-		t.Fatalf("probe SELECT * -> %d: %s", probeStatus, string(probeBody))
-	}
 
 	// Each query below MUST return HTTP 200 with the expected row
 	// count: a 501 here means the DuckDB engine reported

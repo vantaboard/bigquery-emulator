@@ -1,13 +1,4 @@
 # Bazel build for the persistent, file-backed DuckDB `Storage` impl.
-# Mirrors the CMake `backend_storage_duckdb` target
-# (`//CMakeLists.txt`).
-#
-# `BIGQUERY_EMULATOR_HAS_DUCKDB=1` is set unconditionally here — the
-# Bazel build is the canonical path for the full DuckDB-enabled
-# emulator binary, so the no-DuckDB compile path that CMake exposes
-# through `-DBIGQUERY_EMULATOR_ENABLE_DUCKDB=OFF` is intentionally
-# unreachable from Bazel. The CMake side keeps the option around for
-# host installs without libduckdb on PATH.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
@@ -33,14 +24,12 @@ cc_library(
     ],
 )
 
-# duckdb_storage_test is the Bazel mirror of the CMake
-# `duckdb_storage_test` target. It exercises the Parquet round-trip
-# story for AppendRows / ScanRows and the plan-38 CreateReadStream
-# filter knobs (row_limit / offset). The cc_test inherits the
-# `-Wl,-rpath,$ORIGIN` linker flag from //third_party/duckdb's
-# cc_import so the libduckdb.so sibling that lands in the runfiles
-# tree is discoverable without LD_LIBRARY_PATH; the duckdb_engine_test
-# above relies on the same plumbing.
+# Exercises the Parquet round-trip story for AppendRows / ScanRows
+# and the plan-38 CreateReadStream filter knobs (row_limit / offset).
+# The cc_test inherits the `-Wl,-rpath,$ORIGIN` linker flag from
+# //third_party/duckdb's cc_import so the libduckdb.so sibling that
+# lands in the runfiles tree is discoverable without LD_LIBRARY_PATH;
+# the duckdb_engine_test above relies on the same plumbing.
 cc_test(
     name = "duckdb_storage_test",
     srcs = ["duckdb_storage_test.cc"],

@@ -1,13 +1,7 @@
-# Bazel build for the GoogleSQL reference-impl engine (Phase 5.A).
+# Bazel build for the GoogleSQL reference-impl engine.
 #
-# Mirrors the CMake `backend_engine_reference_impl` target
-# (`//CMakeLists.txt:backend_engine_reference_impl`), except this is
-# the build that actually links GoogleSQL and flips the
-# `BIGQUERY_EMULATOR_HAS_GOOGLESQL` define on. The same .cc file
-# also compiles under the CMake target with the define unset and
-# every `Engine` method returning `UNIMPLEMENTED` -- identical to how
-# `frontend/handlers/query.cc` handles the analyzer split between
-# the two build systems.
+# Links GoogleSQL's analyzer + reference-impl evaluator (under
+# `@googlesql//`) so the engine actually executes queries.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 

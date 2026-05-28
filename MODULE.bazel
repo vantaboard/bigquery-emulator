@@ -1,12 +1,10 @@
 # Bzlmod root for bigquery-emulator.
 #
-# Bazel is the canonical build path for anything that links GoogleSQL
-# (i.e. the C++ engine's analyzer / reference-impl plumbing). GoogleSQL
-# is Bazel-only, and `cloud-spanner-emulator` builds the same way, so
-# the C++ engine of bigquery-emulator follows suit starting with the
-# `googlesql-vendor-catalog` plan. The CMake build is kept in parallel
-# for the legacy storage / engine scaffolds and the vendored libduckdb;
-# see the top of `CMakeLists.txt` for the build-system split.
+# Bazel is the sole build system for the C++ engine (the analyzer,
+# reference-impl evaluator, DuckDB engine, and the production
+# `emulator_main` binary). GoogleSQL is Bazel-only, and
+# `cloud-spanner-emulator` builds the same way, so the C++ engine of
+# bigquery-emulator follows suit.
 #
 # `googlesql` is vendored via a `bazel_dep` + a `local_path_override`
 # pointing at a sibling checkout of
@@ -99,21 +97,19 @@ single_version_override(
     version = "0.51.0",
 )
 
-# DuckDB — prebuilt libduckdb tarball v1.5.3, same artifact the CMake
-# build's `third_party/duckdb/CMakeLists.txt` fetches. We use
-# `http_archive` (the WORKSPACE-era rule, re-exposed under bzlmod via
-# `use_repo_rule`) rather than building DuckDB from source: upstream
-# publishes a ready-to-link `libduckdb.so` + headers per architecture,
-# and pulling those in directly avoids a multi-minute compile of
-# DuckDB's ~600k-line C++ tree on every clean build. The pin/SHA-256
-# lives in `third_party/duckdb/VERSION` next to the CMake fetch so
-# both build systems bump in lockstep.
+# DuckDB — prebuilt libduckdb tarball v1.5.3. We use `http_archive`
+# (the WORKSPACE-era rule, re-exposed under bzlmod via `use_repo_rule`)
+# rather than building DuckDB from source: upstream publishes a
+# ready-to-link `libduckdb.so` + headers per architecture, and pulling
+# those in directly avoids a multi-minute compile of DuckDB's ~600k-line
+# C++ tree on every clean build. The pin/SHA-256 lives in
+# `third_party/duckdb/VERSION`.
 #
-# Today we register only the linux/amd64 artifact: the Bazel + GoogleSQL
-# toolchain stack here is only exercised on amd64 (linux/arm64 CI
-# still runs the CMake build path for `emulator_main`). When the arm64
-# Bazel build lands, copy this block, swap in the arm64 zip URL +
-# SHA-256, and `select()` between the two in
+# Today we register only the linux/amd64 artifact: the GoogleSQL
+# hermetic LLVM toolchain only cross-builds cleanly to amd64, so no
+# engine binary ships for arm64. When the arm64 Bazel build lands,
+# copy this block, swap in the arm64 zip URL + SHA-256, and
+# `select()` between the two in
 # `//binaries/emulator_main:emulator_main`'s `deps` list.
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 

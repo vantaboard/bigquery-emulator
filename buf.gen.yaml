@@ -8,10 +8,10 @@
 #
 # Output paths line up with the imports already declared in the proto:
 #   - go_package -> gateway/enginepb
-# The C++ stubs are generated separately by CMake (see CMakeLists.txt);
-# keeping the two codegen paths independent matches the Spanner emulator
-# split where Go is built with the Go toolchain and C++ is built with
-# its native build system.
+# The C++ stubs are generated separately by Bazel (see
+# proto/BUILD.bazel); keeping the two codegen paths independent
+# matches the Spanner emulator split where Go is built with the Go
+# toolchain and C++ is built with its native build system.
 version: v2
 
 managed:
