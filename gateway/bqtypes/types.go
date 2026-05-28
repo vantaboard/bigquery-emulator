@@ -29,16 +29,28 @@ type JobReference struct {
 }
 
 // Dataset is the BigQuery Dataset resource (subset).
+//
+// Access is the dataset ACL — a list of role bindings. The field is
+// always serialized (no `omitempty`) because the Java BigQuery client
+// calls `new ArrayList<>(dataset.getAcl())` on the deserialized
+// response, which NPEs when the field is null. Live BigQuery returns
+// an empty array for newly-created datasets; the emulator must
+// preserve that shape so AuthorizeDatasetIT-style ACL-mutation flows
+// work end-to-end. See the Phase A baseline note in
+// `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`.
 type Dataset struct {
-	Kind             string           `json:"kind,omitempty"` // bigquery#dataset
-	ID               string           `json:"id,omitempty"`
-	DatasetReference DatasetReference `json:"datasetReference"`
-	FriendlyName     string           `json:"friendlyName,omitempty"`
-	Description      string           `json:"description,omitempty"`
-	Location         string           `json:"location,omitempty"`
-	Etag             string           `json:"etag,omitempty"`
-	CreationTime     string           `json:"creationTime,omitempty"`
-	LastModifiedTime string           `json:"lastModifiedTime,omitempty"`
+	Kind                     string                   `json:"kind,omitempty"` // bigquery#dataset
+	ID                       string                   `json:"id,omitempty"`
+	DatasetReference         DatasetReference         `json:"datasetReference"`
+	FriendlyName             string                   `json:"friendlyName,omitempty"`
+	Description              string                   `json:"description,omitempty"`
+	Location                 string                   `json:"location,omitempty"`
+	Etag                     string                   `json:"etag,omitempty"`
+	CreationTime             string                   `json:"creationTime,omitempty"`
+	LastModifiedTime         string                   `json:"lastModifiedTime,omitempty"`
+	Access                   []map[string]interface{} `json:"access"`
+	Labels                   map[string]string        `json:"labels,omitempty"`
+	DefaultTableExpirationMs string                   `json:"defaultTableExpirationMs,omitempty"`
 }
 
 // Table is the BigQuery Table resource (subset).

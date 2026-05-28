@@ -219,6 +219,40 @@ func TestDatasetGetSynthesizesResource(t *testing.T) {
 	}
 }
 
+// TestDatasetGetAccessIsEmptyArrayNotNull pins the live-IT contract:
+// Java BigQuery's AuthorizeDatasetIT (and any other ACL-mutation
+// flow) calls `new ArrayList<>(dataset.getAcl())`, which NPEs when
+// the API response has `access: null` or omits the field entirely.
+// Live BigQuery returns `access: []` for newly-created datasets; the
+// emulator must do the same.
+func TestDatasetGetAccessIsEmptyArrayNotNull(t *testing.T) {
+	req := newDatasetReq(http.MethodGet, "proj", "ds1", "")
+	rec := httptest.NewRecorder()
+	DatasetGet(Dependencies{})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	got, present := doc["access"]
+	if !present {
+		t.Fatalf("response missing `access` field; body=%s", rec.Body.String())
+	}
+	if got == nil {
+		t.Fatalf("`access` is null; live BigQuery returns []")
+	}
+	arr, ok := got.([]any)
+	if !ok {
+		t.Fatalf("`access` is %T, want []any", got)
+	}
+	if len(arr) != 0 {
+		t.Errorf("`access` = %v, want []", arr)
+	}
+}
+
 // TestDatasetListReturnsEmptyPage pins the empty-page shape the handler
 // returns until Storage grows a list RPC.
 func TestDatasetListReturnsEmptyPage(t *testing.T) {

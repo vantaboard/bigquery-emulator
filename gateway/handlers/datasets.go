@@ -63,6 +63,12 @@ func nowMillis() string {
 // Stamps Kind, ID, and timestamps; preserves any caller-provided
 // metadata (FriendlyName, Description, Location) that the engine does
 // not need to know about.
+//
+// Access is materialized to an empty slice when the caller did not
+// provide one. The Java BigQuery client wraps `dataset.getAcl()` in
+// `new ArrayList<>(...)`, which NPEs on a null value; live BigQuery
+// returns `access: []` for newly-created datasets and ACL-mutation
+// flows like AuthorizeDatasetIT depend on that shape.
 func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Dataset {
 	ds.Kind = datasetKind
 	ds.ID = projectID + ":" + datasetID
@@ -74,6 +80,9 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 		ds.CreationTime = nowMillis()
 	}
 	ds.LastModifiedTime = nowMillis()
+	if ds.Access == nil {
+		ds.Access = []map[string]interface{}{}
+	}
 	return ds
 }
 
