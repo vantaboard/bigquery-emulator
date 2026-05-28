@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -185,7 +186,38 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if queryGRPCToHTTPError(w, err) {
 		return
 	}
+	schema, dmlStats, rows, ok := streamQueryResults(w, stream)
+	if !ok {
+		return
+	}
+	end := time.Now().UTC()
 
+	// Record the completed job (with its rows + schema cached)
+	// before assembling the response so the jobReference we emit
+	// is the same one a later jobs.get / jobs.getQueryResults will
+	// find. The current registry does not track engine-side
+	// bytes-processed yet, so we stamp 0; the long-running-jobs
+	// follow-up wires the real metric.
+	restSchema := schemaFromProto(schema)
+	restDmlStats := dmlStatsFromProto(dmlStats)
+	result := &jobs.QueryResult{
+		Schema:   restSchema,
+		Rows:     rows,
+		DmlStats: restDmlStats,
+	}
+	job := deps.Jobs.CompleteQueryWithResult(
+		projectID, req.Location, 0, start, end, result)
+	out := assembleQueryResponse(job, restSchema, rows, dmlStats, restDmlStats)
+	writeJSON(w, http.StatusOK, out)
+}
+
+// streamQueryResults drains the engine's query stream into the
+// per-RPC schema, DML stats, and row slice. Returns ok=false after
+// emitting an HTTP error envelope, in which case the caller must
+// stop processing the request.
+func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQueryClient) (
+	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, bool,
+) {
 	var schema *enginepb.TableSchema
 	var dmlStats *enginepb.DmlStats
 	rows := make([]bqtypes.Row, 0)
@@ -195,7 +227,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 			break
 		}
 		if queryGRPCToHTTPError(w, err) {
-			return
+			return nil, nil, nil, false
 		}
 		if s := msg.GetSchema(); s != nil {
 			// Per proto contract the first message carries the
@@ -220,38 +252,31 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		}
 		rows = append(rows, bqtypes.CellsToRow(msg.GetCells()))
 	}
-	end := time.Now().UTC()
+	return schema, dmlStats, rows, true
+}
 
-	// Record the completed job (with its rows + schema cached)
-	// before assembling the response so the jobReference we emit
-	// is the same one a later jobs.get / jobs.getQueryResults will
-	// find. The current registry does not track engine-side
-	// bytes-processed yet, so we stamp 0; the long-running-jobs
-	// follow-up wires the real metric.
-	restSchema := schemaFromProto(schema)
-	// Build the bqtypes.DmlStats envelope once so the synchronous
-	// response and the cached `QueryResult` (replayed by
-	// `jobs.getQueryResults`) emit byte-identical row counts.
-	var restDmlStats *bqtypes.DmlStats
-	if dmlStats != nil {
-		inserted := dmlStats.GetInsertedRowCount()
-		updated := dmlStats.GetUpdatedRowCount()
-		deleted := dmlStats.GetDeletedRowCount()
-		restDmlStats = &bqtypes.DmlStats{
-			InsertedRowCount: strconv.FormatInt(inserted, 10),
-			UpdatedRowCount:  strconv.FormatInt(updated, 10),
-			DeletedRowCount:  strconv.FormatInt(deleted, 10),
-		}
+// dmlStatsFromProto converts an engine-side DmlStats message into
+// the REST-wire envelope. Returns nil when the engine never emitted
+// a DmlStats summary (i.e. the statement was a SELECT, not DML).
+func dmlStatsFromProto(d *enginepb.DmlStats) *bqtypes.DmlStats {
+	if d == nil {
+		return nil
 	}
-	result := &jobs.QueryResult{
-		Schema:   restSchema,
-		Rows:     rows,
-		DmlStats: restDmlStats,
+	return &bqtypes.DmlStats{
+		InsertedRowCount: strconv.FormatInt(d.GetInsertedRowCount(), 10),
+		UpdatedRowCount:  strconv.FormatInt(d.GetUpdatedRowCount(), 10),
+		DeletedRowCount:  strconv.FormatInt(d.GetDeletedRowCount(), 10),
 	}
-	job := deps.Jobs.CompleteQueryWithResult(
-		projectID, req.Location, 0, start, end, result)
+}
+
+// assembleQueryResponse builds the synchronous jobs.query response
+// envelope: SELECT-shape (schema + rows + totalRows) by default,
+// switching to the DML-shape (numDmlAffectedRows + zeroed selects)
+// when the stream surfaced a DmlStats message.
+func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows []bqtypes.Row,
+	dmlStats *enginepb.DmlStats, restDmlStats *bqtypes.DmlStats,
+) bqtypes.QueryResponse {
 	jobRef := job.JobReference
-
 	out := bqtypes.QueryResponse{
 		Kind:                queryResponseKind,
 		Schema:              restSchema,
@@ -283,7 +308,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		out.Rows = nil
 		out.TotalRows = "0"
 	}
-	writeJSON(w, http.StatusOK, out)
+	return out
 }
 
 // getQueryResultsKind is the value the BigQuery REST API returns for
@@ -351,7 +376,6 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 		var (
 			schema   *bqtypes.TableSchema
 			allRows  []bqtypes.Row
-			pageRows []bqtypes.Row
 			dmlStats *bqtypes.DmlStats
 		)
 		if result := job.Result; result != nil {
@@ -360,32 +384,7 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 			dmlStats = result.DmlStats
 		}
 
-		// pageToken support: the registry never mints one, so any
-		// non-empty value is a stale token from a prior emulator run
-		// or a client that conflated tabledata.list with
-		// getQueryResults. Respond with an empty terminal page so
-		// polling loops complete cleanly.
-		if r.URL.Query().Get("pageToken") == "" {
-			start := uint64(0)
-			if s := r.URL.Query().Get("startIndex"); s != "" {
-				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
-					start = v
-				}
-			}
-			limit := uint64(len(allRows))
-			if s := r.URL.Query().Get("maxResults"); s != "" {
-				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
-					limit = v
-				}
-			}
-			total := uint64(len(allRows))
-			if start > total {
-				start = total
-			}
-			end := min(start+limit, total)
-			pageRows = allRows[start:end]
-		}
-
+		pageRows := paginateResults(allRows, r.URL.Query())
 		jobRef := job.JobReference
 		out := bqtypes.QueryResponse{
 			Kind:                getQueryResultsKind,
@@ -415,4 +414,39 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+// paginateResults applies the registry's single-page pagination
+// rules (startIndex + maxResults) to the cached row slice. A non-
+// empty pageToken is a stale value from a prior emulator run (the
+// registry never mints one) so it short-circuits to a terminal
+// empty page; clients polling for pageToken see the same shape
+// they would after consuming all rows.
+func paginateResults(allRows []bqtypes.Row, q url.Values) []bqtypes.Row {
+	if q.Get("pageToken") != "" {
+		return nil
+	}
+	start := parseUintQuery(q, "startIndex", 0)
+	limit := parseUintQuery(q, "maxResults", uint64(len(allRows)))
+	total := uint64(len(allRows))
+	if start > total {
+		start = total
+	}
+	end := min(start+limit, total)
+	return allRows[start:end]
+}
+
+// parseUintQuery returns the named query parameter as a uint64,
+// falling back to defaultVal when the value is missing or unparsable.
+// Pulled out so the pagination helper stops nesting if-inside-if.
+func parseUintQuery(q url.Values, key string, defaultVal uint64) uint64 {
+	s := q.Get(key)
+	if s == "" {
+		return defaultVal
+	}
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return defaultVal
+	}
+	return v
 }

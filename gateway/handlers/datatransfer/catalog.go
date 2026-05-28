@@ -63,87 +63,97 @@ func buildAuthorizationPlaceholder(template, project, location, dataSourceID str
 // All third-party rows use the same inert .invalid authorization-URL
 // placeholder so `GET .../dataSources/{id}` returns a deterministic
 // `authorizationUrl` without ever performing OAuth.
+// oauthThirdPartyStubs lists the metadata-only third-party
+// connectors the emulator advertises in its dataSources catalog.
+// Each row maps directly onto a Create*Transfer.java IT driver class
+// (Amazon S3 / Google Ad Manager / Google Ads / Campaign Manager /
+// Google Play / Amazon Redshift / Teradata / YouTube Channel /
+// YouTube Content Owner). The catalog only carries metadata; no
+// transfer execution and no third-party traffic happens.
+var oauthThirdPartyStubs = []struct {
+	ID, Display, Desc string
+}{
+	{
+		dataSourceAmazonS3,
+		"Amazon S3 (emulator catalog stub)",
+		"Metadata-only stub for third-party connector discovery; transfer execution and credential validation are not implemented.",
+	},
+	{
+		dataSourceAdManager,
+		"Google Ad Manager (emulator catalog stub)",
+		"Metadata-only stub for the dfp_dt connector used by CreateAdManagerTransfer; transfer execution is not implemented.",
+	},
+	{
+		dataSourceGoogleAds,
+		"Google Ads (emulator catalog stub)",
+		"Metadata-only stub for the adwords connector used by CreateAdsTransfer; transfer execution is not implemented.",
+	},
+	{
+		dataSourceCampaignManager,
+		"Campaign Manager (emulator catalog stub)",
+		"Metadata-only stub for the dcm_dt connector used by CreateCampaignmanagerTransfer; transfer execution is not implemented.",
+	},
+	{
+		dataSourcePlay,
+		"Google Play (emulator catalog stub)",
+		"Metadata-only stub for the play connector used by CreatePlayTransfer; transfer execution is not implemented.",
+	},
+	{
+		dataSourceRedshift,
+		"Amazon Redshift (emulator catalog stub)",
+		"Metadata-only stub for the redshift connector used by CreateRedshiftTransfer; transfer execution and credential validation are not implemented.",
+	},
+	{
+		dataSourceOnPremises,
+		"Teradata / on-premises (emulator catalog stub)",
+		"Metadata-only stub for the on_premises connector used by CreateTeradataTransfer; transfer execution and Teradata agent integration are not implemented.",
+	},
+	{
+		dataSourceYoutubeChannel,
+		"YouTube Channel (emulator catalog stub)",
+		"Metadata-only stub for the youtube_channel connector used by CreateYoutubeChannelTransfer; transfer execution is not implemented.",
+	},
+	{
+		dataSourceYoutubeContentOwner,
+		"YouTube Content Owner (emulator catalog stub)",
+		"Metadata-only stub for the youtube_content_owner connector used by CreateYoutubeContentOwnerTransfer; transfer execution is not implemented.",
+	},
+}
+
+// oauthAuthorizationURLPlaceholder is the inert .invalid URL the
+// catalog emits as `authorizationUrl` for every OAuth third-party
+// stub. Lifted to a package const so the test fixtures and the
+// catalog-builder share the same source of truth.
+const oauthAuthorizationURLPlaceholder = "https://oauth-emulator.invalid/authorize?response_type=code&client_id=emulator-not-configured&data_source_id=%[3]s&project=%[1]s&location=%[2]s"
+
 func builtinDataSourceCatalog() []DataSourceCatalogEntry {
-	const oauthPlaceholder = "https://oauth-emulator.invalid/authorize?response_type=code&client_id=emulator-not-configured&data_source_id=%[3]s&project=%[1]s&location=%[2]s"
-	return []DataSourceCatalogEntry{
+	out := []DataSourceCatalogEntry{
 		{
 			DataSourceID:      dataSourceScheduledQuery,
 			DisplayName:       "Scheduled Query (emulator)",
 			Description:       "Runs BigQuery SQL on demand via startManualRuns or POST .../runs when a ScheduledQueryRunner is wired; no cron or third-party I/O.",
 			AuthorizationType: "AUTHORIZATION_TYPE_GOOGLE_PLUS_AUTHORIZATION_CODE",
 		},
-		{
-			DataSourceID:                   dataSourceAmazonS3,
-			DisplayName:                    "Amazon S3 (emulator catalog stub)",
-			Description:                    "Metadata-only stub for third-party connector discovery; transfer execution and credential validation are not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceAdManager,
-			DisplayName:                    "Google Ad Manager (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the dfp_dt connector used by CreateAdManagerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceGoogleAds,
-			DisplayName:                    "Google Ads (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the adwords connector used by CreateAdsTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceCampaignManager,
-			DisplayName:                    "Campaign Manager (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the dcm_dt connector used by CreateCampaignmanagerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourcePlay,
-			DisplayName:                    "Google Play (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the play connector used by CreatePlayTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceRedshift,
-			DisplayName:                    "Amazon Redshift (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the redshift connector used by CreateRedshiftTransfer; transfer execution and credential validation are not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceOnPremises,
-			DisplayName:                    "Teradata / on-premises (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the on_premises connector used by CreateTeradataTransfer; transfer execution and Teradata agent integration are not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceYoutubeChannel,
-			DisplayName:                    "YouTube Channel (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the youtube_channel connector used by CreateYoutubeChannelTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
-		{
-			DataSourceID:                   dataSourceYoutubeContentOwner,
-			DisplayName:                    "YouTube Content Owner (emulator catalog stub)",
-			Description:                    "Metadata-only stub for the youtube_content_owner connector used by CreateYoutubeContentOwnerTransfer; transfer execution is not implemented.",
-			AuthorizationType:              authTypeOAuth,
-			DefaultDataRefreshIntervalDays: 1,
-			AuthorizationURLPlaceholder:    oauthPlaceholder,
-		},
+	}
+	for _, s := range oauthThirdPartyStubs {
+		out = append(out, oauthStubEntry(s.ID, s.Display, s.Desc))
+	}
+	return out
+}
+
+// oauthStubEntry builds a metadata-only OAuth third-party catalog
+// entry. The OAuth-related fields (authorization type, daily refresh,
+// inert .invalid authorization URL placeholder) are the same for
+// every third-party stub, so the per-row table only carries the
+// fields that actually differ.
+func oauthStubEntry(id, display, desc string) DataSourceCatalogEntry {
+	return DataSourceCatalogEntry{
+		DataSourceID:                   id,
+		DisplayName:                    display,
+		Description:                    desc,
+		AuthorizationType:              authTypeOAuth,
+		DefaultDataRefreshIntervalDays: 1,
+		AuthorizationURLPlaceholder:    oauthAuthorizationURLPlaceholder,
 	}
 }
 

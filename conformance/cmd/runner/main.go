@@ -35,13 +35,96 @@ func (s *stringSliceFlag) Set(v string) error {
 }
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "runner:", err)
+	code, err := run()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "runner:", err)
 		os.Exit(2)
+	}
+	if code != 0 {
+		os.Exit(code)
 	}
 }
 
-func run() error {
+// runnerConfig is the parsed view of the CLI flags that `run` hands
+// off to the conformance runner. Pulled out of run() so the flag-
+// parsing block (and the engine-binary / --connect mutual-exclusion
+// rule) can live in its own helper without smuggling state through
+// closures.
+type runnerConfig struct {
+	Fixtures        string
+	EngineBinary    string
+	Connect         string
+	UpdateBaselines bool
+	Output          string
+	OutputFile      string
+	Profiles        []string
+	HelpExit        bool // user passed --help; main should exit 0.
+}
+
+// run drives the binary's flag parse + signal handling + runner.Run
+// orchestration. Returns the exit code main should hand to os.Exit
+// (so any defers in this function actually fire) plus any
+// runner-internal error main should print.
+func run() (int, error) {
+	cfg, err := parseFlags(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if cfg.HelpExit {
+		return 0, nil
+	}
+
+	runnerStdout, cleanup, err := setupOutputFile(cfg.OutputFile)
+	if err != nil {
+		return 0, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// SIGINT/SIGTERM cancel the runner's context so the harness can
+	// SIGINT every emulator subprocess it spawned. The runner
+	// returns its in-progress Report so the caller still sees what
+	// PASSed before the cancel.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+	defer signal.Stop(sigCh)
+
+	report, err := runner.Run(ctx, runner.Options{
+		FixturesPath: cfg.Fixtures,
+		Harness: runner.HarnessOptions{
+			EngineBinary:   cfg.EngineBinary,
+			ConnectAddress: cfg.Connect,
+			EngineStdout:   os.Stderr,
+			EngineStderr:   os.Stderr,
+		},
+		Profiles:        cfg.Profiles,
+		UpdateBaselines: cfg.UpdateBaselines,
+		Output:          cfg.Output,
+		Out:             runnerStdout,
+		Err:             os.Stderr,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return report.ExitCode(), nil
+}
+
+// parseFlags wires up the CLI's flag set, applies the
+// --engine-binary / --connect mutual-exclusion rule, and returns a
+// runnerConfig. Returns flag.ErrHelp when the user passed --help so
+// the caller can short-circuit cleanly.
+func parseFlags(args []string) (runnerConfig, error) {
 	fs := flag.NewFlagSet("runner", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
@@ -73,8 +156,40 @@ func run() error {
 	)
 	fs.Var(&profiles, "profile", "restrict the matrix to one profile (repeatable). Default: all known profiles")
 
-	fs.Usage = func() {
-		_, _ = fmt.Fprintln(fs.Output(), `Usage: runner [flags]
+	fs.Usage = func() { writeUsage(fs) }
+
+	if err := fs.Parse(args); err != nil {
+		return runnerConfig{}, err
+	}
+	if *showHelp {
+		fs.Usage()
+		return runnerConfig{HelpExit: true}, nil
+	}
+	if *engineBinary != "" && *connect != "" {
+		// Flag default is `./bin/emulator_main`; only treat it as
+		// user-supplied when --connect is the empty default. The
+		// CLI lets the user pick either path explicitly.
+		if *engineBinary != "./bin/emulator_main" {
+			return runnerConfig{}, errors.New("--engine-binary and --connect are mutually exclusive")
+		}
+		*engineBinary = ""
+	}
+	return runnerConfig{
+		Fixtures:        *fixtures,
+		EngineBinary:    *engineBinary,
+		Connect:         *connect,
+		UpdateBaselines: *updateBaselines,
+		Output:          *output,
+		OutputFile:      *outputFile,
+		Profiles:        []string(profiles),
+	}, nil
+}
+
+// writeUsage emits the runner's --help banner. Pulled out of
+// parseFlags so the flag-parsing function stays under the funlen
+// limit; the heredoc's prose is the bulk of its line count.
+func writeUsage(fs *flag.FlagSet) {
+	_, _ = fmt.Fprintln(fs.Output(), `Usage: runner [flags]
 
 Run the BigQuery emulator conformance fixtures and diff against
 expected rows or errors. By default the runner spawns its own
@@ -82,8 +197,8 @@ emulator_main subprocess per fixture x profile; --connect HOST:PORT
 reaches an already-running gateway (used by CI).
 
 Flags:`)
-		fs.PrintDefaults()
-		_, _ = fmt.Fprintln(fs.Output(), `
+	fs.PrintDefaults()
+	_, _ = fmt.Fprintln(fs.Output(), `
 Profiles:
   duckdb   duckdb engine + duckdb storage  (only profile today)
 
@@ -94,98 +209,38 @@ Exit codes:
 
 See conformance/README.md for the fixture schema and JSON output
 shape.`)
-	}
+}
 
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return err
+// setupOutputFile honors --output-file: it opens a sibling tmp file,
+// returns an io.MultiWriter that tees the runner's output into both
+// stdout and the tmp file, plus a cleanup closure the caller must
+// defer to atomically rename the tmp file into place. When the flag
+// is empty, returns os.Stdout and a nil cleanup.
+//
+// We rename regardless of whether the runner returned an error or
+// reported a non-zero exit code (fixture mismatch): the artifact is
+// still the most useful diagnostic the workflow has on hand. Only a
+// CreateTemp failure (out of disk, perm denied) short-circuits
+// before any data lands.
+func setupOutputFile(path string) (io.Writer, func(), error) {
+	if path == "" {
+		return os.Stdout, nil, nil
 	}
-	if *showHelp {
-		fs.Usage()
-		return nil
+	dir := filepath.Dir(path)
+	if dir == "" {
+		dir = "."
 	}
-	if *engineBinary != "" && *connect != "" {
-		// Flag default is `./bin/emulator_main`; only treat it as
-		// user-supplied when --connect is the empty default. The
-		// CLI lets the user pick either path explicitly.
-		if *engineBinary != "./bin/emulator_main" {
-			return errors.New("--engine-binary and --connect are mutually exclusive")
-		}
-		*engineBinary = ""
-	}
-
-	// When --output-file is set, tee the renderer output into a
-	// sibling tmp file and atomically rename it on the way out so
-	// the CI consumer can upload the JSON artifact without juggling
-	// shell redirects.
-	//
-	// We rename regardless of whether the runner returned an error
-	// or reported a non-zero exit code (fixture mismatch): the
-	// artifact is still the most useful diagnostic the workflow
-	// has on hand. Only a CreateTemp failure (out of disk, perm
-	// denied) short-circuits before any data lands.
-	var (
-		runnerStdout io.Writer = os.Stdout
-		tmpFile      *os.File
-		tmpName      string
-	)
-	if *outputFile != "" {
-		dir := filepath.Dir(*outputFile)
-		if dir == "" {
-			dir = "."
-		}
-		tmp, err := os.CreateTemp(dir, ".conformance-runner-*.tmp")
-		if err != nil {
-			return fmt.Errorf("create --output-file tmp: %w", err)
-		}
-		tmpFile = tmp
-		tmpName = tmp.Name()
-		runnerStdout = io.MultiWriter(os.Stdout, tmpFile)
-		defer func() {
-			_ = tmpFile.Close()
-			if err := os.Rename(tmpName, *outputFile); err != nil {
-				fmt.Fprintln(os.Stderr, "runner: rename --output-file:", err)
-				_ = os.Remove(tmpName)
-			}
-		}()
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// SIGINT/SIGTERM cancel the runner's context so the harness can
-	// SIGINT every emulator subprocess it spawned. The runner
-	// returns its in-progress Report so the caller still sees what
-	// PASSed before the cancel.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-	defer signal.Stop(sigCh)
-
-	report, err := runner.Run(ctx, runner.Options{
-		FixturesPath: *fixtures,
-		Harness: runner.HarnessOptions{
-			EngineBinary:   *engineBinary,
-			ConnectAddress: *connect,
-			EngineStdout:   os.Stderr,
-			EngineStderr:   os.Stderr,
-		},
-		Profiles:        []string(profiles),
-		UpdateBaselines: *updateBaselines,
-		Output:          *output,
-		Out:             runnerStdout,
-		Err:             os.Stderr,
-	})
+	tmp, err := os.CreateTemp(dir, ".conformance-runner-*.tmp")
 	if err != nil {
-		return err
+		return nil, nil, fmt.Errorf("create --output-file tmp: %w", err)
 	}
-	if code := report.ExitCode(); code != 0 {
-		os.Exit(code)
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = tmp.Close()
+		if err := os.Rename(tmpName, path); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "runner: rename --output-file:", err)
+			_ = os.Remove(tmpName)
+		}
 	}
-	return nil
+	return io.MultiWriter(os.Stdout, tmp), cleanup, nil
 }
