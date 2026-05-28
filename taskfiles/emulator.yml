@@ -192,10 +192,26 @@ tasks:
             echo "  GOOGLESQL_SOURCE=local task emulator:build-engine:bazel" >&2
             exit 1
           fi
-          mod_name="$(grep -E '^\s*name = ' "$cache/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
-          if [ "$mod_name" != "googlesql" ]; then
-            echo "Prebuilt cache MODULE.bazel declares module(name = \"$mod_name\", ...) — expected \"googlesql\"" >&2
-            echo "Re-stage the artifact: 'task googlesql:clean && task googlesql:stage-bazel'" >&2
+          # Run the Phase 5 centralized validator before bazel starts. The
+          # validator is the single source of truth for schema, identity,
+          # platform, payload-integrity, and wrapper-presence gates. Any
+          # of those failing here is a hard error — bazel never runs.
+          # Skip validator if BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1 is
+          # exported (escape hatch for the on-host quick rebuild loop
+          # documented in docs/dev/googlesql-prebuilt/rollback.md).
+          if [ "${BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE:-0}" = "1" ]; then
+            echo "ok (validator skipped via BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1)"
+            exit 0
+          fi
+          if ! python3 "$root/tools/googlesql-prebuilt/validate_artifact.py" \
+              --repo-root "$cache" \
+              --summary-line >&2; then
+            echo "validate_artifact rejected the staged prebuilt cache (see diagnostic above)." >&2
+            echo "Recover with one of:" >&2
+            echo "  task googlesql:clean && task googlesql:fetch-prebuilt URL=... SHA256=..." >&2
+            echo "  task googlesql:clean && task googlesql:stage-bazel" >&2
+            echo "Or fall back to source mode explicitly:" >&2
+            echo "  GOOGLESQL_SOURCE=local task emulator:build-engine:bazel" >&2
             exit 1
           fi
           echo "ok"

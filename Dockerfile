@@ -148,6 +148,13 @@ COPY frontend ./frontend
 COPY proto ./proto
 COPY third_party ./third_party
 
+# Phase 5 centralized validator. Copied in BEFORE the GoogleSQL fetch
+# step so the in-container fetch can run the same Schema/identity/payload
+# gates the host-side `task googlesql:fetch-prebuilt` runs. Touching any
+# of these tools busts only the validate step's layer — the (expensive)
+# bazel build layer below stays cached.
+COPY tools/googlesql-prebuilt ./tools/googlesql-prebuilt
+
 # Resolve a GoogleSQL build mode (Phase 4 of the `googlesql-prebuilt`
 # rollout — see `docs/dev/googlesql-prebuilt/README.md`):
 #
@@ -213,6 +220,14 @@ RUN set -eux; \
         mv "$unpack/googlesql_prebuilt_linux_amd64" "$cache_root/googlesql_prebuilt_linux_amd64"; \
         echo "${GOOGLESQL_PREBUILT_SHA256}  artifact.tar.gz" > "$cache_root/googlesql_prebuilt_linux_amd64.tarball.sha256"; \
         rm -rf "$tmp"; \
+        # Phase 5 centralized validator — schema, identity, platform,
+        # payload SHA, wrapper-presence gates. Anything failing here is
+        # a hard error: the Dockerfile refuses to proceed to the bazel
+        # build with a partially-valid cache.
+        python3 tools/googlesql-prebuilt/validate_artifact.py \
+            --repo-root "$cache_root/googlesql_prebuilt_linux_amd64" \
+            --summary-line \
+            --summary-json /tmp/googlesql-validate.json; \
         artifact_version="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("artifact_version","?"))' 2>/dev/null || echo '?')"; \
         gs_commit="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("googlesql",{}).get("commit","?")[:12])' 2>/dev/null || echo '?')"; \
         echo "GoogleSQL prebuilt artifact_version=$artifact_version googlesql=$gs_commit"; \

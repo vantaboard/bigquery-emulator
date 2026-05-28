@@ -56,6 +56,30 @@ inputs:
       fallback. Ignored in prebuilt mode.
     required: false
     default: "2026.01.1"
+  expected-googlesql-sha:
+    description: |
+      Optional 40-hex upstream GoogleSQL commit the validator must see
+      in the unpacked manifest. Forwarded to
+      `tools/googlesql-prebuilt/validate_artifact.py`. Use this on
+      release-grade lanes so the artifact's identity is pinned beyond
+      the tarball SHA-256.
+    required: false
+    default: ""
+  expected-artifact-version:
+    description: |
+      Optional strict-semver pin the validator must see in
+      `manifest.artifact_version`. Same release-grade use case as
+      `expected-googlesql-sha`.
+    required: false
+    default: ""
+  fail-on-source-fallback:
+    description: |
+      When `true`, the action FAILS (instead of warning) if the prebuilt
+      pin is empty and would otherwise fall back to a source checkout.
+      Release / parity-strict lanes pass `true`; PR lanes leave it
+      `false` so a temporarily-unset repo var does not block the merge.
+    required: false
+    default: "false"
 
 outputs:
   mode:
@@ -80,6 +104,36 @@ outputs:
       from the prebuilt manifest in prebuilt mode, from `git rev-parse`
       against `../googlesql/HEAD` in source mode.
     value: ${{ steps.identity.outputs.googlesql-commit }}
+  googlesql-commit-full:
+    description: 40-hex full upstream GoogleSQL commit (Phase 5 identity surface).
+    value: ${{ steps.identity.outputs.googlesql-commit-full }}
+  googlesql-tag:
+    description: |
+      Upstream GoogleSQL tag string (e.g. `2026.01.1` in prebuilt mode;
+      the resolved git ref in source mode).
+    value: ${{ steps.identity.outputs.googlesql-tag }}
+  schema-version:
+    description: Manifest schema version (Phase 5; empty in source mode).
+    value: ${{ steps.identity.outputs.schema-version }}
+  platform-libc:
+    description: Producer-pinned libc string (Phase 5; empty in source mode).
+    value: ${{ steps.identity.outputs.platform-libc }}
+  compiler:
+    description: |
+      Compiler + version string (e.g. `clang-18.1.3`; Phase 5;
+      empty in source mode).
+    value: ${{ steps.identity.outputs.compiler }}
+  tarball-url:
+    description: |
+      Echo of the resolved tarball URL (prebuilt mode only). Empty in
+      source mode. Used by release / parity workflows to compose
+      provenance blocks.
+    value: ${{ steps.identity.outputs.tarball-url }}
+  tarball-sha256:
+    description: |
+      Echo of the resolved tarball SHA-256 (prebuilt mode only). Empty
+      in source mode.
+    value: ${{ steps.identity.outputs.tarball-sha256 }}
 
 runs:
   using: composite
@@ -91,6 +145,7 @@ runs:
         set -euo pipefail
         url='${{ inputs.prebuilt-url }}'
         sha='${{ inputs.prebuilt-sha256 }}'
+        fail_on_fallback='${{ inputs.fail-on-source-fallback }}'
         if [ -n "$url" ] && [ -n "$sha" ]; then
           if ! [[ "$sha" =~ ^[0-9a-f]{64}$ ]]; then
             echo "::error::prebuilt-sha256 must be 64 lowercase hex chars; got '$sha'"
@@ -100,6 +155,10 @@ runs:
           echo "googlesql-source=prebuilt" >> "$GITHUB_OUTPUT"
           echo "::notice::GoogleSQL mode=prebuilt url=$url sha256=$sha"
         else
+          if [ "$fail_on_fallback" = "true" ]; then
+            echo "::error::vars.GOOGLESQL_PREBUILT_URL/_SHA256 are empty and fail-on-source-fallback=true. Refusing to silently fall back to source mode. Set the repo vars, or invoke this lane via workflow_dispatch with the documented source-debug knob." >&2
+            exit 1
+          fi
           echo "mode=source" >> "$GITHUB_OUTPUT"
           echo "googlesql-source=local" >> "$GITHUB_OUTPUT"
           echo "::warning::vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower). Set the repo vars to switch CI lanes onto the Phase 4 default (prebuilt)."
@@ -115,9 +174,32 @@ runs:
         # + manifest-schema gates the local helper enforces, so a
         # tampered or stale tarball cannot land in the cache. Requires
         # `arduino/setup-task` to have run earlier in the calling job.
+        # The task also invokes the Phase 5 centralized validator
+        # (`tools/googlesql-prebuilt/validate_artifact.py`) before
+        # committing to the cache, so an artifact that passes this step
+        # has already cleared the full identity + payload integrity gates.
         task googlesql:fetch-prebuilt \
           URL='${{ inputs.prebuilt-url }}' \
           SHA256='${{ inputs.prebuilt-sha256 }}'
+
+    - name: Validate prebuilt artifact identity (Phase 5 pins)
+      if: steps.resolve.outputs.mode == 'prebuilt'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # Re-run validator with caller-supplied pins so a release / parity
+        # lane can demand artifact_version + googlesql.commit match the
+        # workflow's pin even if the underlying tarball happens to share
+        # a SHA-256 with a prior publish (defensive belt + braces).
+        args=( --repo-root .cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64 --summary-line --summary-json /tmp/googlesql-validate.json )
+        if [ -n '${{ inputs.expected-googlesql-sha }}' ]; then
+          args+=( --expected-googlesql-sha '${{ inputs.expected-googlesql-sha }}' )
+        fi
+        if [ -n '${{ inputs.expected-artifact-version }}' ]; then
+          args+=( --expected-artifact-version '${{ inputs.expected-artifact-version }}' )
+        fi
+        python3 tools/googlesql-prebuilt/validate_artifact.py "${args[@]}"
 
     - name: Checkout sibling googlesql (source fallback)
       if: steps.resolve.outputs.mode == 'source'
@@ -149,13 +231,60 @@ runs:
         if [ "$mode" = "prebuilt" ]; then
           mf=".cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/manifest.json"
           ver="$(python3 -c "import json; print(json.load(open('$mf')).get('artifact_version','?'))" 2>/dev/null || echo '?')"
-          gs="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?')[:12])" 2>/dev/null || echo '?')"
+          gs_full="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?'))" 2>/dev/null || echo '?')"
+          gs="${gs_full:0:12}"
+          tag="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('upstream_tag','?'))" 2>/dev/null || echo '?')"
+          schema="$(python3 -c "import json; print(json.load(open('$mf')).get('schema_version','?'))" 2>/dev/null || echo '?')"
+          libc="$(python3 -c "import json; print(json.load(open('$mf')).get('platform',{}).get('libc','?'))" 2>/dev/null || echo '?')"
+          compiler="$(python3 -c "import json; m=json.load(open('$mf')); print(m.get('toolchain',{}).get('compiler','?')+'-'+m.get('toolchain',{}).get('compiler_version','?'))" 2>/dev/null || echo '?')"
           echo "artifact-version=$ver" >> "$GITHUB_OUTPUT"
           echo "googlesql-commit=$gs" >> "$GITHUB_OUTPUT"
-          echo "::notice::GoogleSQL prebuilt artifact_version=$ver googlesql=$gs"
+          echo "googlesql-commit-full=$gs_full" >> "$GITHUB_OUTPUT"
+          echo "googlesql-tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "schema-version=$schema" >> "$GITHUB_OUTPUT"
+          echo "platform-libc=$libc" >> "$GITHUB_OUTPUT"
+          echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
+          echo "tarball-url=${{ inputs.prebuilt-url }}" >> "$GITHUB_OUTPUT"
+          echo "tarball-sha256=${{ inputs.prebuilt-sha256 }}" >> "$GITHUB_OUTPUT"
+          echo "::notice::GoogleSQL prebuilt artifact_version=$ver googlesql=$gs tag=$tag schema=$schema libc=$libc compiler=$compiler"
+          # Self-describing block in the workflow summary so the run
+          # page surfaces artifact identity even when the build later
+          # fails for unrelated reasons.
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              printf '### GoogleSQL build provenance\n\n'
+              printf '| Field | Value |\n|---|---|\n'
+              printf '| mode | prebuilt |\n'
+              printf '| artifact_version | `%s` |\n' "$ver"
+              printf '| googlesql commit | `%s` |\n' "$gs_full"
+              printf '| googlesql tag | `%s` |\n' "$tag"
+              printf '| schema_version | `%s` |\n' "$schema"
+              printf '| platform.libc | `%s` |\n' "$libc"
+              printf '| compiler | `%s` |\n' "$compiler"
+              printf '| tarball URL | %s |\n' "${{ inputs.prebuilt-url }}"
+              printf '| tarball SHA-256 | `%s` |\n' "${{ inputs.prebuilt-sha256 }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
         else
           gs="$(git -C ../googlesql rev-parse --short=12 HEAD)"
+          gs_full="$(git -C ../googlesql rev-parse HEAD)"
           echo "artifact-version=" >> "$GITHUB_OUTPUT"
           echo "googlesql-commit=$gs" >> "$GITHUB_OUTPUT"
+          echo "googlesql-commit-full=$gs_full" >> "$GITHUB_OUTPUT"
+          echo "googlesql-tag=${{ inputs.googlesql-ref }}" >> "$GITHUB_OUTPUT"
+          echo "schema-version=" >> "$GITHUB_OUTPUT"
+          echo "platform-libc=" >> "$GITHUB_OUTPUT"
+          echo "compiler=" >> "$GITHUB_OUTPUT"
+          echo "tarball-url=" >> "$GITHUB_OUTPUT"
+          echo "tarball-sha256=" >> "$GITHUB_OUTPUT"
           echo "::notice::GoogleSQL source ref=${{ inputs.googlesql-ref }} commit=$gs"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            {
+              printf '### GoogleSQL build provenance\n\n'
+              printf '| Field | Value |\n|---|---|\n'
+              printf '| mode | source (fallback) |\n'
+              printf '| googlesql ref | `%s` |\n' "${{ inputs.googlesql-ref }}"
+              printf '| googlesql commit | `%s` |\n' "$gs_full"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
         fi

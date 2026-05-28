@@ -167,10 +167,14 @@ tasks:
             echo "  tools/googlesql-prebuilt/templates/MODULE.bazel.tmpl pins this." >&2
             exit 1
           fi
-          # Verify manifest schema as a defense-in-depth gate. We rely
-          # on the manifest_writer --validate-only path (closed schema).
-          python3 tools/googlesql-prebuilt/manifest_writer.py \
-            --validate-only "$unpack/{{.PREBUILT_REPO_NAME}}/manifest.json"
+          # Full Phase 5 validator: closed-schema gate, identity pins
+          # (platform/toolchain), payload existence + per-file SHA-256,
+          # wrapper-BUILD presence, no-unaccounted-file rule. Same
+          # validator the CI composite action, Dockerfile, and producer
+          # verify.sh call into so every consumer applies the same gates.
+          python3 tools/googlesql-prebuilt/validate_artifact.py \
+            --repo-root "$unpack/{{.PREBUILT_REPO_NAME}}" \
+            --summary-line
           # Commit to cache: remove old contents, move new in.
           rm -rf "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
           mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
@@ -254,6 +258,40 @@ tasks:
           SHA256="$sha" \
           ARTIFACT_VERSION="{{.ARTIFACT_VERSION}}"
         rm -rf "$out_dir"
+
+  validate:
+    desc: |
+      Run the Phase 5 centralized validator against the currently staged
+      prebuilt cache. Optional pin args: EXPECTED_GOOGLESQL_SHA, EXPECTED_ARTIFACT_VERSION,
+      EXPECTED_GOOGLESQL_TAG, EXPECTED_LIBC. Exits non-zero with an actionable
+      diagnostic on the FIRST failing gate. Prints a one-line summary on success.
+    vars:
+      EXPECTED_GOOGLESQL_SHA: '{{.EXPECTED_GOOGLESQL_SHA | default ""}}'
+      EXPECTED_ARTIFACT_VERSION: '{{.EXPECTED_ARTIFACT_VERSION | default ""}}'
+      EXPECTED_GOOGLESQL_TAG: '{{.EXPECTED_GOOGLESQL_TAG | default ""}}'
+      EXPECTED_LIBC: '{{.EXPECTED_LIBC | default ""}}'
+      SUMMARY_JSON: '{{.SUMMARY_JSON | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -d "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" ]; then
+          echo "validate: nothing to validate — cache is empty at:" >&2
+          echo "  {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" >&2
+          echo "Stage an artifact first (one of):" >&2
+          echo "  task googlesql:fetch-prebuilt URL=... SHA256=...    # published artifact" >&2
+          echo "  task googlesql:stage-bazel                          # local real (~25-55 min)" >&2
+          echo "  task googlesql:stage-fixture                        # stub (smoke only)" >&2
+          exit 1
+        fi
+        args=( --repo-root "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" --summary-line )
+        [ -n "{{.EXPECTED_GOOGLESQL_SHA}}" ]       && args+=( --expected-googlesql-sha "{{.EXPECTED_GOOGLESQL_SHA}}" )
+        [ -n "{{.EXPECTED_ARTIFACT_VERSION}}" ]    && args+=( --expected-artifact-version "{{.EXPECTED_ARTIFACT_VERSION}}" )
+        [ -n "{{.EXPECTED_GOOGLESQL_TAG}}" ]       && args+=( --expected-googlesql-tag "{{.EXPECTED_GOOGLESQL_TAG}}" )
+        [ -n "{{.EXPECTED_LIBC}}" ]                && args+=( --expected-libc "{{.EXPECTED_LIBC}}" )
+        [ -n "{{.SUMMARY_JSON}}" ]                 && args+=( --summary-json "{{.SUMMARY_JSON}}" )
+        python3 tools/googlesql-prebuilt/validate_artifact.py "${args[@]}"
 
   clean:
     desc: Remove the prebuilt cache (.cache/googlesql-prebuilt). Safe; no Bazel state touched.
