@@ -160,13 +160,33 @@ tasks:
   # diagnostics consistent across local + CI lanes.
   emulator-up:
     aliases: [emulator]
-    desc: Start bigquery-emulator via docker compose and wait for /healthz (idempotent)
+    desc: Start bigquery-emulator via docker compose and wait for /healthz (idempotent; rebuilds the local image if any tracked source path is newer than it)
     # `run: once` collapses the five suite-level invocations during
     # `task thirdparty` to a single bringup, so we do not re-poll
     # /healthz between suites. `docker compose up -d` is itself
     # idempotent, so an explicit `task thirdparty:emulator-up` outside
     # the aggregator is still a no-op when the container is already
     # serving.
+    #
+    # Staleness guard: before any `docker compose up -d`, we invoke
+    # `scripts/ensure_emulator_image_fresh.sh`. The helper builds the
+    # image when it is missing OR when any file under `gateway/`,
+    # `binaries/`, `backend/`, `proto/`, `Dockerfile`, etc. has an
+    # mtime newer than the image's `.Created` timestamp. That guard
+    # exists because plain `docker compose up -d` reuses any locally
+    # tagged `bigquery-emulator:local` image regardless of how stale
+    # it is — the failure mode logged in
+    # `logs/task-thirdparty-20260528-063518.log` was the Java suite
+    # tripping `invalid character '\x1f'` on every Failsafe IT because
+    # the running container predated the `gateway/middleware/gunzip.go`
+    # decompression layer the current gateway depends on. With the
+    # guard in place, a developer who edits `gateway/server.go` and
+    # immediately reruns `task thirdparty` gets the new gateway
+    # bytecode in the next bringup instead of testing yesterday's
+    # artifact. Operators who want to suppress the staleness check
+    # (e.g. CI lanes that built the image in a prior step) can set
+    # `THIRDPARTY_SKIP_BUILD=1`; `THIRDPARTY_REBUILD=1` forces an
+    # unconditional rebuild. Both knobs are passed straight through.
     run: once
     cmds:
       - |
@@ -188,6 +208,12 @@ tasks:
         # BAZEL_CPU_RESERVE) are honored verbatim. See
         # `scripts/compute_docker_throttle.sh` for the full picks.
         eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
+        # Rebuild the bigquery-emulator:local image if any tracked
+        # source path is newer than the image (the staleness check
+        # short-circuits in <100 ms on the happy path). See the helper
+        # for the full source allowlist; override via THIRDPARTY_REBUILD=1
+        # or skip via THIRDPARTY_SKIP_BUILD=1.
+        bash "${root}/scripts/ensure_emulator_image_fresh.sh"
         docker compose up -d bigquery-emulator
         # Poll /healthz via the shared helper. It silences the
         # cosmetic curl "Recv failure" that docker-proxy emits during
