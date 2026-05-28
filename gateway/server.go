@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -214,18 +214,33 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	// never 401, so this is permissive by design.
 	handler = middleware.WithAuth(handler)
 	if opts.LogRequests {
-		handler = loggingMiddleware(handler)
+		logger := opts.Logger
+		if logger == nil {
+			logger = slog.New(slog.DiscardHandler)
+		}
+		handler = loggingMiddleware(logger, handler)
 	}
 	return handler
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
+// loggingMiddleware logs each completed HTTP request as a structured
+// slog event. Routing the request line through key/value pairs (instead
+// of `log.Printf("%s %s ...", ...)`) keeps the logger's typed-value
+// path between gateway and handler, defangs gosec G706's
+// log-injection finding (the attacker-controlled URI never lands in a
+// format-string position), and lets operators ship the JSON output to
+// structured backends.
+func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		log.Printf("%s %s -> %d (%s)",
-			r.Method, r.URL.RequestURI(), rw.status, time.Since(start))
+		logger.InfoContext(r.Context(), "request",
+			slog.String("method", r.Method),
+			slog.String("uri", r.URL.RequestURI()),
+			slog.Int("status", rw.status),
+			slog.Duration("dur", time.Since(start)),
+		)
 	})
 }
 

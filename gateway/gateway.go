@@ -13,7 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -109,11 +109,21 @@ type Options struct {
 
 	// Debug enables verbose request and lifecycle logging.
 	Debug bool
+
+	// Logger is the structured logger the gateway emits lifecycle and
+	// request events to. When nil, the gateway logs to a discard
+	// handler so callers that want silent embedding (unit tests, the
+	// shallow-emulator harness) get zero output without having to
+	// build their own no-op logger. Production binaries (see
+	// binaries/gateway_main) wire a real *slog.Logger here so the
+	// emulator's structured logs surface in stderr / stackdriver.
+	Logger *slog.Logger
 }
 
 // Gateway is the top-level BigQuery emulator gateway.
 type Gateway struct {
 	opts       Options
+	logger     *slog.Logger
 	engine     *exec.Cmd
 	engineDone chan struct{}
 
@@ -136,7 +146,11 @@ type Gateway struct {
 
 // New constructs a Gateway. Run actually starts it.
 func New(opts Options) *Gateway {
-	return &Gateway{opts: opts}
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	return &Gateway{opts: opts, logger: logger}
 }
 
 // WithPreStartHook installs a callback executed once before the engine
@@ -162,13 +176,14 @@ func (g *Gateway) WithPostEngineHook(hook func(Options, *engine.Client) error) *
 // Run starts the engine subprocess (if configured) and the HTTP server,
 // then blocks until either terminates or a signal arrives.
 func (g *Gateway) Run() error {
+	ctx := context.Background()
 	if g.preStartHook != nil {
 		if err := g.preStartHook(g.opts); err != nil {
 			return fmt.Errorf("pre-start hook: %w", err)
 		}
 	}
 
-	if err := g.startEngine(); err != nil {
+	if err := g.startEngine(ctx); err != nil {
 		return fmt.Errorf("start engine: %w", err)
 	}
 
@@ -187,11 +202,14 @@ func (g *Gateway) Run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("BigQuery emulator REST gateway listening at http://%s", g.opts.HTTPAddress)
-		if g.opts.EngineBinary != "" {
-			log.Printf("Engine gRPC expected at %s", g.opts.EngineAddress)
-		} else {
-			log.Printf("Engine subprocess disabled (--engine_binary=\"\"); query routes will return Unimplemented")
+		g.logger.InfoContext(ctx, "gateway listening",
+			slog.String("addr", g.opts.HTTPAddress))
+		switch {
+		case g.opts.EngineBinary != "":
+			g.logger.InfoContext(ctx, "engine grpc expected",
+				slog.String("addr", g.opts.EngineAddress))
+		default:
+			g.logger.InfoContext(ctx, "engine subprocess disabled; query routes will return Unimplemented")
 		}
 		err := srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -209,10 +227,11 @@ func (g *Gateway) Run() error {
 		g.stopEngine()
 		return err
 	case sig := <-sigCh:
-		log.Printf("Received signal %s, shutting down", sig)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		g.logger.InfoContext(ctx, "shutting down on signal",
+			slog.String("signal", sig.String()))
+		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(ctx)
+		_ = srv.Shutdown(shutdownCtx)
 		g.stopEngine()
 		return nil
 	}
@@ -220,7 +239,7 @@ func (g *Gateway) Run() error {
 
 // startEngine spawns the C++ engine subprocess if one is configured and
 // waits for it to come up. It is a no-op when EngineBinary is empty.
-func (g *Gateway) startEngine() error {
+func (g *Gateway) startEngine(ctx context.Context) error {
 	if g.opts.EngineBinary == "" {
 		return nil
 	}
@@ -246,11 +265,12 @@ func (g *Gateway) startEngine() error {
 		err := cmd.Wait()
 		close(g.engineDone)
 		if err != nil {
-			log.Printf("Engine subprocess exited: %v", err)
+			g.logger.WarnContext(ctx, "engine subprocess exited",
+				slog.Any("err", err))
 		}
 	}()
 
-	if err := g.connectAndWaitForEngine(); err != nil {
+	if err := g.connectAndWaitForEngine(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -266,21 +286,22 @@ func (g *Gateway) startEngine() error {
 // Stores the live *engine.Client on the receiver for the lifetime of
 // the gateway; the connection is reused for every business RPC and torn
 // down by stopEngine.
-func (g *Gateway) connectAndWaitForEngine() error {
+func (g *Gateway) connectAndWaitForEngine(ctx context.Context) error {
 	client, err := engine.Dial(g.opts.EngineAddress)
 	if err != nil {
 		return fmt.Errorf("dial engine at %s: %w", g.opts.EngineAddress, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), engineReadyTimeout)
+	readyCtx, cancel := context.WithTimeout(ctx, engineReadyTimeout)
 	defer cancel()
 
-	if err := client.WaitForReady(ctx); err != nil {
+	if err := client.WaitForReady(readyCtx); err != nil {
 		_ = client.Close()
 		return fmt.Errorf("wait for engine ready at %s: %w", g.opts.EngineAddress, err)
 	}
 	g.engineClient = client
-	log.Printf("Engine gRPC at %s reported SERVING", g.opts.EngineAddress)
+	g.logger.InfoContext(ctx, "engine grpc serving",
+		slog.String("addr", g.opts.EngineAddress))
 	return nil
 }
 

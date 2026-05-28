@@ -22,7 +22,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log" //nolint:depguard // matches the rest of the gateway package's existing log usage; slog migration is out of scope for this change
+	"log" //nolint:depguard // process-launch + version-print error paths use stdlib log; gateway runtime emits structured slog via opts.Logger
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -118,6 +119,14 @@ func main() {
 
 	httpAddr, engineAddr, engineArgs := cfg.ToOptions(cfg.EngineBinary)
 
+	logLevel := slog.LevelInfo
+	if cfg.Debug {
+		logLevel = slog.LevelDebug
+	}
+	gatewayLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+
 	opts := gateway.Options{
 		HTTPAddress:            httpAddr,
 		EngineAddress:          engineAddr,
@@ -135,6 +144,7 @@ func main() {
 		DataDir:                cfg.DataDir,
 		InitialDataDir:         cfg.InitialDataDir,
 		Debug:                  cfg.Debug,
+		Logger:                 gatewayLogger,
 	}
 
 	gw := gateway.New(opts).
