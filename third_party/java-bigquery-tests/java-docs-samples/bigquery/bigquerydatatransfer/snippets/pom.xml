@@ -32,12 +32,25 @@
 
 
   <!-- [START bigquerydatatransfer_install_with_bom] -->
+  <!--
+    bigquery-emulator live-IT lane: bump libraries-bom from upstream's
+    26.32.0 to 26.73.0. The older BOM resolves google-cloud-core to
+    2.32.0, whose ServiceOptions.getResolvedApiaryHost() unconditionally
+    returns "https://bigquery.googleapis.com/" and ignores any custom
+    host set via BigQueryOptions.Builder.setHost(). That makes the
+    BqOpts-style "route through BIGQUERY_EMULATOR_HOST" pattern silently
+    no-op, so Create*TransferIT.setUp dataset/table provisioning hits
+    live BigQuery and 401s instead of the emulator. core 2.44.1+
+    (shipped by libraries-bom 26.73.0 → core 2.62.2) added the early
+    return that honors the configured host. Matches the BOM pinned by
+    java-bigquery/samples/snippets/pom.xml.
+  -->
   <dependencyManagement>
     <dependencies>
       <dependency>
         <groupId>com.google.cloud</groupId>
         <artifactId>libraries-bom</artifactId>
-        <version>26.32.0</version>
+        <version>26.73.0</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
