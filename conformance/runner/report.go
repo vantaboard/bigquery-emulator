@@ -23,14 +23,14 @@ func writeTextResult(w io.Writer, r Result) {
 	default:
 		prefix = tag
 	}
-	fmt.Fprintf(w, "[%s] %s (profile=%s, %dms)\n",
+	_, _ = fmt.Fprintf(w, "[%s] %s (profile=%s, %dms)\n",
 		prefix, r.Fixture, r.Profile, r.DurationMs)
 	if r.Message != "" {
-		fmt.Fprintf(w, "       %s\n", r.Message)
+		_, _ = fmt.Fprintf(w, "       %s\n", r.Message)
 	}
 	if r.Diff != "" {
 		for line := range strings.SplitSeq(strings.TrimRight(r.Diff, "\n"), "\n") {
-			fmt.Fprintf(w, "       %s\n", line)
+			_, _ = fmt.Fprintf(w, "       %s\n", line)
 		}
 	}
 }
@@ -39,8 +39,8 @@ func writeTextResult(w io.Writer, r Result) {
 // `go test`'s `--- PASS` style so engineers reading the log don't
 // have to learn a new vocabulary.
 func writeTextSummary(w io.Writer, report *Report) {
-	fmt.Fprintf(w, "---\n")
-	fmt.Fprintf(w, "conformance: total=%d passed=%d failed=%d skipped=%d\n",
+	_, _ = fmt.Fprintf(w, "---\n")
+	_, _ = fmt.Fprintf(w, "conformance: total=%d passed=%d failed=%d skipped=%d\n",
 		report.Summary.Total,
 		report.Summary.Passed,
 		report.Summary.Failed,

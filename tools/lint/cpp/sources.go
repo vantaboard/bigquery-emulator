@@ -230,7 +230,7 @@ func runList(args []string, stdout, stderr io.Writer) error {
 		return errUsage
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "cpp-lint list: takes no positional arguments")
+		_, _ = fmt.Fprintln(stderr, "cpp-lint list: takes no positional arguments")
 		return errUsage
 	}
 	lister, err := newGitSourceLister()

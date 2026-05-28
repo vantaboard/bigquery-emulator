@@ -74,7 +74,7 @@ func run() error {
 	fs.Var(&profiles, "profile", "restrict the matrix to one profile (repeatable). Default: all known profiles")
 
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), `Usage: runner [flags]
+		_, _ = fmt.Fprintln(fs.Output(), `Usage: runner [flags]
 
 Run the BigQuery emulator conformance fixtures and diff against
 expected rows or errors. By default the runner spawns its own
@@ -83,7 +83,7 @@ reaches an already-running gateway (used by CI).
 
 Flags:`)
 		fs.PrintDefaults()
-		fmt.Fprintln(fs.Output(), `
+		_, _ = fmt.Fprintln(fs.Output(), `
 Profiles:
   duckdb   duckdb engine + duckdb storage  (only profile today)
 
