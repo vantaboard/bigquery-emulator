@@ -1,15 +1,24 @@
-# Linters: fast pre-commit gate (gofmt + go vet), full golangci-lint
-# pass driven by .golangci.yml, and shellcheck over docker/*.sh.
+# Linters: fast pre-commit gate (gofmt + go vet + first-party C++
+# format/source rules), full golangci-lint pass driven by
+# .golangci.yml, shellcheck over docker/*.sh, and slower compile-aware
+# C++ analysis (clang-tidy, cppcheck) for opt-in lanes.
 #
-# Usage: task lint:run (fast gate, used by the auto-commit workflow)
-#        task lint:fix (apply gofmt + re-run vet)
-#        task lint:go  / task lint:go-fix (full golangci-lint pass)
-#        task lint:shell (shellcheck on docker/*.sh)
+# Usage: task lint:run             (fast gate, used by auto-commit + CI)
+#        task lint:fix             (apply gofmt / clang-format + re-run vet)
+#        task lint:go / lint:go-fix
+#                                  (full golangci-lint pass)
+#        task lint:shell           (shellcheck on docker/*.sh)
+#        task lint:cpp:format      (clang-format dry-run on first-party .cc/.h)
+#        task lint:cpp:format-fix  (apply clang-format -i)
+#        task lint:cpp:source      (file-length / banned-logging / status checks)
+#        task lint:cpp:baseline    (regenerate tools/lint/cpp/baseline.txt)
+#        task lint:cpp:tidy        (clang-tidy, compile-aware, slow lane)
+#        task lint:cpp:cppcheck    (cppcheck, slow secondary-analysis lane)
 #
-# The fast gate is kept separate from the full golangci-lint pass so the
-# auto-commit pre-commit hook (.cursor/rules/pre-commit-lint.mdc) stays
-# snappy and the existing pre-existing golangci-lint findings do not
-# block every commit; once those are cleared, fold lint:go into lint:run.
+# The fast gate stays snappy so the auto-commit pre-commit hook
+# (.cursor/rules/pre-commit-lint.mdc) does not become a tax. The slower
+# C++ lanes (`task lint:cpp:tidy`, `task lint:cpp:cppcheck`) are opt-in
+# locally and run as a separate CI job; see `taskfiles/ci.yml`.
 version: "3"
 
 tasks:
@@ -20,12 +29,15 @@ tasks:
 
   run:
     aliases: [check]
-    desc: Fast pre-commit gate (gofmt + go vet). Used by the auto-commit workflow.
-    # gofmt scans every Go file under the worktree, so vendored upstream
-    # trees in third_party/ would otherwise leak findings here even though
-    # `.golangci.yml` already excludes them from the slow pass. Use a
-    # find-based pruning list to skip the same paths in the fast gate
-    # so `task lint:run` agrees with `task lint:go`.
+    desc: Fast pre-commit gate (gofmt + go vet + first-party C++ format/source). Used by the auto-commit workflow.
+    # The Go half scans every .go file under the worktree, so vendored
+    # upstream trees in third_party/ would otherwise leak findings here
+    # even though `.golangci.yml` already excludes them from the slow
+    # pass. Use a find-based pruning list to skip the same paths in the
+    # fast gate so `task lint:run` agrees with `task lint:go`. The C++
+    # half delegates to `task lint:cpp:format` / `task lint:cpp:source`,
+    # which both consume the canonical first-party file list from
+    # `tools/lint/cpp` so the same exclude rules apply.
     cmds:
       - |
         set -eo pipefail
@@ -46,11 +58,14 @@ tasks:
           fi
         fi
         go vet ./...
+      - task: cpp:format
+      - task: cpp:source
 
   fix:
-    desc: Apply auto-fixable lints from the fast gate (gofmt -s -w + go vet)
+    desc: Apply auto-fixable lints from the fast gate (gofmt -s -w, clang-format -i, go vet)
     # Match `lint:run`'s exclusions so we never reformat vendored
     # upstream trees in third_party/ (or generated code under gen/).
+    # The C++ half delegates to `task lint:cpp:format-fix`.
     cmds:
       - |
         set -eo pipefail
@@ -65,6 +80,7 @@ tasks:
           printf '%s\n' $gofmt_targets | xargs gofmt -s -w
         fi
         go vet ./...
+      - task: cpp:format-fix
 
   go:
     desc: Run golangci-lint with the project's .golangci.yml (slow, full check)
@@ -100,3 +116,221 @@ tasks:
           exit 0
         fi
         shellcheck "${scripts[@]}"
+
+  # ---------------------------------------------------------------
+  # C++ lint lanes (.cc / .h)
+  # ---------------------------------------------------------------
+  #
+  # Every C++ task consumes the canonical first-party source list from
+  # `tools/lint/cpp list` so generated, vendored, and cached trees can
+  # never leak into a lint run. The list logic is pinned by
+  # `tools/lint/cpp/sources_test.go`'s `TestFilterFirstParty` table —
+  # treat that test as the single source of truth for "is this file
+  # ours?".
+  #
+  # Tooling expectations:
+  #   - clang-format / clang-tidy / cppcheck come from apt
+  #     (`sudo apt install clang-format clang-tidy cppcheck` on
+  #     Ubuntu — see README.md). They are NOT pinned via mise because
+  #     mise has no first-class package for them.
+  #   - The Go-based source-only checker ships in this repo at
+  #     `tools/lint/cpp/`; running it via `go run` is fast enough for
+  #     the pre-commit gate (~250 ms cold; faster after caching).
+
+  cpp:format:
+    desc: clang-format dry-run on first-party C++ files (read-only check)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v clang-format >/dev/null 2>&1; then
+          echo 'lint:cpp:format: clang-format not found on PATH' >&2
+          echo '  Fix: sudo apt install clang-format (Ubuntu/Debian)' >&2
+          echo '       brew install clang-format (macOS)' >&2
+          exit 1
+        fi
+        files=$(go run ./tools/lint/cpp list)
+        if [ -z "$files" ]; then
+          echo 'lint:cpp:format: no first-party C++ files found' >&2
+          exit 0
+        fi
+        # `--Werror` upgrades the formatter's warnings to non-zero exit
+        # so CI can tell "would reformat" apart from a real failure.
+        # shellcheck disable=SC2086  # intentional word-split for the file list
+        clang-format --dry-run --Werror $files
+
+  cpp:format-fix:
+    desc: clang-format -i on first-party C++ files (writes formatting fixes in place)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v clang-format >/dev/null 2>&1; then
+          echo 'lint:cpp:format-fix: clang-format not found on PATH' >&2
+          exit 1
+        fi
+        files=$(go run ./tools/lint/cpp list)
+        if [ -z "$files" ]; then
+          echo 'lint:cpp:format-fix: no first-party C++ files found' >&2
+          exit 0
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for the file list
+        clang-format -i $files
+
+  cpp:source:
+    desc: Source-only C++ checks (file length, banned logging, status anti-patterns)
+    # `tools/lint/cpp` enforces three classes of rule that clang-format
+    # and clang-tidy do not cover well: a 500-line whole-file cap
+    # (ratcheted via `tools/lint/cpp/baseline.txt`), banned production
+    # logging APIs (`std::cout`, `std::cerr`, `printf`, …), and obvious
+    # `absl::Status` / `absl::StatusOr<T>` misuse. See
+    # `tools/lint/cpp/README.md`.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        go run ./tools/lint/cpp check
+
+  cpp:baseline:
+    desc: Regenerate tools/lint/cpp/baseline.txt from the current first-party file lengths
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        go run ./tools/lint/cpp baseline
+
+  cpp:tidy:
+    desc: |
+      clang-tidy on first-party C++ files (compile-aware, slow lane).
+      Requires a `compile_commands.json` at the repo root; see the
+      `lint:cpp:compile-commands` task below for the generator. Runs
+      outside `task lint:run` because the cold compile-database build
+      can take minutes.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v clang-tidy >/dev/null 2>&1; then
+          echo 'lint:cpp:tidy: clang-tidy not found on PATH' >&2
+          echo '  Fix: sudo apt install clang-tidy (Ubuntu/Debian)' >&2
+          echo '       brew install llvm (macOS; clang-tidy ships in the LLVM bundle)' >&2
+          exit 1
+        fi
+        if [ ! -f compile_commands.json ]; then
+          echo 'lint:cpp:tidy: compile_commands.json not present at the repo root.' >&2
+          echo "  Fix: run 'task lint:cpp:compile-commands' first." >&2
+          exit 1
+        fi
+        files=$(go run ./tools/lint/cpp list)
+        if [ -z "$files" ]; then
+          echo 'lint:cpp:tidy: no first-party C++ files found' >&2
+          exit 0
+        fi
+        # `-warnings-as-errors=*` is intentionally NOT set here yet —
+        # the rollout plan (.cursor/plans/cpp_lint_rollout_*.plan.md)
+        # treats clang-tidy as warning-only until the first run is
+        # clean and selected checks have been baselined. CI sets the
+        # flag once that gate is reached.
+        # shellcheck disable=SC2086  # intentional word-split for the file list
+        clang-tidy -p . $files
+
+  cpp:compile-commands:
+    desc: |
+      Generate compile_commands.json at the repo root by translating
+      `bazel aquery` output for the canonical engine binary. Required
+      input for `task lint:cpp:tidy`.
+    # We deliberately do NOT pin a Bazel-side compile-commands
+    # extractor as a module dependency yet (e.g. hedronvision's
+    # `bazel-compile-commands-extractor`); the rollout plan favours a
+    # build-system-light approach so the lint stack works against any
+    # checkout. The Python helper at `tools/lint/cpp/compile_db.py`
+    # parses `bazel aquery --output=jsonproto` and emits the standard
+    # JSON compilation database. It calls into the throttled
+    # `task bazel:*` wrappers so the build follows the same process
+    # hygiene as every other Bazel invocation in this repo.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -x tools/lint/cpp/compile_db.py ]; then
+          echo 'lint:cpp:compile-commands: tools/lint/cpp/compile_db.py is missing.' >&2
+          exit 1
+        fi
+        python3 tools/lint/cpp/compile_db.py \
+          --target //binaries/emulator_main:emulator_main \
+          --output compile_commands.json
+
+  cpp:test:
+    desc: |
+      Run every first-party `cc_test` via the throttled
+      `task bazel:test` wrapper. Discovers targets via
+      `bazel query 'kind(cc_test, //backend/... + //binaries/... +
+      //frontend/...)'` so a new test does not need a manual
+      Taskfile edit. Emits the standard `--test_output=errors` shape
+      so failing tests print their stderr inline.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v bazel >/dev/null 2>&1 && ! command -v bazelisk >/dev/null 2>&1; then
+          echo 'lint:cpp:test: bazel/bazelisk not found on PATH' >&2
+          exit 1
+        fi
+        # Use `bazel query` rather than a hand-maintained list. The
+        # query lives under each of the first-party include roots so a
+        # new cc_test under any of them is picked up automatically.
+        targets=$(bazel query \
+          'kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)' \
+          2>/dev/null | tr '\n' ' ')
+        if [ -z "$targets" ]; then
+          echo 'lint:cpp:test: no cc_test targets discovered' >&2
+          exit 0
+        fi
+        echo "lint:cpp:test: running ${targets}"
+        # Hand off to the throttled `task bazel:test` wrapper so the
+        # command inherits BAZEL_JOBS / BAZEL_MEM_MB / the shutdown
+        # trap on signal cancellation. We forward TEST_FLAGS so a
+        # caller can override `--test_output=errors` when debugging.
+        task bazel:test TARGETS="$targets" TEST_FLAGS="${TEST_FLAGS:---test_output=errors}"
+
+  cpp:cppcheck:
+    desc: |
+      cppcheck on first-party C++ files (secondary-analysis lane).
+      Catches uninitialised state, bounds issues, resource leaks, and
+      null-handling mistakes that clang-tidy may miss. Slow; runs
+      outside `task lint:run`.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v cppcheck >/dev/null 2>&1; then
+          echo 'lint:cpp:cppcheck: cppcheck not found on PATH' >&2
+          echo '  Fix: sudo apt install cppcheck (Ubuntu/Debian)' >&2
+          exit 1
+        fi
+        files=$(go run ./tools/lint/cpp list)
+        if [ -z "$files" ]; then
+          echo 'lint:cpp:cppcheck: no first-party C++ files found' >&2
+          exit 0
+        fi
+        # `--enable=warning,style,performance,portability` mirrors the
+        # set most C++ teams treat as default-on for production code.
+        # `--inline-suppr` lets us reuse the source-only checker's
+        # suppression markers if needed; `--error-exitcode=1` makes a
+        # finding fail CI without needing extra parsing.
+        # shellcheck disable=SC2086  # intentional word-split for the file list
+        cppcheck \
+          --enable=warning,style,performance,portability \
+          --inline-suppr \
+          --error-exitcode=1 \
+          --suppress=missingIncludeSystem \
+          --quiet \
+          $files

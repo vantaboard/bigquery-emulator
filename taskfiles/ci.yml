@@ -2,6 +2,7 @@
 # that runs in CI should also run via `task ci:run`, and vice versa.
 #
 # Usage: task ci (or task ci:run)
+#        task ci:cpp-analysis (the slow, warning-only C++ lane)
 version: "3"
 
 tasks:
@@ -11,9 +12,31 @@ tasks:
       - task: run
 
   run:
-    desc: Full CI gate (lint:run, test, emulator:build-engine-bazel, emulator:build)
+    desc: Full CI gate (lint:run, test, emulator:build-engine-bazel, lint:cpp:test, emulator:build)
+    # `lint:run` covers the fast Go + C++ format/source checks;
+    # `cpp-analysis` is intentionally NOT pulled into the blocking
+    # gate today (matches `.github/workflows/ci.yml`'s
+    # `continue-on-error: true` posture for that job). Run
+    # `task ci:cpp-analysis` locally when iterating on cppcheck /
+    # clang-tidy findings before promoting the lane to required.
+    #
+    # `lint:cpp:test` runs after the engine build so the Bazel disk
+    # cache is already warm; running it before the build would
+    # double the cold-build cost of the C++ tree.
     cmds:
       - task: :lint:run
       - task: :test:run
       - task: :emulator:build-engine-bazel
+      - task: :lint:cpp:test
       - task: :emulator:build
+
+  cpp-analysis:
+    desc: Slow C++ analysis lane (cppcheck; warning-only mirror of CI's `cpp-analysis` job)
+    # Mirror of the `cpp-analysis` job in `.github/workflows/ci.yml`.
+    # clang-tidy is NOT included here because it requires a
+    # `compile_commands.json` (`task lint:cpp:compile-commands`); CI
+    # likewise gates that lane behind a successful Bazel build of the
+    # engine. Local maintainers can run `task lint:cpp:tidy`
+    # explicitly after generating the compile DB.
+    cmds:
+      - task: :lint:cpp:cppcheck

@@ -1,0 +1,21 @@
+# tools/lint/cpp/baseline.txt
+#
+# Files in this list are allowed to exceed the first-party C++
+# whole-file line cap enforced by `task lint:cpp:source`.
+# Each entry is one repo-relative path per line; '#' starts a
+# comment. The list is intentionally a ratchet: regenerate via
+# `task lint:cpp:baseline` after a refactor so the gate stays
+# tight without forcing a sweeping rewrite up-front.
+#
+# Every grandfathered entry should be paired with a follow-up
+# issue tracking the eventual split. Do NOT add a new file here
+# without that issue link in the commit message.
+
+backend/engine/duckdb/duckdb_engine.cc
+backend/engine/duckdb/duckdb_engine_test.cc
+backend/engine/duckdb/transpiler/transpiler.cc
+backend/engine/duckdb/transpiler/transpiler_test.cc
+backend/storage/duckdb/duckdb_storage.cc
+backend/storage/duckdb/duckdb_storage_test.cc
+frontend/handlers/query.cc
+frontend/handlers/storage_read_test.cc

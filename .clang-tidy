@@ -1,0 +1,166 @@
+# Compile-aware static analysis profile for the BigQuery emulator's
+# first-party C++ tree.
+#
+# Applied by `task lint:cpp:tidy` against the first-party file list
+# (`tools/lint/cpp list`); the editor picks it up automatically
+# through clangd's `--clang-tidy` flag in `.vscode/settings.json`.
+#
+# Scope and rollout posture:
+#
+#   * The plan (.cursor/plans/cpp_lint_rollout_*.plan.md) starts
+#     clang-tidy in WARNING-ONLY mode. CI does NOT enable
+#     `-warnings-as-errors=*` yet — the Taskfile leaves that flag
+#     off so the slow lane reports findings without blocking PRs
+#     until the first sweep is clean and selected checks have been
+#     baselined.
+#   * Checks are picked from four buckets:
+#       1. correctness / runtime risk (clang-analyzer, bugprone,
+#          select cppcoreguidelines), 2. complexity (readability-function-size,
+#          readability-function-cognitive-complexity), 3. modernization (modernize-*, performance-*,
+#          portability-*), and
+#       4. style maintainability (readability-*).
+#   * Repo-specific carve-outs:
+#       - googletest's TEST_P / TEST_F macros generate names that
+#         trip several `readability-identifier-naming` and
+#         `cert-err58-cpp` rules; both are disabled to keep the
+#         test suite friction-free.
+#       - The DuckDB engine intentionally takes ownership of raw
+#         duckdb_* C-API handles, so `cppcoreguidelines-owning-memory`
+#         and `cppcoreguidelines-pro-type-reinterpret-cast` would
+#         require a wrapper rewrite. Disabled here; we may revisit
+#         once the C-API surface is wrapped.
+#       - GoogleSQL hands us protobuf-style accessors (`add_node()`
+#         / `mutable_*()`); `google-build-using-namespace` and the
+#         `google-explicit-constructor` rule are noisy against that
+#         pattern. Disabled.
+#
+# Header-filter scope:
+#
+#   The `HeaderFilterRegex` below limits clang-tidy's diagnostics to
+#   first-party headers (under `backend/`, `binaries/`, `frontend/`,
+#   or the smoke directory). Without it clang-tidy would flag every
+#   include from `@googlesql`, abseil, gRPC, etc. The same
+#   first-party/include-roots set is encoded in
+#   `tools/lint/cpp/sources.go::firstPartyIncludeRoots`; keep them
+#   in sync when adding a new top-level C++ tree.
+#
+# Tuning:
+#
+#   The complexity thresholds match the values the rollout plan
+#   pinned and the existing Go `cyclop` posture in `.golangci.yml`.
+#   Bump them only with a recorded rationale in the commit message.
+
+---
+Checks: >
+  -*,
+
+  # Correctness / runtime risk (statically detected).
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  clang-analyzer-*,
+
+  # Complexity (file-size lives in the source-only checker; this
+  # bucket only enforces per-function metrics that clang-tidy is
+  # well-positioned to compute).
+  readability-function-size,
+  readability-function-cognitive-complexity,
+
+  # Modernization toward the C++20 dialect the engine builds against.
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -modernize-use-nodiscard,
+
+  # Performance hygiene that the upstream tooling encourages.
+  performance-*,
+  -performance-avoid-endl,
+
+  # Portability checks that catch host-dependent assumptions.
+  portability-*,
+
+  # Style + readability.
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-redundant-access-specifiers,
+  -readability-uppercase-literal-suffix,
+  -readability-convert-member-functions-to-static,
+
+  # Cppcoreguidelines: pull in the safety-critical subset and turn
+  # off the rules that fight the engine's intentional C-API usage
+  # or the protobuf accessor patterns.
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-narrowing-conversions,
+  cppcoreguidelines-no-malloc,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-pro-type-static-cast-downcast,
+  cppcoreguidelines-slicing,
+
+  # Google-style picks; intentionally narrow to the rules that
+  # match what the existing tree already follows. The wider
+  # `google-*` set conflicts with the protobuf access patterns
+  # GoogleSQL hands us.
+  google-default-arguments,
+  google-explicit-constructor,
+  google-global-names-in-headers,
+  google-readability-casting,
+  google-readability-todo,
+  google-runtime-int,
+  google-runtime-operator,
+
+WarningsAsErrors: ''
+
+# Limit diagnostics to first-party headers. Without this, every
+# `#include` of an Abseil / gRPC / GoogleSQL header would emit a
+# wall of warnings against upstream code we have no business
+# reformatting. The pattern matches the same trees encoded in the
+# Go source-list helper.
+HeaderFilterRegex: '^(backend|binaries|frontend|tools/googlesql-prebuilt/smoke)/.*\.(h|hpp|hh)$'
+
+# Inherit clang-format's settings rather than duplicate them here;
+# clang-tidy uses this when formatting `--fix` rewrites so
+# auto-applied edits stay consistent with `.clang-format`.
+FormatStyle: file
+
+CheckOptions:
+  # Function-size thresholds (per-function only). The whole-file
+  # cap lives in `tools/lint/cpp` because this check does not
+  # express a file-level limit.
+  - key: readability-function-size.LineThreshold
+    value: '80'
+  - key: readability-function-size.StatementThreshold
+    value: '60'
+  - key: readability-function-size.BranchThreshold
+    value: '12'
+  - key: readability-function-size.NestingThreshold
+    value: '4'
+  - key: readability-function-size.ParameterThreshold
+    value: '8'
+
+  # Cognitive complexity. Matches the existing Go `cyclop`
+  # threshold (`max-complexity: 25` in .golangci.yml); ratchet down
+  # after the first clean sweep.
+  - key: readability-function-cognitive-complexity.Threshold
+    value: '25'
+  # `googletest`'s `TEST_*` macros expand into a class definition
+  # that the cognitive-complexity rule would otherwise count
+  # against the test body. Skip macro bodies so we keep the rule
+  # honest for normal code without flagging every fixture.
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: 'true'
+
+  # Allow the existing `int main(int argc, char** argv)` shape
+  # without reflowing to `argc, argv` in `main.cc`. The rule is
+  # otherwise useful and stays on for everything else.
+  - key: readability-named-parameter.IgnoreFunctions
+    value: 'main'
+
+  # Identifier naming aligns with the existing tree (snake_case
+  # locals + PascalCase functions + `kFoo` constants). The
+  # readability-identifier-naming check is left disabled for now
+  # because the existing GoogleSQL-adjacent code mixes a few
+  # styles. We reintroduce it once the wider sweep is settled.

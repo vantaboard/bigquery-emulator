@@ -58,8 +58,9 @@ struct QueryRequest {
   std::string sql;
   std::vector<QueryParameter> parameters;
   // BigQuery defaults `useLegacySql` to true on the wire; the gateway
-  // rejects that case (see ROADMAP Phase 1) so by the time a request
-  // reaches here this field should always be false. We keep it as a
+  // rejects that case (see the gateway-HTTP-surface section of
+  // ROADMAP.md) so by the time a request reaches here this field
+  // should always be false. We keep it as a
   // belt-and-braces field so the engine can also error out if the
   // gateway ever stops enforcing.
   bool use_legacy_sql = false;
@@ -130,20 +131,26 @@ class Engine {
   // Returns an opaque `AnalyzedQuery` the caller can hand back to
   // `DryRun` / `ExecuteQuery`, OR a parse / analysis error mapped to
   // the matching absl::Status code (the gateway translates that into
-  // a BigQuery error envelope; see Phase 4 of ROADMAP.md).
-  virtual absl::StatusOr<std::unique_ptr<AnalyzedQuery>> Analyze(
+  // a BigQuery error envelope; see the analyzer integration section
+  // of ROADMAP.md).
+  //
+  // `[[nodiscard]]` is on every Status / StatusOr-returning method
+  // here for the same reason it is on `backend::storage::Storage`:
+  // dropping the result silently swallows a parse / analysis error
+  // that the gateway has no other channel to surface.
+  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<AnalyzedQuery>> Analyze(
       const QueryRequest& request, googlesql::Catalog* catalog) = 0;
 
   // Plan-only path used by `jobs.query?dryRun=true`. Implementations
   // are free to short-circuit through `Analyze` internally.
-  virtual absl::StatusOr<DryRunResult> DryRun(
+  [[nodiscard]] virtual absl::StatusOr<DryRunResult> DryRun(
       const QueryRequest& request, googlesql::Catalog* catalog) = 0;
 
   // Plan + execute. The returned `RowSource` streams the result rows
   // back to the gateway one by one; the gateway paginates them out
   // through the `bigquery.jobs.query` and
   // `bigquery.jobs.getQueryResults` REST endpoints.
-  virtual absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
+  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) = 0;
 
   // Plan + execute a DML statement (INSERT / UPDATE / DELETE / MERGE)
@@ -155,7 +162,7 @@ class Engine {
   // implement DML yet return `absl::StatusCode::kUnimplemented`; the
   // frontend handler maps that to gRPC `UNIMPLEMENTED` so the
   // gateway can surface BigQuery's `notImplemented` reason.
-  virtual absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] virtual absl::StatusOr<DmlStats> ExecuteDml(
       const QueryRequest& request, googlesql::Catalog* catalog) {
     (void)request;
     (void)catalog;
@@ -170,8 +177,8 @@ class Engine {
   // the matching gRPC code. Engines that do not implement DDL return
   // `absl::StatusCode::kUnimplemented`; the frontend handler maps
   // that to gRPC `UNIMPLEMENTED`.
-  virtual absl::Status ExecuteDdl(const QueryRequest& request,
-                                   googlesql::Catalog* catalog) {
+  [[nodiscard]] virtual absl::Status ExecuteDdl(const QueryRequest& request,
+                                                googlesql::Catalog* catalog) {
     (void)request;
     (void)catalog;
     return absl::UnimplementedError(

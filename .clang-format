@@ -1,0 +1,85 @@
+# Canonical first-party C++ formatting profile for the BigQuery
+# emulator. Applied by `task lint:cpp:format` (CI gate) and
+# `task lint:cpp:format-fix` (local apply); editor format-on-save
+# picks it up automatically through the clangd integration in
+# `.vscode/settings.json`.
+#
+# Style decisions:
+#
+#   - Base on Google. The engine links GoogleSQL and Abseil, both of
+#     which are formatted with Google style; matching them keeps the
+#     surrounding header / call-site shape consistent and keeps
+#     review noise low when an upstream change is mirrored locally.
+#   - Column limit 80 to mirror upstream GoogleSQL/Abseil style.
+#   - Stay strict on `IncludeBlocks: Regroup` so includes always
+#     appear in the canonical Google order (associated header,
+#     C system, C++ standard, third-party, project), and so
+#     contributors don't have to remember the rule by hand.
+#
+# Scope: this file applies to every `.cc`/`.h` clang-format finds in
+# the worktree. The first-party file list (computed by
+# `tools/lint/cpp list`) is what gates clang-format invocations from
+# `task lint:cpp:format*` so vendored / generated trees never reach
+# the formatter even though they technically match `.clang-format`'s
+# discovery rules.
+
+---
+Language: Cpp
+BasedOnStyle: Google
+ColumnLimit: 80
+
+# Keep Google's two-space indent; the existing tree already uses it
+# (search for the `BIGQUERY_EMULATOR_*_H_` include guards) and a
+# four-space switch would generate a sweep across every file.
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+
+# Allow a single short `if` / `for` / `while` body on the same line
+# (matches existing helpers like `if (!s.ok()) return s.status();`),
+# but never collapse functions onto one line — that would make the
+# DuckDB-engine helpers harder to scan.
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+
+# Keep return types on their own line for very long signatures
+# (`absl::StatusOr<std::unique_ptr<...>> Foo(...)` reads better that
+# way) but do not force every function onto multiple lines.
+AlwaysBreakAfterReturnType: None
+
+# Place each parameter / argument on its own line when a signature
+# does not fit, rather than bin-packing. The existing engine code is
+# already mostly written this way; the explicit setting prevents
+# clang-format from surprise-bin-packing a long signature when the
+# argument list happens to fit.
+BinPackParameters: false
+BinPackArguments: false
+
+# Pointer / reference align with the type, matching Google style and
+# the existing tree (`absl::Status* status`, `const Type& t`).
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# Standard #include reordering. Headers in this repo follow the
+# Google order: associated header (named after the .cc file), then
+# `<...>` system / C++ standard headers, then third-party, then
+# in-repo. The default Google profile already encodes this; the
+# explicit setting documents the contract.
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+
+# Namespace closing comments are mandatory in this tree (the engine
+# headers all carry them, e.g. `}  // namespace bigquery_emulator`)
+# so contributors who forget one are nudged by the formatter.
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+
+# Preserve carriage-return / line-ending hygiene without demanding a
+# specific style; on Linux this is always LF, but explicit is safer
+# than implicit when a Windows checkout sneaks in via Cursor on a
+# different host.
+DeriveLineEnding: false
+UseCRLF: false

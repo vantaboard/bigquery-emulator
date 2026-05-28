@@ -80,7 +80,9 @@ class Value {
 
   Value() = default;
 
-  static Value Null() { return Value(); }
+  static Value Null() {
+    return Value();
+  }
   static Value Bool(bool v);
   static Value Int64(int64_t v);
   static Value Float64(double v);
@@ -89,8 +91,12 @@ class Value {
   static Value Array(std::vector<Value> elements);
   static Value Struct(std::vector<Value> fields);
 
-  Kind kind() const { return kind_; }
-  bool is_null() const { return kind_ == Kind::kNull; }
+  Kind kind() const {
+    return kind_;
+  }
+  bool is_null() const {
+    return kind_ == Kind::kNull;
+  }
 
   // Accessors. Each returns a default value (false / 0 / empty) when
   // the active kind does not match, so callers can use these to fold
@@ -107,8 +113,12 @@ class Value {
   // The kString and kBytes kinds share the std::string slot in
   // `data_`; the active kind discriminates which BigQuery type the
   // bytes were parsed as.
-  using Variant = std::variant<std::monostate, bool, int64_t, double,
-                                std::string, std::vector<Value>>;
+  using Variant = std::variant<std::monostate,
+                               bool,
+                               int64_t,
+                               double,
+                               std::string,
+                               std::vector<Value>>;
 
   Kind kind_ = Kind::kNull;
   Variant data_;
@@ -133,7 +143,11 @@ class RowIterator {
   //   * `false` - end of stream; `*row` is unchanged.
   // A non-OK status indicates a backend error mid-iteration; further
   // calls are undefined.
-  virtual absl::StatusOr<bool> Next(Row* row) = 0;
+  //
+  // `[[nodiscard]]`: the StatusOr carries the iteration error; a
+  // caller that drops the result is silently swallowing a backend
+  // failure that would otherwise surface to the gateway as a 5xx.
+  [[nodiscard]] virtual absl::StatusOr<bool> Next(Row* row) = 0;
 };
 
 // ReadFilter constrains the rows a `CreateReadStream` iterator yields.
@@ -205,11 +219,18 @@ class Storage {
   // round-tripping but otherwise ignores it. `delete_contents=true`
   // mirrors the BigQuery REST `deleteContents` query parameter on
   // `datasets.delete`.
+  //
+  // The `absl::Status` returns are `[[nodiscard]]` so a caller that
+  // drops the result is caught by the compiler — the gateway has no
+  // other way to surface dataset CRUD failures, and silent drops
+  // were the motivating example for the rollout's status-discarded
+  // rule. The same rationale applies to every other Status-returning
+  // method on this interface.
   // ------------------------------------------------------------------
-  virtual absl::Status CreateDataset(const DatasetId& id,
-                                      absl::string_view location) = 0;
-  virtual absl::Status DropDataset(const DatasetId& id,
-                                    bool delete_contents) = 0;
+  [[nodiscard]] virtual absl::Status CreateDataset(
+      const DatasetId& id, absl::string_view location) = 0;
+  [[nodiscard]] virtual absl::Status DropDataset(const DatasetId& id,
+                                                 bool delete_contents) = 0;
 
   // ------------------------------------------------------------------
   // Table CRUD. `CreateTable` is idempotent at the dataset level only:
@@ -218,21 +239,21 @@ class Storage {
   // missing tables; callers that want "drop if exists" semantics
   // should swallow that status.
   // ------------------------------------------------------------------
-  virtual absl::Status CreateTable(const TableId& id,
-                                    const schema::TableSchema& schema) = 0;
-  virtual absl::Status DropTable(const TableId& id) = 0;
+  [[nodiscard]] virtual absl::Status CreateTable(
+      const TableId& id, const schema::TableSchema& schema) = 0;
+  [[nodiscard]] virtual absl::Status DropTable(const TableId& id) = 0;
 
   // Returns the schema the table was created with. NOT_FOUND if the
   // dataset or table does not exist.
-  virtual absl::StatusOr<schema::TableSchema> GetSchema(
+  [[nodiscard]] virtual absl::StatusOr<schema::TableSchema> GetSchema(
       const TableId& id) const = 0;
 
   // Appends `rows` to `id` as a single batch. Implementations may
   // require all rows in the batch to share the table's schema shape
   // (cell count == column count); validation lives in the impl, not
   // here.
-  virtual absl::Status AppendRows(const TableId& id,
-                                   absl::Span<const Row> rows) = 0;
+  [[nodiscard]] virtual absl::Status AppendRows(const TableId& id,
+                                                absl::Span<const Row> rows) = 0;
 
   // Atomically replaces every row in `id` with `rows`. Used by the
   // DML engine's scan-and-rewrite path for UPDATE / DELETE / MERGE:
@@ -246,14 +267,14 @@ class Storage {
   // exist. The new row vector replaces the existing one in full,
   // including the empty-vector case (`rows.empty()` truncates the
   // table).
-  virtual absl::Status OverwriteRows(const TableId& id,
-                                      absl::Span<const Row> rows) = 0;
+  [[nodiscard]] virtual absl::Status OverwriteRows(
+      const TableId& id, absl::Span<const Row> rows) = 0;
 
   // Begins a fresh scan of `id`'s rows. The returned iterator captures
   // a snapshot at call time; rows appended afterward may or may not be
   // visible depending on the impl. NOT_FOUND if the table does not
   // exist.
-  virtual absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
+  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const = 0;
 
   // CreateReadStream is the StorageRead.ReadRows-shaped scan: same
@@ -268,8 +289,8 @@ class Storage {
   // and `row_restriction` are accepted but not honored (see the
   // field comments on `ReadFilter`). NOT_FOUND if the table does
   // not exist.
-  virtual absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
-      const TableId& id, const ReadFilter& filter) const = 0;
+  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>>
+  CreateReadStream(const TableId& id, const ReadFilter& filter) const = 0;
 };
 
 }  // namespace storage

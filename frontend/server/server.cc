@@ -41,7 +41,8 @@ class GrpcServer final : public Server {
              std::unique_ptr<CatalogService> catalog,
              std::unique_ptr<QueryService> query,
              std::unique_ptr<StorageReadService> storage_read,
-             std::string host, int port)
+             std::string host,
+             int port)
       : server_(std::move(server)),
         catalog_(std::move(catalog)),
         query_(std::move(query)),
@@ -49,10 +50,16 @@ class GrpcServer final : public Server {
         host_(std::move(host)),
         port_(port) {}
 
-  void WaitForShutdown() override { server_->Wait(); }
+  void WaitForShutdown() override {
+    server_->Wait();
+  }
 
-  std::string host() const override { return host_; }
-  int port() const override { return port_; }
+  std::string host() const override {
+    return host_;
+  }
+  int port() const override {
+    return port_;
+  }
 
   void Stop() {
     if (server_ != nullptr) {
@@ -96,6 +103,8 @@ std::pair<std::string, int> SplitHostPort(const std::string& address) {
 
 std::unique_ptr<Server> Server::Create(const Options& options) {
   if (options.storage == nullptr) {
+    // cpp-lint:allow(banned-logging) -- pre-gRPC bootstrap diagnostic; Create
+    // has no Status return today
     std::fprintf(stderr,
                  "[frontend::Server] Options.storage must be non-null; "
                  "Catalog RPCs have no backend to delegate to\n");
@@ -118,14 +127,16 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
 
   ::grpc::ServerBuilder builder;
   int bound_port = 0;
-  builder.AddListeningPort(options.server_address,
-                           ::grpc::InsecureServerCredentials(), &bound_port);
+  builder.AddListeningPort(
+      options.server_address, ::grpc::InsecureServerCredentials(), &bound_port);
   builder.RegisterService(catalog.get());
   builder.RegisterService(query.get());
   builder.RegisterService(storage_read.get());
 
   std::unique_ptr<::grpc::Server> grpc_server = builder.BuildAndStart();
   if (grpc_server == nullptr || bound_port == 0) {
+    // cpp-lint:allow(banned-logging) -- pre-gRPC bootstrap diagnostic; Create
+    // has no Status return today
     std::fprintf(stderr,
                  "[frontend::Server] failed to bind gRPC server on %s\n",
                  options.server_address.c_str());
@@ -150,9 +161,12 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
     port = bound_port;
   }
 
-  auto server = std::make_unique<GrpcServer>(
-      std::move(grpc_server), std::move(catalog), std::move(query),
-      std::move(storage_read), std::move(host), port);
+  auto server = std::make_unique<GrpcServer>(std::move(grpc_server),
+                                             std::move(catalog),
+                                             std::move(query),
+                                             std::move(storage_read),
+                                             std::move(host),
+                                             port);
 
   g_server = server.get();
   std::signal(SIGINT, HandleSignal);

@@ -60,8 +60,32 @@ jobs:
             libgrpc-dev \
             protobuf-compiler-grpc
 
-      - name: go vet
-        run: go vet ./...
+      - name: Install C++ lint tooling (clang-format, clang-tidy, cppcheck)
+        # The fast `task lint:run` gate calls `task lint:cpp:format` and
+        # `task lint:cpp:source`, both of which need clang-format on the
+        # PATH. clang-tidy / cppcheck come along for the slower opt-in
+        # lanes (`task lint:cpp:tidy`, `task lint:cpp:cppcheck`); we
+        # install them in this same step so the runner is also able to
+        # execute the secondary-analysis job below.
+        #
+        # We pin to the apt-shipped clang-format-18 so the formatter
+        # version matches the clang-18 toolchain Bazel pins via
+        # `task emulator:build-engine:bazel`. Mismatched clang-format
+        # versions produce different output for the same input file,
+        # which would surface as flapping CI.
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            clang-format \
+            clang-tidy \
+            cppcheck
+
+      - name: Fast lint gate (gofmt + go vet + first-party C++ format/source)
+        # Mirror of `task lint:run`. Fails the job if Go formatting,
+        # `go vet`, clang-format, or the source-only C++ checker
+        # surface any finding. Subsumes the previous standalone
+        # `go vet` step (`task lint:run` invokes `go vet ./...`
+        # internally).
+        run: task lint:run
 
       - name: go test (with coverage)
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
@@ -111,8 +135,20 @@ jobs:
         id: googlesql
         uses: ./.github/actions/setup-googlesql
         with:
-          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+          # The `fromJSON(toJSON(vars))` round-trip silences the
+          # "Context access might be invalid" warning that the GitHub
+          # Actions VS Code extension (and the underlying
+          # actions/languageservices linter) emits for `vars.NAME`
+          # reads when it cannot prove the variable exists — typically
+          # because the editor is not authenticated against the repo
+          # (see github/vscode-github-actions#96, #222). The cast
+          # erases the static shape of the `vars` context, so the
+          # linter falls back to "any" and stops warning. Both repo
+          # vars are optional: when either is unset, the composite
+          # action sees an empty string and falls back to building
+          # GoogleSQL from a sibling source checkout.
+          prebuilt-url: ${{ fromJSON(toJSON(vars)).GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ fromJSON(toJSON(vars)).GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
         env:
@@ -120,6 +156,19 @@ jobs:
         run: |
           echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
           task emulator:build-engine:bazel
+
+      - name: Run first-party cc_test targets via Bazel
+        # Runs every `cc_test` target under the first-party include
+        # roots (backend/, binaries/, frontend/,
+        # tools/googlesql-prebuilt/smoke/). Reuses the same throttled
+        # `task bazel:test` wrapper the engine build sits behind so
+        # the daemon shutdown / process-hygiene rules from
+        # `.cursor/rules/bazel-process-hygiene.mdc` apply uniformly.
+        # The cache is already warm from the engine build above, so
+        # this step is dominated by test-runtime, not compile-time.
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: task lint:cpp:test
 
       - name: Build Go gateway (gateway_main)
         run: |
@@ -129,3 +178,46 @@ jobs:
       - name: Release Bazel daemon
         if: always()
         run: bazel shutdown || true
+
+  cpp-analysis:
+    # Slow C++ analysis lane. Runs in parallel with `build-and-test`
+    # and does NOT block PRs while the rollout is bedding in:
+    # `continue-on-error: true` keeps the job's failure status from
+    # marking the workflow as failed. Once we have demonstrated a
+    # clean run on `main` and triaged the existing findings, flip
+    # this to required (and remove the `continue-on-error` flag) per
+    # the rollout plan in `.cursor/plans/cpp_lint_rollout_*.plan.md`.
+    name: cpp-analysis (cppcheck, warning-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        # `tools/lint/cpp` is a Go binary; `task lint:cpp:cppcheck`
+        # invokes `go run ./tools/lint/cpp list` to compute the
+        # first-party file list before handing off to cppcheck.
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+
+      - name: cppcheck on first-party C++ tree
+        # Mirror of `task lint:cpp:cppcheck`. Surfaces warnings,
+        # style, performance, and portability findings against the
+        # canonical first-party file list.
+        run: task lint:cpp:cppcheck

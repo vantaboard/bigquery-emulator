@@ -182,3 +182,36 @@ build --disk_cache=%workspace%/.cache/bazel-disk
 test  --disk_cache=%workspace%/.cache/bazel-disk
 run   --disk_cache=%workspace%/.cache/bazel-disk
 coverage --disk_cache=%workspace%/.cache/bazel-disk
+
+# ---------------------------------------------------------------------------
+# First-party C++ warning profile.
+#
+# `--per_file_copt` lets us turn warnings up only for the trees we own
+# without recompiling Abseil / GoogleSQL / DuckDB / gRPC under the
+# stricter set. The path regex matches the same first-party roots
+# enumerated in `tools/lint/cpp/sources.go::firstPartyIncludeRoots`;
+# keep the two in sync when adding a new top-level C++ tree.
+#
+# Posture (matches `.cursor/plans/cpp_lint_rollout_*.plan.md`):
+#
+#   - `-Wall -Wextra` are turned on. They are the standard "compile
+#     errors waiting to happen" set; clang-18 is the toolchain Bazel
+#     pins (see `task emulator:build-engine:bazel`) so the flag set
+#     evaluates the same locally and in CI.
+#   - `-Werror` is left OFF for now. Once `task lint:cpp:tidy`
+#     surfaces and we have triaged the existing warnings, the rollout
+#     plan flips this on (and CI gates on it). Until then the slow
+#     warnings-only lane catches new code without breaking the cold
+#     engine build.
+#   - We do NOT add any `-Wno-*` here: warnings GoogleSQL / Abseil
+#     emit live in the `--config=clang` flag set above, which only
+#     applies to the upstream code that legitimately needs them.
+#
+# Pattern: `//backend/...:.*` and friends use Bazel's standard label
+# regex syntax. The leading `//` anchors the match so a transitively
+# included header from a different package does not pick up the
+# stricter warnings.
+build --per_file_copt=//backend/[/:].*@-Wall,-Wextra
+build --per_file_copt=//binaries/[/:].*@-Wall,-Wextra
+build --per_file_copt=//frontend/[/:].*@-Wall,-Wextra
+build --per_file_copt=//tools/googlesql-prebuilt/smoke/[/:].*@-Wall,-Wextra
