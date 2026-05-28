@@ -108,6 +108,23 @@
             <include>**/CreateAmazonS3TransferIT.java</include>
             <include>**/DisableTransferConfigIT.java</include>
             <include>**/ReEnableTransferConfigIT.java</include>
+            <!--
+              Phase C additions (see
+              .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md): smoke ITs
+              for the 8 third-party connector Create*Transfer samples. Expected
+              to fail with io.grpc.StatusRuntimeException: UNIMPLEMENTED from
+              the gapic DataTransferService client until Phase D lands the DTS
+              gRPC bridge; committed today so Failsafe discovers them and the
+              per-IT mapping carries the implementation target.
+            -->
+            <include>**/CreateAdManagerTransferIT.java</include>
+            <include>**/CreateAdsTransferIT.java</include>
+            <include>**/CreateCampaignmanagerTransferIT.java</include>
+            <include>**/CreatePlayTransferIT.java</include>
+            <include>**/CreateRedshiftTransferIT.java</include>
+            <include>**/CreateTeradataTransferIT.java</include>
+            <include>**/CreateYoutubeChannelTransferIT.java</include>
+            <include>**/CreateYoutubeContentOwnerTransferIT.java</include>
           </includes>
           <systemPropertyVariables>
             <BIGQUERY_EMULATOR_HOST>${env.BIGQUERY_EMULATOR_HOST}</BIGQUERY_EMULATOR_HOST>
