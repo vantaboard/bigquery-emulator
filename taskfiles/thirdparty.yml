@@ -584,6 +584,15 @@ tasks:
         export AWS_BUCKET="${AWS_BUCKET:-emulator-fake-bucket}"
         export MY_SQL_DATABASE="${MY_SQL_DATABASE:-emulator_fake_db}"
         export MY_SQL_INSTANCE="${MY_SQL_INSTANCE:-emulator-fake-instance}"
+        # DB_USER / DB_PWD are required at <clinit> by the
+        # bigqueryconnection Cloud-SQL family (DeleteConnectionIT,
+        # GetConnectionIT, ShareConnectionIT, UpdateConnectionIT). Phase C
+        # extension of the Phase B env-var stubbing pattern; emulator does
+        # not talk to Cloud SQL, so any non-empty values short-circuit the
+        # `requireEnvVar` assertion and let the ITs reach the real gRPC
+        # UNIMPLEMENTED shape from the not-yet-wired bqconnection backend.
+        export DB_USER="${DB_USER:-emulator-fake-user}"
+        export DB_PWD="${DB_PWD:-emulator-fake-pwd}"
         # DTS_TRANSFER_CONFIG_NAME points at a transfer config the
         # DisableTransferConfigIT / ReEnableTransferConfigIT ITs read
         # by name. The emulator's datatransfer handler matches on the
