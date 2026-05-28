@@ -5,6 +5,7 @@
 #
 # Usage: task lint:run             (fast gate, used by auto-commit + CI)
 #        task lint:fix             (apply gofmt / clang-format + re-run vet)
+#        task lint:check           (deep pass: golangci-lint + every C++ lane)
 #        task lint:go / lint:go-fix
 #                                  (full golangci-lint pass)
 #        task lint:shell           (shellcheck on docker/*.sh)
@@ -19,6 +20,12 @@
 # (.cursor/rules/pre-commit-lint.mdc) does not become a tax. The slower
 # C++ lanes (`task lint:cpp:tidy`, `task lint:cpp:cppcheck`) are opt-in
 # locally and run as a separate CI job; see `taskfiles/ci.yml`.
+#
+# `task lint:check` is the deep local pass: golangci-lint for Go plus
+# every first-party C++ lane (clang-format dry-run, source-only checker,
+# clang-tidy, cppcheck). It needs `compile_commands.json` at the repo
+# root for the clang-tidy lane — run `task lint:cpp:compile-commands`
+# first if it is missing.
 version: "3"
 
 tasks:
@@ -28,7 +35,6 @@ tasks:
       - task: run
 
   run:
-    aliases: [check]
     desc: Fast pre-commit gate (gofmt + go vet + first-party C++ format/source). Used by the auto-commit workflow.
     # The Go half scans every .go file under the worktree, so vendored
     # upstream trees in third_party/ would otherwise leak findings here
@@ -81,6 +87,39 @@ tasks:
         fi
         go vet ./...
       - task: cpp:format-fix
+
+  check:
+    desc: |
+      Deep lint pass for Go and C++ (slow). Runs `golangci-lint` for Go
+      and every first-party C++ lane: clang-format dry-run, the
+      source-only checker, clang-tidy, and cppcheck. Distinct from
+      `task lint:run` (the fast pre-commit gate); use `check` when you
+      want the same coverage CI's slow lane provides.
+    # Order is cheap-to-expensive so the first failure shows up quickly:
+    #   1. `lint:go`          — golangci-lint (Go formatters + vet +
+    #                            every linter declared in .golangci.yml).
+    #   2. `lint:cpp:format`  — clang-format dry-run on the first-party
+    #                            file list (sub-second).
+    #   3. `lint:cpp:source`  — Go-based source-only checker (file
+    #                            length, banned logging, status
+    #                            anti-patterns).
+    #   4. `lint:cpp:tidy`    — clang-tidy (compile-aware; requires
+    #                            `compile_commands.json` at the repo
+    #                            root — run
+    #                            `task lint:cpp:compile-commands`
+    #                            first if missing).
+    #   5. `lint:cpp:cppcheck`— secondary-analysis lane.
+    #
+    # Each sub-task already errors with a helpful "install X" /
+    # "generate compile DB first" message when its prerequisite is
+    # missing, so this aggregator inherits that behaviour rather than
+    # silently skipping a lane.
+    cmds:
+      - task: go
+      - task: cpp:format
+      - task: cpp:source
+      - task: cpp:tidy
+      - task: cpp:cppcheck
 
   go:
     desc: Run golangci-lint with the project's .golangci.yml (slow, full check)
