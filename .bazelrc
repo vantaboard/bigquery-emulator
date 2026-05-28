@@ -117,6 +117,24 @@ build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 # `--config=googlesql-prebuilt` can trust the cache contents.
 build:googlesql-prebuilt --override_module=googlesql=%workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
+# ABI parity with the prebuilt artifact. The Phase 1 manifest commits
+# the producer to `-DNDEBUG` (see
+# `docs/dev/googlesql-prebuilt/manifest.md`'s `cflags` field), which
+# elides `googlesql/public/id_string.h`'s `IdString::CheckAlive() ->
+# IdStringPool::CheckPoolIdAlive(...)` debug check from the bundled
+# `.pic.o`. The consumer's default `fastbuild` compilation has
+# `NDEBUG` UNdefined, so inline `IdString::CheckAlive()` calls expand
+# to a reference to `IdStringPool::CheckPoolIdAlive`, which then ends
+# up undefined at link time (the bundled archive doesn't have it).
+# Forcing `-DNDEBUG` on every TU compiled in prebuilt mode keeps the
+# inline expansion in sync. Same principle applies to any other
+# `#ifndef NDEBUG`-guarded member function GoogleSQL's headers
+# expose for inline use.
+#
+# This flag flips between modes (source mode keeps the default
+# fastbuild ABI). Phase 4 owns standardising the default mode.
+build:googlesql-prebuilt --copt=-DNDEBUG
+build:googlesql-prebuilt --host_copt=-DNDEBUG
 
 # ---------------------------------------------------------------------------
 # Local disk cache.
