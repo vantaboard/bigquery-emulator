@@ -41,7 +41,7 @@ public class UpdateConnection {
   static void updateConnection(
       String projectId, String location, String connectionId, Connection connection)
       throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       ConnectionName name = ConnectionName.of(projectId, location, connectionId);
       FieldMask updateMask = FieldMaskUtil.fromString("description");
       UpdateConnectionRequest request =

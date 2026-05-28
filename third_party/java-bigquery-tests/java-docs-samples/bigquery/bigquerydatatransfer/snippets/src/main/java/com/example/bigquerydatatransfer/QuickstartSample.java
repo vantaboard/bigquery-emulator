@@ -34,7 +34,7 @@ public class QuickstartSample {
     // Instantiate a client. If you don't specify credentials when constructing a client, the
     // client library will look for credentials in the environment, such as the
     // GOOGLE_APPLICATION_CREDENTIALS environment variable.
-    try (DataTransferServiceClient client = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient client = BqDataTransferOpts.newClient()) {
       // Request the list of available data sources.
       String parent = String.format("projects/%s", projectId);
       ListDataSourcesRequest request =

@@ -34,7 +34,7 @@ public class DeleteTransferConfig {
   }
 
   public static void deleteTransferConfig(String configId) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       DeleteTransferConfigRequest request =
           DeleteTransferConfigRequest.newBuilder().setName(configId).build();
       dataTransferServiceClient.deleteTransferConfig(request);

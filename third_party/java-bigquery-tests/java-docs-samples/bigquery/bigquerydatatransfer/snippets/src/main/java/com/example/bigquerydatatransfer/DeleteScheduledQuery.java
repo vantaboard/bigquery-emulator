@@ -34,7 +34,7 @@ public class DeleteScheduledQuery {
   }
 
   public static void deleteScheduledQuery(String name) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       DeleteTransferConfigRequest request =
           DeleteTransferConfigRequest.newBuilder().setName(name).build();
       dataTransferServiceClient.deleteTransferConfig(request);

@@ -40,7 +40,7 @@ public class UpdateCredentials {
   public static void updateCredentials(
       TransferConfig transferConfig, String serviceAccount, FieldMask updateMask)
       throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       UpdateTransferConfigRequest request =
           UpdateTransferConfigRequest.newBuilder()
               .setTransferConfig(transferConfig)

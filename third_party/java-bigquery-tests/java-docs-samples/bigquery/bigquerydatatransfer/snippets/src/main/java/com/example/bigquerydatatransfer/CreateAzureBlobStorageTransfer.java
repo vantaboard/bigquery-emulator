@@ -71,7 +71,7 @@ public class CreateAzureBlobStorageTransfer {
             .build();
     // Initialize client that will be used to send requests. This client only needs to be created
     // once, and can be reused for multiple requests.
-    try (DataTransferServiceClient client = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient client = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       CreateTransferConfigRequest request =
           CreateTransferConfigRequest.newBuilder()

@@ -82,7 +82,7 @@ public class ReadTimestampAvro {
       snapshotMillis = Long.parseLong(args[1]);
     }
 
-    try (BigQueryReadClient client = BigQueryReadClient.create()) {
+    try (BigQueryReadClient client = BqStorageOpts.newReadClient()) {
       String parent = String.format("projects/%s", projectId);
 
       // This example uses citibike data from the public datasets.

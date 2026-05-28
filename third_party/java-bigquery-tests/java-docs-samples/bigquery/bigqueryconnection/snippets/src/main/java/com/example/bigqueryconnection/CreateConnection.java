@@ -55,7 +55,7 @@ public class CreateConnection {
   static void createConnection(
       String projectId, String location, String connectionId, Connection connection)
       throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       LocationName parent = LocationName.of(projectId, location);
       CreateConnectionRequest request =
           CreateConnectionRequest.newBuilder()

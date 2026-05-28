@@ -60,7 +60,7 @@ public class RunNotification {
 
   public static void runNotification(String projectId, TransferConfig transferConfig)
       throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       CreateTransferConfigRequest request =
           CreateTransferConfigRequest.newBuilder()

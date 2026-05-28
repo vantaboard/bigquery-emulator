@@ -50,7 +50,7 @@ public class WriteBufferedStream {
 
   public static void writeBufferedStream(String projectId, String datasetName, String tableName)
       throws DescriptorValidationException, InterruptedException, IOException {
-    try (BigQueryWriteClient client = BigQueryWriteClient.create()) {
+    try (BigQueryWriteClient client = BqStorageOpts.newWriteClient()) {
       // Initialize a write stream for the specified table.
       // For more information on WriteStream.Type, see:
       // https://googleapis.dev/java/google-cloud-bigquerystorage/latest/com/google/cloud/bigquery/storage/v1/WriteStream.Type.html

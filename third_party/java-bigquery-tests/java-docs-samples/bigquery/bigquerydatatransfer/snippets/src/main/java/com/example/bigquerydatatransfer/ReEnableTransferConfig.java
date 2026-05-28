@@ -39,7 +39,7 @@ public class ReEnableTransferConfig {
 
   public static void reEnableTransferConfig(TransferConfig transferConfig, FieldMask updateMask)
       throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       UpdateTransferConfigRequest request =
           UpdateTransferConfigRequest.newBuilder()
               .setTransferConfig(transferConfig)

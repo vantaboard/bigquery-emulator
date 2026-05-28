@@ -36,7 +36,7 @@ public class GetConnection {
 
   static void getConnection(String projectId, String location, String connectionId)
       throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       ConnectionName name = ConnectionName.of(projectId, location, connectionId);
       GetConnectionRequest request =
           GetConnectionRequest.newBuilder().setName(name.toString()).build();

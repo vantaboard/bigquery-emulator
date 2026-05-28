@@ -50,7 +50,7 @@ public class ScheduleBackFill {
 
   public static void scheduleBackFill(String configId, Timestamp startTime, Timestamp endTime)
       throws IOException {
-    try (DataTransferServiceClient client = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient client = BqDataTransferOpts.newClient()) {
       ScheduleTransferRunsRequest request =
           ScheduleTransferRunsRequest.newBuilder()
               .setParent(configId)

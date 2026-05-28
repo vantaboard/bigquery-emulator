@@ -85,7 +85,7 @@ public class StorageSample {
       snapshotMillis = Integer.parseInt(args[1]);
     }
 
-    try (BigQueryReadClient client = BigQueryReadClient.create()) {
+    try (BigQueryReadClient client = BqStorageOpts.newReadClient()) {
       String parent = String.format("projects/%s", projectId);
 
       // This example uses baby name data from the public datasets.

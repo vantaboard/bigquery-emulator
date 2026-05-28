@@ -35,7 +35,7 @@ public class DeleteConnection {
 
   static void deleteConnection(String projectId, String location, String connectionName)
       throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       ConnectionName name = ConnectionName.of(projectId, location, connectionName);
       DeleteConnectionRequest request =
           DeleteConnectionRequest.newBuilder().setName(name.toString()).build();

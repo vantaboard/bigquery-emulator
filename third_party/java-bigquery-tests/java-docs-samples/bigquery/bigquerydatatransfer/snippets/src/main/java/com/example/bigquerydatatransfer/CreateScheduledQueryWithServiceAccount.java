@@ -59,7 +59,7 @@ public class CreateScheduledQueryWithServiceAccount {
 
   public static void createScheduledQueryWithServiceAccount(
       String projectId, TransferConfig transferConfig, String serviceAccount) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       CreateTransferConfigRequest request =
           CreateTransferConfigRequest.newBuilder()

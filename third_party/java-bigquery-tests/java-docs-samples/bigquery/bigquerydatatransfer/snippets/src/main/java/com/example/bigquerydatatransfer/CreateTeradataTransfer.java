@@ -61,7 +61,7 @@ public class CreateTeradataTransfer {
 
   public static void createTeradataTransfer(String projectId, TransferConfig transferConfig)
       throws IOException {
-    try (DataTransferServiceClient client = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient client = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       CreateTransferConfigRequest request =
           CreateTransferConfigRequest.newBuilder()

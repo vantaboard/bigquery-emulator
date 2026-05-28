@@ -33,7 +33,7 @@ public class ListConnections {
   }
 
   static void listConnections(String projectId, String location) throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       LocationName parent = LocationName.of(projectId, location);
       int pageSize = 10;
       ListConnectionsRequest request =

@@ -33,7 +33,7 @@ public class ListTransferConfigs {
   }
 
   public static void listTransferConfigs(String projectId) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       ListTransferConfigsRequest request =
           ListTransferConfigsRequest.newBuilder().setParent(parent.toString()).build();

@@ -34,7 +34,7 @@ public class RunHistory {
   }
 
   public static void runHistory(String configId) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       ListTransferRunsRequest request =
           ListTransferRunsRequest.newBuilder().setParent(configId).build();
       dataTransferServiceClient

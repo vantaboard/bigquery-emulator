@@ -292,7 +292,7 @@ public class ParallelWriteCommittedStream {
 
   public static void writeCommittedStream(String projectId, String datasetName, String tableName)
       throws DescriptorValidationException, InterruptedException, IOException {
-    try (BigQueryWriteClient client = BigQueryWriteClient.create()) {
+    try (BigQueryWriteClient client = BqStorageOpts.newWriteClient()) {
       new ParallelWriteCommittedStream().writeLoop(projectId, datasetName, tableName, client);
     } catch (Exception e) {
       System.out.println("Failed to append records. \n" + e.toString());

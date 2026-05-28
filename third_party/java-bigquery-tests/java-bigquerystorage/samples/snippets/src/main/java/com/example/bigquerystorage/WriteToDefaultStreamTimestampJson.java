@@ -180,7 +180,7 @@ public class WriteToDefaultStreamTimestampJson {
         throws Descriptors.DescriptorValidationException, IOException, InterruptedException {
       // Initialize client without settings, internally within stream writer a new client will be
       // created with full settings.
-      client = BigQueryWriteClient.create();
+      client = BqStorageOpts.newWriteClient();
 
       streamWriter = createStreamWriter(parentTable.toString());
     }

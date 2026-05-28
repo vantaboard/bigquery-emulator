@@ -36,7 +36,7 @@ public class RunDetails {
   }
 
   public static void runDetails(String runId) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       GetTransferRunRequest request = GetTransferRunRequest.newBuilder().setName(runId).build();
       TransferRun run = dataTransferServiceClient.getTransferRun(request);
       System.out.print("Run details retrieved successfully :" + run.getName() + "\n");

@@ -38,7 +38,7 @@ public class ShareConnection {
 
   static void shareConnection(String projectId, String location, String connectionId)
       throws IOException {
-    try (ConnectionServiceClient client = ConnectionServiceClient.create()) {
+    try (ConnectionServiceClient client = BqConnectionOpts.newClient()) {
       ResourceName resource = ConnectionName.of(projectId, location, connectionId);
       Binding binding =
           Binding.newBuilder()

@@ -35,7 +35,7 @@ public class GetTransferConfigInfo {
   }
 
   public static void getTransferConfigInfo(String configId) throws IOException {
-    try (DataTransferServiceClient dataTransferServiceClient = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient dataTransferServiceClient = BqDataTransferOpts.newClient()) {
       GetTransferConfigRequest request =
           GetTransferConfigRequest.newBuilder().setName(configId).build();
       TransferConfig info = dataTransferServiceClient.getTransferConfig(request);

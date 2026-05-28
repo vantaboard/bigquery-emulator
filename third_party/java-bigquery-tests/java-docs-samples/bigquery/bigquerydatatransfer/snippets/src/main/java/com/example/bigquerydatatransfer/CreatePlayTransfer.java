@@ -52,7 +52,7 @@ public class CreatePlayTransfer {
 
   public static void createPlayTransfer(String projectId, TransferConfig transferConfig)
       throws IOException {
-    try (DataTransferServiceClient client = DataTransferServiceClient.create()) {
+    try (DataTransferServiceClient client = BqDataTransferOpts.newClient()) {
       ProjectName parent = ProjectName.of(projectId);
       CreateTransferConfigRequest request =
           CreateTransferConfigRequest.newBuilder()
