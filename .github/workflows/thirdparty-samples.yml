@@ -193,20 +193,23 @@ jobs:
           disk-cache: thirdparty
           repository-cache: true
 
-      - name: Checkout sibling googlesql (for local_path_override)
-        uses: actions/checkout@v4
+      # Phase 4 of the `googlesql-prebuilt` rollout: prefer the
+      # published prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL`
+      # / `_SHA256` at the repository level) and fall back to a sibling
+      # source checkout when the repo vars are unset.
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
         with:
-          repository: google/googlesql
-          ref: 2026.01.1
-          path: googlesql-sibling
-
-      - name: Stage googlesql at ../googlesql
-        run: |
-          mv googlesql-sibling ../googlesql
-          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel
-        run: task emulator:build-engine:bazel
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          echo "::notice::Live thirdparty build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          task emulator:build-engine:bazel
 
       - name: Build Go gateway (gateway_main)
         run: task emulator:build

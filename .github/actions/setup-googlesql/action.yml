@@ -1,0 +1,161 @@
+# Resolve a GoogleSQL build mode for the emulator's Bazel build.
+# Centralises the prebuilt-vs-source decision that every CI workflow
+# making an engine build needs (Phase 4 of the `googlesql-prebuilt`
+# rollout — see `docs/dev/googlesql-prebuilt/README.md` and
+# `.github/workflows/ci.yml`).
+#
+# Two ways to pick a mode:
+#
+#   1. Pass `prebuilt-url` and `prebuilt-sha256` (typically wired from
+#      `vars.GOOGLESQL_PREBUILT_URL` / `vars.GOOGLESQL_PREBUILT_SHA256`,
+#      repository-level Actions variables that release maintainers
+#      bump on every prebuilt artifact publish). The action downloads,
+#      verifies, and unpacks the artifact under
+#      `.cache/googlesql-prebuilt/`. The caller then runs
+#      `task emulator:build-engine:bazel` with the Phase 4 default
+#      (`GOOGLESQL_SOURCE=prebuilt`) and the cache is consumed.
+#
+#   2. Leave both empty (e.g. before maintainers populate the repo
+#      vars). The action emits a workflow-level warning and falls back
+#      to source mode: it checks out
+#      `https://github.com/google/googlesql` at `googlesql-ref` into
+#      `../googlesql` and applies the gazelle leading-zero patch
+#      documented in `MODULE.bazel`. The caller MUST then export
+#      `GOOGLESQL_SOURCE=local` before invoking the build, otherwise
+#      the build's pre-flight gate refuses to start (the cache is empty
+#      under prebuilt mode).
+#
+# In both modes the action surfaces the GoogleSQL identity (artifact
+# version + commit, or source ref + HEAD commit) into job outputs so
+# a failed CI lane can be tied back to a concrete artifact or commit.
+
+name: Set up GoogleSQL (prebuilt or source)
+description: |
+  Resolve a GoogleSQL build mode for the emulator's Bazel build.
+  Either fetches a published prebuilt artifact (when prebuilt-url +
+  prebuilt-sha256 are set) or falls back to a sibling source checkout.
+
+inputs:
+  prebuilt-url:
+    description: |
+      URL of a published GoogleSQL prebuilt tarball (typically
+      `vars.GOOGLESQL_PREBUILT_URL`). When set together with
+      `prebuilt-sha256`, the action downloads, verifies, and unpacks
+      the artifact into `.cache/googlesql-prebuilt/`.
+    required: false
+    default: ""
+  prebuilt-sha256:
+    description: |
+      Expected SHA-256 hex (64 chars) of the prebuilt tarball. Required
+      when `prebuilt-url` is set; ignored otherwise.
+    required: false
+    default: ""
+  googlesql-ref:
+    description: |
+      Upstream GoogleSQL git ref (tag or commit) used by the source
+      fallback. Ignored in prebuilt mode.
+    required: false
+    default: "2026.01.1"
+
+outputs:
+  mode:
+    description: '"prebuilt" or "source" — which path was selected.'
+    value: ${{ steps.resolve.outputs.mode }}
+  googlesql-source:
+    description: |
+      Value to pass as the `GOOGLESQL_SOURCE` env var to
+      `task emulator:build-engine:bazel`. `prebuilt` for prebuilt mode,
+      `local` for source mode. Phase 4's default matches `prebuilt`,
+      but exporting it explicitly keeps the workflow free of mode
+      ambiguity.
+    value: ${{ steps.resolve.outputs.googlesql-source }}
+  artifact-version:
+    description: |
+      Best-effort `artifact_version` from the prebuilt manifest. Empty
+      string in source mode.
+    value: ${{ steps.identity.outputs.artifact-version }}
+  googlesql-commit:
+    description: |
+      12-char short SHA of the GoogleSQL commit the build will see —
+      from the prebuilt manifest in prebuilt mode, from `git rev-parse`
+      against `../googlesql/HEAD` in source mode.
+    value: ${{ steps.identity.outputs.googlesql-commit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve GoogleSQL mode
+      id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+        url='${{ inputs.prebuilt-url }}'
+        sha='${{ inputs.prebuilt-sha256 }}'
+        if [ -n "$url" ] && [ -n "$sha" ]; then
+          if ! [[ "$sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::prebuilt-sha256 must be 64 lowercase hex chars; got '$sha'"
+            exit 1
+          fi
+          echo "mode=prebuilt" >> "$GITHUB_OUTPUT"
+          echo "googlesql-source=prebuilt" >> "$GITHUB_OUTPUT"
+          echo "::notice::GoogleSQL mode=prebuilt url=$url sha256=$sha"
+        else
+          echo "mode=source" >> "$GITHUB_OUTPUT"
+          echo "googlesql-source=local" >> "$GITHUB_OUTPUT"
+          echo "::warning::vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower). Set the repo vars to switch CI lanes onto the Phase 4 default (prebuilt)."
+        fi
+
+    - name: Fetch + verify + unpack prebuilt artifact
+      if: steps.resolve.outputs.mode == 'prebuilt'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # `task googlesql:fetch-prebuilt` runs the same SHA + module-name
+        # + manifest-schema gates the local helper enforces, so a
+        # tampered or stale tarball cannot land in the cache. Requires
+        # `arduino/setup-task` to have run earlier in the calling job.
+        task googlesql:fetch-prebuilt \
+          URL='${{ inputs.prebuilt-url }}' \
+          SHA256='${{ inputs.prebuilt-sha256 }}'
+
+    - name: Checkout sibling googlesql (source fallback)
+      if: steps.resolve.outputs.mode == 'source'
+      uses: actions/checkout@v4
+      with:
+        repository: google/googlesql
+        ref: ${{ inputs.googlesql-ref }}
+        path: googlesql-sibling
+
+    - name: Stage googlesql at ../googlesql (source fallback)
+      if: steps.resolve.outputs.mode == 'source'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
+        # strict semver parser ("leading zero"); see the long note at
+        # the top of //MODULE.bazel for the rationale.
+        mv googlesql-sibling ../googlesql
+        sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+    - name: Surface GoogleSQL identity
+      id: identity
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        mode='${{ steps.resolve.outputs.mode }}'
+        if [ "$mode" = "prebuilt" ]; then
+          mf=".cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/manifest.json"
+          ver="$(python3 -c "import json; print(json.load(open('$mf')).get('artifact_version','?'))" 2>/dev/null || echo '?')"
+          gs="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?')[:12])" 2>/dev/null || echo '?')"
+          echo "artifact-version=$ver" >> "$GITHUB_OUTPUT"
+          echo "googlesql-commit=$gs" >> "$GITHUB_OUTPUT"
+          echo "::notice::GoogleSQL prebuilt artifact_version=$ver googlesql=$gs"
+        else
+          gs="$(git -C ../googlesql rev-parse --short=12 HEAD)"
+          echo "artifact-version=" >> "$GITHUB_OUTPUT"
+          echo "googlesql-commit=$gs" >> "$GITHUB_OUTPUT"
+          echo "::notice::GoogleSQL source ref=${{ inputs.googlesql-ref }} commit=$gs"
+        fi

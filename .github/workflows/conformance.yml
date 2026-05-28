@@ -81,24 +81,26 @@ jobs:
           disk-cache: conformance
           repository-cache: true
 
-      - name: Checkout sibling googlesql (for local_path_override)
-        uses: actions/checkout@v4
+      # Phase 4 of the `googlesql-prebuilt` rollout: prefer the
+      # published prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL`
+      # and `vars.GOOGLESQL_PREBUILT_SHA256` at the repository level)
+      # and fall back to a sibling source checkout otherwise. The
+      # composite action surfaces the resolved mode and artifact
+      # identity so a failed conformance run can be tied back to a
+      # concrete artifact / commit.
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
         with:
-          repository: google/googlesql
-          ref: 2026.01.1
-          path: googlesql-sibling
-
-      - name: Stage googlesql at ../googlesql
-        run: |
-          mv googlesql-sibling ../googlesql
-          # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
-          # strict semver parser ("leading zero"); see the long note
-          # at the top of //MODULE.bazel for the rationale. Mirror the
-          # ci.yml workflow's patch.
-          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
-        run: task emulator:build-engine:bazel
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          echo "::notice::Conformance ${{ matrix.profile }} build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          task emulator:build-engine:bazel
 
       - name: Run conformance fixtures
         run: |

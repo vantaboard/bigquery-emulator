@@ -40,6 +40,15 @@ jobs:
           go-version: '1.26'
           cache: true
 
+      - name: Install Task
+        # The prebuilt-GoogleSQL setup action shells out to
+        # `task googlesql:fetch-prebuilt`; install Task on the runner
+        # so that path is available regardless of the resolved mode.
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install C++ build deps
         run: |
           sudo apt-get update
@@ -70,10 +79,21 @@ jobs:
       # Bazel build of emulator_main (canonical, full GoogleSQL)
       # ---------------------------------------------------------------
       #
-      # `local_path_override` in MODULE.bazel points at a sibling
-      # `../googlesql/` checkout; the step below pulls the matching
-      # tag from upstream and applies the one-line semver patch
-      # documented in MODULE.bazel before the build kicks off.
+      # Phase 4 of the `googlesql-prebuilt` rollout (see
+      # `docs/dev/googlesql-prebuilt/README.md`) consumes a pinned
+      # prebuilt artifact instead of recompiling GoogleSQL from source.
+      # The composite action below resolves the mode:
+      #
+      #   * If `vars.GOOGLESQL_PREBUILT_URL` and
+      #     `vars.GOOGLESQL_PREBUILT_SHA256` are set at the repository
+      #     level, it downloads + verifies + unpacks the artifact and
+      #     the build runs with `GOOGLESQL_SOURCE=prebuilt`.
+      #   * Otherwise it emits a workflow-level warning and falls back
+      #     to a sibling `../googlesql/` checkout (the legacy source
+      #     path), with `GOOGLESQL_SOURCE=local`. This keeps CI green
+      #     during the transition window before maintainers configure
+      #     the repo vars; once they do, the prebuilt path takes over
+      #     automatically.
       - name: Set up Bazel (bazelisk)
         uses: bazel-contrib/setup-bazel@0.13.0
         with:
@@ -81,26 +101,25 @@ jobs:
           disk-cache: ${{ github.workflow }}
           repository-cache: true
 
-      - name: Checkout sibling googlesql (for local_path_override)
-        uses: actions/checkout@v4
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
         with:
-          repository: google/googlesql
-          ref: 2026.01.1
-          path: googlesql-sibling
-
-      - name: Stage googlesql at ../googlesql
-        run: |
-          mv googlesql-sibling ../googlesql
-          # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
-          # strict semver parser ("leading zero"); see the long note
-          # at the top of //MODULE.bazel for the rationale.
-          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: |
-          bazel build //binaries/emulator_main:emulator_main
+          echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          task emulator:build-engine:bazel
 
       - name: Build Go gateway (gateway_main)
         run: |
           mkdir -p bin
           go build -o bin/gateway_main ./binaries/gateway_main
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true
