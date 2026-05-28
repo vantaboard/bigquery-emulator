@@ -165,6 +165,16 @@
         <configuration>
           <includes>
             <include>**/WriteBufferedStreamIT.java</include>
+            <!--
+              Phase C addition (see
+              .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md): smoke IT
+              for the bigquerystorage-arrow-quickstart sample. Expected to fail
+              with io.grpc.StatusRuntimeException: UNIMPLEMENTED from the
+              BigQueryRead.CreateReadSession path until Phase D lands the
+              shallow Read-path port; committed today so Failsafe discovers it
+              once the gRPC handler lands.
+            -->
+            <include>**/StorageArrowSampleIT.java</include>
           </includes>
           <systemPropertyVariables>
             <BIGQUERY_EMULATOR_HOST>${env.BIGQUERY_EMULATOR_HOST}</BIGQUERY_EMULATOR_HOST>
