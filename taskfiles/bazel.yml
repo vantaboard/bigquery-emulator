@@ -234,7 +234,8 @@ tasks:
       (required; usually the output of `bazel query 'kind(cc_test, //...)'`).
       Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Emits a single
       combined lcov report at `bazel-out/_coverage/_coverage_report.dat`
-      via `--combined_report=lcov`, which Codecov ingests directly.
+      via `--combined_report=lcov`, which the in-repo `tools/coverage`
+      summarizer (run via `task coverage:summarize`) ingests directly.
       Runs `bazel shutdown` on exit (success, failure, or signal).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
