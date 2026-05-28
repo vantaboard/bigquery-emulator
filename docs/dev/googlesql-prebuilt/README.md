@@ -22,6 +22,8 @@ release notes.
 
 ## Documents in this directory
 
+Phase 1 — Compatibility surface:
+
 1. [`label-inventory.md`](label-inventory.md) — Section 1.
    Every `@googlesql//` label the emulator references, with the owning emulator
    package, the public headers each label exposes, and a per-label
@@ -40,12 +42,37 @@ release notes.
 5. [`upgrade-rules.md`](upgrade-rules.md) — Done criteria.
    How the frozen surface may evolve during a GoogleSQL upgrade and which
    changes cascade as breaking work into later phases.
+
+Phase 5 — Safety gates:
+
 6. [`rollback.md`](rollback.md) — Phase 5 rollback playbook.
    When and how to repin or revert prebuilt adoption when the parity job,
    conformance lane, or validator surfaces a regression. Lists every
    `FAIL_*` token emitted by
    [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py)
    with the recommended response.
+
+Phase 6 — Docs and operations:
+
+7. [`maintainer-runbook.md`](maintainer-runbook.md) — Maintainer artifact runbook.
+   The steady-state publish / pin / verify / roll-back flow: how to run the
+   producer workflow, find the asset URL + SHA, update the consumer pins
+   (`vars.GOOGLESQL_PREBUILT_*` + `env.RELEASE_GOOGLESQL_PREBUILT_*`), and
+   roll back via repin.
+8. [`upgrade-procedure.md`](upgrade-procedure.md) — Upgrade procedure.
+   Ordered checklist for bumping the upstream GoogleSQL pin end to end:
+   source SHA candidate → label inventory → wrapper/manifest changes if needed
+   → produce → verify → pin → parity → release pin. Calls out the breaking
+   cases (label renames, schema bumps, toolchain changes).
+9. [`performance.md`](performance.md) — Cache and performance expectations.
+   What improves (local rebuilds, PR CI, Docker `ENGINE_SOURCE=bazel`,
+   release determinism) and what does not (source mode still slow, first-time
+   download cost, non-GoogleSQL C++ still compiles, prebuilt-engine Docker
+   image stays fastest).
+10. [`troubleshooting.md`](troubleshooting.md) — Validator troubleshooting.
+    Maps every Phase 5 `FAIL_*` token to the likely owner (artifact producer,
+    consumer pin, local environment, compatibility surface) and points back
+    into `rollback.md` for the rollback procedure.
 
 ## What this phase does NOT do
 
