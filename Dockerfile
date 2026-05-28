@@ -46,18 +46,24 @@
 
 ARG GO_VERSION=1.26
 ARG DEBIAN_VERSION=bookworm
-# GoogleSQL upstream tag. Must match the version pinned in MODULE.bazel.
-# The patched value works around gazelle's strict semver parser; see the
-# top-of-file note in MODULE.bazel and the same patch applied in
-# `.github/workflows/ci.yml` and `.github/workflows/conformance.yml`.
+# GoogleSQL upstream tag (used by the source fallback path). Must
+# match the version pinned in MODULE.bazel. The patched value works
+# around gazelle's strict semver parser; see the top-of-file note in
+# MODULE.bazel and the same patch applied in `.github/workflows/ci.yml`
+# and `.github/workflows/conformance.yml`. With the Phase 4
+# `GOOGLESQL_PREBUILT_URL` build arg set, this is unused.
 ARG GOOGLESQL_VERSION=2026.01.1
 ARG GOOGLESQL_VERSION_PATCHED=2026.1.1
 ARG BAZELISK_VERSION=v1.27.0
 
 # Engine source selector. Two valid values:
 #   * `bazel` (default): run the canonical `cc_binary` build inside the
-#     image; self-contained, slow first cut (~25-55 min cold cache).
-#     What `docker build .` does without any extra setup.
+#     image. By default this consumes a published GoogleSQL prebuilt
+#     artifact via the Phase 4 `GOOGLESQL_PREBUILT_URL` /
+#     `GOOGLESQL_PREBUILT_SHA256` build args; if those are unset, falls
+#     back to a sibling `google/googlesql` clone (slow first cut,
+#     ~25-55 min cold cache). What `docker build .` does without any
+#     extra setup.
 #   * `prebuilt`: skip the in-container Bazel build and COPY the engine
 #     binary + libduckdb.so from the host build context (under `bin/`).
 #     Used by `.github/workflows/release.yml` so the release runner does
@@ -66,6 +72,20 @@ ARG BAZELISK_VERSION=v1.27.0
 #     `bin/libduckdb.so` must be staged before `docker build` runs;
 #     `task emulator:build-engine:bazel` produces both.
 ARG ENGINE_SOURCE=bazel
+
+# Phase 4 of the `googlesql-prebuilt` rollout: when both args are set,
+# the `engine-builder-bazel` stage downloads the published GoogleSQL
+# prebuilt artifact, verifies its SHA-256, and unpacks it into the
+# `.cache/googlesql-prebuilt/` cache the `--config=googlesql-prebuilt`
+# group reads from (see `.bazelrc`). This skips the multi-GB GoogleSQL
+# source compile inside the container.
+#
+# When either arg is empty, the stage falls back to the legacy sibling
+# `google/googlesql` clone + `--config=googlesql-source` build. The
+# fallback exists so `docker build .` keeps working before maintainers
+# wire the prebuilt URL/SHA into their build invocations or CI vars.
+ARG GOOGLESQL_PREBUILT_URL=""
+ARG GOOGLESQL_PREBUILT_SHA256=""
 
 ###############################################################################
 # Stage 1a: C++ engine (canonical Bazel build, full GoogleSQL + DuckDB)
@@ -117,16 +137,6 @@ RUN curl -fsSL -o /usr/local/bin/bazel \
         "https://github.com/bazelbuild/bazelisk/releases/download/${BAZELISK_VERSION}/bazelisk-linux-amd64" \
     && chmod +x /usr/local/bin/bazel
 
-# Stage googlesql sibling at /googlesql so MODULE.bazel's
-# `local_path_override(path = "../googlesql")` resolves cleanly when
-# the workspace lives at /src.
-ARG GOOGLESQL_VERSION
-ARG GOOGLESQL_VERSION_PATCHED
-RUN git clone --depth=1 --branch=${GOOGLESQL_VERSION} \
-        https://github.com/google/googlesql.git /googlesql \
-    && sed -i "s/version = \"${GOOGLESQL_VERSION}\"/version = \"${GOOGLESQL_VERSION_PATCHED}\"/" \
-        /googlesql/MODULE.bazel
-
 WORKDIR /src
 
 # Bazel inputs only: the stage skips `gateway/`, `docs/`, etc. so a
@@ -138,6 +148,84 @@ COPY frontend ./frontend
 COPY proto ./proto
 COPY third_party ./third_party
 
+# Resolve a GoogleSQL build mode (Phase 4 of the `googlesql-prebuilt`
+# rollout — see `docs/dev/googlesql-prebuilt/README.md`):
+#
+#   * If `GOOGLESQL_PREBUILT_URL` + `GOOGLESQL_PREBUILT_SHA256` are
+#     set, fetch + verify (SHA gate) + unpack into
+#     `/src/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/`,
+#     where `%workspace%/.cache/googlesql-prebuilt/...` from
+#     `.bazelrc` resolves under `--config=googlesql-prebuilt`.
+#   * Otherwise clone `google/googlesql@${GOOGLESQL_VERSION}` at
+#     `/googlesql` (so `MODULE.bazel`'s
+#     `local_path_override(path = "../googlesql")` resolves) and apply
+#     the gazelle leading-zero patch.
+#
+# The fetch path mirrors the SHA-gate logic in
+# `taskfiles/googlesql.yml::fetch-prebuilt` so Bazel only sees the
+# cache after the checksum + module-name + manifest gates have all
+# passed.
+ARG GOOGLESQL_VERSION
+ARG GOOGLESQL_VERSION_PATCHED
+ARG GOOGLESQL_PREBUILT_URL
+ARG GOOGLESQL_PREBUILT_SHA256
+# Use bash for the fetch step: it relies on `<(...)` process
+# substitution and a few other constructs `dash` does not implement.
+SHELL ["/bin/bash", "-c"]
+RUN set -eux; \
+    if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then \
+        if ! [[ "${GOOGLESQL_PREBUILT_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then \
+            echo "GOOGLESQL_PREBUILT_SHA256 must be 64 lowercase hex chars; got '${GOOGLESQL_PREBUILT_SHA256}'" >&2; \
+            exit 2; \
+        fi; \
+        cache_root=/src/.cache/googlesql-prebuilt; \
+        mkdir -p "$cache_root"; \
+        tmp="$(mktemp -d -p "$cache_root" .fetch-XXXXXX)"; \
+        tarball="$tmp/artifact.tar.gz"; \
+        echo "fetching ${GOOGLESQL_PREBUILT_URL} -> $tarball"; \
+        curl --fail --location --show-error --silent \
+            --output "$tarball" "${GOOGLESQL_PREBUILT_URL}"; \
+        actual_sha="$(sha256sum "$tarball" | awk '{print $1}')"; \
+        if [ "$actual_sha" != "${GOOGLESQL_PREBUILT_SHA256}" ]; then \
+            echo "GoogleSQL prebuilt SHA mismatch (expected ${GOOGLESQL_PREBUILT_SHA256}, got $actual_sha)" >&2; \
+            rm -rf "$tmp"; \
+            exit 1; \
+        fi; \
+        while IFS= read -r path; do \
+            case "$path" in \
+              /*|*..*) echo "tarball path-escape entry: $path" >&2; exit 1 ;; \
+            esac; \
+        done < <(tar -tzf "$tarball"); \
+        unpack="$tmp/unpack"; \
+        mkdir -p "$unpack"; \
+        tar -xzf "$tarball" -C "$unpack"; \
+        if [ ! -d "$unpack/googlesql_prebuilt_linux_amd64" ]; then \
+            echo "tarball missing top-level googlesql_prebuilt_linux_amd64/" >&2; \
+            ls -la "$unpack" >&2; \
+            exit 1; \
+        fi; \
+        mod_name="$(grep -E '^[[:space:]]*name = ' "$unpack/googlesql_prebuilt_linux_amd64/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"; \
+        if [ "$mod_name" != "googlesql" ]; then \
+            echo "prebuilt MODULE.bazel declares module(name = \"$mod_name\"); expected \"googlesql\"" >&2; \
+            exit 1; \
+        fi; \
+        rm -rf "$cache_root/googlesql_prebuilt_linux_amd64"; \
+        mv "$unpack/googlesql_prebuilt_linux_amd64" "$cache_root/googlesql_prebuilt_linux_amd64"; \
+        echo "${GOOGLESQL_PREBUILT_SHA256}  artifact.tar.gz" > "$cache_root/googlesql_prebuilt_linux_amd64.tarball.sha256"; \
+        rm -rf "$tmp"; \
+        artifact_version="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("artifact_version","?"))' 2>/dev/null || echo '?')"; \
+        gs_commit="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("googlesql",{}).get("commit","?")[:12])' 2>/dev/null || echo '?')"; \
+        echo "GoogleSQL prebuilt artifact_version=$artifact_version googlesql=$gs_commit"; \
+        echo prebuilt > /tmp/googlesql-mode; \
+    else \
+        echo "GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build" >&2; \
+        git clone --depth=1 --branch="${GOOGLESQL_VERSION}" \
+            https://github.com/google/googlesql.git /googlesql; \
+        sed -i "s/version = \"${GOOGLESQL_VERSION}\"/version = \"${GOOGLESQL_VERSION_PATCHED}\"/" \
+            /googlesql/MODULE.bazel; \
+        echo source > /tmp/googlesql-mode; \
+    fi
+
 # Auto-detect throttling matches taskfiles/bazel.yml + emulator.yml so a
 # constrained CI runner picks the same shape as a local invocation. Per
 # `.cursor/rules/bazel-process-hygiene.mdc`, do NOT lower these; let the
@@ -147,8 +235,9 @@ ARG BAZEL_MEM_MB=
 
 # Build with a BuildKit cache mount on Bazel's user-root so subsequent
 # `docker build` invocations skip re-downloading and re-compiling
-# GoogleSQL. The first cold build dominates: figure ~25-55 min depending
-# on the runner; warm rebuilds typically land under two minutes.
+# GoogleSQL. The first cold build dominates: figure ~25-55 min in
+# source mode; the prebuilt path drops that to ~5-10 min on a cold
+# tree because GoogleSQL's archive is already linked.
 RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clang18 \
     set -eux; \
     jobs="${BAZEL_JOBS}"; \
@@ -161,8 +250,16 @@ RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clan
         mem=$(awk '/^MemTotal:/ { mb = int($2 * 3 / 4 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo); \
     fi; \
     : "${mem:=8192}"; \
+    mode="$(cat /tmp/googlesql-mode)"; \
+    case "$mode" in \
+      prebuilt) gsq_cfg=googlesql-prebuilt ;; \
+      source)   gsq_cfg=googlesql-source ;; \
+      *)        echo "unknown googlesql mode '$mode'" >&2; exit 1 ;; \
+    esac; \
+    echo "engine-builder-bazel: --config=$gsq_cfg (jobs=$jobs mem=${mem})"; \
     CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
         bazel build \
+            --config="$gsq_cfg" \
             --jobs="${jobs}" \
             --local_resources=cpu="${jobs}" \
             --local_resources=memory="${mem}" \

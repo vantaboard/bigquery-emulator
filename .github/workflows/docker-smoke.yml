@@ -77,8 +77,28 @@ jobs:
           # task run hits the pre-built image.
           DOCKER_BUILDKIT: "1"
           COMPOSE_DOCKER_CLI_BUILD: "1"
+          # Phase 4: when these repo vars are set, the Dockerfile's
+          # `engine-builder-bazel` stage consumes the published
+          # GoogleSQL prebuilt artifact instead of cloning the source
+          # tree. Empty values leave the source fallback in place.
+          GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
         run: |
           set -euo pipefail
+          # Forward the GoogleSQL prebuilt args only when both are set
+          # (matches the Dockerfile gate: an empty URL or SHA falls back
+          # to source). bash arrays keep the empty / partial-set cases
+          # honest — `--build-arg KEY=` is treated as "set to empty
+          # string", which trips the Dockerfile's path-traversal-style
+          # arg validation if only one is set.
+          gsq_args=()
+          if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then
+            gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
+            gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+            echo "::notice::docker-smoke: GoogleSQL prebuilt artifact ($GOOGLESQL_PREBUILT_URL)"
+          else
+            echo "::warning::docker-smoke: vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower)"
+          fi
           # Pre-build with explicit cache backends so layers persist
           # across runs. compose's `--build` invocation in the task
           # then no-ops if the image is already up to date.
@@ -87,6 +107,7 @@ jobs:
             --load \
             --cache-from "type=local,src=/tmp/.buildx-cache" \
             --cache-to "type=local,dest=/tmp/.buildx-cache-new,mode=max" \
+            "${gsq_args[@]}" \
             .
           # Atomic swap so a partial cache from a failed run does not
           # poison the next run.

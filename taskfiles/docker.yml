@@ -33,15 +33,32 @@ tasks:
       so the in-container Bazel build cannot OOM the host. Override on
       the CLI to scale up on dedicated runners:
         BAZEL_JOBS=12 BAZEL_MEM_MB=16384 task docker:build
+      
+      Phase 4 of the `googlesql-prebuilt` rollout: the Dockerfile
+      consumes a published GoogleSQL prebuilt artifact when
+      GOOGLESQL_PREBUILT_URL + GOOGLESQL_PREBUILT_SHA256 are set in
+      the environment, and falls back to a sibling source clone
+      otherwise. Both env vars are forwarded as `--build-arg`s when
+      set; leaving them empty is harmless (the Dockerfile picks the
+      source path).
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
+        gsq_args=()
+        if [ -n "${GOOGLESQL_PREBUILT_URL:-}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256:-}" ]; then
+          gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
+          gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+          echo "[docker:build] GoogleSQL prebuilt: $GOOGLESQL_PREBUILT_URL (sha256=$GOOGLESQL_PREBUILT_SHA256)"
+        else
+          echo "[docker:build] GoogleSQL: source fallback (set GOOGLESQL_PREBUILT_URL/_SHA256 to switch to prebuilt)"
+        fi
         docker build \
           --build-arg BAZEL_JOBS="${BAZEL_JOBS}" \
           --build-arg BAZEL_MEM_MB="${BAZEL_MEM_MB}" \
+          "${gsq_args[@]}" \
           -t {{.DOCKER_IMAGE}} .
 
   run:

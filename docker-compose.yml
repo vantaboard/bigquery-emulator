@@ -51,6 +51,12 @@ services:
         # values for the developer's machine and export them.
         BAZEL_JOBS: ${BAZEL_JOBS:-}
         BAZEL_MEM_MB: ${BAZEL_MEM_MB:-}
+        # Phase 4: forward the GoogleSQL prebuilt artifact pin so the
+        # Dockerfile's `engine-builder-bazel` stage skips the multi-GB
+        # GoogleSQL source compile. Both must be set together; a
+        # missing pair drops back to the source fallback.
+        GOOGLESQL_PREBUILT_URL: ${GOOGLESQL_PREBUILT_URL:-}
+        GOOGLESQL_PREBUILT_SHA256: ${GOOGLESQL_PREBUILT_SHA256:-}
     ports:
       - "9050:9050"
       - "9060:9060"
