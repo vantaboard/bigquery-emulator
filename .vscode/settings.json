@@ -16,10 +16,13 @@
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "golang.go"
     },
+    "go.buildTags": "integration",
+    "go.testTags": "integration",
     "gopls": {
         "analyses": {
             "composites": false
-        }
+        },
+        "build.buildFlags": ["-tags=integration"]
     },
     "exp-vscode-go.testExplorer.enable": true,
 
