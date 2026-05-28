@@ -169,6 +169,68 @@ GRPC_VERSION="$(read_bazel_dep_version 'grpc')"
 [ -n "$ABSEIL_VERSION" ] && [ -n "$PROTOBUF_VERSION" ] && [ -n "$GRPC_VERSION" ] \
     || die "failed to read abseil/protobuf/grpc pins from $EMULATOR_SRC/MODULE.bazel"
 
+# Phase 3 verification surfaced three more transitive third-party
+# Bzlmod modules referenced by the artifact's exported header tree
+# (gtest_prod.h, openssl/bn.h, re2/re2.h). Read them from the
+# upstream googlesql/MODULE.bazel rather than the consumer's, since
+# the consumer doesn't directly depend on re2 / boringssl. Reading
+# from upstream also makes the version pin self-consistent: the
+# static archives in `lib/` were linked against THESE versions.
+read_bazel_dep_version_from() {
+    local file="$1"
+    local module_name="$2"
+    grep -E "^\\s*bazel_dep\\(\\s*name = \"${module_name}\"" "$file" \
+        | sed -E 's/.*version = "([^"]+)".*/\1/' \
+        | head -n1
+}
+GOOGLETEST_VERSION="$(read_bazel_dep_version_from "$GOOGLESQL_SRC/MODULE.bazel" googletest)"
+RE2_VERSION="$(read_bazel_dep_version_from "$GOOGLESQL_SRC/MODULE.bazel" re2)"
+BORINGSSL_VERSION="$(read_bazel_dep_version_from "$GOOGLESQL_SRC/MODULE.bazel" boringssl)"
+GOOGLEAPIS_VERSION="$(read_bazel_dep_version_from "$GOOGLESQL_SRC/MODULE.bazel" googleapis)"
+GOOGLEAPIS_CC_VERSION="$(read_bazel_dep_version_from "$GOOGLESQL_SRC/MODULE.bazel" googleapis-cc)"
+[ -n "$GOOGLETEST_VERSION" ] && [ -n "$RE2_VERSION" ] && [ -n "$BORINGSSL_VERSION" ] \
+    && [ -n "$GOOGLEAPIS_VERSION" ] && [ -n "$GOOGLEAPIS_CC_VERSION" ] \
+    || die "failed to read googletest/re2/boringssl/googleapis pins from $GOOGLESQL_SRC/MODULE.bazel"
+
+# ICU, farmhash, and differential-privacy are fetched by upstream
+# googlesql via `googlesql/bazel/http_archive_deps.bzl` (NOT BCR
+# `bazel_dep`s). Parse their pinned versions from the same file so the
+# manifest's `bundled_thirdparty_deps` field reports the exact source
+# identity of the bytes we just statically linked into
+# `libgooglesql.a`.
+HTTP_ARCHIVE_DEPS="$GOOGLESQL_SRC/bazel/http_archive_deps.bzl"
+if [ -r "$HTTP_ARCHIVE_DEPS" ]; then
+    # `strip_prefix = "icu"` doesn't carry the version. The URL does:
+    # `release-76-1/icu4c-76_1-src.tgz` -> 76.1.
+    ICU_VERSION="$(grep -oE 'release-[0-9]+-[0-9]+/icu4c-[0-9]+_[0-9]+-src' "$HTTP_ARCHIVE_DEPS" \
+        | head -1 \
+        | sed -E 's|release-([0-9]+)-([0-9]+)/.*|\1.\2|' \
+        || echo unknown)"
+    # `strip_prefix = "farmhash-<sha>"` is the commit pin.
+    FARMHASH_COMMIT="$(grep -oE 'farmhash-[0-9a-f]{40}' "$HTTP_ARCHIVE_DEPS" \
+        | head -1 \
+        | sed -E 's|farmhash-||' \
+        || echo unknown)"
+    # `strip_prefix = "differential-privacy-<x.y.z>"` (and the same
+    # version for the cc/ subdirectory `com_google_cc_differential_privacy`
+    # repo). Read one and use it for both since they pin the same
+    # upstream tarball.
+    DIFFERENTIAL_PRIVACY_VERSION="$(grep -oE 'differential-privacy-[0-9]+\.[0-9]+\.[0-9]+' "$HTTP_ARCHIVE_DEPS" \
+        | head -1 \
+        | sed -E 's|differential-privacy-||' \
+        || echo unknown)"
+else
+    ICU_VERSION="unknown"
+    FARMHASH_COMMIT="unknown"
+    DIFFERENTIAL_PRIVACY_VERSION="unknown"
+fi
+[ -n "$ICU_VERSION" ] && [ "$ICU_VERSION" != "unknown" ] \
+    || die "failed to parse ICU version from $HTTP_ARCHIVE_DEPS"
+[ -n "$FARMHASH_COMMIT" ] && [ "$FARMHASH_COMMIT" != "unknown" ] \
+    || die "failed to parse farmhash commit from $HTTP_ARCHIVE_DEPS"
+[ -n "$DIFFERENTIAL_PRIVACY_VERSION" ] && [ "$DIFFERENTIAL_PRIVACY_VERSION" != "unknown" ] \
+    || die "failed to parse differential-privacy version from $HTTP_ARCHIVE_DEPS"
+
 BAZEL_VERSION_FILE="$EMULATOR_SRC/.bazelversion"
 if [ -r "$BAZEL_VERSION_FILE" ]; then
     BAZEL_VERSION="$(tr -d '[:space:]' < "$BAZEL_VERSION_FILE")"
@@ -241,26 +303,49 @@ mkdir -p "$REPO_STAGE/LICENSES"
     || die "googlesql source missing LICENSE (refusing to ship without it)"
 cp "$GOOGLESQL_SRC/LICENSE" "$REPO_STAGE/LICENSES/googlesql-LICENSE"
 
-# Generate a NOTICE listing the consumer-resolved third-party deps.
-# Per Phase 1 doc, these are NOT statically bundled into libgooglesql.a;
-# the NOTICE just records what the wrapper cc_library targets `deps=`
-# down into so a downstream license auditor knows what to look at.
+# Generate a NOTICE listing both the bundled and the consumer-resolved
+# third-party deps. ICU and farmhash are statically linked into
+# lib/libgooglesql.a (their objects appear under `_thirdparty_icu76__`
+# and `_thirdparty_farmhash__` names inside the archive). Everything
+# else is Bzlmod-resolved by the consumer's MODULE.bazel at link time.
 cat > "$REPO_STAGE/LICENSES/thirdparty-NOTICE" <<EOF
 GoogleSQL prebuilt artifact ($REPO_NAME) — third-party dependencies.
 
-The static archives shipped under lib/ contain only object code from
-the upstream GoogleSQL repository (https://github.com/google/googlesql,
-commit $GOOGLESQL_COMMIT). All of the following libraries are
-Bzlmod-resolved by the consumer's MODULE.bazel at link time and are
-NOT bundled into lib/libgooglesql.a or lib/libgooglesql_protos.a:
+The static archive lib/libgooglesql.a contains object code from the
+upstream GoogleSQL repository (https://github.com/google/googlesql,
+commit $GOOGLESQL_COMMIT) PLUS the following STATICALLY BUNDLED
+third-party libraries (see manifest's bundled_thirdparty_deps):
+
+  - icu $ICU_VERSION (Unicode license) — libicuuc, libicui18n, libicudata
+    Bundled because upstream GoogleSQL fetches it via http_archive
+    with a custom BUILD file; the closest BCR module (icu 78.x) uses
+    incompatible \`icu_78::\` namespace versioning.
+  - farmhash $FARMHASH_COMMIT (MIT) — farmhash.pic.o
+    Bundled because farmhash is not published in the Bazel Central
+    Registry; upstream GoogleSQL fetches it via http_archive.
+  - differential-privacy $DIFFERENTIAL_PRIVACY_VERSION (Apache-2.0) —
+    com_google_differential_privacy + com_google_cc_differential_privacy
+    cc_library objects plus the four cc_proto_library outputs
+    (confidence_interval, data, numerical_mechanism, summary), and
+    the cephes inverse_gaussian_cdf object. Bundled because the
+    differential-privacy repo is not published in the Bazel Central
+    Registry; upstream GoogleSQL fetches it via http_archive at the
+    pinned 4.x release tarball.
+
+The following libraries are NOT bundled — they are Bzlmod-resolved by
+the consumer's MODULE.bazel at link time (the prebuilt repo's own
+MODULE.bazel declares matching \`bazel_dep\` lines so the consumer
+resolves the same versions the producer linked against):
 
   - abseil-cpp $ABSEIL_VERSION (Apache-2.0)
   - protobuf $PROTOBUF_VERSION (BSD-3-Clause)
   - grpc $GRPC_VERSION (Apache-2.0)
+  - boringssl $BORINGSSL_VERSION (OpenSSL / ISC)
+  - re2 $RE2_VERSION (BSD-3-Clause)
+  - googletest $GOOGLETEST_VERSION (BSD-3-Clause)
 
-Phase 1 manifest schema (\`bundled_thirdparty_deps\`) reports an empty
-list, matching this layout. If a future producer starts bundling any
-of these, the manifest field will be updated accordingly.
+See docs/dev/googlesql-prebuilt/headers-and-libraries.md for the
+rationale behind the bundle / consumer-resolved split.
 EOF
 
 # ---------------------------------------------------------------------------
@@ -453,6 +538,120 @@ stage_bazel() {
     # accepts symbolic signal names.
     trap '(cd "'"$GOOGLESQL_SRC"'" && bazel shutdown 2>/dev/null) || true' EXIT INT TERM
 
+    # Toolchain pin: googlesql/MODULE.bazel registers the
+    # `@llvm_toolchain//:all` C++ toolchain (clang-21 + libc++) as
+    # `dev_dependency = True`. When `bazel build` runs INSIDE the
+    # googlesql repo, googlesql IS the root module, so that
+    # registration fires and Bazel resolves the C++ toolchain to the
+    # LLVM hermetic toolchain. The resulting `.pic.o` files use the
+    # libc++ ABI (`std::__1::basic_string` etc.). The bigquery-emulator
+    # consumer builds with `/usr/bin/clang` + libstdc++ (`std::__cxx11::
+    # basic_string`), so producer + consumer end up with incompatible
+    # C++ runtime layouts and the emulator_main link fails with
+    # thousands of "undefined reference to absl::lts_20240722::...
+    # std::__1::basic_string..." errors. Phase 3 prebuilt-mode link
+    # verification caught it.
+    #
+    # `--ignore_dev_dependency` would skip the registration, but it
+    # also drops the `single_version_override` overrides marked
+    # `dev_dependency` (Bazel applies them as a single bundle), which
+    # in googlesql's case includes the abseil-cpp 20240722.1 pin. Once
+    # that pin is dropped, Bzlmod resolves abseil-cpp to a much newer
+    # version that breaks googlesql's analysis (`absl/utility:
+    # if_constexpr` is gone in newer abseil).
+    #
+    # Workaround: patch the upstream `register_toolchains(...)` block
+    # OUT of `googlesql/MODULE.bazel` for the duration of the producer
+    # build, then restore it. The patch is a single-block delete
+    # bracketed by markers we add ourselves, so the restore is a hard
+    # rollback to the file's original byte content (we save/restore
+    # via a side file). Bazel still picks up the abseil pin (the
+    # `single_version_override` is not a dev_dep) but resolves the C++
+    # toolchain to the auto-detected `/usr/bin/clang` host toolchain
+    # (libstdc++ ABI, matching the consumer).
+    local module_path module_backup module_backup_dir
+    module_path="$GOOGLESQL_SRC/MODULE.bazel"
+    # The harvest stage's `$tmpdir` is created later; allocate a
+    # private dir here for the MODULE.bazel save/restore so the trap
+    # below has somewhere to read from on signal.
+    module_backup_dir="$(mktemp -d -t googlesql-prebuilt-module-XXXXXX)"
+    module_backup="$module_backup_dir/MODULE.bazel.orig"
+    [ -f "$module_path" ] || die "missing $module_path"
+    cp "$module_path" "$module_backup"
+    # Undo on exit / signal; the broader trap below also triggers
+    # `bazel shutdown`.
+    trap '[ -f "'"$module_backup"'" ] && cp "'"$module_backup"'" "'"$module_path"'"; (cd "'"$GOOGLESQL_SRC"'" && bazel shutdown 2>/dev/null) || true' EXIT INT TERM
+    # Remove the `register_toolchains("@llvm_toolchain//:all", ...)`
+    # block. It's a multi-line `register_toolchains(...)` ending in a
+    # closing paren on its own line; we use Python to scope the edit
+    # rather than fragile sed.
+    python3 - <<'PY' "$module_path"
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+text = p.read_text()
+# Match `register_toolchains(\n    "@llvm_toolchain//:all",\n    dev_dependency = True,\n)`.
+patched, n = re.subn(
+    r'register_toolchains\(\s*"@llvm_toolchain//:all"\s*,\s*dev_dependency\s*=\s*True\s*,?\s*\)\n?',
+    "# register_toolchains(\"@llvm_toolchain//:all\", dev_dependency = True)  "
+    "# patched out by tools/googlesql-prebuilt/package.sh for ABI parity\n",
+    text,
+)
+if n != 1:
+    sys.exit(f"register_toolchains patch failed: matched {n} times")
+p.write_text(patched)
+PY
+
+    # Enumerate every `cc_proto_library` target under //googlesql/...
+    # and add it to the build set. Reason: in modern Bazel,
+    # building a `cc_library` X that depends on `cc_proto_library` Y
+    # does NOT force Y's `.pb.cc` to compile into a `.pic.o` — Y only
+    # contributes a header CcInfo for X's TU compile. The actual
+    # `.pb.pic.o` materializes only when something asks for Y's
+    # archive output (i.e. a `cc_binary` link, or building Y directly).
+    # Since we only build `cc_library` umbrellas here, none of the
+    # `cc_proto_library` `.pb.pic.o` files get created, and the
+    # downstream `libgooglesql.a` is missing every proto message's
+    # compiled code — every `FooProto::Clear()` / `_default_instance_`
+    # ends up undefined at consumer link time. Explicitly enumerating
+    # and building each `cc_proto_library` target forces the proto
+    # `.pic.o` to materialize, so the harvest step picks them up.
+    #
+    # `bazel query` runs in a separate invocation (no `--features=pic`
+    # etc.) so the analysis cache is shared with the build below.
+    log "enumerating //googlesql/... cc_proto_library targets via bazel query"
+    local proto_targets_raw
+    proto_targets_raw="$(
+        cd "$GOOGLESQL_SRC"
+        CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
+        bazel query 'kind("cc_proto_library", //googlesql/...)'
+    )"
+    local proto_targets=()
+    local proto_target
+    while IFS= read -r proto_target; do
+        [ -n "$proto_target" ] || continue
+        proto_targets+=("$proto_target")
+    done <<<"$proto_targets_raw"
+    [ "${#proto_targets[@]}" -gt 0 ] \
+        || die "bazel query found 0 cc_proto_library targets under //googlesql/..."
+    log "  ${#proto_targets[@]} cc_proto_library targets queued"
+
+    # External `cc_proto_library` targets that the bundled GoogleSQL
+    # object code references at link time. These live under
+    # `@_main~googlesql_http_archive_deps~*` (i.e. the GoogleSQL-side
+    # http_archive_deps extension), NOT in BCR — same rationale as
+    # ICU + farmhash. Their `.pic.o` files won't materialize unless
+    # something explicitly requests their `cc_proto_library` target,
+    # and the bundled `libgooglesql.a` archive carries unresolved
+    # references into them. Listed explicitly because querying
+    # external repos in Bzlmod is brittle (`@<canonical_name>//...`
+    # changes per resolution).
+    local external_proto_targets=(
+        '@com_google_differential_privacy//proto:confidence_interval_cc_proto'
+        '@com_google_differential_privacy//proto:data_cc_proto'
+        '@com_google_differential_privacy//proto:numerical_mechanism_cc_proto'
+        '@com_google_differential_privacy//proto:summary_cc_proto'
+    )
+
     (
         cd "$GOOGLESQL_SRC"
         CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
@@ -467,30 +666,74 @@ stage_bazel() {
             --copt=-fPIC \
             --copt=-fno-omit-frame-pointer \
             --copt=-DNDEBUG \
-            "${umbrella_targets[@]}"
+            "${umbrella_targets[@]}" \
+            "${proto_targets[@]}" \
+            "${external_proto_targets[@]}"
     )
+
+    # Restore the upstream MODULE.bazel as soon as the build is done.
+    # The trap above is a defense-in-depth safety net for crash paths.
+    cp "$module_backup" "$module_path"
+    rm -rf "$module_backup_dir"
 
     local bazel_bin
     bazel_bin="$(cd "$GOOGLESQL_SRC" && bazel info bazel-bin)"
     [ -d "$bazel_bin" ] || die "bazel-bin not found at $bazel_bin"
 
     log "harvesting hand-written headers from $GOOGLESQL_SRC/googlesql/"
-    local pkg
-    for pkg in public public/types public/proto public/functions \
-               base common resolved_ast; do
-        local src_dir="$GOOGLESQL_SRC/googlesql/$pkg"
-        local dst_dir="$REPO_STAGE/include/googlesql/$pkg"
-        if [ -d "$src_dir" ]; then
-            mkdir -p "$dst_dir"
-            # `find ... -exec cp` rather than glob so we don't choke on
-            # zero-header directories.
-            find "$src_dir" -maxdepth 1 -type f -name '*.h' -exec cp {} "$dst_dir/" \;
-        fi
-    done
+    # Walk the full upstream `googlesql/` source tree and copy every
+    # hand-written `.h` (NOT `.h.template` — those expand into bazel-bin).
+    # The earlier explicit allowlist (`public/types`, `base`, ...) missed
+    # transitive headers like `googlesql/parser/parse_tree.h`, which the
+    # public-facing `:analyzer` wrapper reaches via the analyzer's
+    # `analyzer.h` `#include`. Phase 3 prebuilt-mode link verification
+    # caught the gap.
+    #
+    # Excluded directories: `bazel-*` symlinks (output trees) — we
+    # harvest those separately as "generated" headers below. The
+    # `bazel-` prefix matches `bazel-bin`, `bazel-out`, `bazel-testlogs`,
+    # and the workspace's own `bazel-googlesql` convenience symlink.
+    if [ -d "$GOOGLESQL_SRC/googlesql" ]; then
+        (
+            cd "$GOOGLESQL_SRC/googlesql"
+            find . -type f -name '*.h' \
+                ! -path './bazel-*' \
+                | while read -r relpath; do
+                    rel_clean="${relpath#./}"
+                    dst="$REPO_STAGE/include/googlesql/$rel_clean"
+                    mkdir -p "$(dirname "$dst")"
+                    cp "$rel_clean" "$dst"
+                done
+        )
+    fi
 
-    log "harvesting generated .pb.h headers from $bazel_bin/googlesql"
+    log "harvesting generated headers from $bazel_bin/googlesql"
+    # Two classes of generated header live under bazel-bin:
+    #   1. `*.pb.h` from `cc_proto_library` rules.
+    #   2. Hand-written templates expanded by upstream build helpers
+    #      (e.g. `googlesql/resolved_ast/resolved_ast.h` is generated
+    #      from `resolved_ast.h.template` by `gen_resolved_ast.py`,
+    #      `resolved_node_kind.h` from `resolved_node_kind.h.template`,
+    #      the `resolved_ast_*_visitor.h` family, etc.). These are
+    #      `*.h` (not `*.pb.h`) and are required by consumers via the
+    #      `:resolved_ast` wrapper. The earlier `*.pb.h`-only filter
+    #      missed them and Phase 3 prebuilt-mode link verification
+    #      caught the gap (`fatal error: 'googlesql/resolved_ast/
+    #      resolved_ast.h' file not found`).
+    #
+    # We harvest BOTH classes by scanning every `*.h` (.pb.h, .h)
+    # under `bazel-bin/googlesql/` whose path does NOT contain a
+    # Bazel-internal directory (`_objs/`, `_virtual_includes/`,
+    # `_virtual_imports/`, `_objs.bin/`, etc.). Bazel's intermediate
+    # output dirs hide internal copies that would clobber the
+    # producer-friendly include layout.
     if [ -d "$bazel_bin/googlesql" ]; then
-        find "$bazel_bin/googlesql" -type f -name '*.pb.h' | while read -r genhdr; do
+        find "$bazel_bin/googlesql" -type f \( -name '*.h' -o -name '*.pb.h' \) \
+            ! -path '*/_objs/*' \
+            ! -path '*/_objs.bin/*' \
+            ! -path '*/_virtual_includes/*' \
+            ! -path '*/_virtual_imports/*' \
+        | while read -r genhdr; do
             local rel="${genhdr#"$bazel_bin"/}"
             local dst="$REPO_STAGE/include/$rel"
             mkdir -p "$(dirname "$dst")"
@@ -508,44 +751,230 @@ stage_bazel() {
     extract_to_combined() {
         local out_archive="$1"
         local pattern_inc="$2"  # 'main' or 'proto'
-        local obj_dir="$tmpdir/$pattern_inc"
+        # Harvest raw `.pic.o` object files from `bazel-bin/googlesql/.../_objs/`.
+        #
+        # Why raw objects rather than the per-target `lib*.a` archives:
+        # `bazel build @googlesql//googlesql/public:analyzer` (and the
+        # other umbrella targets) emits one `lib<target>.a` per umbrella
+        # `cc_library`, but the umbrella's transitive deps (every other
+        # `cc_library` rule under `googlesql/...`) compile their `.pic.o`
+        # files into `_objs/<dep_target>/...` directories WITHOUT producing
+        # a per-dep archive. Iterating `lib*.a` would therefore miss the
+        # transitive object code (e.g. everything under `googlesql/base/`,
+        # `googlesql/common/`, most of `googlesql/public/types/`) and the
+        # resulting `libgooglesql.a` would be uselessly small. Globbing
+        # raw `.pic.o` files captures the full transitive closure.
+        #
+        # Proto / main split: `cc_proto_library` emits objects whose
+        # filenames end in `.pb.pic.o` (e.g. `options.pb.pic.o`,
+        # `error_location.pb.pic.o`). Hand-written sources (including
+        # files with `proto` in their *target* name like `proto_helper.cc`)
+        # compile to plain `<base>.pic.o`. Distinguishing on filename
+        # rather than directory name keeps hand-written proto helpers
+        # (`proto_helper.pic.o`, `proto_value_conversion.pic.o`) inside
+        # the main archive where consumers expect them per
+        # `docs/dev/googlesql-prebuilt/repo-layout.md`.
+        #
+        # Name collision: many sub-targets share `<source>.pic.o`
+        # basenames across different `_objs/<target>/` directories
+        # (e.g. `function.pic.o` exists in both `_objs/function/` and
+        # `_objs/templated_sql_function/`). `ar` keys archive entries
+        # by basename, so feeding both via `ar rcsD <archive>
+        # path/a/function.pic.o path/b/function.pic.o` records two
+        # entries with the same name and the linker resolves to the
+        # FIRST one, masking some symbols. We avoid that by COPYING
+        # each object into a per-archive tmpdir under a unique
+        # `<srcdir>__<name>.pic.o` name (path components flattened with
+        # `__`) before invoking `ar`.
+        local obj_list_raw obj_list_renamed obj_dir
+        obj_dir="$tmpdir/$pattern_inc"
         mkdir -p "$obj_dir"
-        local idx=0
-        # Find every PIC archive under bazel-bin/googlesql. Phase 1
-        # decision (headers-and-libraries.md): PIC is enabled and
-        # recorded in the manifest's `cflags`.
-        local archives
+        obj_list_raw="$tmpdir/${pattern_inc}.raw"
+        obj_list_renamed="$tmpdir/${pattern_inc}.list"
         if [ "$pattern_inc" = "proto" ]; then
-            archives="$(find "$bazel_bin/googlesql" -type f -name '*_cc_proto*.pic.a' 2>/dev/null || true)"
+            find "$bazel_bin/googlesql" -type f -name '*.pb.pic.o' \
+                > "$obj_list_raw" 2>/dev/null || true
         else
-            # Exclude proto archives by name pattern.
-            archives="$(find "$bazel_bin/googlesql" -type f -name '*.pic.a' \
-                ! -name '*_cc_proto*.pic.a' 2>/dev/null || true)"
+            find "$bazel_bin/googlesql" -type f -name '*.pic.o' \
+                ! -name '*.pb.pic.o' > "$obj_list_raw" 2>/dev/null || true
         fi
-        [ -n "$archives" ] || die "no .pic.a files matched for $pattern_inc under $bazel_bin/googlesql"
-        local ar_file
-        while IFS= read -r ar_file; do
-            [ -z "$ar_file" ] && continue
-            idx=$((idx + 1))
-            local sub="$obj_dir/$idx"
-            mkdir -p "$sub"
-            # `ar x` extracts into cwd. Use per-archive subdirs to
-            # avoid filename collisions (many archives have `foo.o`).
-            (cd "$sub" && ar x "$ar_file")
-        done <<< "$archives"
+        sort -o "$obj_list_raw" "$obj_list_raw"
         local obj_count
-        obj_count="$(find "$obj_dir" -type f -name '*.o' | wc -l)"
-        [ "$obj_count" -gt 0 ] || die "extracted zero objects for $pattern_inc"
-        log "  $out_archive: combining $obj_count objects from $idx archives"
-        # `find -print0 | xargs -0 ar rcs` keeps the order deterministic
-        # (find's BFS) and survives spaces in obj paths.
-        find "$obj_dir" -type f -name '*.o' -print0 \
-            | xargs -0 ar rcs "$out_archive"
+        obj_count="$(wc -l < "$obj_list_raw" 2>/dev/null || echo 0)"
+        [ "$obj_count" -gt 0 ] \
+            || die "no .pic.o objects matched for $pattern_inc under $bazel_bin/googlesql"
+        # Build the renamed copy. `bazel-bin/googlesql/public/_objs/
+        # analyzer/analyzer.pic.o` -> `public__analyzer__analyzer.pic.o`.
+        # Strip `bazel-bin/googlesql/` prefix and `_objs/` markers; the
+        # remaining path components are deterministic and unique.
+        : > "$obj_list_renamed"
+        local src
+        while IFS= read -r src; do
+            [ -z "$src" ] && continue
+            local rel="${src#"$bazel_bin/googlesql/"}"
+            # Drop "_objs/" segments to keep the flat name short while
+            # preserving the disambiguating target name immediately
+            # before the basename.
+            local flat
+            flat="$(printf '%s\n' "$rel" | sed 's|/_objs/|/|g; s|/|__|g')"
+            local dst="$obj_dir/$flat"
+            cp "$src" "$dst"
+            printf '%s\n' "$dst" >> "$obj_list_renamed"
+        done < "$obj_list_raw"
+        local renamed_count
+        renamed_count="$(wc -l < "$obj_list_renamed")"
+        local unique_count
+        unique_count="$(sed 's|.*/||' "$obj_list_renamed" | sort -u | wc -l)"
+        [ "$renamed_count" = "$unique_count" ] \
+            || die "post-rename object basenames still collide: $renamed_count rows, $unique_count unique"
+        log "  $out_archive: combining $obj_count objects (renamed for unique basenames)"
+        # `ar rcsD` (D = deterministic mode) zeroes timestamps / uids /
+        # gids in the archive header so subsequent rebuilds with the same
+        # inputs produce byte-identical archives (matches the manifest's
+        # SHA-256 reproducibility intent in `docs/dev/googlesql-prebuilt/
+        # manifest.md`).
+        rm -f "$out_archive"
+        xargs -a "$obj_list_renamed" ar rcsD "$out_archive"
         ranlib "$out_archive"
     }
 
     extract_to_combined "$REPO_STAGE/lib/libgooglesql.a" main
     extract_to_combined "$REPO_STAGE/lib/libgooglesql_protos.a" proto
+
+    # Bundle ICU + farmhash object code into `libgooglesql.a`.
+    #
+    # Why bundle these specific deps and not, e.g., abseil / protobuf:
+    # ICU and farmhash are NOT BCR-resolvable to the versions GoogleSQL
+    # actually links against. GoogleSQL fetches them via its own
+    # `googlesql/bazel/http_archive_deps.bzl` extension (ICU 76.1 from
+    # the unicode.org source tarball with a custom BUILD wrapper;
+    # farmhash from an upstream commit, also with a custom BUILD).
+    # The closest BCR module — `icu 78.2` — uses different namespace
+    # versioning (`icu_78::` vs the producer's `icu_76::`) and would
+    # not satisfy the consumer's link. Bundling these objects into
+    # the same `libgooglesql.a` removes the consumer's burden of
+    # vendoring an extension.
+    #
+    # This violates the Phase 1 default of `bundled_thirdparty_deps = []`
+    # (see `docs/dev/googlesql-prebuilt/headers-and-libraries.md` and
+    # `manifest.md`). The Phase 1 surface docs have been updated in the
+    # same change set to allow ICU + farmhash bundling; the manifest's
+    # `bundled_thirdparty_deps` field below reports the bundled versions
+    # so the Phase 5 parity gate can diff source vs. prebuilt linkage.
+    #
+    # Abseil, Protobuf, gRPC, BoringSSL, RE2, GoogleTest remain
+    # consumer-resolved through Bzlmod (`bazel_dep` in the prebuilt
+    # repo's `MODULE.bazel`); the consumer's `MODULE.bazel` pins them
+    # to the same versions the producer linked against.
+    log "bundling ICU + farmhash objects into $REPO_STAGE/lib/libgooglesql.a"
+    local thirdparty_dir="$tmpdir/_thirdparty"
+    local thirdparty_list="$tmpdir/_thirdparty.list"
+    mkdir -p "$thirdparty_dir"
+    : > "$thirdparty_list"
+
+    # ICU 76 archives: foreign_cc copies them into
+    # `bazel-bin/external/<repo>/icu/lib/lib*.a`. The consumer needs
+    # `uc` (common), `i18n` (collation, regex, format), and `data` (the
+    # binary tables those depend on). `io`/`tu`/`test` are not reached
+    # by the googlesql functions we ship.
+    local icu_lib_dir
+    icu_lib_dir="$(find "$bazel_bin/external" -maxdepth 5 -type d \
+        -path '*~icu/icu/lib' 2>/dev/null | head -1)"
+    [ -d "$icu_lib_dir" ] \
+        || die "ICU lib dir not found under bazel-bin/external (looked for */~icu/icu/lib)"
+    log "  ICU archives sourced from $icu_lib_dir"
+    local icu_lib
+    for icu_lib in libicuuc.a libicui18n.a libicudata.a; do
+        [ -f "$icu_lib_dir/$icu_lib" ] \
+            || die "ICU archive missing: $icu_lib_dir/$icu_lib"
+        # Extract into a per-archive subdir to keep `ar x`'s output
+        # contained and predictable. ICU's .a archives mix `.ao` member
+        # names (foreign_cc CMake convention for libicuuc / libicui18n)
+        # and a plain `.o` for the data table (`icudt76l_dat.o` in
+        # libicudata.a — the giant ~30 MiB symbol table that ICU's
+        # runtime requires for collation / locale / format data).
+        # Both are ELF relocatable objects; the extension is just
+        # ICU's build convention.
+        local sub="$thirdparty_dir/icu_${icu_lib%.a}"
+        mkdir -p "$sub"
+        (cd "$sub" && ar x "$icu_lib_dir/$icu_lib")
+        # Flatten with an `_thirdparty_icu76__` prefix to namespace the
+        # objects away from googlesql `.pic.o` basenames (e.g. ICU's
+        # `format.ao` vs googlesql's `format.pic.o` would collide
+        # otherwise — see the `extract_to_combined` collision note).
+        # Match BOTH `.ao` (libicuuc/libicui18n members) and `.o`
+        # (libicudata's single `icudt76l_dat.o`); without the `.o`
+        # match the ICU data symbol `icudt76_dat` ends up undefined
+        # at consumer link time.
+        local obj
+        for obj in "$sub"/*.ao "$sub"/*.o; do
+            [ -f "$obj" ] || continue
+            local base
+            base="$(basename "$obj")"
+            local dst="$thirdparty_dir/_thirdparty_icu76__$base"
+            mv "$obj" "$dst"
+            printf '%s\n' "$dst" >> "$thirdparty_list"
+        done
+        rm -rf "$sub"
+    done
+
+    # Everything else under `bazel-bin/external/_main~googlesql_http_archive_deps~*`
+    # is a non-BCR external repo fetched by GoogleSQL's own
+    # `http_archive_deps.bzl` extension (farmhash, differential-privacy
+    # core C++ + protos, cephes inverse_gaussian, etc.). Their `.pic.o`
+    # objects need to be bundled into `libgooglesql.a` for the same
+    # reason as ICU + farmhash: they cannot be `bazel_dep`-resolved by
+    # the consumer because they don't exist in BCR. Walk every `.pic.o`
+    # under those repos and rename with a `_thirdparty_<repo>__<flat>`
+    # prefix to avoid basename collisions with googlesql's own
+    # `.pic.o` (see the `extract_to_combined` collision note).
+    #
+    # Excludes ICU (handled above; uses `.ao` archives extracted from
+    # `lib/lib*.a` rather than walking `_objs/`).
+    local extdep_root
+    extdep_root="$bazel_bin/external"
+    # Find every repo dir matching the http_archive_deps namespace.
+    local repo_dir
+    while IFS= read -r repo_dir; do
+        [ -z "$repo_dir" ] && continue
+        local repo_basename
+        repo_basename="$(basename "$repo_dir")"
+        # Strip `_main~googlesql_http_archive_deps~` prefix → e.g.
+        # `com_google_differential_privacy`.
+        local short_repo="${repo_basename#_main~googlesql_http_archive_deps~}"
+        # ICU was handled separately above (foreign_cc / .ao layout).
+        [ "$short_repo" = "icu" ] && continue
+        # Walk every `.pic.o` under the repo, rename with a unique
+        # `_thirdparty_<short_repo>__<path-flattened>` name so basenames
+        # never collide. (`differential-privacy` ships `util.pic.o`,
+        # `summary.pb.pic.o`, etc.; without the flatten the .pic.o
+        # basenames will collide both with each other and with
+        # googlesql's `_objs/util/util.pic.o`.)
+        local obj
+        while IFS= read -r obj; do
+            [ -z "$obj" ] && continue
+            local rel="${obj#"$repo_dir/"}"
+            local flat
+            flat="$(printf '%s\n' "$rel" | sed 's|/_objs/|/|g; s|/|__|g')"
+            local dst="$thirdparty_dir/_thirdparty_${short_repo}__$flat"
+            cp "$obj" "$dst"
+            printf '%s\n' "$dst" >> "$thirdparty_list"
+        done < <(find "$repo_dir" -type f -name '*.pic.o' 2>/dev/null)
+    done < <(find "$extdep_root" -maxdepth 1 -type d \
+                 -name '_main~googlesql_http_archive_deps~*' 2>/dev/null)
+
+    local thirdparty_count
+    thirdparty_count="$(wc -l < "$thirdparty_list")"
+    log "  appending $thirdparty_count third-party objects to libgooglesql.a"
+    # Validate basenames are unique across the bundled set (defense
+    # against future http_archive_deps additions whose `.pic.o` paths
+    # collapse to the same flat name).
+    local unique_count
+    unique_count="$(sed 's|.*/||' "$thirdparty_list" | sort -u | wc -l)"
+    [ "$thirdparty_count" = "$unique_count" ] \
+        || die "third-party object basenames collide ($thirdparty_count rows, $unique_count unique)"
+    xargs -a "$thirdparty_list" ar rcsD "$REPO_STAGE/lib/libgooglesql.a"
+    ranlib "$REPO_STAGE/lib/libgooglesql.a"
 
     # Cleanup tmpdir explicitly so the EXIT trap doesn't double-rm.
     rm -rf "$tmpdir"
@@ -574,6 +1003,11 @@ text = text.replace("{{ARTIFACT_VERSION}}", "$ARTIFACT_VERSION")
 text = text.replace("{{ABSEIL_VERSION}}", "$ABSEIL_VERSION")
 text = text.replace("{{PROTOBUF_VERSION}}", "$PROTOBUF_VERSION")
 text = text.replace("{{GRPC_VERSION}}", "$GRPC_VERSION")
+text = text.replace("{{GOOGLETEST_VERSION}}", "$GOOGLETEST_VERSION")
+text = text.replace("{{RE2_VERSION}}", "$RE2_VERSION")
+text = text.replace("{{BORINGSSL_VERSION}}", "$BORINGSSL_VERSION")
+text = text.replace("{{GOOGLEAPIS_VERSION}}", "$GOOGLEAPIS_VERSION")
+text = text.replace("{{GOOGLEAPIS_CC_VERSION}}", "$GOOGLEAPIS_CC_VERSION")
 sys.stdout.write(text)
 EOF
 
@@ -631,7 +1065,11 @@ cat > "$MANIFEST_CONFIG" <<EOF
     "build_timestamp": "$BUILD_TIMESTAMP",
     "host_os_release": "$HOST_OS_RELEASE"
   },
-  "bundled_thirdparty_deps": []
+  "bundled_thirdparty_deps": [
+    "icu@${ICU_VERSION}",
+    "farmhash@${FARMHASH_COMMIT}",
+    "differential-privacy@${DIFFERENTIAL_PRIVACY_VERSION}"
+  ]
 }
 EOF
 

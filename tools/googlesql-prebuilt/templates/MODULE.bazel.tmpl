@@ -22,9 +22,12 @@ existing `local_path_override` to `../googlesql`) and prebuilt mode
 (`--override_module=googlesql=<unpacked_artifact_path>` or an
 equivalent `archive_override`) without editing any emulator BUILD file.
 
-Phase 3 owns the consumer-side wiring; this file only declares what
-the prebuilt repo NEEDS to compile against (Abseil, Protobuf, gRPC,
-rules_cc).
+Phase 3 owns the consumer-side wiring; this file declares what the
+prebuilt repo NEEDS at compile + link time. The header tree under
+`include/googlesql/...` `#include`s symbols from these third-party
+trees, and the static archives in `lib/` (linked at producer-side
+build time) carry unresolved external references into them, so the
+consumer's link must see the same versions.
 """
 
 module(
@@ -41,3 +44,67 @@ bazel_dep(name = "rules_cc", version = "0.2.8")
 bazel_dep(name = "abseil-cpp", version = "{{ABSEIL_VERSION}}", repo_name = "com_google_absl")
 bazel_dep(name = "protobuf", version = "{{PROTOBUF_VERSION}}", repo_name = "com_google_protobuf")
 bazel_dep(name = "grpc", version = "{{GRPC_VERSION}}", repo_name = "com_github_grpc_grpc")
+
+# Third-party deps reached transitively from the artifact's exported
+# header tree. Discovered during Phase 3 verification when prebuilt
+# mode tried to compile a consumer TU that pulled the `:type` wrapper:
+# `googlesql/public/types/...` -> `googlesql/common/multiprecision_int.h`
+# -> `googlesql/base/bits.h` `#include`s `gtest/gtest_prod.h`, and
+# `googlesql/public/value.h` includes the same.
+# `googlesql/base/exactfloat.h` reaches `openssl/bn.h`,
+# `googlesql/public/functions/regexp.h` reaches `re2/re2.h`. Without
+# these `bazel_dep`s the prebuilt repo's wrapper compiles fail under
+# strict-deps + sandboxing because the third-party headers are not in
+# any `cc_library`'s `hdrs` reachable from the wrapper.
+#
+# Versions match the ones GoogleSQL itself pins in its
+# `MODULE.bazel`, so the static archives shipped under `lib/` carry
+# unresolved externals into the same ABI the consumer's build
+# resolves to.
+#
+# `repo_name` aliases match what GoogleSQL's `BUILD` files reference
+# (`@com_google_googletest//:gtest`, `@com_googlesource_code_re2//:re2`,
+# `@boringssl//:crypto`).
+bazel_dep(name = "googletest", version = "{{GOOGLETEST_VERSION}}", repo_name = "com_google_googletest")
+bazel_dep(name = "re2", version = "{{RE2_VERSION}}", repo_name = "com_googlesource_code_re2")
+bazel_dep(name = "boringssl", version = "{{BORINGSSL_VERSION}}")
+
+# Googleapis is needed for the well-known `google.type` protos
+# (`google.type.Date`, `google.type.TimeOfDay`, etc.) that GoogleSQL's
+# datetime functions reference at link time. The static archives in
+# `lib/` carry unresolved `google::type::_Date_default_instance_` /
+# `google::type::Date::GetMetadata() const` symbols that the consumer
+# must resolve through this `bazel_dep`. Versions match upstream
+# GoogleSQL's `MODULE.bazel` so the proto codegen ABI is identical to
+# the producer-side build.
+#
+# The `:date_cc_proto` / `:timeofday_cc_proto` targets are listed on
+# the `:_all_hdrs` cc_library in `BUILD.bazel` so consumers
+# transitively pick them up at link time via the wrapper deps.
+bazel_dep(name = "googleapis", version = "{{GOOGLEAPIS_VERSION}}", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis-cc", version = "{{GOOGLEAPIS_CC_VERSION}}")
+
+# ICU + farmhash + differential-privacy are statically bundled into
+# `lib/libgooglesql.a` (their object code is appended to the archive
+# by `tools/googlesql-prebuilt/package.sh`), so they do NOT appear as
+# `bazel_dep`s here. The manifest's `bundled_thirdparty_deps`
+# enumerates the bundled versions for source-vs-prebuilt parity
+# checking (Phase 5). Rationale:
+#
+#   - Upstream GoogleSQL fetches ICU via its own
+#     `googlesql/bazel/http_archive_deps.bzl` extension at the pinned
+#     `release-76-1/icu4c-76_1-src.tgz` tarball with a custom BUILD
+#     file. The closest BCR module (`icu 78.x`) uses an incompatible
+#     `icu_78::` namespace versioning vs. the producer-side `icu_76::`
+#     symbols carried by the bundled object code.
+#   - Farmhash is not published in the Bazel Central Registry. Upstream
+#     GoogleSQL fetches it via http_archive at a pinned commit.
+#   - Differential-privacy (the C++ library + its protos, plus the
+#     cephes inverse-gaussian helper) is also not in BCR. GoogleSQL's
+#     anonymization / DP-aware aggregate functions in
+#     `googlesql/reference_impl/...` reference these symbols at link
+#     time, so the bundled archive carries them too.
+#
+# See `docs/dev/googlesql-prebuilt/headers-and-libraries.md` for the
+# bundle / consumer-resolved boundary; see `upgrade-rules.md` for the
+# procedure to add to or remove from `bundled_thirdparty_deps`.

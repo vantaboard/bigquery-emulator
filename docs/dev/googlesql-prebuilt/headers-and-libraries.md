@@ -13,7 +13,8 @@ agree on.
 | One combined archive or per-label archives?           | **One** combined archive (`libgooglesql.a`) + one matching `proto_combined.a` for generated protobuf objects. |
 | Include root layout?                                  | `include/googlesql/...` mirroring upstream source paths. |
 | Generated `.pb.h` headers?                            | Ship with the package, under the same `include/googlesql/...` prefix. |
-| Third-party deps (Abseil, Protobuf, gRPC, RE2, …)?   | **Not bundled**. Resolved by the consumer through Bzlmod (`MODULE.bazel`) as today. |
+| Third-party deps (Abseil, Protobuf, gRPC, RE2, BoringSSL, GoogleTest)? | **Not bundled**. Resolved by the consumer through Bzlmod (`MODULE.bazel`) as today. |
+| ICU + farmhash + differential-privacy?                | **Bundled** into `lib/libgooglesql.a` (manifest's `bundled_thirdparty_deps` lists them). Necessary because BCR's `icu` module ships a different ABI version (`icu_78::` vs. the producer-pinned `icu_76::`), and farmhash + differential-privacy are not published in BCR. |
 
 ## Rationale
 
@@ -45,13 +46,29 @@ listed in [`label-inventory.md`](label-inventory.md) (`googlesql/base`,
 `googlesql/public/functions`, `googlesql/resolved_ast`).
 
 The combined archive does **not** contain Abseil, Protobuf, gRPC, RE2,
-GoogleTest, ICU, or FlatBuffers objects. Those repos are still resolved by the
-consumer's `MODULE.bazel` exactly as they are today; the prebuilt artifact's
-wrapper `cc_library` targets declare them via `deps = [...]` so the linker
-sees a single resolved version of each. This is what keeps the `slot_type`-era
-Abseil pin in [`MODULE.bazel`](../../../MODULE.bazel) load-bearing — both the
-source and the prebuilt path must end up with the same Abseil, otherwise the
-linker resolves to mismatched symbol sets.
+GoogleTest, BoringSSL, or FlatBuffers objects. Those repos are still resolved
+by the consumer's `MODULE.bazel` exactly as they are today; the prebuilt
+artifact's wrapper `cc_library` targets declare them via `deps = [...]` so the
+linker sees a single resolved version of each. This is what keeps the
+`slot_type`-era Abseil pin in [`MODULE.bazel`](../../../MODULE.bazel)
+load-bearing — both the source and the prebuilt path must end up with the
+same Abseil, otherwise the linker resolves to mismatched symbol sets.
+
+ICU, farmhash, and differential-privacy are the exceptions: their object code
+IS bundled into `lib/libgooglesql.a`. Upstream GoogleSQL fetches all three
+through its own `googlesql/bazel/http_archive_deps.bzl` extension (ICU 76.1
+from `https://github.com/unicode-org/icu/releases/...` with a custom BUILD
+file; farmhash from a pinned commit, also with a custom BUILD;
+differential-privacy 4.x from the upstream `differential-privacy` GitHub
+release, used by GoogleSQL's anonymization / DP-aware aggregate functions).
+None of these is a clean Bzlmod resolve for the consumer: the BCR `icu`
+module (78.x) uses a different `icu_78::` namespace ABI than the
+producer-pinned `icu_76::` symbols carried by the archive; there is no BCR
+`farmhash` module at all; and `differential-privacy` is not published in
+BCR. The manifest's `bundled_thirdparty_deps` reports the pinned identities
+(`icu@76.1`, `farmhash@<commit>`, `differential-privacy@<version>`) so the
+Phase 5 parity gate can verify the consumer is not double-linking any of
+them through some other path.
 
 ### Include-root layout (`include/googlesql/...`)
 
@@ -154,7 +171,7 @@ The Phase 2 producer ships exactly two static libraries:
 
 | File                      | Contains                                                                                                                                                                                                                                                                                                                                          |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `lib/libgooglesql.a`     | Compiled object code for every `cc_library` reachable from `bazel build @googlesql//googlesql/public:analyzer @googlesql//googlesql/public:evaluator @googlesql//googlesql/resolved_ast` at the pinned upstream commit, **excluding** Abseil, Protobuf, gRPC, RE2, GoogleTest, ICU, FlatBuffers (i.e. excluding everything under `@com_*`/`@boringssl`). |
+| `lib/libgooglesql.a`     | Compiled object code for every `cc_library` reachable from `bazel build @googlesql//googlesql/public:analyzer @googlesql//googlesql/public:evaluator @googlesql//googlesql/resolved_ast` at the pinned upstream commit, **plus** bundled `.o` files from ICU 76 (`libicuuc`, `libicui18n`, `libicudata`), farmhash, and differential-privacy (`com_google_differential_privacy` + `com_google_cc_differential_privacy` cc_library and cc_proto_library outputs, plus the cephes `inverse_gaussian_cdf` object), **excluding** Abseil, Protobuf, gRPC, RE2, GoogleTest, BoringSSL, FlatBuffers (i.e. excluding everything under `@com_*`/`@boringssl` that the consumer's `MODULE.bazel` resolves itself). |
 | `lib/libgooglesql_protos.a` | Compiled object code for every `cc_proto_library` reachable from the same query (the `.pb.cc` generated objects). Kept separate so the wrapper repo can build a Protobuf descriptor-only `cc_library` without pulling all of `libgooglesql.a`. |
 
 Both are static archives. PIC is enabled (the consumer's `cc_binary` may be

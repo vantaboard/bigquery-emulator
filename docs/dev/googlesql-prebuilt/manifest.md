@@ -40,7 +40,7 @@ are a Phase-5 validation error.
 | `producer.run_id`                     | string  | CI run identifier (GitHub `${{ github.run_id }}` or equivalent). |
 | `producer.build_timestamp`            | string  | RFC 3339 UTC timestamp the artifact was finalised. |
 | `producer.host_os_release`            | string  | `lsb_release -ds` (or equivalent) of the producer host. Useful for diagnosing libc-mismatch reports. |
-| `bundled_thirdparty_deps`             | array   | List of third-party libraries **statically** bundled into `lib/libgooglesql.a`. Empty array is the Phase 1 expectation (third-party deps are consumer-resolved via Bzlmod, not bundled). |
+| `bundled_thirdparty_deps`             | array   | List of third-party libraries **statically** bundled into `lib/libgooglesql.a`, in `"<name>@<version-or-commit>"` form. Phase 1 default ships `["icu@76.1", "farmhash@<commit>", "differential-privacy@<version>"]` — all three are bundled because none has a Bzlmod-resolvable equivalent at the producer-pinned ABI (BCR `icu` is 78.x; no BCR `farmhash`; no BCR `differential-privacy`). All other transitively-linked third-party deps (Abseil, Protobuf, gRPC, BoringSSL, RE2, GoogleTest, googleapis) are NOT bundled and are listed as `bazel_dep`s in the prebuilt repo's `MODULE.bazel` for the consumer to resolve. |
 
 ## Example manifest
 
@@ -146,7 +146,11 @@ producer (Phase 2) populates them mechanically from the actual build outputs.
     "build_timestamp": "2026-02-15T17:43:21Z",
     "host_os_release": "Ubuntu 22.04.4 LTS"
   },
-  "bundled_thirdparty_deps": []
+  "bundled_thirdparty_deps": [
+    "icu@76.1",
+    "farmhash@816a4ae622e964763ca0862d9dbd19324a1eaf45",
+    "differential-privacy@4.0.0"
+  ]
 }
 ```
 

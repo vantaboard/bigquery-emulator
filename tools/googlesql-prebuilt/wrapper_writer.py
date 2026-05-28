@@ -218,8 +218,20 @@ def render_hdrs(paths: list[str]) -> str:
 
 
 def render_deps(deps: list[str]) -> str:
-    """Render the `deps = [...]` list including the private archive labels."""
-    full_deps = ["//:_archive", "//:_archive_protos", *deps]
+    """Render the `deps = [...]` list including the private archive labels.
+
+    `:_all_hdrs` is added to every wrapper so that any
+    transitively-included header (notably the `*.pb.h` files generated
+    from `cc_proto_library` rules in the source build) resolves under
+    strict-deps + sandboxing without each wrapper having to enumerate
+    them in its own `hdrs`. See the `_all_hdrs` rationale in the
+    artifact root `BUILD.bazel` (rendered from
+    `tools/googlesql-prebuilt/templates/BUILD.bazel`). The wrappers'
+    `hdrs` lists remain the narrow consumer-facing public API frozen
+    in `docs/dev/googlesql-prebuilt/label-inventory.md`; `:_all_hdrs`
+    is purely a deps-side mechanism for transitive header coverage.
+    """
+    full_deps = ["//:_all_hdrs", "//:_archive", "//:_archive_protos", *deps]
     body = "\n".join(f'        "{d}",' for d in sorted(set(full_deps)))
     return f"    deps = [\n{body}\n    ],"
 

@@ -14,7 +14,7 @@
 # from `tools/googlesql-prebuilt/templates/BUILD.bazel`. Edits in the
 # template land in the next published artifact.
 
-load("@rules_cc//cc:defs.bzl", "cc_import")
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
 
 package(default_visibility = ["//:__subpackages__"])
 
@@ -34,20 +34,127 @@ exports_files(glob(
     allow_empty = False,
 ))
 
-# Combined static archives. Private to the prebuilt repo; the public
-# wrapper `cc_library`s pull them in via `deps`. External consumers
-# should always go through one of the wrapper labels under
-# `//googlesql/public:...` or `//googlesql/resolved_ast:...` so the
-# emulator-side strict-deps narrowing remains identical to the source
-# build.
+# `:_all_hdrs` exposes the full `include/googlesql/**` header closure
+# (hand-written `*.h` plus generated `*.pb.h`) as a single `cc_library`
+# so each wrapper in `googlesql/public/BUILD.bazel` and
+# `googlesql/resolved_ast/BUILD.bazel` can dep on it and resolve any
+# transitively-included header without enumerating them in the
+# wrapper's own `hdrs` list.
+#
+# Why this exists: the wrappers' `hdrs` lists are the consumer-facing
+# public API frozen in `docs/dev/googlesql-prebuilt/label-inventory.md`
+# (e.g. `:analyzer` exposes `analyzer.h`; `:type` exposes
+# `type.h`/`type.pb.h`/`types/*.h`). But under strict-deps + sandboxing,
+# every header reachable through `#include` MUST appear in a `hdrs` (or
+# `textual_hdrs`) of a `cc_library` in the consuming compile's
+# transitive deps. Source-mode satisfies this implicitly because the
+# upstream `cc_library(:type)` etc. transitively dep on every
+# `cc_proto_library` in the closure (e.g. `:annotation_cc_proto` for
+# `annotation.pb.h`). The prebuilt artifact ships ONE combined static
+# archive (`libgooglesql.a`), so there's no per-proto wrapper to
+# transitively pull in. `:_all_hdrs` plays that role: a single private
+# header-only library that every wrapper deps on.
+#
+# Visibility is `//:__subpackages__` so consumers cannot accidentally
+# `deps = ["@googlesql//:_all_hdrs"]` and circumvent the wrappers'
+# narrow public API. They must go through `:analyzer`, `:type`, etc.
+# (which then deps on `:_all_hdrs` privately).
+cc_library(
+    name = "_all_hdrs",
+    hdrs = glob(["include/googlesql/**/*.h"]),
+    strip_include_prefix = "/include",
+    # Third-party header packages reached transitively from the
+    # exported `googlesql/...` include tree. Discovered during Phase 3
+    # prebuilt-mode link verification: e.g. `googlesql/base/bits.h`
+    # `#include`s `gtest/gtest_prod.h`, `googlesql/base/exactfloat.h`
+    # `#include`s `openssl/bn.h`, `googlesql/public/functions/regexp.h`
+    # `#include`s `re2/re2.h`. Adding them here lets every wrapper
+    # `cc_library` (which deps on `:_all_hdrs`) resolve those headers
+    # under strict-deps + sandboxing without enumerating them per
+    # wrapper.
+    #
+    # The combined `lib/libgooglesql.a` archive carries unresolved
+    # external symbols into these libraries (the producer-side build
+    # linked against them), so listing them as `deps` also closes the
+    # link surface for consumers' final emulator binary. Versions are
+    # pinned in this artifact's `MODULE.bazel` to match the producer's
+    # link state.
+    #
+    # ICU + farmhash + differential-privacy are statically BUNDLED
+    # into `lib/libgooglesql.a` by `tools/googlesql-prebuilt/package.sh`
+    # and therefore do not appear here as deps. The bundled object code
+    # carries `unicode/...` (ICU 76), `farmhash::*`, and
+    # `differential_privacy::*` symbol definitions; consumers never see
+    # the upstream `@icu` / `@com_google_farmhash` /
+    # `@com_google_differential_privacy` repos. See
+    # `MODULE.bazel.tmpl` for the rationale (none of the three has a
+    # BCR module compatible with the producer's ABI).
+    deps = [
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_googletest//:gtest",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+# Raw `cc_import`s for the two combined archives. Kept private and
+# wrapped by `:_archive` / `:_archive_protos` below so the wrappers
+# can attach link-only deps (googleapis cc_proto_libraries) that MUST
+# appear AFTER the static archives in the link line. Without that
+# ordering, `--start-lib`/`--end-lib`-wrapped `.pic.o` objects from
+# `cc_proto_library` are skipped before the archive's unresolved
+# `google::type::Date::~Date()` / `google::type::_Date_default_instance_`
+# refs are seen, and the consumer's emulator link fails. See the
+# `:_archive` rationale below.
 cc_import(
-    name = "_archive",
+    name = "_archive_raw",
     static_library = "lib/libgooglesql.a",
 )
 
 cc_import(
-    name = "_archive_protos",
+    name = "_archive_protos_raw",
     static_library = "lib/libgooglesql_protos.a",
+)
+
+# `:_archive` is the public entry point for `lib/libgooglesql.a`. It
+# wraps the `cc_import` and pins the link-line position of every
+# googleapis cc_proto_library that the bundled `googlesql/...` object
+# code references at link time (`google::type::Date`,
+# `google::type::TimeOfDay`, `google::type::LatLng`,
+# `google::rpc::Status`). Bazel emits a `cc_library`'s own
+# precompiled libraries BEFORE its `deps`, so attaching the
+# googleapis cc_proto_libraries here puts their `.pic.o` files AFTER
+# `libgooglesql.a` in the link line — which is the only order in
+# which `--start-lib`/`--end-lib`-wrapped proto objects can resolve
+# the archive's unresolved externals.
+#
+# Source-mode hides this because the upstream
+# `cc_library(:builtin_function...)` etc. transitively dep on the
+# same googleapis cc_proto_libraries, and the producer-side link
+# order is dominated by topology. In prebuilt mode the combined
+# `libgooglesql.a` carries the unresolved externals and we re-
+# establish the dep edge here.
+#
+# DO NOT inline these into `:_all_hdrs` — `:_all_hdrs` is referenced
+# by every wrapper BEFORE `:_archive`, which would put the cc_proto
+# `.pic.o` blocks BEFORE the archive in the link line. The block
+# would then be processed and skipped (no unresolved symbols yet)
+# before the archive's references are seen, yielding undefined
+# references.
+cc_library(
+    name = "_archive",
+    deps = [
+        ":_archive_raw",
+        "@com_google_googleapis//google/type:date_cc_proto",
+        "@com_google_googleapis//google/type:timeofday_cc_proto",
+        "@com_google_googleapis//google/type:latlng_cc_proto",
+        "@com_google_googleapis//google/rpc:status_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "_archive_protos",
+    deps = [":_archive_protos_raw"],
 )
 
 # Convenience filegroup so the Phase 5 parity gate can diff the
