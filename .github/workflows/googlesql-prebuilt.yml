@@ -1,0 +1,294 @@
+# GoogleSQL prebuilt artifact producer (Phase 2 of the
+# `googlesql-prebuilt` rollout — see
+# `docs/dev/googlesql-prebuilt/README.md`).
+#
+# This workflow builds the @googlesql_prebuilt_linux_amd64 external
+# repo described in `docs/dev/googlesql-prebuilt/repo-layout.md`,
+# verifies it independently of the source checkout, and (optionally)
+# publishes the tarball + sidecar manifest as GitHub Release assets.
+#
+# Manual dispatch only for now. Automatic triggers (e.g. on a
+# `googlesql-prebuilt/*` tag push) can be added once the artifact
+# naming, retention, and overwrite semantics have shipped in a real
+# release. Phase 2 deliberately does NOT change normal emulator
+# builds, the CI lane in `ci.yml`, the conformance lane, the release
+# workflow, or Docker builds. Consumer adoption is Phase 3+.
+#
+# Publication medium decision: GitHub Release assets (single .tar.gz +
+# sidecar .manifest.json + .sha256). Rationale (also in
+# `tools/googlesql-prebuilt/README.md`):
+#
+#   - The Phase 1 manifest contract (`manifest.md`) names `.tar.gz` as
+#     the on-disk distribution format and pins the consumer via
+#     `http_archive(sha256 = ..., strip_prefix = ...)`. GitHub Release
+#     assets fit `http_archive` directly: each asset has a stable URL
+#     under
+#     `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`
+#     and is immutable for the lifetime of the release.
+#   - GHCR OCI artifacts are appealing for digest-pinning but require
+#     consumers to wire an OCI puller (`oras`, `crane`, or Bazel's
+#     experimental `oci` rule) into their MODULE.bazel resolution
+#     path. We may layer GHCR on top later — a Phase 5 addendum —
+#     when source-vs-prebuilt parity is in CI and the consumer side
+#     is stable enough that introducing a second medium is safe.
+#   - GitHub Releases retain artifacts indefinitely by default and
+#     are bisecting-friendly: a `gh release list --json tagName` plus
+#     `gh release download <tag>` is enough to walk back through old
+#     artifacts.
+
+name: googlesql-prebuilt
+
+on:
+  workflow_dispatch:
+    inputs:
+      googlesql_ref:
+        description: "Upstream googlesql git ref (tag or commit)"
+        required: false
+        default: "2026.01.1"
+      artifact_version:
+        description: "Strict-semver artifact_version (e.g. 0.1.0)"
+        required: true
+        default: "0.1.0"
+      publish:
+        description: "Publish the verified artifact as a GitHub Release asset"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # Scoped per (ref, googlesql_ref, artifact_version) — the producer is
+  # the same for the same inputs, so two simultaneous dispatches for
+  # the same input set should serialize. Different inputs can run in
+  # parallel.
+  group: googlesql-prebuilt-${{ github.ref }}-${{ inputs.googlesql_ref }}-${{ inputs.artifact_version }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-verify:
+    name: build, package, verify
+    runs-on: ubuntu-latest
+    # Cold-cache GoogleSQL is the same ~95% / 2 hr profile the release
+    # workflow hit; same 180 min budget.
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout emulator
+        uses: actions/checkout@v4
+        with:
+          path: bigquery-emulator
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install C++ build deps + toolchain probes
+        # Mirrors `ci.yml` so the engine's Bazel build sees the same
+        # apt-installed protobuf + clang. We don't actually link
+        # against the apt protobuf (Bzlmod resolves the version
+        # pinned in MODULE.bazel) but the C++ toolchain probe still
+        # uses the apt clang.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.13.0
+        with:
+          bazelisk-cache: true
+          # Keep this cache distinct from ci.yml / conformance.yml /
+          # release.yml so prebuilt producer runs don't churn caches
+          # the on-PR lanes rely on.
+          disk-cache: googlesql-prebuilt
+          repository-cache: true
+
+      - name: Checkout sibling googlesql (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: google/googlesql
+          ref: ${{ inputs.googlesql_ref }}
+          path: googlesql-sibling
+
+      - name: Stage googlesql sibling at ../googlesql
+        # Mirror ci.yml / release.yml: the local_path_override in the
+        # emulator's MODULE.bazel resolves `googlesql` from
+        # `../googlesql/`, and the upstream MODULE.bazel pins
+        # `version = "2026.01.1"` which gazelle's strict semver
+        # parser rejects.
+        run: |
+          mv googlesql-sibling ../googlesql
+          sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+
+      - name: Resolve googlesql commit SHA
+        id: googlesql
+        run: |
+          cd ../googlesql
+          sha=$(git rev-parse HEAD)
+          short=$(git rev-parse --short=12 HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-publish overwrite gate
+        # Refuse to even start the build if a release asset already
+        # exists for this (artifact_version, googlesql_sha) pair AND
+        # the user asked to publish. Saves an hour+ of cold-cache
+        # compile when the inputs are stale.
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="googlesql-prebuilt/v${{ inputs.artifact_version }}+gs-${{ steps.googlesql.outputs.short_sha }}"
+          asset="googlesql-prebuilt-linux-amd64-clang18-${{ steps.googlesql.outputs.short_sha }}-v${{ inputs.artifact_version }}.tar.gz"
+          if gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$asset"; then
+            echo "::error::Refusing to overwrite existing release asset $tag/$asset" >&2
+            echo "If this is intentional, delete the existing asset via 'gh release delete-asset $tag $asset' and re-run." >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag exists but does not yet have $asset — will upload alongside existing assets."
+          fi
+
+      - name: Package the prebuilt artifact
+        id: package
+        # BAZEL_JOBS / BAZEL_MEM_MB throttling is applied inside
+        # package.sh per bazel-process-hygiene.mdc. On GitHub-hosted
+        # ubuntu-latest (4 vCPU, 16 GB), the script's auto-detect
+        # picks jobs=2, mem ~= 12 GB.
+        run: |
+          set -euo pipefail
+          cd bigquery-emulator
+          ./tools/googlesql-prebuilt/package.sh \
+            --mode=bazel \
+            --googlesql-src ../../googlesql \
+            --emulator-src . \
+            --artifact-version "${{ inputs.artifact_version }}" \
+            --out-dir "$RUNNER_TEMP/googlesql-prebuilt-out" \
+            --googlesql-commit "${{ steps.googlesql.outputs.sha }}" \
+            --emulator-min-commit "${{ github.sha }}" \
+            --workflow-id "googlesql-prebuilt.yml" \
+            --run-id "${{ github.run_id }}" \
+            | tee /tmp/package-summary.txt
+          # Surface the machine-parsable summary into job outputs so
+          # the subsequent verify + publish steps know the artifact
+          # paths without re-deriving them.
+          while IFS='=' read -r key value; do
+            case "$key" in
+              TARBALL_PATH|TARBALL_NAME|TARBALL_SHA256|SIDECAR_MANIFEST|GOOGLESQL_COMMIT|GOOGLESQL_SHORT_SHA|ARTIFACT_VERSION)
+                echo "${key,,}=${value}" >> "$GITHUB_OUTPUT"
+                ;;
+            esac
+          done < /tmp/package-summary.txt
+
+      - name: Verify the packaged artifact (clang-link smoke)
+        # Refusal-grade: if any of the manifest / checksum / smoke
+        # gates fail, the workflow fails and NO publish happens.
+        run: |
+          set -euo pipefail
+          cd bigquery-emulator
+          ./tools/googlesql-prebuilt/verify.sh \
+            --tarball "${{ steps.package.outputs.tarball_path }}" \
+            --tarball-sha256 "${{ steps.package.outputs.tarball_sha256 }}" \
+            --expected-googlesql-sha "${{ steps.googlesql.outputs.sha }}" \
+            --expected-artifact-version "${{ inputs.artifact_version }}" \
+            --smoke-mode=link
+
+      - name: Verify via Bazel wrappers (full Phase 3 consume path)
+        # Second smoke variant: build a tiny cc_binary against the
+        # UNPACKED artifact's wrapper cc_library targets. This is the
+        # strongest test of the layout — it exercises the cc_import
+        # private archive deps, the strip_include_prefix, and the
+        # Bzlmod-resolved abseil/protobuf pins. Continue-on-error
+        # is intentionally OFF: failing this means the artifact is
+        # not Phase 3-consumable, so we should not publish.
+        run: |
+          set -euo pipefail
+          cd bigquery-emulator
+          ./tools/googlesql-prebuilt/verify.sh \
+            --tarball "${{ steps.package.outputs.tarball_path }}" \
+            --tarball-sha256 "${{ steps.package.outputs.tarball_sha256 }}" \
+            --expected-googlesql-sha "${{ steps.googlesql.outputs.sha }}" \
+            --expected-artifact-version "${{ inputs.artifact_version }}" \
+            --smoke-mode=bazel
+
+      # ---------------------------------------------------------------
+      # Always upload the build log + sidecar manifest as a workflow
+      # artifact. Run on success AND failure so a failed run still
+      # leaves a forensic trail.
+      # ---------------------------------------------------------------
+      - name: Upload workflow artifacts (log + sidecar manifest)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: googlesql-prebuilt-${{ steps.package.outputs.googlesql_short_sha }}-v${{ inputs.artifact_version }}
+          path: |
+            ${{ steps.package.outputs.tarball_path }}
+            ${{ steps.package.outputs.tarball_path }}.sha256
+            ${{ steps.package.outputs.sidecar_manifest }}
+            /tmp/package-summary.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ---------------------------------------------------------------
+      # Publish path (only when inputs.publish=true AND verify passed)
+      # ---------------------------------------------------------------
+      - name: Publish to GitHub Release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="googlesql-prebuilt/v${{ inputs.artifact_version }}+gs-${{ steps.package.outputs.googlesql_short_sha }}"
+          title="GoogleSQL prebuilt v${{ inputs.artifact_version }} (googlesql@${{ steps.package.outputs.googlesql_short_sha }})"
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<EOF
+          GoogleSQL prebuilt artifact (linux/amd64, clang-18).
+
+          - Artifact version: ${{ inputs.artifact_version }}
+          - GoogleSQL commit: ${{ steps.package.outputs.googlesql_commit }}
+          - Tarball SHA-256:  ${{ steps.package.outputs.tarball_sha256 }}
+          - Producer run:     https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          See \`docs/dev/googlesql-prebuilt/README.md\` for the consumer
+          contract and \`docs/dev/googlesql-prebuilt/manifest.md\` for
+          the manifest schema.
+          EOF
+
+          # Create the release if absent. Bisecting-friendly: each
+          # (artifact_version, googlesql_sha) gets its own tag.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --title "$title" \
+              --notes-file "$notes_file" \
+              --target "${{ github.sha }}"
+          fi
+          # Upload assets. `--clobber` is INTENTIONALLY OFF — the
+          # producer's contract is immutable artifacts. The
+          # pre-publish gate above already verified no clobber would
+          # be needed.
+          gh release upload "$tag" \
+            "${{ steps.package.outputs.tarball_path }}" \
+            "${{ steps.package.outputs.tarball_path }}.sha256" \
+            "${{ steps.package.outputs.sidecar_manifest }}"
+
+          asset_url="https://github.com/${{ github.repository }}/releases/download/$tag/${{ steps.package.outputs.tarball_name }}"
+          echo "::notice title=Published prebuilt artifact::$asset_url (sha256=${{ steps.package.outputs.tarball_sha256 }})"
+          echo "ARTIFACT_URL=$asset_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "ARTIFACT_SHA256=${{ steps.package.outputs.tarball_sha256 }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release Bazel daemon
+        if: always()
+        # bazel-process-hygiene.mdc: shutdown the daemon at end-of-run.
+        # The package script also installs a trap, but the runner-side
+        # shutdown is defensive — covers the case where the script
+        # was interrupted mid-flight.
+        run: |
+          (cd ../googlesql && bazel shutdown 2>/dev/null) || true
+          (cd bigquery-emulator && bazel shutdown 2>/dev/null) || true
