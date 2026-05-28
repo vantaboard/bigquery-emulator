@@ -1,0 +1,38 @@
+"""Synthetic MODULE.bazel for the verify.sh bazel-wrappers smoke.
+
+Substituted at smoke time by `tools/googlesql-prebuilt/verify.sh`:
+- {{ARTIFACT_VERSION}}   matches the unpacked artifact's
+                         MODULE.bazel `version =`.
+- {{ARTIFACT_PATH}}      absolute path to the unpacked artifact root
+                         (the `googlesql_prebuilt_linux_amd64/`
+                         directory under the tmp extract dir). The
+                         `local_path_override` points there so the
+                         smoke workspace consumes the SHIPPED layout,
+                         not the source checkout.
+- {{ABSEIL_VERSION}}     mirrors the artifact's manifest.toolchain pin.
+- {{PROTOBUF_VERSION}}   mirrors the artifact's manifest.toolchain pin.
+- {{GRPC_VERSION}}       mirrors the artifact's manifest.toolchain pin.
+
+The smoke workspace is intentionally minimal: just enough to resolve
+the prebuilt repo's deps and build one `cc_binary`.
+"""
+
+module(
+    name = "googlesql_prebuilt_smoke",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "abseil-cpp", version = "{{ABSEIL_VERSION}}", repo_name = "com_google_absl")
+single_version_override(
+    module_name = "abseil-cpp",
+    version = "{{ABSEIL_VERSION}}",
+)
+bazel_dep(name = "protobuf", version = "{{PROTOBUF_VERSION}}", repo_name = "com_google_protobuf")
+bazel_dep(name = "grpc", version = "{{GRPC_VERSION}}", repo_name = "com_github_grpc_grpc")
+
+bazel_dep(name = "googlesql_prebuilt_linux_amd64", version = "{{ARTIFACT_VERSION}}")
+local_path_override(
+    module_name = "googlesql_prebuilt_linux_amd64",
+    path = "{{ARTIFACT_PATH}}",
+)

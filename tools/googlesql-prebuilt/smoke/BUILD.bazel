@@ -1,0 +1,20 @@
+# `cc_binary` smoke target used by the bazel-wrappers smoke mode in
+# `tools/googlesql-prebuilt/verify.sh`. The verifier copies this file
+# and `smoke_wrappers.cc` into a tmp Bazel workspace next to the
+# unpacked artifact, wires the artifact in via `local_path_override`
+# in the tmp workspace's MODULE.bazel, and builds `:smoke`.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "smoke",
+    srcs = ["smoke_wrappers.cc"],
+    deps = [
+        # Phase 1 inventory row: `:error_helpers` is one of the 18
+        # frozen direct labels. Linking against this wrapper exercises
+        # the strict-deps narrowing (only `error_helpers.h` is
+        # visible), the `:_archive` private cc_import, and the third-
+        # party absl/strings deps the wrapper exposes.
+        "@googlesql_prebuilt_linux_amd64//googlesql/public:error_helpers",
+    ],
+)

@@ -1,0 +1,63 @@
+# Root `BUILD.bazel` for the `@googlesql_prebuilt_linux_amd64` external
+# repo. Holds the private `:_archive` / `:_archive_protos` `cc_import`s
+# and exports the `include/**` header tree so the sibling
+# `googlesql/public/BUILD.bazel` + `googlesql/resolved_ast/BUILD.bazel`
+# wrapper `cc_library` targets can reference each header label.
+#
+# All public wrapper labels live under the sibling packages so the
+# label paths match the `compat.labels` set frozen in
+# `docs/dev/googlesql-prebuilt/manifest.md`
+# (e.g. `//googlesql/public:analyzer`,
+# `//googlesql/resolved_ast:resolved_node_kind_cc_proto`).
+#
+# This file is shipped verbatim by `tools/googlesql-prebuilt/package.sh`
+# from `tools/googlesql-prebuilt/templates/BUILD.bazel`. Edits in the
+# template land in the next published artifact.
+
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+package(default_visibility = ["//:__subpackages__"])
+
+exports_files([
+    "BUILD.bazel",
+    "MODULE.bazel",
+    "manifest.json",
+])
+
+# Every shipped header is exported as a source file so the sibling
+# wrapper packages can reference them in `hdrs = ["//:include/...h"]`.
+# `strip_include_prefix = "/include"` (repo-root relative; the leading
+# slash is load-bearing) on each wrapper rule reroots
+# `#include "googlesql/..."` under the `include/` tree.
+exports_files(glob(
+    ["include/**/*.h"],
+    allow_empty = False,
+))
+
+# Combined static archives. Private to the prebuilt repo; the public
+# wrapper `cc_library`s pull them in via `deps`. External consumers
+# should always go through one of the wrapper labels under
+# `//googlesql/public:...` or `//googlesql/resolved_ast:...` so the
+# emulator-side strict-deps narrowing remains identical to the source
+# build.
+cc_import(
+    name = "_archive",
+    static_library = "lib/libgooglesql.a",
+)
+
+cc_import(
+    name = "_archive_protos",
+    static_library = "lib/libgooglesql_protos.a",
+)
+
+# Convenience filegroup so the Phase 5 parity gate can diff the
+# shipped archives byte-for-byte against a source-mode rebuild without
+# having to know each `.a` path.
+filegroup(
+    name = "libraries",
+    srcs = [
+        "lib/libgooglesql.a",
+        "lib/libgooglesql_protos.a",
+    ],
+    visibility = ["//visibility:public"],
+)

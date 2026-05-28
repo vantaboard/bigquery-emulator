@@ -1,0 +1,28 @@
+"""MODULE.bazel for the @googlesql_prebuilt_linux_amd64 external repo.
+
+Pinned by tools/googlesql-prebuilt/package.sh. Placeholders ({{...}})
+are substituted at package time with the artifact's actual versions so
+the consumer (Phase 3) can match Bzlmod dep pins to the source build's
+MODULE.bazel.
+
+The consumer wires this repo via `bazel_dep(name = "googlesql_prebuilt_linux_amd64",
+version = "...")` (or `http_archive` + `repo_override` while
+developing). Phase 3 owns the consumer-side wiring; this file only
+declares what the prebuilt repo NEEDS to compile against (Abseil,
+Protobuf, gRPC, rules_cc).
+"""
+
+module(
+    name = "googlesql_prebuilt_linux_amd64",
+    version = "{{ARTIFACT_VERSION}}",
+)
+
+# Mirrors the source-side //MODULE.bazel pins. Mismatches between the
+# consumer's resolved version and these declarations are a Phase 5
+# parity error: the static archives in lib/ were linked against these
+# exact versions, so resolving a different version would produce
+# multiple-definition link errors or ODR violations at runtime.
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "abseil-cpp", version = "{{ABSEIL_VERSION}}", repo_name = "com_google_absl")
+bazel_dep(name = "protobuf", version = "{{PROTOBUF_VERSION}}", repo_name = "com_google_protobuf")
+bazel_dep(name = "grpc", version = "{{GRPC_VERSION}}", repo_name = "com_github_grpc_grpc")
