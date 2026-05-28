@@ -40,6 +40,12 @@ release notes.
 5. [`upgrade-rules.md`](upgrade-rules.md) — Done criteria.
    How the frozen surface may evolve during a GoogleSQL upgrade and which
    changes cascade as breaking work into later phases.
+6. [`rollback.md`](rollback.md) — Phase 5 rollback playbook.
+   When and how to repin or revert prebuilt adoption when the parity job,
+   conformance lane, or validator surfaces a regression. Lists every
+   `FAIL_*` token emitted by
+   [`tools/googlesql-prebuilt/validate_artifact.py`](../../../tools/googlesql-prebuilt/validate_artifact.py)
+   with the recommended response.
 
 ## What this phase does NOT do
 
