@@ -101,6 +101,52 @@ should be updated to reflect this when the Phase 1 docs next see an
 intentional change (the producer hasn't touched the docs because the
 contract — what `compat.labels` says — is what matters).
 
+## Phase 1 doc clarification: artifact MODULE.bazel identity is `googlesql`
+
+[`repo-layout.md`](../../docs/dev/googlesql-prebuilt/repo-layout.md)
+says "The repo is named `@googlesql_prebuilt_linux_amd64` in the
+consumer's Bzlmod graph" and goes on to claim a consumer "can swap
+`@googlesql//` for `@googlesql_prebuilt_linux_amd64//` in a single
+`bazel mod` extension and everything resolves." That swap is not
+how Phase 3 wires consumption.
+
+Phase 1's
+[`label-inventory.md`](../../docs/dev/googlesql-prebuilt/label-inventory.md)
+froze 18 emulator-side `@googlesql//...` references and explicitly
+disallowed renaming them: rewriting every emulator `BUILD.bazel` to
+the prebuilt repo's name would be label churn the rollout was
+designed to avoid. The clean two-mode story (Phase 3:
+[`googlesql-prebuilt-consume-wiring_3b4c5d6e.plan.md`](../../docs/dev/googlesql-prebuilt/upgrade-rules.md))
+needs **the same** `@googlesql//` label space in both modes so the
+emulator BUILDs do not change. That is only possible if the prebuilt
+artifact's `MODULE.bazel` advertises module identity `googlesql`,
+not `googlesql_prebuilt_linux_amd64`.
+
+This producer therefore emits a `module(name = "googlesql", ...)`
+declaration in the artifact's `MODULE.bazel`. The other three names
+the rollout pins are unchanged:
+
+- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (Phase 1 freeze).
+- GitHub Release asset prefix  : `googlesql-prebuilt-linux-amd64-...` (Phase 2 contract).
+- Tarball/Release tag           : `googlesql-prebuilt/v<version>+gs-<short_sha>` (Phase 2 contract).
+
+Only the in-Bzlmod identity (the `module(name = ...)` field that
+`bazel_dep` and `--override_module` resolve against) is `googlesql`.
+The platform discriminator stays the tarball directory name + asset
+name suffix, so a future `linux/arm64` artifact would publish a
+sibling tarball `googlesql_prebuilt_linux_arm64/` whose
+`MODULE.bazel` also says `module(name = "googlesql", ...)` — the
+selection between platforms still happens at the consumer's
+`select()` (or via a per-platform `archive_override`).
+
+The
+[Phase 1 upgrade rules](../../docs/dev/googlesql-prebuilt/upgrade-rules.md)
+do not classify this clarification as breaking: no exposed wrapper
+label changed, no payload bytes changed, no manifest field changed.
+What changed is which name the consumer's `bazel_dep` resolves to,
+and that is documented here so a future producer change cannot drift
+from this commit's intent.
+
 ## Local exercise (no real bazel build)
 
 ```bash

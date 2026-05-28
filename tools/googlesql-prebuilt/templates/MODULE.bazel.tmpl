@@ -1,19 +1,34 @@
-"""MODULE.bazel for the @googlesql_prebuilt_linux_amd64 external repo.
+"""MODULE.bazel for the GoogleSQL prebuilt artifact.
 
 Pinned by tools/googlesql-prebuilt/package.sh. Placeholders ({{...}})
 are substituted at package time with the artifact's actual versions so
 the consumer (Phase 3) can match Bzlmod dep pins to the source build's
 MODULE.bazel.
 
-The consumer wires this repo via `bazel_dep(name = "googlesql_prebuilt_linux_amd64",
-version = "...")` (or `http_archive` + `repo_override` while
-developing). Phase 3 owns the consumer-side wiring; this file only
-declares what the prebuilt repo NEEDS to compile against (Abseil,
-Protobuf, gRPC, rules_cc).
+Naming (Phase 1 doc clarification, see
+tools/googlesql-prebuilt/README.md "Naming clarification"):
+
+- Tarball top-level directory  : `googlesql_prebuilt_linux_amd64/` (Phase 1 freeze).
+- GitHub Release asset name    : `googlesql-prebuilt-linux-amd64-...` (Phase 2 contract).
+- Module name in MODULE.bazel  : `googlesql` (the consumer-facing identity).
+
+Why the module name is `googlesql` and not `googlesql_prebuilt_linux_amd64`:
+the emulator's `BUILD.bazel` files reference `@googlesql//googlesql/public:*`
+and `@googlesql//googlesql/resolved_ast:*` directly. Those references
+are frozen by Phase 1 (label-inventory.md) and must not change between
+source mode and prebuilt mode. By declaring this artifact's MODULE.bazel
+identity as `googlesql`, a consumer can flip between source mode (the
+existing `local_path_override` to `../googlesql`) and prebuilt mode
+(`--override_module=googlesql=<unpacked_artifact_path>` or an
+equivalent `archive_override`) without editing any emulator BUILD file.
+
+Phase 3 owns the consumer-side wiring; this file only declares what
+the prebuilt repo NEEDS to compile against (Abseil, Protobuf, gRPC,
+rules_cc).
 """
 
 module(
-    name = "googlesql_prebuilt_linux_amd64",
+    name = "googlesql",
     version = "{{ARTIFACT_VERSION}}",
 )
 
