@@ -119,6 +119,14 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # `clang-18`, so we mirror that pin inside the build stage. The
 # runtime stage stays on bookworm-slim with libstdc++6 (gcc-12), which
 # matches the libstdc++ headers used at build time.
+#
+# DL3008 (pin versions in apt-get install) is intentionally ignored:
+# debian:bookworm-slim is a rolling base whose package versions rotate
+# with security updates, and old versions are quickly purged from the
+# Debian mirrors. Pinning exact versions would make this layer break
+# nondeterministically on rebuild. The base image tag itself is the
+# version pin.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -328,7 +336,12 @@ COPY bin/libduckdb.so /out/libduckdb.so
 # `FROM ${ENGINE_SOURCE}` chooses between the bazel and prebuilt stages
 # above. The runtime stage's `COPY --from=engine-builder` indirection
 # isolates the rest of the Dockerfile from the choice.
+# `engine-builder-${ENGINE_SOURCE}` resolves to a sibling build stage
+# (`engine-builder-bazel` or `engine-builder-prebuilt`), not an external
+# image, so DL3006's tag-pinning advice does not apply; hadolint cannot
+# statically resolve the ARG substitution and treats it as a remote ref.
 ###############################################################################
+# hadolint ignore=DL3006
 FROM engine-builder-${ENGINE_SOURCE} AS engine-builder
 
 ###############################################################################
@@ -392,6 +405,15 @@ LABEL org.opencontainers.image.source="${SOURCE_REPO}" \
 #   * wget — used by the HEALTHCHECK directive below.
 #   * ca-certificates — keeps the gateway HTTP client honest if the
 #     image is repurposed to talk to upstream BigQuery in the future.
+#
+# hadolint DL3008 (pin apt versions): intentionally unpinned — these
+# are core Ubuntu system libraries (libstdc++, tzdata, wget,
+# ca-certificates) on the version-pinned `ubuntu:24.04` base. Ubuntu's
+# security mirror rotates exact versions in-place, so a hard pin like
+# `libstdc++6=14.2.0-...` breaks the build the next time a security
+# update rolls out. The `ubuntu:24.04` tag already provides
+# layer-level reproducibility for the runtime stage.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         libstdc++6 \
