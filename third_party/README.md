@@ -255,6 +255,18 @@ cd third_party/python-bigquery-tests/samples/snippets && \
     NOX_DEFAULT_VENV_BACKEND=virtualenv uvx --from 'nox[pbs]' nox -s py -- -n0
 ```
 
+**Python version:** the `snippets` / `system` / `prerelease_deps`
+sessions only accept Python **3.9 / 3.11-3.13** (upstream's
+`SYSTEM_TEST_PYTHON_VERSIONS`); the project's `mise.toml` pins
+`python = "3.14.x"`. The task auto-falls back: it first looks for a
+`python3.13 → 3.12 → 3.11 → 3.9` binary on `PATH`, then if none is
+present picks `3.13` and lets `uvx --from 'nox[pbs]' nox -p 3.13` fetch
+the interpreter via python-build-standalone (the project's pinned `uv`
+in `mise.toml` makes this work without any extra setup). Set
+`PYTHON_SAMPLES_PYTHON=3.12` (or similar) to pin a specific
+interpreter and skip the fallback. The `unit` / `unit_noextras`
+sessions accept 3.9-3.14 directly, so 3.14 needs no fallback.
+
 **Backend:** the task defaults `NOX_DEFAULT_VENV_BACKEND=virtualenv`
 because upstream's `noxfile.py` invokes `python -m pip` in every
 session and uv-created venvs ship without pip. Set

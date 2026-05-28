@@ -39,7 +39,14 @@
 #   PYTHON_SAMPLES_NOX_SESSION     default `snippets` (upstream emulator-driven session: docs/snippets.py + samples/);
 #                                  also unit / unit_noextras (mocked) and any other upstream session
 #                                  defined in third_party/python-bigquery-tests/noxfile.py after sync
-#   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3)
+#   PYTHON_SAMPLES_PYTHON          override interpreter (default: current python3, with an
+#                                  auto-fallback when the resolved interpreter is too new
+#                                  for the chosen session — e.g. mise.toml pins 3.14 but
+#                                  `snippets` / `system` / `prerelease_deps` require 3.9 /
+#                                  3.11-3.13. The task tries `python3.13`-`3.9` on PATH,
+#                                  then falls back to `uvx --from 'nox[pbs]' nox -p 3.13`
+#                                  which fetches CPython via python-build-standalone.
+#                                  Setting this var verbatim skips the fallback.)
 #   PYTHON_SAMPLES_CMD_TIMEOUT     wall-clock cap for the Python suite (default 30m)
 #   PYTHON_SAMPLES_PYTEST_ARGS     extra pytest flags appended after the task's defaults
 #                                  (`-v --durations=10`, plus `-n0` for the `snippets` session).
@@ -328,6 +335,49 @@ tasks:
         # session decorators. UNIT_TEST_PYTHON_VERSIONS = 3.9-3.14;
         # SYSTEM_TEST_PYTHON_VERSIONS = 3.9, 3.11-3.13;
         # DEFAULT_PYTHON_VERSION = 3.9 / 3.14 for everything else.
+        #
+        # Auto-fallback when the resolved interpreter is too new for
+        # the chosen nox session. Most common case: mise.toml pins
+        # python = "3.14.x" but `snippets` / `system` / `prerelease_deps`
+        # only accept 3.9 / 3.11-3.13. Mirrors the python-bigquery-
+        # dataframes-tests fallback below. Preference order:
+        #   1. A `pythonX.Y` binary on PATH (any nox backend works,
+        #      including the default virtualenv).
+        #   2. `uvx --from 'nox[pbs]' nox -p 3.13`: the `pbs` extra
+        #      fetches CPython via python-build-standalone, so no
+        #      `python3.13` binary is needed locally. Requires `uv`
+        #      on PATH (mise.toml pins it).
+        # Caller-supplied PYTHON_SAMPLES_PYTHON skips the fallback so
+        # deliberate pins are never silently rewritten.
+        if [ -z "${PYTHON_SAMPLES_PYTHON:-}" ]; then
+          case "$nox_session" in
+            snippets|system|prerelease_deps)
+              case "$py" in
+                3.9|3.11|3.12|3.13) ;;
+                *)
+                  _py_old="$py"
+                  _py_found=""
+                  for _v in 3.13 3.12 3.11 3.9; do
+                    if command -v "python${_v}" >/dev/null 2>&1; then
+                      py="${_v}"
+                      _py_found=1
+                      echo "python-bigquery-tests: default Python is ${_py_old} (nox ${nox_session} requires 3.9 / 3.11-3.13); using $(command -v "python${_v}")." >&2
+                      break
+                    fi
+                  done
+                  if [ -z "${_py_found}" ] && command -v uv >/dev/null 2>&1; then
+                    py="3.13"
+                    echo "python-bigquery-tests: default Python is ${_py_old} (nox ${nox_session} requires 3.9 / 3.11-3.13); no python3.9/3.11-3.13 on PATH, picking 3.13 via 'uvx --from nox[pbs]' (python-build-standalone)." >&2
+                  fi
+                  ;;
+              esac
+              ;;
+          esac
+        fi
+        # Final validation: after the auto-fallback above, fail with
+        # a specific message if the interpreter still doesn't match
+        # the session's accepted set. Caller-supplied
+        # PYTHON_SAMPLES_PYTHON also lands here verbatim.
         case "$nox_session" in
           unit|unit_noextras)
             case "$py" in
@@ -342,7 +392,7 @@ tasks:
             case "$py" in
               3.9|3.11|3.12|3.13) ;;
               *)
-                echo "nox session ${nox_session} requires Python 3.9, 3.11, 3.12, or 3.13 (got ${py}); export PYTHON_SAMPLES_PYTHON=3.13 (see .envrc) or use PYTHON_SAMPLES_NOX_SESSION=unit for 3.9-3.14." >&2
+                echo "nox session ${nox_session} requires Python 3.9, 3.11, 3.12, or 3.13 (got ${py}). Install python3.13 (or set PYTHON_SAMPLES_PYTHON=3.13) — or install uv (https://docs.astral.sh/uv/) so the task can fetch 3.13 via 'uvx --from nox[pbs]' (python-build-standalone). Alternatively, use PYTHON_SAMPLES_NOX_SESSION=unit for the 3.9-3.14 nox lane." >&2
                 exit 1
                 ;;
             esac
