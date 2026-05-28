@@ -350,7 +350,7 @@ func (f *Fixture) validateExpectation() error {
 	hasErr := f.Expected.Error != nil
 	if hasErr && (hasRows || hasSchema) {
 		return errors.New(
-			"expected: error: cannot be combined with rows: or schema:")
+			"expected: error cannot be combined with rows or schema")
 	}
 	switch f.Expected.Match {
 	case MatchSchemaOnly:
@@ -360,18 +360,18 @@ func (f *Fixture) validateExpectation() error {
 		// there is nothing to assert on.
 		if !hasErr && !hasRows && !hasSchema {
 			return errors.New(
-				"expected: match=schema_only requires schema: or rows: (column names)")
+				"expected: match=schema_only requires schema or rows (column names)")
 		}
 	default:
 		// ordered / unordered must set rows: or error:.
 		if !hasRows && !hasErr {
-			return errors.New("expected: must set either rows: or error:")
+			return errors.New("expected: must set either rows or error")
 		}
 	}
 	if hasErr {
 		e := f.Expected.Error
 		if e.Code == 0 && e.MessageContains == "" {
-			return errors.New("expected.error: must set at least one of code: or message_contains:")
+			return errors.New("expected.error: must set at least one of code or message_contains")
 		}
 	}
 	return nil
@@ -411,11 +411,11 @@ func (s SetupStep) validate() error {
 	}
 	switch count {
 	case 0:
-		return errors.New("setup step must set exactly one of dataset:, table:, rows:, sql:")
+		return errors.New("setup step must set exactly one of dataset, table, rows, sql")
 	case 1:
 		return nil
 	default:
-		return errors.New("setup step must set exactly one of dataset:, table:, rows:, sql:")
+		return errors.New("setup step must set exactly one of dataset, table, rows, sql")
 	}
 }
 

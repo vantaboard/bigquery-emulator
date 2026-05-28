@@ -328,31 +328,27 @@ func freePort() (int, error) {
 	return port, nil
 }
 
-// doRequest is the runner's slimmed-down HTTP helper. It POSTs JSON
-// bodies (or issues a GET) and returns the status + body. Errors are
-// wrapped with the URL so the runner-internal error path is easy to
-// debug.
-func doRequest(ctx context.Context, method, url string, body []byte) (int, []byte, error) {
-	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, url, reader)
+// doRequest is the runner's slimmed-down HTTP helper. Every caller
+// POSTs a JSON body, so the method is hard-coded to POST and the body
+// is required (callers already gate on whether they have something to
+// send before calling). Errors are wrapped with the URL so the
+// runner-internal error path is easy to debug.
+func doRequest(ctx context.Context, url string, body []byte) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
+		bytes.NewReader(body))
 	if err != nil {
-		return 0, nil, fmt.Errorf("build request %s %s: %w", method, url, err)
+		return 0, nil, fmt.Errorf("build request POST %s: %w", url, err)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("http %s %s: %w", method, url, err)
+		return 0, nil, fmt.Errorf("http POST %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return resp.StatusCode, nil, fmt.Errorf("read body from %s %s: %w",
-			method, url, err)
+		return resp.StatusCode, nil, fmt.Errorf("read body from POST %s: %w",
+			url, err)
 	}
 	return resp.StatusCode, respBody, nil
 }

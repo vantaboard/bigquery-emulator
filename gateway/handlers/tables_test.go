@@ -16,15 +16,17 @@ import (
 
 // newTableReq builds an *http.Request mirroring how Go's mux populates
 // the projectId / datasetId / tableId wildcards at runtime, so handler
-// unit tests don't have to wire the full server.
-func newTableReq(method, projectID, datasetID, tableID, body string) *http.Request {
-	url := "/bigquery/v2/projects/" + projectID + "/datasets/" + datasetID + "/tables"
+// unit tests don't have to wire the full server. The project ID and
+// dataset ID are the package-level testProjectID / testDatasetID
+// constants; every call site here uses those.
+func newTableReq(method, tableID, body string) *http.Request {
+	url := "/bigquery/v2/projects/" + testProjectID + "/datasets/" + testDatasetID + "/tables"
 	if tableID != "" {
 		url += "/" + tableID
 	}
 	req := httptest.NewRequest(method, url, strings.NewReader(body))
-	req.SetPathValue("projectId", projectID)
-	req.SetPathValue("datasetId", datasetID)
+	req.SetPathValue("projectId", testProjectID)
+	req.SetPathValue("datasetId", testDatasetID)
 	if tableID != "" {
 		req.SetPathValue("tableId", tableID)
 	}
@@ -48,7 +50,7 @@ func TestTableInsertForwardsSchema(t *testing.T) {
             ]}
         ]}
     }`
-	req := newTableReq(http.MethodPost, testProjectID, testDatasetID, "", body)
+	req := newTableReq(http.MethodPost, "", body)
 	rec := httptest.NewRecorder()
 	TableInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -95,7 +97,7 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 // RPC is issued, mirroring the upstream documented requirement.
 func TestTableInsertRequiresTableID(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newTableReq(http.MethodPost, testProjectID, testDatasetID, "", `{}`)
+	req := newTableReq(http.MethodPost, "", `{}`)
 	rec := httptest.NewRecorder()
 	TableInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -121,7 +123,7 @@ func TestTableGetUsesDescribeTable(t *testing.T) {
 			}, nil
 		},
 	}
-	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, testTableID, "")
+	req := newTableReq(http.MethodGet, testTableID, "")
 	rec := httptest.NewRecorder()
 	TableGet(Dependencies{Catalog: fake})(rec, req)
 
@@ -153,7 +155,7 @@ func TestTableGetNotFound(t *testing.T) {
 			return nil, status.Error(codes.NotFound, "table not found")
 		},
 	}
-	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, "missing", "")
+	req := newTableReq(http.MethodGet, "missing", "")
 	rec := httptest.NewRecorder()
 	TableGet(Dependencies{Catalog: fake})(rec, req)
 
@@ -166,7 +168,7 @@ func TestTableGetNotFound(t *testing.T) {
 // triple forwarded to the engine on a delete.
 func TestTableDeleteForwardsTableRef(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newTableReq(http.MethodDelete, testProjectID, testDatasetID, testTableID, "")
+	req := newTableReq(http.MethodDelete, testTableID, "")
 	rec := httptest.NewRecorder()
 	TableDelete(Dependencies{Catalog: fake})(rec, req)
 
@@ -184,7 +186,7 @@ func TestTableDeleteForwardsTableRef(t *testing.T) {
 
 // TestTableListReturnsEmptyPage pins the empty-page shape.
 func TestTableListReturnsEmptyPage(t *testing.T) {
-	req := newTableReq(http.MethodGet, testProjectID, testDatasetID, "", "")
+	req := newTableReq(http.MethodGet, "", "")
 	rec := httptest.NewRecorder()
 	TableList(Dependencies{})(rec, req)
 

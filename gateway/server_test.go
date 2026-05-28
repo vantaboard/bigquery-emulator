@@ -14,116 +14,111 @@ const (
 	tablePath    = "/projects/p/datasets/d/tables/t"
 )
 
+// routeCase captures one row of the BigQuery v2 / non-v2 route tables
+// the smoke test below walks. Hoisted out of the test body so the
+// table literals do not count toward TestRouteTable's funlen budget.
+type routeCase struct {
+	name   string
+	method string
+	path   string
+}
+
+// bqV2RouteCases lists the bare paths (no `/bigquery/v2` prefix) for
+// every documented BigQuery v2 REST endpoint. The test exercises each
+// case under both the prefixed and the bare form (see
+// `mountBigQueryV2` in server.go for why both exist).
+var bqV2RouteCases = []routeCase{
+	{"projects.list", http.MethodGet, "/projects"},
+	{"projects.getServiceAccount", http.MethodGet, "/projects/p/serviceAccount"},
+
+	{"datasets.list", http.MethodGet, datasetsPath},
+	{"datasets.insert", http.MethodPost, datasetsPath},
+	{"datasets.get", http.MethodGet, datasetPath},
+	{"datasets.update", http.MethodPut, datasetPath},
+	{"datasets.patch", http.MethodPatch, datasetPath},
+	{"datasets.delete", http.MethodDelete, datasetPath},
+	{"datasets.undelete", http.MethodPost, datasetPath + ":undelete"},
+
+	{"tables.list", http.MethodGet, datasetPath + "/tables"},
+	{"tables.insert", http.MethodPost, datasetPath + "/tables"},
+	{"tables.get", http.MethodGet, tablePath},
+	{"tables.update", http.MethodPut, tablePath},
+	{"tables.patch", http.MethodPatch, tablePath},
+	{"tables.delete", http.MethodDelete, tablePath},
+	{"tables.getIamPolicy", http.MethodPost, tablePath + ":getIamPolicy"},
+	{"tables.setIamPolicy", http.MethodPost, tablePath + ":setIamPolicy"},
+	{"tables.testIamPermissions", http.MethodPost, tablePath + ":testIamPermissions"},
+
+	{"tabledata.list", http.MethodGet, tablePath + "/data"},
+	{"tabledata.insertAll", http.MethodPost, tablePath + "/insertAll"},
+
+	// Jobs (excludes the media-upload variant, which lives at
+	// /upload/bigquery/v2/... only - see otherRouteCases below).
+	{"jobs.list", http.MethodGet, "/projects/p/jobs"},
+	{"jobs.insert", http.MethodPost, "/projects/p/jobs"},
+	{"jobs.get", http.MethodGet, "/projects/p/jobs/j"},
+	{"jobs.cancel", http.MethodPost, "/projects/p/jobs/j/cancel"},
+	{"jobs.delete", http.MethodDelete, "/projects/p/jobs/j/delete"},
+
+	{"jobs.query", http.MethodPost, "/projects/p/queries"},
+	{"jobs.getQueryResults", http.MethodGet, "/projects/p/queries/j"},
+}
+
+// otherRouteCases lists endpoints registered at exactly one literal
+// path (not mirrored at the bare form).
+var otherRouteCases = []routeCase{
+	{"health-root", http.MethodGet, "/"},
+	{"health-z", http.MethodGet, "/healthz"},
+
+	{"discovery", http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest"},
+
+	// jobs.insert media-upload variant - the public API hard-codes
+	// the /upload prefix, so it is not mirrored at /.../jobs.
+	{"jobs.insert-upload", http.MethodPost, "/upload/bigquery/v2/projects/p/jobs"},
+}
+
+// assertRouteReachable issues `method path` against srv and fails the
+// test if the response is the catch-all 404 emitted by
+// `handlers.NotFound` (distinguishable by its "No route matches"
+// message). A handler 404 is allowed because some routes legitimately
+// return 404 for not-yet-existing resources (e.g.
+// `jobs.getQueryResults` for an unknown jobId).
+func assertRouteReachable(t *testing.T, srv http.Handler, method, path string) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound &&
+		strings.Contains(rec.Body.String(), "No route matches") {
+		t.Fatalf("%s %s returned 404 from the route catch-all; "+
+			"route is missing", method, path)
+	}
+}
+
 // TestRouteTable smoke-tests that every documented BigQuery v2 REST
-// endpoint reaches a handler (not the 404 catch-all). Originally
-// every handler returned 501 so the test simply asserted "code != 404",
-// but as real handlers land some now legitimately return 404 for
-// not-yet-existing resources (e.g. `jobs.getQueryResults` for an
-// unknown jobId). To stay precise about what we are testing, the
-// route-missing 404 emitted by `handlers.NotFound` is distinguished
-// from a handler 404 by its `"No route matches ..."` message.
-//
-// Cross-reference docs/REST_API.md when adding new routes here.
+// endpoint reaches a handler (not the 404 catch-all). Cross-reference
+// docs/REST_API.md when adding new routes to bqV2RouteCases or
+// otherRouteCases.
 func TestRouteTable(t *testing.T) {
 	srv := NewServer(Options{}, nil)
 
-	// BigQuery v2 endpoints are mounted under both the `/bigquery/v2`
-	// prefix and the bare path (see `mountBQv2` in server.go). The
-	// table records the bare path; the test exercises both forms.
-	bqV2 := []struct {
-		name   string
-		method string
-		path   string
-	}{
-		// Projects
-		{"projects.list", http.MethodGet, "/projects"},
-		{"projects.getServiceAccount", http.MethodGet, "/projects/p/serviceAccount"},
-
-		// Datasets
-		{"datasets.list", http.MethodGet, datasetsPath},
-		{"datasets.insert", http.MethodPost, datasetsPath},
-		{"datasets.get", http.MethodGet, datasetPath},
-		{"datasets.update", http.MethodPut, datasetPath},
-		{"datasets.patch", http.MethodPatch, datasetPath},
-		{"datasets.delete", http.MethodDelete, datasetPath},
-		{"datasets.undelete", http.MethodPost, datasetPath + ":undelete"},
-
-		// Tables
-		{"tables.list", http.MethodGet, datasetPath + "/tables"},
-		{"tables.insert", http.MethodPost, datasetPath + "/tables"},
-		{"tables.get", http.MethodGet, tablePath},
-		{"tables.update", http.MethodPut, tablePath},
-		{"tables.patch", http.MethodPatch, tablePath},
-		{"tables.delete", http.MethodDelete, tablePath},
-		{"tables.getIamPolicy", http.MethodPost, tablePath + ":getIamPolicy"},
-		{"tables.setIamPolicy", http.MethodPost, tablePath + ":setIamPolicy"},
-		{"tables.testIamPermissions", http.MethodPost, tablePath + ":testIamPermissions"},
-
-		// Tabledata
-		{"tabledata.list", http.MethodGet, tablePath + "/data"},
-		{"tabledata.insertAll", http.MethodPost, tablePath + "/insertAll"},
-
-		// Jobs (excludes the media-upload variant, which lives at
-		// /upload/bigquery/v2/... only — see `other` below).
-		{"jobs.list", http.MethodGet, "/projects/p/jobs"},
-		{"jobs.insert", http.MethodPost, "/projects/p/jobs"},
-		{"jobs.get", http.MethodGet, "/projects/p/jobs/j"},
-		{"jobs.cancel", http.MethodPost, "/projects/p/jobs/j/cancel"},
-		{"jobs.delete", http.MethodDelete, "/projects/p/jobs/j/delete"},
-
-		// Queries
-		{"jobs.query", http.MethodPost, "/projects/p/queries"},
-		{"jobs.getQueryResults", http.MethodGet, "/projects/p/queries/j"},
-	}
-
-	// Non-BigQuery-v2 endpoints (or fixed-prefix variants of v2) are
-	// registered exactly once, at the literal path documented here.
-	other := []struct {
-		name   string
-		method string
-		path   string
-	}{
-		// Health
-		{"health-root", http.MethodGet, "/"},
-		{"health-z", http.MethodGet, "/healthz"},
-
-		// Discovery
-		{"discovery", http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest"},
-
-		// jobs.insert media-upload variant — the public API hard-codes
-		// the /upload prefix, so it is not mirrored at /.../jobs.
-		{"jobs.insert-upload", http.MethodPost, "/upload/bigquery/v2/projects/p/jobs"},
-	}
-
-	check := func(t *testing.T, method, path string) {
-		t.Helper()
-		req := httptest.NewRequest(method, path, nil)
-		rec := httptest.NewRecorder()
-		srv.ServeHTTP(rec, req)
-		if rec.Code == http.StatusNotFound &&
-			strings.Contains(rec.Body.String(), "No route matches") {
-			t.Fatalf("%s %s returned 404 from the route catch-all; "+
-				"route is missing", method, path)
-		}
-	}
-
-	for _, tc := range bqV2 {
+	for _, tc := range bqV2RouteCases {
 		// `/bigquery/v2` prefix: the form gcloud, bq, and clients
 		// pointed at *.googleapis.com use.
 		t.Run("prefixed/"+tc.name, func(t *testing.T) {
-			check(t, tc.method, "/bigquery/v2"+tc.path)
+			assertRouteReachable(t, srv, tc.method, "/bigquery/v2"+tc.path)
 		})
 		// Bare form: required because the official client libraries
 		// (e.g. @google-cloud/bigquery v8) treat BIGQUERY_EMULATOR_HOST
 		// as the verbatim baseUrl with no version segment.
 		t.Run("bare/"+tc.name, func(t *testing.T) {
-			check(t, tc.method, tc.path)
+			assertRouteReachable(t, srv, tc.method, tc.path)
 		})
 	}
 
-	for _, tc := range other {
+	for _, tc := range otherRouteCases {
 		t.Run(tc.name, func(t *testing.T) {
-			check(t, tc.method, tc.path)
+			assertRouteReachable(t, srv, tc.method, tc.path)
 		})
 	}
 }

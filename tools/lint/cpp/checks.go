@@ -93,10 +93,7 @@ func splitLines(body []byte) []string {
 	if len(body) == 0 {
 		return nil
 	}
-	s := string(body)
-	if strings.HasSuffix(s, "\n") {
-		s = s[:len(s)-1]
-	}
+	s := strings.TrimSuffix(string(body), "\n")
 	return strings.Split(s, "\n")
 }
 

@@ -109,10 +109,68 @@ func TestQueryRunMalformedBody(t *testing.T) {
 	}
 }
 
+// assertDryRunForwarding pins the engine RPC arguments derived from
+// the inbound dryRun=true /queries body. Hoisted out of the caller
+// test to keep its statement count below the funlen budget.
+func assertDryRunForwarding(t *testing.T, fake *fakeQueryClient) {
+	t.Helper()
+	if fake.lastDryRun == nil {
+		t.Fatal("Query.DryRun was not called")
+	}
+	if got := fake.lastDryRun.GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
+	}
+	if got := fake.lastDryRun.GetDefaultDatasetId(); got != "ds" {
+		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
+	}
+	if got := fake.lastDryRun.GetSql(); got != "SELECT id, name FROM ds.t" {
+		t.Errorf("sql forwarded = %q", got)
+	}
+	if fake.lastDryRun.GetUseLegacySql() {
+		t.Errorf("use_legacy_sql forwarded = true; want false")
+	}
+}
+
+// assertDryRunEnvelope pins the QueryResponse envelope produced from
+// a successful dry-run: kind, jobComplete=true, decimal-string
+// totalBytesProcessed, and an empty rows page.
+func assertDryRunEnvelope(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if resp.Kind != "bigquery#queryResponse" {
+		t.Errorf("kind = %q, want %q", resp.Kind, "bigquery#queryResponse")
+	}
+	if !resp.JobComplete {
+		t.Error("jobComplete = false, want true for completed dry run")
+	}
+	if resp.TotalBytesProcessed != "4096" {
+		t.Errorf("totalBytesProcessed = %q, want %q (decimal string)",
+			resp.TotalBytesProcessed, "4096")
+	}
+	if len(resp.Rows) != 0 {
+		t.Errorf("rows = %d, want 0 for a dry run", len(resp.Rows))
+	}
+}
+
+// assertDryRunSchema pins the column names + types decoded out of the
+// engine's DryRunResponse schema.
+func assertDryRunSchema(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
+		t.Fatalf("schema not propagated: %+v", resp.Schema)
+	}
+	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
+		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
+	}
+	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
+		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
+	}
+}
+
 // TestQueryRunDryRunForwardsToEngine asserts the dryRun=true branch
 // forwards (project, default dataset, sql) to enginepb.Query.DryRun
 // and converts the resulting schema + estimated bytes into a
-// QueryResponse with `jobComplete=true` and an empty rows page.
+// QueryResponse with `jobComplete=true` and an empty rows page. The
+// per-axis assertions live in their own helpers above.
 func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 	fake := &fakeQueryClient{
 		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
@@ -134,48 +192,15 @@ func TestQueryRunDryRunForwardsToEngine(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	if fake.lastDryRun == nil {
-		t.Fatal("Query.DryRun was not called")
-	}
-	if got := fake.lastDryRun.GetProjectId(); got != testProjectID {
-		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
-	}
-	if got := fake.lastDryRun.GetDefaultDatasetId(); got != "ds" {
-		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
-	}
-	if got := fake.lastDryRun.GetSql(); got != "SELECT id, name FROM ds.t" {
-		t.Errorf("sql forwarded = %q", got)
-	}
-	if fake.lastDryRun.GetUseLegacySql() {
-		t.Errorf("use_legacy_sql forwarded = true; want false")
-	}
 
 	var resp bqtypes.QueryResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if resp.Kind != "bigquery#queryResponse" {
-		t.Errorf("kind = %q, want %q", resp.Kind, "bigquery#queryResponse")
-	}
-	if !resp.JobComplete {
-		t.Error("jobComplete = false, want true for completed dry run")
-	}
-	if resp.TotalBytesProcessed != "4096" {
-		t.Errorf("totalBytesProcessed = %q, want %q (decimal string)",
-			resp.TotalBytesProcessed, "4096")
-	}
-	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
-		t.Fatalf("schema not propagated: %+v", resp.Schema)
-	}
-	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
-		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
-	}
-	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
-		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
-	}
-	if len(resp.Rows) != 0 {
-		t.Errorf("rows = %d, want 0 for a dry run", len(resp.Rows))
-	}
+
+	assertDryRunForwarding(t, fake)
+	assertDryRunEnvelope(t, resp)
+	assertDryRunSchema(t, resp)
 }
 
 // TestQueryRunDryRunInvalidArgumentMapsToInvalidQuery asserts a parse

@@ -8,14 +8,23 @@ import (
 	"testing"
 )
 
-func newRoutineReq(method, projectID, datasetID, routineID string) *http.Request {
-	url := "/bigquery/v2/projects/" + projectID + "/datasets/" + datasetID + "/routines"
+// routineTestProjectID and routineTestDatasetID are the only project /
+// dataset values these tests target; promoted to consts so
+// newRoutineReq can drop the otherwise-constant `projectID` parameter
+// (unparam).
+const (
+	routineTestProjectID = "p"
+	routineTestDatasetID = "d"
+)
+
+func newRoutineReq(method, routineID string) *http.Request {
+	url := "/bigquery/v2/projects/" + routineTestProjectID + "/datasets/" + routineTestDatasetID + "/routines"
 	if routineID != "" {
 		url += "/" + routineID
 	}
 	req := httptest.NewRequest(method, url, strings.NewReader(""))
-	req.SetPathValue("projectId", projectID)
-	req.SetPathValue("datasetId", datasetID)
+	req.SetPathValue("projectId", routineTestProjectID)
+	req.SetPathValue("datasetId", routineTestDatasetID)
 	if routineID != "" {
 		req.SetPathValue("routineId", routineID)
 	}
@@ -24,7 +33,7 @@ func newRoutineReq(method, projectID, datasetID, routineID string) *http.Request
 
 func TestRoutineListReturnsEmptyPage(t *testing.T) {
 	rec := httptest.NewRecorder()
-	RoutineList(Dependencies{})(rec, newRoutineReq(http.MethodGet, "p", "d", ""))
+	RoutineList(Dependencies{})(rec, newRoutineReq(http.MethodGet, ""))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
@@ -46,7 +55,7 @@ func TestRoutineListReturnsEmptyPage(t *testing.T) {
 
 func TestRoutineGetReturnsNotFound(t *testing.T) {
 	rec := httptest.NewRecorder()
-	RoutineGet(Dependencies{})(rec, newRoutineReq(http.MethodGet, "p", "d", "r1"))
+	RoutineGet(Dependencies{})(rec, newRoutineReq(http.MethodGet, "r1"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
@@ -58,7 +67,7 @@ func TestRoutineGetReturnsNotFound(t *testing.T) {
 
 func TestRoutineInsertReturnsNotImplemented(t *testing.T) {
 	rec := httptest.NewRecorder()
-	RoutineInsert(Dependencies{})(rec, newRoutineReq(http.MethodPost, "p", "d", ""))
+	RoutineInsert(Dependencies{})(rec, newRoutineReq(http.MethodPost, ""))
 
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501; body=%s", rec.Code, rec.Body.String())
@@ -67,7 +76,7 @@ func TestRoutineInsertReturnsNotImplemented(t *testing.T) {
 
 func TestRoutineUpdateReturnsNotImplemented(t *testing.T) {
 	rec := httptest.NewRecorder()
-	RoutineUpdate(Dependencies{})(rec, newRoutineReq(http.MethodPut, "p", "d", "r1"))
+	RoutineUpdate(Dependencies{})(rec, newRoutineReq(http.MethodPut, "r1"))
 
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501; body=%s", rec.Code, rec.Body.String())
@@ -76,7 +85,7 @@ func TestRoutineUpdateReturnsNotImplemented(t *testing.T) {
 
 func TestRoutineDeleteReturnsNotFound(t *testing.T) {
 	rec := httptest.NewRecorder()
-	RoutineDelete(Dependencies{})(rec, newRoutineReq(http.MethodDelete, "p", "d", "r1"))
+	RoutineDelete(Dependencies{})(rec, newRoutineReq(http.MethodDelete, "r1"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())

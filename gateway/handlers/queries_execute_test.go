@@ -15,13 +15,110 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// assertExecuteForwarding pins the engine RPC arguments the gateway
+// must derive from the inbound /queries body. Hoisted out of the
+// caller test to keep its cyclomatic complexity below the cyclop cap.
+func assertExecuteForwarding(t *testing.T, fake *fakeQueryClient) {
+	t.Helper()
+	if fake.lastExecuteQuery == nil {
+		t.Fatal("Query.ExecuteQuery was not called")
+	}
+	if got := fake.lastExecuteQuery.GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
+	}
+	if got := fake.lastExecuteQuery.GetDefaultDatasetId(); got != "ds" {
+		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
+	}
+	if got := fake.lastExecuteQuery.GetSql(); got != "SELECT id, name FROM ds.t" {
+		t.Errorf("sql forwarded = %q", got)
+	}
+	if fake.lastExecuteQuery.GetUseLegacySql() {
+		t.Errorf("use_legacy_sql forwarded = true; want false")
+	}
+}
+
+// assertExecuteEnvelope checks the QueryResponse kind / jobReference /
+// jobComplete fields that the BigQuery client libraries depend on.
+func assertExecuteEnvelope(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if resp.Kind != queryResponseKind {
+		t.Errorf("kind = %q, want %q", resp.Kind, queryResponseKind)
+	}
+	if !resp.JobComplete {
+		t.Error("jobComplete = false, want true")
+	}
+	if resp.JobReference == nil {
+		t.Fatal("jobReference is nil; jobs.query must always emit one")
+	}
+	if resp.JobReference.ProjectID != testProjectID {
+		t.Errorf("jobReference.projectId = %q, want %q",
+			resp.JobReference.ProjectID, testProjectID)
+	}
+	if !strings.HasPrefix(resp.JobReference.JobID, "job_") {
+		t.Errorf("jobReference.jobId = %q, want a job_-prefixed id",
+			resp.JobReference.JobID)
+	}
+	if resp.JobReference.Location != "US" {
+		t.Errorf("jobReference.location = %q, want %q",
+			resp.JobReference.Location, "US")
+	}
+}
+
+// assertExecuteSchema pins the column names + types decoded out of the
+// engine's leading TableSchema message.
+func assertExecuteSchema(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
+		t.Fatalf("schema not propagated: %+v", resp.Schema)
+	}
+	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
+		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
+	}
+	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
+		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
+	}
+}
+
+// assertExecuteRows pins the JSON `rows[*].f[*].v` shape and that
+// engine NULL cells round-trip as JSON null.
+func assertExecuteRows(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if len(resp.Rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(resp.Rows))
+	}
+	if got := resp.Rows[0].F[0].V; got != "1" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", got, "1")
+	}
+	if got := resp.Rows[0].F[1].V; got != testUserAlice {
+		t.Errorf("rows[0].f[1].v = %v, want %q", got, testUserAlice)
+	}
+	if got := resp.Rows[1].F[0].V; got != "2" {
+		t.Errorf("rows[1].f[0].v = %v, want %q", got, "2")
+	}
+	if resp.Rows[1].F[1].V != nil {
+		t.Errorf("rows[1].f[1].v = %v, want nil (NULL)", resp.Rows[1].F[1].V)
+	}
+}
+
+// assertExecuteTotals pins the totalRows / totalBytesProcessed wire
+// fields that drive client-side pagination + cost reporting.
+func assertExecuteTotals(t *testing.T, resp bqtypes.QueryResponse) {
+	t.Helper()
+	if resp.TotalRows != "2" {
+		t.Errorf("totalRows = %q, want %q", resp.TotalRows, "2")
+	}
+	if resp.TotalBytesProcessed != "0" {
+		t.Errorf("totalBytesProcessed = %q, want %q (engine bytes not wired yet)",
+			resp.TotalBytesProcessed, "0")
+	}
+}
+
 // TestQueryRunExecuteAssemblesResponse drives the non-dry-run path
 // end-to-end against a fake stream that returns a schema message
 // followed by two row messages, mirroring the proto contract on
-// QueryResultRow. The assembled QueryResponse must carry the
-// BigQuery-shaped kind, jobReference (minted by deps.Jobs), the
-// schema, two `f`/`v` rows (with NULLs as JSON null), totalRows
-// matching the row count, and jobComplete=true.
+// QueryResultRow. Each axis (request forwarding, envelope, schema,
+// rows, totals) is delegated to its own assertion helper so this test
+// stays under the cyclop ceiling.
 func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	stream := &fakeQueryResultStream{
 		msgs: []*enginepb.QueryResultRow{
@@ -53,78 +150,17 @@ func TestQueryRunExecuteAssemblesResponse(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	if fake.lastExecuteQuery == nil {
-		t.Fatal("Query.ExecuteQuery was not called")
-	}
-	if got := fake.lastExecuteQuery.GetProjectId(); got != testProjectID {
-		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
-	}
-	if got := fake.lastExecuteQuery.GetDefaultDatasetId(); got != "ds" {
-		t.Errorf("default_dataset_id forwarded = %q, want %q", got, "ds")
-	}
-	if got := fake.lastExecuteQuery.GetSql(); got != "SELECT id, name FROM ds.t" {
-		t.Errorf("sql forwarded = %q", got)
-	}
-	if fake.lastExecuteQuery.GetUseLegacySql() {
-		t.Errorf("use_legacy_sql forwarded = true; want false")
-	}
 
 	var resp bqtypes.QueryResponse
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if resp.Kind != queryResponseKind {
-		t.Errorf("kind = %q, want %q", resp.Kind, queryResponseKind)
-	}
-	if !resp.JobComplete {
-		t.Error("jobComplete = false, want true")
-	}
-	if resp.TotalRows != "2" {
-		t.Errorf("totalRows = %q, want %q", resp.TotalRows, "2")
-	}
-	if resp.JobReference == nil {
-		t.Fatal("jobReference is nil; jobs.query must always emit one")
-	}
-	if resp.JobReference.ProjectID != testProjectID {
-		t.Errorf("jobReference.projectId = %q, want %q",
-			resp.JobReference.ProjectID, testProjectID)
-	}
-	if !strings.HasPrefix(resp.JobReference.JobID, "job_") {
-		t.Errorf("jobReference.jobId = %q, want a job_-prefixed id",
-			resp.JobReference.JobID)
-	}
-	if resp.JobReference.Location != "US" {
-		t.Errorf("jobReference.location = %q, want %q",
-			resp.JobReference.Location, "US")
-	}
-	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
-		t.Fatalf("schema not propagated: %+v", resp.Schema)
-	}
-	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINT64 {
-		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
-	}
-	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {
-		t.Errorf("schema field[1] mismatch: %+v", resp.Schema.Fields[1])
-	}
-	if len(resp.Rows) != 2 {
-		t.Fatalf("rows = %d, want 2", len(resp.Rows))
-	}
-	if got := resp.Rows[0].F[0].V; got != "1" {
-		t.Errorf("rows[0].f[0].v = %v, want %q", got, "1")
-	}
-	if got := resp.Rows[0].F[1].V; got != testUserAlice {
-		t.Errorf("rows[0].f[1].v = %v, want %q", got, testUserAlice)
-	}
-	if got := resp.Rows[1].F[0].V; got != "2" {
-		t.Errorf("rows[1].f[0].v = %v, want %q", got, "2")
-	}
-	if resp.Rows[1].F[1].V != nil {
-		t.Errorf("rows[1].f[1].v = %v, want nil (NULL)", resp.Rows[1].F[1].V)
-	}
-	if resp.TotalBytesProcessed != "0" {
-		t.Errorf("totalBytesProcessed = %q, want %q (engine bytes not wired yet)",
-			resp.TotalBytesProcessed, "0")
-	}
+
+	assertExecuteForwarding(t, fake)
+	assertExecuteEnvelope(t, resp)
+	assertExecuteSchema(t, resp)
+	assertExecuteRows(t, resp)
+	assertExecuteTotals(t, resp)
 }
 
 // TestQueryRunExecuteJSONShape pins the on-the-wire JSON the BigQuery

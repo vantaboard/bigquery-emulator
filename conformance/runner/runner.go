@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"slices"
 	"sort"
@@ -250,8 +249,7 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 		result.Message = "marshal query: " + marshalErr.Error()
 		return markDuration(result, started)
 	}
-	status, body, queryErr := doRequest(ctx, http.MethodPost,
-		base+"/queries", queryBody)
+	status, body, queryErr := doRequest(ctx, base+"/queries", queryBody)
 	if queryErr != nil {
 		result.Message = "query rpc: " + queryErr.Error()
 		return markDuration(result, started)
@@ -372,8 +370,7 @@ func setupDataset(ctx context.Context, base, dataset string) error {
 	body := fmt.Sprintf(
 		`{"datasetReference":{"projectId":"%s","datasetId":"%s"},"location":"US"}`,
 		projectIDFromBase(base), dataset)
-	status, respBody, err := doRequest(ctx, http.MethodPost,
-		base+"/datasets", []byte(body))
+	status, respBody, err := doRequest(ctx, base+"/datasets", []byte(body))
 	if err != nil {
 		return err
 	}
@@ -406,7 +403,7 @@ func setupTable(ctx context.Context, base string, t *TableSetup) error {
 		return fmt.Errorf("marshal table body: %w", err)
 	}
 	url := fmt.Sprintf("%s/datasets/%s/tables", base, t.Dataset)
-	status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
+	status, respBody, err := doRequest(ctx, url, jsonBody)
 	if err != nil {
 		return err
 	}
@@ -440,7 +437,7 @@ func setupRows(ctx context.Context, base string, rs *RowsSetup) error {
 	}
 	url := fmt.Sprintf("%s/datasets/%s/tables/%s/insertAll",
 		base, rs.Dataset, rs.Table)
-	status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
+	status, respBody, err := doRequest(ctx, url, jsonBody)
 	if err != nil {
 		return err
 	}
@@ -462,8 +459,7 @@ func setupSQL(ctx context.Context, base, sql string) error {
 	if err != nil {
 		return fmt.Errorf("marshal sql body: %w", err)
 	}
-	status, respBody, err := doRequest(ctx, http.MethodPost,
-		base+"/queries", queryBody)
+	status, respBody, err := doRequest(ctx, base+"/queries", queryBody)
 	if err != nil {
 		return err
 	}

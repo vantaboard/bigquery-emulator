@@ -17,15 +17,17 @@ import (
 // newDatasetReq builds an *http.Request with the path-value wildcards
 // populated the way Go's mux populates them at runtime, so handlers
 // that read PathValue("projectId") / PathValue("datasetId") see the
-// expected values without going through the full mux.
-func newDatasetReq(method, projectID, datasetID, body string) *http.Request {
-	url := "/bigquery/v2/projects/" + projectID + "/datasets"
+// expected values without going through the full mux. The project ID
+// is the package-level testProjectID; every call site in this package
+// uses that constant.
+func newDatasetReq(method, datasetID, body string) *http.Request {
+	url := "/bigquery/v2/projects/" + testProjectID + "/datasets"
 	if datasetID != "" {
 		url += "/" + datasetID
 	}
 	reqBody := strings.NewReader(body)
 	req := httptest.NewRequest(method, url, reqBody)
-	req.SetPathValue("projectId", projectID)
+	req.SetPathValue("projectId", testProjectID)
 	if datasetID != "" {
 		req.SetPathValue("datasetId", datasetID)
 	}
@@ -43,7 +45,7 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 	fake := &fakeCatalogClient{}
 	deps := Dependencies{Catalog: fake}
 
-	req := newDatasetReq(http.MethodPost, testProjectID, "",
+	req := newDatasetReq(http.MethodPost, "",
 		`{"datasetReference":{"datasetId":"ds1"},"location":"US","friendlyName":"hello"}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(deps)(rec, req)
@@ -92,7 +94,7 @@ func TestDatasetInsertForwardsToCatalog(t *testing.T) {
 // RPC is issued.
 func TestDatasetInsertRequiresDatasetID(t *testing.T) {
 	fake := &fakeCatalogClient{}
-	req := newDatasetReq(http.MethodPost, testProjectID, "", `{"location":"US"}`)
+	req := newDatasetReq(http.MethodPost, "", `{"location":"US"}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{Catalog: fake})(rec, req)
 
@@ -113,7 +115,7 @@ func TestDatasetInsertEnginePropagatesAlreadyExists(t *testing.T) {
 			return nil, status.Error(codes.AlreadyExists, "dataset already exists")
 		},
 	}
-	req := newDatasetReq(http.MethodPost, testProjectID, "",
+	req := newDatasetReq(http.MethodPost, "",
 		`{"datasetReference":{"datasetId":"ds1"}}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{Catalog: fake})(rec, req)
@@ -134,7 +136,7 @@ func TestDatasetInsertEnginePropagatesAlreadyExists(t *testing.T) {
 // nil-Catalog behaviour so the route table tests keep working in
 // pure gateway-only mode.
 func TestDatasetInsertWithoutCatalogFallsBackTo501(t *testing.T) {
-	req := newDatasetReq(http.MethodPost, testProjectID, "",
+	req := newDatasetReq(http.MethodPost, "",
 		`{"datasetReference":{"datasetId":"ds1"}}`)
 	rec := httptest.NewRecorder()
 	DatasetInsert(Dependencies{})(rec, req)
@@ -179,7 +181,7 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 			return nil, status.Error(codes.NotFound, "dataset not found")
 		},
 	}
-	req := newDatasetReq(http.MethodDelete, testProjectID, testDatasetID, "")
+	req := newDatasetReq(http.MethodDelete, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetDelete(Dependencies{Catalog: fake})(rec, req)
 
@@ -201,7 +203,7 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 // Storage grows a DescribeDataset method this test will need
 // updating.
 func TestDatasetGetSynthesizesResource(t *testing.T) {
-	req := newDatasetReq(http.MethodGet, testProjectID, testDatasetID, "")
+	req := newDatasetReq(http.MethodGet, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetGet(Dependencies{})(rec, req)
 
@@ -227,7 +229,7 @@ func TestDatasetGetSynthesizesResource(t *testing.T) {
 // Live BigQuery returns `access: []` for newly-created datasets; the
 // emulator must do the same.
 func TestDatasetGetAccessIsEmptyArrayNotNull(t *testing.T) {
-	req := newDatasetReq(http.MethodGet, testProjectID, testDatasetID, "")
+	req := newDatasetReq(http.MethodGet, testDatasetID, "")
 	rec := httptest.NewRecorder()
 	DatasetGet(Dependencies{})(rec, req)
 
