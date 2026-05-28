@@ -1,18 +1,13 @@
 # CI for the BigQuery emulator.
 #
-# Mirrors `task ci:run` (see Taskfile.yml): `go vet`, `go test`, CMake
-# build of the C++ engine, a Bazel build of the canonical engine
-# binary (GoogleSQL + reference_impl + DuckDB + gRPC, amd64-only), and
-# a Go build of the gateway. Runs on a linux/amd64 + linux/arm64
-# matrix so we catch architecture-specific regressions early.
+# Mirrors `task ci:run` (see Taskfile.yml): `go vet`, `go test`, a
+# Bazel build of the canonical engine binary (GoogleSQL +
+# reference_impl + DuckDB + gRPC), and a Go build of the gateway.
 #
-# Build-system split (see README.md "Building"):
-#   * CMake — runs on every matrix entry; covers the storage scaffolds
-#     and the DuckDB engine scaffold. Does NOT link GoogleSQL.
-#   * Bazel — amd64 only; produces the canonical
-#     `//binaries/emulator_main:emulator_main` cc_binary that links
-#     the full GoogleSQL analyzer + reference-impl evaluator and
-#     actually serves Query.DryRun / Query.ExecuteQuery end-to-end.
+# linux/amd64 only: the canonical Bazel-built engine
+# `//binaries/emulator_main:emulator_main` links GoogleSQL, whose
+# hermetic LLVM toolchain only ships amd64 binaries today. arm64
+# support is tracked against upstream GoogleSQL toolchain notes.
 #
 # Keep this file and the `ci:run` task in sync: anything that runs here
 # should also run via `task ci:run` locally, and vice versa.
@@ -33,16 +28,8 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: build-and-test (${{ matrix.arch }})
-    runs-on: ${{ matrix.runs-on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runs-on: ubuntu-latest
-          - arch: arm64
-            runs-on: ubuntu-24.04-arm
+    name: build-and-test (amd64)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,9 +45,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang \
-            cmake \
-            make \
-            ninja-build \
             libprotobuf-dev \
             protobuf-compiler \
             libgrpc++-dev \
@@ -70,19 +54,10 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # amd64 produces a single coverage report that gets uploaded to
-      # Codecov below. arm64 keeps the plain `go test` invocation so we
-      # don't end up double-counting (and racing on) a second upload.
       - name: go test (with coverage)
-        if: matrix.arch == 'amd64'
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
 
-      - name: go test
-        if: matrix.arch != 'amd64'
-        run: go test ./...
-
       - name: Upload coverage to Codecov
-        if: matrix.arch == 'amd64'
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.out
@@ -91,99 +66,15 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # arm64 keeps the cheap emulator_main-only build as the cross-arch
-      # gate. The amd64 leg below replaces this with a coverage-instrumented
-      # build that also links + runs the GoogleTest binaries through ctest.
-      - name: Build C++ engine (emulator_main)
-        if: matrix.arch == 'arm64'
-        run: |
-          cmake -S . -B build-out \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++
-          cmake --build build-out --target emulator_main -j
-
-      # ---------------------------------------------------------------
-      # C++ coverage (CMake/ctest path, amd64 only)
-      # ---------------------------------------------------------------
-      #
-      # Reconfigures into build-cov/ with BIGQUERY_EMULATOR_ENABLE_COVERAGE
-      # so every CMake target gets compiled with `--coverage`. Builds the
-      # whole tree (not just emulator_main) so the GoogleTest binaries
-      # registered in CMakeLists.txt link, then drives them through ctest.
-      # gcovr collapses the .gcda/.gcno data into a Codecov-shaped
-      # cobertura XML, filtered to first-party sources.
-      #
-      # The Bazel coverage path lives in a dedicated workflow
-      # (.github/workflows/coverage-bazel.yml) because the GoogleSQL
-      # link is hours-cold and would crowd out the build-and-test gate
-      # if added here.
-      # `gcovr` defaults to the system `gcov` (from gcc), which cannot
-      # read `.gcno` files produced by clang. Install `llvm` so
-      # `/usr/bin/llvm-cov` (clang's gcov-compatible front-end) is on
-      # the PATH; the gcovr step below passes
-      # `--gcov-executable 'llvm-cov gcov'` so the two halves of the
-      # toolchain match.
-      - name: Install gcovr + llvm-cov
-        if: matrix.arch == 'amd64'
-        run: sudo apt-get install -y --no-install-recommends gcovr llvm
-
-      - name: Build C++ with coverage instrumentation (emulator_main + tests)
-        if: matrix.arch == 'amd64'
-        run: |
-          cmake -S . -B build-cov \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DBIGQUERY_EMULATOR_ENABLE_COVERAGE=ON \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++
-          cmake --build build-cov -j
-
-      - name: Run C++ tests (ctest)
-        if: matrix.arch == 'amd64'
-        run: ctest --test-dir build-cov --output-on-failure
-
-      - name: Generate gcovr cobertura report
-        if: matrix.arch == 'amd64'
-        run: |
-          gcovr --root . \
-            --gcov-executable 'llvm-cov gcov' \
-            --filter '^(backend|frontend|binaries)/' \
-            --exclude '.*_test\.cc$' \
-            --exclude '.*\.pb\.(h|cc)$' \
-            --exclude 'third_party/.*' \
-            --xml-pretty -o coverage-cpp-cmake.xml
-
-      - name: Upload C++ coverage to Codecov
-        if: matrix.arch == 'amd64'
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage-cpp-cmake.xml
-          flags: cpp-cmake-amd64
-          name: cpp-cmake-amd64
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-
       # ---------------------------------------------------------------
       # Bazel build of emulator_main (canonical, full GoogleSQL)
       # ---------------------------------------------------------------
-      #
-      # Scoped to linux/amd64 only: the GoogleSQL + Bazel toolchain
-      # does not cross-build cleanly to linux/arm64 in CI yet
-      # (upstream GoogleSQL pins a hermetic LLVM that only ships amd64
-      # binaries today), so the arm64 leg of this matrix continues to
-      # exercise the CMake path above. The SELECT E2E tests auto-skip
-      # on arm64 until a Bazel-built engine binary is available; that
-      # was the trade-off documented in plans 21–24. Track arm64
-      # enablement against upstream GoogleSQL toolchain notes.
       #
       # `local_path_override` in MODULE.bazel points at a sibling
       # `../googlesql/` checkout; the step below pulls the matching
       # tag from upstream and applies the one-line semver patch
       # documented in MODULE.bazel before the build kicks off.
       - name: Set up Bazel (bazelisk)
-        if: matrix.arch == 'amd64'
         uses: bazel-contrib/setup-bazel@0.13.0
         with:
           bazelisk-cache: true
@@ -191,7 +82,6 @@ jobs:
           repository-cache: true
 
       - name: Checkout sibling googlesql (for local_path_override)
-        if: matrix.arch == 'amd64'
         uses: actions/checkout@v4
         with:
           repository: google/googlesql
@@ -199,7 +89,6 @@ jobs:
           path: googlesql-sibling
 
       - name: Stage googlesql at ../googlesql
-        if: matrix.arch == 'amd64'
         run: |
           mv googlesql-sibling ../googlesql
           # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
@@ -208,7 +97,6 @@ jobs:
           sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
-        if: matrix.arch == 'amd64'
         run: |
           bazel build //binaries/emulator_main:emulator_main
 

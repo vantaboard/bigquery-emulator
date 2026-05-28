@@ -5,8 +5,8 @@
 # runs `bazel coverage` over every `cc_test` target discovered via
 # `bazel query 'kind(cc_test, //...)'`. The aggregated lcov report at
 # `bazel-out/_coverage/_coverage_report.dat` is uploaded to Codecov with
-# the `cpp-bazel-amd64` flag so the result sits alongside the Go (`go-amd64`)
-# and CMake/ctest (`cpp-cmake-amd64`) flags on the same project page.
+# the `cpp-bazel-amd64` flag so the result sits alongside the Go
+# (`go-amd64`) flag on the same project page.
 #
 # Why a separate workflow (not folded into ci.yml):
 #   * `bazel coverage` instrumentation roughly doubles the cold-link
@@ -66,9 +66,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang \
-            cmake \
-            make \
-            ninja-build \
             libprotobuf-dev \
             protobuf-compiler \
             libgrpc++-dev \
