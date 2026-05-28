@@ -2,15 +2,14 @@
 # ./conformance/cmd/runner` with the project's conventions baked in:
 # the engine binary lives at ./bin/emulator_main (staged by
 # `task emulator:build-engine:bazel`), the seed fixtures live under
-# conformance/fixtures, and the matrix iterates both `memory` +
-# `duckdb` profiles by default. Plan 41 wires this into CI; plan 42
-# added the `update-baselines` and `run-fixture` convenience targets
+# conformance/fixtures, and the matrix runs the DuckDB-only profile
+# by default. Plan 41 wires this into CI; plan 42 added the
+# `update-baselines` and `run-fixture` convenience targets
 # used during fixture authoring.
 #
 # Usage:
-#   task conformance:run                       # all fixtures, both profiles
-#   task conformance:run PROFILE=memory        # subset
-#   task conformance:run PROFILE=memory,duckdb # explicit matrix
+#   task conformance:run                       # all fixtures, all profiles
+#   task conformance:run PROFILE=duckdb        # explicit (only profile today)
 #   task conformance:run OUTPUT=json OUTPUT_FILE=/tmp/r.json
 #   task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
 #   task conformance:update-baselines FIXTURE=conformance/fixtures/<name>.yaml

@@ -111,9 +111,8 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Convert a `schema::ColumnSchema` into a freshly-allocated
-  // `googlesql::Type*`. Public so the (eventually) Storage-backed
-  // `Table` subclass in `backend/engine/reference_impl/` can reuse
-  // the same translation when it builds its evaluator columns.
+  // `googlesql::Type*`. Public so other catalog adapters can reuse
+  // the same translation when they build their typed columns.
   //
   // The mapping is total for the BigQuery scalar / structural types
   // defined on `schema::ColumnType`. Unknown / unsupported types

@@ -8,7 +8,7 @@ The two parity legs (`build-prebuilt` and `build-source` in
     (`emulator_main --version`).
   * A step-level `outcome` for the smoke query subset
     (every tier).
-  * Step-level `outcome`s for the memory + duckdb conformance lanes
+  * A step-level `outcome` for the duckdb conformance lane
     (scheduled / release tiers only).
   * JSON conformance reports uploaded as workflow artifacts (downloaded
     by the comparator job into `--prebuilt-results-dir` /
@@ -206,8 +206,6 @@ def main(argv: list[str]) -> int:
     # Per-step outcomes harvested from each leg's outputs.
     parser.add_argument("--prebuilt-smoke", default="")
     parser.add_argument("--source-smoke", default="")
-    parser.add_argument("--prebuilt-conformance-memory", default="")
-    parser.add_argument("--source-conformance-memory", default="")
     parser.add_argument("--prebuilt-conformance-duckdb", default="")
     parser.add_argument("--source-conformance-duckdb", default="")
 
@@ -259,12 +257,6 @@ def main(argv: list[str]) -> int:
     add_stage("Smoke query set", args.prebuilt_smoke, args.source_smoke)
     if args.tier in ("scheduled", "release"):
         add_stage(
-            "Conformance (memory)",
-            args.prebuilt_conformance_memory,
-            args.source_conformance_memory,
-        )
-    if args.tier == "release":
-        add_stage(
             "Conformance (duckdb)",
             args.prebuilt_conformance_duckdb,
             args.source_conformance_duckdb,
@@ -286,12 +278,6 @@ def main(argv: list[str]) -> int:
         "smoke", "conformance-smoke-prebuilt.json", "conformance-smoke-source.json"
     )
     if args.tier in ("scheduled", "release"):
-        diff_pair(
-            "conformance (memory)",
-            "conformance-memory-prebuilt.json",
-            "conformance-memory-source.json",
-        )
-    if args.tier == "release":
         diff_pair(
             "conformance (duckdb)",
             "conformance-duckdb-prebuilt.json",

@@ -32,13 +32,10 @@ cc_library(
     hdrs = ["query.h"],
     deps = [
         "//backend/catalog:googlesql_catalog",
-        # `backend/engine` carries the optional `Engine*` parameter on
-        # `QueryService` and `StreamQueryResults` (which the Phase 5i
-        # wiring path threads through from
-        # `binaries/emulator_main/main.cc`). The reference-impl engine
-        # is the default when no engine is supplied.
+        # `backend/engine` carries the required `Engine*` parameter on
+        # `QueryService` and `StreamQueryResults`; the wire path in
+        # `binaries/emulator_main/main.cc` threads in a DuckDBEngine.
         "//backend/engine",
-        "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",
@@ -70,7 +67,7 @@ cc_test(
         "//backend/engine/duckdb:duckdb_engine",
         "//backend/schema",
         "//backend/storage",
-        "//backend/storage:memory",
+        "//backend/storage/duckdb:duckdb_storage",
         "//proto:emulator_cc_proto",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/status",
@@ -114,7 +111,7 @@ cc_test(
         ":storage_read_handler",
         "//backend/schema",
         "//backend/storage",
-        "//backend/storage:memory",
+        "//backend/storage/duckdb:duckdb_storage",
         # The in-process server fixture (StorageReadGrpcTest) needs
         # both the proto and the gRPC stub headers so it can stand
         # up a real client/server pair without the full

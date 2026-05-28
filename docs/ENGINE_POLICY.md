@@ -1,103 +1,99 @@
 # Engine policy
 
-This emulator ships **two C++ engines** behind a common
-`backend/engine/engine.h` interface. The choice between them is
-orchestrated by `--engine` (+ `--on_unknown_fn`) on `emulator_main`.
-This document is the **single source of truth** for which engine new
-work should target.
+This emulator ships **one C++ engine** behind the
+`backend/engine/engine.h` interface: the DuckDB engine. There is no
+runtime selector and no fallback bridge; new work targets DuckDB.
 
-> **TL;DR**: build against **DuckDB**. Touch ReferenceImplEngine only
-> when DuckDB cannot host the construct, or when a maintenance-mode
-> bug fix is needed for the small surface ReferenceImplEngine still
-> owns.
+> **TL;DR**: build against **DuckDB**. The previous ReferenceImpl
+> engine, the FallbackEngine bridge, and the in-memory storage
+> backend were removed once DuckDB reached parity for the supported
+> surface. See "History" below for what changed.
 
-## The engines
+## The runtime
 
-| Engine | Source | Status | Used by |
-|---|---|---|---|
-| **DuckDB** | `backend/engine/duckdb/` | **Primary.** Active development surface. | `--engine=duckdb` (the default for production paths, the `duckdb` conformance profile, and `gateway/e2e/*duckdb*_test.go`). |
-| **ReferenceImplEngine** | `backend/engine/reference_impl/` | **Maintenance-only.** No new features. | `--engine=reference_impl` (the `memory` conformance profile and the small set of E2E tests that pin reference-impl-specific surfaces). |
-| **FallbackEngine** | `backend/engine/fallback/` (wrapper) | Transitional. **Will shrink** as DuckDB coverage grows. | `--engine=duckdb --on_unknown_fn=fallback` -- the canonical configuration for `gateway_main`. Routes unsupported-on-DuckDB constructs to ReferenceImplEngine. |
+| Component | Source | Notes |
+|---|---|---|
+| **DuckDB engine** | `backend/engine/duckdb/` | Sole engine implementation. GoogleSQL analyzes; the transpiler lowers to DuckDB SQL; DuckDB executes. |
+| **DuckDB storage** | `backend/storage/duckdb/` | Sole storage implementation. Catalog + table rows persist to a `catalog.duckdb` file under `--data_dir`. |
+
+`emulator_main` no longer accepts `--engine`, `--storage`, or
+`--on_unknown_fn`; those flags were removed when the ReferenceImpl
+engine and in-memory storage were deleted. The only knobs are
+`--host_port` and `--data_dir`.
 
 ## What this means in practice
 
 1. **New feature work targets DuckDB.** Add the construct to the
    DuckDB transpiler (`backend/engine/duckdb/transpile/`) and the
-   DuckDB engine (`backend/engine/duckdb/duckdb_engine.cc`). The
-   ReferenceImplEngine is **not** a development target for new
-   features, even when it would be easier to land there first.
+   DuckDB engine (`backend/engine/duckdb/duckdb_engine.cc`).
 
-2. **ReferenceImplEngine receives bug fixes and security work
-   only.** The reference impl covers UPDATE / DELETE / INSERT today
-   and a slice of `INFORMATION_SCHEMA`. Treat that surface as frozen
-   in shape; fix bugs in what already works, but resist the urge to
-   grow it.
+2. **Some DML / DDL shapes are still UNIMPLEMENTED on DuckDB.** As
+   of this revision the engine returns UNIMPLEMENTED for:
+   - `INSERT VALUES` / `INSERT ... SELECT`
+   - `UPDATE`
+   - `DELETE`
+   - Scalar-only `SELECT` (no `FROM` clause)
 
-3. **FallbackEngine is a bridge, not a long-term home.** The
-   `--on_unknown_fn=fallback` policy lets DuckDB-uncovered
-   constructs (DML today, most DDL until plan 35 landed, parts of
-   the analytics surface) work end-to-end while the DuckDB engine
-   catches up. **Every fallback hop is a TODO**: the long-term goal
-   is for DuckDB coverage to grow so the fallback can shrink to
-   zero. When you implement a new construct on DuckDB, delete the
-   corresponding fallback workaround.
+   Use `tabledata.insertAll` to seed rows for tests and fixtures
+   while these gaps are closed. `MERGE`, `CREATE TABLE`,
+   `CREATE TABLE AS SELECT`, and `DROP TABLE` are all implemented.
 
-4. **Storage follows the same asymmetry.** DuckDB+Parquet storage
-   (`--storage=duckdb`) is the primary; the in-memory storage
-   (`--storage=memory`) is kept around for hermetic test harnesses
-   and for the `memory` conformance profile, but is not a target
-   for new on-disk features.
+3. **Storage follows the same single-implementation rule.** The
+   in-memory storage backend is gone; every persistent state path
+   goes through `DuckDBStorage`. Tests that previously used a
+   volatile in-memory store now allocate a temp `--data_dir` and
+   rely on DuckDB instead.
 
 ## Implication for conformance fixtures
 
-The conformance harness (`conformance/cmd/runner`, `conformance/fixtures/*.yaml`)
-runs against two named profiles:
+The conformance harness (`conformance/cmd/runner`,
+`conformance/fixtures/*.yaml`) runs a single profile today:
 
-| Profile | Engine | Storage | Fallback |
-|---|---|---|---|
-| `memory` | reference_impl | memory | off |
-| `duckdb` | duckdb | duckdb | on (`--on_unknown_fn=fallback`) |
+| Profile | Engine | Storage |
+|---|---|---|
+| `duckdb` | duckdb | duckdb |
 
 Per the policy above:
 
-- **Prefer fixtures that pass on both profiles.** A construct that
-  works on `memory` almost always works on `duckdb` (either natively
-  on DuckDB or via the fallback to ReferenceImpl). Targeting both
-  catches engine-divergence regressions cheaply.
+- **Leave `profiles:` unset** in new fixtures unless you are
+  intentionally targeting a future second profile. Today the
+  default profile set is `[duckdb]` and the harness runs every
+  fixture against it.
+- **Use `rows:` setup steps** (which call `tabledata.insertAll`)
+  instead of `sql:` `INSERT VALUES` for seeding, since INSERT is
+  UNIMPLEMENTED on the DuckDB engine.
+- **Document UNIMPLEMENTED gaps loudly.** If a fixture is blocked
+  on a DuckDB gap (INSERT/UPDATE/DELETE/MERGE-only-no), leave it
+  out of the suite rather than `t.Skip()`-ing it; the conformance
+  harness's purpose is to pin what works.
 
-- **When a fixture only passes on one profile, prefer `duckdb`.**
-  DuckDB is where new features land first; a duckdb-only fixture is
-  pinning a real DuckDB feature. A memory-only fixture is pinning a
-  ReferenceImpl-only surface (which should be rare and intentional;
-  see point 2 above).
+## History
 
-- **Document the rationale.** Any single-profile fixture should
-  start with a top-of-file comment explaining *why* only one engine
-  applies (e.g. "DDL is only implemented on DuckDB; ReferenceImpl
-  returns UNIMPLEMENTED"). Without that comment, reviewers cannot
-  tell if the asymmetry is intentional or a latent bug.
+A previous iteration of the emulator carried two engines
+(ReferenceImpl + DuckDB) bridged by a FallbackEngine wrapper that
+routed DuckDB-uncovered constructs to ReferenceImpl, plus an
+in-memory storage backend for hermetic tests. That layout was
+removed because:
 
-- **Legitimate ReferenceImpl-only surfaces** are exactly:
-  - the `memory` profile's hermetic-storage fast path used by some
-    CI lanes (no on-disk artifacts);
-  - the small slice of BigQuery-specific behavior that DuckDB will
-    never natively cover (some `INFORMATION_SCHEMA` views, certain
-    BQ-specific functions DuckDB lacks).
+- ReferenceImpl coverage was incomplete (no DDL, partial DML,
+  missing analytics functions) and not actively maintained.
+- The fallback bridge made it ambiguous which engine produced any
+  given result; production users reported subtle divergences when
+  fixtures ran on `duckdb` but tests ran on `memory`.
+- Maintaining two storage backends doubled the test-fixture cost
+  for no production benefit, since `docker compose up` always
+  used the persistent DuckDB store anyway.
 
-  Everything else should target DuckDB and let `FallbackEngine`
-  bridge the gap until DuckDB catches up.
+The removal commit landed with a `BREAKING CHANGE:` footer noting
+that `--engine=reference_impl`, `--storage=memory`, and
+`--on_unknown_fn=fallback` are gone and DuckDB engine + DuckDB
+storage is the only supported runtime.
 
 ## Cross-references
 
-- `HANDOFF.md` §4 -- engine-architecture context (the WIP-checkpoint
-  notes from plan 34 introduced this asymmetry; this policy doc
-  promotes it to a first-class invariant).
-- `conformance/README.md` -- fixture authoring guide; references this
-  document from its "Contributing a new fixture" section.
-- `backend/engine/fallback/fallback_engine.cc` -- the implementation
-  of the bridge described above.
-- [`README.md` §Profiles](../README.md#profiles) -- the user-facing
-  walkthrough of the three named profiles (`ci`, `duckdb`, `dev`)
-  built on the engine/storage/fallback knobs this policy governs.
-  When in doubt about which profile to run, start at the README
-  table; this document is the "why", the README section is the "how".
+- `HANDOFF.md` §4 — engine-architecture context.
+- `conformance/README.md` — fixture authoring guide; references
+  this document from its "Contributing a new fixture" section.
+- [`README.md` "Runtime configuration"](../README.md#runtime-configuration) —
+  the user-facing version of the flag surface this document
+  governs.

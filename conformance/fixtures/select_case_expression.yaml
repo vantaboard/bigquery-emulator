@@ -1,19 +1,13 @@
 # select_case_expression: CASE WHEN ... THEN ... ELSE ... END.
 #
-# Pins the analyzer / evaluator's CASE branch lowering on both
-# profiles. Mirrors the `select_case_expression` parity case in
-# `gateway/e2e/query_duckdb_parity_test.go::TestDuckDBParityQuerySuite`
-# (`SELECT id, CASE WHEN id = 1 THEN 'first' ELSE 'rest' END AS label`).
-# The seed uses INSERT VALUES so the INT64 column round-trips natively
-# through the engine -- `tabledata.insertAll` would stringify ints (see
-# the comment in `dml_insert_test.go`) and the CASE branch comparison
-# would short-circuit oddly on memory storage.
+# Pins the analyzer / evaluator's CASE branch lowering on DuckDB.
+# Seeds via `tabledata.insertAll` because the DuckDB engine returns
+# UNIMPLEMENTED for INSERT VALUES today.
 name: select_case_expression
 description: |
   Projection with a CASE WHEN ... THEN ... ELSE expression. Verifies
   the engine evaluates the branch condition row-by-row and emits the
   THEN/ELSE STRING into the projection.
-profiles: [memory, duckdb]
 project_id: proj-select-case
 dataset_id: ds_select_case
 setup:
@@ -24,9 +18,13 @@ setup:
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: name, type: STRING, mode: NULLABLE}
-  - sql: |
-      INSERT INTO ds_select_case.people (id, name)
-      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - rows:
+      dataset: ds_select_case
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
 query: |
   SELECT id,
          CASE WHEN id = 1 THEN 'first' ELSE 'rest' END AS label

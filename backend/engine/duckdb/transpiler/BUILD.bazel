@@ -95,9 +95,8 @@ cc_library(
         # `:resolved_ast` is the canonical target for the generated
         # node classes (`ResolvedQueryStmt`, `ResolvedProjectScan`,
         # ...) and the `ResolvedASTVisitor` base. We pull it in via
-        # the no-colon `@googlesql//googlesql/resolved_ast` form
-        # for consistency with how `reference_impl_engine` depends
-        # on the same library.
+        # the no-colon `@googlesql//googlesql/resolved_ast` form so
+        # the link line picks up the bundled visitor base.
         "@googlesql//googlesql/resolved_ast",
     ],
 )

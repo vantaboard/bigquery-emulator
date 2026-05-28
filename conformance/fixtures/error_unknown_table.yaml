@@ -12,7 +12,6 @@ name: error_unknown_table
 description: |
   SELECT from a non-existent table returns HTTP 400 with a message
   that mentions the missing table name.
-profiles: [memory, duckdb]
 project_id: proj-error-unknown-table
 dataset_id: ds_error_unknown_table
 setup:

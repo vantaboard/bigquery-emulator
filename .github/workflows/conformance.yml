@@ -1,10 +1,12 @@
 # Conformance matrix CI for the BigQuery emulator.
 #
 # Runs `task conformance:run` against every seed fixture under
-# `conformance/fixtures/` for each engine + storage profile in
-# parallel. Each profile produces its own JSON report which is
-# uploaded as a workflow artifact (`conformance-<profile>.json`) so a
-# divergence between profiles is auditable after the run.
+# `conformance/fixtures/` for each runtime profile in parallel.
+# Each profile produces its own JSON report which is uploaded as a
+# workflow artifact (`conformance-<profile>.json`). Today there is
+# only one profile (`duckdb`) since the emulator is DuckDB-only;
+# the matrix shape stays in place so a future profile addition
+# does not require a workflow rewrite.
 #
 # Triggers mirror `.github/workflows/ci.yml`: pull requests against
 # any branch and pushes to `main`. The workflow stays in its own
@@ -15,11 +17,10 @@
 #
 # The C++ engine binary is built fresh via
 # `task emulator:build-engine:bazel`, which links the full GoogleSQL
-# + reference_impl + DuckDB + gRPC stack. We piggy-back on the same
-# Bazel + repository caches the `ci.yml` workflow uses (via
-# `bazel-contrib/setup-bazel`) so a cold start lands somewhere near
-# the build-and-test job's wall-clock budget; subsequent runs hit
-# the warm cache.
+# + DuckDB + gRPC stack. We piggy-back on the same Bazel + repository
+# caches the `ci.yml` workflow uses (via `bazel-contrib/setup-bazel`)
+# so a cold start lands somewhere near the build-and-test job's
+# wall-clock budget; subsequent runs hit the warm cache.
 
 name: conformance
 
@@ -42,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [memory, duckdb]
+        profile: [duckdb]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

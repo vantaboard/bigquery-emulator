@@ -26,10 +26,10 @@
 // follow-up plan `duckdb-storage-ddl_p1e2f3a4`; both methods return
 // UNIMPLEMENTED until then.
 //
-// Concurrency: every public method acquires the single absl::Mutex
-// the same way `InMemoryStorage` does. DuckDB itself is thread-safe
-// per-connection but we serialize at the C++ level so dataset / table
-// directory mutations stay in lockstep with catalog rows.
+// Concurrency: every public method acquires a single absl::Mutex.
+// DuckDB itself is thread-safe per-connection but we serialize at
+// the C++ level so dataset / table directory mutations stay in
+// lockstep with catalog rows.
 
 #include <memory>
 #include <string>
@@ -53,10 +53,7 @@ class DuckDBStorage : public Storage {
   // Constructs a DuckDBStorage rooted at `data_dir`. The directory is
   // created (recursively) if it does not exist. Opens a DuckDB
   // connection backed by `<data_dir>/catalog.duckdb` so dataset /
-  // table existence survives process restarts; the in-memory `Storage`
-  // implementation has no equivalent, so this is the file-store side
-  // of the (DuckDB, Persistent File) profile from ROADMAP "Pluggable
-  // engine and storage".
+  // table existence survives process restarts.
   //
   // Returns INVALID_ARGUMENT when `data_dir` is empty, FAILED_PRECONDITION
   // when the directory can not be created (e.g. permission denied), or

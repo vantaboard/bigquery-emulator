@@ -9,9 +9,8 @@
 // vectors), so this header is the "Arrow batch -> BigQuery cell"
 // boundary the DuckDB engine relies on.
 //
-// The cell shape produced here matches what
-// `backend::engine::reference_impl::ReferenceImplEngine::ExecuteQuery`
-// returns through `GoogleSqlValueToStorageValue`, so the gateway's
+// The cell shape produced here matches what the DuckDB engine
+// surfaces through `ValueToCell`, so the gateway's
 // per-engine `frontend/handlers/query.cc::ValueToCell` -> proto Cell
 // path renders the same wire JSON regardless of which engine ran the
 // query. See `gateway/bqtypes/wire.go::ValueToCell` for the matching
@@ -48,8 +47,8 @@ namespace arrow_to_bq {
 // and never touches the underlying data pointer for a NULL row. Any
 // cell whose vector type does not match `column.type` falls back to
 // the vector's textual rendering via the duckdb_value-friendly
-// helpers; this matches the reference-impl engine's fallback path for
-// types it has not yet specialized (`GoogleSqlValueToStorageValue`
+// helpers; this is the fallback path for types the engine has not
+// yet specialized (`GoogleSqlValueToStorageValue`
 // returns `Value::String(value.DebugString())`).
 absl::StatusOr<storage::Value> ReadCellFromVector(
     ::duckdb_vector vector, ::idx_t row,

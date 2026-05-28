@@ -11,7 +11,6 @@ name: error_type_mismatch
 description: |
   SELECT 1 + 'foo' returns HTTP 400 with a "Could not cast literal"
   message from the analyzer's DATE-arithmetic overload coercion.
-profiles: [memory, duckdb]
 project_id: proj-error-type-mismatch
 query: SELECT 1 + 'foo'
 expected:

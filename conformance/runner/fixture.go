@@ -37,11 +37,11 @@ type Fixture struct {
 	// fixture title in `--output text`. Optional.
 	Description string `yaml:"description,omitempty"`
 
-	// Profiles is the engine + storage matrix the fixture applies
-	// to. Empty means both `memory` and `duckdb` (see
-	// `defaultProfiles`). Unknown profile names are an error at
-	// load time so a typo is caught immediately rather than masked
-	// as "fixture ran on zero profiles".
+	// Profiles is the runtime matrix the fixture applies to. Empty
+	// means the default (DuckDB-only) profile set. Unknown profile
+	// names are an error at load time so a typo is caught
+	// immediately rather than masked as "fixture ran on zero
+	// profiles".
 	Profiles []string `yaml:"profiles,omitempty"`
 
 	// ProjectID is the BigQuery project the runner POSTs catalog +
@@ -73,10 +73,11 @@ type Fixture struct {
 	Path string `yaml:"-"`
 }
 
-// SetupStep is one entry in `Fixture.Setup`. The three discriminator
+// SetupStep is one entry in `Fixture.Setup`. The four discriminator
 // fields are mutually exclusive: `Dataset` for a dataset create,
-// `Table` for a table create, and `SQL` for a query (typically DML
-// or DDL). The loader rejects steps that set more than one or none.
+// `Table` for a table create, `Rows` for a `tabledata.insertAll`
+// seed, and `SQL` for a query (typically DML or DDL). The loader
+// rejects steps that set more than one or none.
 type SetupStep struct {
 	// Dataset is the dataset ID to create. The runner POSTs a
 	// minimal `{datasetReference, location:"US"}` body against
@@ -87,11 +88,27 @@ type SetupStep struct {
 	// `/bigquery/v2/projects/<projectId>/datasets/<datasetId>/tables`.
 	Table *TableSetup `yaml:"table,omitempty"`
 
+	// Rows seeds a previously created table by POSTing
+	// `tabledata.insertAll`. This is the canonical way to populate
+	// rows in fixtures because the DuckDB engine returns
+	// UNIMPLEMENTED for INSERT VALUES today.
+	Rows *RowsSetup `yaml:"rows,omitempty"`
+
 	// SQL is a query the runner POSTs to /queries. Errors from the
 	// gateway abort the fixture (counted as runner-internal failure,
-	// not a fixture mismatch). Use this for INSERT, UPDATE, DELETE,
-	// CREATE TABLE, etc.
+	// not a fixture mismatch). Use this for MERGE, CREATE TABLE,
+	// DROP TABLE, etc. INSERT / UPDATE / DELETE are UNIMPLEMENTED
+	// on the DuckDB engine; use `rows:` instead.
 	SQL string `yaml:"sql,omitempty"`
+}
+
+// RowsSetup describes a `tabledata.insertAll` setup step. Each entry
+// in `Rows` is a column-name -> cell-value map, matching the same
+// shape as `Expectation.Rows`.
+type RowsSetup struct {
+	Dataset string           `yaml:"dataset"`
+	Table   string           `yaml:"table"`
+	Rows    []map[string]any `yaml:"rows"`
 }
 
 // TableSetup describes a table to create via REST. The schema is the
@@ -203,7 +220,7 @@ type ExpectedError struct {
 // defaultProfiles is the set Fixture.Profiles defaults to when the
 // fixture omits it. Keep alphabetized so iteration order is stable
 // across the matrix.
-var defaultProfiles = []string{"duckdb", "memory"}
+var defaultProfiles = []string{"duckdb"}
 
 // Load parses a single YAML file into a Fixture. It validates the
 // shape (required fields, exclusivity of expectation, known profile
@@ -375,16 +392,28 @@ func (s SetupStep) validate() error {
 			return errors.New("table.schema must list at least one column")
 		}
 	}
+	if s.Rows != nil {
+		count++
+		if s.Rows.Dataset == "" {
+			return errors.New("rows.dataset is required")
+		}
+		if s.Rows.Table == "" {
+			return errors.New("rows.table is required")
+		}
+		if len(s.Rows.Rows) == 0 {
+			return errors.New("rows.rows must list at least one row")
+		}
+	}
 	if strings.TrimSpace(s.SQL) != "" {
 		count++
 	}
 	switch count {
 	case 0:
-		return errors.New("setup step must set exactly one of dataset:, table:, sql:")
+		return errors.New("setup step must set exactly one of dataset:, table:, rows:, sql:")
 	case 1:
 		return nil
 	default:
-		return errors.New("setup step must set exactly one of dataset:, table:, sql:")
+		return errors.New("setup step must set exactly one of dataset:, table:, rows:, sql:")
 	}
 }
 

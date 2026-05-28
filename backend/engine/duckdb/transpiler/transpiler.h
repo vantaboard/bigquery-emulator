@@ -5,7 +5,7 @@
 //
 // `Transpiler` walks a GoogleSQL `ResolvedAST` produced by
 // `googlesql::AnalyzeStatement` (see
-// `backend/engine/reference_impl/reference_impl_engine.cc`) and
+// `backend/engine/duckdb/duckdb_engine.cc`) and
 // emits a DuckDB-flavored SQL string the DuckDB C++ client can
 // execute. This file is the *skeleton* that the engine and the
 // follow-up plans (`transpiler-emit-scans_d5a6b7c8`, ...) fill in

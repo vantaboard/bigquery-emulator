@@ -10,7 +10,6 @@ description: |
   Trivial constant SELECT round-trip on both engine profiles. Exercises
   the gateway's `jobs.query` synchronous path and the engine's tiny
   computed-column ProjectScan emit.
-profiles: [memory, duckdb]
 project_id: proj-select-literal
 query: SELECT 1 AS n
 expected:

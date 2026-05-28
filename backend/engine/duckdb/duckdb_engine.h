@@ -43,27 +43,18 @@ class DuckDBEngine : public Engine {
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
-  // Plan-34 (DuckDB-only MERGE). Other DML kinds (INSERT/UPDATE/DELETE)
-  // intentionally return UNIMPLEMENTED so the `FallbackEngine` wrapper
-  // routes them to the reference-impl engine, which already runs them
-  // through `PreparedModify`. MERGE lands here because the GoogleSQL
-  // reference-impl algebrizer does not yet algebrize `ResolvedMergeStmt`
-  // at the statement root; see the comment block at the matching switch
-  // in `backend/engine/reference_impl/reference_impl_engine.cc` for the
-  // engine-asymmetry rationale.
+  // DML. The DuckDB engine implements MERGE end-to-end; INSERT,
+  // UPDATE, and DELETE currently return UNIMPLEMENTED so callers see
+  // a stable status code when they land on DuckDB.
   absl::StatusOr<DmlStats> ExecuteDml(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
-  // Plan-35 (DuckDB-only DDL). Implements CREATE TABLE,
-  // CREATE TABLE AS SELECT, DROP TABLE, and ALTER TABLE ADD COLUMN
-  // by analyzing the GoogleSQL statement, mapping the resolved name
-  // path to a `storage::TableId`, and driving the underlying
-  // `Storage` (scan + rewrite where necessary for ALTER, plus a
-  // per-query DuckDB connection for CTAS). The reference-impl
-  // engine returns UNIMPLEMENTED so the `FallbackEngine` wrapper
-  // routes DDL here; see the matching comment in
-  // `backend/engine/reference_impl/reference_impl_engine.cc::
-  // ExecuteDdl` for the engine-asymmetry rationale.
+  // DDL. Implements CREATE TABLE, CREATE TABLE AS SELECT, DROP
+  // TABLE, and ALTER TABLE ADD COLUMN by analyzing the GoogleSQL
+  // statement, mapping the resolved name path to a
+  // `storage::TableId`, and driving the underlying `Storage` (scan
+  // + rewrite where necessary for ALTER, plus a per-query DuckDB
+  // connection for CTAS).
   absl::Status ExecuteDdl(const QueryRequest& request,
                           googlesql::Catalog* catalog) override;
 

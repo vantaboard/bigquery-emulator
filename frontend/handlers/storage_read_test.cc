@@ -16,14 +16,18 @@
 #include "frontend/handlers/storage_read.h"
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
+#include <random>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "backend/schema/schema.h"
-#include "backend/storage/memory/in_memory_storage.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/grpcpp.h"
@@ -40,11 +44,40 @@ namespace bigquery_emulator {
 namespace frontend {
 namespace {
 
+namespace fs = std::filesystem;
+
+// Mints a fresh DuckDB-backed Storage instance rooted under TMPDIR
+// (defaulting to /tmp). The returned path is the data_dir the test
+// must `fs::remove_all` on TearDown to avoid leaving catalog files
+// around between runs.
+fs::path MakeTempDataDir(absl::string_view prefix) {
+  const char* tmpdir_env = std::getenv("TMPDIR");
+  const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
+  std::random_device rd;
+  std::mt19937_64 rng(rd());
+  fs::path out = fs::path(tmpdir) /
+                 absl::StrCat("bqemu-", std::string(prefix), "-", rng());
+  std::error_code ec;
+  fs::remove_all(out, ec);
+  return out;
+}
+
 class StorageReadServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    storage_ = std::make_unique<backend::storage::memory::InMemoryStorage>();
+    data_dir_ = MakeTempDataDir("storage-read-test");
+    auto opened =
+        backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(opened.ok()) << opened.status();
+    storage_ = std::move(opened).value();
     service_ = std::make_unique<StorageReadService>(storage_.get());
+  }
+
+  void TearDown() override {
+    service_.reset();
+    storage_.reset();
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
   }
 
   // Materializes a tiny `proj-test.ds.t` table with columns
@@ -87,7 +120,8 @@ class StorageReadServiceTest : public ::testing::Test {
     return req;
   }
 
-  std::unique_ptr<backend::storage::memory::InMemoryStorage> storage_;
+  fs::path data_dir_;
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
   std::unique_ptr<StorageReadService> service_;
 };
 
@@ -318,7 +352,11 @@ TEST_F(StorageReadServiceTest, ReadRowsRejectsEmptyReadStream) {
 class StorageReadGrpcTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    storage_ = std::make_unique<backend::storage::memory::InMemoryStorage>();
+    data_dir_ = MakeTempDataDir("storage-read-grpc-test");
+    auto opened =
+        backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(opened.ok()) << opened.status();
+    storage_ = std::move(opened).value();
     service_ = std::make_unique<StorageReadService>(storage_.get());
 
     // Bind to localhost:0 so the OS picks a free port. Mirrors the
@@ -345,6 +383,13 @@ class StorageReadGrpcTest : public ::testing::Test {
 
   void TearDown() override {
     if (server_ != nullptr) server_->Shutdown();
+    stub_.reset();
+    channel_.reset();
+    server_.reset();
+    service_.reset();
+    storage_.reset();
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
   }
 
   // Creates a fixed `proj-test.ds.t` table with the three-column
@@ -396,7 +441,8 @@ class StorageReadGrpcTest : public ::testing::Test {
                      .ok());
   }
 
-  std::unique_ptr<backend::storage::memory::InMemoryStorage> storage_;
+  fs::path data_dir_;
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
   std::unique_ptr<StorageReadService> service_;
   std::unique_ptr<::grpc::Server> server_;
   std::shared_ptr<::grpc::Channel> channel_;

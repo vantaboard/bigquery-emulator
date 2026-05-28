@@ -8,17 +8,22 @@
 #include "frontend/handlers/query.h"
 
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/engine/duckdb/duckdb_engine.h"
 #include "backend/schema/schema.h"
-#include "backend/storage/memory/in_memory_storage.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
 #include "grpcpp/grpcpp.h"
 #include "gtest/gtest.h"
@@ -28,11 +33,34 @@ namespace bigquery_emulator {
 namespace frontend {
 namespace {
 
+namespace fs = std::filesystem;
+
 class QueryServiceTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    storage_ = std::make_unique<backend::storage::memory::InMemoryStorage>();
-    service_ = std::make_unique<QueryService>(storage_.get());
+    const char* tmpdir_env = std::getenv("TMPDIR");
+    const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
+    std::random_device rd;
+    std::mt19937_64 rng(rd());
+    data_dir_ = fs::path(tmpdir) /
+                absl::StrCat("bqemu-query-test-", rng());
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
+    auto opened =
+        backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(opened.ok()) << opened.status();
+    storage_ = std::move(opened).value();
+    engine_ = std::make_unique<backend::engine::duckdb::DuckDBEngine>(
+        storage_.get());
+    service_ = std::make_unique<QueryService>(storage_.get(), engine_.get());
+  }
+
+  void TearDown() override {
+    service_.reset();
+    engine_.reset();
+    storage_.reset();
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
   }
 
   // Builds a request with a project pre-set; tests just fill in the
@@ -74,7 +102,9 @@ class QueryServiceTest : public ::testing::Test {
                     .ok());
   }
 
-  std::unique_ptr<backend::storage::memory::InMemoryStorage> storage_;
+  fs::path data_dir_;
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
+  std::unique_ptr<backend::engine::duckdb::DuckDBEngine> engine_;
   std::unique_ptr<QueryService> service_;
 };
 
@@ -220,8 +250,8 @@ class MessageCollector {
 TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   v1::QueryRequest req = MakeRequest("SELECT 1 AS one");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
@@ -261,8 +291,8 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   v1::QueryRequest req =
       MakeRequest("SELECT id, name FROM ds.t ORDER BY id");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
@@ -290,8 +320,8 @@ TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaOnly) {
   CreatePeopleTable();
   v1::QueryRequest req = MakeRequest("SELECT id, name FROM ds.t");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
   ASSERT_EQ(collector.messages().size(), 1u);
   EXPECT_TRUE(collector.messages()[0].has_schema());
@@ -300,8 +330,8 @@ TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaOnly) {
 TEST_F(QueryServiceTest, ExecuteQuerySyntaxErrorIsInvalidArgument) {
   v1::QueryRequest req = MakeRequest("SELECT FROM");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
   EXPECT_TRUE(collector.messages().empty());
@@ -311,8 +341,8 @@ TEST_F(QueryServiceTest, ExecuteQueryUseLegacySqlIsInvalidArgument) {
   v1::QueryRequest req = MakeRequest("SELECT 1");
   req.set_use_legacy_sql(true);
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
   EXPECT_TRUE(collector.messages().empty());
@@ -322,8 +352,8 @@ TEST_F(QueryServiceTest, ExecuteQueryMissingProjectIsInvalidArgument) {
   v1::QueryRequest req;
   req.set_sql("SELECT 1");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
 }
@@ -331,8 +361,8 @@ TEST_F(QueryServiceTest, ExecuteQueryMissingProjectIsInvalidArgument) {
 TEST_F(QueryServiceTest, ExecuteQueryEmptySqlIsInvalidArgument) {
   v1::QueryRequest req = MakeRequest("");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
 }
@@ -355,9 +385,9 @@ TEST(QueryServiceWithoutStorageTest, ExecuteQueryReturnsFailedPrecondition) {
 
 TEST_F(QueryServiceTest, ExecuteQueryCancelledWriterReturnsCancelled) {
   v1::QueryRequest req = MakeRequest("SELECT 1 AS one");
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req,
-                          [](const v1::QueryResultRow&) { return false; });
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req,
+      [](const v1::QueryResultRow&) { return false; }, engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::CANCELLED)
       << status.error_message();
 }
@@ -378,8 +408,8 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
       "INSERT INTO ds.t (id, name, tags) "
       "VALUES (1, 'ada', ['math']), (2, 'linus', [])");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   // DML response shape: one message, no schema / cells, just stats.
@@ -406,41 +436,18 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   EXPECT_EQ(rows_seen, 2);
 }
 
-TEST_F(QueryServiceTest, ExecuteQueryDdlOnReferenceImplIsUnimplemented) {
-  // Plan 35 extended HANDOFF.md §4.3 path 3's "DuckDB-only MERGE"
-  // pattern to cover DDL: the reference-impl engine returns
-  // UNIMPLEMENTED for CREATE / DROP / ALTER, the DuckDB engine
-  // implements them end-to-end, and the FallbackEngine wrapper
-  // routes a DDL statement through to DuckDB. This test exercises
-  // the default-engine path (no explicit engine threaded into
-  // `StreamQueryResults`, so the handler instantiates a
-  // ReferenceImplEngine) and pins the UNIMPLEMENTED contract that
-  // FallbackEngine reads. The matching success-on-DuckDB path is
-  // covered in `ExecuteQueryDdlOnDuckDBSucceeds` below.
-  v1::QueryRequest req =
-      MakeRequest("CREATE TABLE ds.new_table (id INT64) OPTIONS()");
-  MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
-      << status.error_message();
-  EXPECT_TRUE(collector.messages().empty());
-}
-
 TEST_F(QueryServiceTest, ExecuteQueryDdlOnDuckDBSucceeds) {
-  // The matching DDL-on-DuckDB path: when the operator launches
-  // `--engine=duckdb`, the handler routes a CREATE TABLE through
-  // `DuckDBEngine::ExecuteDdl`. The result stream is empty (no
-  // schema, no rows, no dml_stats) and the gateway maps that to
-  // `jobComplete=true` with zero rows -- the same envelope the
-  // BigQuery REST `query` endpoint emits for a successful DDL.
+  // CREATE TABLE routes through `DuckDBEngine::ExecuteDdl`. The
+  // result stream is empty (no schema, no rows, no dml_stats) and
+  // the gateway maps that to `jobComplete=true` with zero rows --
+  // the same envelope the BigQuery REST `query` endpoint emits for
+  // a successful DDL.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
-  backend::engine::duckdb::DuckDBEngine engine(storage_.get());
   v1::QueryRequest req =
       MakeRequest("CREATE TABLE ds.new_table (id INT64, name STRING)");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer(), &engine);
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
   EXPECT_TRUE(collector.messages().empty());
 
@@ -453,43 +460,18 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlOnDuckDBSucceeds) {
 
 TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
   CreatePeopleTable();
-  // Phase 6b: DELETE now runs end-to-end against the reference-impl
-  // engine; the handler streams a single dml_stats message with the
-  // matching deletedRowCount.
+  // DELETE runs end-to-end against the DuckDB engine; the handler
+  // streams a single dml_stats message with the matching
+  // deletedRowCount.
   v1::QueryRequest req = MakeRequest("DELETE FROM ds.t WHERE FALSE");
   MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
   const auto& messages = collector.messages();
   ASSERT_EQ(messages.size(), 1u);
   ASSERT_TRUE(messages[0].has_dml_stats());
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
-}
-
-TEST_F(QueryServiceTest, ExecuteQueryMergeIsUnimplementedFromEngine) {
-  CreatePeopleTable();
-  // Phase 6b: MERGE on the reference-impl engine returns UNIMPLEMENTED
-  // because the reference-impl algebrizer does not yet support
-  // ResolvedMergeStmt at the statement root. Plan 34's engine-policy
-  // decision (HANDOFF.md §4.3 path 3, "DuckDB-only MERGE") landed MERGE
-  // on the DuckDB engine and left this path as the documented
-  // asymmetry; the handler propagates the engine's UNIMPLEMENTED as
-  // gRPC UNIMPLEMENTED. The empty array literal is explicitly typed
-  // (`CAST([] AS ARRAY<STRING>)`) because the analyzer cannot
-  // otherwise infer an element type for `[]` against the
-  // `ARRAY<STRING>` `tags` column.
-  v1::QueryRequest req = MakeRequest(
-      "MERGE INTO ds.t T USING (SELECT 99 AS id, 'mira' AS name, "
-      "CAST([] AS ARRAY<STRING>) AS tags) S ON T.id = S.id "
-      "WHEN NOT MATCHED THEN INSERT (id, name, tags) "
-      "VALUES (S.id, S.name, S.tags)");
-  MessageCollector collector;
-  ::grpc::Status status =
-      StreamQueryResults(storage_.get(), req, collector.Writer());
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
-      << status.error_message();
-  EXPECT_TRUE(collector.messages().empty());
 }
 
 }  // namespace

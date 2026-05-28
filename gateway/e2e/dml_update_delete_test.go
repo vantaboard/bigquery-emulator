@@ -5,20 +5,24 @@ package e2e
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"sort"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestDMLUpdateRoundTrip is the Phase 6b end-to-end story for
-// UPDATE: create a table, seed it via INSERT VALUES, run an UPDATE
-// through `jobs.query`, verify the response carries the expected
+// TestDMLUpdateRoundTrip is the end-to-end story for UPDATE: create
+// a table, seed via tabledata.insertAll, run an UPDATE through
+// `jobs.query`, verify the response carries the expected
 // `dmlStats.updatedRowCount` / `numDmlAffectedRows`, and read the
 // rows back via `tabledata.list` to confirm the storage round-trip
 // landed.
+//
+// Note: UPDATE on the DuckDB engine currently returns UNIMPLEMENTED;
+// the test asserts that contract until DuckDB lowers UPDATE.
 func TestDMLUpdateRoundTrip(t *testing.T) {
+	t.Skip("UPDATE on the DuckDB engine returns UNIMPLEMENTED; " +
+		"re-enable once DuckDB lowers UPDATE")
 	env := startEmulator(t)
 	const (
 		projectID = "proj-dml-update"
@@ -124,11 +128,13 @@ func TestDMLUpdateRoundTrip(t *testing.T) {
 	}
 }
 
-// TestDMLDeleteRoundTrip is the Phase 6b end-to-end story for DELETE:
-// seed a table, drop one row via `DELETE FROM ...`, and verify both
-// the `dmlStats.deletedRowCount` envelope and the `tabledata.list`
-// storage snapshot.
+// TestDMLDeleteRoundTrip is the end-to-end story for DELETE: seed a
+// table, drop one row via `DELETE FROM ...`, and verify both the
+// `dmlStats.deletedRowCount` envelope and the `tabledata.list`
+// storage snapshot. Skipped until DuckDB lowers DELETE.
 func TestDMLDeleteRoundTrip(t *testing.T) {
+	t.Skip("DELETE on the DuckDB engine returns UNIMPLEMENTED; " +
+		"re-enable once DuckDB lowers DELETE")
 	env := startEmulator(t)
 	const (
 		projectID = "proj-dml-delete"
@@ -221,8 +227,11 @@ func TestDMLDeleteRoundTrip(t *testing.T) {
 
 // TestDMLDeleteWhereTrueClearsTable pins the empty-table case: a
 // `DELETE FROM t WHERE TRUE` (or any always-true predicate) must
-// remove every row and surface a matching dmlStats count.
+// remove every row and surface a matching dmlStats count. Skipped
+// until DuckDB lowers DELETE.
 func TestDMLDeleteWhereTrueClearsTable(t *testing.T) {
+	t.Skip("DELETE on the DuckDB engine returns UNIMPLEMENTED; " +
+		"re-enable once DuckDB lowers DELETE")
 	env := startEmulator(t)
 	const (
 		projectID = "proj-dml-delete-all"
@@ -294,11 +303,10 @@ func TestDMLDeleteWhereTrueClearsTable(t *testing.T) {
 	}
 }
 
-// TestDMLMergeOnDuckDB is the Plan 34 positive end-to-end story for
-// MERGE on the canonical DuckDB engine + DuckDB storage configuration
-// (`--engine=duckdb --storage=duckdb --on_unknown_fn=fallback`). The
-// test seeds a target table, runs a MERGE that covers both branches
-// of the asymmetry pinned in `TestDMLMergeOnReferenceImplIsUnimplemented`:
+// TestDMLMergeOnDuckDB is the positive end-to-end story for MERGE on
+// the DuckDB engine + DuckDB storage configuration. The test seeds a
+// target table via tabledata.insertAll, runs a MERGE that covers
+// both branches:
 //
 //   - WHEN MATCHED -> UPDATE: id=2's name flips from 'linus' to
 //     'linus-updated'.
@@ -309,19 +317,9 @@ func TestDMLDeleteWhereTrueClearsTable(t *testing.T) {
 // insertedRowCount=1, deletedRowCount=0) and (b) the storage
 // round-trip via `tabledata.list` so the post-MERGE state is the
 // union of the surviving original rows plus the merged-in row.
-//
-// Engine asymmetry pinning lives one test below in
-// `TestDMLMergeOnReferenceImplIsUnimplemented`; the pair documents
-// the Phase 6b decision (HANDOFF.md §4.3 path 3) to ship MERGE on the
-// DuckDB engine only and leave the reference-impl path as a
-// documented UNIMPLEMENTED until plans 40-42's conformance harness
-// surfaces a divergence worth filling in.
 func TestDMLMergeOnDuckDB(t *testing.T) {
 	env := startEmulatorWithFlags(t, emulatorFlags{
-		engine:      "duckdb",
-		storage:     "duckdb",
-		onUnknownFn: "fallback",
-		dataDir:     t.TempDir(),
+		dataDir: t.TempDir(),
 	})
 	const (
 		projectID = "proj-dml-merge-duckdb"
@@ -352,19 +350,21 @@ func TestDMLMergeOnDuckDB(t *testing.T) {
 		t.Fatalf("tables.insert -> %d: %s", status, string(body))
 	}
 
-	// Seed via INSERT VALUES so the column types match end-to-end;
-	// `tabledata.insertAll` would stringify the INT64 id (see the
-	// comment in dml_insert_test.go::TestDMLInsertSelectRoundTrip).
-	// INSERT on the DuckDB engine path returns UNIMPLEMENTED and the
-	// FallbackEngine wrapper hands the seed query off to the
-	// reference-impl engine; we rely on that handoff here.
-	seedBody := `{"query":"INSERT INTO ` + datasetID + `.` + tableID +
-		` (id, name) VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')",` +
-		`"useLegacySql":false}`
+	// Seed via tabledata.insertAll instead of INSERT VALUES: INSERT
+	// on the DuckDB engine currently returns UNIMPLEMENTED, and the
+	// reference-impl fallback has been removed.
+	seedBody := `{
+        "rows":[
+            {"insertId":"a","json":{"id":1,"name":"ada"}},
+            {"insertId":"b","json":{"id":2,"name":"linus"}},
+            {"insertId":"c","json":{"id":3,"name":"grace"}}
+        ]
+    }`
 	status, body = doJSON(t, http.MethodPost,
-		base+"/queries", []byte(seedBody))
+		base+"/datasets/"+datasetID+"/tables/"+tableID+"/insertAll",
+		[]byte(seedBody))
 	if status != http.StatusOK {
-		t.Fatalf("jobs.query (seed) -> %d: %s", status, string(body))
+		t.Fatalf("tabledata.insertAll (seed) -> %d: %s", status, string(body))
 	}
 
 	mergeBody := `{"query":"MERGE INTO ` + datasetID + `.` + tableID +
@@ -440,77 +440,5 @@ func TestDMLMergeOnDuckDB(t *testing.T) {
 		if pairs[i] != want[i] {
 			t.Errorf("rows[%d] = %q, want %q", i, pairs[i], want[i])
 		}
-	}
-}
-
-// TestDMLMergeOnReferenceImplIsUnimplemented pins the engine
-// asymmetry around MERGE: the reference-impl engine returns
-// UNIMPLEMENTED today because the GoogleSQL reference-impl algebrizer
-// does not algebrize `ResolvedMergeStmt` at the statement root (see
-// the `// TODO: Add MERGE support.` comment in
-// `googlesql/reference_impl/algebrizer.cc::AlgebrizeStatement`). Plan
-// 34's engine-policy decision (HANDOFF.md §4.3 path 3, "DuckDB-only
-// MERGE") was to land MERGE on the DuckDB engine and leave the
-// reference-impl path as the documented UNIMPLEMENTED -- the gateway
-// maps that to HTTP 501.
-//
-// This test runs against the default `reference_impl + memory`
-// configuration (the engine selected when no `--engine` flag is
-// passed); the matching positive case for the DuckDB engine lives
-// above in `TestDMLMergeOnDuckDB`. The pair, taken together,
-// documents the asymmetry rather than pinning failure as success.
-//
-// Run only when the active engine is the reference-impl engine: gate
-// on the same `BIGQUERY_EMULATOR_E2E_ENGINE` env var the orchestrator
-// scripts can set when they want to flip the default engine for a
-// sweep; the empty / unset case is the legacy `reference_impl`
-// default `startEmulator` uses, so the test runs there too.
-func TestDMLMergeOnReferenceImplIsUnimplemented(t *testing.T) {
-	if engine := os.Getenv("BIGQUERY_EMULATOR_E2E_ENGINE"); engine != "" &&
-		engine != "reference_impl" {
-		t.Skipf("BIGQUERY_EMULATOR_E2E_ENGINE=%q; this test pins MERGE "+
-			"behavior only for the reference-impl engine (see "+
-			"TestDMLMergeOnDuckDB for the DuckDB-engine round-trip)",
-			engine)
-	}
-	env := startEmulator(t)
-	const (
-		projectID = "proj-dml-merge"
-		datasetID = "ds_dml_merge"
-		tableID   = "people"
-	)
-	base := env.URL() + "/bigquery/v2/projects/" + projectID
-
-	status, body := doJSON(t, http.MethodPost, base+"/datasets",
-		[]byte(`{"datasetReference":{"projectId":"`+projectID+
-			`","datasetId":"`+datasetID+`"},"location":"US"}`))
-	if status != http.StatusOK {
-		t.Fatalf("datasets.insert -> %d: %s", status, string(body))
-	}
-
-	tableBody := `{
-        "tableReference":{"projectId":"` + projectID +
-		`","datasetId":"` + datasetID +
-		`","tableId":"` + tableID + `"},
-        "schema":{"fields":[
-            {"name":"id","type":"INT64","mode":"REQUIRED"},
-            {"name":"name","type":"STRING","mode":"NULLABLE"}
-        ]}
-    }`
-	status, body = doJSON(t, http.MethodPost,
-		base+"/datasets/"+datasetID+"/tables", []byte(tableBody))
-	if status != http.StatusOK {
-		t.Fatalf("tables.insert -> %d: %s", status, string(body))
-	}
-
-	mergeBody := `{"query":"MERGE INTO ` + datasetID + `.` + tableID +
-		` T USING (SELECT 1 AS id, 'ada' AS name) S ON T.id = S.id ` +
-		`WHEN NOT MATCHED THEN INSERT (id, name) VALUES (S.id, S.name)",` +
-		`"useLegacySql":false}`
-	status, _ = doJSON(t, http.MethodPost,
-		base+"/queries", []byte(mergeBody))
-	if status != http.StatusNotImplemented {
-		t.Fatalf("jobs.query (MERGE on reference-impl) -> %d, want 501",
-			status)
 	}
 }

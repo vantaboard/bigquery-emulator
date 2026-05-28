@@ -1,18 +1,13 @@
 # select_where_clause: filter rows by an equality predicate.
 #
-# Memory storage returns every cell as `Value::String` regardless of
-# the column's declared type (see
-# `gateway/e2e/query_duckdb_parity_test.go` rationale comment), so we
-# stick to equality on a STRING column. `WHERE name = 'linus'` works
-# on both profiles because string-equality does not depend on the
-# storage layer's INT64 typing. ORDER BY id makes the row order
-# deterministic for `match: ordered`.
+# ORDER BY id makes the row order deterministic for
+# `match: ordered`. Rows are seeded via `tabledata.insertAll` because
+# the DuckDB engine returns UNIMPLEMENTED for INSERT VALUES today.
 name: select_where_clause
 description: |
   SELECT with a WHERE filter on a STRING column. Verifies the engine
   applies the predicate before the projection and that only matching
   rows surface on the wire.
-profiles: [memory, duckdb]
 project_id: proj-select-where
 dataset_id: ds_select_where
 setup:
@@ -23,9 +18,13 @@ setup:
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: name, type: STRING, mode: NULLABLE}
-  - sql: |
-      INSERT INTO ds_select_where.people (id, name)
-      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
+  - rows:
+      dataset: ds_select_where
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
 query: |
   SELECT id, name FROM ds_select_where.people
   WHERE name = 'linus' ORDER BY id

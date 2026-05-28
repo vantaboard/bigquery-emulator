@@ -14,8 +14,8 @@ one of three statuses, and the follow-up plans flip rows from
 | status         | meaning                                                                                                   |
 |----------------|-----------------------------------------------------------------------------------------------------------|
 | `done`         | `Transpiler::Emit*` for this node kind emits DuckDB SQL that round-trips through the conformance harness. |
-| `skiplist`     | Out of scope today. The engine falls back to the reference-impl evaluator (`--on_unknown_fn=fallback`) when this shape is encountered, and the conformance harness pins the test to the reference-impl engine via a session label. |
-| `not_started`  | We intend to lower this shape but the `Emit*` stub still returns `""`. The engine fallback fires the same way as `skiplist` until the row flips to `done`. |
+| `skiplist`     | Out of scope today. The engine surfaces `UNIMPLEMENTED` when this shape is encountered. |
+| `not_started`  | We intend to lower this shape but the `Emit*` stub still returns `""`. The engine returns `UNIMPLEMENTED` the same way as `skiplist` until the row flips to `done`. |
 
 The tracker is the source of truth for which `ResolvedAST` shapes the
 DuckDB engine accepts on a given build. The engine consults the

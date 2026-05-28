@@ -13,23 +13,17 @@ import (
 
 // TestDDLCreateTableAsSelectRoundTrip is the Plan-35 end-to-end story
 // for `CREATE TABLE AS SELECT` on the canonical DuckDB engine + DuckDB
-// storage configuration (`--engine=duckdb --storage=duckdb
-// --on_unknown_fn=fallback`). The DDL surface is implemented entirely
-// on the DuckDB engine (see
-// `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`); the
-// reference-impl engine returns UNIMPLEMENTED and the FallbackEngine
-// wrapper retries against DuckDB so DDL still works on
-// `--engine=reference_impl --on_unknown_fn=fallback`. Plan 35's
+// storage configuration. The DDL surface is implemented entirely on
+// the DuckDB engine (see
+// `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`). Plan 35's
 // engine-policy decision (extending HANDOFF.md §4.3 path 3's
 // "DuckDB-only MERGE" pattern) is what this test pins.
 //
 // The test:
 //
-//  1. Creates a `src` table and seeds it with three rows via INSERT
-//     VALUES (which the FallbackEngine routes to the reference-impl
-//     engine under the canonical Phase 5i `--engine=duckdb
-//     --on_unknown_fn=fallback` shape, since INSERT lives on
-//     reference-impl today).
+//  1. Creates a `src` table and seeds it with three rows via
+//     `tabledata.insertAll` (INSERT VALUES is UNIMPLEMENTED on the
+//     DuckDB engine today).
 //  2. Runs `CREATE TABLE ds.copy AS SELECT id, name FROM ds.src`
 //     through `jobs.query` and checks the response surfaces
 //     `jobComplete=true` with no schema / rows / dmlStats (the
@@ -40,10 +34,7 @@ import (
 //     `column_definition_list` carried.
 func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 	env := startEmulatorWithFlags(t, emulatorFlags{
-		engine:      "duckdb",
-		storage:     "duckdb",
-		onUnknownFn: "fallback",
-		dataDir:     t.TempDir(),
+		dataDir: t.TempDir(),
 	})
 
 	const (
@@ -76,16 +67,21 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 		t.Fatalf("tables.insert(src) -> %d: %s", status, string(body))
 	}
 
-	// Seed via INSERT VALUES so the type fidelity matches end-to-end;
-	// `tabledata.insertAll` would stringify the INT64 id (see the
-	// matching note in `dml_insert_test.go`).
-	seedBody := `{"query":"INSERT INTO ` + datasetID + `.` + srcTable +
-		` (id, name) VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')",` +
-		`"useLegacySql":false}`
+	// Seed via `tabledata.insertAll` because INSERT VALUES is
+	// UNIMPLEMENTED on the DuckDB engine today. The insertAll path
+	// stringifies INT64 cells (see `dml_insert_test.go` for the
+	// historical note), but the CTAS step copies cells through
+	// DuckDB which renormalizes them in the inner SELECT.
+	seedBody := `{"kind":"bigquery#tableDataInsertAllRequest","rows":[
+        {"json":{"id":1,"name":"ada"}},
+        {"json":{"id":2,"name":"linus"}},
+        {"json":{"id":3,"name":"grace"}}
+    ]}`
 	status, body = doJSON(t, http.MethodPost,
-		base+"/queries", []byte(seedBody))
+		base+"/datasets/"+datasetID+"/tables/"+srcTable+"/insertAll",
+		[]byte(seedBody))
 	if status != http.StatusOK {
-		t.Fatalf("jobs.query (seed) -> %d: %s", status, string(body))
+		t.Fatalf("tabledata.insertAll (seed) -> %d: %s", status, string(body))
 	}
 
 	ctasBody := `{"query":"CREATE TABLE ` + datasetID + `.` + dstTable +

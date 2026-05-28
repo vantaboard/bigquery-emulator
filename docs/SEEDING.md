@@ -91,11 +91,11 @@ returns the seeded rows.
 
 YAML seeds are re-applied every time the gateway boots. The applier
 treats `ALREADY_EXISTS` from the engine as a successful no-op for
-datasets and tables, so reruns succeed even when the engine is
-backed by persistent storage (`--storage=duckdb`). Rows are appended
-on every boot; if you need deterministic per-boot state, pair the
-flag with `--storage=memory` (volatile) so each restart starts
-empty.
+datasets and tables, so reruns succeed against the persistent
+DuckDB-backed catalog. Rows are appended on every boot; if you
+need deterministic per-boot state, point `--data-dir` at a fresh
+temp directory each run (e.g. `--data-dir "$(mktemp -d)"`) so the
+catalog starts empty.
 
 ---
 
@@ -269,10 +269,6 @@ canonical reference:
 | `--http-port`                  | `--http_port`                 | BigQuery REST listener port (default `9050`).                                    |
 | `--grpc-port`                  | `--grpc_port`                 | Internal engine gRPC port (default `9060`).                                      |
 | `--engine-binary`              | `--engine_binary`             | Path to the C++ engine subprocess; empty disables it.                            |
-| `--engine`                     |                               | Engine analysis backend, forwarded to emulator_main as `--engine`.               |
-| `--storage`                    |                               | Storage backend, forwarded as `--storage`.                                       |
-| `--profile`                    |                               | Engine runtime profile, forwarded as `--profile`.                                |
-| `--on-unknown-fn`              | `--on_unknown_fn`             | Engine policy for unknown SQL functions, forwarded as `--on_unknown_fn`.         |
 | `--data-dir`                   | `--data_dir`                  | Persistent storage root. Falls back to `$BIGQUERY_EMULATOR_DATA_DIR`.            |
 | `--initial-data-dir`           |                               | Template copied into `--data-dir` on first boot (see §2).                        |
 | `--copy-engine-stdout`         | `--copy_engine_stdout`        | Forward engine stdout.                                                           |

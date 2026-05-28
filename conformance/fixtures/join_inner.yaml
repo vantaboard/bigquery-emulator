@@ -11,7 +11,6 @@ description: |
   INNER JOIN of users + events on user_id. Verifies the engine emits
   one row per (user, event) match and drops rows from either side
   that lack a counterpart.
-profiles: [memory, duckdb]
 project_id: proj-join-inner
 dataset_id: ds_join_inner
 setup:
@@ -29,13 +28,21 @@ setup:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: user_id, type: INT64, mode: REQUIRED}
         - {name: kind, type: STRING, mode: REQUIRED}
-  - sql: |
-      INSERT INTO ds_join_inner.users (id, name)
-      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
-  - sql: |
-      INSERT INTO ds_join_inner.events (id, user_id, kind)
-      VALUES (10, 1, 'login'), (11, 1, 'click'),
-             (12, 2, 'login'), (13, 3, 'click')
+  - rows:
+      dataset: ds_join_inner
+      table: users
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
+  - rows:
+      dataset: ds_join_inner
+      table: events
+      rows:
+        - {id: 10, user_id: 1, kind: login}
+        - {id: 11, user_id: 1, kind: click}
+        - {id: 12, user_id: 2, kind: login}
+        - {id: 13, user_id: 3, kind: click}
 query: |
   SELECT u.id, u.name, e.kind
     FROM ds_join_inner.users AS u

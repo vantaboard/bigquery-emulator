@@ -61,11 +61,9 @@ DuckDBEngine::~DuckDBEngine() = default;
 
 namespace {
 
-// Mirror of `reference_impl_engine::MakeAnalyzerOptions`. The two
-// engines have to resolve names through the same `LanguageOptions`
-// snapshot or function dispatch drifts between Analyze and the
-// per-engine ExecuteQuery; centralizing this helper is on the
-// followup plan that lands the gateway-shared analyzer helper.
+// LanguageOptions snapshot used for analyzer-driven name resolution.
+// Matches the options the engine threads through ExecuteQuery so
+// dispatch stays consistent across Analyze and execute paths.
 ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   ::googlesql::LanguageOptions language;
   language.EnableMaximumLanguageFeatures();
@@ -74,11 +72,9 @@ namespace {
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
   options.set_attach_error_location_payload(true);
-  // We do NOT flip `prune_unused_columns` on: the reference-impl
-  // evaluator needs every analyzer-allocated column to live (see the
-  // matching note in `reference_impl_engine.cc`), and we keep the
-  // same setting here so a `--on_unknown_fn=fallback` retry against
-  // the reference-impl engine sees the same resolved shape.
+  // We do NOT flip `prune_unused_columns` on: doing so changes the
+  // resolved column lifetime, which has historically broken the
+  // engine's downstream uses of the resolved AST.
   options.CreateDefaultArenasIfNotSet();
   return options;
 }
@@ -102,9 +98,9 @@ absl::Status ValidateRequest(const QueryRequest& request,
 }
 
 // Build the BigQuery-shaped output schema from the analyzer's
-// resolved-output-column list. Routed through the proto round-trip we
-// already use in the reference-impl engine so the two paths agree on
-// the REPEATED-mode contract for ARRAY columns.
+// resolved-output-column list. Routed through the proto round-trip
+// so the REPEATED-mode contract for ARRAY columns matches the
+// surface the gateway emits.
 absl::StatusOr<schema::TableSchema> ReflectOutputSchema(
     const ::googlesql::ResolvedQueryStmt& stmt) {
   v1::TableSchema proto;
@@ -114,11 +110,10 @@ absl::StatusOr<schema::TableSchema> ReflectOutputSchema(
   return backend::schema::TableSchemaFromProto(proto);
 }
 
-// Concrete `AnalyzedQuery` returned by `Analyze`. Mirrors the
-// reference-impl engine's wrapper; the resolved AST lives on the
-// instance so a `DryRun` -> `ExecuteQuery` flow could reuse the
-// analysis without re-parsing (today both methods re-analyze
-// independently for simplicity).
+// Concrete `AnalyzedQuery` returned by `Analyze`. The resolved AST
+// lives on the instance so a `DryRun` -> `ExecuteQuery` flow could
+// reuse the analysis without re-parsing (today both methods
+// re-analyze independently for simplicity).
 class AnalyzedQueryImpl : public AnalyzedQuery {
  public:
   AnalyzedQueryImpl(std::unique_ptr<const ::googlesql::AnalyzerOutput> output,
@@ -198,11 +193,10 @@ absl::StatusOr<std::string> RenderScalarLiteral(
   // natively-typed Value variants (Int64, Float64, Bool) and a
   // String carrying the textual representation -- the Phase 1
   // gateway lowers every JSON cell to a string regardless of the
-  // column's declared type, and `Storage::ScanRows` on an
-  // InMemoryStorage path returns the exact same Value::String back.
-  // The DuckDBStorage path on the other hand returns natively-typed
-  // values because the Parquet file enforces the schema, so this
-  // branch only fires for the in-memory storage backend.
+  // column's declared type. DuckDBStorage returns natively-typed
+  // values because the Parquet file enforces the schema, so the
+  // string branch is a fallback for callers that hand-construct
+  // Value::String cells in unit tests.
   switch (column.type) {
     case schema::ColumnType::kBool:
       if (cell.kind() == storage::Value::Kind::kString) {
@@ -334,12 +328,11 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
 // stream straight onto the wire.
 //
 // Each cell is rendered through `arrow_to_bq::ChunkRowToCells` so
-// the resulting `storage::Value` shape matches what
-// `ReferenceImplEngine::ExecuteQuery` returns; the per-engine
-// `frontend/handlers/query.cc::ValueToCell` then lowers both onto
-// the same proto Cell wire shape. The chunked path replaces the
-// previous row-at-a-time `duckdb_value_*` accessors so the engine
-// no longer pays one C-API call per cell.
+// the resulting `storage::Value` shape lines up with what
+// `frontend/handlers/query.cc::ValueToCell` lowers onto the proto
+// Cell wire shape. The chunked path replaces the previous
+// row-at-a-time `duckdb_value_*` accessors so the engine no longer
+// pays one C-API call per cell.
 //
 // Declaration order pins destruction order: chunk_ first (releases
 // the columnar buffers it borrowed from result_), then result_, then
@@ -504,9 +497,8 @@ absl::Status AttachStorageTable(::duckdb_connection conn,
 // order from the analyzer's `output_column_list` and the per-cell
 // shape would silently disagree with the gateway's BigQuery schema.
 // Non-strippable shapes return the original scan; the engine then
-// returns UNIMPLEMENTED for the wrapping ProjectScan and the
-// `--on_unknown_fn=fallback` policy hands the query to the
-// reference-impl evaluator.
+// returns UNIMPLEMENTED for the wrapping ProjectScan so the gateway
+// can surface BigQuery's `notImplemented` reason.
 const ::googlesql::ResolvedScan* StripPassThroughProjectScans(
     const ::googlesql::ResolvedScan* scan) {
   while (scan != nullptr &&
@@ -567,9 +559,8 @@ absl::StatusOr<DryRunResult> DuckDBEngine::DryRun(
   if (!analyzed.ok()) return analyzed.status();
   DryRunResult result;
   result.schema = (*analyzed)->output_schema();
-  // We don't have a cost model yet (same caveat as the reference-impl
-  // engine); surface zero so the gateway's wire envelope stays
-  // well-formed.
+  // We don't have a cost model yet; surface zero so the gateway's
+  // wire envelope stays well-formed.
   result.estimated_bytes_processed = 0;
   return result;
 }
@@ -581,9 +572,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDBEngine::ExecuteQuery(
 
   // 1. Analyze. We do this ourselves (rather than through
   // `PreparedQuery::Prepare`) because we need the resolved AST in
-  // hand for the transpiler and the table-scan visitor; the
-  // algebrizer the reference-impl engine drives is what we are
-  // intentionally skipping on this path.
+  // hand for the transpiler and the table-scan visitor.
   ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
   ::googlesql::TypeFactory type_factory;
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
@@ -610,9 +599,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDBEngine::ExecuteQuery(
   // `EmitProjectScan` are still `not_started`, so we strip wrapping
   // pass-through `ProjectScan`s (added by the analyzer for
   // `SELECT *` shapes) before dispatching to the transpiler. If the
-  // resulting scan does not lower we return UNIMPLEMENTED; the
-  // engine factory's `--on_unknown_fn=fallback` wrapper then retries
-  // via the reference-impl engine.
+  // resulting scan does not lower we return UNIMPLEMENTED so the
+  // gateway can surface BigQuery's `notImplemented` reason.
   const ::googlesql::ResolvedScan* inner =
       StripPassThroughProjectScans(query_stmt->query());
   if (inner == nullptr) {
@@ -671,11 +659,10 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDBEngine::ExecuteQuery(
     }
   }
 
-  // 6. Execute the transpiled SQL. We fold a DuckDB rejection into
-  // UNIMPLEMENTED instead of INTERNAL so the fallback policy can
-  // route the query to the reference-impl engine: a transpiled SQL
-  // that DuckDB cannot run is, by definition, a query the DuckDB
-  // engine "cannot yet execute".
+  // 6. Execute the transpiled SQL. A DuckDB rejection folds into
+  // UNIMPLEMENTED instead of INTERNAL because a transpiled SQL that
+  // DuckDB cannot run is, by definition, a query the DuckDB engine
+  // "cannot yet execute".
   ::duckdb_result result;
   if (::duckdb_query(conn, sql.c_str(), &result) != ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
@@ -696,10 +683,7 @@ namespace {
 
 // Stable string representation of a `storage::Value` used as a
 // primary-key lookup key when diffing the pre- and post-MERGE row
-// sets. Same shape (and same caveats) as the helper in
-// `backend/engine/reference_impl/reference_impl_engine.cc`; folding
-// the two into a shared utility is on the followup plan that
-// consolidates the engines' DML plumbing.
+// sets.
 std::string SerializeForPkLookup(const storage::Value& value) {
   using Kind = storage::Value::Kind;
   switch (value.kind()) {
@@ -892,10 +876,9 @@ absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
   }
 
   // 1. Analyze. We need the resolved AST to (a) confirm this is a
-  // MERGE statement (other DML kinds intentionally fall through to
-  // the reference-impl engine via FallbackEngine) and (b) discover
-  // the storage tables the SQL touches so we can materialize them
-  // inside the per-query DuckDB connection.
+  // MERGE statement and (b) discover the storage tables the SQL
+  // touches so we can materialize them inside the per-query DuckDB
+  // connection.
   ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
   // PreparedQuery in the SELECT path opts into MAXIMUM_FEATURES via
   // EnableMaximumLanguageFeatures(); the DML path additionally needs
@@ -921,14 +904,10 @@ absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
   if (stmt->node_kind() != ::googlesql::RESOLVED_MERGE_STMT) {
     // Phase 6b ENGINE POLICY (HANDOFF.md §4.3 path 3): the DuckDB
     // engine only implements MERGE today; INSERT / UPDATE / DELETE
-    // intentionally fall through to UNIMPLEMENTED so the
-    // FallbackEngine wrapper routes them to the reference-impl
-    // engine (which already runs all three through PreparedModify).
+    // surface UNIMPLEMENTED for now.
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: ExecuteDml only implements MERGE today; got ",
-        stmt->node_kind_string(),
-        " (fallback wrapper should route this to the reference-impl "
-        "engine)"));
+        stmt->node_kind_string()));
   }
   const auto* merge_stmt = stmt->GetAs<::googlesql::ResolvedMergeStmt>();
   if (merge_stmt->table_scan() == nullptr ||
@@ -1041,10 +1020,8 @@ absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
   // MATCHED ...` with the same statement shape BigQuery exposes, so
   // for the simple cases the conformance harness will seed in plans
   // 40-42 we do not need a transpiler. Cases DuckDB rejects fold to
-  // INTERNAL (rather than UNIMPLEMENTED) because there is no
-  // sensible fallback: the reference-impl engine cannot run MERGE
-  // either (see the matching comment block in
-  // `backend/engine/reference_impl/reference_impl_engine.cc`).
+  // INTERNAL (rather than UNIMPLEMENTED) because the DuckDB engine
+  // is the only path for MERGE today.
   ::duckdb_result merge_result;
   if (::duckdb_query(conn, request.sql.c_str(), &merge_result) !=
       ::DuckDBSuccess) {
@@ -1083,10 +1060,6 @@ absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
 //
 // The DuckDB engine owns the DDL surface end-to-end: CREATE TABLE,
 // CREATE TABLE AS SELECT, DROP TABLE, and ALTER TABLE ADD COLUMN.
-// The reference-impl engine returns UNIMPLEMENTED for these
-// (mirroring its Plan 34 MERGE short-circuit) so the FallbackEngine
-// wrapper routes a DDL statement here when the operator launched
-// emulator_main with `--engine=reference_impl --on_unknown_fn=fallback`.
 //
 // Shape decisions:
 //

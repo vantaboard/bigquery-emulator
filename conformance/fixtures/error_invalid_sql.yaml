@@ -10,7 +10,6 @@ description: |
   Negative-path: SELECT with a syntax error returns a structured
   BigQuery error envelope on both profiles. Verifies the gateway
   surfaces analyzer errors as 400 invalidQuery rather than 500.
-profiles: [memory, duckdb]
 project_id: proj-error-invalid-sql
 query: SELECT * FRO bad
 expected:

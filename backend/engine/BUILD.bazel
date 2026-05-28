@@ -1,9 +1,8 @@
-# Bazel build for the engine abstract interfaces + the reference-impl
-# engine concrete (`backend/engine/reference_impl/`).
+# Bazel build for the engine abstract interfaces.
 #
 # The interface library (`//backend/engine:engine`) is
-# header-only-ish, no GoogleSQL on the link line. The concrete
-# library lives in `//backend/engine/reference_impl/` and pulls
+# header-only-ish, no GoogleSQL on the link line. The DuckDB engine
+# implementation lives in `//backend/engine/duckdb/` and pulls
 # GoogleSQL in.
 load("@rules_cc//cc:defs.bzl", "cc_library")
 

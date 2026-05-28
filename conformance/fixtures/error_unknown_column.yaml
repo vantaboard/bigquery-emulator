@@ -7,7 +7,6 @@ name: error_unknown_column
 description: |
   SELECT bad_column FROM <existing table> returns HTTP 400 with a
   message that mentions the offending column name.
-profiles: [memory, duckdb]
 project_id: proj-error-unknown-column
 dataset_id: ds_error_unknown_column
 setup:

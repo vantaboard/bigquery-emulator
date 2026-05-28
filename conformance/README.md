@@ -24,15 +24,15 @@ DML, structural errors, DDL, and a schema-only smoke check; see the
 # 1. Build the C++ engine if you have not already.
 task emulator:build-engine:bazel
 
-# 2. Run every fixture in conformance/fixtures against both profiles,
-#    spawning a fresh emulator per fixture × profile.
+# 2. Run every fixture in conformance/fixtures against the active
+#    profile set (DuckDB-only today), spawning a fresh emulator per
+#    fixture × profile.
 task conformance:run
 # (equivalent to `go run ./conformance/cmd/runner`)
 
 # 3. Restrict the matrix to one or more profiles. PROFILE is a
 #    comma-separated list; each entry maps to a single --profile flag.
-task conformance:run PROFILE=memory
-task conformance:run PROFILE=memory,duckdb
+task conformance:run PROFILE=duckdb
 
 # 4. Run a single fixture file. Honors PROFILE too.
 task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
@@ -44,31 +44,24 @@ task conformance:run OUTPUT=json OUTPUT_FILE=conformance-result.json
 #    emulator_main subprocesses (faster dev loop).
 go run ./conformance/cmd/runner \
   --fixtures conformance/fixtures/select_literal_value.yaml \
-  --profile memory \
+  --profile duckdb \
   --connect 127.0.0.1:9060
 ```
 
 ## Profile matrix
 
-A fixture's `profiles:` list declares which engine + storage profile it
-applies to. Two profiles are defined today:
+A fixture's `profiles:` list declares which runtime profile it
+applies to. Only one profile is defined today:
 
-| profile | engine          | storage | use for                                  |
-|---------|-----------------|---------|------------------------------------------|
-| memory  | reference_impl  | memory  | CI / unit-style assertions, fast startup |
-| duckdb  | duckdb          | duckdb  | OLAP shapes, DDL surface, Parquet store  |
+| profile | engine | storage | use for                                |
+|---------|--------|---------|----------------------------------------|
+| duckdb  | duckdb | duckdb  | All conformance assertions (only lane) |
 
-A fixture that omits `profiles:` runs on **both** profiles. A fixture
-that lists exactly one profile (e.g. a DuckDB-only feature) runs only
-against that profile. The runner iterates the matrix and tags every
-result with its profile in both `text` and `json` output modes, so a
-divergence between profiles is visible without manual cross-referencing.
-
-The DuckDB profile passes `--on_unknown_fn=fallback` so DDL and DML
-shapes the DuckDB transpiler does not lower yet are retried against the
-reference-impl engine. The memory profile leaves `--on_unknown_fn`
-unset (default `unimplemented`), so any UNIMPLEMENTED surface lands as
-a structured 501 on the wire.
+A fixture that omits `profiles:` runs on the default profile set
+(currently `[duckdb]`). The runner still tags every result with its
+profile name in both `text` and `json` output modes so a future
+expansion (a second engine, an experimental storage backend, etc.)
+does not need a CI-format break.
 
 ## Fixture schema
 
@@ -77,8 +70,8 @@ Every fixture is a single YAML document with the following fields:
 ```yaml
 name: insert_then_select          # required, identifier (matches filename)
 description: |                    # optional, human prose for the diff log
-  Catalog mutation + INSERT VALUES + SELECT round-trip.
-profiles: [memory, duckdb]        # optional; omitted = both
+  Catalog setup + row seed + SELECT round-trip.
+profiles: [duckdb]                # optional; omitted = default profile set
 project_id: proj-conformance      # optional, defaults to "proj-conformance-<name>"
 dataset_id: ds_conformance        # optional, hint only; not auto-created
 setup:                            # optional, runs in order before `query`
@@ -89,7 +82,11 @@ setup:                            # optional, runs in order before `query`
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: name, type: STRING, mode: NULLABLE}
-  - sql: INSERT INTO ds_conformance.people (id, name) VALUES (1, 'a')
+  - rows:                         # REST POST tabledata.insertAll
+      dataset: ds_conformance
+      table: people
+      rows:
+        - {id: 1, name: a}
 query: SELECT id, name FROM ds_conformance.people ORDER BY id   # required
 expected:                         # exactly one of `rows:` or `error:`
                                   # (schema_only mode may set neither)
@@ -116,10 +113,17 @@ The `setup` list is dispatched by which field is present in each step:
    with `{tableReference, schema:{fields:[...]}}`. The `schema:` list
    maps directly to BigQuery's `TableFieldSchema` shape (`name`, `type`,
    `mode`, plus nested `fields` for `STRUCT`).
-3. `sql: <query>` — `POST /bigquery/v2/projects/<projectId>/queries`
-   with `{query, useLegacySql:false}`. Use this for `INSERT`,
-   `UPDATE`, `DELETE`, `CREATE TABLE AS SELECT`, etc. The setup step
-   fails the fixture if the gateway responds with a non-2xx status.
+3. `rows:` — `POST /bigquery/v2/projects/<projectId>/datasets/<datasetId>/tables/<tableId>/insertAll`
+   with `{kind:"bigquery#tableDataInsertAllRequest", rows:[{json:{...}}, ...]}`.
+   This is the canonical seeding path because the DuckDB engine
+   currently returns UNIMPLEMENTED for `INSERT VALUES`. Each row map
+   is wrapped in `{json: ...}` by the runner.
+4. `sql: <query>` — `POST /bigquery/v2/projects/<projectId>/queries`
+   with `{query, useLegacySql:false}`. Use this for `MERGE`,
+   `CREATE TABLE`, `DROP TABLE`, etc. `INSERT` / `UPDATE` / `DELETE`
+   are UNIMPLEMENTED on the DuckDB engine; use `rows:` for seeding
+   instead. The setup step fails the fixture if the gateway responds
+   with a non-2xx status.
 
 A fixture that needs only a `SELECT` (with no catalog state) omits
 `setup` entirely.
@@ -197,39 +201,36 @@ may be omitted; the runner only asserts on what the fixture pins.
 
 ### Worked example
 
-The fixture below seeds three rows via the REST catalog + INSERT
-VALUES, mutates id=1 and deletes id=2, then asserts the post-mutation
-SELECT returns the two remaining rows in `id` order:
+The fixture below seeds three rows via `tabledata.insertAll` and then
+asserts a filtered SELECT returns the single matching row. `INSERT` /
+`UPDATE` / `DELETE` are UNIMPLEMENTED on the DuckDB engine today, so
+fixtures use `rows:` for seeding rather than DML `sql:` steps.
 
 ```yaml
-name: dml_update_delete
-profiles: [memory, duckdb]
-project_id: proj-dml-update-delete
-dataset_id: ds_dml_update_delete
+name: select_where_clause
+project_id: proj-select-where
+dataset_id: ds_select_where
 setup:
-  - dataset: ds_dml_update_delete
+  - dataset: ds_select_where
   - table:
-      dataset: ds_dml_update_delete
+      dataset: ds_select_where
       id: people
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: name, type: STRING, mode: NULLABLE}
-  - sql: |
-      INSERT INTO ds_dml_update_delete.people (id, name)
-      VALUES (1, 'ada'), (2, 'linus'), (3, 'grace')
-  - sql: |
-      UPDATE ds_dml_update_delete.people
-      SET name = 'augusta'
-      WHERE id = 1
-  - sql: |
-      DELETE FROM ds_dml_update_delete.people
-      WHERE id = 2
+  - rows:
+      dataset: ds_select_where
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
 query: |
-  SELECT id, name FROM ds_dml_update_delete.people ORDER BY id
+  SELECT id, name FROM ds_select_where.people
+  WHERE name = 'linus' ORDER BY id
 expected:
   rows:
-    - {id: "1", name: "augusta"}
-    - {id: "3", name: "grace"}
+    - {id: "2", name: "linus"}
 ```
 
 ## Runner CLI
@@ -248,7 +249,7 @@ Flags:
                           not change its --engine / --storage at runtime,
                           so use --profile to restrict which fixtures run.
   --profile NAME          Repeatable. Restrict the matrix to one or more
-                          named profiles (memory, duckdb). Default: all.
+                          named profiles (duckdb). Default: all.
   --update-baselines      Overwrite the `expected:` block of every fixture
                           with the actual response. Used to bootstrap new
                           fixtures (plan 42 leans on this).
@@ -282,7 +283,7 @@ Exit codes:
     {
       "fixture": "select_literal_value",
       "path": "conformance/fixtures/select_literal_value.yaml",
-      "profile": "memory",
+      "profile": "duckdb",
       "status": "PASS",
       "duration_ms": 142,
       "message": ""
@@ -316,8 +317,7 @@ use (skim the existing files before naming):
 | `aggregate_` | `aggregate_count_star`, `aggregate_count_distinct` |
 | `groupby_` | `groupby_count`, `groupby_having` |
 | `join_` | `join_inner`, `join_left_outer` |
-| `dml_` | `insert_then_select`, `dml_update_delete`, `dml_delete_where_predicate` |
-| `ddl_` | `ddl_create_table_as_select`, `ddl_drop_table_then_select` |
+| `ddl_` | `ddl_drop_table_then_select` |
 | `error_` | `error_invalid_sql`, `error_unknown_table`, `error_type_mismatch` |
 
 The `name:` field inside the YAML **must** match the filename
@@ -329,9 +329,8 @@ log and a mismatch makes the failure harder to bisect.
 Start from a similar existing fixture and adapt it. The shape is
 documented under "Fixture schema" above; key choices to make:
 
-- **`profiles:`** -- both `memory` and `duckdb` unless you have a
-  specific reason to target one. See "When DuckDB and the memory
-  profile disagree" below.
+- **`profiles:`** -- omit unless you need to single-target a future
+  profile. Today the default profile set is `[duckdb]`.
 - **`setup:`** -- only the catalog state the fixture *needs*. A
   SELECT fixture that doesn't read any tables can omit `setup:`
   entirely (see `select_literal_value.yaml`).
@@ -352,12 +351,8 @@ canonical Bazel-built engine (run `task emulator:build-engine:bazel`
 once if you have not already; it is cached).
 
 ```bash
-# Run the new fixture against both profiles.
+# Run the new fixture.
 task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml
-
-# Run against only one profile (faster iteration on a duckdb-only
-# fixture, for example).
-task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml PROFILE=duckdb
 
 # Run the full suite to confirm no regression.
 task conformance:run
@@ -406,35 +401,25 @@ quick decision tree for picking one:
    list. The runner asserts on the column names + types and
    ignores the cell values.
 
-## When DuckDB and the memory profile disagree
+## DuckDB-only runtime constraints
 
-The `memory` profile is `--engine=reference_impl --storage=memory`;
-the `duckdb` profile is `--engine=duckdb --storage=duckdb
---on_unknown_fn=fallback` (DuckDB-uncovered constructs route to
-ReferenceImpl through `FallbackEngine`).
+The conformance harness drives the emulator's only supported
+runtime: DuckDB engine + DuckDB storage. A few constructs are
+known UNIMPLEMENTED on the DuckDB engine today; fixtures should
+avoid them entirely:
 
-The two profiles disagree on:
+- **`INSERT VALUES` / `INSERT ... SELECT`** -- the DuckDB engine
+  returns UNIMPLEMENTED. Use a `rows:` setup step to seed table
+  data via `tabledata.insertAll` instead.
+- **`UPDATE` / `DELETE`** -- also UNIMPLEMENTED on the DuckDB
+  engine today. `MERGE` is supported and works as a fixture
+  `sql:` setup step.
+- **`SELECT 1` / scalar-only `SELECT`** -- the DuckDB transpiler
+  does not lower a `SELECT` with no `FROM` yet; use a real table
+  scan even for trivial fixtures.
 
-- **DDL** -- only the DuckDB engine implements `CREATE` / `DROP`
-  / `CREATE TABLE AS SELECT`. The memory profile leaves
-  `--on_unknown_fn` at its default (`unimplemented`), so DDL
-  fixtures targeting the memory profile would surface a 501. Mark
-  DDL fixtures `profiles: [duckdb]`.
-- **Cell type fidelity from in-memory storage** -- the in-memory
-  storage layer returns every cell as `Value::String` regardless
-  of the declared column type. Equality (`WHERE id = 1`) and
-  `ORDER BY id` work because the engine normalizes both sides;
-  but predicates like `WHERE id > 1` fail on memory because
-  INT64 > STRING is not a supported comparison. Fixtures that
-  exercise comparison operators on integer columns should either
-  filter on STRING columns or be tagged `profiles: [duckdb]`.
-- **`INFORMATION_SCHEMA` views** -- only ReferenceImpl implements
-  most of them today. A fixture pinning a system view may need
-  `profiles: [memory]`.
-
-When in doubt, target the `duckdb` profile first; see
-[`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md) for the
-"DuckDB-primary" policy decision and why.
+See [`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md) for the
+"DuckDB-only" policy decision and the roadmap for closing each gap.
 
 ## Adding fixtures (compact recap)
 
@@ -442,11 +427,8 @@ Already comfortable with the above? The short version:
 
 1. Drop a new `<name>.yaml` under `conformance/fixtures/`. Keep the
    filename and the `name:` field in sync.
-2. Decide which profile(s) the fixture applies to and list them in
-   `profiles:`. Default to both unless you know one profile cannot
-   support the shape (e.g. a Parquet-only storage feature). See
-   "When DuckDB and the memory profile disagree" above for the
-   common reasons to single-target a profile.
+2. Leave `profiles:` unset unless you need to single-target a
+   profile (today there is only one).
 3. Run `task conformance:run-fixture FIXTURE=conformance/fixtures/<name>.yaml`
    to verify the fixture against your local emulator.
 4. If the runner reports a result that matches what you expected, you

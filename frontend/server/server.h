@@ -28,10 +28,9 @@ namespace frontend {
 //
 //   * Run statements through `googlesql::Analyzer::AnalyzeStatement` to
 //     resolve names and types.
-//   * Hand resolved ASTs to `googlesql::reference_impl::Algebrizer` and
-//     `Evaluator` to produce result rows.
-//   * Resolve catalog references against the in-memory backend (see
-//     backend/storage/storage.h).
+//   * Hand resolved ASTs to the DuckDB engine to produce result rows.
+//   * Resolve catalog references against the DuckDB-backed storage
+//     (see backend/storage/storage.h).
 //
 // Today this header just declares the API surface; Create returns a no-op
 // server that blocks on WaitForShutdown until interrupted.
@@ -41,20 +40,18 @@ class Server {
     // host:port the gRPC server should listen on, e.g. "localhost:9060".
     std::string server_address;
 
-    // Storage backend the Catalog service delegates every RPC to. Must
-    // outlive the returned `Server` (the gateway today wires this to
-    // the `InMemoryStorage` / `DuckDBStorage` owned by `emulator_main`).
-    // Must be non-null; `Server::Create` returns null otherwise.
+    // Storage backend the Catalog service delegates every RPC to.
+    // Must outlive the returned `Server` -- the gateway wires this
+    // to the `DuckDBStorage` owned by `emulator_main`. Must be
+    // non-null; `Server::Create` returns null otherwise.
     backend::storage::Storage* storage = nullptr;
 
     // Execution backend the Query service forwards `DryRun` and
-    // `ExecuteQuery` RPCs to. Optional: when null, the Query service
-    // constructs a per-request reference-impl engine (the original
-    // Phase 5.A behavior). The Phase 5i wiring path in
-    // `binaries/emulator_main/main.cc` always supplies one -- usually
-    // a `FallbackEngine` wrapping the user-selected `--engine` with
-    // the reference-impl evaluator as the safety net. Must outlive
-    // the returned `Server`.
+    // `ExecuteQuery` RPCs to. The `binaries/emulator_main/main.cc`
+    // wiring path constructs a `DuckDBEngine` and threads it
+    // through here. Must outlive the returned `Server`. When null
+    // the Query service returns `FAILED_PRECONDITION` for
+    // `ExecuteQuery`.
     backend::engine::Engine* engine = nullptr;
   };
 

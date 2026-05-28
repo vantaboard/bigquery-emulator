@@ -15,13 +15,12 @@ rg '@googlesql//' \
 ```
 
 Run from a clean checkout, that query yields **18 distinct labels** spanning
-6 emulator BUILD files:
+5 emulator BUILD files:
 
 | Owning emulator BUILD file                                          | Targets that reference `@googlesql//` |
 |---------------------------------------------------------------------|---------------------------------------|
 | `backend/catalog/BUILD.bazel`                                       | `storage_table`, `googlesql_catalog`  |
 | `backend/schema/BUILD.bazel`                                        | `googlesql_to_bq`, `googlesql_to_bq_test` |
-| `backend/engine/reference_impl/BUILD.bazel`                         | `reference_impl_engine`, `reference_impl_engine_test` |
 | `backend/engine/duckdb/BUILD.bazel`                                 | `duckdb_engine`, `duckdb_engine_test` |
 | `backend/engine/duckdb/transpiler/BUILD.bazel`                      | `types`, `transpiler`, `transpiler_test` |
 | `frontend/handlers/BUILD.bazel`                                     | `query_handler`                       |
@@ -43,15 +42,13 @@ archive but skip the wrapper), and **why** the emulator needs the label today.
 
 | Label                                       | Upstream `hdrs`                                                          | Prebuilt disposition | Why the emulator depends on it |
 |---------------------------------------------|--------------------------------------------------------------------------|----------------------|-------------------------------- |
-| `@googlesql//googlesql/public:analyzer`               | `analyzer.h`                                                              | Expose | Engine `Analyze*` entry points used by `duckdb_engine`, `reference_impl_engine`, `query_handler`, transpiler tests. |
+| `@googlesql//googlesql/public:analyzer`               | `analyzer.h`                                                              | Expose | Engine `Analyze*` entry points used by `duckdb_engine`, `query_handler`, transpiler tests. |
 | `@googlesql//googlesql/public:analyzer_options`       | `analyzer_options.h`                                                      | Expose | Builds the `AnalyzerOptions` the engines + handler pass into `AnalyzeStatement`. |
 | `@googlesql//googlesql/public:analyzer_output`        | `analyzer_output.h`, `analyzer_output_properties.h`                       | Expose | Carries the resolved-AST + per-statement output back from the analyzer; consumed by both engines and the query handler. |
 | `@googlesql//googlesql/public:builtin_function_options` | `builtin_function_options.h`                                            | Expose | `googlesql_catalog` registers the BigQuery-enabled builtin-function set; `transpiler_test` constructs its own options for the test harness. |
 | `@googlesql//googlesql/public:catalog`                | `catalog.h`, `catalog_helper.h`, `property_graph.h`                       | Expose | Interface the `googlesql_catalog` adapter implements; transpiler resolves `Table`/`Column` references against it. |
 | `@googlesql//googlesql/public:error_helpers`          | `error_helpers.h`                                                         | Expose | Query handler maps GoogleSQL `absl::Status` errors into gRPC codes. |
 | `@googlesql//googlesql/public:error_location_cc_proto` | `error_location.pb.h` (generated)                                        | Expose | Query handler reads `ErrorLocation` payloads to render `position` in the BigQuery error responses. |
-| `@googlesql//googlesql/public:evaluator`              | `evaluator.h`                                                             | Expose | `reference_impl_engine` runs the reference evaluator end-to-end. |
-| `@googlesql//googlesql/public:evaluator_base`         | `evaluator_base.h`                                                        | Expose | Shared base for `Evaluator` + iterator types used by `reference_impl_engine`. |
 | `@googlesql//googlesql/public:evaluator_table_iterator` | `evaluator_table_iterator.h`                                            | Expose | `storage_table` returns one of these from `CreateEvaluatorTableIterator`. |
 | `@googlesql//googlesql/public:function`               | `function.h`, `function_signature.h`, `input_argument_type.h`, `procedure.h`, `table_valued_function.h` | Expose | Transpiler walks `Function::Name()` on `ResolvedFunctionCall` nodes. |
 | `@googlesql//googlesql/public:language_options`       | `language_options.h`                                                      | Expose | All engines + handler + transpiler tests snapshot the same `LanguageOptions` between analyzer and evaluator. |
@@ -98,8 +95,8 @@ upstream commit). For Phase 1, the load-bearing transitive packages are:
 
 ## Counts (must match `rg` output)
 
-- 6 emulator BUILD files reference GoogleSQL directly.
-- 18 unique direct `@googlesql//` labels (16 in `googlesql/public`, 2 in
+- 5 emulator BUILD files reference GoogleSQL directly.
+- 16 unique direct `@googlesql//` labels (14 in `googlesql/public`, 2 in
   `googlesql/resolved_ast`).
 - All 18 are classified **Expose** in this phase (no Alias / Defer).
 

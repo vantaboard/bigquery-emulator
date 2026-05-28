@@ -30,15 +30,15 @@ This emulator is modeled directly on Google's
 |  gateway_main (Go)            |  gRPC  |  emulator_main (C++)           |
 |                               | <----> |                                |
 |  - Implements BigQuery REST   |        |  - Links GoogleSQL directly    |
-|    (projects/datasets/tables/ |        |  - Analyzer + reference_impl   |
-|     jobs/queries/insertAll)   |        |  - In-memory catalog/storage   |
+|    (projects/datasets/tables/ |        |  - DuckDB engine + storage     |
+|     jobs/queries/insertAll)   |        |  - Persistent catalog/storage  |
 |  - Spawns engine as subproc   |        |                                |
 +-------------------------------+        +--------------------------------+
 ```
 
 - The **engine is C++** so it can link [GoogleSQL](https://github.com/google/googlesql)
-  directly. SQL parsing, name resolution, type inference, and reference-impl
-  execution come from upstream. We do **not** re-port that surface to Go.
+  directly. SQL parsing, name resolution, type inference come from upstream;
+  execution lowers to DuckDB. We do **not** re-port that surface to Go.
 - The **REST gateway is Go** because that is where the BigQuery-specific
   value lives: REST routes, jobs lifecycle, datasets/tables/projects model,
   streaming inserts, error envelope, discovery doc.
@@ -69,7 +69,7 @@ bigquery-emulator/
   frontend/             # C++: gRPC server that fronts the engine
     server/                 # gRPC plumbing
     handlers/               # Implements proto/emulator.proto services
-  backend/              # C++: in-memory storage / schema / catalog
+  backend/              # C++: DuckDB storage / schema / catalog
   proto/                # Internal Go <-> C++ contract
     emulator.proto
   build/                # Bazel + Docker glue (planned)
@@ -284,64 +284,39 @@ docker run --rm -p 9050:9050 bigquery-emulator:dev \
     --log_requests --hostname=0.0.0.0 --http_port=9050
 ```
 
-## Profiles
+## Runtime configuration
 
-`emulator_main`'s `--engine` / `--storage` / `--on_unknown_fn` flags
-form a small product space. Three combinations are named, documented,
-and exercised in conformance:
-
-| Profile  | `--engine`        | `--storage` | `--on_unknown_fn`   | Use case                                                                 |
-|----------|-------------------|-------------|---------------------|--------------------------------------------------------------------------|
-| `ci`     | `reference_impl`  | `memory`    | `unimplemented`     | Hermetic, no on-disk state. The conformance `memory` profile and the CI smoke lanes. Slow but the source of truth for semantics (`docs/ENGINE_POLICY.md`). |
-| `duckdb` | `duckdb`          | `duckdb`    | `fallback`          | Persistent, GoogleSQL-via-DuckDB. The canonical `docker compose up` configuration; the conformance `duckdb` profile; the recommended day-to-day shape. |
-| `dev`    | `duckdb`          | `duckdb`    | `unimplemented`     | DuckDB analyzer + DuckDB persistence with the fallback bridge OFF, so transpiler-uncovered shapes surface as `UNIMPLEMENTED` instead of silently routing to the reference impl. Use when you're working on the transpiler itself and want every gap to fail loud. |
-
-Each profile is a thin label on top of the underlying flags; nothing in
-the gateway or the conformance harness changes behavior on the label,
-only on the flag combination. The two equivalent ways to select a
-profile:
+`emulator_main` runs a single fixed runtime today: the DuckDB engine
+backed by DuckDB storage. There are no `--engine` / `--storage` /
+`--on_unknown_fn` selectors anymore (those were removed when the
+ReferenceImpl engine and in-memory storage backends were deleted).
+The only knobs are `--host_port` and `--data_dir`:
 
 ```bash
-# 1. Use the engine's --profile shorthand (currently `ci` / `dev`;
-#    see `emulator_main --help`). `--profile` defaults engine + storage
-#    in one knob; explicit `--engine` / `--storage` flags always win:
-./bin/emulator_main --profile=ci
-./bin/emulator_main --profile=dev
+# Default: bind to 127.0.0.1:9060, use $HOME/.bigquery-emulator as the
+# DuckDB catalog root.
+./bin/emulator_main
 
-# 2. Set the underlying flags explicitly. Identical to --profile but
-#    surfaces the engine / storage decision in the command line:
-./bin/emulator_main --engine=reference_impl --storage=memory                    # ci
-./bin/emulator_main --engine=duckdb --storage=duckdb --on_unknown_fn=fallback   # duckdb (canonical)
-./bin/emulator_main --engine=duckdb --storage=duckdb                            # dev
+# Pick a port + hermetic data dir (used by tests, conformance,
+# `docker compose up`).
+./bin/emulator_main --host_port=127.0.0.1:9060 --data_dir=/tmp/bq-emu
 ```
 
-When the gateway spawns the engine (`task emulator:run-full`,
-`docker compose up`, the published Docker image, the goreleaser
-archive), it forwards every flag after the gateway-recognized set to
-the engine. So the same profile knobs work end-to-end:
+The gateway forwards `--data_dir` (and any of its hyphen-aliased
+equivalents — see `docs/SEEDING.md`) to `emulator_main` on spawn, so
+all of the following set the same DuckDB catalog root:
 
 ```bash
-./bin/bigquery-emulator-gateway --engine=duckdb --storage=duckdb --on_unknown_fn=fallback
-```
-
-For Docker, append the flags after the image name (the
-`docker/gateway_main.sh` shim forwards them):
-
-```bash
+./bin/bigquery-emulator-gateway --data-dir /var/lib/bq-emu
 docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1 \
-    --engine=duckdb --storage=duckdb --on_unknown_fn=fallback
+    --data-dir /var/lib/bq-emu
 ```
 
-The `duckdb` profile is the recommended day-to-day shape: it has the
-analyzer parity of the reference impl wherever the DuckDB transpiler
-has coverage, the persistent on-disk catalog under `--data_dir`
-(default `$HOME/.bigquery-emulator`), and the
-`--on_unknown_fn=fallback` bridge to the reference impl for shapes the
-transpiler does not yet cover. See [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
-for the engine-asymmetry rationale (DuckDB is the active development
-surface; the reference impl is maintenance-mode), and the conformance
-harness ([`conformance/README.md`](./conformance/README.md)) for how
-the same profile labels drive fixture selection.
+See [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the
+DuckDB-only policy decision and which DML / DDL shapes are still
+UNIMPLEMENTED, and the conformance harness
+([`conformance/README.md`](./conformance/README.md)) for the shape of
+the per-fixture diff.
 
 ## Seeding & CLI compatibility
 

@@ -46,7 +46,7 @@ namespace duckdb {
 namespace transpiler {
 namespace {
 
-// Mirrors `reference_impl_engine::MakeAnalyzerOptions` so the tests
+// Mirrors `duckdb_engine::MakeAnalyzerOptions` so the tests
 // resolve names through the same `LanguageOptions` snapshot the
 // engine itself uses. Drifting these two breaks function dispatch
 // (e.g. `IFNULL` resolves but `COALESCE` does not) in subtle ways

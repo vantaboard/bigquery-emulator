@@ -1,15 +1,11 @@
 # Bazel build for the BigQuery emulator's C++ engine entry point. This
-# `cc_binary` links the full GoogleSQL + reference_impl + DuckDB + gRPC
-# stack.
+# `cc_binary` links the full GoogleSQL + DuckDB + gRPC stack.
 #
-# Pull-in list mirrors the runtime factory in
-# `binaries/emulator_main/main.cc`: every storage backend the
-# `--storage` flag can pick (memory + duckdb), every engine backend
-# `--engine` can pick (reference_impl + duckdb), the gRPC front door,
-# and the catalog/query handlers it registers. The handlers
-# transitively pull in GoogleSQL's analyzer + the reference-impl
-# evaluator (see `//frontend/handlers:query_handler` and
-# `//backend/engine/reference_impl:reference_impl_engine`).
+# Pull-in list mirrors the runtime wiring in
+# `binaries/emulator_main/main.cc`: the DuckDB storage backend, the
+# DuckDB engine, the gRPC front door, and the catalog/query handlers
+# it registers. The handlers transitively pull in GoogleSQL's
+# analyzer (see `//frontend/handlers:query_handler`).
 #
 # Static C++/C linkage (`-static-libgcc` / `-static-libstdc++`) follows
 # the cloud-spanner-emulator precedent: it lets the binary run on
@@ -77,10 +73,7 @@ cc_binary(
         ":version",
         "//backend/engine",
         "//backend/engine/duckdb:duckdb_engine",
-        "//backend/engine/fallback:fallback_engine",
-        "//backend/engine/reference_impl:reference_impl_engine",
         "//backend/storage",
-        "//backend/storage:memory",
         "//backend/storage/duckdb:duckdb_storage",
         "//frontend/server:server",
         "@com_google_absl//absl/status:statusor",

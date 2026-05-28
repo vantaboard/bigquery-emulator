@@ -13,13 +13,13 @@
 
 - A **Go REST gateway** (`gateway_main`, package layout under `gateway/`) implementing the BigQuery public surface (projects/datasets/tables/jobs/queries/insertAll/...).
 - A **C++ engine subprocess** (`emulator_main`, layout under `frontend/` + `backend/`) that links GoogleSQL directly and exposes Catalog + Query gRPC services to the gateway.
-- **Pluggable engines** (Reference Impl on top of `googlesql::reference_impl::Evaluator` | DuckDB) and **pluggable storage** (in-memory | DuckDB+Parquet) behind two narrow C++ interfaces (`backend/engine/engine.h`, `backend/storage/storage.h`).
+- **DuckDB engine** (lowers GoogleSQL-analyzed AST to DuckDB SQL) backed by **DuckDB+Parquet storage**, behind two narrow C++ interfaces (`backend/engine/engine.h`, `backend/storage/storage.h`). The original ReferenceImpl engine and in-memory storage were removed once DuckDB reached parity for the supported surface; see `docs/ENGINE_POLICY.md`.
 
 Authoritative project intro: [`ROADMAP.md`](ROADMAP.md). Read its first ~100 lines before doing anything else.
 
 Build systems:
 
-- **Bazel** is the sole build system for the C++ engine (the analyzer + reference-impl engine + DuckDB engine + the production `emulator_main`). GoogleSQL is Bazel-only and is consumed via `local_path_override` to a sibling checkout at `/home/brighten-tompkins/Code/go-googlesql` (see `MODULE.bazel`).
+- **Bazel** is the sole build system for the C++ engine (the analyzer + DuckDB engine + the production `emulator_main`). GoogleSQL is Bazel-only and is consumed via `local_path_override` to a sibling checkout at `/home/brighten-tompkins/Code/go-googlesql` (see `MODULE.bazel`).
 - **Go modules** for everything in `gateway/`.
 
 Tooling pins live in `mise.toml` (with `direnv` driving `.envrc`); `Taskfile.yml` exposes `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`, etc.

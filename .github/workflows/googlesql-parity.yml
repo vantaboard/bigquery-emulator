@@ -18,14 +18,15 @@
 #                            smoke query set. Runs on every PR and on
 #                            `main` pushes.
 #   * Scheduled tier       — `tier: scheduled` job. Adds the standard
-#                            conformance lane (memory profile) for both
+#                            conformance lane (duckdb profile) for both
 #                            modes. Runs on a nightly cron + on
 #                            `workflow_dispatch -f tier=scheduled`.
-#   * Release tier         — `tier: release` job. Adds the duckdb
-#                            conformance lane on top of scheduled.
-#                            Runs on `workflow_dispatch -f tier=release`
-#                            and is the gate the release workflow can
-#                            point to before publishing.
+#   * Release tier         — `tier: release` job. Runs the same
+#                            conformance lane as scheduled today
+#                            (there is only one profile). Kept as a
+#                            distinct tier so future profiles can layer
+#                            in without a workflow rewrite. Triggered
+#                            via `workflow_dispatch -f tier=release`.
 #
 # Mode handoff details. Each "mode" leg is a dedicated job so a single
 # leg's slowness does not block the other; the comparator job aggregates
@@ -61,7 +62,7 @@ on:
   workflow_dispatch:
     inputs:
       tier:
-        description: 'Parity tier: pr (fast), scheduled (adds memory conformance), release (full)'
+        description: 'Parity tier: pr (fast), scheduled (adds conformance), release (full)'
         type: choice
         required: true
         default: pr
@@ -123,7 +124,6 @@ jobs:
       schema_version: ${{ steps.googlesql.outputs.schema-version }}
       compiler: ${{ steps.googlesql.outputs.compiler }}
       smoke_status: ${{ steps.smoke.outcome }}
-      conformance_memory_status: ${{ steps.conformance_memory.outcome }}
       conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
     steps:
       - name: Checkout
@@ -205,7 +205,7 @@ jobs:
       - name: Smoke query set (prebuilt)
         # Tiny deterministic query batch curated from the existing
         # conformance fixtures. Catches analyzer/catalog/runtime
-        # mismatches without paying for the full 24-fixture suite. PR
+        # mismatches without paying for the full fixture suite. PR
         # tier stops here; scheduled/release tiers continue.
         run: |
           set -euo pipefail
@@ -217,31 +217,19 @@ jobs:
           cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true
           cp conformance/fixtures/error_unknown_table.yaml          "$smoke/" || true
           task conformance:run \
-            PROFILE=memory \
+            PROFILE=duckdb \
             FIXTURES="$smoke" \
             OUTPUT=json \
             OUTPUT_FILE=conformance-smoke-prebuilt.json
           rm -rf "$smoke"
 
-      - name: Conformance — memory profile (prebuilt)
-        id: conformance_memory
-        # Scheduled and release tiers run the standard memory-profile
-        # conformance lane against both modes. The PR tier skips this
-        # to stay within a single-runner budget.
-        if: env.PARITY_TIER != 'pr'
-        run: |
-          set -euo pipefail
-          task conformance:run \
-            PROFILE=memory \
-            OUTPUT=json \
-            OUTPUT_FILE=conformance-memory-prebuilt.json
-
       - name: Conformance — duckdb profile (prebuilt)
         id: conformance_duckdb
-        # Release tier adds the duckdb profile — same conformance fixtures,
-        # different storage backing, used to certify the release binary
-        # also works against the persistent DuckDB engine.
-        if: env.PARITY_TIER == 'release'
+        # Scheduled and release tiers run the standard conformance
+        # lane against both modes. The PR tier skips this to stay
+        # within a single-runner budget. Today there is only one
+        # profile (`duckdb`).
+        if: env.PARITY_TIER != 'pr'
         run: |
           set -euo pipefail
           task conformance:run \
@@ -274,7 +262,6 @@ jobs:
       googlesql_tag: ${{ steps.googlesql.outputs.googlesql-tag }}
       compiler: clang-host
       smoke_status: ${{ steps.smoke.outcome }}
-      conformance_memory_status: ${{ steps.conformance_memory.outcome }}
       conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
     steps:
       - name: Checkout
@@ -352,25 +339,15 @@ jobs:
           cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true
           cp conformance/fixtures/error_unknown_table.yaml          "$smoke/" || true
           task conformance:run \
-            PROFILE=memory \
+            PROFILE=duckdb \
             FIXTURES="$smoke" \
             OUTPUT=json \
             OUTPUT_FILE=conformance-smoke-source.json
           rm -rf "$smoke"
 
-      - name: Conformance — memory profile (source)
-        id: conformance_memory
-        if: env.PARITY_TIER != 'pr'
-        run: |
-          set -euo pipefail
-          task conformance:run \
-            PROFILE=memory \
-            OUTPUT=json \
-            OUTPUT_FILE=conformance-memory-source.json
-
       - name: Conformance — duckdb profile (source)
         id: conformance_duckdb
-        if: env.PARITY_TIER == 'release'
+        if: env.PARITY_TIER != 'pr'
         run: |
           set -euo pipefail
           task conformance:run \
@@ -425,8 +402,6 @@ jobs:
           SOURCE_RESULT: ${{ needs.build-source.result }}
           PREBUILT_SMOKE: ${{ needs.build-prebuilt.outputs.smoke_status }}
           SOURCE_SMOKE: ${{ needs.build-source.outputs.smoke_status }}
-          PREBUILT_CONF_MEM: ${{ needs.build-prebuilt.outputs.conformance_memory_status }}
-          SOURCE_CONF_MEM: ${{ needs.build-source.outputs.conformance_memory_status }}
           PREBUILT_CONF_DUCKDB: ${{ needs.build-prebuilt.outputs.conformance_duckdb_status }}
           SOURCE_CONF_DUCKDB: ${{ needs.build-source.outputs.conformance_duckdb_status }}
           PREBUILT_GSQ: ${{ needs.build-prebuilt.outputs.googlesql_commit }}
@@ -444,8 +419,6 @@ jobs:
             --source-result "$SOURCE_RESULT" \
             --prebuilt-smoke "$PREBUILT_SMOKE" \
             --source-smoke "$SOURCE_SMOKE" \
-            --prebuilt-conformance-memory "$PREBUILT_CONF_MEM" \
-            --source-conformance-memory "$SOURCE_CONF_MEM" \
             --prebuilt-conformance-duckdb "$PREBUILT_CONF_DUCKDB" \
             --source-conformance-duckdb "$SOURCE_CONF_DUCKDB" \
             --prebuilt-googlesql-commit "$PREBUILT_GSQ" \

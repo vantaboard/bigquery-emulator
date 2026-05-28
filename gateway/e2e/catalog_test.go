@@ -151,32 +151,21 @@ func (e *emulatorEnv) tearDown() {
 
 // emulatorFlags bundles the subset of `emulator_main` flags the E2E
 // tests need to control. Zero values mean "do not pass the flag" so
-// the emulator's own defaults apply (reference_impl engine + in-memory
-// storage). Tests that need the canonical Phase 5i `--engine=duckdb
-// --storage=duckdb --on_unknown_fn=fallback` configuration construct a
-// fully-populated `emulatorFlags`.
+// the emulator's own defaults apply (DuckDB engine + DuckDB storage
+// rooted at `$HOME/.bigquery-emulator`). Tests that want a hermetic
+// data directory populate `dataDir`.
 type emulatorFlags struct {
-	// engine maps to `--engine`. Empty leaves the flag off so the
-	// emulator's default (`reference_impl`) applies.
-	engine string
-	// storage maps to `--storage`. Empty leaves the flag off so the
-	// emulator's default (`memory`) applies.
-	storage string
-	// onUnknownFn maps to `--on_unknown_fn`. Empty leaves the flag off
-	// so the emulator's default (`unimplemented`) applies.
-	onUnknownFn string
 	// dataDir maps to `--data_dir`. Empty defers to the emulator's
 	// default; tests that want a hermetic data dir pass `t.TempDir()`.
 	dataDir string
 }
 
-// startEmulator is the default-configuration helper that mirrors the
-// pre-Phase-5i behavior: `--storage=memory` with no engine override.
-// New tests that need a different engine/storage combination call
-// `startEmulatorWithFlags` directly.
+// startEmulator is the default-configuration helper for tests that
+// only need a fresh DuckDB-backed emulator with a per-test data
+// directory.
 func startEmulator(t *testing.T) *emulatorEnv {
 	t.Helper()
-	return startEmulatorWithFlags(t, emulatorFlags{storage: "memory"})
+	return startEmulatorWithFlags(t, emulatorFlags{dataDir: t.TempDir()})
 }
 
 // startEmulatorWithFlags launches the engine subprocess with the
@@ -198,15 +187,6 @@ func startEmulatorWithFlags(t *testing.T, flags emulatorFlags) *emulatorEnv {
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 
 	args := []string{"--host_port", addr}
-	if flags.engine != "" {
-		args = append(args, "--engine", flags.engine)
-	}
-	if flags.storage != "" {
-		args = append(args, "--storage", flags.storage)
-	}
-	if flags.onUnknownFn != "" {
-		args = append(args, "--on_unknown_fn", flags.onUnknownFn)
-	}
 	if flags.dataDir != "" {
 		args = append(args, "--data_dir", flags.dataDir)
 	}
@@ -272,10 +252,10 @@ func doJSON(t *testing.T, method, url string, body []byte) (int, []byte) {
 	return resp.StatusCode, respBody
 }
 
-// TestTabledataRoundTrip is the Phase 3j end-to-end story: create a
-// dataset and a table over REST, stream two rows in with
+// TestTabledataRoundTrip is the end-to-end story: create a dataset
+// and a table over REST, stream two rows in with
 // tabledata.insertAll, and read them back out with tabledata.list.
-// Exercises the full gateway -> Catalog gRPC -> InMemoryStorage path.
+// Exercises the full gateway -> Catalog gRPC -> DuckDBStorage path.
 func TestTabledataRoundTrip(t *testing.T) {
 	env := startEmulator(t)
 

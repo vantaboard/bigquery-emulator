@@ -11,7 +11,6 @@ description: |
   Constant arithmetic plus a STRING literal in a single projection.
   Exercises the analyzer's literal folding + the gateway's per-column
   type emission for INT64 / STRING side-by-side.
-profiles: [memory, duckdb]
 project_id: proj-select-computed
 query: SELECT 1 + 2 AS sum, 'hello' AS greeting
 expected:

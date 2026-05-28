@@ -1,8 +1,8 @@
 # CI for the BigQuery emulator.
 #
 # Mirrors `task ci:run` (see Taskfile.yml): `go vet`, `go test`, a
-# Bazel build of the canonical engine binary (GoogleSQL +
-# reference_impl + DuckDB + gRPC), and a Go build of the gateway.
+# Bazel build of the canonical engine binary (GoogleSQL + DuckDB +
+# gRPC), and a Go build of the gateway.
 #
 # linux/amd64 only: the canonical Bazel-built engine
 # `//binaries/emulator_main:emulator_main` links GoogleSQL, whose

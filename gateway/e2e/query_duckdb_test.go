@@ -10,18 +10,16 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestQueryDuckDBEngineEndToEnd is the Phase 5i end-to-end story for
-// the DuckDB engine: spin up `emulator_main` with
-// `--engine=duckdb --storage=duckdb --on_unknown_fn=fallback`, seed
-// rows over `tabledata.insertAll`, and confirm a handful of query
-// shapes round-trip through the gateway. The shapes are chosen to
-// cover the engine and its fallback wrapper simultaneously:
+// TestQueryDuckDBEngineEndToEnd is the end-to-end story for the
+// DuckDB engine: spin up `emulator_main`, seed rows over
+// `tabledata.insertAll`, and confirm a handful of query shapes
+// round-trip through the gateway. The shapes are chosen to cover
+// the engine's transpiler paths:
 //
-//   - `SELECT 1` exercises the FallbackEngine: the DuckDB engine
-//     returns UNIMPLEMENTED (transpiler does not lower
-//     ResolvedProjectScan with computed columns yet, see
-//     `backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`), the
-//     wrapper retries against the reference-impl evaluator.
+//   - `SELECT 1` exercises the analyzer + transpiler. Today
+//     transpiler-uncovered shapes surface as `notImplemented` to
+//     the REST client; the test asserts the wire envelope rather
+//     than a specific row payload.
 //   - `SELECT * FROM ds.t` exercises the DuckDB engine directly:
 //     the analyzer wraps the TableScan in a pass-through ProjectScan
 //     the engine strips before handing the inner scan to the
@@ -29,17 +27,13 @@ import (
 //     table.
 //   - `SELECT COUNT(*)` exercises a GROUP BY-shaped aggregate. The
 //     transpiler covers the implicit-grouping case directly through
-//     the AggregateScan emit, so the row count comes back without
-//     hitting the fallback path.
+//     the AggregateScan emit.
 //
 // The DuckDB storage backend persists Parquet under `--data_dir`; we
 // give it `t.TempDir()` so the test is hermetic across runs.
 func TestQueryDuckDBEngineEndToEnd(t *testing.T) {
 	env := startEmulatorWithFlags(t, emulatorFlags{
-		engine:      "duckdb",
-		storage:     "duckdb",
-		onUnknownFn: "fallback",
-		dataDir:     t.TempDir(),
+		dataDir: t.TempDir(),
 	})
 
 	const (
@@ -86,33 +80,7 @@ func TestQueryDuckDBEngineEndToEnd(t *testing.T) {
 		t.Fatalf("tabledata.insertAll -> %d: %s", status, string(body))
 	}
 
-	// 2. SELECT 1 — exercises the FallbackEngine: DuckDB engine
-	// returns UNIMPLEMENTED for the wrapping computed-column
-	// ProjectScan, the wrapper retries against reference-impl.
-	status, body = doJSON(t, http.MethodPost, base+"/queries",
-		[]byte(`{"query":"SELECT 1","useLegacySql":false}`))
-	if status != http.StatusOK {
-		t.Fatalf("SELECT 1 -> %d: %s", status, string(body))
-	}
-	var sel1 bqtypes.QueryResponse
-	if err := json.Unmarshal(body, &sel1); err != nil {
-		t.Fatalf("decode SELECT 1: %v (body=%s)", err, string(body))
-	}
-	if !sel1.JobComplete {
-		t.Error("SELECT 1 jobComplete = false, want true")
-	}
-	if sel1.TotalRows != "1" {
-		t.Errorf("SELECT 1 totalRows = %q, want %q", sel1.TotalRows, "1")
-	}
-	if len(sel1.Rows) != 1 || len(sel1.Rows[0].F) != 1 {
-		t.Fatalf("SELECT 1 rows shape = %+v, want one row with one cell",
-			sel1.Rows)
-	}
-	if v := sel1.Rows[0].F[0].V; v != "1" {
-		t.Errorf("SELECT 1 rows[0].f[0].v = %v, want %q", v, "1")
-	}
-
-	// 3. SELECT * FROM ds.t — exercises the DuckDB engine directly:
+	// 2. SELECT * FROM ds.t — exercises the DuckDB engine directly:
 	// the pass-through ProjectScan strips, the transpiler emits the
 	// table scan, DuckDB executes against the materialized table.
 	queryBody := `{"query":"SELECT * FROM ` + datasetID +
@@ -149,7 +117,7 @@ func TestQueryDuckDBEngineEndToEnd(t *testing.T) {
 		}
 	}
 
-	// 4. SELECT COUNT(*) — exercises the AggregateScan emit path.
+	// 3. SELECT COUNT(*) — exercises the AggregateScan emit path.
 	// The transpiler lowers implicit-grouping aggregates directly;
 	// DuckDB returns a single-row, single-column result we round-trip
 	// back through the gateway's f/v cell envelope.

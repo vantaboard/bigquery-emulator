@@ -65,25 +65,6 @@ type Config struct {
 	// mode). Maps to `--engine-binary` / `--engine_binary`.
 	EngineBinary string
 
-	// Engine names the engine analysis backend the C++ subprocess
-	// should use (e.g. "memory", "duckdb-backed"). Passed straight
-	// through to emulator_main as `--engine`.
-	Engine string
-
-	// Storage names the persistent storage backend the C++ subprocess
-	// should use ("memory" or "duckdb"). Passed straight through to
-	// emulator_main as `--storage`.
-	Storage string
-
-	// Profile names the engine's runtime profile (e.g. "default",
-	// "test"). Passed through as `--profile`.
-	Profile string
-
-	// OnUnknownFn controls how the engine handles SQL functions it
-	// does not recognize ("error", "ignore", "skip"). Passed through
-	// as `--on_unknown_fn`.
-	OnUnknownFn string
-
 	// DataDir is the persistent storage root. Forwarded to the engine
 	// as `--data_dir`. Maps to `--data-dir` / `--data_dir` /
 	// `BIGQUERY_EMULATOR_DATA_DIR`.
@@ -218,16 +199,6 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 		"Port on which to run the internal engine gRPC server.")
 	registerString(fs, &cfg.EngineBinary, []string{"engine-binary", "engine_binary"},
 		"Path to the C++ engine binary. Empty disables the subprocess.")
-	registerString(fs, &cfg.Engine, []string{"engine"},
-		"Engine analysis backend. Passed through to emulator_main as --engine.")
-	registerString(fs, &cfg.Storage, []string{"storage"},
-		"Storage backend (memory|duckdb). Passed through to emulator_main as --storage.")
-	registerString(fs, &cfg.Profile, []string{"profile"},
-		"Engine runtime profile. Passed through to emulator_main as --profile.")
-	registerString(fs, &cfg.OnUnknownFn,
-		[]string{"on-unknown-fn", "on_unknown_fn"},
-		"Engine policy for unknown SQL functions (error|ignore|skip). "+
-			"Passed through to emulator_main as --on_unknown_fn.")
 	registerString(fs, &cfg.DataDir,
 		[]string{"data-dir", "data_dir"},
 		"Persistent storage root. Passed to the engine as --data_dir. "+
@@ -335,10 +306,6 @@ func (c Config) ToOptions(engineBinary string) (httpAddr, engineAddr string, eng
 func (c Config) engineCLIArgs() []string {
 	type pair struct{ name, value string }
 	pairs := []pair{
-		{"--engine", c.Engine},
-		{"--storage", c.Storage},
-		{"--profile", c.Profile},
-		{"--on_unknown_fn", c.OnUnknownFn},
 		{"--data_dir", c.DataDir},
 	}
 	args := make([]string, 0, len(pairs)*2)

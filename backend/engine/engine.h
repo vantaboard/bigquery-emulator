@@ -3,25 +3,16 @@
 
 // Engine is the C++ engine's query execution interface.
 //
-// Two implementations land in Phase 5 of ROADMAP.md:
+// The only implementation lives at `backend/engine/duckdb/`: it
+// transpiles the GoogleSQL ResolvedAST into DuckDB SQL via a custom
+// visitor and executes it through DuckDB's C++ client.
 //
-//   * `backend/engine/reference_impl/` — wraps
-//     `googlesql::reference_impl::Algebrizer` + `Evaluator`. Slow,
-//     row-by-row, but the source of truth for semantic parity. Drives
-//     the conformance harness and covers corners DuckDB cannot reach
-//     yet.
-//   * `backend/engine/duckdb/` — transpiles the GoogleSQL ResolvedAST
-//     into DuckDB SQL via a custom visitor and executes it through
-//     DuckDB's C++ client. Massive OLAP speedup at the cost of
-//     dialect fidelity.
-//
-// Phase 3a (this header) defines the abstract surface only. The
+// This header defines the abstract surface only. The
 // `googlesql::Catalog` parameter is forward-declared so this header
-// stays free of any GoogleSQL include dependency until the vendor
-// lands in Phase 4 (`googlesql-vendor-catalog_u6d7e8f9.plan.md`). The
-// `AnalyzedQuery` and `RowSource` opaque interfaces let us return a
-// resolved AST handle and a streamed result without leaking
-// engine-specific types up to the gRPC handlers.
+// stays free of any GoogleSQL include dependency. The `AnalyzedQuery`
+// and `RowSource` opaque interfaces let us return a resolved AST
+// handle and a streamed result without leaking engine-specific types
+// up to the gRPC handlers.
 
 #include <cstdint>
 #include <memory>
@@ -36,9 +27,8 @@
 #include "backend/storage/storage.h"
 
 // Forward-declared so this header does not pull in any GoogleSQL
-// headers. The reference-impl engine downcasts the
-// `googlesql::Catalog*` to its own catalog adapter when it actually
-// runs analysis (Phase 4+).
+// headers. The DuckDB engine downcasts the `googlesql::Catalog*` to
+// its own catalog adapter when it actually runs analysis.
 namespace googlesql {
 class Catalog;
 }  // namespace googlesql
@@ -75,10 +65,9 @@ struct QueryRequest {
   bool use_legacy_sql = false;
 };
 
-// Opaque handle for a parsed + name-resolved query. The reference-impl
-// and DuckDB engines each hide their own ResolvedAST plus any side
-// state (extracted parameters, default dataset, etc.) behind this
-// interface.
+// Opaque handle for a parsed + name-resolved query. The DuckDB engine
+// hides its own ResolvedAST plus any side state (extracted
+// parameters, default dataset, etc.) behind this interface.
 class AnalyzedQuery {
  public:
   virtual ~AnalyzedQuery();
@@ -89,9 +78,8 @@ class AnalyzedQuery {
 };
 
 // Streamed query result. The engine produces rows one at a time;
-// `Next` returns false on end-of-stream. Implementations may (and the
-// DuckDB engine in Phase 5.B does) batch internally and stream rows
-// out one-by-one.
+// `Next` returns false on end-of-stream. The DuckDB engine batches
+// internally and streams rows out one-by-one.
 class RowSource {
  public:
   virtual ~RowSource();
@@ -179,14 +167,9 @@ class Engine {
   // (CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE / ALTER TABLE
   // ADD COLUMN). The engine mutates the underlying `Storage` -- there
   // is no row-shaped reply, just success (OK) or a status mapped to
-  // the matching gRPC code. Plan 35 ships DDL on the DuckDB engine
-  // only; the reference-impl engine returns UNIMPLEMENTED with a
-  // "served by the DuckDB engine" rationale so the FallbackEngine
-  // wrapper routes DDL to the DuckDB engine the same way it routes
-  // MERGE (HANDOFF.md §4.3 path 3, "DuckDB-only MERGE", extended to
-  // cover DDL in Plan 35). Engines that do not implement DDL yet
-  // return `absl::StatusCode::kUnimplemented`; the frontend handler
-  // maps that to gRPC `UNIMPLEMENTED`.
+  // the matching gRPC code. Engines that do not implement DDL return
+  // `absl::StatusCode::kUnimplemented`; the frontend handler maps
+  // that to gRPC `UNIMPLEMENTED`.
   virtual absl::Status ExecuteDdl(const QueryRequest& request,
                                    googlesql::Catalog* catalog) {
     (void)request;

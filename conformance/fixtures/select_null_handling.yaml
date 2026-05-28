@@ -13,7 +13,6 @@ description: |
   IS NULL / COALESCE round-trip. Verifies the engine's NULL semantics
   for both predicate emission (boolean column) and default-value
   substitution against a NULLABLE column.
-profiles: [memory, duckdb]
 project_id: proj-select-null
 dataset_id: ds_select_null
 setup:
@@ -24,9 +23,13 @@ setup:
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: name, type: STRING, mode: NULLABLE}
-  - sql: |
-      INSERT INTO ds_select_null.people (id, name)
-      VALUES (1, 'ada'), (2, NULL), (3, 'grace')
+  - rows:
+      dataset: ds_select_null
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: null}
+        - {id: 3, name: grace}
 query: |
   SELECT id,
          name IS NULL AS is_null,

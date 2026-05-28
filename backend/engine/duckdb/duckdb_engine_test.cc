@@ -1,33 +1,31 @@
-// Unit tests for the DuckDB query engine. The tests mirror the
-// reference-impl engine fixture so the two engines run against the
-// same `InMemoryStorage` shape and the assertions read symmetric:
-// the only intentional difference is the engine kind under test.
-//
-// The tests stay one layer below the gRPC service boundary so the
-// engine machinery (analyze + transpile + attach + execute + cell
-// conversion) is exercised end-to-end without spinning up the
-// frontend. Queries the transpiler does not yet lower
-// (`SHAPE_TRACKER.md` rows still on `not_started`) return
-// UNIMPLEMENTED -- that is the contract the engine factory's
-// `--on_unknown_fn=fallback` wrapper reads to delegate to the
-// reference-impl evaluator.
+// Unit tests for the DuckDB query engine. The tests stay one layer
+// below the gRPC service boundary so the engine machinery (analyze
+// + transpile + attach + execute + cell conversion) is exercised
+// end-to-end without spinning up the frontend. Queries the
+// transpiler does not yet lower (`SHAPE_TRACKER.md` rows still on
+// `not_started`) return UNIMPLEMENTED.
 
 #include "backend/engine/duckdb/duckdb_engine.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
-#include "backend/storage/memory/in_memory_storage.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/language_options.h"
@@ -40,6 +38,8 @@ namespace backend {
 namespace engine {
 namespace duckdb {
 namespace {
+
+namespace fs = std::filesystem;
 
 // Mirrors the LanguageOptions snapshot the engine uses internally so
 // the per-call `GoogleSqlCatalog` resolves names the same way.
@@ -54,8 +54,25 @@ namespace {
 class DuckDBEngineTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    storage_ = std::make_unique<storage::memory::InMemoryStorage>();
+    const char* tmpdir_env = std::getenv("TMPDIR");
+    const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
+    std::random_device rd;
+    std::mt19937_64 rng(rd());
+    data_dir_ = fs::path(tmpdir) /
+                absl::StrCat("bqemu-duckdb-engine-test-", rng());
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
+    auto opened = storage::duckdb::DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(opened.ok()) << opened.status();
+    storage_ = std::move(opened).value();
     engine_ = std::make_unique<DuckDBEngine>(storage_.get());
+  }
+
+  void TearDown() override {
+    engine_.reset();
+    storage_.reset();
+    std::error_code ec;
+    fs::remove_all(data_dir_, ec);
   }
 
   QueryRequest MakeRequest(absl::string_view sql) {
@@ -116,7 +133,8 @@ class DuckDBEngineTest : public ::testing::Test {
     return {std::move(type_factory), std::move(catalog)};
   }
 
-  std::unique_ptr<storage::memory::InMemoryStorage> storage_;
+  fs::path data_dir_;
+  std::unique_ptr<storage::duckdb::DuckDBStorage> storage_;
   std::unique_ptr<DuckDBEngine> engine_;
 };
 
@@ -143,10 +161,9 @@ TEST_F(DuckDBEngineTest, DryRunSelect1ReturnsInt64Column) {
 TEST_F(DuckDBEngineTest, ExecuteQuerySelect1FallsBackToUnimplemented) {
   // `SELECT 1` analyzes to ProjectScan(SingleRowScan, computed
   // literal). The transpiler's `EmitProjectScan` is `not_started`,
-  // so the engine must report UNIMPLEMENTED -- the engine factory's
-  // `--on_unknown_fn=fallback` wrapper takes the reference-impl path
-  // from there. We pin the status code so the wrapper has a stable
-  // contract to read.
+  // so the engine must report UNIMPLEMENTED. The status code is
+  // pinned so the gateway has a stable contract to translate to
+  // `notImplemented`.
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(MakeRequest("SELECT 1 AS one"),
                                        bundle.catalog.get());
@@ -230,9 +247,8 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectIdOnlyReturnsUnimplemented) {
   // `SELECT id FROM t` lands a ProjectScan whose column_list
   // ([id]) differs from the input TableScan's column_list
   // ([id, name]), so the engine refuses to strip it and returns
-  // UNIMPLEMENTED. This is the contract the fallback policy reads
-  // to retry against the reference-impl engine; pin it so a future
-  // tightening of the strip rules surfaces here.
+  // UNIMPLEMENTED. Pin the status so a future tightening of the
+  // strip rules surfaces here.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(
@@ -267,17 +283,11 @@ TEST_F(DuckDBEngineTest, ExecuteQueryRejectsNullCatalog) {
 }
 
 // ---------------------------------------------------------------------------
-// ExecuteDml (Plan 34 -- DuckDB-only MERGE)
+// ExecuteDml
 //
-// The DuckDB engine's DML surface is intentionally narrow: only MERGE
-// lands here today, since INSERT / UPDATE / DELETE already run on the
-// reference-impl engine through `PreparedModify`. The `FallbackEngine`
-// wrapper that the canonical Phase 5i binary configures (see
-// `--engine=duckdb --on_unknown_fn=fallback`) routes the non-MERGE
-// DML kinds to the reference-impl engine when this engine returns
-// UNIMPLEMENTED.
-//
-// These tests pin:
+// The DuckDB engine implements MERGE end-to-end and surfaces
+// UNIMPLEMENTED for INSERT / UPDATE / DELETE statements that have not
+// yet been wired through DuckDB. These tests pin:
 //
 //   * MERGE WHEN MATCHED + WHEN NOT MATCHED rewrites the target table
 //     atomically through `Storage::OverwriteRows` and surfaces an
@@ -285,9 +295,8 @@ TEST_F(DuckDBEngineTest, ExecuteQueryRejectsNullCatalog) {
 //     updatedRowCount, deletedRowCount) by diffing the pre-MERGE
 //     snapshot against the post-MERGE state on the synthetic primary
 //     key (column 0; see `backend/catalog/storage_table.cc`).
-//   * INSERT / UPDATE / DELETE return UNIMPLEMENTED so the
-//     FallbackEngine wrapper hands them off to the reference-impl
-//     engine (which already runs all three through PreparedModify).
+//   * INSERT / UPDATE / DELETE return UNIMPLEMENTED so callers see a
+//     stable status code when those paths land on DuckDB.
 //   * MERGE on a target table whose schema is not backed by a
 //     StorageTable surfaces FAILED_PRECONDITION (the engine has no
 //     way to write rows back through a non-storage catalog Table).
@@ -339,10 +348,8 @@ TEST_F(DuckDBEngineTest, ExecuteDmlMergeMatchedAndNotMatchedUpdatesStorage) {
 TEST_F(DuckDBEngineTest, ExecuteDmlInsertFallsBackToUnimplemented) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  // INSERT lives on the reference-impl engine; the DuckDB engine
-  // returns UNIMPLEMENTED so the FallbackEngine wrapper takes over.
-  // We pin the status code so the wrapper has a stable contract to
-  // read.
+  // INSERT on the DuckDB engine currently returns UNIMPLEMENTED.
+  // Pin the status code so callers see a stable contract.
   auto stats = engine_->ExecuteDml(
       MakeRequest("INSERT INTO ds.people (id, name) VALUES (10, 'kay')"),
       bundle.catalog.get());
@@ -385,12 +392,10 @@ TEST_F(DuckDBEngineTest, ExecuteDmlRejectsNullCatalog) {
 }
 
 // ---------------------------------------------------------------------------
-// ExecuteDdl (Plan 35 -- DuckDB-only DDL)
+// ExecuteDdl
 //
-// The DuckDB engine owns the DDL surface end-to-end. The
-// reference-impl engine returns UNIMPLEMENTED for ExecuteDdl, so
-// the FallbackEngine wrapper retries DDL against this engine.
-// These tests pin the four DDL shapes the plan ships:
+// The DuckDB engine owns the DDL surface end-to-end. These tests
+// pin the four DDL shapes the engine ships:
 //
 //   * CREATE TABLE (schema-only) lands an empty table on storage
 //     under the BigQuery-typed schema we pass through

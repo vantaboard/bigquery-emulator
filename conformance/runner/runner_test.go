@@ -41,7 +41,7 @@ func TestLoadValidFixture(t *testing.T) {
 	}
 }
 
-func TestLoadDefaultsToBothProfiles(t *testing.T) {
+func TestLoadDefaultsToActiveProfileSet(t *testing.T) {
 	body := []byte(`name: test
 query: SELECT 1
 expected:
@@ -52,8 +52,8 @@ expected:
 	if err != nil {
 		t.Fatalf("loadBytes: %v", err)
 	}
-	if len(f.Profiles) != 2 {
-		t.Fatalf("profiles=%v, want 2 default entries", f.Profiles)
+	if len(f.Profiles) != len(defaultProfiles) {
+		t.Fatalf("profiles=%v, want %d default entries", f.Profiles, len(defaultProfiles))
 	}
 }
 
@@ -607,12 +607,12 @@ func TestResolveProfilesDefaultsToAll(t *testing.T) {
 }
 
 func TestResolveProfilesFiltersToSubset(t *testing.T) {
-	got, err := resolveProfiles([]string{"memory"})
+	got, err := resolveProfiles([]string{"duckdb"})
 	if err != nil {
 		t.Fatalf("resolveProfiles: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "memory" {
-		t.Fatalf("got=%v, want [memory]", got)
+	if len(got) != 1 || got[0].Name != "duckdb" {
+		t.Fatalf("got=%v, want [duckdb]", got)
 	}
 }
 

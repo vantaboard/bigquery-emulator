@@ -7,7 +7,6 @@ name: error_unknown_function
 description: |
   SELECT NOT_A_FUNCTION(1) returns HTTP 400 with a message mentioning
   the unrecognized function name.
-profiles: [memory, duckdb]
 project_id: proj-error-unknown-function
 query: SELECT NOT_A_FUNCTION(1)
 expected:

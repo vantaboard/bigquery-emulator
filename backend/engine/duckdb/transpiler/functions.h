@@ -19,22 +19,25 @@
 //   * `kSkiplist` — the function is intentionally out of scope today
 //                   (BigQuery-specific semantics or no DuckDB analog).
 //                   The transpiler returns `""` from the relevant
-//                   emit, the engine surfaces `UNIMPLEMENTED`, and the
-//                   `FallbackEngine` wrapper retries on the reference-
-//                   impl evaluator.
+//                   emit and the engine surfaces `UNIMPLEMENTED`
+//                   from `ExecuteQuery`.
 //   * `kFallback` — the function *could* lower but a dedicated rewrite
 //                   pass hasn't landed yet (e.g. interval arithmetic
 //                   for DATE_ADD). Same runtime behavior as
 //                   `kSkiplist`; the distinction is documentation +
 //                   the log message the emitter records, so the
 //                   conformance harness can tell deliberate skips
-//                   from "not implemented yet" cases.
+//                   from "not implemented yet" cases. ("Fallback" is
+//                   a vestigial name from a previous build with a
+//                   separate reference-impl bridge engine; today both
+//                   `kSkiplist` and `kFallback` surface as
+//                   UNIMPLEMENTED on the DuckDB-only runtime.)
 //
 // `SAFE.<fn>` form is not represented here. The transpiler checks
 // `ResolvedFunctionCallBase::error_mode() == SAFE_ERROR_MODE` and
 // short-circuits to `""` before consulting this table; SAFE mode has
-// no native DuckDB analog yet, so every safe-form call falls back
-// independent of the underlying function's disposition.
+// no native DuckDB analog yet, so every safe-form call surfaces as
+// UNIMPLEMENTED independent of the underlying function's disposition.
 
 #include <string>
 

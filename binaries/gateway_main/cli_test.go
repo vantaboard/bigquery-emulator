@@ -150,16 +150,6 @@ func TestParseArgs_HyphenAndUnderscoreAliases(t *testing.T) {
 			},
 		},
 		{
-			checkName: "on-unknown-fn",
-			hyphen:    []string{"--on-unknown-fn=ignore"},
-			underbar:  []string{"--on_unknown_fn=ignore"},
-			check: func(t *testing.T, cfg Config) {
-				if cfg.OnUnknownFn != "ignore" {
-					t.Errorf("OnUnknownFn=%q, want ignore", cfg.OnUnknownFn)
-				}
-			},
-		},
-		{
 			checkName: "seed-data-file/seed-yaml",
 			hyphen:    []string{"--seed-data-file=a.yaml", "--seed-data-file=b.yaml"},
 			underbar:  []string{"--seed-yaml=a.yaml", "--seed-yaml=b.yaml"},
@@ -260,10 +250,6 @@ func TestParseArgs_EnvFallbacks(t *testing.T) {
 // parses regardless of which alias the operator typed.
 func TestParseArgs_EngineCLIArgs(t *testing.T) {
 	cfg, err := parseArgs([]string{
-		"--engine=memory",
-		"--storage=duckdb",
-		"--profile=default",
-		"--on-unknown-fn=error",
 		"--data-dir=/var/lib/bq",
 	}, &bytes.Buffer{}, emptyEnv)
 	if err != nil {
@@ -272,10 +258,6 @@ func TestParseArgs_EngineCLIArgs(t *testing.T) {
 
 	got := cfg.engineCLIArgs()
 	want := []string{
-		"--engine", "memory",
-		"--storage", "duckdb",
-		"--profile", "default",
-		"--on_unknown_fn", "error",
 		"--data_dir", "/var/lib/bq",
 	}
 	if !reflect.DeepEqual(got, want) {

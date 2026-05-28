@@ -405,11 +405,11 @@ COPY LICENSE /LICENSE
 COPY docker/gateway_main.sh /usr/local/bin/bigquery-emulator-gateway
 RUN chmod +x /usr/local/bin/bigquery-emulator-gateway
 
-# Persistent data dir consumed by `--storage=duckdb` (the default is
-# `--storage=memory`, so this directory only matters when the operator
-# explicitly opts into the persistent storage backend). WORKDIR + VOLUME
-# guarantee the data persists across `docker run` cycles when the
-# operator mounts the volume.
+# Persistent data dir consumed by the DuckDB storage backend (now the
+# only backend). The emulator opens a `catalog.duckdb` file under this
+# directory and persists the catalog + table rows across boots.
+# WORKDIR + VOLUME guarantee the data survives `docker run` cycles
+# when the operator mounts the volume.
 WORKDIR /var/lib/bigquery-emulator
 VOLUME ["/var/lib/bigquery-emulator"]
 
@@ -426,8 +426,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O - http://localhost:9050/healthz >/dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/usr/local/bin/bigquery-emulator-gateway"]
-# Default profile: gateway + engine (the engine defaults to
-# `--profile=ci` shape: reference_impl + memory). `--copy_engine_stderr`
+# Default: gateway + engine (the engine runs the DuckDB engine + DuckDB
+# storage; there is no other runtime today). `--copy_engine_stderr`
 # surfaces engine logs on the container's stderr so a `docker logs`
 # diagnoses the engine subprocess too.
 CMD ["--http_port=9050", "--grpc_port=9060", "--copy_engine_stderr"]

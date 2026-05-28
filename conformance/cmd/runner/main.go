@@ -20,8 +20,9 @@ import (
 	"github.com/vantaboard/bigquery-emulator/conformance/runner"
 )
 
-// stringSliceFlag is a repeatable flag value, so `--profile memory
-// --profile duckdb` accumulates into one slice rather than overwriting.
+// stringSliceFlag is a repeatable flag value, so `--profile duckdb`
+// (and any future profile names) accumulate into one slice rather
+// than overwriting.
 type stringSliceFlag []string
 
 func (s *stringSliceFlag) String() string { return strings.Join(*s, ",") }
@@ -68,8 +69,7 @@ Flags:`)
 		fs.PrintDefaults()
 		fmt.Fprintln(fs.Output(), `
 Profiles:
-  memory   reference_impl engine + memory storage  (default in matrix)
-  duckdb   duckdb engine + duckdb storage + fallback (default in matrix)
+  duckdb   duckdb engine + duckdb storage  (only profile today)
 
 Exit codes:
   0   every fixture × profile PASSed

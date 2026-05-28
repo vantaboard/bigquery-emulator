@@ -12,7 +12,6 @@
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/engine.h"
-#include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -444,22 +443,17 @@ QueryService::QueryService(backend::storage::Storage* storage,
       classify_output->resolved_statement();
   const StatementClass cls = ClassifyStatement(stmt->node_kind());
 
-  // Engine selection:
-  //   * If the caller provided one (the `binaries/emulator_main` wire
-  //     path always does), use it verbatim -- including any
-  //     `FallbackEngine` wrapping the operator already configured via
-  //     `--on_unknown_fn=fallback`.
-  //   * Otherwise (the legacy `query_test.cc` path that only knows
-  //     about `storage`) construct a per-call reference-impl engine
-  //     so the existing tests still pin the original behavior.
-  std::unique_ptr<backend::engine::reference_impl::ReferenceImplEngine>
-      owned_engine;
-  backend::engine::Engine* active_engine = engine;
-  if (active_engine == nullptr) {
-    owned_engine = std::make_unique<
-        backend::engine::reference_impl::ReferenceImplEngine>(storage);
-    active_engine = owned_engine.get();
+  // Engine selection: the production wire path
+  // (`binaries/emulator_main`) always supplies a DuckDB engine. Unit
+  // tests must construct one too; we no longer fall back to a
+  // per-call default engine because the reference-impl engine has
+  // been removed.
+  if (engine == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        "QueryService::ExecuteQuery: engine backend is not configured");
   }
+  backend::engine::Engine* active_engine = engine;
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
 
   switch (cls) {
@@ -488,15 +482,9 @@ QueryService::QueryService(backend::storage::Storage* storage,
       return ::grpc::Status::OK;
     }
     case StatementClass::kDdl: {
-      // Plan-35 ENGINE POLICY (extends HANDOFF.md §4.3 path 3's
-      // "DuckDB-only MERGE" pattern): DDL lives on the DuckDB
-      // engine. The reference-impl engine returns UNIMPLEMENTED for
-      // ExecuteDdl, which surfaces here as gRPC UNIMPLEMENTED so
-      // the gateway maps it to BigQuery's `notImplemented` reason;
-      // the FallbackEngine wrapper (operator launched with
-      // `--engine=reference_impl --on_unknown_fn=fallback`) catches
-      // it transparently and retries against DuckDB before this
-      // status ever escapes.
+      // DDL lives on the DuckDB engine; any UNIMPLEMENTED here
+      // surfaces as gRPC UNIMPLEMENTED so the gateway maps it to
+      // BigQuery's `notImplemented` reason.
       absl::Status ddl_status =
           active_engine->ExecuteDdl(engine_request, &catalog);
       if (!ddl_status.ok()) {

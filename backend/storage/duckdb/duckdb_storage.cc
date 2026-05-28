@@ -607,7 +607,8 @@ std::string DuckDBStorage::TableParquetPath(const TableId& id) const {
 
 std::string DuckDBStorage::DuckDBSchemaName(absl::string_view project_id,
                                               absl::string_view dataset_id) {
-  // Mirror the storage key separator from `InMemoryStorage`. BigQuery
+  // Storage key separator the catalog uses to keep dataset / table
+  // identifiers globally unique. BigQuery
   // disallows control characters in either id, so the result is
   // always a fresh, unambiguous DuckDB identifier even after
   // double-quote escaping.

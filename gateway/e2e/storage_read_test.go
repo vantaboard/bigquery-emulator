@@ -32,10 +32,8 @@ import (
 // See `docs/REST_API.md#storage-read-api` for the user-facing version
 // of the same explanation.
 //
-// Two subtests run the same scenario on each storage profile: the
-// in-memory store (default `--storage=memory`) and the persistent
-// DuckDB store (`--storage=duckdb --engine=duckdb`, hermetic data
-// dir under `t.TempDir()`). Each subtest exercises:
+// The scenario runs against the persistent DuckDB store with a
+// hermetic data dir under `t.TempDir()`. Each invocation exercises:
 //
 //  1. `insertAll` to seed the table via the REST path.
 //  2. `CreateReadSession` + `ReadRows` over the engine's gRPC surface
@@ -44,30 +42,18 @@ import (
 //     `<column> = <literal>` `row_restriction` and assert the
 //     filtered subset.
 func TestStorageReadRoundTrip(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		env := startEmulator(t)
-		runStorageReadRoundTrip(t, env, "proj-storage-read-mem",
-			"ds_storage_read_mem")
+	env := startEmulatorWithFlags(t, emulatorFlags{
+		dataDir: t.TempDir(),
 	})
-
-	t.Run("duckdb", func(t *testing.T) {
-		env := startEmulatorWithFlags(t, emulatorFlags{
-			engine:      "duckdb",
-			storage:     "duckdb",
-			onUnknownFn: "fallback",
-			dataDir:     t.TempDir(),
-		})
-		runStorageReadRoundTrip(t, env, "proj-storage-read-duck",
-			"ds_storage_read_duck")
-	})
+	runStorageReadRoundTrip(t, env, "proj-storage-read-duck",
+		"ds_storage_read_duck")
 }
 
-// runStorageReadRoundTrip is shared between the memory + DuckDB
-// subtests. It seeds a table via REST `insertAll` and then exercises
-// the engine's StorageRead gRPC surface (Catalog + Query rides over
-// the same channel through the gateway, but StorageRead clients dial
-// the engine directly because the gateway intentionally does not
-// proxy it — see docs/REST_API.md).
+// runStorageReadRoundTrip seeds a table via REST `insertAll` and then
+// exercises the engine's StorageRead gRPC surface (Catalog + Query
+// rides over the same channel through the gateway, but StorageRead
+// clients dial the engine directly because the gateway intentionally
+// does not proxy it — see docs/REST_API.md).
 func runStorageReadRoundTrip(t *testing.T, env *emulatorEnv,
 	projectID, datasetID string) {
 	t.Helper()

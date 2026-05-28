@@ -1,9 +1,8 @@
 # Bazel build for the DuckDB query engine.
 #
-# Phase 5i wires the engine end-to-end: open an in-memory DuckDB
-# connection per query, attach the storage's row stream as a DuckDB
-# table, run the transpiled SQL, and stream the results back as a
-# `RowSource`.
+# The engine opens a per-query DuckDB connection, attaches the
+# storage's row stream as a DuckDB table, runs the transpiled SQL,
+# and streams the results back as a `RowSource`.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
@@ -68,7 +67,7 @@ cc_test(
         "//backend/engine",
         "//backend/schema",
         "//backend/storage",
-        "//backend/storage:memory",
+        "//backend/storage/duckdb:duckdb_storage",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",

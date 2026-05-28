@@ -9,7 +9,6 @@ description: |
   GROUP BY kind, HAVING COUNT(*) >= 2. Verifies the engine applies a
   post-aggregation filter on the group cardinality and only surfaces
   the groups that satisfy the threshold.
-profiles: [memory, duckdb]
 project_id: proj-groupby-having
 dataset_id: ds_groupby_having
 setup:
@@ -20,10 +19,16 @@ setup:
       schema:
         - {name: id, type: INT64, mode: REQUIRED}
         - {name: kind, type: STRING, mode: REQUIRED}
-  - sql: |
-      INSERT INTO ds_groupby_having.events (id, kind)
-      VALUES (1, 'login'), (2, 'click'), (3, 'login'),
-             (4, 'view'),  (5, 'click'), (6, 'login')
+  - rows:
+      dataset: ds_groupby_having
+      table: events
+      rows:
+        - {id: 1, kind: login}
+        - {id: 2, kind: click}
+        - {id: 3, kind: login}
+        - {id: 4, kind: view}
+        - {id: 5, kind: click}
+        - {id: 6, kind: login}
 query: |
   SELECT kind, COUNT(*) AS c
     FROM ds_groupby_having.events

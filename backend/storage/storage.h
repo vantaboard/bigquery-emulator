@@ -4,19 +4,15 @@
 // Storage is the C++ engine's row store interface.
 //
 // `Storage` lives below the gRPC service boundary: the gateway never
-// touches it directly, the catalog handler does. Two concrete impls
-// land later in Phase 3:
-//
-//   * `backend/storage/memory/in_memory_storage.{h,cc}` — volatile,
-//     CI-friendly, dataset → table → rows map.
-//   * `backend/storage/duckdb/duckdb_storage.{h,cc}` — persistent,
-//     Parquet/Arrow on disk through DuckDB.
+// touches it directly, the catalog handler does. The only concrete
+// implementation is `backend/storage/duckdb/duckdb_storage.{h,cc}`,
+// the persistent Parquet/Arrow-on-disk store backed by DuckDB.
 //
 // **Engine-agnostic types only**: this header MUST NOT mention
-// `googlesql::Value` or any other engine-specific type. The
-// reference-impl and DuckDB engines each translate to their own
-// representations at the call sites in `backend/engine/`. See ROADMAP
-// "Pluggable engine and storage" for the rationale.
+// `googlesql::Value` or any other engine-specific type. The DuckDB
+// engine translates to its own representations at the call sites in
+// `backend/engine/`. See ROADMAP "Pluggable engine and storage" for
+// the rationale.
 
 #include <cstdint>
 #include <memory>
@@ -39,8 +35,7 @@ namespace storage {
 
 // Stable identifiers for catalog entries. These mirror the proto
 // `DatasetRef` / `TableRef` shape (proto/emulator.proto) but the
-// storage layer does not depend on the proto runtime so the same types
-// flow through the in-memory and DuckDB stores.
+// storage layer does not depend on the proto runtime.
 struct DatasetId {
   std::string project_id;
   std::string dataset_id;
@@ -63,10 +58,10 @@ inline bool operator==(const TableId& a, const TableId& b) {
 // Engine-agnostic cell value. The variant covers the BigQuery scalar
 // types plus ARRAY and STRUCT containers.
 //
-// We deliberately do not reuse `googlesql::Value` here; the reference
-// impl and DuckDB engines each marshal to and from `Value` at their
-// own boundary. NULL is an explicit kind so callers do not have to
-// thread `std::optional<Value>` through every API.
+// We deliberately do not reuse `googlesql::Value` here; the DuckDB
+// engine marshals to and from `Value` at its own boundary. NULL is
+// an explicit kind so callers do not have to thread
+// `std::optional<Value>` through every API.
 class Value {
  public:
   enum class Kind {
@@ -145,11 +140,10 @@ class RowIterator {
 //
 // Plan 38 wires the StorageRead gRPC surface (`ReadRows`) on top of
 // `CreateReadStream`, so the filter shape mirrors what the public
-// `bigquery_emulator.v1.ReadOptions` proto can ask for. Each backend
-// applies the knobs it can push down natively (DuckDB layers a SQL
-// `LIMIT` / `WHERE`; the memory backend caps iteration in C++); both
-// speak the same wire shape after the iterator, so the handler does
-// not branch on the storage type.
+// `bigquery_emulator.v1.ReadOptions` proto can ask for. The DuckDB
+// backend pushes the knobs down natively (a SQL `LIMIT` / `WHERE`)
+// and the iterator surfaces them on the wire so the handler does
+// not have to re-apply them.
 //
 // Plan-39 scope adds `equality_predicate` (the typed parse of
 // `<column> = <literal>` from `ReadOptions.row_restriction`). The raw
@@ -186,22 +180,18 @@ struct ReadFilter {
   std::string row_restriction;
 
   // Typed parse of `row_restriction` produced by
-  // `backend::storage::ParseRowRestriction`. When set, both backends
-  // honor it:
-  //   * Memory: linear scan; cells are compared against the typed
-  //     value before being copied into the iterator's snapshot.
-  //   * DuckDB: appended to the SELECT as a `WHERE` clause using the
-  //     same literal rendering helpers that drive INSERT.
-  // Plan 39 lifts the parse to the handler so a malformed restriction
-  // surfaces as INVALID_ARGUMENT before any rows are read.
+  // `backend::storage::ParseRowRestriction`. The DuckDB backend
+  // appends it to the SELECT as a `WHERE` clause using the same
+  // literal rendering helpers that drive INSERT. Plan 39 lifts the
+  // parse to the handler so a malformed restriction surfaces as
+  // INVALID_ARGUMENT before any rows are read.
   std::optional<EqualityPredicate> equality_predicate;
 };
 
 // Storage is the abstract interface every backend implements.
 //
-// All methods are **thread-safe**. Implementations are free to provide
-// finer-grained guarantees (the in-memory store uses a single mutex;
-// the DuckDB-backed store relies on DuckDB's own concurrency model).
+// All methods are **thread-safe**. The DuckDB-backed store relies on
+// DuckDB's own concurrency model.
 //
 // Lifetime: a `Storage` instance is created once at engine startup and
 // shared by every gRPC request handler.
@@ -211,7 +201,7 @@ class Storage {
 
   // ------------------------------------------------------------------
   // Dataset CRUD. `location` is the BigQuery region the dataset is
-  // pinned to (e.g. "US", "EU"); the in-memory store stashes it for
+  // pinned to (e.g. "US", "EU"); the DuckDB store stashes it for
   // round-tripping but otherwise ignores it. `delete_contents=true`
   // mirrors the BigQuery REST `deleteContents` query parameter on
   // `datasets.delete`.
@@ -240,7 +230,7 @@ class Storage {
   // Appends `rows` to `id` as a single batch. Implementations may
   // require all rows in the batch to share the table's schema shape
   // (cell count == column count); validation lives in the impl, not
-  // here, so the in-memory store can stay cheap.
+  // here.
   virtual absl::Status AppendRows(const TableId& id,
                                    absl::Span<const Row> rows) = 0;
 
@@ -268,17 +258,16 @@ class Storage {
 
   // CreateReadStream is the StorageRead.ReadRows-shaped scan: same
   // snapshot semantics as `ScanRows`, but the returned iterator is
-  // constrained by `filter` (see `ReadFilter` above). The memory
-  // backend caps iteration in C++; the DuckDB backend pushes the
-  // limit / offset into the underlying SELECT so we don't materialize
-  // rows we will never emit. Both backends speak the same wire shape
-  // afterward — the iterator is a `RowIterator` either way — so the
-  // `StorageReadService` handler does not branch on backend type.
+  // constrained by `filter` (see `ReadFilter` above). The DuckDB
+  // backend pushes the limit / offset into the underlying SELECT so
+  // we don't materialize rows we will never emit. The iterator is a
+  // `RowIterator` so the `StorageReadService` handler does not
+  // branch on backend type.
   //
-  // Plan 38 enforces `row_limit` and `offset` on both backends;
-  // `selected_fields` and `row_restriction` are accepted but not
-  // honored (see the field comments on `ReadFilter`). NOT_FOUND if
-  // the table does not exist.
+  // Plan 38 enforces `row_limit` and `offset`; `selected_fields`
+  // and `row_restriction` are accepted but not honored (see the
+  // field comments on `ReadFilter`). NOT_FOUND if the table does
+  // not exist.
   virtual absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
       const TableId& id, const ReadFilter& filter) const = 0;
 };

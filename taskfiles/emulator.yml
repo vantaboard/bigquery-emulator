@@ -68,9 +68,8 @@ tasks:
           -o ./bin/gateway_main ./binaries/gateway_main
 
   # build-engine-bazel is the canonical engine build: it links the full
-  # GoogleSQL + reference_impl + DuckDB + gRPC stack, so the resulting
-  # binary actually serves `Query.DryRun` / `Query.ExecuteQuery` end to
-  # end.
+  # GoogleSQL + DuckDB + gRPC stack, so the resulting binary actually
+  # serves `Query.DryRun` / `Query.ExecuteQuery` end to end.
   #
   # After building, we stage both the binary and `libduckdb.so` into
   # ./bin/ side-by-side. The cc_binary sets `-Wl,-rpath,$ORIGIN`, so

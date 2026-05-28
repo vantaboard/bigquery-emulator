@@ -365,6 +365,39 @@ func runSetupStep(ctx context.Context, base string, step SetupStep) error {
 			return fmt.Errorf("tables.insert -> %d: %s", status, snippet(respBody))
 		}
 		return nil
+	case step.Rows != nil:
+		// `tabledata.insertAll` is the only way to seed rows on
+		// the DuckDB engine today; INSERT VALUES returns
+		// UNIMPLEMENTED. The wire shape matches Google's REST API
+		// spec: each row is wrapped in `{json: {...}}`.
+		type insertAllRow struct {
+			JSON map[string]any `json:"json"`
+		}
+		body := struct {
+			Kind string         `json:"kind"`
+			Rows []insertAllRow `json:"rows"`
+		}{
+			Kind: "bigquery#tableDataInsertAllRequest",
+			Rows: make([]insertAllRow, 0, len(step.Rows.Rows)),
+		}
+		for _, r := range step.Rows.Rows {
+			body.Rows = append(body.Rows, insertAllRow{JSON: r})
+		}
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal insertAll body: %w", err)
+		}
+		url := fmt.Sprintf("%s/datasets/%s/tables/%s/insertAll",
+			base, step.Rows.Dataset, step.Rows.Table)
+		status, respBody, err := doRequest(ctx, http.MethodPost, url, jsonBody)
+		if err != nil {
+			return err
+		}
+		if status < 200 || status >= 300 {
+			return fmt.Errorf("tabledata.insertAll -> %d: %s",
+				status, snippet(respBody))
+		}
+		return nil
 	case strings.TrimSpace(step.SQL) != "":
 		queryBody, err := json.Marshal(map[string]any{
 			"query":        step.SQL,

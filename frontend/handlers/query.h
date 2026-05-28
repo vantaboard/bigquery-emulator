@@ -35,26 +35,20 @@ namespace frontend {
 // the gateway can map them to BigQuery's HTTP 400
 // `reason: invalidQuery` envelope.
 //
-// ExecuteQuery (Phase 5.A) drives the GoogleSQL reference-impl engine
-// (`backend/engine/reference_impl`) and streams the resolved schema as
-// the first `QueryResultRow` followed by one `QueryResultRow` per
-// result row. The `ExecuteQuery` gRPC handler is a thin shim over
-// `StreamQueryResults` (below) so unit tests can exercise the
-// streaming logic without a real `grpc::ServerWriter`.
+// ExecuteQuery drives the DuckDB engine and streams the resolved
+// schema as the first `QueryResultRow` followed by one
+// `QueryResultRow` per result row. The `ExecuteQuery` gRPC handler is
+// a thin shim over `StreamQueryResults` (below) so unit tests can
+// exercise the streaming logic without a real `grpc::ServerWriter`.
 class QueryService final : public v1::Query::Service {
  public:
   // `storage` is the catalog adapter's backing store (used to
   // materialize `googlesql::Table*`s for name resolution). `engine`
   // is the execution backend the handler forwards `DryRun` /
-  // `ExecuteQuery` to. When `engine == nullptr` the handler falls
-  // back to constructing a per-request reference-impl engine; this
-  // preserves the legacy behavior (and the existing tests in
-  // `query_test.cc`) where the handler only knew about `storage`.
-  // The Phase 5i `--engine=duckdb --on_unknown_fn=fallback` flag in
-  // `binaries/emulator_main/main.cc` constructs a long-lived engine
-  // (possibly wrapped in `FallbackEngine`) and passes it in here so
-  // the binary actually exercises the selected engine instead of
-  // hardcoding reference-impl.
+  // `ExecuteQuery` to. Both pointers must be non-null at startup;
+  // `binaries/emulator_main/main.cc` constructs them and threads
+  // them through. `ExecuteQuery` returns `FAILED_PRECONDITION` when
+  // `engine` is null.
   explicit QueryService(backend::storage::Storage* storage = nullptr,
                          backend::engine::Engine* engine = nullptr);
 
@@ -92,13 +86,10 @@ class QueryService final : public v1::Query::Service {
 // call it directly with a capturing lambda and inspect the emitted
 // messages.
 //
-// `engine` is the execution backend to forward to. When null, the
-// helper constructs a per-call reference-impl engine so the existing
-// `query_test.cc` tests (which only know about `storage`) keep
-// passing. The Phase 5i wiring path in `emulator_main` always
-// supplies a non-null engine -- usually a `FallbackEngine` wrapping
-// `--engine=duckdb` with the reference-impl evaluator as the safety
-// net.
+// `engine` is the execution backend to forward to. The handler
+// returns `FAILED_PRECONDITION` when the engine is null; the
+// `binaries/emulator_main` wire path and unit tests construct a
+// `DuckDBEngine` explicitly.
 ::grpc::Status StreamQueryResults(
     backend::storage::Storage* storage, const v1::QueryRequest& request,
     const std::function<bool(const v1::QueryResultRow&)>& write,

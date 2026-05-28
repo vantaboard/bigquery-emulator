@@ -27,34 +27,31 @@ per plan). Start with the index:
 Each plan maps to a slice of a ROADMAP phase and includes filled-in todos,
 verification commands, and done criteria.
 
-## Pluggable engine and storage
+## Engine and storage
 
-The C++ side is structured around two narrow interfaces so the heavy
-machinery can be swapped without touching the gateway, the gRPC contract,
-or the conformance harness:
+The C++ side is structured around two narrow interfaces
+(`backend/engine/engine.h`, `backend/storage/storage.h`) so the heavy
+machinery can be swapped without touching the gateway, the gRPC
+contract, or the conformance harness. Today there is exactly one
+implementation behind each interface:
 
-- **`Engine` interface.** Answers `Analyze`, `DryRun`, and `ExecuteQuery`
-  against a resolved AST and a catalog. Two implementations ship:
-  1. **Reference Impl Engine** — wraps `googlesql::reference_impl::Evaluator`.
-     Slow, row-by-row, but the source of truth for semantic parity. Drives
-     the conformance harness and covers corners DuckDB can't reach yet.
-  2. **DuckDB Engine** — transpiles the ZetaSQL `ResolvedAST` into a
-     DuckDB-flavored SQL string via a custom C++ AST visitor/unparser,
-     then executes it through DuckDB's C++ client. Massive OLAP speedup
-     and Arrow-native results, at the cost of dialect fidelity for cases
-     the unparser can't yet handle (see Open Questions).
+- **`Engine` interface — DuckDB engine** (`backend/engine/duckdb/`).
+  Transpiles the GoogleSQL `ResolvedAST` into a DuckDB-flavored SQL
+  string via a custom C++ AST visitor/unparser, then executes it
+  through DuckDB's C++ client. Massive OLAP speedup and Arrow-native
+  results, at the cost of dialect fidelity for cases the unparser
+  can't yet handle (see Open Questions).
 
-- **`Storage` interface.** Backs the catalog with rows. Two implementations:
-  1. **In-Memory Store** — volatile arena store. CI-friendly, zero-config,
-     no on-disk footprint.
-  2. **Persistent File Store** — local `.parquet` and Apache Arrow files
-     managed by DuckDB. Survives restarts and gives users a real local
-     data warehouse.
+- **`Storage` interface — DuckDB storage** (`backend/storage/duckdb/`).
+  Local `.parquet` and Apache Arrow files managed by DuckDB. Survives
+  restarts and gives users a real local data warehouse.
 
-Engine and storage choices are independent — any engine can sit on any
-store. The default profile is `(Reference Impl, In-Memory)`: the slow-but-
-correct combo that maximizes conformance. The "production-emulator" profile
-is `(DuckDB, Persistent File)`. Tests typically mix-and-match per case.
+An earlier iteration carried a second `Engine` implementation
+(ReferenceImpl, on top of `googlesql::reference_impl::Evaluator`)
+bridged to DuckDB by a `FallbackEngine` wrapper, plus an in-memory
+storage backend for hermetic tests. Both were removed once DuckDB
+covered the supported surface; see `docs/ENGINE_POLICY.md` for the
+deprecation rationale.
 
 The point of this roadmap is to keep the work bite-sized, ordered by
 dependency, and honest about what is "in" vs. "vendored from upstream."
@@ -73,7 +70,7 @@ gRPC engine, with the gateway lifecycle wiring them together.
   - `binaries/emulator_main/main.cc` (C++ entrypoint, stub)
   - `gateway/` Go package (HTTP server + subprocess manager)
   - `frontend/server/` C++ gRPC server (stub)
-  - `backend/` C++ in-memory storage layer (stub)
+  - `backend/` C++ storage + engine layer (stub)
   - `proto/emulator.proto` internal contract between Go and C++
   - `Taskfile.yml`, `Makefile`, `BUILD.bazel`, `MODULE.bazel`
   - `.gitignore` (excludes the local `cloud-spanner-emulator/` reference clone)
@@ -355,16 +352,12 @@ Goal: prove that real BigQuery client libraries work against the emulator.
   git commit + build date; gateway via `-X main.<sym>=…` ldflags
   (see `.goreleaser.yml`), engine via the `:version_cc` genrule under
   `binaries/emulator_main/BUILD.bazel`
-- ✅ Profile matrix documented in README §Profiles
-  (`ci` / `duckdb` / `dev`); the same labels drive the conformance
-  harness (`conformance/README.md`) and the engine policy
-  (`docs/ENGINE_POLICY.md`).
-
-  | Profile  | `--engine`        | `--storage` | `--on_unknown_fn` |
-  |----------|-------------------|-------------|-------------------|
-  | `ci`     | `reference_impl`  | `memory`    | `unimplemented`   |
-  | `duckdb` | `duckdb`          | `duckdb`    | `fallback`        |
-  | `dev`    | `duckdb`          | `duckdb`    | `unimplemented`   |
+- ✅ Runtime configuration documented in README §Runtime configuration;
+  the conformance harness (`conformance/README.md`) and the engine
+  policy (`docs/ENGINE_POLICY.md`) cover the DuckDB-only runtime.
+  `emulator_main` accepts `--host_port` and `--data_dir` only;
+  `--engine` / `--storage` / `--on_unknown_fn` were removed when
+  the ReferenceImpl + in-memory backends were deleted.
 - ⏳ Document `gcloud emulators bigquery start`-equivalent usage
 
 ---
@@ -373,15 +366,14 @@ Goal: prove that real BigQuery client libraries work against the emulator.
 
 - No Go port of GoogleSQL. Engine is C++. If GoogleSQL changes, we rebuild;
   we do not chase semantics in Go.
-- Persistence is opt-in, not promised. The default profile is in-memory and
-  volatile; the DuckDB-backed Persistent File Store is a first-class option
-  for users who want a long-lived local warehouse, but we don't claim
-  durability semantics, replication, or backup.
-- No production performance promises. The DuckDB engine moves the floor up
-  meaningfully versus a row-by-row reference evaluator, but we aren't
-  competing with the real BigQuery service. Expect competitive numbers for
-  OLAP shapes the transpiler covers; expect the Reference Impl floor for
-  shapes that fall back.
+- Persistence is best-effort, not promised. The DuckDB-backed
+  `--data_dir` is what runs in production; we don't claim durability
+  semantics, replication, or backup.
+- No production performance promises. The DuckDB engine is the only
+  execution backend; we aren't competing with the real BigQuery
+  service. Expect competitive numbers for OLAP shapes the transpiler
+  covers; expect `UNIMPLEMENTED` for shapes it does not lower yet
+  (INSERT / UPDATE / DELETE / scalar-only SELECT today).
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
   later if there's demand.
 
@@ -389,10 +381,10 @@ Goal: prove that real BigQuery client libraries work against the emulator.
 
 The C++ engine is built with Bazel. The
 `//binaries/emulator_main:emulator_main` `cc_binary` links
-GoogleSQL's analyzer + reference-impl evaluator, both storage
-backends (in-memory + DuckDB), the catalog/query gRPC handlers, and
-grpc++ in one binary that can serve `Query.DryRun` and
-`Query.ExecuteQuery` end-to-end. GoogleSQL is vendored via a sibling
+GoogleSQL's analyzer, the DuckDB engine + DuckDB storage backend,
+the catalog/query gRPC handlers, and grpc++ in one binary that can
+serve `Query.DryRun` and `Query.ExecuteQuery` end-to-end. GoogleSQL
+is vendored via a sibling
 `../googlesql/` checkout (`local_path_override` in
 [`MODULE.bazel`](./MODULE.bazel)); DuckDB v1.5.3 is pulled in as a
 prebuilt tarball through `http_archive`

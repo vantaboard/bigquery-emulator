@@ -50,10 +50,9 @@ type Options struct {
 
 	// EngineArgs is the additional flag list passed to the engine
 	// subprocess after `--host_port`. Use this to forward
-	// `--engine`, `--storage`, `--profile`, `--data_dir`, and
-	// `--on_unknown_fn` from gateway-level CLI flags through to
-	// `emulator_main` without the gateway needing to know each
-	// flag's semantics.
+	// `--data_dir` (and any future engine-level flags) from
+	// gateway-level CLI flags through to `emulator_main` without
+	// the gateway needing to know each flag's semantics.
 	EngineArgs []string
 
 	// CopyEngineStdout / CopyEngineStderr forward the engine subprocess's
@@ -97,8 +96,8 @@ type Options struct {
 	// gateway/seedfile for the schema.
 	SeedFiles []string
 
-	// DataDir is the persistent storage root the engine uses when
-	// `--storage=duckdb` is selected. Mirrors `--data-dir`; the
+	// DataDir is the persistent storage root the engine uses for
+	// the DuckDB catalog + table data. Mirrors `--data-dir`; the
 	// gateway passes it through via `--data_dir` in EngineArgs.
 	DataDir string
 

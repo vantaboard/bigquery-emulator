@@ -1,18 +1,14 @@
 // emulator_main is the C++ entry point for the BigQuery emulator's engine.
 //
 // It is structurally analogous to cloud-spanner-emulator's emulator_main:
-// it owns a gRPC server that fronts GoogleSQL (analyzer + reference impl)
+// it owns a gRPC server that fronts GoogleSQL (analyzer + DuckDB engine)
 // for the Go gateway to call into. The Go gateway spawns this binary on
 // startup; the binary blocks until the gateway terminates it.
 //
-// Phase 3c+ status: this binary parses the CLI surface (`--host_port`,
-// `--engine`, `--storage`, `--profile`, `--data_dir`, `--help`),
-// instantiates the chosen storage backend and engine through a
-// factory, and hands them to the gRPC front door. `--storage=duckdb`
-// opens a persistent catalog under `--data_dir` (Phase 3e); both
-// engine implementations are still scaffolds that return
-// `UNIMPLEMENTED`. Phase 5 wires the real `googlesql::reference_impl`
-// and DuckDB transpiler paths.
+// Runtime shape: the engine is always DuckDB and the storage backend is
+// always the DuckDB Parquet/Arrow store under `--data_dir`. The
+// `--host_port` flag selects the gRPC listen address; `--data_dir`
+// selects the persistent catalog root.
 
 #include <cstdio>
 #include <cstdlib>
@@ -24,58 +20,17 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/duckdb/duckdb_engine.h"
 #include "backend/engine/engine.h"
-#include "backend/engine/fallback/fallback_engine.h"
-#include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
-#include "backend/storage/memory/in_memory_storage.h"
 #include "backend/storage/storage.h"
 #include "binaries/emulator_main/version.h"
 #include "frontend/server/server.h"
 
 namespace {
 
-// Selectable engine implementations. Reference impl is the semantic
-// source of truth (slow but correct); DuckDB is the fast transpiled
-// path. Both scaffolds currently return UNIMPLEMENTED.
-enum class EngineKind {
-  kReferenceImpl,
-  kDuckDB,
-};
-
-// Selectable storage backends. Memory is volatile and CI-friendly;
-// DuckDB is the persistent file store rooted at `--data_dir` (see
-// `DuckDBStorage::Open` for the on-disk layout).
-enum class StorageKind {
-  kMemory,
-  kDuckDB,
-};
-
-// Pre-baked combinations exposed via `--profile`. Mirrors the two
-// callouts in ROADMAP's "Pluggable engine and storage" section: `ci`
-// is `(reference_impl, memory)` (the default; maximizes conformance),
-// `dev` is `(duckdb, duckdb)` (the published "production emulator"
-// shape, persistent + fast).
-enum class ProfileKind {
-  kUnset,
-  kCi,
-  kDev,
-};
-
-// Selects what the engine should do when the active engine reports
-// `UNIMPLEMENTED` for a query shape it cannot lower (Phase 5i). The
-// default is to surface the UNIMPLEMENTED to the client; `fallback`
-// transparently retries the query against the reference-impl engine
-// so the DuckDB transpiler can land per-shape coverage without
-// breaking shapes it does not cover yet.
-enum class OnUnknownFnKind {
-  kUnimplemented,
-  kFallback,
-};
-
-// Default `--data_dir` when `--storage=duckdb` is selected without an
-// explicit data_dir. Mirrors what cloud-spanner-emulator does for its
-// persistent-store directory: a stable, user-scoped path under $HOME.
-// Resolved lazily because $HOME is process-environment state.
+// Default `--data_dir` when not explicitly provided. Mirrors what
+// cloud-spanner-emulator does for its persistent-store directory: a
+// stable, user-scoped path under $HOME. Resolved lazily because $HOME
+// is process-environment state.
 std::string DefaultDataDir() {
   const char* home = std::getenv("HOME");
   if (home == nullptr || *home == '\0') {
@@ -92,31 +47,16 @@ std::string DefaultDataDir() {
 
 struct Flags {
   std::string host_port = "localhost:9060";
-  EngineKind engine = EngineKind::kReferenceImpl;
-  StorageKind storage = StorageKind::kMemory;
-  ProfileKind profile = ProfileKind::kUnset;
-  // Phase 5i fallback policy. Default is `unimplemented` so
-  // `--engine=duckdb` surfaces UNIMPLEMENTED for transpiler-uncovered
-  // shapes; `--on_unknown_fn=fallback` wraps the active engine in a
-  // FallbackEngine that retries against the reference-impl evaluator
-  // on UNIMPLEMENTED.
-  OnUnknownFnKind on_unknown_fn = OnUnknownFnKind::kUnimplemented;
-  // Persistent-store root used by `--storage=duckdb`. The default is
-  // `$HOME/.bigquery-emulator`; users override via `--data_dir=PATH`.
-  // Ignored when `--storage=memory`.
+  // Persistent-store root used by the DuckDB storage backend. Default
+  // is `$HOME/.bigquery-emulator`; users override via `--data_dir=PATH`.
   std::string data_dir;
-  // Set by --engine / --storage on the command line so the profile
-  // shorthand never overrides an explicit flag.
-  bool engine_explicit = false;
-  bool storage_explicit = false;
   bool data_dir_explicit = false;
   bool help = false;
   // `--version` short-circuits before any catalog / storage init in
-  // `main`, so the flag works in stripped containers where
-  // `--storage=duckdb`'s default `$HOME/.bigquery-emulator` directory
-  // is unwritable or the listening port is already taken. Mirrors the
-  // Go gateway's `--version` posture (see
-  // `binaries/gateway_main/main.go`).
+  // `main`, so the flag works in stripped containers where the
+  // default `$HOME/.bigquery-emulator` directory is unwritable or
+  // the listening port is already taken. Mirrors the Go gateway's
+  // `--version` posture (see `binaries/gateway_main/main.go`).
   bool version = false;
 };
 
@@ -132,51 +72,9 @@ void PrintUsage(std::FILE* out, const char* argv0) {
                "  --host_port=HOST:PORT   gRPC listen address\n"
                "                          (default: localhost:9060)\n"
                "\n"
-               "  --engine=KIND           query engine implementation:\n"
-               "                            reference_impl  GoogleSQL\n"
-               "                                            reference impl\n"
-               "                                            (slow, correct;\n"
-               "                                            ROADMAP 5.A)\n"
-               "                            duckdb          ZetaSQL ->\n"
-               "                                            DuckDB SQL\n"
-               "                                            transpiler\n"
-               "                                            (fast OLAP;\n"
-               "                                            ROADMAP 5.B)\n"
-               "                          default: reference_impl\n"
-               "\n"
-               "  --storage=KIND          row storage backend:\n"
-               "                            memory          volatile,\n"
-               "                                            CI-friendly\n"
-               "                            duckdb          Parquet/Arrow\n"
-               "                                            on disk via\n"
-               "                                            DuckDB; opens\n"
-               "                                            a catalog at\n"
-               "                                            --data_dir\n"
-               "                          default: memory\n"
-               "\n"
-               "  --profile=KIND          shorthand for the two common\n"
-               "                          engine+storage combinations:\n"
-               "                            ci              reference_impl\n"
-               "                                            + memory\n"
-               "                                            (default)\n"
-               "                            dev             duckdb + duckdb\n"
-               "                          Explicit --engine / --storage\n"
-               "                          flags win over --profile.\n"
-               "\n"
                "  --data_dir=PATH         persistent-store root used by\n"
-               "                          --storage=duckdb; ignored when\n"
-               "                          --storage=memory.\n"
+               "                          the DuckDB storage backend.\n"
                "                          default: $HOME/.bigquery-emulator\n"
-               "\n"
-               "  --on_unknown_fn=POLICY  what to do when the active engine\n"
-               "                          cannot lower a query shape:\n"
-               "                            unimplemented surface UNIMPLEMENTED\n"
-               "                                          to the client\n"
-               "                            fallback      retry the query\n"
-               "                                          against the\n"
-               "                                          reference-impl\n"
-               "                                          engine\n"
-               "                          default: unimplemented\n"
                "\n"
                "  --version               print engine version (semver +\n"
                "                          git commit + build date) and exit\n"
@@ -231,76 +129,6 @@ bool MatchStringFlag(int argc, char** argv, int* i, const char* key,
   return false;
 }
 
-absl::StatusOr<EngineKind> ParseEngineKind(const std::string& value) {
-  if (value == "reference_impl") return EngineKind::kReferenceImpl;
-  if (value == "duckdb") return EngineKind::kDuckDB;
-  return absl::InvalidArgumentError(
-      "unknown --engine value (expected reference_impl|duckdb): " + value);
-}
-
-absl::StatusOr<StorageKind> ParseStorageKind(const std::string& value) {
-  if (value == "memory") return StorageKind::kMemory;
-  if (value == "duckdb") return StorageKind::kDuckDB;
-  return absl::InvalidArgumentError(
-      "unknown --storage value (expected memory|duckdb): " + value);
-}
-
-absl::StatusOr<ProfileKind> ParseProfileKind(const std::string& value) {
-  if (value == "ci") return ProfileKind::kCi;
-  if (value == "dev") return ProfileKind::kDev;
-  return absl::InvalidArgumentError(
-      "unknown --profile value (expected ci|dev): " + value);
-}
-
-absl::StatusOr<OnUnknownFnKind> ParseOnUnknownFnKind(
-    const std::string& value) {
-  if (value == "unimplemented") return OnUnknownFnKind::kUnimplemented;
-  if (value == "fallback") return OnUnknownFnKind::kFallback;
-  return absl::InvalidArgumentError(
-      "unknown --on_unknown_fn value (expected unimplemented|fallback): " +
-      value);
-}
-
-const char* EngineName(EngineKind kind) {
-  switch (kind) {
-    case EngineKind::kReferenceImpl:
-      return "reference_impl";
-    case EngineKind::kDuckDB:
-      return "duckdb";
-  }
-  return "?";
-}
-
-const char* StorageName(StorageKind kind) {
-  switch (kind) {
-    case StorageKind::kMemory:
-      return "memory";
-    case StorageKind::kDuckDB:
-      return "duckdb";
-  }
-  return "?";
-}
-
-// Applies the --profile shorthand to `flags`, but never overrides
-// engine/storage choices that were set explicitly on the command line.
-// Returning OK is unconditional today; this signature leaves room for
-// per-profile validation later.
-absl::Status ApplyProfile(Flags* flags) {
-  switch (flags->profile) {
-    case ProfileKind::kUnset:
-      return absl::OkStatus();
-    case ProfileKind::kCi:
-      if (!flags->engine_explicit) flags->engine = EngineKind::kReferenceImpl;
-      if (!flags->storage_explicit) flags->storage = StorageKind::kMemory;
-      return absl::OkStatus();
-    case ProfileKind::kDev:
-      if (!flags->engine_explicit) flags->engine = EngineKind::kDuckDB;
-      if (!flags->storage_explicit) flags->storage = StorageKind::kDuckDB;
-      return absl::OkStatus();
-  }
-  return absl::InternalError("ApplyProfile: unreachable profile kind");
-}
-
 absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
   Flags flags;
   for (int i = 1; i < argc; ++i) {
@@ -318,103 +146,22 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
       flags.host_port = value;
       continue;
     }
-    if (MatchStringFlag(argc, argv, &i, "engine", &value)) {
-      auto kind = ParseEngineKind(value);
-      if (!kind.ok()) return kind.status();
-      flags.engine = *kind;
-      flags.engine_explicit = true;
-      continue;
-    }
-    if (MatchStringFlag(argc, argv, &i, "storage", &value)) {
-      auto kind = ParseStorageKind(value);
-      if (!kind.ok()) return kind.status();
-      flags.storage = *kind;
-      flags.storage_explicit = true;
-      continue;
-    }
-    if (MatchStringFlag(argc, argv, &i, "profile", &value)) {
-      auto kind = ParseProfileKind(value);
-      if (!kind.ok()) return kind.status();
-      flags.profile = *kind;
-      continue;
-    }
     if (MatchStringFlag(argc, argv, &i, "data_dir", &value)) {
       flags.data_dir = value;
       flags.data_dir_explicit = true;
       continue;
     }
-    if (MatchStringFlag(argc, argv, &i, "on_unknown_fn", &value)) {
-      auto kind = ParseOnUnknownFnKind(value);
-      if (!kind.ok()) return kind.status();
-      flags.on_unknown_fn = *kind;
-      continue;
-    }
     return absl::InvalidArgumentError(
         std::string("unknown flag: ") + std::string(arg));
   }
-  auto status = ApplyProfile(&flags);
-  if (!status.ok()) return status;
-  // Fill in the default data_dir only after profile resolution so the
-  // user's explicit --data_dir always wins. We defer the lookup to
-  // here (rather than the Flags initializer) because $HOME is process
-  // state, not a constant.
+  // Fill in the default data_dir lazily so the user's explicit
+  // --data_dir always wins. We defer the lookup to here (rather than
+  // the Flags initializer) because $HOME is process state, not a
+  // constant.
   if (!flags.data_dir_explicit) {
     flags.data_dir = DefaultDataDir();
   }
   return flags;
-}
-
-// Storage factory. `--storage=memory` is volatile and CI-friendly;
-// `--storage=duckdb` opens a persistent DuckDB catalog under
-// `data_dir` (see `DuckDBStorage::Open` for the on-disk layout).
-absl::StatusOr<std::unique_ptr<
-    bigquery_emulator::backend::storage::Storage>>
-CreateStorage(StorageKind kind, const std::string& data_dir) {
-  switch (kind) {
-    case StorageKind::kMemory:
-      return std::unique_ptr<bigquery_emulator::backend::storage::Storage>(
-          new bigquery_emulator::backend::storage::memory::InMemoryStorage());
-    case StorageKind::kDuckDB: {
-      auto store_or =
-          bigquery_emulator::backend::storage::duckdb::DuckDBStorage::Open(
-              data_dir);
-      if (!store_or.ok()) return store_or.status();
-      return std::unique_ptr<bigquery_emulator::backend::storage::Storage>(
-          std::move(*store_or));
-    }
-  }
-  return absl::InternalError("CreateStorage: unreachable storage kind");
-}
-
-// Engine factory. Constructs the concrete engine corresponding to
-// `kind`. The reference-impl engine is the conformance-bar
-// implementation (slow but correct); the DuckDB engine is the
-// transpiler-driven fast path (Phase 5i). Whether `UNIMPLEMENTED` from
-// the DuckDB engine falls back to reference-impl is the
-// `--on_unknown_fn` knob handled in `main`, not here.
-std::unique_ptr<bigquery_emulator::backend::engine::Engine> CreateEngine(
-    EngineKind kind, bigquery_emulator::backend::storage::Storage* storage) {
-  switch (kind) {
-    case EngineKind::kReferenceImpl:
-      return std::unique_ptr<bigquery_emulator::backend::engine::Engine>(
-          new bigquery_emulator::backend::engine::reference_impl::
-              ReferenceImplEngine(storage));
-    case EngineKind::kDuckDB:
-      return std::unique_ptr<bigquery_emulator::backend::engine::Engine>(
-          new bigquery_emulator::backend::engine::duckdb::DuckDBEngine(
-              storage));
-  }
-  return nullptr;
-}
-
-const char* OnUnknownFnName(OnUnknownFnKind kind) {
-  switch (kind) {
-    case OnUnknownFnKind::kUnimplemented:
-      return "unimplemented";
-    case OnUnknownFnKind::kFallback:
-      return "fallback";
-  }
-  return "?";
 }
 
 }  // namespace
@@ -443,69 +190,30 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
-  auto storage = CreateStorage(flags.storage, flags.data_dir);
-  if (!storage.ok()) {
+  auto storage_or =
+      bigquery_emulator::backend::storage::duckdb::DuckDBStorage::Open(
+          flags.data_dir);
+  if (!storage_or.ok()) {
     std::fprintf(stderr, "[emulator_main] failed to create storage: %s\n",
-                 std::string(storage.status().message()).c_str());
+                 std::string(storage_or.status().message()).c_str());
     return EXIT_FAILURE;
   }
-  std::unique_ptr<bigquery_emulator::backend::storage::Storage> storage_owned =
-      std::move(storage).value();
+  std::unique_ptr<bigquery_emulator::backend::storage::Storage> storage =
+      std::move(storage_or).value();
 
-  std::unique_ptr<bigquery_emulator::backend::engine::Engine> primary_engine =
-      CreateEngine(flags.engine, storage_owned.get());
-  if (primary_engine == nullptr) {
-    std::fprintf(stderr, "[emulator_main] failed to create engine\n");
-    return EXIT_FAILURE;
-  }
+  std::unique_ptr<bigquery_emulator::backend::engine::Engine> engine(
+      new bigquery_emulator::backend::engine::duckdb::DuckDBEngine(
+          storage.get()));
 
-  // `--on_unknown_fn=fallback` wraps the active engine in a
-  // FallbackEngine so UNIMPLEMENTED queries transparently retry
-  // through the reference-impl evaluator. We construct the fallback
-  // engine even when `--engine=reference_impl` is already selected
-  // because the wrapper is a no-op in that case (the primary never
-  // returns UNIMPLEMENTED for shapes the reference-impl covers) and
-  // keeping the wiring symmetric makes the binary easier to reason
-  // about. `fallback_engine_owned` is null when the policy is
-  // `unimplemented`; the wrapper is null on the same branch and we
-  // forward the raw primary engine to the server.
-  std::unique_ptr<bigquery_emulator::backend::engine::Engine>
-      fallback_engine_owned;
-  std::unique_ptr<bigquery_emulator::backend::engine::Engine> wrapper_engine;
-  bigquery_emulator::backend::engine::Engine* active_engine =
-      primary_engine.get();
-  if (flags.on_unknown_fn == OnUnknownFnKind::kFallback) {
-    fallback_engine_owned = std::unique_ptr<
-        bigquery_emulator::backend::engine::Engine>(
-        new bigquery_emulator::backend::engine::reference_impl::
-            ReferenceImplEngine(storage_owned.get()));
-    wrapper_engine = std::unique_ptr<
-        bigquery_emulator::backend::engine::Engine>(
-        new bigquery_emulator::backend::engine::fallback::FallbackEngine(
-            primary_engine.get(), fallback_engine_owned.get()));
-    active_engine = wrapper_engine.get();
-  }
-
-  if (flags.storage == StorageKind::kDuckDB) {
-    std::fprintf(stderr,
-                 "[emulator_main] starting engine=%s storage=%s "
-                 "on_unknown_fn=%s data_dir=%s host_port=%s\n",
-                 EngineName(flags.engine), StorageName(flags.storage),
-                 OnUnknownFnName(flags.on_unknown_fn),
-                 flags.data_dir.c_str(), flags.host_port.c_str());
-  } else {
-    std::fprintf(stderr,
-                 "[emulator_main] starting engine=%s storage=%s "
-                 "on_unknown_fn=%s host_port=%s\n",
-                 EngineName(flags.engine), StorageName(flags.storage),
-                 OnUnknownFnName(flags.on_unknown_fn),
-                 flags.host_port.c_str());
-  }
+  std::fprintf(stderr,
+               "[emulator_main] starting engine=duckdb storage=duckdb "
+               "data_dir=%s host_port=%s\n",
+               flags.data_dir.c_str(), flags.host_port.c_str());
 
   bigquery_emulator::frontend::Server::Options options;
   options.server_address = flags.host_port;
-  options.storage = storage_owned.get();
-  options.engine = active_engine;
+  options.storage = storage.get();
+  options.engine = engine.get();
 
   auto server = bigquery_emulator::frontend::Server::Create(options);
   if (!server) {

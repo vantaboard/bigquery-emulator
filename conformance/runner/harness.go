@@ -47,8 +47,7 @@ type EmulatorEnv struct {
 	cmd *exec.Cmd
 
 	// dataDir is the temporary `--data_dir` the harness allocated
-	// for this emulator; empty for the memory profile. The teardown
-	// path removes it.
+	// for this emulator. The teardown path removes it.
 	dataDir string
 }
 
@@ -191,18 +190,18 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 	}
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	args := append([]string{"--host_port", addr}, p.EmulatorMainArgs()...)
-	var dataDir string
-	if p.Storage == "duckdb" {
-		root := opts.DataDirRoot
-		if root == "" {
-			root = os.TempDir()
-		}
-		dataDir, err = os.MkdirTemp(root, "bq-conformance-")
-		if err != nil {
-			return nil, fmt.Errorf("create data_dir: %w", err)
-		}
-		args = append(args, "--data_dir", dataDir)
+	// DuckDB storage always needs a persistent --data_dir; give each
+	// spawn its own temp directory so concurrent profile runs do not
+	// collide on the same catalog.
+	root := opts.DataDirRoot
+	if root == "" {
+		root = os.TempDir()
 	}
+	dataDir, err := os.MkdirTemp(root, "bq-conformance-")
+	if err != nil {
+		return nil, fmt.Errorf("create data_dir: %w", err)
+	}
+	args = append(args, "--data_dir", dataDir)
 	cmd := exec.Command(opts.EngineBinary, args...)
 	cmd.Stdout = opts.EngineStdout
 	cmd.Stderr = opts.EngineStderr
