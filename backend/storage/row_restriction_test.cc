@@ -72,8 +72,7 @@ TEST(ParseRowRestriction, ParsesNegativeInt64Equality) {
 
 TEST(ParseRowRestriction, ParsesBoolEqualityTrue) {
   EqualityPredicate pred;
-  ASSERT_TRUE(
-      ParseRowRestriction("active = true", PeopleSchema(), &pred).ok());
+  ASSERT_TRUE(ParseRowRestriction("active = true", PeopleSchema(), &pred).ok());
   EXPECT_EQ(pred.kind, EqualityPredicate::Kind::kBool);
   EXPECT_TRUE(pred.bool_value);
 }
@@ -88,8 +87,7 @@ TEST(ParseRowRestriction, ParsesBoolEqualityFalseCaseInsensitive) {
 
 TEST(ParseRowRestriction, ParsesStringEquality) {
   EqualityPredicate pred;
-  ASSERT_TRUE(
-      ParseRowRestriction("name = 'ada'", PeopleSchema(), &pred).ok());
+  ASSERT_TRUE(ParseRowRestriction("name = 'ada'", PeopleSchema(), &pred).ok());
   EXPECT_EQ(pred.kind, EqualityPredicate::Kind::kString);
   EXPECT_EQ(pred.column_index, 1u);
   EXPECT_EQ(pred.string_value, "ada");
@@ -104,16 +102,15 @@ TEST(ParseRowRestriction, ParsesStringEqualityWithEscapedQuote) {
 
 TEST(ParseRowRestriction, ParsesBacktickQuotedColumn) {
   EqualityPredicate pred;
-  ASSERT_TRUE(
-      ParseRowRestriction("`id` = 42", PeopleSchema(), &pred).ok());
+  ASSERT_TRUE(ParseRowRestriction("`id` = 42", PeopleSchema(), &pred).ok());
   EXPECT_EQ(pred.column, "id");
   EXPECT_EQ(pred.int64_value, 42);
 }
 
 TEST(ParseRowRestriction, IgnoresSurroundingWhitespace) {
   EqualityPredicate pred;
-  ASSERT_TRUE(ParseRowRestriction("   id   =   42   ",
-                                    PeopleSchema(), &pred).ok());
+  ASSERT_TRUE(
+      ParseRowRestriction("   id   =   42   ", PeopleSchema(), &pred).ok());
   EXPECT_EQ(pred.column, "id");
   EXPECT_EQ(pred.int64_value, 42);
 }
@@ -124,16 +121,15 @@ TEST(ParseRowRestriction, IgnoresSurroundingWhitespace) {
 
 TEST(ParseRowRestriction, RejectsAndConnective) {
   EqualityPredicate pred;
-  auto s = ParseRowRestriction("id = 1 AND name = 'ada'",
-                                 PeopleSchema(), &pred);
+  auto s =
+      ParseRowRestriction("id = 1 AND name = 'ada'", PeopleSchema(), &pred);
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kInvalidArgument);
 }
 
 TEST(ParseRowRestriction, RejectsOrConnective) {
   EqualityPredicate pred;
-  auto s =
-      ParseRowRestriction("id = 1 OR id = 2", PeopleSchema(), &pred);
+  auto s = ParseRowRestriction("id = 1 OR id = 2", PeopleSchema(), &pred);
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kInvalidArgument);
 }

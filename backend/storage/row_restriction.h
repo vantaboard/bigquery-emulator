@@ -70,8 +70,8 @@ struct EqualityPredicate {
 // literal types BigQuery's `simple_filter` accepts in the public
 // Storage Read API.
 absl::Status ParseRowRestriction(absl::string_view restriction,
-                                  const schema::TableSchema& schema,
-                                  EqualityPredicate* out);
+                                 const schema::TableSchema& schema,
+                                 EqualityPredicate* out);
 
 }  // namespace storage
 }  // namespace backend

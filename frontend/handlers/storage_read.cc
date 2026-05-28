@@ -116,7 +116,7 @@ void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
 // surface noisy false-positive FAILED_PRECONDITION replies when the
 // catalog handler updates them out-of-band.
 bool SchemasEqualByShape(const backend::schema::TableSchema& a,
-                          const backend::schema::TableSchema& b) {
+                         const backend::schema::TableSchema& b) {
   if (a.columns.size() != b.columns.size()) return false;
   for (size_t i = 0; i < a.columns.size(); ++i) {
     if (a.columns[i].name != b.columns[i].name) return false;
@@ -131,8 +131,8 @@ bool SchemasEqualByShape(const backend::schema::TableSchema& a,
 StorageReadService::StorageReadService(backend::storage::Storage* storage)
     : storage_(storage) {}
 
-::grpc::Status StorageReadService::ParseParent(
-    const std::string& parent, std::string* project_id) const {
+::grpc::Status StorageReadService::ParseParent(const std::string& parent,
+                                               std::string* project_id) const {
   // Accept `projects/{project_id}` and reject anything else. The
   // public BigQuery surface allows a longer path
   // (`projects/{p}/locations/{l}`) but plan 37 keeps the location
@@ -144,13 +144,13 @@ StorageReadService::StorageReadService(backend::storage::Storage* storage)
         "StorageRead.CreateReadSession: parent is required (expected "
         "form projects/{project_id})");
   }
-  const std::vector<absl::string_view> parts =
-      absl::StrSplit(parent, '/');
+  const std::vector<absl::string_view> parts = absl::StrSplit(parent, '/');
   if (parts.size() != 2 || parts[0] != "projects" || parts[1].empty()) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageRead.CreateReadSession: malformed parent ",
-                     "(expected form projects/{project_id}): ", parent));
+                     "(expected form projects/{project_id}): ",
+                     parent));
   }
   *project_id = std::string(parts[1]);
   return ::grpc::Status::OK;
@@ -165,17 +165,17 @@ StorageReadService::StorageReadService(backend::storage::Storage* storage)
         "(expected form "
         "projects/{project_id}/datasets/{dataset_id}/tables/{table_id})");
   }
-  const std::vector<absl::string_view> parts =
-      absl::StrSplit(table_path, '/');
-  if (parts.size() != 6 || parts[0] != "projects" ||
-      parts[2] != "datasets" || parts[4] != "tables" ||
-      parts[1].empty() || parts[3].empty() || parts[5].empty()) {
+  const std::vector<absl::string_view> parts = absl::StrSplit(table_path, '/');
+  if (parts.size() != 6 || parts[0] != "projects" || parts[2] != "datasets" ||
+      parts[4] != "tables" || parts[1].empty() || parts[3].empty() ||
+      parts[5].empty()) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageRead.CreateReadSession: malformed ",
                      "read_session.table (expected form ",
                      "projects/{project_id}/datasets/{dataset_id}/tables/",
-                     "{table_id}): ", table_path));
+                     "{table_id}): ",
+                     table_path));
   }
   out->project_id = std::string(parts[1]);
   out->dataset_id = std::string(parts[3]);
@@ -188,8 +188,7 @@ std::string StorageReadService::NewSessionId(const std::string& project_id) {
   // ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_)). Bumping the counter and
   // formatting the string here keeps the critical section short.
   const std::int64_t id = next_session_id_++;
-  return absl::StrCat("projects/", project_id,
-                      "/locations/-/sessions/s", id);
+  return absl::StrCat("projects/", project_id, "/locations/-/sessions/s", id);
 }
 
 std::string StorageReadService::StreamIdForSession(
@@ -225,8 +224,11 @@ std::string StorageReadService::StreamIdForSession(
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageRead.CreateReadSession: parent project (",
-                     project_id, ") does not match read_session.table ",
-                     "project (", table_id.project_id, ")"));
+                     project_id,
+                     ") does not match read_session.table ",
+                     "project (",
+                     table_id.project_id,
+                     ")"));
   }
 
   // Validate the table exists by fetching its schema. NOT_FOUND here
@@ -248,7 +250,8 @@ std::string StorageReadService::StreamIdForSession(
     backend::storage::EqualityPredicate parsed;
     const absl::Status parse_status = backend::storage::ParseRowRestriction(
         request->read_session().read_options().row_restriction(),
-        *schema_or, &parsed);
+        *schema_or,
+        &parsed);
     if (!parse_status.ok()) {
       return AbslToGrpcStatus(parse_status);
     }
@@ -275,8 +278,7 @@ std::string StorageReadService::StreamIdForSession(
   response->set_table(request->read_session().table());
   backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
   if (request->read_session().has_read_options()) {
-    *response->mutable_read_options() =
-        request->read_session().read_options();
+    *response->mutable_read_options() = request->read_session().read_options();
   }
   auto* stream = response->add_streams();
   stream->set_name(stream_name);
@@ -288,9 +290,8 @@ std::string StorageReadService::StreamIdForSession(
     const v1::ReadRowsRequest* request,
     ::grpc::ServerWriter<v1::ReadRowsResponse>* writer) {
   if (request == nullptr) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::INTERNAL,
-        "StorageRead.ReadRows: request must be non-null");
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "StorageRead.ReadRows: request must be non-null");
   }
 
   // 1. Recover the session name. Plan 37 mints stream ids of the form
@@ -306,15 +307,14 @@ std::string StorageReadService::StreamIdForSession(
   // only needed once we start streaming rows).
   const std::string& read_stream = request->read_stream();
   constexpr absl::string_view kStreamsSuffix = "/streams/0";
-  if (read_stream.empty() ||
-      read_stream.size() <= kStreamsSuffix.size() ||
+  if (read_stream.empty() || read_stream.size() <= kStreamsSuffix.size() ||
       !absl::EndsWith(read_stream, kStreamsSuffix)) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
-        absl::StrCat(
-            "StorageRead.ReadRows: read_stream must be of the form "
-            "{session_name}/streams/0 (got: ",
-            read_stream, ")"));
+        absl::StrCat("StorageRead.ReadRows: read_stream must be of the form "
+                     "{session_name}/streams/0 (got: ",
+                     read_stream,
+                     ")"));
   }
   const std::string session_name =
       read_stream.substr(0, read_stream.size() - kStreamsSuffix.size());
@@ -331,10 +331,9 @@ std::string StorageReadService::StreamIdForSession(
     if (it == sessions_.end()) {
       return ::grpc::Status(
           ::grpc::StatusCode::NOT_FOUND,
-          absl::StrCat(
-              "StorageRead.ReadRows: no such session (call "
-              "CreateReadSession first): ",
-              session_name));
+          absl::StrCat("StorageRead.ReadRows: no such session (call "
+                       "CreateReadSession first): ",
+                       session_name));
     }
     table = it->second.table;
     session_schema = it->second.schema;
@@ -355,10 +354,13 @@ std::string StorageReadService::StreamIdForSession(
   if (!SchemasEqualByShape(session_schema, *live_schema_or)) {
     return ::grpc::Status(
         ::grpc::StatusCode::FAILED_PRECONDITION,
-        absl::StrCat(
-            "StorageRead.ReadRows: table schema for ", table.project_id,
-            ".", table.dataset_id, ".", table.table_id,
-            " changed since CreateReadSession; open a new session"));
+        absl::StrCat("StorageRead.ReadRows: table schema for ",
+                     table.project_id,
+                     ".",
+                     table.dataset_id,
+                     ".",
+                     table.table_id,
+                     " changed since CreateReadSession; open a new session"));
   }
 
   // From here on we are about to stream rows; the writer must be
@@ -367,9 +369,8 @@ std::string StorageReadService::StreamIdForSession(
   // path above pass nullptr -- so we delay the null check until we
   // actually need to write.
   if (writer == nullptr) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::INTERNAL,
-        "StorageRead.ReadRows: writer must be non-null");
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "StorageRead.ReadRows: writer must be non-null");
   }
 
   // 4. Open a read stream against the storage backend. We honor the
@@ -389,8 +390,7 @@ std::string StorageReadService::StreamIdForSession(
   if (!iter_or.ok()) {
     return AbslToGrpcStatus(iter_or.status());
   }
-  std::unique_ptr<backend::storage::RowIterator> iter =
-      std::move(*iter_or);
+  std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
 
   // 5. Stream rows in pages of kReadRowsBatchSize. Each Write that
   // returns false means the client cancelled or the channel broke;

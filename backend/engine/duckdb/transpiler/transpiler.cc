@@ -148,8 +148,7 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
     case ::googlesql::RESOLVED_COLUMN_REF:
       return EmitColumnRef(expr->GetAs<::googlesql::ResolvedColumnRef>());
     case ::googlesql::RESOLVED_FUNCTION_CALL:
-      return EmitFunctionCall(
-          expr->GetAs<::googlesql::ResolvedFunctionCall>());
+      return EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>());
     case ::googlesql::RESOLVED_MAKE_STRUCT:
       return EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>());
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
@@ -180,14 +179,12 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
       return EmitAggregateScan(
           scan->GetAs<::googlesql::ResolvedAggregateScan>());
     case ::googlesql::RESOLVED_ORDER_BY_SCAN:
-      return EmitOrderByScan(
-          scan->GetAs<::googlesql::ResolvedOrderByScan>());
+      return EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>());
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return EmitLimitOffsetScan(
           scan->GetAs<::googlesql::ResolvedLimitOffsetScan>());
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
-      return EmitAnalyticScan(
-          scan->GetAs<::googlesql::ResolvedAnalyticScan>());
+      return EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>());
     default:
       return "";
   }
@@ -255,8 +252,8 @@ std::string Transpiler::EmitTableScan(
   }
   std::string select_list =
       projections.empty() ? "*" : absl::StrJoin(projections, ", ");
-  return absl::StrCat("SELECT ", select_list, " FROM ",
-                      QuoteIdent(table->Name()));
+  return absl::StrCat(
+      "SELECT ", select_list, " FROM ", QuoteIdent(table->Name()));
 }
 
 std::string Transpiler::EmitSingleRowScan(
@@ -332,18 +329,17 @@ std::string Transpiler::EmitJoinScan(
     if (node->join_type() != ::googlesql::ResolvedJoinScan::INNER) {
       return "";
     }
-    return absl::StrCat("SELECT * FROM (", left, ") CROSS JOIN (", right,
-                        ")");
+    return absl::StrCat("SELECT * FROM (", left, ") CROSS JOIN (", right, ")");
   }
   std::string on = EmitExpr(node->join_expr());
   if (on.empty()) return "";
-  return absl::StrCat("SELECT * FROM (", left, ") ", join_kw, " (", right,
-                      ") ON ", on);
+  return absl::StrCat(
+      "SELECT * FROM (", left, ") ", join_kw, " (", right, ") ON ", on);
 }
 
 std::string Transpiler::EmitArrayScan(
     const ::googlesql::ResolvedArrayScan* node) {
-  // Phase 5j subset: standalone UNNEST. Emit
+  // Standalone UNNEST subset. Emit
   // `SELECT unnest(<arr>) AS "<col>"`, which DuckDB lowers to one row
   // per array element with the column carrying `<col>` as its name.
   //
@@ -368,9 +364,8 @@ std::string Transpiler::EmitArrayScan(
   if (node == nullptr) return "";
   if (node->array_expr_list_size() != 1 ||
       node->element_column_list_size() != 1 ||
-      node->array_offset_column() != nullptr ||
-      node->join_expr() != nullptr || node->is_outer() ||
-      node->array_zip_mode() != nullptr) {
+      node->array_offset_column() != nullptr || node->join_expr() != nullptr ||
+      node->is_outer() || node->array_zip_mode() != nullptr) {
     return "";
   }
   // Standalone UNNEST either has no input_scan or a SingleRowScan
@@ -383,7 +378,9 @@ std::string Transpiler::EmitArrayScan(
   }
   std::string arr = EmitExpr(node->array_expr_list(0));
   if (arr.empty()) return "";
-  return absl::StrCat("SELECT unnest(", arr, ") AS ",
+  return absl::StrCat("SELECT unnest(",
+                      arr,
+                      ") AS ",
                       QuoteIdent(node->element_column_list(0).name()));
 }
 
@@ -410,8 +407,7 @@ std::string Transpiler::EmitAggregateScan(
 
   std::vector<std::string> projections;
   std::vector<std::string> group_by_exprs;
-  projections.reserve(node->group_by_list_size() +
-                      node->aggregate_list_size());
+  projections.reserve(node->group_by_list_size() + node->aggregate_list_size());
   group_by_exprs.reserve(node->group_by_list_size());
 
   for (int i = 0; i < node->group_by_list_size(); ++i) {
@@ -421,14 +417,12 @@ std::string Transpiler::EmitAggregateScan(
     if (expr.empty()) return "";
     std::string quoted_out = QuoteIdent(gc->column().name());
     projections.push_back(
-        expr == quoted_out ? expr
-                           : absl::StrCat(expr, " AS ", quoted_out));
+        expr == quoted_out ? expr : absl::StrCat(expr, " AS ", quoted_out));
     group_by_exprs.push_back(expr);
   }
 
   for (int i = 0; i < node->aggregate_list_size(); ++i) {
-    const ::googlesql::ResolvedComputedColumnBase* ac =
-        node->aggregate_list(i);
+    const ::googlesql::ResolvedComputedColumnBase* ac = node->aggregate_list(i);
     if (ac == nullptr) return "";
     const ::googlesql::ResolvedExpr* expr_node = ac->expr();
     if (expr_node == nullptr ||
@@ -445,8 +439,7 @@ std::string Transpiler::EmitAggregateScan(
 
   std::string select_list =
       projections.empty() ? "*" : absl::StrJoin(projections, ", ");
-  std::string sql =
-      absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
+  std::string sql = absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
   if (!group_by_exprs.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
@@ -475,8 +468,7 @@ std::string Transpiler::EmitOrderByScan(
   std::vector<std::string> items;
   items.reserve(node->order_by_item_list_size());
   for (int i = 0; i < node->order_by_item_list_size(); ++i) {
-    const ::googlesql::ResolvedOrderByItem* item =
-        node->order_by_item_list(i);
+    const ::googlesql::ResolvedOrderByItem* item = node->order_by_item_list(i);
     if (item == nullptr || item->column_ref() == nullptr) return "";
     if (item->collation_name() != nullptr) return "";
     std::string col = EmitColumnRef(item->column_ref());
@@ -497,8 +489,8 @@ std::string Transpiler::EmitOrderByScan(
     items.push_back(absl::StrCat(col, " ", dir, nulls));
   }
   if (items.empty()) return "";
-  return absl::StrCat("SELECT * FROM (", input, ") ORDER BY ",
-                      absl::StrJoin(items, ", "));
+  return absl::StrCat(
+      "SELECT * FROM (", input, ") ORDER BY ", absl::StrJoin(items, ", "));
 }
 
 std::string Transpiler::EmitLimitOffsetScan(
@@ -603,8 +595,7 @@ std::string Transpiler::EmitAnalyticScan(
         items.push_back(absl::StrCat(col, " ", dir, nulls));
       }
       if (!items.empty()) {
-        order_clause =
-            absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
+        order_clause = absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
       }
     }
 
@@ -643,8 +634,7 @@ std::string Transpiler::EmitAnalyticScan(
         if (start.empty()) return "";
         std::string end = EmitFrameBound(wf->end_expr());
         if (end.empty()) return "";
-        frame_clause =
-            absl::StrCat(unit, " BETWEEN ", start, " AND ", end);
+        frame_clause = absl::StrCat(unit, " BETWEEN ", start, " AND ", end);
       }
 
       std::vector<std::string> over_parts;
@@ -653,8 +643,8 @@ std::string Transpiler::EmitAnalyticScan(
       if (!frame_clause.empty()) over_parts.push_back(frame_clause);
       std::string over =
           absl::StrCat("OVER (", absl::StrJoin(over_parts, " "), ")");
-      projections.push_back(absl::StrCat(fn_sql, " ", over, " AS ",
-                                          QuoteIdent(col->column().name())));
+      projections.push_back(absl::StrCat(
+          fn_sql, " ", over, " AS ", QuoteIdent(col->column().name())));
     }
   }
 
@@ -681,8 +671,7 @@ std::string Transpiler::EmitWithRefScan(
 
 // Expressions ---------------------------------------------------------------
 
-std::string Transpiler::EmitLiteral(
-    const ::googlesql::ResolvedLiteral* node) {
+std::string Transpiler::EmitLiteral(const ::googlesql::ResolvedLiteral* node) {
   // Delegates to the file-private `EmitValueLiteral` helper. Scalar
   // kinds keep going through `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`
   // because that path already matches DuckDB syntax for INT / FLOAT /
@@ -772,8 +761,8 @@ std::string Transpiler::EmitFunctionCall(
                 << "' lowering deferred; falling back to reference-impl";
       return "";
     case FnKind::kMap:
-      return absl::StrCat(entry->duckdb_name, "(",
-                          absl::StrJoin(args, ", "), ")");
+      return absl::StrCat(
+          entry->duckdb_name, "(", absl::StrJoin(args, ", "), ")");
   }
   return "";
 }
@@ -806,8 +795,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
       node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
       node->group_by_list_size() > 0 ||
       node->group_by_aggregate_list_size() > 0 ||
-      node->where_expr() != nullptr ||
-      node->having_expr() != nullptr ||
+      node->where_expr() != nullptr || node->having_expr() != nullptr ||
       node->null_handling_modifier() !=
           ::googlesql::ResolvedNonScalarFunctionCallBase::
               DEFAULT_NULL_HANDLING) {
@@ -845,8 +833,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
       return "";
     case FnKind::kMap: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
-      return absl::StrCat(entry->duckdb_name, "(", prefix,
-                          absl::StrJoin(args, ", "), ")");
+      return absl::StrCat(
+          entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
   }
   return "";
@@ -877,8 +865,7 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     return "";
   }
   if (node->null_handling_modifier() !=
-      ::googlesql::ResolvedNonScalarFunctionCallBase::
-          DEFAULT_NULL_HANDLING) {
+      ::googlesql::ResolvedNonScalarFunctionCallBase::DEFAULT_NULL_HANDLING) {
     // IGNORE / RESPECT NULLS modifies LAG / LEAD / FIRST_VALUE /
     // LAST_VALUE semantics; DuckDB has the same keywords but the
     // rewrite needs more care than this emit pass covers.
@@ -915,8 +902,8 @@ std::string Transpiler::EmitAnalyticFunctionCall(
       return "";
     case FnKind::kMap: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
-      return absl::StrCat(entry->duckdb_name, "(", prefix,
-                          absl::StrJoin(args, ", "), ")");
+      return absl::StrCat(
+          entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
   }
   return "";
@@ -948,8 +935,7 @@ std::string Transpiler::EmitFrameBound(
   return "";
 }
 
-std::string Transpiler::EmitCast(
-    const ::googlesql::ResolvedCast* /*node*/) {
+std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* /*node*/) {
   return "";
 }
 
@@ -982,8 +968,7 @@ std::string Transpiler::EmitMakeStruct(
   const ::googlesql::Type* t = node->type();
   if (t == nullptr || !t->IsStruct()) return "";
   const ::googlesql::StructType* st = t->AsStruct();
-  if (st == nullptr ||
-      st->num_fields() != node->field_list_size()) {
+  if (st == nullptr || st->num_fields() != node->field_list_size()) {
     return "";
   }
   std::vector<std::string> kvs;

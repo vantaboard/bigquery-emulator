@@ -51,11 +51,10 @@ class ArrowToBqTest : public ::testing::Test {
   // duckdb_fetch_chunk so the per-test assertions can read the full
   // result without juggling chunk lifetime.
   std::vector<storage::Row> RunAndFetch(absl::string_view sql,
-                                         const schema::TableSchema& schema) {
+                                        const schema::TableSchema& schema) {
     ::duckdb_result result;
     const std::string sql_str(sql);
-    EXPECT_EQ(::duckdb_query(conn_, sql_str.c_str(), &result),
-              ::DuckDBSuccess)
+    EXPECT_EQ(::duckdb_query(conn_, sql_str.c_str(), &result), ::DuckDBSuccess)
         << ::duckdb_result_error(&result);
     std::vector<storage::Row> rows;
     while (true) {
@@ -111,8 +110,7 @@ TEST_F(ArrowToBqTest, RendersVarcharBothInlineAndPointer) {
       s);
   ASSERT_EQ(rows.size(), 2u);
   EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kString);
-  EXPECT_EQ(rows[0].cells[0].string_value(),
-            "abracadabra-extra-long-string");
+  EXPECT_EQ(rows[0].cells[0].string_value(), "abracadabra-extra-long-string");
   EXPECT_EQ(rows[1].cells[0].kind(), storage::Value::Kind::kString);
   EXPECT_EQ(rows[1].cells[0].string_value(), "ada");
 }

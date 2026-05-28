@@ -56,37 +56,39 @@ namespace {
 // Returns an INVALID_ARGUMENT gRPC status describing which field is
 // missing so callers don't have to guess at "empty DatasetRef" errors.
 ::grpc::Status ValidateDatasetRef(const v1::DatasetRef& ref,
-                                   absl::string_view rpc_name) {
+                                  absl::string_view rpc_name) {
   if (ref.project_id().empty()) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          absl::StrCat(rpc_name, ": dataset.project_id "
-                                                 "is required"));
+                          absl::StrCat(rpc_name,
+                                       ": dataset.project_id "
+                                       "is required"));
   }
   if (ref.dataset_id().empty()) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          absl::StrCat(rpc_name, ": dataset.dataset_id "
-                                                 "is required"));
+                          absl::StrCat(rpc_name,
+                                       ": dataset.dataset_id "
+                                       "is required"));
   }
   return ::grpc::Status::OK;
 }
 
 // Validates that a `TableRef` carries the three required identifiers.
 ::grpc::Status ValidateTableRef(const v1::TableRef& ref,
-                                 absl::string_view rpc_name) {
+                                absl::string_view rpc_name) {
   if (ref.project_id().empty()) {
-    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          absl::StrCat(rpc_name,
-                                       ": table.project_id is required"));
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        absl::StrCat(rpc_name, ": table.project_id is required"));
   }
   if (ref.dataset_id().empty()) {
-    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          absl::StrCat(rpc_name,
-                                       ": table.dataset_id is required"));
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        absl::StrCat(rpc_name, ": table.dataset_id is required"));
   }
   if (ref.table_id().empty()) {
-    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          absl::StrCat(rpc_name,
-                                       ": table.table_id is required"));
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        absl::StrCat(rpc_name, ": table.table_id is required"));
   }
   return ::grpc::Status::OK;
 }
@@ -96,8 +98,8 @@ backend::storage::DatasetId DatasetIdFromProto(const v1::DatasetRef& ref) {
 }
 
 backend::storage::TableId TableIdFromProto(const v1::TableRef& ref) {
-  return backend::storage::TableId{ref.project_id(), ref.dataset_id(),
-                                    ref.table_id()};
+  return backend::storage::TableId{
+      ref.project_id(), ref.dataset_id(), ref.table_id()};
 }
 
 // Converts an `enginepb::Cell` to a `backend::storage::Value`.
@@ -107,8 +109,8 @@ backend::storage::TableId TableIdFromProto(const v1::TableRef& ref) {
 // as `Cell::string_value` and `Cell::null_value`; the engine keeps
 // them stored as either `Value::String` or `Value::Null` so a later
 // `ListRows` returns the exact same string-shaped bytes back. Typed
-// coercion happens at the engine boundary inside Phase 5; the
-// catalog only round-trips opaque wire-shape data.
+// coercion happens at the engine boundary inside the query-execution
+// path; the catalog only round-trips opaque wire-shape data.
 backend::storage::Value CellToValue(const v1::Cell& cell) {
   switch (cell.value_case()) {
     case v1::Cell::kStringValue:
@@ -207,8 +209,7 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "CatalogService: storage backend is not configured");
   }
-  if (auto v = ValidateDatasetRef(request->dataset(), "DropDataset");
-      !v.ok()) {
+  if (auto v = ValidateDatasetRef(request->dataset(), "DropDataset"); !v.ok()) {
     return v;
   }
   const auto id = DatasetIdFromProto(request->dataset());
@@ -235,10 +236,9 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   return AbslToGrpcStatus(storage_->CreateTable(id, *schema_or));
 }
 
-::grpc::Status CatalogService::DropTable(
-    ::grpc::ServerContext* /*context*/,
-    const v1::DropTableRequest* request,
-    v1::DropTableResponse* /*response*/) {
+::grpc::Status CatalogService::DropTable(::grpc::ServerContext* /*context*/,
+                                         const v1::DropTableRequest* request,
+                                         v1::DropTableResponse* /*response*/) {
   if (storage_ == nullptr) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "CatalogService: storage backend is not configured");
@@ -295,10 +295,9 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   return AbslToGrpcStatus(storage_->AppendRows(id, absl::MakeSpan(rows)));
 }
 
-::grpc::Status CatalogService::ListRows(
-    ::grpc::ServerContext* /*context*/,
-    const v1::ListRowsRequest* request,
-    v1::ListRowsResponse* response) {
+::grpc::Status CatalogService::ListRows(::grpc::ServerContext* /*context*/,
+                                        const v1::ListRowsRequest* request,
+                                        v1::ListRowsResponse* response) {
   if (storage_ == nullptr) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "CatalogService: storage backend is not configured");
@@ -313,9 +312,8 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   }
   std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
 
-  const int64_t start_index = request->start_index() > 0
-                                  ? request->start_index()
-                                  : 0;
+  const int64_t start_index =
+      request->start_index() > 0 ? request->start_index() : 0;
   const int64_t max_results = request->max_results();
   const bool unlimited = max_results <= 0;
 

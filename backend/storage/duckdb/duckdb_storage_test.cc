@@ -37,8 +37,8 @@ class DuckDBStorageTest : public ::testing::Test {
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
     std::mt19937_64 rng(rd());
-    data_dir_ = fs::path(tmpdir) /
-                 absl::StrCat("bqemu-duckdb-storage-test-", rng());
+    data_dir_ =
+        fs::path(tmpdir) / absl::StrCat("bqemu-duckdb-storage-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
   }
@@ -151,8 +151,7 @@ TEST_F(DuckDBStorageTest, RoundTripsHundredRowsAcrossRestart) {
       ASSERT_LT(id, 100);
       EXPECT_FALSE(seen[id]) << "duplicate row for id " << id;
       seen[id] = true;
-      EXPECT_EQ(row.cells[1].string_value(),
-                absl::StrCat("person-", id));
+      EXPECT_EQ(row.cells[1].string_value(), absl::StrCat("person-", id));
     }
     for (size_t i = 0; i < seen.size(); ++i) {
       EXPECT_TRUE(seen[i]) << "missing row for id " << i;
@@ -170,8 +169,7 @@ TEST_F(DuckDBStorageTest, CreateTableMaterializesEmptyParquet) {
   ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
   ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
 
-  const fs::path parquet =
-      data_dir_ / "proj-1" / "ds_1" / "people.parquet";
+  const fs::path parquet = data_dir_ / "proj-1" / "ds_1" / "people.parquet";
   ASSERT_TRUE(fs::exists(parquet));
   EXPECT_GT(fs::file_size(parquet), 0u);
 
@@ -193,10 +191,8 @@ TEST_F(DuckDBStorageTest, DropTableRemovesParquetAndSidecar) {
   ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
   ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
 
-  const fs::path parquet =
-      data_dir_ / "proj-1" / "ds_1" / "people.parquet";
-  const fs::path sidecar =
-      data_dir_ / "proj-1" / "ds_1" / "people.meta.json";
+  const fs::path parquet = data_dir_ / "proj-1" / "ds_1" / "people.parquet";
+  const fs::path sidecar = data_dir_ / "proj-1" / "ds_1" / "people.meta.json";
   ASSERT_TRUE(fs::exists(parquet));
   ASSERT_TRUE(fs::exists(sidecar));
 
@@ -318,8 +314,7 @@ TEST_F(DuckDBStorageTest, CreateReadStreamReturnsAllRowsByDefault) {
   // which mirrors INSERT order; rows[i] == person-i.
   for (size_t i = 0; i < scanned.size(); ++i) {
     EXPECT_EQ(scanned[i].cells[0].int64_value(), static_cast<int64_t>(i));
-    EXPECT_EQ(scanned[i].cells[1].string_value(),
-              absl::StrCat("person-", i));
+    EXPECT_EQ(scanned[i].cells[1].string_value(), absl::StrCat("person-", i));
   }
 }
 
@@ -577,7 +572,8 @@ TEST(SchemaToDuckDBType, RoundTripsAllPlanCoveredTypes) {
       {schema::ColumnType::kJson, "JSON"},
   };
   for (const auto& c : cases) {
-    EXPECT_EQ(schema::ToDuckDBType(c.bq), c.duckdb) << "kind=" << static_cast<int>(c.bq);
+    EXPECT_EQ(schema::ToDuckDBType(c.bq), c.duckdb)
+        << "kind=" << static_cast<int>(c.bq);
     // FromDuckDBType only needs to accept the bare head; the
     // TIMESTAMP WITH TIME ZONE alias falls through the suffix
     // check inside the function and round-trips back to

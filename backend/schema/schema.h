@@ -103,7 +103,8 @@ ColumnMode ParseColumnMode(absl::string_view name);
 // surfaced as `kUnknown` so analysis can pick it up later.
 // ---------------------------------------------------------------------------
 
-absl::StatusOr<ColumnSchema> ColumnSchemaFromProto(const v1::FieldSchema& proto);
+absl::StatusOr<ColumnSchema> ColumnSchemaFromProto(
+    const v1::FieldSchema& proto);
 absl::StatusOr<TableSchema> TableSchemaFromProto(const v1::TableSchema& proto);
 
 void ColumnSchemaToProto(const ColumnSchema& column, v1::FieldSchema* out);
@@ -113,8 +114,8 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out);
 // DuckDB type-name conversions
 //
 // Used by the DuckDB-backed storage (`backend/storage/duckdb/`) and,
-// later, the DuckDB engine transpiler (Phase 5.B) to lower BigQuery
-// column types onto DuckDB's type system. The mapping is intentionally
+// later, the DuckDB engine transpiler to lower BigQuery column types
+// onto DuckDB's type system. The mapping is intentionally
 // total: any unknown BigQuery type maps to `VARCHAR` so a misconfigured
 // schema does not fail the CREATE TABLE; conversely, `FromDuckDBType`
 // returns `kUnknown` for types DuckDB knows but BigQuery does not

@@ -100,8 +100,8 @@ std::string FormatTimestampMicros(int64_t micros) {
 // through DuckDB's internal cast machinery.
 std::string FormatDecimalInt64(int64_t v, uint8_t scale) {
   bool negative = v < 0;
-  uint64_t magnitude = negative ? static_cast<uint64_t>(-(v + 1)) + 1
-                                  : static_cast<uint64_t>(v);
+  uint64_t magnitude =
+      negative ? static_cast<uint64_t>(-(v + 1)) + 1 : static_cast<uint64_t>(v);
   std::string digits = absl::StrCat(magnitude);
   if (scale == 0) {
     return negative ? absl::StrCat("-", digits) : digits;
@@ -127,11 +127,9 @@ absl::string_view ReadVarchar(::duckdb_vector vector, ::idx_t row) {
 }  // namespace
 
 absl::StatusOr<storage::Value> ReadCellFromVector(
-    ::duckdb_vector vector, ::idx_t row,
-    const schema::ColumnSchema& column) {
+    ::duckdb_vector vector, ::idx_t row, const schema::ColumnSchema& column) {
   if (vector == nullptr) {
-    return absl::InvalidArgumentError(
-        "arrow_to_bq: vector is null");
+    return absl::InvalidArgumentError("arrow_to_bq: vector is null");
   }
   const uint64_t* validity = ::duckdb_vector_get_validity(vector);
   if (!RowIsValid(validity, row)) {
@@ -140,8 +138,7 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
 
   ::duckdb_logical_type logical = ::duckdb_vector_get_column_type(vector);
   if (logical == nullptr) {
-    return absl::InternalError(
-        "arrow_to_bq: vector has no logical type");
+    return absl::InternalError("arrow_to_bq: vector has no logical type");
   }
   const ::duckdb_type type_id = ::duckdb_get_type_id(logical);
 
@@ -153,13 +150,15 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
       type_id == ::DUCKDB_TYPE_LIST) {
     if (type_id != ::DUCKDB_TYPE_LIST) {
       ::duckdb_destroy_logical_type(&logical);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "arrow_to_bq: REPEATED column '", column.name,
-          "' is backed by non-LIST DuckDB vector (type_id=", type_id,
-          ")"));
+      return absl::FailedPreconditionError(
+          absl::StrCat("arrow_to_bq: REPEATED column '",
+                       column.name,
+                       "' is backed by non-LIST DuckDB vector (type_id=",
+                       type_id,
+                       ")"));
     }
-    const auto* entries =
-        static_cast<const ::duckdb_list_entry*>(::duckdb_vector_get_data(vector));
+    const auto* entries = static_cast<const ::duckdb_list_entry*>(
+        ::duckdb_vector_get_data(vector));
     ::duckdb_vector child = ::duckdb_list_vector_get_child(vector);
     schema::ColumnSchema element = column;
     element.mode = schema::ColumnMode::kNullable;
@@ -187,16 +186,18 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
       type_id == ::DUCKDB_TYPE_STRUCT) {
     if (type_id != ::DUCKDB_TYPE_STRUCT) {
       ::duckdb_destroy_logical_type(&logical);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "arrow_to_bq: STRUCT column '", column.name,
-          "' is backed by non-STRUCT DuckDB vector (type_id=", type_id,
-          ")"));
+      return absl::FailedPreconditionError(
+          absl::StrCat("arrow_to_bq: STRUCT column '",
+                       column.name,
+                       "' is backed by non-STRUCT DuckDB vector (type_id=",
+                       type_id,
+                       ")"));
     }
     std::vector<storage::Value> fields;
     fields.reserve(column.fields.size());
     for (size_t i = 0; i < column.fields.size(); ++i) {
-      ::duckdb_vector child = ::duckdb_struct_vector_get_child(
-          vector, static_cast<::idx_t>(i));
+      ::duckdb_vector child =
+          ::duckdb_struct_vector_get_child(vector, static_cast<::idx_t>(i));
       auto v = ReadCellFromVector(child, row, column.fields[i]);
       if (!v.ok()) {
         ::duckdb_destroy_logical_type(&logical);
@@ -272,9 +273,11 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
         }
         default:
           ::duckdb_destroy_logical_type(&logical);
-          return absl::UnimplementedError(absl::StrCat(
-              "arrow_to_bq: INT64 column '", column.name,
-              "' backed by unsupported DuckDB type_id=", type_id));
+          return absl::UnimplementedError(
+              absl::StrCat("arrow_to_bq: INT64 column '",
+                           column.name,
+                           "' backed by unsupported DuckDB type_id=",
+                           type_id));
       }
       ::duckdb_destroy_logical_type(&logical);
       return storage::Value::Int64(v);
@@ -296,9 +299,11 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
         }
         default:
           ::duckdb_destroy_logical_type(&logical);
-          return absl::UnimplementedError(absl::StrCat(
-              "arrow_to_bq: FLOAT64 column '", column.name,
-              "' backed by unsupported DuckDB type_id=", type_id));
+          return absl::UnimplementedError(
+              absl::StrCat("arrow_to_bq: FLOAT64 column '",
+                           column.name,
+                           "' backed by unsupported DuckDB type_id=",
+                           type_id));
       }
       ::duckdb_destroy_logical_type(&logical);
       return storage::Value::Float64(v);
@@ -340,13 +345,14 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
     case schema::ColumnType::kBignumeric: {
       if (type_id != ::DUCKDB_TYPE_DECIMAL) {
         ::duckdb_destroy_logical_type(&logical);
-        return absl::UnimplementedError(absl::StrCat(
-            "arrow_to_bq: NUMERIC column '", column.name,
-            "' backed by unsupported DuckDB type_id=", type_id));
+        return absl::UnimplementedError(
+            absl::StrCat("arrow_to_bq: NUMERIC column '",
+                         column.name,
+                         "' backed by unsupported DuckDB type_id=",
+                         type_id));
       }
       const uint8_t scale = ::duckdb_decimal_scale(logical);
-      const ::duckdb_type internal =
-          ::duckdb_decimal_internal_type(logical);
+      const ::duckdb_type internal = ::duckdb_decimal_internal_type(logical);
       int64_t raw = 0;
       switch (internal) {
         case ::DUCKDB_TYPE_SMALLINT: {
@@ -374,7 +380,8 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
           // when a column type is not yet specialized here.
           ::duckdb_destroy_logical_type(&logical);
           return absl::UnimplementedError(absl::StrCat(
-              "arrow_to_bq: DECIMAL column '", column.name,
+              "arrow_to_bq: DECIMAL column '",
+              column.name,
               "' with HUGEINT internal storage is not yet supported"));
       }
       std::string rendered = FormatDecimalInt64(raw, scale);
@@ -388,9 +395,10 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
       // a container type. Surface as a FailedPrecondition because the
       // analyzer disagreed with DuckDB's reported chunk type.
       ::duckdb_destroy_logical_type(&logical);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "arrow_to_bq: container column '", column.name,
-          "' has no LIST/STRUCT vector backing"));
+      return absl::FailedPreconditionError(
+          absl::StrCat("arrow_to_bq: container column '",
+                       column.name,
+                       "' has no LIST/STRUCT vector backing"));
     case schema::ColumnType::kUnknown:
       // Fallback path: render the cell as the textual form of the
       // varchar vector if DuckDB shipped one, otherwise empty.
@@ -401,7 +409,8 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
       }
       ::duckdb_destroy_logical_type(&logical);
       return absl::UnimplementedError(absl::StrCat(
-          "arrow_to_bq: column '", column.name,
+          "arrow_to_bq: column '",
+          column.name,
           "' has unknown BigQuery type and non-VARCHAR DuckDB type_id=",
           type_id));
   }
@@ -410,17 +419,19 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
 }
 
 absl::StatusOr<storage::Row> ChunkRowToCells(
-    ::duckdb_data_chunk chunk, ::idx_t row,
+    ::duckdb_data_chunk chunk,
+    ::idx_t row,
     const schema::TableSchema& output_schema) {
   if (chunk == nullptr) {
     return absl::InvalidArgumentError("arrow_to_bq: chunk is null");
   }
   const ::idx_t ncols = ::duckdb_data_chunk_get_column_count(chunk);
   if (ncols != static_cast<::idx_t>(output_schema.columns.size())) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "arrow_to_bq: chunk has ", ncols,
-        " columns but analyzer output schema has ",
-        output_schema.columns.size()));
+    return absl::InvalidArgumentError(
+        absl::StrCat("arrow_to_bq: chunk has ",
+                     ncols,
+                     " columns but analyzer output schema has ",
+                     output_schema.columns.size()));
   }
   storage::Row out;
   out.cells.reserve(ncols);

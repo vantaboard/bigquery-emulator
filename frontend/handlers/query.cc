@@ -66,8 +66,8 @@ namespace {
   std::string message(status.message());
   ::googlesql::ErrorLocation location;
   if (::googlesql::GetErrorLocation(status, &location)) {
-    message = absl::StrCat(location.line(), ":", location.column(), ": ",
-                           message);
+    message =
+        absl::StrCat(location.line(), ":", location.column(), ": ", message);
   }
   return ::grpc::Status(code, message);
 }
@@ -84,8 +84,8 @@ namespace {
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   // Without this opt-in the analyzer rejects every non-SELECT
   // statement kind in `Prepare()` with a generic
-  // "Statement not supported" error. Phase 6a needs INSERT/UPDATE/
-  // DELETE/MERGE to flow through to the classifier in
+  // "Statement not supported" error. The DML classifier needs
+  // INSERT/UPDATE/DELETE/MERGE to flow through to the classifier in
   // `StreamQueryResults` so the handler can return UNIMPLEMENTED
   // (or run INSERT) instead of a misleading INVALID_ARGUMENT.
   language.SetSupportsAllStatementKinds();
@@ -258,7 +258,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
 }  // namespace
 
 QueryService::QueryService(backend::storage::Storage* storage,
-                            backend::engine::Engine* engine)
+                           backend::engine::Engine* engine)
     : storage_(storage), engine_(engine) {}
 
 ::grpc::Status QueryService::DryRun(::grpc::ServerContext* /*context*/,
@@ -296,9 +296,8 @@ QueryService::QueryService(backend::storage::Storage* storage,
 
   ::googlesql::TypeFactory type_factory;
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
-  backend::catalog::GoogleSqlCatalog catalog(request->project_id(), storage_,
-                                              &type_factory,
-                                              options.language());
+  backend::catalog::GoogleSqlCatalog catalog(
+      request->project_id(), storage_, &type_factory, options.language());
 
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
@@ -334,7 +333,7 @@ QueryService::QueryService(backend::storage::Storage* storage,
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,
           absl::StrCat("QueryService::DryRun: DDL statements are not "
-                       "implemented yet (Phase 6b of ROADMAP.md); got ",
+                       "implemented yet; got ",
                        stmt->node_kind_string()));
     case StatementClass::kOther:
       return ::grpc::Status(
@@ -357,7 +356,8 @@ QueryService::QueryService(backend::storage::Storage* storage,
 }
 
 ::grpc::Status QueryService::ExecuteQuery(
-    ::grpc::ServerContext* /*context*/, const v1::QueryRequest* request,
+    ::grpc::ServerContext* /*context*/,
+    const v1::QueryRequest* request,
     ::grpc::ServerWriter<v1::QueryResultRow>* writer) {
   if (writer == nullptr) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
@@ -370,7 +370,8 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // The lambda is invoked synchronously by StreamQueryResults; no
   // need to capture state by value.
   return StreamQueryResults(
-      storage_, *request,
+      storage_,
+      *request,
       [writer](const v1::QueryResultRow& message) -> bool {
         return writer->Write(message);
       },
@@ -378,12 +379,14 @@ QueryService::QueryService(backend::storage::Storage* storage,
 }
 
 ::grpc::Status StreamQueryResults(
-    backend::storage::Storage* storage, const v1::QueryRequest& request,
+    backend::storage::Storage* storage,
+    const v1::QueryRequest& request,
     const std::function<bool(const v1::QueryResultRow&)>& write,
     backend::engine::Engine* engine) {
   if (!write) {
-    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
-                          "QueryService::ExecuteQuery: write callback is empty");
+    return ::grpc::Status(
+        ::grpc::StatusCode::INTERNAL,
+        "QueryService::ExecuteQuery: write callback is empty");
   }
   if (storage == nullptr) {
     return ::grpc::Status(
@@ -415,21 +418,25 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // here for the duration of the stream.
   ::googlesql::TypeFactory type_factory;
   ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
-  backend::catalog::GoogleSqlCatalog catalog(
-      request.project_id(), storage, &type_factory,
-      analyzer_options.language());
+  backend::catalog::GoogleSqlCatalog catalog(request.project_id(),
+                                             storage,
+                                             &type_factory,
+                                             analyzer_options.language());
 
   // Pre-classify the statement so we can pick the right engine entry
   // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
   // and reject DDL with a friendly UNIMPLEMENTED. We pay for one
   // analyzer pass here even though the engine re-analyzes inside
   // `PreparedQuery::Prepare` / `PreparedModify::Prepare`; the cost is
-  // dominated by the catalog setup and Phase 6c will fold the two
-  // analyses together.
+  // dominated by the catalog setup and a follow-up will fold the
+  // two analyses together.
   std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
-  absl::Status classify_status = ::googlesql::AnalyzeStatement(
-      request.sql(), analyzer_options, &catalog, &type_factory,
-      &classify_output);
+  absl::Status classify_status =
+      ::googlesql::AnalyzeStatement(request.sql(),
+                                    analyzer_options,
+                                    &catalog,
+                                    &type_factory,
+                                    &classify_output);
   if (!classify_status.ok()) {
     return AnalyzeStatusToGrpc(classify_status);
   }
@@ -523,7 +530,7 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // the first row.
   v1::QueryResultRow schema_message;
   backend::schema::TableSchemaToProto(source->schema(),
-                                       schema_message.mutable_schema());
+                                      schema_message.mutable_schema());
   if (!write(schema_message)) {
     return ::grpc::Status(
         ::grpc::StatusCode::CANCELLED,

@@ -28,8 +28,8 @@
 #include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
-#include "proto/emulator.pb.h"
 #include "google/protobuf/util/json_util.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -50,8 +50,9 @@ constexpr absl::string_view kCatalogDbFile = "catalog.duckdb";
 // Builds an absl::Status from a duckdb error string. The DuckDB C API
 // does not bucket errors by category, so we surface the raw message
 // at the requested status code.
-absl::Status DuckDBError(absl::StatusCode code, absl::string_view what,
-                          absl::string_view detail) {
+absl::Status DuckDBError(absl::StatusCode code,
+                         absl::string_view what,
+                         absl::string_view detail) {
   if (detail.empty()) {
     return absl::Status(code, std::string(what));
   }
@@ -103,7 +104,7 @@ absl::StatusOr<std::string> RenderCellLiteral(
 // literal form for the temporal / numeric types that round-trip as
 // strings in our Value union.
 //
-// The Phase 1 gateway tabledata.insertAll path lowers every JSON cell
+// The gateway `tabledata.insertAll` path lowers every JSON cell
 // to a `Value::String` regardless of the column's declared type
 // (see the comment on `frontend/handlers/catalog.cc::CellToValue`).
 // For numeric / boolean columns we therefore accept both the natively-
@@ -119,76 +120,82 @@ absl::StatusOr<std::string> RenderScalarLiteral(
     case schema::ColumnType::kBool:
       if (cell.kind() == Value::Kind::kString) {
         return absl::StrCat("CAST('",
-                             EscapeStringLiteralInner(cell.string_value()),
-                             "' AS BOOLEAN)");
+                            EscapeStringLiteralInner(cell.string_value()),
+                            "' AS BOOLEAN)");
       }
       return std::string(cell.bool_value() ? "TRUE" : "FALSE");
     case schema::ColumnType::kInt64:
       if (cell.kind() == Value::Kind::kString) {
         return absl::StrCat("CAST('",
-                             EscapeStringLiteralInner(cell.string_value()),
-                             "' AS BIGINT)");
+                            EscapeStringLiteralInner(cell.string_value()),
+                            "' AS BIGINT)");
       }
       return absl::StrCat(cell.int64_value());
     case schema::ColumnType::kFloat64: {
       if (cell.kind() == Value::Kind::kString) {
         return absl::StrCat("CAST('",
-                             EscapeStringLiteralInner(cell.string_value()),
-                             "' AS DOUBLE)");
+                            EscapeStringLiteralInner(cell.string_value()),
+                            "' AS DOUBLE)");
       }
       const double v = cell.float64_value();
       if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
       if (std::isinf(v)) {
         return std::string(v > 0 ? "'Infinity'::DOUBLE"
-                                  : "'-Infinity'::DOUBLE");
+                                 : "'-Infinity'::DOUBLE");
       }
       return absl::StrFormat("%.17g", v);
     }
     case schema::ColumnType::kString:
     case schema::ColumnType::kJson:
     case schema::ColumnType::kGeography:
-      return absl::StrCat("'", EscapeStringLiteralInner(cell.string_value()),
-                          "'");
+      return absl::StrCat(
+          "'", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kBytes:
       return RenderBlobLiteral(cell.string_value());
     case schema::ColumnType::kDate:
-      return absl::StrCat("DATE '",
-                           EscapeStringLiteralInner(cell.string_value()), "'");
+      return absl::StrCat(
+          "DATE '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kTime:
-      return absl::StrCat("TIME '",
-                           EscapeStringLiteralInner(cell.string_value()), "'");
+      return absl::StrCat(
+          "TIME '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kDatetime:
-      return absl::StrCat("TIMESTAMP '",
-                           EscapeStringLiteralInner(cell.string_value()), "'");
+      return absl::StrCat(
+          "TIMESTAMP '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kTimestamp:
-      return absl::StrCat("TIMESTAMPTZ '",
-                           EscapeStringLiteralInner(cell.string_value()), "'");
+      return absl::StrCat(
+          "TIMESTAMPTZ '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kNumeric:
     case schema::ColumnType::kBignumeric:
       // Stored as a textual decimal in our Value union; let DuckDB
       // re-parse it under the declared precision/scale so out-of-
       // range values surface as an INTERNAL from RunSql.
-      return absl::StrCat(
-          "CAST('", EscapeStringLiteralInner(cell.string_value()),
-          "' AS ", schema::ToDuckDBType(column.type), ")");
+      return absl::StrCat("CAST('",
+                          EscapeStringLiteralInner(cell.string_value()),
+                          "' AS ",
+                          schema::ToDuckDBType(column.type),
+                          ")");
     case schema::ColumnType::kStruct: {
       if (cell.kind() != Value::Kind::kStruct) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "AppendRows: column '", column.name,
-            "' expects STRUCT but row provided non-struct cell"));
+        return absl::InvalidArgumentError(
+            absl::StrCat("AppendRows: column '",
+                         column.name,
+                         "' expects STRUCT but row provided non-struct cell"));
       }
       const auto& fields = cell.struct_value();
       if (fields.size() != column.fields.size()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "AppendRows: STRUCT column '", column.name, "' has ",
-            column.fields.size(), " fields but row provided ", fields.size()));
+        return absl::InvalidArgumentError(
+            absl::StrCat("AppendRows: STRUCT column '",
+                         column.name,
+                         "' has ",
+                         column.fields.size(),
+                         " fields but row provided ",
+                         fields.size()));
       }
       std::string out = "{";
       for (size_t i = 0; i < fields.size(); ++i) {
         if (i > 0) absl::StrAppend(&out, ", ");
-        absl::StrAppend(&out, "'",
-                         EscapeStringLiteralInner(column.fields[i].name),
-                         "': ");
+        absl::StrAppend(
+            &out, "'", EscapeStringLiteralInner(column.fields[i].name), "': ");
         auto inner_or = RenderCellLiteral(fields[i], column.fields[i]);
         if (!inner_or.ok()) return inner_or.status();
         absl::StrAppend(&out, *inner_or);
@@ -198,9 +205,8 @@ absl::StatusOr<std::string> RenderScalarLiteral(
     }
     case schema::ColumnType::kArray:
     case schema::ColumnType::kUnknown:
-      return absl::StrCat("'",
-                           EscapeStringLiteralInner(cell.string_value()),
-                           "'");
+      return absl::StrCat(
+          "'", EscapeStringLiteralInner(cell.string_value()), "'");
   }
   return absl::InternalError("RenderScalarLiteral: unreachable");
 }
@@ -236,8 +242,10 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
   std::string out = "(";
   for (size_t i = 0; i < schema.columns.size(); ++i) {
     if (i > 0) absl::StrAppend(&out, ", ");
-    absl::StrAppend(&out, QuoteIdent(schema.columns[i].name), " ",
-                     schema::ColumnSchemaToDuckDBType(schema.columns[i]));
+    absl::StrAppend(&out,
+                    QuoteIdent(schema.columns[i].name),
+                    " ",
+                    schema::ColumnSchemaToDuckDBType(schema.columns[i]));
   }
   absl::StrAppend(&out, ")");
   return out;
@@ -267,8 +275,8 @@ std::string RenderPredicateClause(const EqualityPredicate& pred) {
       absl::StrAppend(&out, pred.bool_value ? "TRUE" : "FALSE");
       return out;
     case EqualityPredicate::Kind::kString:
-      absl::StrAppend(&out, "'",
-                       EscapeStringLiteralInner(pred.string_value), "'");
+      absl::StrAppend(
+          &out, "'", EscapeStringLiteralInner(pred.string_value), "'");
       return out;
   }
   return out;
@@ -323,15 +331,14 @@ absl::Status RunSql(DuckDBStorage::Impl* impl, absl::string_view sql) {
   }
   ::duckdb_result result;
   const std::string sql_str(sql);
-  const auto state =
-      ::duckdb_query(impl->connection, sql_str.c_str(), &result);
+  const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
   if (state != ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return DuckDBError(absl::StatusCode::kInternal,
-                        absl::StrCat("DuckDB query failed: ", sql_str),
-                        detail);
+                       absl::StrCat("DuckDB query failed: ", sql_str),
+                       detail);
   }
   ::duckdb_destroy_result(&result);
   return absl::OkStatus();
@@ -342,18 +349,17 @@ absl::Status RunSql(DuckDBStorage::Impl* impl, absl::string_view sql) {
 // the in-memory store does so callers can switch backends without
 // rewriting their error-handling code.
 absl::Status FilesystemStatus(absl::string_view what,
-                               const std::error_code& ec) {
+                              const std::error_code& ec) {
   if (!ec) return absl::OkStatus();
   return absl::Status(absl::StatusCode::kInternal,
-                       absl::StrCat(what, ": ", ec.message()));
+                      absl::StrCat(what, ": ", ec.message()));
 }
 
 // Writes `contents` to `path` atomically by rendering to `path.tmp`
 // first and renaming on top. Avoids torn sidecars if the process
 // dies mid-write; subsequent opens always see a complete JSON file
 // or no file at all.
-absl::Status WriteFileAtomic(const fs::path& path,
-                              absl::string_view contents) {
+absl::Status WriteFileAtomic(const fs::path& path, absl::string_view contents) {
   const fs::path tmp = path.string() + ".tmp";
   {
     std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -364,9 +370,8 @@ absl::Status WriteFileAtomic(const fs::path& path,
     }
     out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
     if (!out) {
-      return absl::Status(
-          absl::StatusCode::kInternal,
-          absl::StrCat("failed to write ", tmp.string()));
+      return absl::Status(absl::StatusCode::kInternal,
+                          absl::StrCat("failed to write ", tmp.string()));
     }
   }
   std::error_code ec;
@@ -375,8 +380,7 @@ absl::Status WriteFileAtomic(const fs::path& path,
     fs::remove(tmp, ec);
     return absl::Status(
         absl::StatusCode::kInternal,
-        absl::StrCat("failed to rename ", tmp.string(), " -> ",
-                     path.string()));
+        absl::StrCat("failed to rename ", tmp.string(), " -> ", path.string()));
   }
   return absl::OkStatus();
 }
@@ -385,13 +389,13 @@ absl::StatusOr<std::string> ReadFile(const fs::path& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) {
     return absl::Status(absl::StatusCode::kNotFound,
-                         absl::StrCat("file not found: ", path.string()));
+                        absl::StrCat("file not found: ", path.string()));
   }
   std::ostringstream ss;
   ss << in.rdbuf();
   if (!in && !in.eof()) {
     return absl::Status(absl::StatusCode::kInternal,
-                         absl::StrCat("failed to read ", path.string()));
+                        absl::StrCat("failed to read ", path.string()));
   }
   return ss.str();
 }
@@ -420,14 +424,13 @@ absl::StatusOr<std::string> RenderTableMetaJson(
   const auto status =
       google::protobuf::util::MessageToJsonString(proto, &schema_json, opts);
   if (!status.ok()) {
-    return absl::Status(
-        absl::StatusCode::kInternal,
-        absl::StrCat("failed to render schema as JSON: ",
-                     std::string(status.message())));
+    return absl::Status(absl::StatusCode::kInternal,
+                        absl::StrCat("failed to render schema as JSON: ",
+                                     std::string(status.message())));
   }
   // Hand-rolled outer wrapper. The four BigQuery metadata fields are
-  // empty placeholders today; the catalog handler (Phase 3g) is what
-  // mutates them.
+  // empty placeholders today; the catalog handler is what mutates
+  // them.
   std::string out;
   out.reserve(schema_json.size() + 128);
   absl::StrAppend(&out,
@@ -446,8 +449,8 @@ absl::StatusOr<std::string> RenderTableMetaJson(
 // the same atomic-write story as the table sidecar so the catalog
 // stays consistent across crashes.
 std::string RenderDatasetMetaJson(absl::string_view location) {
-  std::string escaped = absl::StrReplaceAll(location, {{"\"", "\\\""},
-                                                          {"\\", "\\\\"}});
+  std::string escaped =
+      absl::StrReplaceAll(location, {{"\"", "\\\""}, {"\\", "\\\\"}});
   return absl::StrCat("{\n  \"location\": \"", escaped, "\"\n}\n");
 }
 
@@ -456,8 +459,7 @@ std::string RenderDatasetMetaJson(absl::string_view location) {
 // is intentionally narrow: it does not validate the metadata fields
 // at the top level so a developer can hand-edit the file without
 // the storage layer slapping their hand.
-absl::StatusOr<schema::TableSchema> ParseTableMetaJson(
-    absl::string_view json) {
+absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json) {
   // Locate the `"schema":` key. We don't want to drag a full JSON
   // parser in just to skip three lines of metadata; the file is
   // written by `RenderTableMetaJson` above and the schema object is
@@ -522,10 +524,9 @@ absl::StatusOr<schema::TableSchema> ParseTableMetaJson(
   const auto status =
       google::protobuf::util::JsonStringToMessage(schema_json, &proto, opts);
   if (!status.ok()) {
-    return absl::Status(
-        absl::StatusCode::kInternal,
-        absl::StrCat("failed to parse schema JSON: ",
-                     std::string(status.message())));
+    return absl::Status(absl::StatusCode::kInternal,
+                        absl::StrCat("failed to parse schema JSON: ",
+                                     std::string(status.message())));
   }
   return schema::TableSchemaFromProto(proto);
 }
@@ -536,8 +537,7 @@ absl::StatusOr<schema::TableSchema> ParseTableMetaJson(
 // Construction
 // ---------------------------------------------------------------------------
 
-DuckDBStorage::DuckDBStorage(std::string data_dir,
-                              std::unique_ptr<Impl> impl)
+DuckDBStorage::DuckDBStorage(std::string data_dir, std::unique_ptr<Impl> impl)
     : data_dir_(std::move(data_dir)), impl_(std::move(impl)) {}
 
 DuckDBStorage::~DuckDBStorage() = default;
@@ -552,9 +552,11 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
   std::error_code ec;
   fs::create_directories(root, ec);
   if (ec) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "DuckDBStorage::Open: could not create data_dir ", root.string(),
-        ": ", ec.message()));
+    return absl::FailedPreconditionError(
+        absl::StrCat("DuckDBStorage::Open: could not create data_dir ",
+                     root.string(),
+                     ": ",
+                     ec.message()));
   }
   const fs::path catalog_path = root / std::string(kCatalogDbFile);
   auto impl = std::make_unique<Impl>();
@@ -563,12 +565,11 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
     return absl::InternalError(absl::StrCat(
         "DuckDBStorage::Open: duckdb_open failed for ", catalog_path.string()));
   }
-  const auto conn_state =
-      ::duckdb_connect(impl->database, &impl->connection);
+  const auto conn_state = ::duckdb_connect(impl->database, &impl->connection);
   if (conn_state != ::DuckDBSuccess) {
-    return absl::InternalError(absl::StrCat(
-        "DuckDBStorage::Open: duckdb_connect failed for ",
-        catalog_path.string()));
+    return absl::InternalError(
+        absl::StrCat("DuckDBStorage::Open: duckdb_connect failed for ",
+                     catalog_path.string()));
   }
   return std::unique_ptr<DuckDBStorage>(
       new DuckDBStorage(std::string(data_dir), std::move(impl)));
@@ -579,7 +580,7 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
 // ---------------------------------------------------------------------------
 
 std::string DuckDBStorage::DatasetDir(absl::string_view project_id,
-                                       absl::string_view dataset_id) const {
+                                      absl::string_view dataset_id) const {
   return (fs::path(data_dir_) / std::string(project_id) /
           std::string(dataset_id))
       .string();
@@ -606,7 +607,7 @@ std::string DuckDBStorage::TableParquetPath(const TableId& id) const {
 }
 
 std::string DuckDBStorage::DuckDBSchemaName(absl::string_view project_id,
-                                              absl::string_view dataset_id) {
+                                            absl::string_view dataset_id) {
   // Storage key separator the catalog uses to keep dataset / table
   // identifiers globally unique. BigQuery
   // disallows control characters in either id, so the result is
@@ -624,7 +625,7 @@ std::string DuckDBStorage::DuckDBSchemaName(const DatasetId& id) {
 // ---------------------------------------------------------------------------
 
 absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
-                                            absl::string_view location) {
+                                          absl::string_view location) {
   if (id.project_id.empty() || id.dataset_id.empty()) {
     return absl::InvalidArgumentError(
         "CreateDataset: project_id and dataset_id must be non-empty");
@@ -650,8 +651,8 @@ absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
   const std::string schema_name = DuckDBSchemaName(id);
   // CREATE SCHEMA so the catalog file mirrors the on-disk layout.
   // The two are not strictly redundant: the schema lets the DuckDB
-  // engine (Phase 5.B) attach tables by qualified name without
-  // re-deriving the directory from the data dir on every query.
+  // engine attach tables by qualified name without re-deriving the
+  // directory from the data dir on every query.
   const auto sql_status = RunSql(
       impl_.get(),
       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ", QuoteIdent(schema_name)));
@@ -663,13 +664,13 @@ absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
 }
 
 absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
-                                          bool delete_contents) {
+                                        bool delete_contents) {
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   // Count non-metadata entries (any `.meta.json` / `.parquet` pair
   // counts as one table; the dataset sidecar is excluded).
@@ -690,13 +691,15 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
   }
   if (ec) {
     return FilesystemStatus(
-        absl::StrCat("failed to enumerate dataset dir: ", ds_dir.string()),
-        ec);
+        absl::StrCat("failed to enumerate dataset dir: ", ds_dir.string()), ec);
   }
   if (has_tables && !delete_contents) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "dataset is not empty: ", id.project_id, ".", id.dataset_id,
-        " (use delete_contents=true to drop with tables)"));
+    return absl::FailedPreconditionError(
+        absl::StrCat("dataset is not empty: ",
+                     id.project_id,
+                     ".",
+                     id.dataset_id,
+                     " (use delete_contents=true to drop with tables)"));
   }
   fs::remove_all(ds_dir, ec);
   if (ec) {
@@ -707,17 +710,18 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
   // the file-tree removal above (every table file is gone, so any
   // catalog references in DuckDB must go too).
   const std::string schema_name = DuckDBSchemaName(id);
-  return RunSql(impl_.get(),
-                 absl::StrCat("DROP SCHEMA IF EXISTS ",
-                              QuoteIdent(schema_name), " CASCADE"));
+  return RunSql(
+      impl_.get(),
+      absl::StrCat(
+          "DROP SCHEMA IF EXISTS ", QuoteIdent(schema_name), " CASCADE"));
 }
 
 // ---------------------------------------------------------------------------
 // Table CRUD
 // ---------------------------------------------------------------------------
 
-absl::Status DuckDBStorage::CreateTable(
-    const TableId& id, const schema::TableSchema& schema) {
+absl::Status DuckDBStorage::CreateTable(const TableId& id,
+                                        const schema::TableSchema& schema) {
   if (id.table_id.empty()) {
     return absl::InvalidArgumentError(
         "CreateTable: table_id must be non-empty");
@@ -726,14 +730,17 @@ absl::Status DuckDBStorage::CreateTable(
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (fs::exists(meta_path, ec)) {
-    return absl::AlreadyExistsError(absl::StrCat(
-        "table already exists: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::AlreadyExistsError(absl::StrCat("table already exists: ",
+                                                 id.project_id,
+                                                 ".",
+                                                 id.dataset_id,
+                                                 ".",
+                                                 id.table_id));
   }
   auto meta_json_or = RenderTableMetaJson(schema);
   if (!meta_json_or.ok()) return meta_json_or.status();
@@ -752,18 +759,20 @@ absl::Status DuckDBStorage::CreateTable(
   const std::string parquet_path = TableParquetPath(id);
   const std::string tmp_table = "main.__bqemu_mkempty";
   const std::string cols = RenderColumnList(schema);
-  const auto create_status =
-      RunSql(impl_.get(), absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
-                                         tmp_table, " ", cols));
+  const auto create_status = RunSql(
+      impl_.get(),
+      absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", cols));
   if (!create_status.ok()) {
     fs::remove(meta_path, ec);
     return create_status;
   }
-  const auto copy_status = RunSql(
-      impl_.get(),
-      absl::StrCat("COPY ", tmp_table, " TO '",
-                    EscapeStringLiteralInner(parquet_path),
-                    "' (FORMAT PARQUET)"));
+  const auto copy_status =
+      RunSql(impl_.get(),
+             absl::StrCat("COPY ",
+                          tmp_table,
+                          " TO '",
+                          EscapeStringLiteralInner(parquet_path),
+                          "' (FORMAT PARQUET)"));
   const auto drop_status =
       RunSql(impl_.get(), absl::StrCat("DROP TABLE ", tmp_table));
   if (!copy_status.ok()) {
@@ -780,14 +789,17 @@ absl::Status DuckDBStorage::DropTable(const TableId& id) {
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
   fs::remove(meta_path, ec);
   if (ec) {
@@ -799,10 +811,9 @@ absl::Status DuckDBStorage::DropTable(const TableId& id) {
   if (fs::exists(parquet_path, ec)) {
     fs::remove(parquet_path, ec);
     if (ec) {
-      return FilesystemStatus(
-          absl::StrCat("failed to remove table parquet: ",
-                       parquet_path.string()),
-          ec);
+      return FilesystemStatus(absl::StrCat("failed to remove table parquet: ",
+                                           parquet_path.string()),
+                              ec);
     }
   }
   return absl::OkStatus();
@@ -814,14 +825,17 @@ absl::StatusOr<schema::TableSchema> DuckDBStorage::GetSchema(
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
   auto contents_or = ReadFile(meta_path);
   if (!contents_or.ok()) return contents_or.status();
@@ -851,7 +865,7 @@ namespace {
 // failure, so any error here is logged at INTERNAL but does not
 // override the caller's status.
 void TryDropTempTable(DuckDBStorage::Impl* impl,
-                       absl::string_view qualified_name) {
+                      absl::string_view qualified_name) {
   RunSql(impl, absl::StrCat("DROP TABLE IF EXISTS ", qualified_name))
       .IgnoreError();
 }
@@ -859,17 +873,18 @@ void TryDropTempTable(DuckDBStorage::Impl* impl,
 // Reads a single DuckDB cell into a storage::Value, using the
 // column type from `column` to pick the right C-API accessor. NULL
 // cells become Value::Null() regardless of column type.
-absl::StatusOr<Value> ReadCell(::duckdb_result* result, idx_t col,
-                                 idx_t row,
-                                 const schema::ColumnSchema& column) {
+absl::StatusOr<Value> ReadCell(::duckdb_result* result,
+                               idx_t col,
+                               idx_t row,
+                               const schema::ColumnSchema& column) {
   if (::duckdb_value_is_null(result, col, row)) return Value::Null();
   // REPEATED cells / ARRAY: pull them through `duckdb_value_varchar`
   // and parse — DuckDB renders LIST values as `[a, b, c]` which is
   // the same shape the engines emit; the integration test does not
   // exercise repeated cells, so we keep this branch on the textual
-  // path and let Phase 5.B revisit when the engine needs typed
-  // arrays. Future TODO: switch to `duckdb_result_get_chunk` for
-  // typed extraction without the lossy varchar round-trip.
+  // path and revisit when the engine needs typed arrays. Future
+  // TODO: switch to `duckdb_result_get_chunk` for typed extraction
+  // without the lossy varchar round-trip.
   if (column.mode == schema::ColumnMode::kRepeated ||
       column.type == schema::ColumnType::kArray ||
       column.type == schema::ColumnType::kStruct) {
@@ -939,19 +954,22 @@ class VectorRowIterator : public RowIterator {
 }  // namespace
 
 absl::Status DuckDBStorage::AppendRows(const TableId& id,
-                                         absl::Span<const Row> rows) {
+                                       absl::Span<const Row> rows) {
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
   if (rows.empty()) return absl::OkStatus();
 
@@ -963,10 +981,19 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   const size_t ncols = schema.columns.size();
   for (size_t i = 0; i < rows.size(); ++i) {
     if (rows[i].cells.size() != ncols) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "AppendRows: row[", i, "] has ", rows[i].cells.size(),
-          " cell(s) but table ", id.project_id, ".", id.dataset_id, ".",
-          id.table_id, " has ", ncols, " column(s)"));
+      return absl::InvalidArgumentError(absl::StrCat("AppendRows: row[",
+                                                     i,
+                                                     "] has ",
+                                                     rows[i].cells.size(),
+                                                     " cell(s) but table ",
+                                                     id.project_id,
+                                                     ".",
+                                                     id.dataset_id,
+                                                     ".",
+                                                     id.table_id,
+                                                     " has ",
+                                                     ncols,
+                                                     " column(s)"));
     }
   }
 
@@ -981,9 +1008,9 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // CREATE OR REPLACE TEMP TABLE coerces a stale row from an
   // interrupted previous run if any.
   const std::string col_list = RenderColumnList(schema);
-  auto status = RunSql(impl_.get(),
-                        absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
-                                     tmp_table, " ", col_list));
+  auto status = RunSql(
+      impl_.get(),
+      absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", col_list));
   if (!status.ok()) return status;
 
   // 2. Carry over existing rows if a parquet snapshot exists. The
@@ -992,11 +1019,14 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // we treat the table as empty.
   if (fs::exists(parquet_path, ec)) {
     const std::string select_cols = RenderColumnIdentList(schema);
-    status =
-        RunSql(impl_.get(),
-                absl::StrCat("INSERT INTO ", tmp_table, " SELECT ",
-                             select_cols, " FROM read_parquet('",
-                             EscapeStringLiteralInner(parquet_path), "')"));
+    status = RunSql(impl_.get(),
+                    absl::StrCat("INSERT INTO ",
+                                 tmp_table,
+                                 " SELECT ",
+                                 select_cols,
+                                 " FROM read_parquet('",
+                                 EscapeStringLiteralInner(parquet_path),
+                                 "')"));
     if (!status.ok()) {
       TryDropTempTable(impl_.get(), tmp_table);
       return status;
@@ -1033,11 +1063,12 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // rename in step 5 is the only window where readers see partial
   // state — DuckDB's COPY itself is not atomic.
   fs::remove(tmp_path, ec);
-  status =
-      RunSql(impl_.get(),
-              absl::StrCat("COPY ", tmp_table, " TO '",
-                           EscapeStringLiteralInner(tmp_path),
-                           "' (FORMAT PARQUET)"));
+  status = RunSql(impl_.get(),
+                  absl::StrCat("COPY ",
+                               tmp_table,
+                               " TO '",
+                               EscapeStringLiteralInner(tmp_path),
+                               "' (FORMAT PARQUET)"));
   if (!status.ok()) {
     TryDropTempTable(impl_.get(), tmp_table);
     fs::remove(tmp_path, ec);
@@ -1051,29 +1082,35 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   if (ec) {
     TryDropTempTable(impl_.get(), tmp_table);
     fs::remove(tmp_path, ec);
-    return absl::Status(
-        absl::StatusCode::kInternal,
-        absl::StrCat("AppendRows: failed to rename ", tmp_path, " -> ",
-                     parquet_path, ": ", ec.message()));
+    return absl::Status(absl::StatusCode::kInternal,
+                        absl::StrCat("AppendRows: failed to rename ",
+                                     tmp_path,
+                                     " -> ",
+                                     parquet_path,
+                                     ": ",
+                                     ec.message()));
   }
   TryDropTempTable(impl_.get(), tmp_table);
   return absl::OkStatus();
 }
 
 absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
-                                            absl::Span<const Row> rows) {
+                                          absl::Span<const Row> rows) {
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
 
   auto contents_or = ReadFile(meta_path);
@@ -1084,10 +1121,19 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   const size_t ncols = schema.columns.size();
   for (size_t i = 0; i < rows.size(); ++i) {
     if (rows[i].cells.size() != ncols) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "OverwriteRows: row[", i, "] has ", rows[i].cells.size(),
-          " cell(s) but table ", id.project_id, ".", id.dataset_id, ".",
-          id.table_id, " has ", ncols, " column(s)"));
+      return absl::InvalidArgumentError(absl::StrCat("OverwriteRows: row[",
+                                                     i,
+                                                     "] has ",
+                                                     rows[i].cells.size(),
+                                                     " cell(s) but table ",
+                                                     id.project_id,
+                                                     ".",
+                                                     id.dataset_id,
+                                                     ".",
+                                                     id.table_id,
+                                                     " has ",
+                                                     ncols,
+                                                     " column(s)"));
     }
   }
 
@@ -1100,9 +1146,9 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   // overwrite contract: replace the parquet file with whatever the
   // caller hands us, including the empty-vector case.
   const std::string col_list = RenderColumnList(schema);
-  auto status = RunSql(impl_.get(),
-                        absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
-                                     tmp_table, " ", col_list));
+  auto status = RunSql(
+      impl_.get(),
+      absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", col_list));
   if (!status.ok()) return status;
 
   if (!rows.empty()) {
@@ -1130,11 +1176,12 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   }
 
   fs::remove(tmp_path, ec);
-  status =
-      RunSql(impl_.get(),
-              absl::StrCat("COPY ", tmp_table, " TO '",
-                           EscapeStringLiteralInner(tmp_path),
-                           "' (FORMAT PARQUET)"));
+  status = RunSql(impl_.get(),
+                  absl::StrCat("COPY ",
+                               tmp_table,
+                               " TO '",
+                               EscapeStringLiteralInner(tmp_path),
+                               "' (FORMAT PARQUET)"));
   if (!status.ok()) {
     TryDropTempTable(impl_.get(), tmp_table);
     fs::remove(tmp_path, ec);
@@ -1145,10 +1192,13 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   if (ec) {
     TryDropTempTable(impl_.get(), tmp_table);
     fs::remove(tmp_path, ec);
-    return absl::Status(
-        absl::StatusCode::kInternal,
-        absl::StrCat("OverwriteRows: failed to rename ", tmp_path, " -> ",
-                     parquet_path, ": ", ec.message()));
+    return absl::Status(absl::StatusCode::kInternal,
+                        absl::StrCat("OverwriteRows: failed to rename ",
+                                     tmp_path,
+                                     " -> ",
+                                     parquet_path,
+                                     ": ",
+                                     ec.message()));
   }
   TryDropTempTable(impl_.get(), tmp_table);
   return absl::OkStatus();
@@ -1166,16 +1216,16 @@ namespace {
 // `tag` is the caller-facing name plumbed into error messages
 // ("ScanRows" / "CreateReadStream") so a failure in either branch is
 // attributed to the right surface.
-absl::Status ExecuteSelect(DuckDBStorage::Impl* impl, absl::string_view sql,
-                            const schema::TableSchema& schema,
-                            absl::string_view tag,
-                            const TableId& id,
-                            absl::string_view parquet_path,
-                            std::vector<Row>* out) {
+absl::Status ExecuteSelect(DuckDBStorage::Impl* impl,
+                           absl::string_view sql,
+                           const schema::TableSchema& schema,
+                           absl::string_view tag,
+                           const TableId& id,
+                           absl::string_view parquet_path,
+                           std::vector<Row>* out) {
   const std::string sql_str(sql);
   ::duckdb_result result;
-  const auto state =
-      ::duckdb_query(impl->connection, sql_str.c_str(), &result);
+  const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
   if (state != ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
@@ -1187,10 +1237,18 @@ absl::Status ExecuteSelect(DuckDBStorage::Impl* impl, absl::string_view sql,
   const idx_t col_count = ::duckdb_column_count(&result);
   if (col_count != schema.columns.size()) {
     ::duckdb_destroy_result(&result);
-    return absl::InternalError(absl::StrCat(
-        tag, ": parquet file has ", col_count,
-        " column(s) but sidecar schema declares ", schema.columns.size(),
-        " for table ", id.project_id, ".", id.dataset_id, ".", id.table_id));
+    return absl::InternalError(
+        absl::StrCat(tag,
+                     ": parquet file has ",
+                     col_count,
+                     " column(s) but sidecar schema declares ",
+                     schema.columns.size(),
+                     " for table ",
+                     id.project_id,
+                     ".",
+                     id.dataset_id,
+                     ".",
+                     id.table_id));
   }
   out->reserve(out->size() + row_count);
   for (idx_t r = 0; r < row_count; ++r) {
@@ -1218,14 +1276,17 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
   auto contents_or = ReadFile(meta_path);
   if (!contents_or.ok()) return contents_or.status();
@@ -1236,22 +1297,22 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
   if (!fs::exists(parquet_path, ec)) {
-    return std::unique_ptr<RowIterator>(
-        new VectorRowIterator(std::move(rows)));
+    return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
   }
 
   // Explicit projection: ScanRows promises rows in column-list
   // order regardless of how the parquet file laid them out (the
   // file is written by us, but a user could hand-edit it).
   const std::string select_cols = RenderColumnIdentList(schema);
-  const std::string sql = absl::StrCat(
-      "SELECT ", select_cols, " FROM read_parquet('",
-      EscapeStringLiteralInner(parquet_path), "')");
-  auto status = ExecuteSelect(impl_.get(), sql, schema, "ScanRows", id,
-                                parquet_path, &rows);
+  const std::string sql = absl::StrCat("SELECT ",
+                                       select_cols,
+                                       " FROM read_parquet('",
+                                       EscapeStringLiteralInner(parquet_path),
+                                       "')");
+  auto status = ExecuteSelect(
+      impl_.get(), sql, schema, "ScanRows", id, parquet_path, &rows);
   if (!status.ok()) return status;
-  return std::unique_ptr<RowIterator>(
-      new VectorRowIterator(std::move(rows)));
+  return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
 }
 
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
@@ -1260,14 +1321,17 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "dataset not found: ", id.project_id, ".", id.dataset_id));
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
   const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat(
-        "table not found: ", id.project_id, ".", id.dataset_id, ".",
-        id.table_id));
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
   }
   auto contents_or = ReadFile(meta_path);
   if (!contents_or.ok()) return contents_or.status();
@@ -1278,8 +1342,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
   if (!fs::exists(parquet_path, ec)) {
-    return std::unique_ptr<RowIterator>(
-        new VectorRowIterator(std::move(rows)));
+    return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
   }
 
   // ORDER BY a stable row identifier so OFFSET / LIMIT yield
@@ -1291,10 +1354,11 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   // synthesized by DuckDB at scan time and never selected into the
   // result.
   const std::string select_cols = RenderColumnIdentList(schema);
-  std::string sql = absl::StrCat(
-      "SELECT ", select_cols,
-      " FROM read_parquet('", EscapeStringLiteralInner(parquet_path),
-      "', file_row_number = true)");
+  std::string sql = absl::StrCat("SELECT ",
+                                 select_cols,
+                                 " FROM read_parquet('",
+                                 EscapeStringLiteralInner(parquet_path),
+                                 "', file_row_number = true)");
   // Plan 39: push the parsed `<column> = <literal>` predicate down
   // into a SQL WHERE clause. The clause lands before ORDER BY so
   // DuckDB filters on the parquet scan side rather than buffering the
@@ -1316,11 +1380,10 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     }
     absl::StrAppend(&sql, " OFFSET ", filter.offset);
   }
-  auto status = ExecuteSelect(impl_.get(), sql, schema,
-                                "CreateReadStream", id, parquet_path, &rows);
+  auto status = ExecuteSelect(
+      impl_.get(), sql, schema, "CreateReadStream", id, parquet_path, &rows);
   if (!status.ok()) return status;
-  return std::unique_ptr<RowIterator>(
-      new VectorRowIterator(std::move(rows)));
+  return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
 }
 
 }  // namespace duckdb

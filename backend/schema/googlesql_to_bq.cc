@@ -67,8 +67,8 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
                                 const std::string& nested_path,
                                 v1::FieldSchema* out) {
   if (type == nullptr) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "field '", nested_path, "': null type"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("field '", nested_path, "': null type"));
   }
   const ::googlesql::TypeKind kind = type->kind();
   const absl::string_view scalar = BqScalarName(kind);
@@ -87,19 +87,23 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
       // here as well so the failure mode is consistent.
       if (field.name.empty()) {
         return absl::InvalidArgumentError(absl::StrCat(
-            "field '", nested_path, "': STRUCT field #", i,
+            "field '",
+            nested_path,
+            "': STRUCT field #",
+            i,
             " has no name; BigQuery requires a name for every nested field"));
       }
       nested->set_name(field.name);
       const std::string child_path =
-          nested_path.empty()
-              ? field.name
-              : absl::StrCat(nested_path, ".", field.name);
+          nested_path.empty() ? field.name
+                              : absl::StrCat(nested_path, ".", field.name);
       if (field.type != nullptr && field.type->IsArray()) {
-        const ::googlesql::Type* element = field.type->AsArray()->element_type();
+        const ::googlesql::Type* element =
+            field.type->AsArray()->element_type();
         if (element != nullptr && element->IsArray()) {
           return absl::InvalidArgumentError(absl::StrCat(
-              "field '", child_path,
+              "field '",
+              child_path,
               "': ARRAY<ARRAY<...>> is not representable in BigQuery"));
         }
         absl::Status s = FillScalarOrStruct(element, child_path, nested);
@@ -115,10 +119,11 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
   // Unsupported kinds (PROTO, ENUM, INTERVAL, RANGE, GRAPH_ELEMENT,
   // EXTENDED, UUID, ...) fall through here. Surface the GoogleSQL
   // debug name so the analyzer error message is actionable.
-  return absl::InvalidArgumentError(absl::StrCat(
-      "field '", nested_path,
-      "': unsupported GoogleSQL type for BigQuery reflection: ",
-      type->DebugString()));
+  return absl::InvalidArgumentError(
+      absl::StrCat("field '",
+                   nested_path,
+                   "': unsupported GoogleSQL type for BigQuery reflection: ",
+                   type->DebugString()));
 }
 
 }  // namespace
@@ -132,14 +137,15 @@ absl::Status TypeToFieldSchema(const ::googlesql::Type* type,
   out->Clear();
   out->set_name(std::string(name));
   if (type == nullptr) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "TypeToFieldSchema: column '", name, "' has null type"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("TypeToFieldSchema: column '", name, "' has null type"));
   }
   if (type->IsArray()) {
     const ::googlesql::Type* element = type->AsArray()->element_type();
     if (element != nullptr && element->IsArray()) {
       return absl::InvalidArgumentError(absl::StrCat(
-          "TypeToFieldSchema: column '", name,
+          "TypeToFieldSchema: column '",
+          name,
           "': ARRAY<ARRAY<...>> is not representable in BigQuery"));
     }
     absl::Status s = FillScalarOrStruct(element, std::string(name), out);

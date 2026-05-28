@@ -10,7 +10,7 @@
 //     <project_id>/                             # one dir per project
 //       <dataset_id>/                           # one dir per dataset
 //         _dataset.meta.json                    # dataset-level metadata
-//         <table_id>.parquet                    # data file (Phase 3f)
+//         <table_id>.parquet                    # data file
 //         <table_id>.meta.json                  # per-table sidecar
 //
 // The DuckDB catalog file tracks dataset existence (as DuckDB schemas)
@@ -20,8 +20,8 @@
 // schema) lives in the JSON sidecars so a developer can inspect, edit,
 // or hand-author a dataset/table without going through the emulator.
 //
-// This header is the Phase 3e *core* skeleton: it owns the connection,
-// the directory layout, the metadata sidecar, and dataset/table CRUD.
+// This header is the *core* skeleton: it owns the connection, the
+// directory layout, the metadata sidecar, and dataset/table CRUD.
 // The actual Parquet I/O for `AppendRows` / `ScanRows` lands in the
 // follow-up plan `duckdb-storage-ddl_p1e2f3a4`; both methods return
 // UNIMPLEMENTED until then.
@@ -70,30 +70,31 @@ class DuckDBStorage : public Storage {
 
   // Path the storage was opened with. Stable for the lifetime of the
   // instance; exposed mainly for tests / logs.
-  const std::string& data_dir() const { return data_dir_; }
+  const std::string& data_dir() const {
+    return data_dir_;
+  }
 
   // ------------------------------------------------------------------
   // Storage interface
   // ------------------------------------------------------------------
   absl::Status CreateDataset(const DatasetId& id,
-                              absl::string_view location) override;
-  absl::Status DropDataset(const DatasetId& id,
-                            bool delete_contents) override;
+                             absl::string_view location) override;
+  absl::Status DropDataset(const DatasetId& id, bool delete_contents) override;
 
   absl::Status CreateTable(const TableId& id,
-                            const schema::TableSchema& schema) override;
+                           const schema::TableSchema& schema) override;
   absl::Status DropTable(const TableId& id) override;
 
   absl::StatusOr<schema::TableSchema> GetSchema(
       const TableId& id) const override;
 
-  // Phase 3e returns UNIMPLEMENTED for these two. The DDL plan
-  // (`duckdb-storage-ddl_p1e2f3a4`) lowers them onto Parquet I/O via
-  // DuckDB's `read_parquet` + INSERT statements.
+  // The core skeleton returns UNIMPLEMENTED for these two. The DDL
+  // plan (`duckdb-storage-ddl_p1e2f3a4`) lowers them onto Parquet
+  // I/O via DuckDB's `read_parquet` + INSERT statements.
   absl::Status AppendRows(const TableId& id,
-                           absl::Span<const Row> rows) override;
+                          absl::Span<const Row> rows) override;
   absl::Status OverwriteRows(const TableId& id,
-                              absl::Span<const Row> rows) override;
+                             absl::Span<const Row> rows) override;
   absl::StatusOr<std::unique_ptr<RowIterator>> ScanRows(
       const TableId& id) const override;
   absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
@@ -113,7 +114,7 @@ class DuckDBStorage : public Storage {
   // Filesystem layout helpers. All take ids by string_view and emit
   // absolute paths under `data_dir_`.
   std::string DatasetDir(absl::string_view project_id,
-                          absl::string_view dataset_id) const;
+                         absl::string_view dataset_id) const;
   std::string DatasetDir(const DatasetId& id) const;
   std::string DatasetMetaPath(const DatasetId& id) const;
   std::string TableMetaPath(const TableId& id) const;
@@ -123,7 +124,7 @@ class DuckDBStorage : public Storage {
   // just use the dataset_id because two projects may share a dataset
   // id; collapse them into one safe identifier so DuckDB stays happy.
   static std::string DuckDBSchemaName(absl::string_view project_id,
-                                       absl::string_view dataset_id);
+                                      absl::string_view dataset_id);
   static std::string DuckDBSchemaName(const DatasetId& id);
 
   std::string data_dir_;

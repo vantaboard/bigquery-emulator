@@ -51,8 +51,7 @@ namespace arrow_to_bq {
 // yet specialized (`GoogleSqlValueToStorageValue`
 // returns `Value::String(value.DebugString())`).
 absl::StatusOr<storage::Value> ReadCellFromVector(
-    ::duckdb_vector vector, ::idx_t row,
-    const schema::ColumnSchema& column);
+    ::duckdb_vector vector, ::idx_t row, const schema::ColumnSchema& column);
 
 // Reads one full row from a fetched `chunk`. The output row's cell
 // count and per-cell type follow `output_schema`. The chunk's column
@@ -60,7 +59,8 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
 // function returns INVALID_ARGUMENT to surface an analyzer / engine
 // drift instead of silently mis-rendering rows.
 absl::StatusOr<storage::Row> ChunkRowToCells(
-    ::duckdb_data_chunk chunk, ::idx_t row,
+    ::duckdb_data_chunk chunk,
+    ::idx_t row,
     const schema::TableSchema& output_schema);
 
 }  // namespace arrow_to_bq

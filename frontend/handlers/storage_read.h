@@ -31,8 +31,8 @@ namespace frontend {
 // The struct holds the `TableId` the session is reading from and the
 // schema we returned at create time (so a follow-up `ReadRows` can
 // re-verify the schema has not drifted under the session). Sessions
-// never expire today; phase 7c will revisit when long-lived readers
-// land.
+// never expire today; the long-lived-readers follow-up will revisit
+// expiry semantics.
 //
 // `Storage` errors map to gRPC status codes via the same convention
 // `CatalogService` uses (see catalog.cc :: AbslToGrpcStatus):
@@ -50,10 +50,9 @@ class StorageReadService final : public v1::StorageRead::Service {
  public:
   explicit StorageReadService(backend::storage::Storage* storage);
 
-  ::grpc::Status CreateReadSession(
-      ::grpc::ServerContext* context,
-      const v1::CreateReadSessionRequest* request,
-      v1::ReadSession* response) override;
+  ::grpc::Status CreateReadSession(::grpc::ServerContext* context,
+                                   const v1::CreateReadSessionRequest* request,
+                                   v1::ReadSession* response) override;
 
   // Streams rows off the stream id minted by `CreateReadSession`.
   // The handler:
@@ -125,7 +124,7 @@ class StorageReadService final : public v1::StorageRead::Service {
   // INVALID_ARGUMENT so the gateway can surface BigQuery's standard
   // 400 error envelope.
   ::grpc::Status ParseParent(const std::string& parent,
-                              std::string* project_id) const;
+                             std::string* project_id) const;
 
   // ParseTablePath enforces the
   // `projects/{project_id}/datasets/{dataset_id}/tables/{table_id}`
@@ -133,7 +132,7 @@ class StorageReadService final : public v1::StorageRead::Service {
   // `*out`. Plan 37 only cares about project/dataset/table; the
   // `location` slot the public API exposes is not yet honored.
   ::grpc::Status ParseTablePath(const std::string& table_path,
-                                 backend::storage::TableId* out) const;
+                                backend::storage::TableId* out) const;
 
   // NewSessionId mints a unique session id of the form
   // `projects/{project_id}/locations/-/sessions/s{N}` where N comes

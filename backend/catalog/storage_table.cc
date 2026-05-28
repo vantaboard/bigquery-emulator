@@ -31,7 +31,8 @@ namespace {
 // threaded alongside so STRUCT fields can pick up their per-field
 // types in the order GoogleSQL expects.
 absl::StatusOr<::googlesql::Value> ConvertCell(
-    const storage::Value& value, const ::googlesql::Type* type,
+    const storage::Value& value,
+    const ::googlesql::Type* type,
     const schema::ColumnSchema& column);
 
 // Project columns: given the full row from storage, return the
@@ -39,7 +40,8 @@ absl::StatusOr<::googlesql::Value> ConvertCell(
 // index `i` corresponds to `bq_schema.columns[i]`; the iterator
 // stores its own per-column googlesql `Type*` snapshot in parallel.
 absl::Status ProjectRowCells(
-    const storage::Row& row, const schema::TableSchema& bq_schema,
+    const storage::Row& row,
+    const schema::TableSchema& bq_schema,
     absl::Span<const int> column_idxs,
     absl::Span<const ::googlesql::Type* const> column_types,
     std::vector<::googlesql::Value>* out) {
@@ -48,9 +50,12 @@ absl::Status ProjectRowCells(
   for (std::vector<int>::size_type i = 0; i < column_idxs.size(); ++i) {
     const int idx = column_idxs[i];
     if (idx < 0 || static_cast<size_t>(idx) >= row.cells.size()) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "StorageTable iterator: requested column index ", idx,
-          " is outside the row's ", row.cells.size(), " cells"));
+      return absl::InvalidArgumentError(
+          absl::StrCat("StorageTable iterator: requested column index ",
+                       idx,
+                       " is outside the row's ",
+                       row.cells.size(),
+                       " cells"));
     }
     absl::StatusOr<::googlesql::Value> converted =
         ConvertCell(row.cells[idx], column_types[i], bq_schema.columns[idx]);
@@ -61,7 +66,8 @@ absl::Status ProjectRowCells(
 }
 
 absl::StatusOr<::googlesql::Value> ConvertScalar(
-    const storage::Value& value, const ::googlesql::Type* type,
+    const storage::Value& value,
+    const ::googlesql::Type* type,
     const schema::ColumnSchema& column) {
   using Kind = storage::Value::Kind;
   switch (value.kind()) {
@@ -79,20 +85,25 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
       return ::googlesql::Value::Bytes(value.string_value());
     case Kind::kStruct: {
       if (type == nullptr || !type->IsStruct()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "StorageTable iterator: column '", column.name,
-            "' carries a STRUCT cell but the GoogleSQL type is ",
-            type == nullptr ? "<null>" : type->DebugString()));
+        return absl::InvalidArgumentError(
+            absl::StrCat("StorageTable iterator: column '",
+                         column.name,
+                         "' carries a STRUCT cell but the GoogleSQL type is ",
+                         type == nullptr ? "<null>" : type->DebugString()));
       }
       const ::googlesql::StructType* st = type->AsStruct();
       const std::vector<storage::Value>& fields = value.struct_value();
       if (static_cast<int>(fields.size()) != st->num_fields() ||
           fields.size() != column.fields.size()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "StorageTable iterator: column '", column.name,
-            "' STRUCT has ", fields.size(), " field(s) but schema has ",
-            column.fields.size(), " and analyzer Type has ",
-            st->num_fields()));
+        return absl::InvalidArgumentError(
+            absl::StrCat("StorageTable iterator: column '",
+                         column.name,
+                         "' STRUCT has ",
+                         fields.size(),
+                         " field(s) but schema has ",
+                         column.fields.size(),
+                         " and analyzer Type has ",
+                         st->num_fields()));
       }
       std::vector<::googlesql::Value> converted;
       converted.reserve(fields.size());
@@ -108,24 +119,26 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
       // ARRAY cell with a non-ARRAY column type is a schema/data
       // mismatch; the caller must wrap the ARRAY case before
       // recursing for STRUCT field types.
-      return absl::InvalidArgumentError(absl::StrCat(
-          "StorageTable iterator: column '", column.name,
-          "': unexpected ARRAY cell while converting scalar type ",
-          type == nullptr ? "<null>" : type->DebugString()));
+      return absl::InvalidArgumentError(
+          absl::StrCat("StorageTable iterator: column '",
+                       column.name,
+                       "': unexpected ARRAY cell while converting scalar type ",
+                       type == nullptr ? "<null>" : type->DebugString()));
   }
-  return absl::InvalidArgumentError(absl::StrCat(
-      "StorageTable iterator: column '", column.name,
-      "': unhandled storage::Value::Kind ",
-      static_cast<int>(value.kind())));
+  return absl::InvalidArgumentError(
+      absl::StrCat("StorageTable iterator: column '",
+                   column.name,
+                   "': unhandled storage::Value::Kind ",
+                   static_cast<int>(value.kind())));
 }
 
 absl::StatusOr<::googlesql::Value> ConvertCell(
-    const storage::Value& value, const ::googlesql::Type* type,
+    const storage::Value& value,
+    const ::googlesql::Type* type,
     const schema::ColumnSchema& column) {
   if (type == nullptr) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "StorageTable iterator: column '", column.name,
-        "': null target type"));
+        "StorageTable iterator: column '", column.name, "': null target type"));
   }
   // ARRAY column: storage stores the elements in a single kArray
   // cell whose contents are typed by the column's nested element
@@ -136,10 +149,11 @@ absl::StatusOr<::googlesql::Value> ConvertCell(
       return ::googlesql::Value::Null(type);
     }
     if (value.kind() != storage::Value::Kind::kArray) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "StorageTable iterator: column '", column.name,
-          "' is ARRAY but cell kind is ",
-          static_cast<int>(value.kind())));
+      return absl::InvalidArgumentError(
+          absl::StrCat("StorageTable iterator: column '",
+                       column.name,
+                       "' is ARRAY but cell kind is ",
+                       static_cast<int>(value.kind())));
     }
     const ::googlesql::ArrayType* at = type->AsArray();
     const ::googlesql::Type* element_type = at->element_type();
@@ -176,11 +190,13 @@ absl::StatusOr<::googlesql::Value> ConvertCell(
 // `EvaluatorTableIterator` implementation that walks a Storage
 // `RowIterator`, projects the columns the evaluator asked for, and
 // converts each cell on demand.
-class StorageEvaluatorTableIterator : public ::googlesql::EvaluatorTableIterator {
+class StorageEvaluatorTableIterator
+    : public ::googlesql::EvaluatorTableIterator {
  public:
   StorageEvaluatorTableIterator(
       std::unique_ptr<storage::RowIterator> rows_iter,
-      schema::TableSchema bq_schema, std::vector<int> column_idxs,
+      schema::TableSchema bq_schema,
+      std::vector<int> column_idxs,
       std::vector<std::string> column_names,
       std::vector<const ::googlesql::Type*> column_types)
       : rows_iter_(std::move(rows_iter)),
@@ -213,8 +229,8 @@ class StorageEvaluatorTableIterator : public ::googlesql::EvaluatorTableIterator
       current_row_.clear();
       return false;
     }
-    absl::Status s = ProjectRowCells(row, bq_schema_, column_idxs_,
-                                      column_types_, &current_row_);
+    absl::Status s = ProjectRowCells(
+        row, bq_schema_, column_idxs_, column_types_, &current_row_);
     if (!s.ok()) {
       status_ = s;
       current_row_.clear();
@@ -227,8 +243,12 @@ class StorageEvaluatorTableIterator : public ::googlesql::EvaluatorTableIterator
     return current_row_[i];
   }
 
-  absl::Status Status() const override { return status_; }
-  absl::Status Cancel() override { return absl::OkStatus(); }
+  absl::Status Status() const override {
+    return status_;
+  }
+  absl::Status Cancel() override {
+    return absl::OkStatus();
+  }
 
  private:
   std::unique_ptr<storage::RowIterator> rows_iter_;
@@ -250,11 +270,11 @@ absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
 }
 
 StorageTable::StorageTable(absl::string_view name,
-                            absl::string_view full_name,
-                            absl::Span<const NameAndType> columns,
-                            schema::TableSchema bq_schema,
-                            storage::TableId table_id,
-                            const storage::Storage* storage)
+                           absl::string_view full_name,
+                           absl::Span<const NameAndType> columns,
+                           schema::TableSchema bq_schema,
+                           storage::TableId table_id,
+                           const storage::Storage* storage)
     : ::googlesql::SimpleTable(name, columns),
       bq_schema_(std::move(bq_schema)),
       table_id_(std::move(table_id)),
@@ -270,7 +290,7 @@ StorageTable::StorageTable(absl::string_view name,
   // DELETE statements -- both rely on `Table::PrimaryKey()` to drive
   // `EvaluatorTableModifyIterator::GetOriginalKeyValue` and to dedupe
   // post-mutation row sets. BigQuery itself does not have explicit
-  // primary keys, so this is a Phase 6b pragmatic choice: the first
+  // primary keys, so this is a pragmatic choice for the DML path: the first
   // column's values must be unique across the table for DML to
   // succeed (`Modification resulted in duplicate primary key`),
   // duplicate-row INSERTs that share the first column are rejected,
@@ -289,8 +309,7 @@ StorageTable::CreateEvaluatorTableIterator(
     absl::Span<const int> column_idxs) const {
   if (storage_ == nullptr) {
     return absl::FailedPreconditionError(absl::StrCat(
-        "StorageTable '", FullName(),
-        "': storage backend is not configured"));
+        "StorageTable '", FullName(), "': storage backend is not configured"));
   }
   std::vector<std::string> column_names;
   std::vector<const ::googlesql::Type*> column_types;
@@ -300,15 +319,18 @@ StorageTable::CreateEvaluatorTableIterator(
   idxs.reserve(column_idxs.size());
   for (int idx : column_idxs) {
     if (idx < 0 || idx >= NumColumns()) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "StorageTable '", FullName(), "': column index ", idx,
-          " is outside [0, ", NumColumns(), ")"));
+      return absl::InvalidArgumentError(absl::StrCat("StorageTable '",
+                                                     FullName(),
+                                                     "': column index ",
+                                                     idx,
+                                                     " is outside [0, ",
+                                                     NumColumns(),
+                                                     ")"));
     }
     const ::googlesql::Column* col = GetColumn(idx);
     if (col == nullptr) {
       return absl::InvalidArgumentError(absl::StrCat(
-          "StorageTable '", FullName(), "': column #", idx,
-          " is null"));
+          "StorageTable '", FullName(), "': column #", idx, " is null"));
     }
     column_names.push_back(col->Name());
     column_types.push_back(col->GetType());
@@ -318,8 +340,11 @@ StorageTable::CreateEvaluatorTableIterator(
       storage_->ScanRows(table_id_);
   if (!iter.ok()) return iter.status();
   return std::make_unique<StorageEvaluatorTableIterator>(
-      std::move(iter).value(), bq_schema_, std::move(idxs),
-      std::move(column_names), std::move(column_types));
+      std::move(iter).value(),
+      bq_schema_,
+      std::move(idxs),
+      std::move(column_names),
+      std::move(column_types));
 }
 
 }  // namespace catalog

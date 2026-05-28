@@ -42,16 +42,15 @@ class QueryServiceTest : public ::testing::Test {
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
     std::mt19937_64 rng(rd());
-    data_dir_ = fs::path(tmpdir) /
-                absl::StrCat("bqemu-query-test-", rng());
+    data_dir_ = fs::path(tmpdir) / absl::StrCat("bqemu-query-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
     auto opened =
         backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());
     ASSERT_TRUE(opened.ok()) << opened.status();
     storage_ = std::move(opened).value();
-    engine_ = std::make_unique<backend::engine::duckdb::DuckDBEngine>(
-        storage_.get());
+    engine_ =
+        std::make_unique<backend::engine::duckdb::DuckDBEngine>(storage_.get());
     service_ = std::make_unique<QueryService>(storage_.get(), engine_.get());
   }
 
@@ -94,12 +93,8 @@ class QueryServiceTest : public ::testing::Test {
     tags.type = backend::schema::ColumnType::kString;
     tags.mode = backend::schema::ColumnMode::kRepeated;
     schema.columns.push_back(tags);
-    ASSERT_TRUE(storage_
-                    ->CreateDataset({"proj-test", "ds"}, "US")
-                    .ok());
-    ASSERT_TRUE(storage_
-                    ->CreateTable({"proj-test", "ds", "t"}, schema)
-                    .ok());
+    ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+    ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
   }
 
   fs::path data_dir_;
@@ -241,7 +236,9 @@ class MessageCollector {
       return true;
     };
   }
-  const std::vector<v1::QueryResultRow>& messages() const { return messages_; }
+  const std::vector<v1::QueryResultRow>& messages() const {
+    return messages_;
+  }
 
  private:
   std::vector<v1::QueryResultRow> messages_;
@@ -283,13 +280,11 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   append(1, "ada");
   append(2, "linus");
   append(3, "grace");
-  ASSERT_TRUE(storage_
-                  ->AppendRows({"proj-test", "ds", "t"},
-                               absl::MakeConstSpan(rows))
-                  .ok());
+  ASSERT_TRUE(
+      storage_->AppendRows({"proj-test", "ds", "t"}, absl::MakeConstSpan(rows))
+          .ok());
 
-  v1::QueryRequest req =
-      MakeRequest("SELECT id, name FROM ds.t ORDER BY id");
+  v1::QueryRequest req = MakeRequest("SELECT id, name FROM ds.t ORDER BY id");
   MessageCollector collector;
   ::grpc::Status status = StreamQueryResults(
       storage_.get(), req, collector.Writer(), engine_.get());
@@ -373,8 +368,7 @@ TEST(QueryServiceWithoutStorageTest, ExecuteQueryReturnsFailedPrecondition) {
   req.set_sql("SELECT 1");
   std::vector<v1::QueryResultRow> messages;
   ::grpc::Status status = StreamQueryResults(
-      /*storage=*/nullptr, req,
-      [&](const v1::QueryResultRow& m) {
+      /*storage=*/nullptr, req, [&](const v1::QueryResultRow& m) {
         messages.push_back(m);
         return true;
       });
@@ -386,20 +380,22 @@ TEST(QueryServiceWithoutStorageTest, ExecuteQueryReturnsFailedPrecondition) {
 TEST_F(QueryServiceTest, ExecuteQueryCancelledWriterReturnsCancelled) {
   v1::QueryRequest req = MakeRequest("SELECT 1 AS one");
   ::grpc::Status status = StreamQueryResults(
-      storage_.get(), req,
-      [](const v1::QueryResultRow&) { return false; }, engine_.get());
+      storage_.get(),
+      req,
+      [](const v1::QueryResultRow&) { return false; },
+      engine_.get());
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::CANCELLED)
       << status.error_message();
 }
 
 // ---------------------------------------------------------------------------
-// Statement classification (Phase 6a)
+// Statement classification
 //
 // `StreamQueryResults` analyzes the statement once up front so it can
 // pick the right engine entry point: SELECT keeps the existing
 // schema+rows protocol, INSERT/UPDATE/DELETE/MERGE routes through
 // ExecuteDml and emits a final dml_stats summary, and DDL is rejected
-// with UNIMPLEMENTED until Phase 6b implements CREATE/DROP/ALTER.
+// with UNIMPLEMENTED until CREATE/DROP/ALTER lands.
 // ---------------------------------------------------------------------------
 
 TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {

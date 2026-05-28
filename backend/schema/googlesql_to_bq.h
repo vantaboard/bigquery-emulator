@@ -4,8 +4,8 @@
 // Reflection from GoogleSQL's static type system into BigQuery's
 // wire-level `FieldSchema` / `TableSchema` proto shape.
 //
-// The analyzer (Phase 4) produces a `ResolvedStatement` whose output
-// columns each carry a `googlesql::Type*`. The DryRun gRPC RPC and
+// The analyzer produces a `ResolvedStatement` whose output columns
+// each carry a `googlesql::Type*`. The DryRun gRPC RPC and
 // the future ExecuteQuery RPC both need to surface that type
 // information back to the gateway as a `bigquery_emulator.v1.TableSchema`
 // proto so the gateway can emit the corresponding BigQuery REST

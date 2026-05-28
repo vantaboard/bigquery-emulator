@@ -63,8 +63,8 @@ absl::string_view DuckDBSqlTypeName(::googlesql::TypeKind kind) {
       return "TIMESTAMP WITH TIME ZONE";
     // BigQuery NUMERIC is fixed at 38/9; BIGNUMERIC at 76/38 which
     // exceeds DuckDB's max precision (38), so we lossily clamp the
-    // scale on output. The DML / cast-policy plan (`Phase 6`) gets
-    // to revisit this — for now we mirror `schema::ToDuckDBType`.
+    // scale on output. The DML / cast-policy work gets to revisit
+    // this — for now we mirror `schema::ToDuckDBType`.
     case ::googlesql::TYPE_NUMERIC:
       return "DECIMAL(38, 9)";
     case ::googlesql::TYPE_BIGNUMERIC:
@@ -114,8 +114,8 @@ std::string ToDuckDBSqlType(const ::googlesql::Type& type) {
       for (int i = 0; i < struct_type->num_fields(); ++i) {
         const ::googlesql::StructField& f = struct_type->field(i);
         if (f.type == nullptr) continue;
-        fields.push_back(absl::StrCat(QuoteIdentifier(f.name), " ",
-                                       ToDuckDBSqlType(*f.type)));
+        fields.push_back(absl::StrCat(
+            QuoteIdentifier(f.name), " ", ToDuckDBSqlType(*f.type)));
       }
       return absl::StrCat("STRUCT(", absl::StrJoin(fields, ", "), ")");
     }

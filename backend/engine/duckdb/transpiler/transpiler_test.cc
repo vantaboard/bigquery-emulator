@@ -1,4 +1,4 @@
-// Unit tests for the Phase 5g `Transpiler` emit subset.
+// Unit tests for the `Transpiler` emit subset.
 //
 // We exercise each emit path through `AnalyzeStatement` so the
 // `ResolvedAST` the transpiler sees is exactly the analyzer's own
@@ -13,8 +13,8 @@
 // an INT64 and a STRING column) plus the GoogleSQL builtins
 // registered through `AddBuiltinFunctionsAndTypes`. That mirrors the
 // shape the production catalog (`backend/catalog/googlesql_catalog.h`)
-// hands to the analyzer in Phase 5.A, minus the `Storage` adapter
-// the engine layers on top.
+// hands to the analyzer in the reference-impl engine, minus the
+// `Storage` adapter the engine layers on top.
 
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 
@@ -22,11 +22,10 @@
 #include <string>
 #include <vector>
 
-#include "backend/engine/duckdb/transpiler/functions.h"
-
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/duckdb/transpiler/functions.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -69,8 +68,8 @@ class TranspilerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     type_factory_ = std::make_unique<::googlesql::TypeFactory>();
-    catalog_ = std::make_unique<::googlesql::SimpleCatalog>("test_catalog",
-                                                            type_factory_.get());
+    catalog_ = std::make_unique<::googlesql::SimpleCatalog>(
+        "test_catalog", type_factory_.get());
     ::googlesql::LanguageOptions language;
     language.EnableMaximumLanguageFeatures();
     language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
@@ -147,8 +146,7 @@ class TranspilerTest : public ::testing::Test {
     if (q == nullptr || q->query() == nullptr) return nullptr;
     const ::googlesql::ResolvedScan* scan = q->query();
     if (scan->node_kind() != ::googlesql::RESOLVED_PROJECT_SCAN) return nullptr;
-    const auto* project =
-        scan->GetAs<::googlesql::ResolvedProjectScan>();
+    const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
     if (project->expr_list_size() == 0) return nullptr;
     return project->expr_list(0)->expr();
   }
@@ -201,8 +199,7 @@ TEST_F(TranspilerTest, EmitLiteralString) {
   // GoogleSQL's default double-quoted form on TYPE_STRING for
   // exactly this reason -- the conformance harness would otherwise
   // pin every string-bearing query onto the reference-impl engine.
-  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
-            "'hi'");
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()), "'hi'");
 }
 
 TEST_F(TranspilerTest, EmitLiteralBoolTrue) {
@@ -211,8 +208,7 @@ TEST_F(TranspilerTest, EmitLiteralBoolTrue) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
-            "true");
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()), "true");
 }
 
 TEST_F(TranspilerTest, EmitColumnRefQuotesIdentifier) {
@@ -244,8 +240,9 @@ TEST_F(TranspilerTest, EmitFunctionCallCoalesce) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "COALESCE(\"name\", 'unknown')");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "COALESCE(\"name\", 'unknown')");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
@@ -255,8 +252,9 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "IFNULL(\"name\", 'unknown')");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "IFNULL(\"name\", 'unknown')");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallSkiplistReturnsEmpty) {
@@ -271,8 +269,8 @@ TEST_F(TranspilerTest, EmitFunctionCallSkiplistReturnsEmpty) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()), "");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallMappedFunction) {
@@ -286,8 +284,9 @@ TEST_F(TranspilerTest, EmitFunctionCallMappedFunction) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "ABS(\"id\")");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "ABS(\"id\")");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallLengthMaps) {
@@ -300,8 +299,9 @@ TEST_F(TranspilerTest, EmitFunctionCallLengthMaps) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "LENGTH(\"name\")");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "LENGTH(\"name\")");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallSafeModeReturnsEmpty) {
@@ -315,8 +315,8 @@ TEST_F(TranspilerTest, EmitFunctionCallSafeModeReturnsEmpty) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()), "");
 }
 
 TEST_F(TranspilerTest, EmitTableScanEmitsSelectStar) {
@@ -362,8 +362,8 @@ TEST_F(TranspilerTest, EmitFilterScanWithCoalescePredicateLowers) {
   // useful predicate, but it threads two literals, a column ref,
   // and the COALESCE emit through the same SQL string -- exactly
   // the integration the FilterScan emit needs to keep honest.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id FROM people WHERE COALESCE(name, 'x') = 'x'");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people WHERE COALESCE(name, 'x') = 'x'");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_FILTER_SCAN);
@@ -400,11 +400,11 @@ TEST_F(TranspilerTest, EmitJoinScanInnerWithLiteralPredicate) {
   // `ON TRUE` keeps the test focused on the join emit shape: the
   // predicate lowers cleanly through `EmitLiteral` so the assertion
   // can pin the full INNER JOIN SQL string. (`ON x = y` would
-  // route through the `=` function call which isn't on the Phase
-  // 5g whitelist; that path is covered by the propagation test
-  // below.)
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id FROM people INNER JOIN orders ON TRUE");
+  // route through the `=` function call which isn't on the
+  // function-call whitelist for the scan emit; that path is covered
+  // by the propagation test below.)
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people INNER JOIN orders ON TRUE");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
@@ -420,8 +420,8 @@ TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
   // smallest predicate that round-trips through the emit. The
   // assertion confirms the keyword swap (INNER -> LEFT) is the
   // only difference vs. the inner test above.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id FROM people LEFT JOIN orders ON TRUE");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people LEFT JOIN orders ON TRUE");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
@@ -433,18 +433,17 @@ TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
 }
 
 TEST_F(TranspilerTest, EmitJoinScanFallsBackOnUnsupportedPredicate) {
-  // `=` isn't on the Phase 5g function-call whitelist, so the
-  // join_expr emit returns "" and the JoinScan emit propagates the
-  // empty string up to the engine. The disposition policy then
-  // takes the reference-impl fallback for this shape.
+  // `=` isn't on the function-call whitelist used by the scan
+  // emits, so the join_expr emit returns "" and the JoinScan emit
+  // propagates the empty string up to the engine. The disposition
+  // policy then takes the reference-impl fallback for this shape.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id FROM people INNER JOIN orders ON id = order_id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "");
+  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()), "");
 }
 
 // --- Aggregate ----------------------------------------------------------
@@ -488,8 +487,8 @@ TEST_F(TranspilerTest, EmitAggregateScanAvgMinMaxGroupBy) {
   // All three of AVG / MIN / MAX share the same emit path; one
   // test covers the lot. The output column for each aggregate is
   // again the analyzer-synthesized `$agg<n>` name.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id, AVG(id), MIN(id), MAX(id) FROM people GROUP BY id");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id, AVG(id), MIN(id), MAX(id) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
@@ -507,8 +506,8 @@ TEST_F(TranspilerTest, EmitAggregateScanArrayAggMapsThroughTable) {
   // exercises the table-driven dispatch from inside the AggregateScan
   // emit -- a direct counterpart to `EmitFunctionCallMappedFunction`
   // above for the aggregate code path.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id, ARRAY_AGG(id) FROM people GROUP BY id");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id, ARRAY_AGG(id) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
@@ -524,8 +523,8 @@ TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnSkiplistedAggregate) {
   // returns "" and the AggregateScan emit propagates the empty
   // string. The disposition policy then takes the reference-impl
   // fallback for the whole query.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT id, APPROX_QUANTILES(id, 2) FROM people GROUP BY id");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id, APPROX_QUANTILES(id, 2) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
@@ -552,10 +551,9 @@ TEST_F(TranspilerTest, EmitOrderByScanAscDefault) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ORDER_BY_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(
-      t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
-      "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-      "ORDER BY \"id\" ASC");
+  EXPECT_EQ(t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "ORDER BY \"id\" ASC");
 }
 
 TEST_F(TranspilerTest, EmitOrderByScanDescNullsFirst) {
@@ -569,10 +567,9 @@ TEST_F(TranspilerTest, EmitOrderByScanDescNullsFirst) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ORDER_BY_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(
-      t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
-      "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-      "ORDER BY \"id\" DESC NULLS FIRST");
+  EXPECT_EQ(t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "ORDER BY \"id\" DESC NULLS FIRST");
 }
 
 TEST_F(TranspilerTest, EmitOrderByScanMultipleItems) {
@@ -580,16 +577,15 @@ TEST_F(TranspilerTest, EmitOrderByScanMultipleItems) {
   // that each item carries its own direction. `ASC NULLS LAST`
   // pins both the direction and the explicit null-order keyword
   // alongside the bare `DESC` from the first key.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT id, name FROM people ORDER BY id DESC, name ASC NULLS LAST");
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, name FROM people ORDER BY id DESC, name ASC NULLS LAST");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ORDER_BY_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(
-      t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
-      "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-      "ORDER BY \"id\" DESC, \"name\" ASC NULLS LAST");
+  EXPECT_EQ(t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "ORDER BY \"id\" DESC, \"name\" ASC NULLS LAST");
 }
 
 // --- Limit / Offset -----------------------------------------------------
@@ -643,8 +639,7 @@ TEST_F(TranspilerTest, EmitLiteralArrayInt64) {
   // assertion pins the spaces around the element separator so a
   // drift in `EmitValueLiteral`'s join (`", "` vs `","`) surfaces
   // here rather than downstream in the engine fallback.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT [1, 2] AS a");
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT [1, 2] AS a");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
@@ -725,8 +720,7 @@ TEST_F(TranspilerTest, EmitGetStructFieldNamedAccess) {
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_GET_STRUCT_FIELD);
   TestTranspiler t;
   EXPECT_EQ(
-      t.EmitGetStructField(
-          expr->GetAs<::googlesql::ResolvedGetStructField>()),
+      t.EmitGetStructField(expr->GetAs<::googlesql::ResolvedGetStructField>()),
       "{'a': 1, 'b': 'x'}.\"a\"");
 }
 
@@ -760,8 +754,7 @@ TEST_F(TranspilerTest, EmitArrayScanWithOffsetFallsBack) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
-            "");
+  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()), "");
 }
 
 TEST_F(TranspilerTest, EmitArrayScanJoinedToTableFallsBack) {
@@ -777,8 +770,7 @@ TEST_F(TranspilerTest, EmitArrayScanJoinedToTableFallsBack) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
-            "");
+  EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()), "");
 }
 
 TEST_F(TranspilerTest, EmitFunctionCallMakeArrayWithColumn) {
@@ -794,8 +786,9 @@ TEST_F(TranspilerTest, EmitFunctionCallMakeArrayWithColumn) {
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
-            "[\"id\", 0]");
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "[\"id\", 0]");
 }
 
 // --- Functions disposition table ----------------------------------------
@@ -864,26 +857,64 @@ TEST(FunctionsTableTest, CoverageMeetsPlanThreshold) {
   // one of these sentinel lookups returning nullptr.
   const std::vector<std::string> required = {
       // math
-      "abs", "ceil", "floor", "round", "trunc", "sqrt", "exp",
-      "sign", "greatest", "least", "pi", "ln", "pow",
+      "abs",
+      "ceil",
+      "floor",
+      "round",
+      "trunc",
+      "sqrt",
+      "exp",
+      "sign",
+      "greatest",
+      "least",
+      "pi",
+      "ln",
+      "pow",
       // string
-      "concat", "length", "lower", "upper", "substr", "replace",
-      "trim", "ltrim", "rtrim", "lpad", "rpad", "reverse",
-      "starts_with", "ends_with",
+      "concat",
+      "length",
+      "lower",
+      "upper",
+      "substr",
+      "replace",
+      "trim",
+      "ltrim",
+      "rtrim",
+      "lpad",
+      "rpad",
+      "reverse",
+      "starts_with",
+      "ends_with",
       // datetime (fallback)
-      "current_timestamp", "current_date", "date_add",
+      "current_timestamp",
+      "current_date",
+      "date_add",
       "format_timestamp",
       // conditional
-      "ifnull", "coalesce", "nullif",
+      "ifnull",
+      "coalesce",
+      "nullif",
       // array
-      "array_length", "array_concat", "generate_array",
+      "array_length",
+      "array_concat",
+      "generate_array",
       // aggregation
-      "count", "sum", "avg", "min", "max", "any_value",
-      "array_agg", "string_agg",
+      "count",
+      "sum",
+      "avg",
+      "min",
+      "max",
+      "any_value",
+      "array_agg",
+      "string_agg",
       // skiplist
-      "approx_quantiles", "ml.predict", "net.ip_from_string",
+      "approx_quantiles",
+      "ml.predict",
+      "net.ip_from_string",
       // window
-      "row_number", "rank", "dense_rank",
+      "row_number",
+      "rank",
+      "dense_rank",
   };
   for (const auto& name : required) {
     EXPECT_NE(LookupFunction(name), nullptr) << "missing entry: " << name;
@@ -972,8 +1003,8 @@ TEST_F(TranspilerTest, EmitAnalyticScanCountStarOverPartition) {
   // synthesizes a `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED
   // FOLLOWING` frame for aggregate analytic functions, so the emit
   // surfaces that frame even though the user didn't spell it.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT COUNT(*) OVER (PARTITION BY name) FROM people");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT COUNT(*) OVER (PARTITION BY name) FROM people");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
@@ -992,8 +1023,8 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
   // returns "" and the analytic emit propagates the empty string,
   // exactly the disposition policy the engine reads for the
   // reference-impl fallback.
-  const ::googlesql::ResolvedStatement* stmt = Analyze(
-      "SELECT SAFE.SUM(id) OVER (ORDER BY id) FROM people");
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT SAFE.SUM(id) OVER (ORDER BY id) FROM people");
   if (stmt == nullptr) {
     GTEST_SKIP() << "analyzer rejected SAFE aggregate OVER -- skip";
   }
@@ -1004,8 +1035,7 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
   }
   TestTranspiler t;
   EXPECT_EQ(
-      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
-      "");
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()), "");
 }
 
 }  // namespace

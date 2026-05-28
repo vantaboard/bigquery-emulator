@@ -14,9 +14,9 @@ namespace frontend {
 // catalog the Go gateway pokes whenever it sees REST mutations against
 // the BigQuery resource model.
 //
-// Phase 3g wires every RPC through a `backend::storage::Storage`
-// instance: dataset / table CRUD calls delegate straight to the store,
-// and the proto request/response shapes are translated to and from the
+// Each RPC is wired through a `backend::storage::Storage` instance:
+// dataset / table CRUD calls delegate straight to the store, and the
+// proto request/response shapes are translated to and from the
 // engine-agnostic `backend::schema` structs at the service boundary.
 // `Storage` errors map to gRPC status codes via `AbslToGrpcStatus` in
 // `catalog.cc` (see also `catalog-errors` in the matching plan):
@@ -39,35 +39,29 @@ class CatalogService final : public v1::Catalog::Service {
       const v1::RegisterDatasetRequest* request,
       v1::RegisterDatasetResponse* response) override;
 
-  ::grpc::Status DropDataset(
-      ::grpc::ServerContext* context,
-      const v1::DropDatasetRequest* request,
-      v1::DropDatasetResponse* response) override;
+  ::grpc::Status DropDataset(::grpc::ServerContext* context,
+                             const v1::DropDatasetRequest* request,
+                             v1::DropDatasetResponse* response) override;
 
-  ::grpc::Status RegisterTable(
-      ::grpc::ServerContext* context,
-      const v1::RegisterTableRequest* request,
-      v1::RegisterTableResponse* response) override;
+  ::grpc::Status RegisterTable(::grpc::ServerContext* context,
+                               const v1::RegisterTableRequest* request,
+                               v1::RegisterTableResponse* response) override;
 
-  ::grpc::Status DropTable(
-      ::grpc::ServerContext* context,
-      const v1::DropTableRequest* request,
-      v1::DropTableResponse* response) override;
+  ::grpc::Status DropTable(::grpc::ServerContext* context,
+                           const v1::DropTableRequest* request,
+                           v1::DropTableResponse* response) override;
 
-  ::grpc::Status DescribeTable(
-      ::grpc::ServerContext* context,
-      const v1::DescribeTableRequest* request,
-      v1::DescribeTableResponse* response) override;
+  ::grpc::Status DescribeTable(::grpc::ServerContext* context,
+                               const v1::DescribeTableRequest* request,
+                               v1::DescribeTableResponse* response) override;
 
-  ::grpc::Status InsertRows(
-      ::grpc::ServerContext* context,
-      const v1::InsertRowsRequest* request,
-      v1::InsertRowsResponse* response) override;
+  ::grpc::Status InsertRows(::grpc::ServerContext* context,
+                            const v1::InsertRowsRequest* request,
+                            v1::InsertRowsResponse* response) override;
 
-  ::grpc::Status ListRows(
-      ::grpc::ServerContext* context,
-      const v1::ListRowsRequest* request,
-      v1::ListRowsResponse* response) override;
+  ::grpc::Status ListRows(::grpc::ServerContext* context,
+                          const v1::ListRowsRequest* request,
+                          v1::ListRowsResponse* response) override;
 
  private:
   backend::storage::Storage* storage_;

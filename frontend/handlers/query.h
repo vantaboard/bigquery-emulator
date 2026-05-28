@@ -27,7 +27,7 @@ namespace frontend {
 //     consults during name resolution. It must outlive the service
 //     instance.
 //
-// DryRun (Phase 4b) parses + analyzes the SQL via `googlesql::Analyzer`
+// DryRun parses + analyzes the SQL via `googlesql::Analyzer`
 // and returns the resolved output schema + an estimated bytes-
 // processed value the gateway folds into the BigQuery REST
 // `Job.statistics.query` response. Analysis errors surface as
@@ -50,14 +50,15 @@ class QueryService final : public v1::Query::Service {
   // them through. `ExecuteQuery` returns `FAILED_PRECONDITION` when
   // `engine` is null.
   explicit QueryService(backend::storage::Storage* storage = nullptr,
-                         backend::engine::Engine* engine = nullptr);
+                        backend::engine::Engine* engine = nullptr);
 
   ::grpc::Status DryRun(::grpc::ServerContext* context,
                         const v1::QueryRequest* request,
                         v1::DryRunResponse* response) override;
 
   ::grpc::Status ExecuteQuery(
-      ::grpc::ServerContext* context, const v1::QueryRequest* request,
+      ::grpc::ServerContext* context,
+      const v1::QueryRequest* request,
       ::grpc::ServerWriter<v1::QueryResultRow>* writer) override;
 
  private:
@@ -91,7 +92,8 @@ class QueryService final : public v1::Query::Service {
 // `binaries/emulator_main` wire path and unit tests construct a
 // `DuckDBEngine` explicitly.
 ::grpc::Status StreamQueryResults(
-    backend::storage::Storage* storage, const v1::QueryRequest& request,
+    backend::storage::Storage* storage,
+    const v1::QueryRequest& request,
     const std::function<bool(const v1::QueryResultRow&)>& write,
     backend::engine::Engine* engine = nullptr);
 

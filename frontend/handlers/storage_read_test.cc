@@ -105,8 +105,7 @@ class StorageReadServiceTest : public ::testing::Test {
     tags.mode = backend::schema::ColumnMode::kRepeated;
     schema.columns.push_back(tags);
     ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
-    ASSERT_TRUE(
-        storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
+    ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
   }
 
   // Builds a well-formed `CreateReadSessionRequest` that points at
@@ -209,7 +208,8 @@ TEST_F(StorageReadServiceTest, CreateReadSessionRejectsRangeRestriction) {
       << status.error_message();
 }
 
-TEST_F(StorageReadServiceTest, CreateReadSessionRejectsUnknownColumnRestriction) {
+TEST_F(StorageReadServiceTest,
+       CreateReadSessionRejectsUnknownColumnRestriction) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
   req.mutable_read_session()->mutable_read_options()->set_row_restriction(
@@ -260,8 +260,7 @@ TEST_F(StorageReadServiceTest,
       << status.error_message();
 }
 
-TEST_F(StorageReadServiceTest,
-       CreateReadSessionEmptyTableIsInvalidArgument) {
+TEST_F(StorageReadServiceTest, CreateReadSessionEmptyTableIsInvalidArgument) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
   req.mutable_read_session()->set_table("");
@@ -276,8 +275,7 @@ TEST_F(StorageReadServiceTest,
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
   // Drop the `tables/` segment so the path no longer has 6 parts.
-  req.mutable_read_session()->set_table(
-      "projects/proj-test/datasets/ds/t");
+  req.mutable_read_session()->set_table("projects/proj-test/datasets/ds/t");
   v1::ReadSession resp;
   ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
@@ -364,18 +362,16 @@ class StorageReadGrpcTest : public ::testing::Test {
     // engine.
     int bound_port = 0;
     ::grpc::ServerBuilder builder;
-    builder.AddListeningPort("127.0.0.1:0",
-                              ::grpc::InsecureServerCredentials(),
-                              &bound_port);
+    builder.AddListeningPort(
+        "127.0.0.1:0", ::grpc::InsecureServerCredentials(), &bound_port);
     builder.RegisterService(service_.get());
     server_ = builder.BuildAndStart();
     ASSERT_NE(server_, nullptr);
     ASSERT_NE(bound_port, 0);
 
-    const std::string target =
-        absl::StrCat("127.0.0.1:", bound_port);
-    channel_ = ::grpc::CreateChannel(target,
-                                      ::grpc::InsecureChannelCredentials());
+    const std::string target = absl::StrCat("127.0.0.1:", bound_port);
+    channel_ =
+        ::grpc::CreateChannel(target, ::grpc::InsecureChannelCredentials());
     ASSERT_NE(channel_, nullptr);
     stub_ = v1::StorageRead::NewStub(channel_);
     ASSERT_NE(stub_, nullptr);
@@ -413,8 +409,7 @@ class StorageReadGrpcTest : public ::testing::Test {
     tags.mode = backend::schema::ColumnMode::kRepeated;
     schema.columns.push_back(tags);
     ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
-    ASSERT_TRUE(
-        storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
+    ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
   }
 
   // Appends `n` rows with id=0..n-1 and a derived name/tags shape.
@@ -431,14 +426,13 @@ class StorageReadGrpcTest : public ::testing::Test {
       std::vector<backend::storage::Value> tag_values;
       tag_values.push_back(
           backend::storage::Value::String(absl::StrCat("t", i)));
-      r.cells.push_back(
-          backend::storage::Value::Array(std::move(tag_values)));
+      r.cells.push_back(backend::storage::Value::Array(std::move(tag_values)));
       rows.push_back(std::move(r));
     }
-    ASSERT_TRUE(storage_
-                     ->AppendRows({"proj-test", "ds", "t"},
-                                   absl::MakeConstSpan(rows))
-                     .ok());
+    ASSERT_TRUE(
+        storage_
+            ->AppendRows({"proj-test", "ds", "t"}, absl::MakeConstSpan(rows))
+            .ok());
   }
 
   fs::path data_dir_;
@@ -460,8 +454,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsRoundTripsRowsInOrder) {
   create_req.mutable_read_session()->set_table(
       "projects/proj-test/datasets/ds/tables/t");
   v1::ReadSession session;
-  ASSERT_TRUE(
-      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
   ASSERT_EQ(session.streams_size(), 1);
   const std::string stream_name = session.streams(0).name();
 
@@ -516,8 +509,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsOffset) {
   create_req.mutable_read_session()->set_table(
       "projects/proj-test/datasets/ds/tables/t");
   v1::ReadSession session;
-  ASSERT_TRUE(
-      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
 
   ::grpc::ClientContext read_ctx;
   v1::ReadRowsRequest read_req;
@@ -530,7 +522,8 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsOffset) {
   std::vector<v1::DataRow> rows;
   v1::ReadRowsResponse page;
   while (reader->Read(&page)) {
-    for (const auto& row : page.rows()) rows.push_back(row);
+    for (const auto& row : page.rows())
+      rows.push_back(row);
   }
   ::grpc::Status status = reader->Finish();
   ASSERT_TRUE(status.ok()) << status.error_message();
@@ -551,8 +544,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsEmptyTableYieldsZeroPages) {
   create_req.mutable_read_session()->set_table(
       "projects/proj-test/datasets/ds/tables/t");
   v1::ReadSession session;
-  ASSERT_TRUE(
-      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
 
   ::grpc::ClientContext read_ctx;
   v1::ReadRowsRequest read_req;
@@ -562,7 +554,8 @@ TEST_F(StorageReadGrpcTest, ReadRowsEmptyTableYieldsZeroPages) {
 
   v1::ReadRowsResponse page;
   int pages = 0;
-  while (reader->Read(&page)) ++pages;
+  while (reader->Read(&page))
+    ++pages;
   ::grpc::Status status = reader->Finish();
   EXPECT_TRUE(status.ok()) << status.error_message();
   EXPECT_EQ(pages, 0);
@@ -580,8 +573,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsUnknownStreamIsNotFound) {
   ASSERT_NE(reader, nullptr);
 
   v1::ReadRowsResponse page;
-  while (reader->Read(&page)) {
-  }
+  while (reader->Read(&page)) {}
   ::grpc::Status status = reader->Finish();
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND)
       << status.error_message();
@@ -603,8 +595,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsRowRestriction) {
       ->mutable_read_options()
       ->set_row_restriction("id = 5");
   v1::ReadSession session;
-  ASSERT_TRUE(
-      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
 
   ::grpc::ClientContext read_ctx;
   v1::ReadRowsRequest read_req;
@@ -614,7 +605,8 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsRowRestriction) {
   std::vector<v1::DataRow> rows;
   v1::ReadRowsResponse page;
   while (reader->Read(&page)) {
-    for (const auto& row : page.rows()) rows.push_back(row);
+    for (const auto& row : page.rows())
+      rows.push_back(row);
   }
   ::grpc::Status status = reader->Finish();
   ASSERT_TRUE(status.ok()) << status.error_message();
@@ -656,8 +648,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsSchemaDriftIsFailedPrecondition) {
   create_req.mutable_read_session()->set_table(
       "projects/proj-test/datasets/ds/tables/t");
   v1::ReadSession session;
-  ASSERT_TRUE(
-      stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
 
   // Drop and recreate with an incompatible shape (1 column instead
   // of 3). The session's stashed schema is stale; ReadRows trips
@@ -677,8 +668,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsSchemaDriftIsFailedPrecondition) {
   read_req.set_read_stream(session.streams(0).name());
   auto reader = stub_->ReadRows(&read_ctx, read_req);
   v1::ReadRowsResponse page;
-  while (reader->Read(&page)) {
-  }
+  while (reader->Read(&page)) {}
   ::grpc::Status status = reader->Finish();
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION)
       << status.error_message();

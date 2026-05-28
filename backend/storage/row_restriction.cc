@@ -24,8 +24,10 @@ namespace {
 // not pull in absl::StripAsciiWhitespace because we need string_view
 // semantics and want a stable predictable result without allocations.
 absl::string_view Trim(absl::string_view s) {
-  while (!s.empty() && absl::ascii_isspace(s.front())) s.remove_prefix(1);
-  while (!s.empty() && absl::ascii_isspace(s.back())) s.remove_suffix(1);
+  while (!s.empty() && absl::ascii_isspace(s.front()))
+    s.remove_prefix(1);
+  while (!s.empty() && absl::ascii_isspace(s.back()))
+    s.remove_suffix(1);
   return s;
 }
 
@@ -34,8 +36,9 @@ absl::string_view Trim(absl::string_view s) {
 // no such '=' exists or if the '=' is at the start / end. The split
 // honors the SQL escape sequence `''` so `name = 'O''Reilly'` parses
 // as `name` / `'O''Reilly'`.
-bool SplitOnTopLevelEquals(absl::string_view s, absl::string_view* lhs,
-                            absl::string_view* rhs) {
+bool SplitOnTopLevelEquals(absl::string_view s,
+                           absl::string_view* lhs,
+                           absl::string_view* rhs) {
   bool in_string = false;
   for (std::size_t i = 0; i < s.size(); ++i) {
     const char c = s[i];
@@ -108,13 +111,15 @@ absl::Status ExtractIdentifier(absl::string_view s, std::string* name) {
     return absl::OkStatus();
   }
   if (!absl::ascii_isalpha(s.front()) && s.front() != '_') {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: column name must start with a letter or "
-        "underscore (got: ",
-        s, ")"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: column name must start with a letter or "
+                     "underscore (got: ",
+                     s,
+                     ")"));
   }
   std::size_t i = 0;
-  while (i < s.size() && IsBareIdentifierChar(s[i])) ++i;
+  while (i < s.size() && IsBareIdentifierChar(s[i]))
+    ++i;
   *name = std::string(s.substr(0, i));
   const absl::string_view rest = Trim(s.substr(i));
   if (!rest.empty()) {
@@ -177,12 +182,13 @@ absl::Status ParseInt64Literal(absl::string_view s, std::int64_t* out) {
       return absl::InvalidArgumentError(absl::StrCat(
           "row_restriction: FLOAT64 literals are not supported by the "
           "row_restriction parser (got: ",
-          s, ")"));
+          s,
+          ")"));
     }
   }
   if (!absl::SimpleAtoi(s, out)) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: expected INT64 literal, got: ", s));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: expected INT64 literal, got: ", s));
   }
   return absl::OkStatus();
 }
@@ -190,8 +196,8 @@ absl::Status ParseInt64Literal(absl::string_view s, std::int64_t* out) {
 }  // namespace
 
 absl::Status ParseRowRestriction(absl::string_view restriction,
-                                  const schema::TableSchema& schema,
-                                  EqualityPredicate* out) {
+                                 const schema::TableSchema& schema,
+                                 EqualityPredicate* out) {
   if (out == nullptr) {
     return absl::InternalError(
         "row_restriction: out parameter must be non-null");
@@ -207,9 +213,20 @@ absl::Status ParseRowRestriction(absl::string_view restriction,
   // whitespace so a column named `andrew` does not match. We also
   // reject the SQL relational operators we do not implement here.
   static constexpr absl::string_view kBanned[] = {
-      " AND ", " and ", " OR ",  " or ",   " NOT ",  " not ",
-      " IN ",  " in ", " IS ",  " is ",   " LIKE ", " like ",
-      " BETWEEN ", " between ",
+      " AND ",
+      " and ",
+      " OR ",
+      " or ",
+      " NOT ",
+      " not ",
+      " IN ",
+      " in ",
+      " IS ",
+      " is ",
+      " LIKE ",
+      " like ",
+      " BETWEEN ",
+      " between ",
   };
   for (absl::string_view kw : kBanned) {
     if (absl::StrContains(trimmed, kw)) {
@@ -222,7 +239,12 @@ absl::Status ParseRowRestriction(absl::string_view restriction,
   // The same intent for the operator forms (`<`, `>`, `<=`, `>=`,
   // `!=`, `<>`). Anything but a single `=` is a no-go.
   static constexpr absl::string_view kBannedOps[] = {
-      "<=", ">=", "!=", "<>", "<", ">",
+      "<=",
+      ">=",
+      "!=",
+      "<>",
+      "<",
+      ">",
   };
   for (absl::string_view op : kBannedOps) {
     if (absl::StrContains(trimmed, op)) {
@@ -254,28 +276,31 @@ absl::Status ParseRowRestriction(absl::string_view restriction,
     }
   }
   if (column == nullptr) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: unknown column `", column_name,
-        "` (table has no top-level column with that name)"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: unknown column `",
+                     column_name,
+                     "` (table has no top-level column with that name)"));
   }
   if (column->mode == schema::ColumnMode::kRepeated) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: equality on REPEATED column `", column_name,
-        "` is not supported in this emulator profile"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: equality on REPEATED column `",
+                     column_name,
+                     "` is not supported in this emulator profile"));
   }
   if (column->type == schema::ColumnType::kArray ||
       column->type == schema::ColumnType::kStruct) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: equality on ARRAY/STRUCT column `", column_name,
-        "` is not supported in this emulator profile"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: equality on ARRAY/STRUCT column `",
+                     column_name,
+                     "` is not supported in this emulator profile"));
   }
 
   const absl::string_view lit = Trim(rhs);
   if (lit.empty()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: missing literal after `=` (expected "
-        "`<column> = <literal>`): ",
-        restriction));
+    return absl::InvalidArgumentError(
+        absl::StrCat("row_restriction: missing literal after `=` (expected "
+                     "`<column> = <literal>`): ",
+                     restriction));
   }
 
   EqualityPredicate pred;
@@ -309,7 +334,9 @@ absl::Status ParseRowRestriction(absl::string_view restriction,
     }
     default:
       return absl::InvalidArgumentError(absl::StrCat(
-          "row_restriction: column `", column_name, "` has type ",
+          "row_restriction: column `",
+          column_name,
+          "` has type ",
           schema::ColumnTypeName(column->type),
           "; only INT64, BOOL, and STRING columns are supported by the "
           "row_restriction parser in this emulator profile"));

@@ -1,7 +1,7 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_
 
-// DuckDB transpiler (Phase 5.B).
+// DuckDB transpiler.
 //
 // `Transpiler` walks a GoogleSQL `ResolvedAST` produced by
 // `googlesql::AnalyzeStatement` (see
@@ -85,22 +85,18 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // ---------------------------------------------------------------
 
   // Statements -----------------------------------------------------
-  virtual std::string EmitQueryStmt(
-      const ::googlesql::ResolvedQueryStmt* node);
+  virtual std::string EmitQueryStmt(const ::googlesql::ResolvedQueryStmt* node);
 
   // Scans ----------------------------------------------------------
   virtual std::string EmitProjectScan(
       const ::googlesql::ResolvedProjectScan* node);
-  virtual std::string EmitTableScan(
-      const ::googlesql::ResolvedTableScan* node);
+  virtual std::string EmitTableScan(const ::googlesql::ResolvedTableScan* node);
   virtual std::string EmitSingleRowScan(
       const ::googlesql::ResolvedSingleRowScan* node);
   virtual std::string EmitFilterScan(
       const ::googlesql::ResolvedFilterScan* node);
-  virtual std::string EmitJoinScan(
-      const ::googlesql::ResolvedJoinScan* node);
-  virtual std::string EmitArrayScan(
-      const ::googlesql::ResolvedArrayScan* node);
+  virtual std::string EmitJoinScan(const ::googlesql::ResolvedJoinScan* node);
+  virtual std::string EmitArrayScan(const ::googlesql::ResolvedArrayScan* node);
   virtual std::string EmitAggregateScan(
       const ::googlesql::ResolvedAggregateScan* node);
   virtual std::string EmitSetOperationScan(
@@ -117,20 +113,16 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedWithRefScan* node);
 
   // Expressions ----------------------------------------------------
-  virtual std::string EmitLiteral(
-      const ::googlesql::ResolvedLiteral* node);
-  virtual std::string EmitParameter(
-      const ::googlesql::ResolvedParameter* node);
-  virtual std::string EmitColumnRef(
-      const ::googlesql::ResolvedColumnRef* node);
+  virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);
+  virtual std::string EmitParameter(const ::googlesql::ResolvedParameter* node);
+  virtual std::string EmitColumnRef(const ::googlesql::ResolvedColumnRef* node);
   virtual std::string EmitFunctionCall(
       const ::googlesql::ResolvedFunctionCall* node);
   virtual std::string EmitAggregateFunctionCall(
       const ::googlesql::ResolvedAggregateFunctionCall* node);
   virtual std::string EmitAnalyticFunctionCall(
       const ::googlesql::ResolvedAnalyticFunctionCall* node);
-  virtual std::string EmitCast(
-      const ::googlesql::ResolvedCast* node);
+  virtual std::string EmitCast(const ::googlesql::ResolvedCast* node);
   virtual std::string EmitMakeStruct(
       const ::googlesql::ResolvedMakeStruct* node);
   virtual std::string EmitGetStructField(
@@ -162,8 +154,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // bound is malformed or when an offset bound carries an expression
   // we cannot lower yet, so the caller can propagate the empty-string
   // contract.
-  std::string EmitFrameBound(
-      const ::googlesql::ResolvedWindowFrameExpr* expr);
+  std::string EmitFrameBound(const ::googlesql::ResolvedWindowFrameExpr* expr);
 };
 
 }  // namespace transpiler

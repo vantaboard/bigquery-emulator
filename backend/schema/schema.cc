@@ -27,22 +27,38 @@ using ::absl::EqualsIgnoreCase;
 
 absl::string_view ColumnTypeName(ColumnType type) {
   switch (type) {
-    case ColumnType::kInt64: return "INT64";
-    case ColumnType::kFloat64: return "FLOAT64";
-    case ColumnType::kBool: return "BOOL";
-    case ColumnType::kString: return "STRING";
-    case ColumnType::kBytes: return "BYTES";
-    case ColumnType::kDate: return "DATE";
-    case ColumnType::kTime: return "TIME";
-    case ColumnType::kDatetime: return "DATETIME";
-    case ColumnType::kTimestamp: return "TIMESTAMP";
-    case ColumnType::kNumeric: return "NUMERIC";
-    case ColumnType::kBignumeric: return "BIGNUMERIC";
-    case ColumnType::kJson: return "JSON";
-    case ColumnType::kGeography: return "GEOGRAPHY";
-    case ColumnType::kArray: return "ARRAY";
-    case ColumnType::kStruct: return "STRUCT";
-    case ColumnType::kUnknown: return "";
+    case ColumnType::kInt64:
+      return "INT64";
+    case ColumnType::kFloat64:
+      return "FLOAT64";
+    case ColumnType::kBool:
+      return "BOOL";
+    case ColumnType::kString:
+      return "STRING";
+    case ColumnType::kBytes:
+      return "BYTES";
+    case ColumnType::kDate:
+      return "DATE";
+    case ColumnType::kTime:
+      return "TIME";
+    case ColumnType::kDatetime:
+      return "DATETIME";
+    case ColumnType::kTimestamp:
+      return "TIMESTAMP";
+    case ColumnType::kNumeric:
+      return "NUMERIC";
+    case ColumnType::kBignumeric:
+      return "BIGNUMERIC";
+    case ColumnType::kJson:
+      return "JSON";
+    case ColumnType::kGeography:
+      return "GEOGRAPHY";
+    case ColumnType::kArray:
+      return "ARRAY";
+    case ColumnType::kStruct:
+      return "STRUCT";
+    case ColumnType::kUnknown:
+      return "";
   }
   return "";
 }
@@ -52,16 +68,13 @@ ColumnType ParseColumnType(absl::string_view name) {
   // type aliases (see docs/bigquery/docs/data-types.md); legacy
   // `RECORD` maps to STRUCT. We accept all of them here and round-trip
   // back to the canonical name through ColumnTypeName.
-  if (EqualsIgnoreCase(name, "INT64") ||
-      EqualsIgnoreCase(name, "INTEGER")) {
+  if (EqualsIgnoreCase(name, "INT64") || EqualsIgnoreCase(name, "INTEGER")) {
     return ColumnType::kInt64;
   }
-  if (EqualsIgnoreCase(name, "FLOAT64") ||
-      EqualsIgnoreCase(name, "FLOAT")) {
+  if (EqualsIgnoreCase(name, "FLOAT64") || EqualsIgnoreCase(name, "FLOAT")) {
     return ColumnType::kFloat64;
   }
-  if (EqualsIgnoreCase(name, "BOOL") ||
-      EqualsIgnoreCase(name, "BOOLEAN")) {
+  if (EqualsIgnoreCase(name, "BOOL") || EqualsIgnoreCase(name, "BOOLEAN")) {
     return ColumnType::kBool;
   }
   if (EqualsIgnoreCase(name, "STRING")) return ColumnType::kString;
@@ -78,8 +91,7 @@ ColumnType ParseColumnType(absl::string_view name) {
   if (EqualsIgnoreCase(name, "JSON")) return ColumnType::kJson;
   if (EqualsIgnoreCase(name, "GEOGRAPHY")) return ColumnType::kGeography;
   if (EqualsIgnoreCase(name, "ARRAY")) return ColumnType::kArray;
-  if (EqualsIgnoreCase(name, "STRUCT") ||
-      EqualsIgnoreCase(name, "RECORD")) {
+  if (EqualsIgnoreCase(name, "STRUCT") || EqualsIgnoreCase(name, "RECORD")) {
     return ColumnType::kStruct;
   }
   return ColumnType::kUnknown;
@@ -87,9 +99,12 @@ ColumnType ParseColumnType(absl::string_view name) {
 
 absl::string_view ColumnModeName(ColumnMode mode) {
   switch (mode) {
-    case ColumnMode::kNullable: return "NULLABLE";
-    case ColumnMode::kRequired: return "REQUIRED";
-    case ColumnMode::kRepeated: return "REPEATED";
+    case ColumnMode::kNullable:
+      return "NULLABLE";
+    case ColumnMode::kRequired:
+      return "REQUIRED";
+    case ColumnMode::kRepeated:
+      return "REPEATED";
   }
   return "NULLABLE";
 }
@@ -101,7 +116,8 @@ ColumnMode ParseColumnMode(absl::string_view name) {
   return ColumnMode::kNullable;
 }
 
-absl::StatusOr<ColumnSchema> ColumnSchemaFromProto(const v1::FieldSchema& proto) {
+absl::StatusOr<ColumnSchema> ColumnSchemaFromProto(
+    const v1::FieldSchema& proto) {
   if (proto.name().empty()) {
     return absl::InvalidArgumentError(
         "FieldSchema is missing the required `name` field");
@@ -120,9 +136,9 @@ absl::StatusOr<ColumnSchema> ColumnSchemaFromProto(const v1::FieldSchema& proto)
   for (const auto& nested : proto.fields()) {
     auto child = ColumnSchemaFromProto(nested);
     if (!child.ok()) {
-      return absl::Status(child.status().code(),
-                          absl::StrCat(proto.name(), ".",
-                                       child.status().message()));
+      return absl::Status(
+          child.status().code(),
+          absl::StrCat(proto.name(), ".", child.status().message()));
     }
     column.fields.push_back(std::move(*child));
   }
@@ -164,34 +180,50 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out) {
 
 absl::string_view ToDuckDBType(ColumnType type) {
   switch (type) {
-    case ColumnType::kInt64: return "BIGINT";
-    case ColumnType::kFloat64: return "DOUBLE";
-    case ColumnType::kBool: return "BOOLEAN";
-    case ColumnType::kString: return "VARCHAR";
-    case ColumnType::kBytes: return "BLOB";
-    case ColumnType::kDate: return "DATE";
-    case ColumnType::kTime: return "TIME";
+    case ColumnType::kInt64:
+      return "BIGINT";
+    case ColumnType::kFloat64:
+      return "DOUBLE";
+    case ColumnType::kBool:
+      return "BOOLEAN";
+    case ColumnType::kString:
+      return "VARCHAR";
+    case ColumnType::kBytes:
+      return "BLOB";
+    case ColumnType::kDate:
+      return "DATE";
+    case ColumnType::kTime:
+      return "TIME";
     // BigQuery DATETIME is naive (no zone). DuckDB TIMESTAMP is the
     // matching naive type.
-    case ColumnType::kDatetime: return "TIMESTAMP";
+    case ColumnType::kDatetime:
+      return "TIMESTAMP";
     // BigQuery TIMESTAMP is always UTC; DuckDB has a TIMESTAMPTZ
     // alias that round-trips RFC 3339 strings the way the gateway
     // wire layer expects.
-    case ColumnType::kTimestamp: return "TIMESTAMP WITH TIME ZONE";
+    case ColumnType::kTimestamp:
+      return "TIMESTAMP WITH TIME ZONE";
     // BigQuery NUMERIC is fixed at 38/9; BIGNUMERIC at 76/38 which
     // exceeds DuckDB's max precision (38), so we lossily clamp the
-    // scale on output. Phase 6 (DML) revisits the lossy-cast policy.
-    case ColumnType::kNumeric: return "DECIMAL(38, 9)";
-    case ColumnType::kBignumeric: return "DECIMAL(38, 38)";
-    case ColumnType::kJson: return "JSON";
-    case ColumnType::kGeography: return "VARCHAR";
+    // scale on output. The DML work revisits the lossy-cast policy.
+    case ColumnType::kNumeric:
+      return "DECIMAL(38, 9)";
+    case ColumnType::kBignumeric:
+      return "DECIMAL(38, 38)";
+    case ColumnType::kJson:
+      return "JSON";
+    case ColumnType::kGeography:
+      return "VARCHAR";
     // ARRAY / STRUCT need their inner shape to form a real DuckDB
     // type expression; the caller should reach for
     // ColumnSchemaToDuckDBType instead. We return the bare kind name
     // so log messages and error strings remain readable.
-    case ColumnType::kArray: return "LIST";
-    case ColumnType::kStruct: return "STRUCT";
-    case ColumnType::kUnknown: return "VARCHAR";
+    case ColumnType::kArray:
+      return "LIST";
+    case ColumnType::kStruct:
+      return "STRUCT";
+    case ColumnType::kUnknown:
+      return "VARCHAR";
   }
   return "VARCHAR";
 }
@@ -225,43 +257,33 @@ ColumnType FromDuckDBType(absl::string_view duckdb_type) {
   // `kInt64` here — the caller is responsible for flipping the
   // owning ColumnSchema's mode to REPEATED.
   absl::string_view name = duckdb_type;
-  while (!name.empty() && name.back() == ']') name.remove_suffix(1);
-  while (!name.empty() && name.back() == '[') name.remove_suffix(1);
+  while (!name.empty() && name.back() == ']')
+    name.remove_suffix(1);
+  while (!name.empty() && name.back() == '[')
+    name.remove_suffix(1);
   const absl::string_view head = TypeHead(name);
-  if (EqualsIgnoreCase(head, "BIGINT") ||
-      EqualsIgnoreCase(head, "INT8") ||
-      EqualsIgnoreCase(head, "LONG") ||
-      EqualsIgnoreCase(head, "INT64") ||
-      EqualsIgnoreCase(head, "INTEGER") ||
-      EqualsIgnoreCase(head, "INT") ||
-      EqualsIgnoreCase(head, "INT4") ||
-      EqualsIgnoreCase(head, "SMALLINT") ||
-      EqualsIgnoreCase(head, "INT2") ||
-      EqualsIgnoreCase(head, "TINYINT") ||
+  if (EqualsIgnoreCase(head, "BIGINT") || EqualsIgnoreCase(head, "INT8") ||
+      EqualsIgnoreCase(head, "LONG") || EqualsIgnoreCase(head, "INT64") ||
+      EqualsIgnoreCase(head, "INTEGER") || EqualsIgnoreCase(head, "INT") ||
+      EqualsIgnoreCase(head, "INT4") || EqualsIgnoreCase(head, "SMALLINT") ||
+      EqualsIgnoreCase(head, "INT2") || EqualsIgnoreCase(head, "TINYINT") ||
       EqualsIgnoreCase(head, "INT1")) {
     return ColumnType::kInt64;
   }
-  if (EqualsIgnoreCase(head, "DOUBLE") ||
-      EqualsIgnoreCase(head, "FLOAT8") ||
-      EqualsIgnoreCase(head, "REAL") ||
-      EqualsIgnoreCase(head, "FLOAT4") ||
+  if (EqualsIgnoreCase(head, "DOUBLE") || EqualsIgnoreCase(head, "FLOAT8") ||
+      EqualsIgnoreCase(head, "REAL") || EqualsIgnoreCase(head, "FLOAT4") ||
       EqualsIgnoreCase(head, "FLOAT")) {
     return ColumnType::kFloat64;
   }
-  if (EqualsIgnoreCase(head, "BOOLEAN") ||
-      EqualsIgnoreCase(head, "BOOL")) {
+  if (EqualsIgnoreCase(head, "BOOLEAN") || EqualsIgnoreCase(head, "BOOL")) {
     return ColumnType::kBool;
   }
-  if (EqualsIgnoreCase(head, "VARCHAR") ||
-      EqualsIgnoreCase(head, "TEXT") ||
-      EqualsIgnoreCase(head, "STRING") ||
-      EqualsIgnoreCase(head, "CHAR")) {
+  if (EqualsIgnoreCase(head, "VARCHAR") || EqualsIgnoreCase(head, "TEXT") ||
+      EqualsIgnoreCase(head, "STRING") || EqualsIgnoreCase(head, "CHAR")) {
     return ColumnType::kString;
   }
-  if (EqualsIgnoreCase(head, "BLOB") ||
-      EqualsIgnoreCase(head, "BYTEA") ||
-      EqualsIgnoreCase(head, "BINARY") ||
-      EqualsIgnoreCase(head, "VARBINARY") ||
+  if (EqualsIgnoreCase(head, "BLOB") || EqualsIgnoreCase(head, "BYTEA") ||
+      EqualsIgnoreCase(head, "BINARY") || EqualsIgnoreCase(head, "VARBINARY") ||
       EqualsIgnoreCase(head, "BYTES")) {
     return ColumnType::kBytes;
   }
@@ -278,13 +300,12 @@ ColumnType FromDuckDBType(absl::string_view duckdb_type) {
     // for the suffix to disambiguate before falling through to
     // the naive case.
     if (absl::StrContains(absl::AsciiStrToUpper(std::string(name)),
-                           "WITH TIME ZONE")) {
+                          "WITH TIME ZONE")) {
       return ColumnType::kTimestamp;
     }
     return ColumnType::kDatetime;
   }
-  if (EqualsIgnoreCase(head, "DECIMAL") ||
-      EqualsIgnoreCase(head, "NUMERIC")) {
+  if (EqualsIgnoreCase(head, "DECIMAL") || EqualsIgnoreCase(head, "NUMERIC")) {
     return ColumnType::kNumeric;
   }
   if (EqualsIgnoreCase(head, "HUGEINT") ||
@@ -297,13 +318,11 @@ ColumnType FromDuckDBType(absl::string_view duckdb_type) {
       EqualsIgnoreCase(head, "GEOGRAPHY")) {
     return ColumnType::kGeography;
   }
-  if (EqualsIgnoreCase(head, "STRUCT") ||
-      EqualsIgnoreCase(head, "ROW") ||
+  if (EqualsIgnoreCase(head, "STRUCT") || EqualsIgnoreCase(head, "ROW") ||
       EqualsIgnoreCase(head, "RECORD")) {
     return ColumnType::kStruct;
   }
-  if (EqualsIgnoreCase(head, "LIST") ||
-      EqualsIgnoreCase(head, "ARRAY")) {
+  if (EqualsIgnoreCase(head, "LIST") || EqualsIgnoreCase(head, "ARRAY")) {
     return ColumnType::kArray;
   }
   return ColumnType::kUnknown;
@@ -328,8 +347,10 @@ std::string ColumnSchemaToDuckDBType(const ColumnSchema& column) {
     inner = "STRUCT(";
     for (size_t i = 0; i < column.fields.size(); ++i) {
       if (i > 0) absl::StrAppend(&inner, ", ");
-      absl::StrAppend(&inner, QuoteStructFieldName(column.fields[i].name),
-                       " ", ColumnSchemaToDuckDBType(column.fields[i]));
+      absl::StrAppend(&inner,
+                      QuoteStructFieldName(column.fields[i].name),
+                      " ",
+                      ColumnSchemaToDuckDBType(column.fields[i]));
     }
     absl::StrAppend(&inner, ")");
   } else if (column.type == ColumnType::kArray) {

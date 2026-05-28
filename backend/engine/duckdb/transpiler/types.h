@@ -1,7 +1,7 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TYPES_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TYPES_H_
 
-// Type lowering for the DuckDB transpiler (Phase 5.B).
+// Type lowering for the DuckDB transpiler.
 //
 // The transpiler walks a GoogleSQL `ResolvedAST` and emits DuckDB
 // SQL. Wherever the emitted SQL needs a DuckDB type expression — the

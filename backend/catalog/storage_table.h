@@ -4,8 +4,9 @@
 // StorageTable is the `googlesql::Table` adapter that lets the
 // GoogleSQL reference-impl evaluator stream rows out of the active
 // `backend::storage::Storage`. It is the execution-side counterpart of
-// the analysis-only `SimpleTable` instances `GoogleSqlCatalog` used to
-// produce in Phase 4: same column shape, same `googlesql::Type*`
+// the analysis-only `SimpleTable` instances `GoogleSqlCatalog`
+// produces during analyzer name resolution: same column shape, same
+// `googlesql::Type*`
 // allocations, but with a working `CreateEvaluatorTableIterator`
 // override that wraps `Storage::ScanRows` and converts each storage
 // `Value` into a `googlesql::Value` of the matching column type as
@@ -56,9 +57,11 @@ class StorageTable : public ::googlesql::SimpleTable {
   // (`GoogleSqlCatalog::MaterializeTable`) is the only caller that
   // already has both pieces in hand, which is why the constructor
   // takes them paired rather than re-running the type translation.
-  StorageTable(absl::string_view name, absl::string_view full_name,
+  StorageTable(absl::string_view name,
+               absl::string_view full_name,
                absl::Span<const NameAndType> columns,
-               schema::TableSchema bq_schema, storage::TableId table_id,
+               schema::TableSchema bq_schema,
+               storage::TableId table_id,
                const storage::Storage* storage);
 
   ~StorageTable() override = default;
@@ -76,20 +79,24 @@ class StorageTable : public ::googlesql::SimpleTable {
       absl::Span<const int> column_idxs) const override;
 
   // Backing storage identifier the analyzer-allocated `Table` adapter
-  // is materialized from. Used by the DuckDB engine (Phase 5i) to map
+  // is materialized from. Used by the DuckDB engine to map
   // a `ResolvedTableScan::table()` pointer back to the
   // `Storage::ScanRows(id)` call site so the engine can ATTACH the
   // rows into its DuckDB connection before executing the transpiled
   // SQL. The catalog hands out the same `Table*` for the lifetime of
   // the catalog instance, so the returned reference is stable across
   // the same query.
-  const storage::TableId& storage_table_id() const { return table_id_; }
+  const storage::TableId& storage_table_id() const {
+    return table_id_;
+  }
 
   // Engine-agnostic schema the storage layer keeps for this table.
   // Companion accessor to `storage_table_id()`: the DuckDB engine
-  // (Phase 5i) consults it to emit the matching `CREATE TABLE` DDL
-  // when it loads the rows into its in-memory DuckDB connection.
-  const schema::TableSchema& bq_schema() const { return bq_schema_; }
+  // consults it to emit the matching `CREATE TABLE` DDL when it
+  // loads the rows into its in-memory DuckDB connection.
+  const schema::TableSchema& bq_schema() const {
+    return bq_schema_;
+  }
 
  private:
   // The BigQuery-level schema mirrors `SimpleTable::columns_` 1:1 but

@@ -5,9 +5,9 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
@@ -29,13 +29,13 @@ namespace catalog {
 
 namespace {
 
+using ::googlesql::BuiltinFunctionOptions;
+using ::googlesql::LanguageOptions;
 using ::googlesql::SimpleColumn;
 using ::googlesql::SimpleTable;
 using ::googlesql::StructType;
 using ::googlesql::Type;
 using ::googlesql::TypeFactory;
-using ::googlesql::LanguageOptions;
-using ::googlesql::BuiltinFunctionOptions;
 
 // Translate a *scalar-or-struct* `schema::ColumnSchema` into a
 // GoogleSQL `Type*` without consulting the cardinality. Wrapping in
@@ -87,18 +87,22 @@ absl::StatusOr<const Type*> ScalarOrStructType(
       // schema::ColumnSchemaToDuckDBType rejects this shape too. We
       // surface it here instead of silently inventing an inner type.
       return absl::InvalidArgumentError(absl::StrCat(
-          "column '", column.name,
+          "column '",
+          column.name,
           "' has type ARRAY but no nested element schema; use ColumnMode "
           "REPEATED on the inner type instead"));
     case schema::ColumnType::kGeography:
       return absl::InvalidArgumentError(absl::StrCat(
-          "column '", column.name,
+          "column '",
+          column.name,
           "': GEOGRAPHY is not yet supported by the analyzer catalog"));
     case schema::ColumnType::kUnknown:
-      return absl::InvalidArgumentError(absl::StrCat(
-          "column '", column.name,
-          "' has unknown type (raw '", column.raw_type,
-          "'); the analyzer cannot resolve it"));
+      return absl::InvalidArgumentError(
+          absl::StrCat("column '",
+                       column.name,
+                       "' has unknown type (raw '",
+                       column.raw_type,
+                       "'); the analyzer cannot resolve it"));
   }
   return absl::InvalidArgumentError(
       absl::StrCat("column '", column.name, "': unhandled ColumnType"));
@@ -145,8 +149,7 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
     // the same name added twice); log so the per-RPC analyzer error
     // is actionable but do not raise -- the catalog still works,
     // just without the failing builtin entry.
-    LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: "
-               << s;
+    LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: " << s;
   }
 }
 
@@ -161,7 +164,8 @@ std::string GoogleSqlCatalog::CacheKey(absl::string_view project_id,
 
 absl::Status GoogleSqlCatalog::FindTable(
     const absl::Span<const std::string>& path,
-    const ::googlesql::Table** table, const FindOptions& options) {
+    const ::googlesql::Table** table,
+    const FindOptions& options) {
   if (table == nullptr) {
     return absl::InvalidArgumentError("FindTable: output pointer is null");
   }
@@ -179,9 +183,11 @@ absl::Status GoogleSqlCatalog::FindTable(
     dataset_id = path[1];
     table_id = path[2];
   } else {
-    return absl::NotFoundError(absl::StrCat(
-        "Table path must be <dataset>.<table> or "
-        "<project>.<dataset>.<table>; got ", path.size(), " segments"));
+    return absl::NotFoundError(
+        absl::StrCat("Table path must be <dataset>.<table> or "
+                     "<project>.<dataset>.<table>; got ",
+                     path.size(),
+                     " segments"));
   }
 
   absl::MutexLock lock(&mu_);
@@ -193,15 +199,16 @@ absl::Status GoogleSqlCatalog::FindTable(
 }
 
 absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
-    absl::string_view project_id, absl::string_view dataset_id,
+    absl::string_view project_id,
+    absl::string_view dataset_id,
     absl::string_view table_id) {
   const std::string key = CacheKey(project_id, dataset_id, table_id);
   for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
     if (keys_[i] == key) return tables_[i].get();
   }
 
-  storage::TableId id{std::string(project_id), std::string(dataset_id),
-                       std::string(table_id)};
+  storage::TableId id{
+      std::string(project_id), std::string(dataset_id), std::string(table_id)};
   absl::StatusOr<schema::TableSchema> table_schema = storage_->GetSchema(id);
   if (!table_schema.ok()) return table_schema.status();
 

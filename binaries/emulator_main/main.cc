@@ -93,11 +93,14 @@ void PrintUsage(std::FILE* out, const char* argv0) {
 // hygiene.mdc`'s pin to system clang-18) so it is genuinely
 // informative to operators diagnosing build-environment drift.
 void PrintVersion(std::FILE* out) {
-  std::fprintf(out, "bigquery-emulator-engine version %s\n",
+  std::fprintf(out,
+               "bigquery-emulator-engine version %s\n",
                bigquery_emulator::binaries::emulator_main::kVersion);
-  std::fprintf(out, "  commit:  %s\n",
+  std::fprintf(out,
+               "  commit:  %s\n",
                bigquery_emulator::binaries::emulator_main::kCommit);
-  std::fprintf(out, "  built:   %s\n",
+  std::fprintf(out,
+               "  built:   %s\n",
                bigquery_emulator::binaries::emulator_main::kBuildDate);
 #if defined(__clang_version__)
   std::fprintf(out, "  clang:   %s\n", __clang_version__);
@@ -110,8 +113,8 @@ void PrintVersion(std::FILE* out) {
 // Returns true if `argv[*i]` matched `key`, writes the value into
 // `*value`, and advances `*i` past the value when it lives in
 // `argv[*i+1]`. Returns false on mismatch.
-bool MatchStringFlag(int argc, char** argv, int* i, const char* key,
-                      std::string* value) {
+bool MatchStringFlag(
+    int argc, char** argv, int* i, const char* key, std::string* value) {
   const std::string_view arg = argv[*i];
   const std::string with_eq = std::string("--") + key + "=";
   if (arg.substr(0, with_eq.size()) == with_eq) {
@@ -152,8 +155,8 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
       flags.data_dir_explicit = true;
       continue;
     }
-    return absl::InvalidArgumentError(
-        std::string("unknown flag: ") + std::string(arg));
+    return absl::InvalidArgumentError(std::string("unknown flag: ") +
+                                      std::string(arg));
   }
   // Fill in the default data_dir lazily so the user's explicit
   // --data_dir always wins. We defer the lookup to here (rather than
@@ -170,7 +173,8 @@ absl::StatusOr<Flags> ParseFlags(int argc, char** argv) {
 int main(int argc, char** argv) {
   auto parsed = ParseFlags(argc, argv);
   if (!parsed.ok()) {
-    std::fprintf(stderr, "[emulator_main] %s\n",
+    std::fprintf(stderr,
+                 "[emulator_main] %s\n",
                  std::string(parsed.status().message()).c_str());
     PrintUsage(stderr, argv[0]);
     return EXIT_FAILURE;
@@ -195,7 +199,8 @@ int main(int argc, char** argv) {
       bigquery_emulator::backend::storage::duckdb::DuckDBStorage::Open(
           flags.data_dir);
   if (!storage_or.ok()) {
-    std::fprintf(stderr, "[emulator_main] failed to create storage: %s\n",
+    std::fprintf(stderr,
+                 "[emulator_main] failed to create storage: %s\n",
                  std::string(storage_or.status().message()).c_str());
     return EXIT_FAILURE;
   }
@@ -209,7 +214,8 @@ int main(int argc, char** argv) {
   std::fprintf(stderr,
                "[emulator_main] starting engine=duckdb storage=duckdb "
                "data_dir=%s host_port=%s\n",
-               flags.data_dir.c_str(), flags.host_port.c_str());
+               flags.data_dir.c_str(),
+               flags.host_port.c_str());
 
   bigquery_emulator::frontend::Server::Options options;
   options.server_address = flags.host_port;
@@ -224,7 +230,8 @@ int main(int argc, char** argv) {
 
   std::fprintf(stderr,
                "[emulator_main] BigQuery emulator engine listening on %s:%d\n",
-               server->host().c_str(), server->port());
+               server->host().c_str(),
+               server->port());
 
   server->WaitForShutdown();
   return EXIT_SUCCESS;

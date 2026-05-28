@@ -58,8 +58,8 @@ class DuckDBEngineTest : public ::testing::Test {
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
     std::mt19937_64 rng(rd());
-    data_dir_ = fs::path(tmpdir) /
-                absl::StrCat("bqemu-duckdb-engine-test-", rng());
+    data_dir_ =
+        fs::path(tmpdir) / absl::StrCat("bqemu-duckdb-engine-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
     auto opened = storage::duckdb::DuckDBStorage::Open(data_dir_.string());
@@ -117,7 +117,7 @@ class DuckDBEngineTest : public ::testing::Test {
     };
     ASSERT_TRUE(storage_
                     ->AppendRows({"proj-test", "ds", "people"},
-                                  absl::MakeConstSpan(rows))
+                                 absl::MakeConstSpan(rows))
                     .ok());
   }
 
@@ -128,8 +128,7 @@ class DuckDBEngineTest : public ::testing::Test {
   CatalogBundle MakeCatalog() {
     auto type_factory = std::make_unique<::googlesql::TypeFactory>();
     auto catalog = std::make_unique<catalog::GoogleSqlCatalog>(
-        "proj-test", storage_.get(), type_factory.get(),
-        MakeLanguageOptions());
+        "proj-test", storage_.get(), type_factory.get(), MakeLanguageOptions());
     return {std::move(type_factory), std::move(catalog)};
   }
 
@@ -140,8 +139,8 @@ class DuckDBEngineTest : public ::testing::Test {
 
 TEST_F(DuckDBEngineTest, AnalyzeSelect1ReturnsInt64Column) {
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = engine_->Analyze(MakeRequest("SELECT 1"),
-                                    bundle.catalog.get());
+  auto analyzed =
+      engine_->Analyze(MakeRequest("SELECT 1"), bundle.catalog.get());
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
   const schema::TableSchema& s = (*analyzed)->output_schema();
   ASSERT_EQ(s.columns.size(), 1u);
@@ -150,8 +149,7 @@ TEST_F(DuckDBEngineTest, AnalyzeSelect1ReturnsInt64Column) {
 
 TEST_F(DuckDBEngineTest, DryRunSelect1ReturnsInt64Column) {
   CatalogBundle bundle = MakeCatalog();
-  auto dry_run = engine_->DryRun(MakeRequest("SELECT 1"),
-                                  bundle.catalog.get());
+  auto dry_run = engine_->DryRun(MakeRequest("SELECT 1"), bundle.catalog.get());
   ASSERT_TRUE(dry_run.ok()) << dry_run.status();
   ASSERT_EQ(dry_run->schema.columns.size(), 1u);
   EXPECT_EQ(dry_run->schema.columns[0].type, schema::ColumnType::kInt64);
@@ -166,7 +164,7 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelect1FallsBackToUnimplemented) {
   // `notImplemented`.
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(MakeRequest("SELECT 1 AS one"),
-                                       bundle.catalog.get());
+                                      bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented)
       << source.status();
@@ -183,8 +181,8 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectStarFromTableStreamsAllRows) {
   // path.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto source = engine_->ExecuteQuery(
-      MakeRequest("SELECT * FROM ds.people"), bundle.catalog.get());
+  auto source = engine_->ExecuteQuery(MakeRequest("SELECT * FROM ds.people"),
+                                      bundle.catalog.get());
   ASSERT_TRUE(source.ok()) << source.status();
   const schema::TableSchema& s = (*source)->schema();
   ASSERT_EQ(s.columns.size(), 2u);
@@ -205,8 +203,7 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectStarFromTableStreamsAllRows) {
     ASSERT_EQ(row.cells.size(), 2u);
     ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
     ASSERT_EQ(row.cells[1].kind(), storage::Value::Kind::kString);
-    seen.emplace_back(row.cells[0].int64_value(),
-                       row.cells[1].string_value());
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
   }
   ASSERT_EQ(seen.size(), 3u);
   std::vector<std::pair<int64_t, std::string>> want = {
@@ -221,12 +218,11 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectStarOrderByLowersToDuckDB) {
   // wrapped by the pass-through ProjectScan. After stripping, the
   // transpiler emits the OrderByScan SQL and DuckDB returns the
   // rows in the requested order. This pins the engine's
-  // composability over the Phase 5h scan emits.
+  // composability over the join/aggregate scan emits.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(
-      MakeRequest("SELECT * FROM ds.people ORDER BY id"),
-      bundle.catalog.get());
+      MakeRequest("SELECT * FROM ds.people ORDER BY id"), bundle.catalog.get());
   ASSERT_TRUE(source.ok()) << source.status();
   std::vector<int64_t> ids;
   storage::Row row;
@@ -251,8 +247,8 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectIdOnlyReturnsUnimplemented) {
   // strip rules surfaces here.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto source = engine_->ExecuteQuery(
-      MakeRequest("SELECT id FROM ds.people"), bundle.catalog.get());
+  auto source = engine_->ExecuteQuery(MakeRequest("SELECT id FROM ds.people"),
+                                      bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented)
       << source.status();
@@ -260,8 +256,8 @@ TEST_F(DuckDBEngineTest, ExecuteQuerySelectIdOnlyReturnsUnimplemented) {
 
 TEST_F(DuckDBEngineTest, ExecuteQuerySyntaxErrorIsInvalidArgument) {
   CatalogBundle bundle = MakeCatalog();
-  auto source = engine_->ExecuteQuery(MakeRequest("SELECT FROM"),
-                                       bundle.catalog.get());
+  auto source =
+      engine_->ExecuteQuery(MakeRequest("SELECT FROM"), bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument)
       << source.status();
@@ -373,8 +369,7 @@ TEST_F(DuckDBEngineTest, ExecuteDmlDeleteFallsBackToUnimplemented) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto stats = engine_->ExecuteDml(
-      MakeRequest("DELETE FROM ds.people WHERE id = 1"),
-      bundle.catalog.get());
+      MakeRequest("DELETE FROM ds.people WHERE id = 1"), bundle.catalog.get());
   ASSERT_FALSE(stats.ok());
   EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented)
       << stats.status();
@@ -430,13 +425,14 @@ TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableSchemaOnly) {
   EXPECT_EQ(sch->columns[1].mode, schema::ColumnMode::kNullable);
 }
 
-TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableIfNotExistsSwallowsAlreadyExists) {
+TEST_F(DuckDBEngineTest,
+       ExecuteDdlCreateTableIfNotExistsSwallowsAlreadyExists) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto status = engine_->ExecuteDdl(
-      MakeRequest("CREATE TABLE IF NOT EXISTS ds.people "
-                  "(id INT64, name STRING)"),
-      bundle.catalog.get());
+  auto status =
+      engine_->ExecuteDdl(MakeRequest("CREATE TABLE IF NOT EXISTS ds.people "
+                                      "(id INT64, name STRING)"),
+                          bundle.catalog.get());
   EXPECT_TRUE(status.ok()) << status;
 }
 
@@ -476,8 +472,7 @@ TEST_F(DuckDBEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {
     ASSERT_TRUE(has.ok()) << has.status();
     if (!*has) break;
     ASSERT_EQ(row.cells.size(), 2u);
-    seen.emplace_back(row.cells[0].int64_value(),
-                       row.cells[1].string_value());
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
   }
   std::sort(seen.begin(), seen.end());
   std::vector<std::pair<int64_t, std::string>> want = {
@@ -489,7 +484,7 @@ TEST_F(DuckDBEngineTest, ExecuteDdlDropTableRemovesStorage) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.people"),
-                                     bundle.catalog.get());
+                                    bundle.catalog.get());
   ASSERT_TRUE(status.ok()) << status;
 
   auto sch = storage_->GetSchema({"proj-test", "ds", "people"});
@@ -501,7 +496,7 @@ TEST_F(DuckDBEngineTest, ExecuteDdlDropTableMissingIsNotFound) {
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   CatalogBundle bundle = MakeCatalog();
   auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.missing"),
-                                     bundle.catalog.get());
+                                    bundle.catalog.get());
   ASSERT_FALSE(status.ok());
   EXPECT_EQ(status.code(), absl::StatusCode::kNotFound) << status;
 }
@@ -552,8 +547,7 @@ TEST_F(DuckDBEngineTest, ExecuteDdlAlterTableAddColumnIfNotExistsIsIdempotent) {
   CatalogBundle bundle = MakeCatalog();
   ASSERT_TRUE(engine_
                   ->ExecuteDdl(
-                      MakeRequest(
-                          "ALTER TABLE ds.people ADD COLUMN age INT64"),
+                      MakeRequest("ALTER TABLE ds.people ADD COLUMN age INT64"),
                       bundle.catalog.get())
                   .ok());
   auto second = engine_->ExecuteDdl(

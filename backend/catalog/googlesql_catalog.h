@@ -2,7 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_CATALOG_GOOGLESQL_CATALOG_H_
 
 // GoogleSqlCatalog is the GoogleSQL-facing catalog that the analyzer
-// (Phase 4 / 5.A) consults during name resolution. It is a thin
+// consults during name resolution. It is a thin
 // adapter: every `FindTable` lookup is forwarded to the active
 // `backend::storage::Storage` instance through
 // `Storage::GetSchema`, and the engine-agnostic
@@ -36,8 +36,8 @@
 // Materialized tables are `backend::catalog::StorageTable` instances
 // (a `SimpleTable` subclass with a working `CreateEvaluatorTableIterator`
 // that streams rows out of the underlying `Storage`). The same
-// catalog instance therefore drives both Phase 4 analysis and Phase
-// 5.A reference-impl execution.
+// catalog instance therefore drives both analyzer name resolution
+// and reference-impl execution.
 //
 // The catalog inherits from `googlesql::SimpleCatalog` so the
 // analyzer / evaluator can look up GoogleSQL built-in functions and
@@ -99,15 +99,16 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   // SimpleCatalog::FullName() returns the catalog name we passed to
   // its constructor; mirror the previous "project as catalog name"
   // contract by always returning the project_id.
-  std::string FullName() const override { return project_id_; }
+  std::string FullName() const override {
+    return project_id_;
+  }
 
   // Path resolution rules are documented in the file header. A miss
   // returns `absl::StatusCode::kNotFound`; any other status indicates
   // a storage-level failure mid-lookup.
-  absl::Status FindTable(
-      const absl::Span<const std::string>& path,
-      const ::googlesql::Table** table,
-      const FindOptions& options = FindOptions()) override
+  absl::Status FindTable(const absl::Span<const std::string>& path,
+                         const ::googlesql::Table** table,
+                         const FindOptions& options = FindOptions()) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Convert a `schema::ColumnSchema` into a freshly-allocated
