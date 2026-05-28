@@ -19,6 +19,7 @@ package com.example.bigquerydatatransfer;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
+import com.google.cloud.NoCredentials;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryOptions;
 import com.google.cloud.bigquery.DatasetInfo;
@@ -71,6 +72,31 @@ public class CreateAmazonS3TransferIT {
     return value;
   }
 
+  // bigquery-emulator slim-path: when BIGQUERY_EMULATOR_HOST is set, override the
+  // BigQueryOptions endpoint + credentials so the setUp dataset/table land in the
+  // local emulator instead of live BigQuery. Mirrors `com.example.bigquery.BqOpts`;
+  // duplicated locally because the helper lives in a sibling Maven module
+  // (java-bigquery/samples/snippets) that this POM does not depend on.
+  private static BigQuery newBigQueryService() {
+    BigQueryOptions.Builder builder = BigQueryOptions.newBuilder();
+    String host = System.getenv("BIGQUERY_EMULATOR_HOST");
+    if (host != null && !host.isEmpty()) {
+      String normalized = host;
+      if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+        if (normalized.startsWith("//")) {
+          normalized = normalized.substring(2);
+        }
+        normalized = "http://" + normalized;
+      }
+      builder.setHost(normalized).setCredentials(NoCredentials.getInstance());
+    }
+    String project = System.getenv("GOOGLE_CLOUD_PROJECT");
+    if (project != null && !project.isEmpty()) {
+      builder.setProjectId(project);
+    }
+    return builder.build().getService();
+  }
+
   @BeforeClass
   public static void checkRequirements() {
     requireEnvVar("GOOGLE_CLOUD_PROJECT");
@@ -85,7 +111,7 @@ public class CreateAmazonS3TransferIT {
     datasetName = "MY_DATASET_NAME_TEST_" + ID;
     tableName = "MY_TABLE_NAME_TEST_" + ID;
     // create a temporary dataset
-    bigquery = BigQueryOptions.getDefaultInstance().getService();
+    bigquery = newBigQueryService();
     bigquery.create(DatasetInfo.of(datasetName));
     // create a temporary table
     Schema schema =
