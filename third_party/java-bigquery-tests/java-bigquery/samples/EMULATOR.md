@@ -35,14 +35,26 @@ emulator. The four sibling snippet modules ship per-surface
 `Bq{Storage,Connection,DataTransfer}Opts` helpers (`BqOpts` for core
 BigQuery here) that route service-client construction at the local
 emulator when `BIGQUERY_EMULATOR_HOST` /
-`BIGQUERY_STORAGE_GRPC_ENDPOINT` are exported. The bigqueryconnection /
-bigquerydatatransfer / bigquerystorage trees currently fail with
-`NOT_IMPLEMENTED`-shaped errors until Phase B
-(`.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the
-matching shallow gRPC backends; the full per-IT verdict baseline lives
-in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`. The full
-sample-ID-to-class index lives in `third_party/README.md`'s "Sample
-coverage" sub-section.
+`BIGQUERY_STORAGE_GRPC_ENDPOINT` are exported.
+
+After Phase C of the Java live-IT track
+(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) all **24**
+target samples ship a Failsafe IT (Phase A patched the 15 that
+shipped upstream; Phase C authored the 9 missing ones). The bulk of
+the bigqueryconnection / bigquerydatatransfer (gRPC paths) /
+bigquerystorage Write+Read trees currently FAIL with
+`io.grpc.StatusRuntimeException: UNIMPLEMENTED` until Phase D lands
+the matching shallow gRPC backends (Phase B's `bqconnection` and
+`bqstorage` packages are documented-deferral skeletons, and the
+`datatransfer` REST handler is unreachable from the gapic gRPC
+client). The full per-IT verdict baseline lives in
+`.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md` (Phase A:
+15 ITs), `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`
+(Phase B: 15 ITs, +2 PASS from gzip middleware), and
+`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md` (Phase C:
+24 ITs after authoring 9 new ones). The full sample-ID-to-IT-class
+index lives in `third_party/README.md`'s "Sample coverage"
+sub-section.
 
 ## Live Failsafe by default
 

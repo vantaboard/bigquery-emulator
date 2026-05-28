@@ -411,35 +411,58 @@ mirror of the libraries-bom on first run.
 ### Sample coverage
 
 Quick lookup for `https://docs.cloud.google.com/bigquery/docs/samples/<id>`
-sample IDs against the vendored class. Use this when triaging "is sample X
-available?"; rerun the table when adding more.
+sample IDs against the vendored class and its IT (when an IT is shipped).
+Use this when triaging "is sample X available?" or "is sample X exercised
+end-to-end?"; rerun the table when adding more.
 
-| Sample ID | Vendored class |
-|-----------|----------------|
-| `bigquery-authorized-dataset` | [`AuthorizeDataset.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/AuthorizeDataset.java) |
-| `bigquery-delete-dataset-and-contents` | [`DeleteDatasetAndContents.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/DeleteDatasetAndContents.java) |
-| `bigquery-query-external-bigtable-perm` | [`QueryExternalBigtablePerm.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtablePerm.java) |
-| `bigquery-query-external-bigtable-temp` | [`QueryExternalBigtableTemp.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtableTemp.java) |
-| `bigquery-query-materialized-view` | [`QueryMaterializedView.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryMaterializedView.java) |
-| `bigquery-set-hivepartitioningoptions` | `[START bigquery_set_hivepartitioningoptions]` region inside [`CreateTableExternalHivePartitioned.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/CreateTableExternalHivePartitioned.java) |
-| `bigqueryconnection-create-aws-connection` | [`CreateAwsConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/CreateAwsConnection.java) |
-| `bigqueryconnection-delete-connection` | [`DeleteConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/DeleteConnection.java) |
-| `bigqueryconnection-get-connection` | [`GetConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/GetConnection.java) |
-| `bigqueryconnection-share-connection` | [`ShareConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/ShareConnection.java) |
-| `bigqueryconnection-update-connection` | [`UpdateConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/UpdateConnection.java) |
-| `bigquerydatatransfer-create-admanager-transfer` | [`CreateAdManagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdManagerTransfer.java) |
-| `bigquerydatatransfer-create-ads-transfer` | [`CreateAdsTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdsTransfer.java) |
-| `bigquerydatatransfer-create-amazons3-transfer` | [`CreateAmazonS3Transfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAmazonS3Transfer.java) |
-| `bigquerydatatransfer-create-campaignmanager-transfer` | [`CreateCampaignmanagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransfer.java) |
-| `bigquerydatatransfer-create-play-transfer` | [`CreatePlayTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreatePlayTransfer.java) |
-| `bigquerydatatransfer-create-redshift-transfer` | [`CreateRedshiftTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateRedshiftTransfer.java) |
-| `bigquerydatatransfer-create-teradata-transfer` | [`CreateTeradataTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateTeradataTransfer.java) |
-| `bigquerydatatransfer-create-youtubechannel-transfer` | [`CreateYoutubeChannelTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransfer.java) |
-| `bigquerydatatransfer-create-youtubecontentowner-transfer` | [`CreateYoutubeContentOwnerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransfer.java) |
-| `bigquerydatatransfer-disable-transfer` | [`DisableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/DisableTransferConfig.java) |
-| `bigquerydatatransfer-reenable-transfer` | [`ReEnableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/ReEnableTransferConfig.java) |
-| `bigquerystorage-arrow-quickstart` | [`StorageArrowSample.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/StorageArrowSample.java) |
-| `bigquerystorage-jsonstreamwriter-buffered` | [`WriteBufferedStream.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/WriteBufferedStream.java) |
+After Phase C of the Java live-IT track
+([java-its-missing-tests_c9d0e1f2.plan.md](../.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md))
+all 24 target samples ship a Failsafe IT. The current verdict is
+**2 PASS + 20 FAIL + 2 SKIP**: the 2 PASS rows
+(`DeleteDatasetAndContentsIT`, `CreateTableExternalHivePartitionedIT`)
+round-trip cleanly against the emulator, the 2 SKIP rows
+(`QueryExternalBigtable{Perm,Temp}IT`) `@Assume` Bigtable env vars
+that the emulator does not provide, and the 20 FAIL rows surface
+deferred-to-Phase-D root causes:
+
+- 18 hit gRPC `UNIMPLEMENTED` because the bqconnection /
+  `BigQueryRead` / `BigQueryWrite` / `DataTransferService` gRPC
+  servers are not yet wired (Phase B landed REST handlers for
+  datatransfer, but the Java gapic clients use gRPC).
+- `AuthorizeDatasetIT` fails on the bare `POST /datasets/{id}` legacy
+  PATCH path the emulator currently rejects.
+- `QueryMaterializedViewIT` fails on the GoogleSQL engine bug where
+  `SELECT *` over a materialized view resolves to zero columns.
+
+See the Phase B + Phase C plan files for the per-IT verdict tables
+and Phase D follow-ups.
+
+| Sample ID | Vendored class | IT shipped |
+|-----------|----------------|------------|
+| `bigquery-authorized-dataset` | [`AuthorizeDataset.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/AuthorizeDataset.java) | [`AuthorizeDatasetIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/AuthorizeDatasetIT.java) |
+| `bigquery-delete-dataset-and-contents` | [`DeleteDatasetAndContents.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/DeleteDatasetAndContents.java) | [`DeleteDatasetAndContentsIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/DeleteDatasetAndContentsIT.java) |
+| `bigquery-query-external-bigtable-perm` | [`QueryExternalBigtablePerm.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtablePerm.java) | [`QueryExternalBigtablePermIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/QueryExternalBigtablePermIT.java) |
+| `bigquery-query-external-bigtable-temp` | [`QueryExternalBigtableTemp.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryExternalBigtableTemp.java) | [`QueryExternalBigtableTempIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/QueryExternalBigtableTempIT.java) |
+| `bigquery-query-materialized-view` | [`QueryMaterializedView.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/QueryMaterializedView.java) | [`QueryMaterializedViewIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/QueryMaterializedViewIT.java) |
+| `bigquery-set-hivepartitioningoptions` | `[START bigquery_set_hivepartitioningoptions]` region inside [`CreateTableExternalHivePartitioned.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/main/java/com/example/bigquery/CreateTableExternalHivePartitioned.java) | [`CreateTableExternalHivePartitionedIT.java`](java-bigquery-tests/java-bigquery/samples/snippets/src/test/java/com/example/bigquery/CreateTableExternalHivePartitionedIT.java) |
+| `bigqueryconnection-create-aws-connection` | [`CreateAwsConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/CreateAwsConnection.java) | [`CreateAwsConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/CreateAwsConnectionIT.java) |
+| `bigqueryconnection-delete-connection` | [`DeleteConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/DeleteConnection.java) | [`DeleteConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/DeleteConnectionIT.java) |
+| `bigqueryconnection-get-connection` | [`GetConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/GetConnection.java) | [`GetConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/GetConnectionIT.java) |
+| `bigqueryconnection-share-connection` | [`ShareConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/ShareConnection.java) | [`ShareConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/ShareConnectionIT.java) |
+| `bigqueryconnection-update-connection` | [`UpdateConnection.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/main/java/com/example/bigqueryconnection/UpdateConnection.java) | [`UpdateConnectionIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets/src/test/java/com/example/bigqueryconnection/UpdateConnectionIT.java) |
+| `bigquerydatatransfer-create-admanager-transfer` | [`CreateAdManagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdManagerTransfer.java) | [`CreateAdManagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdManagerTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-ads-transfer` | [`CreateAdsTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAdsTransfer.java) | [`CreateAdsTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAdsTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-amazons3-transfer` | [`CreateAmazonS3Transfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateAmazonS3Transfer.java) | [`CreateAmazonS3TransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateAmazonS3TransferIT.java) |
+| `bigquerydatatransfer-create-campaignmanager-transfer` | [`CreateCampaignmanagerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransfer.java) | [`CreateCampaignmanagerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateCampaignmanagerTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-play-transfer` | [`CreatePlayTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreatePlayTransfer.java) | [`CreatePlayTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreatePlayTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-redshift-transfer` | [`CreateRedshiftTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateRedshiftTransfer.java) | [`CreateRedshiftTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateRedshiftTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-teradata-transfer` | [`CreateTeradataTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateTeradataTransfer.java) | [`CreateTeradataTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateTeradataTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-youtubechannel-transfer` | [`CreateYoutubeChannelTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransfer.java) | [`CreateYoutubeChannelTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeChannelTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-create-youtubecontentowner-transfer` | [`CreateYoutubeContentOwnerTransfer.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransfer.java) | [`CreateYoutubeContentOwnerTransferIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/CreateYoutubeContentOwnerTransferIT.java) (Phase C) |
+| `bigquerydatatransfer-disable-transfer` | [`DisableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/DisableTransferConfig.java) | [`DisableTransferConfigIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/DisableTransferConfigIT.java) |
+| `bigquerydatatransfer-reenable-transfer` | [`ReEnableTransferConfig.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/ReEnableTransferConfig.java) | [`ReEnableTransferConfigIT.java`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/test/java/com/example/bigquerydatatransfer/ReEnableTransferConfigIT.java) |
+| `bigquerystorage-arrow-quickstart` | [`StorageArrowSample.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/StorageArrowSample.java) | [`StorageArrowSampleIT.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/test/java/com/example/bigquerystorage/StorageArrowSampleIT.java) (Phase C) |
+| `bigquerystorage-jsonstreamwriter-buffered` | [`WriteBufferedStream.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/main/java/com/example/bigquerystorage/WriteBufferedStream.java) | [`WriteBufferedStreamIT.java`](java-bigquery-tests/java-bigquerystorage/samples/snippets/src/test/java/com/example/bigquerystorage/WriteBufferedStreamIT.java) |
 
 ## `python-bigquery-dataframes-tests`
 
