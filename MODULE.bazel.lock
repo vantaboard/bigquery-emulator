@@ -400,64 +400,6 @@
         ]
       }
     },
-    "@@bazel_jar_jar~//internal:non_module_deps.bzl%non_module_deps": {
-      "general": {
-        "bzlTransitiveDigest": "VtjHIXROFP4aLrP0zJAYkT2N9iG1YLBE+TbeeilP7BM=",
-        "usagesDigest": "8wNM47NKIWiz3KyPnwAfhWFk02ekrs6e4eAU8ydsQb4=",
-        "recordedFileInputs": {},
-        "recordedDirentsInputs": {},
-        "envVariables": {},
-        "generatedRepoSpecs": {
-          "jvm__jarjar_abrams_assembly": {
-            "bzlFile": "@@bazel_tools//tools/build_defs/repo:http.bzl",
-            "ruleClassName": "http_jar",
-            "attributes": {
-              "urls": [
-                "https://repo1.maven.org/maven2/com/eed3si9n/jarjarabrams/jarjar-abrams-assembly_2.12/1.14.0/jarjar-abrams-assembly_2.12-1.14.0.jar"
-              ],
-              "sha256": "75f86f7588136d6ca92d6fed8d58e6666e04c507b71de378527c053fd2a151c2"
-            }
-          },
-          "jvm__com_twitter__scalding_args": {
-            "bzlFile": "@@bazel_tools//tools/build_defs/repo:http.bzl",
-            "ruleClassName": "http_jar",
-            "attributes": {
-              "urls": [
-                "https://repo1.maven.org/maven2/com/twitter/scalding-args_2.12/0.17.4/scalding-args_2.12-0.17.4.jar"
-              ],
-              "sha256": "e0de2ad8ef344bb11a2854275b5b85a1adb17f0e0ed9740177d940a602cd977b"
-            }
-          }
-        },
-        "recordedRepoMappingEntries": [
-          [
-            "bazel_jar_jar~",
-            "bazel_tools",
-            "bazel_tools"
-          ],
-          [
-            "bazel_tools",
-            "rules_java",
-            "rules_java~"
-          ],
-          [
-            "rules_java~",
-            "compatibility_proxy",
-            "rules_java~~compatibility_proxy~compatibility_proxy"
-          ],
-          [
-            "rules_java~~compatibility_proxy~compatibility_proxy",
-            "bazel_tools",
-            "bazel_tools"
-          ],
-          [
-            "rules_java~~compatibility_proxy~compatibility_proxy",
-            "rules_java",
-            "rules_java~"
-          ]
-        ]
-      }
-    },
     "@@cel-spec~//:extensions.bzl%non_module_dependencies": {
       "general": {
         "bzlTransitiveDigest": "/2uyuQa5purSharolRXYOGYMGSGjDeByo6JfQDWsraA=",
@@ -717,12 +659,169 @@
     },
     "@@googleapis~//:extensions.bzl%switched_rules": {
       "general": {
-        "bzlTransitiveDigest": "1ZTg77R3Ks/ksx8QMNIoTRJetbJPRlzGFlJa9hoUn+Y=",
-        "usagesDigest": "8t3fJzs4CIz4JcLNYq5Qh1mQPPe5ntrHKR06r69Yb4s=",
+        "bzlTransitiveDigest": "vG6fuTzXD8MMvHWZEQud0MMH7eoC4GXY0va7VrFFh04=",
+        "usagesDigest": "bh8zHZbrQgI/27IQ3wX2Sxjen0CjlBLexu/XhHv56xQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
-        "generatedRepoSpecs": {},
+        "generatedRepoSpecs": {
+          "com_google_googleapis_imports": {
+            "bzlFile": "@@googleapis~//:repository_rules.bzl",
+            "ruleClassName": "switched_rules",
+            "attributes": {
+              "rules": {
+                "proto_library_with_info": [
+                  "",
+                  ""
+                ],
+                "moved_proto_library": [
+                  "",
+                  ""
+                ],
+                "java_proto_library": [
+                  "",
+                  ""
+                ],
+                "java_grpc_library": [
+                  "",
+                  ""
+                ],
+                "java_gapic_library": [
+                  "",
+                  ""
+                ],
+                "java_gapic_test": [
+                  "",
+                  ""
+                ],
+                "java_gapic_assembly_gradle_pkg": [
+                  "",
+                  ""
+                ],
+                "py_proto_library": [
+                  "",
+                  ""
+                ],
+                "py_grpc_library": [
+                  "",
+                  ""
+                ],
+                "py_gapic_library": [
+                  "",
+                  ""
+                ],
+                "py_test": [
+                  "",
+                  ""
+                ],
+                "py_gapic_assembly_pkg": [
+                  "",
+                  ""
+                ],
+                "py_import": [
+                  "",
+                  ""
+                ],
+                "go_proto_library": [
+                  "",
+                  ""
+                ],
+                "go_grpc_library": [
+                  "",
+                  ""
+                ],
+                "go_library": [
+                  "",
+                  ""
+                ],
+                "go_test": [
+                  "",
+                  ""
+                ],
+                "go_gapic_library": [
+                  "",
+                  ""
+                ],
+                "go_gapic_assembly_pkg": [
+                  "",
+                  ""
+                ],
+                "cc_proto_library": [
+                  "",
+                  ""
+                ],
+                "cc_grpc_library": [
+                  "",
+                  ""
+                ],
+                "cc_gapic_library": [
+                  "",
+                  ""
+                ],
+                "php_proto_library": [
+                  "",
+                  "php_proto_library"
+                ],
+                "php_grpc_library": [
+                  "",
+                  "php_grpc_library"
+                ],
+                "php_gapic_library": [
+                  "",
+                  "php_gapic_library"
+                ],
+                "php_gapic_assembly_pkg": [
+                  "",
+                  "php_gapic_assembly_pkg"
+                ],
+                "nodejs_gapic_library": [
+                  "",
+                  "typescript_gapic_library"
+                ],
+                "nodejs_gapic_assembly_pkg": [
+                  "",
+                  "typescript_gapic_assembly_pkg"
+                ],
+                "ruby_proto_library": [
+                  "",
+                  ""
+                ],
+                "ruby_grpc_library": [
+                  "",
+                  ""
+                ],
+                "ruby_ads_gapic_library": [
+                  "",
+                  ""
+                ],
+                "ruby_cloud_gapic_library": [
+                  "",
+                  ""
+                ],
+                "ruby_gapic_assembly_pkg": [
+                  "",
+                  ""
+                ],
+                "csharp_proto_library": [
+                  "",
+                  ""
+                ],
+                "csharp_grpc_library": [
+                  "",
+                  ""
+                ],
+                "csharp_gapic_library": [
+                  "",
+                  ""
+                ],
+                "csharp_gapic_assembly_pkg": [
+                  "",
+                  ""
+                ]
+              }
+            }
+          }
+        },
         "recordedRepoMappingEntries": []
       }
     },
