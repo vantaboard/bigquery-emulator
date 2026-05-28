@@ -51,7 +51,7 @@ If `available` is below `4 GiB`, the spawn will likely OOM. **Stop**, free memor
 
 ## Mid-loop poll (when a build / test exceeds 5 minutes)
 
-A heavy command running > 5 minutes is normal for the C++ engine; the failure mode is a **silent fork bomb** (e.g. inside-container Bazel auto-detecting 14 jobs × 2 GiB/clang against the host's headroom-less RAM). On the next assistant turn while such a command is in flight, run:
+A heavy command running > 5 minutes is normal for the C++ engine; the failure mode is a **silent fork bomb** (e.g. inside-container Bazel auto-detecting 14 jobs x 2 GiB/clang against the host's headroom-less RAM). On the next assistant turn while such a command is in flight, run:
 
 ```bash
 free -h | head -2
