@@ -90,82 +90,91 @@ tasks:
       SHA256: '{{.SHA256 | default ""}}'
       ARTIFACT_VERSION: '{{.ARTIFACT_VERSION | default ""}}'
     cmds:
+      # Wrapped in bash because Task's embedded mvdan/sh shell does not
+      # accept symbolic signal names in `trap` (`trap ... INT TERM`).
+      # The trap removes the partial-download tmpdir even when the
+      # build is cancelled mid-fetch, so a SIGINT does not leave a
+      # half-unpacked artifact behind.
       - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        if [ -z "{{.URL}}" ] || [ -z "{{.SHA256}}" ]; then
-          echo "task googlesql:fetch-prebuilt requires URL=... SHA256=..." >&2
-          echo "  example: task googlesql:fetch-prebuilt \\" >&2
-          echo "    URL=https://github.com/<owner>/<repo>/releases/download/googlesql-prebuilt/v0.1.0+gs-<sha>/googlesql-prebuilt-linux-amd64-clang18-<sha>-v0.1.0.tar.gz \\" >&2
-          echo "    SHA256=<64 hex>" >&2
-          exit 2
-        fi
-        if ! [[ "{{.SHA256}}" =~ ^[0-9a-f]{64}$ ]]; then
-          echo "SHA256 must be 64 hex chars; got {{.SHA256}}" >&2
-          exit 2
-        fi
-        # Refusal-grade SHA gate: download to a tmpfile, verify, only then commit
-        # to the cache. If verification fails, we leave the cache alone — no silent
-        # fallback to a stale artifact.
-        mkdir -p {{.CACHE_DIR}}
-        tmp="$(mktemp -d -p "{{.CACHE_DIR}}" .fetch-XXXXXX)"
-        trap 'rm -rf "$tmp"' EXIT INT TERM
-        tarball="$tmp/artifact.tar.gz"
-        echo "fetching {{.URL}} -> $tarball"
-        if command -v curl >/dev/null 2>&1; then
-          curl --fail --location --show-error --silent --output "$tarball" "{{.URL}}"
-        elif command -v wget >/dev/null 2>&1; then
-          wget --quiet --output-document="$tarball" "{{.URL}}"
-        else
-          echo "ERROR: neither curl nor wget is available on PATH" >&2
-          exit 1
-        fi
-        actual_sha="$(sha256sum "$tarball" | awk '{print $1}')"
-        if [ "$actual_sha" != "{{.SHA256}}" ]; then
-          echo "ERROR: SHA-256 mismatch on {{.URL}}" >&2
-          echo "  expected: {{.SHA256}}" >&2
-          echo "  actual:   $actual_sha" >&2
-          echo "  cache left untouched at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" >&2
-          echo "  refusing to unpack a tarball whose hash does not match the pin" >&2
-          exit 1
-        fi
-        echo "SHA-256 OK"
-        # Path-traversal gate (mirrors verify.sh) before extraction.
-        while IFS= read -r path; do
-          case "$path" in
-            /*|*..*) echo "ERROR: tarball path-escape entry: $path" >&2; exit 1 ;;
-          esac
-        done < <(tar -tzf "$tarball")
-        # Extract into a sibling tmp dir, only swap into the cache if the
-        # unpacked tree looks valid (top-level dir matches expected name AND
-        # MODULE.bazel declares module(name = "googlesql", ...)).
-        unpack="$tmp/unpack"
-        mkdir -p "$unpack"
-        tar -xzf "$tarball" -C "$unpack"
-        if [ ! -d "$unpack/{{.PREBUILT_REPO_NAME}}" ]; then
-          echo "ERROR: tarball did not contain top-level dir '{{.PREBUILT_REPO_NAME}}/'" >&2
-          ls -la "$unpack" >&2
-          exit 1
-        fi
-        mod_name="$(grep -E '^\s*name = ' "$unpack/{{.PREBUILT_REPO_NAME}}/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
-        if [ "$mod_name" != "googlesql" ]; then
-          echo "ERROR: artifact's MODULE.bazel declares module(name = \"$mod_name\", ...); expected \"googlesql\"" >&2
-          echo "  the prebuilt artifact must advertise itself as the 'googlesql' module so" >&2
-          echo "  --override_module=googlesql=<cache> can resolve. The producer template at" >&2
-          echo "  tools/googlesql-prebuilt/templates/MODULE.bazel.tmpl pins this." >&2
-          exit 1
-        fi
-        # Verify manifest schema as a defense-in-depth gate. We rely on
-        # the manifest_writer's --validate-only flag (closed schema).
-        python3 tools/googlesql-prebuilt/manifest_writer.py \
-          --validate-only "$unpack/{{.PREBUILT_REPO_NAME}}/manifest.json"
-        # Commit to cache: remove old contents, move new in.
-        rm -rf "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
-        mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
-        echo "{{.SHA256}}  artifact.tar.gz" > "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}.tarball.sha256"
-        echo "OK: prebuilt artifact ready at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/"
-        echo "  invoke 'task emulator:build-engine:bazel GOOGLESQL_SOURCE=prebuilt' to use it."
+        bash -c '
+          set -eo pipefail
+          root="$(git rev-parse --show-toplevel)"
+          cd "$root"
+          URL="{{.URL}}"
+          SHA256="{{.SHA256}}"
+          if [ -z "$URL" ] || [ -z "$SHA256" ]; then
+            echo "task googlesql:fetch-prebuilt requires URL=... SHA256=..." >&2
+            echo "  example: task googlesql:fetch-prebuilt \\" >&2
+            echo "    URL=https://github.com/<owner>/<repo>/releases/download/googlesql-prebuilt/v0.1.0+gs-<sha>/googlesql-prebuilt-linux-amd64-clang18-<sha>-v0.1.0.tar.gz \\" >&2
+            echo "    SHA256=<64 hex>" >&2
+            exit 2
+          fi
+          if ! [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "SHA256 must be 64 hex chars; got $SHA256" >&2
+            exit 2
+          fi
+          # Refusal-grade SHA gate: download to a tmpfile, verify, only
+          # then commit to the cache. If verification fails, we leave the
+          # cache alone — no silent fallback to a stale artifact.
+          mkdir -p {{.CACHE_DIR}}
+          tmp="$(mktemp -d -p "{{.CACHE_DIR}}" .fetch-XXXXXX)"
+          trap "rm -rf \"$tmp\"" EXIT INT TERM
+          tarball="$tmp/artifact.tar.gz"
+          echo "fetching $URL -> $tarball"
+          if command -v curl >/dev/null 2>&1; then
+            curl --fail --location --show-error --silent --output "$tarball" "$URL"
+          elif command -v wget >/dev/null 2>&1; then
+            wget --quiet --output-document="$tarball" "$URL"
+          else
+            echo "ERROR: neither curl nor wget is available on PATH" >&2
+            exit 1
+          fi
+          actual_sha="$(sha256sum "$tarball" | awk "{print \$1}")"
+          if [ "$actual_sha" != "$SHA256" ]; then
+            echo "ERROR: SHA-256 mismatch on $URL" >&2
+            echo "  expected: $SHA256" >&2
+            echo "  actual:   $actual_sha" >&2
+            echo "  cache left untouched at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" >&2
+            echo "  refusing to unpack a tarball whose hash does not match the pin" >&2
+            exit 1
+          fi
+          echo "SHA-256 OK"
+          # Path-traversal gate (mirrors verify.sh) before extraction.
+          while IFS= read -r path; do
+            case "$path" in
+              /*|*..*) echo "ERROR: tarball path-escape entry: $path" >&2; exit 1 ;;
+            esac
+          done < <(tar -tzf "$tarball")
+          # Extract into a sibling tmp dir, only swap into the cache if
+          # the unpacked tree looks valid (top-level dir matches expected
+          # name AND MODULE.bazel declares module(name = "googlesql", ...)).
+          unpack="$tmp/unpack"
+          mkdir -p "$unpack"
+          tar -xzf "$tarball" -C "$unpack"
+          if [ ! -d "$unpack/{{.PREBUILT_REPO_NAME}}" ]; then
+            echo "ERROR: tarball did not contain top-level dir '"'"'{{.PREBUILT_REPO_NAME}}/'"'"'" >&2
+            ls -la "$unpack" >&2
+            exit 1
+          fi
+          mod_name="$(grep -E "^[[:space:]]*name = " "$unpack/{{.PREBUILT_REPO_NAME}}/MODULE.bazel" | head -1 | sed -E "s/.*\"([^\"]+)\".*/\\1/")"
+          if [ "$mod_name" != "googlesql" ]; then
+            echo "ERROR: artifact MODULE.bazel declares module(name = \"$mod_name\"); expected \"googlesql\"" >&2
+            echo "  the prebuilt artifact must advertise itself as the googlesql module so" >&2
+            echo "  --override_module=googlesql=<cache> can resolve. The producer template at" >&2
+            echo "  tools/googlesql-prebuilt/templates/MODULE.bazel.tmpl pins this." >&2
+            exit 1
+          fi
+          # Verify manifest schema as a defense-in-depth gate. We rely
+          # on the manifest_writer --validate-only path (closed schema).
+          python3 tools/googlesql-prebuilt/manifest_writer.py \
+            --validate-only "$unpack/{{.PREBUILT_REPO_NAME}}/manifest.json"
+          # Commit to cache: remove old contents, move new in.
+          rm -rf "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
+          mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
+          echo "$SHA256  artifact.tar.gz" > "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}.tarball.sha256"
+          echo "OK: prebuilt artifact ready at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/"
+          echo "  invoke task emulator:build-engine:bazel GOOGLESQL_SOURCE=prebuilt to use it."
+        '
 
   stage-fixture:
     desc: |
