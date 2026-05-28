@@ -49,9 +49,13 @@ linters:
   # policy instead of whatever golangci-lint happens to enable by default.
   default: none
   enable:
-    # Correctness and modernization checks.
-    - copyloopvar
-    - intrange
+    # Correctness and modernization checks. `modernize` is a meta-linter
+    # from `golang.org/x/tools/gopls` that bundles `rangeint` and
+    # `forvar` rewrites; do NOT also enable the standalone `intrange`
+    # and `copyloopvar` linters here because their autofixes overlap
+    # with `modernize` and the runner emits `WARN [runner] Changes
+    # related to "<linter>" are skipped ... due to conflicts with
+    # "modernize"` on every `golangci-lint run --fix` pass.
     - modernize
     - errcheck
     - govet
