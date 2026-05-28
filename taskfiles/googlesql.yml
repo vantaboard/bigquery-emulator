@@ -16,9 +16,11 @@
 # the artifact's SHA-256 before writing into the cache, so a Bazel
 # invocation with `--config=googlesql-prebuilt` can trust the cache.
 #
-# Phase 3 deliberately does NOT change `task emulator:build-engine:bazel`'s
-# default. Source mode is still the default; this file just makes the
-# prebuilt path AVAILABLE.
+# Phase 4 flips the default to PREBUILT for `task emulator:build-engine:bazel`
+# (see `taskfiles/emulator.yml`). These helpers populate / inspect /
+# clean the cache that prebuilt mode reads from. Source mode remains
+# one explicit env var away (`GOOGLESQL_SOURCE=local task ...`) for
+# upstream upgrades and producer debugging.
 
 version: "3"
 
@@ -44,10 +46,11 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         echo "=== googlesql mode ==="
-        echo "Default selection (no --config flag): source (MODULE.bazel local_path_override)"
+        echo "Phase 4 default for 'task emulator:build-engine:bazel': prebuilt"
+        echo "  override with: GOOGLESQL_SOURCE=local task emulator:build-engine:bazel"
         echo
-        echo "Selectors:"
-        echo "  --config=googlesql-source    : explicit no-op (matches default)"
+        echo "Bazel selectors (apply with --config=...):"
+        echo "  --config=googlesql-source    : sibling source checkout via local_path_override"
         echo "  --config=googlesql-prebuilt  : --override_module=googlesql=<cache>"
         echo
         echo "Sibling source checkout at ../googlesql/:"
@@ -173,7 +176,7 @@ tasks:
           mv "$unpack/{{.PREBUILT_REPO_NAME}}" "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}"
           echo "$SHA256  artifact.tar.gz" > "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}.tarball.sha256"
           echo "OK: prebuilt artifact ready at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/"
-          echo "  invoke task emulator:build-engine:bazel GOOGLESQL_SOURCE=prebuilt to use it."
+          echo "  task emulator:build-engine:bazel will pick this up by default (Phase 4)."
         '
 
   stage-fixture:

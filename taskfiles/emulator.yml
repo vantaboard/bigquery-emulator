@@ -78,25 +78,32 @@ tasks:
   # `LD_LIBRARY_PATH`. The integration tests (`go test -tags=integration
   # ./gateway/e2e/...`) discover the binary via `./bin/emulator_main`.
   #
-  # GoogleSQL build-mode selection (Phase 3 of the `googlesql-prebuilt`
-  # rollout, see `docs/dev/googlesql-prebuilt/README.md`):
+  # GoogleSQL build-mode selection (Phase 4 of the `googlesql-prebuilt`
+  # rollout flips the default to prebuilt, see
+  # `docs/dev/googlesql-prebuilt/README.md`):
   #
-  #   GOOGLESQL_SOURCE=local      Default. Build GoogleSQL from the
-  #                               sibling `../googlesql/` checkout
-  #                               via the `local_path_override` in
-  #                               MODULE.bazel.
-  #   GOOGLESQL_SOURCE=prebuilt   Consume the Phase 2 prebuilt
+  #   GOOGLESQL_SOURCE=prebuilt   DEFAULT. Consume the Phase 2 prebuilt
   #                               artifact at
   #                               .cache/googlesql-prebuilt/. The
   #                               cache must be populated first by
   #                               `task googlesql:fetch-prebuilt`,
   #                               `task googlesql:stage-bazel`, or
-  #                               `task googlesql:stage-fixture`.
+  #                               `task googlesql:stage-fixture`. The
+  #                               pre-flight gate refuses to start
+  #                               Bazel if the cache is empty / wrong-
+  #                               named, with a one-liner pointing at
+  #                               the staging tasks.
+  #   GOOGLESQL_SOURCE=local      Explicit opt-in. Build GoogleSQL from
+  #                               the sibling `../googlesql/` checkout
+  #                               via the `local_path_override` in
+  #                               MODULE.bazel. Use for upstream
+  #                               GoogleSQL upgrades and producer
+  #                               debugging; NOT a silent fallback.
   #
   # The variable maps onto an explicit `--config=googlesql-{source,prebuilt}`
   # group from `.bazelrc`. Selection is explicit: there is NO silent
-  # fallback. Phase 4 owns flipping the default; Phase 3 only makes
-  # the prebuilt path AVAILABLE.
+  # fallback when the cache is missing — the build refuses with an
+  # actionable message instead.
   #
   # Process hygiene (see .cursor/rules/bazel-process-hygiene.mdc):
   #   - Throttled by `task bazel:*` shared defaults: jobs = nproc-2,
@@ -135,9 +142,21 @@ tasks:
       # `--config=googlesql-{source,prebuilt}` group from `.bazelrc`.
       # Anything else is rejected up-front to avoid a typo making
       # the build silently fall back to source.
+      #
+      # NOTE: Task evaluates `vars:` blocks lexically and exports each
+      # finished value into the env that subsequent `sh:` blocks see.
+      # That means `_GOOGLESQL_PREBUILT_CHECK` and
+      # `_GOOGLESQL_ARTIFACT_ID` below cannot read `$GOOGLESQL_SOURCE`
+      # directly — they would see the canonicalised value
+      # ("googlesql-prebuilt") instead of the user-facing form
+      # ("prebuilt"). Each downstream block therefore re-derives the
+      # user-facing value from `_GOOGLESQL_SOURCE_RAW` (which captures
+      # the raw env var BEFORE this canonicaliser runs).
+      _GOOGLESQL_SOURCE_RAW:
+        sh: echo "${GOOGLESQL_SOURCE:-prebuilt}"
       GOOGLESQL_SOURCE:
         sh: |
-          v="${GOOGLESQL_SOURCE:-local}"
+          v="${GOOGLESQL_SOURCE:-prebuilt}"
           case "$v" in
             local|source) echo "googlesql-source" ;;
             prebuilt)     echo "googlesql-prebuilt" ;;
@@ -147,12 +166,15 @@ tasks:
               ;;
           esac
       # Pre-flight gate for prebuilt mode. If GOOGLESQL_SOURCE=prebuilt
-      # but the cache is empty / wrong-named, refuse with an actionable
-      # message before bazel starts. Source mode evaluates this as a
-      # no-op.
+      # (the Phase 4 default) but the cache is empty / wrong-named,
+      # refuse with an actionable message before bazel starts. Source
+      # mode evaluates this as a no-op.
       _GOOGLESQL_PREBUILT_CHECK:
         sh: |
-          v="${GOOGLESQL_SOURCE:-local}"
+          # `_GOOGLESQL_SOURCE_RAW` is the raw user-facing value
+          # (`prebuilt`/`local`/`source`), captured before the
+          # canonicaliser ran (see the note above).
+          v="{{._GOOGLESQL_SOURCE_RAW}}"
           if [ "$v" != "prebuilt" ]; then
             echo "ok"
             exit 0
@@ -160,12 +182,14 @@ tasks:
           root="$(git rev-parse --show-toplevel)"
           cache="$root/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64"
           if [ ! -f "$cache/MODULE.bazel" ]; then
-            echo "GOOGLESQL_SOURCE=prebuilt but the cache is empty at:" >&2
+            echo "GOOGLESQL_SOURCE=prebuilt (Phase 4 default) but the cache is empty at:" >&2
             echo "  $cache" >&2
-            echo "Populate it first:" >&2
-            echo "  task googlesql:fetch-prebuilt URL=... SHA256=..." >&2
-            echo "  task googlesql:stage-bazel       # local real artifact (~25-55 min)" >&2
-            echo "  task googlesql:stage-fixture     # stub (smoke only)" >&2
+            echo "Populate it first (one of):" >&2
+            echo "  task googlesql:fetch-prebuilt URL=... SHA256=...   # published artifact" >&2
+            echo "  task googlesql:stage-bazel        # local real artifact (~25-55 min)" >&2
+            echo "  task googlesql:stage-fixture      # stub (smoke only; cannot link emulator_main)" >&2
+            echo "Or fall back to source mode explicitly:" >&2
+            echo "  GOOGLESQL_SOURCE=local task emulator:build-engine:bazel" >&2
             exit 1
           fi
           mod_name="$(grep -E '^\s*name = ' "$cache/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
@@ -175,6 +199,33 @@ tasks:
             exit 1
           fi
           echo "ok"
+      # Artifact identity for log surfacing. In prebuilt mode lift
+      # artifact_version + googlesql commit out of the cache's
+      # manifest so the build banner ties the binary back to a concrete
+      # published artifact. In source mode record the sibling checkout's
+      # commit instead. Failure-tolerant by design: missing fields fall
+      # back to "?" rather than blocking the build (the pre-flight check
+      # above already enforces the must-haves for prebuilt mode).
+      _GOOGLESQL_ARTIFACT_ID:
+        sh: |
+          v="{{._GOOGLESQL_SOURCE_RAW}}"
+          root="$(git rev-parse --show-toplevel)"
+          case "$v" in
+            local|source)
+              sha="$(git -C "$root/../googlesql" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+              echo "source googlesql=$sha"
+              ;;
+            *)
+              mf="$root/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/manifest.json"
+              if [ -f "$mf" ]; then
+                ver="$(python3 -c "import json; print(json.load(open('$mf')).get('artifact_version','?'))" 2>/dev/null || echo "?")"
+                gs="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?')[:12])" 2>/dev/null || echo "?")"
+                echo "prebuilt artifact_version=$ver googlesql=$gs"
+              else
+                echo "prebuilt manifest=missing"
+              fi
+              ;;
+          esac
       # Stamp values for `:version_cc` (see binaries/emulator_main/
       # BUILD.bazel). Matches the gateway-side ldflag inputs in
       # `task emulator:build` so both halves of the emulator report the
@@ -233,7 +284,7 @@ tasks:
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
           trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
-          echo "[build-engine-bazel] mode: --config={{.GOOGLESQL_SOURCE}}"
+          echo "[build-engine-bazel] mode: --config={{.GOOGLESQL_SOURCE}} ({{._GOOGLESQL_ARTIFACT_ID}})"
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
           EMULATOR_VERSION={{.EMULATOR_VERSION}} \
           EMULATOR_COMMIT={{.EMULATOR_COMMIT}} \
