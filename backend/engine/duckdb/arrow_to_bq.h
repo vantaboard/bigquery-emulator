@@ -30,18 +30,13 @@
 #include "absl/status/statusor.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
 #include "duckdb.h"
-#endif
 
 namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace duckdb {
 namespace arrow_to_bq {
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
 
 // Reads a single cell out of `vector` at the given `row` index and
 // renders it as a `storage::Value` shaped for the BigQuery column
@@ -68,8 +63,6 @@ absl::StatusOr<storage::Value> ReadCellFromVector(
 absl::StatusOr<storage::Row> ChunkRowToCells(
     ::duckdb_data_chunk chunk, ::idx_t row,
     const schema::TableSchema& output_schema);
-
-#endif  // BIGQUERY_EMULATOR_HAS_DUCKDB
 
 }  // namespace arrow_to_bq
 }  // namespace duckdb

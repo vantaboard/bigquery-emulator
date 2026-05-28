@@ -1,12 +1,5 @@
 #include "backend/engine/duckdb/arrow_to_bq.h"
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
-
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -14,8 +7,12 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -441,5 +438,3 @@ absl::StatusOr<storage::Row> ChunkRowToCells(
 }  // namespace engine
 }  // namespace backend
 }  // namespace bigquery_emulator
-
-#endif  // BIGQUERY_EMULATOR_HAS_DUCKDB

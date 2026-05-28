@@ -1,38 +1,23 @@
 #include "backend/engine/reference_impl/reference_impl_engine.h"
 
-#include <memory>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/engine/engine.h"
-#include "backend/storage/storage.h"
-
-// The reference-impl engine is the canonical caller of GoogleSQL's
-// analyzer + reference-impl evaluator. We gate every GoogleSQL
-// inclusion behind `BIGQUERY_EMULATOR_HAS_GOOGLESQL` so the legacy
-// CMake build (which still compiles `backend_engine_reference_impl`
-// alongside `backend_storage_memory` and `backend_storage_duckdb`
-// without GoogleSQL linked in) keeps building. The Bazel build sets
-// the define on the `cc_library`, flipping the engine into its real
-// implementation; the CMake build leaves it unset and gets the
-// `UNIMPLEMENTED` stubs back -- identical to how
-// `frontend/handlers/query.cc` handles `DryRun`.
-
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -52,55 +37,10 @@
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "proto/emulator.pb.h"
 
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
-
 namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace reference_impl {
-
-#if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-
-namespace {
-
-constexpr char kNoGoogleSqlMsg[] =
-    "reference_impl engine: this build was produced without GoogleSQL "
-    "linked in; rebuild via Bazel to enable Analyze / DryRun / "
-    "ExecuteQuery";
-
-}  // namespace
-
-ReferenceImplEngine::ReferenceImplEngine(storage::Storage* storage)
-    : storage_(storage) {}
-
-ReferenceImplEngine::~ReferenceImplEngine() = default;
-
-absl::StatusOr<std::unique_ptr<AnalyzedQuery>> ReferenceImplEngine::Analyze(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kNoGoogleSqlMsg);
-}
-
-absl::StatusOr<DryRunResult> ReferenceImplEngine::DryRun(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kNoGoogleSqlMsg);
-}
-
-absl::StatusOr<std::unique_ptr<RowSource>> ReferenceImplEngine::ExecuteQuery(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kNoGoogleSqlMsg);
-}
-
-absl::StatusOr<DmlStats> ReferenceImplEngine::ExecuteDml(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kNoGoogleSqlMsg);
-}
-
-absl::Status ReferenceImplEngine::ExecuteDdl(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kNoGoogleSqlMsg);
-}
-
-#else  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
 namespace {
 
@@ -839,8 +779,6 @@ absl::Status ReferenceImplEngine::ExecuteDdl(
       "--on_unknown_fn=fallback so the FallbackEngine wrapper retries "
       "against DuckDB)");
 }
-
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
 }  // namespace reference_impl
 }  // namespace engine

@@ -10,14 +10,12 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "backend/engine/engine.h"
-#include "backend/storage/storage.h"
-
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/engine.h"
 #include "backend/engine/reference_impl/reference_impl_engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -28,24 +26,12 @@
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 
 namespace bigquery_emulator {
 namespace frontend {
 
 namespace {
 
-#if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-constexpr char kAnalysisUnimplemented[] =
-    "Query.DryRun is not implemented yet (Phase 4 of ROADMAP.md): this "
-    "build was produced without GoogleSQL linked in";
-
-constexpr char kExecutionUnimplemented[] =
-    "Query.ExecuteQuery is not implemented yet (Phase 5 of ROADMAP.md): "
-    "this build was produced without GoogleSQL linked in";
-#endif
-
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
 // Map an analyzer / parser error from `googlesql::AnalyzeStatement` to
 // a gRPC status. GoogleSQL attaches an `ErrorLocation` payload to
 // parse and analysis errors whose `line` / `column` fields are
@@ -185,17 +171,6 @@ backend::engine::QueryRequest ProtoToEngineRequest(
   }
   return engine_request;
 }
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
-
-}  // namespace
-
-QueryService::QueryService(backend::storage::Storage* storage,
-                            backend::engine::Engine* engine)
-    : storage_(storage), engine_(engine) {}
-
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-
-namespace {
 
 // Statement classes the gateway needs to distinguish. The analyzer
 // returns a richer `ResolvedNodeKind`; we collapse that down to the
@@ -283,17 +258,13 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
 
 }  // namespace
 
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
+QueryService::QueryService(backend::storage::Storage* storage,
+                            backend::engine::Engine* engine)
+    : storage_(storage), engine_(engine) {}
 
 ::grpc::Status QueryService::DryRun(::grpc::ServerContext* /*context*/,
                                     const v1::QueryRequest* request,
                                     v1::DryRunResponse* response) {
-#if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-  (void)request;
-  (void)response;
-  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED,
-                        kAnalysisUnimplemented);
-#else
   if (response == nullptr) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "QueryService::DryRun: response is null");
@@ -384,7 +355,6 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
   // exposes those.
   response->set_estimated_bytes_processed(static_cast<int64_t>(0));
   return ::grpc::Status::OK;
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 }
 
 ::grpc::Status QueryService::ExecuteQuery(
@@ -412,14 +382,6 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     backend::storage::Storage* storage, const v1::QueryRequest& request,
     const std::function<bool(const v1::QueryResultRow&)>& write,
     backend::engine::Engine* engine) {
-#if !defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL)
-  (void)storage;
-  (void)request;
-  (void)write;
-  (void)engine;
-  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED,
-                        kExecutionUnimplemented);
-#else
   if (!write) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "QueryService::ExecuteQuery: write callback is empty");
@@ -602,7 +564,6 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     }
   }
   return ::grpc::Status::OK;
-#endif  // BIGQUERY_EMULATOR_HAS_GOOGLESQL
 }
 
 }  // namespace frontend

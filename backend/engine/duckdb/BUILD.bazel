@@ -20,9 +20,6 @@ cc_library(
     name = "arrow_to_bq",
     srcs = ["arrow_to_bq.cc"],
     hdrs = ["arrow_to_bq.h"],
-    local_defines = [
-        "BIGQUERY_EMULATOR_HAS_DUCKDB=1",
-    ],
     deps = [
         "//backend/schema",
         "//backend/storage",
@@ -38,10 +35,6 @@ cc_library(
     name = "duckdb_engine",
     srcs = ["duckdb_engine.cc"],
     hdrs = ["duckdb_engine.h"],
-    local_defines = [
-        "BIGQUERY_EMULATOR_HAS_DUCKDB=1",
-        "BIGQUERY_EMULATOR_HAS_GOOGLESQL=1",
-    ],
     deps = [
         ":arrow_to_bq",
         "//backend/catalog:storage_table",
@@ -93,9 +86,6 @@ cc_test(
 cc_test(
     name = "arrow_to_bq_test",
     srcs = ["arrow_to_bq_test.cc"],
-    local_defines = [
-        "BIGQUERY_EMULATOR_HAS_DUCKDB=1",
-    ],
     deps = [
         ":arrow_to_bq",
         "//backend/schema",

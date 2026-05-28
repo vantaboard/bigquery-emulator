@@ -37,11 +37,6 @@ cc_library(
     name = "query_handler",
     srcs = ["query.cc"],
     hdrs = ["query.h"],
-    # Flip the GoogleSQL-gated branch of `query.cc` on. The CMake
-    # build leaves this define unset so it falls back to the
-    # `UNIMPLEMENTED` stub; the Bazel build is the only one that
-    # actually wires the analyzer + reference-impl engine.
-    local_defines = ["BIGQUERY_EMULATOR_HAS_GOOGLESQL=1"],
     deps = [
         "//backend/catalog:googlesql_catalog",
         # `backend/engine` is needed unconditionally for the optional

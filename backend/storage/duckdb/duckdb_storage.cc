@@ -27,12 +27,9 @@
 #include "backend/schema/schema.h"
 #include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
+#include "duckdb.h"
 #include "proto/emulator.pb.h"
 #include "google/protobuf/util/json_util.h"
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
-#include "duckdb.h"
-#endif
 
 namespace bigquery_emulator {
 namespace backend {
@@ -299,20 +296,16 @@ std::string RenderColumnIdentList(const schema::TableSchema& schema) {
 // interface).
 // ---------------------------------------------------------------------------
 struct DuckDBStorage::Impl {
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
   ::duckdb_database database = nullptr;
   ::duckdb_connection connection = nullptr;
-#endif
 
   ~Impl() {
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
     if (connection != nullptr) {
       ::duckdb_disconnect(&connection);
     }
     if (database != nullptr) {
       ::duckdb_close(&database);
     }
-#endif
   }
 };
 
@@ -324,7 +317,6 @@ namespace {
 // against injection — every site in this file uses `QuoteIdent` on
 // the user-supplied portions before reaching here.
 absl::Status RunSql(DuckDBStorage::Impl* impl, absl::string_view sql) {
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
   if (impl == nullptr || impl->connection == nullptr) {
     return absl::FailedPreconditionError(
         "DuckDBStorage: connection is not initialized");
@@ -343,12 +335,6 @@ absl::Status RunSql(DuckDBStorage::Impl* impl, absl::string_view sql) {
   }
   ::duckdb_destroy_result(&result);
   return absl::OkStatus();
-#else
-  (void)impl;
-  (void)sql;
-  return absl::UnimplementedError(
-      "DuckDBStorage: built without BIGQUERY_EMULATOR_HAS_DUCKDB");
-#endif
 }
 
 // Translates a std::error_code from a std::filesystem call into an
@@ -562,11 +548,6 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
     return absl::InvalidArgumentError(
         "DuckDBStorage::Open: data_dir must be non-empty");
   }
-#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
-  return absl::UnimplementedError(
-      "DuckDBStorage: this build was configured with "
-      "-DBIGQUERY_EMULATOR_ENABLE_DUCKDB=OFF");
-#else
   fs::path root = fs::path(std::string(data_dir));
   std::error_code ec;
   fs::create_directories(root, ec);
@@ -591,7 +572,6 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
   }
   return std::unique_ptr<DuckDBStorage>(
       new DuckDBStorage(std::string(data_dir), std::move(impl)));
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -875,8 +855,6 @@ void TryDropTempTable(DuckDBStorage::Impl* impl,
       .IgnoreError();
 }
 
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
-
 // Reads a single DuckDB cell into a storage::Value, using the
 // column type from `column` to pick the right C-API accessor. NULL
 // cells become Value::Null() regardless of column type.
@@ -941,8 +919,6 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result, idx_t col,
   return absl::InternalError("ReadCell: unreachable column type");
 }
 
-#endif  // BIGQUERY_EMULATOR_HAS_DUCKDB
-
 class VectorRowIterator : public RowIterator {
  public:
   explicit VectorRowIterator(std::vector<Row> rows)
@@ -963,12 +939,6 @@ class VectorRowIterator : public RowIterator {
 
 absl::Status DuckDBStorage::AppendRows(const TableId& id,
                                          absl::Span<const Row> rows) {
-#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
-  (void)id;
-  (void)rows;
-  return absl::UnimplementedError(
-      "DuckDBStorage::AppendRows: built without BIGQUERY_EMULATOR_HAS_DUCKDB");
-#else
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
@@ -1087,18 +1057,10 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   }
   TryDropTempTable(impl_.get(), tmp_table);
   return absl::OkStatus();
-#endif
 }
 
 absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
                                             absl::Span<const Row> rows) {
-#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
-  (void)id;
-  (void)rows;
-  return absl::UnimplementedError(
-      "DuckDBStorage::OverwriteRows: built without "
-      "BIGQUERY_EMULATOR_HAS_DUCKDB");
-#else
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
@@ -1189,12 +1151,9 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   }
   TryDropTempTable(impl_.get(), tmp_table);
   return absl::OkStatus();
-#endif
 }
 
 namespace {
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
 
 // Runs `sql` (a SELECT) against `impl`'s connection and materializes
 // every emitted row into `*out`. Shared between `ScanRows` and
@@ -1250,17 +1209,10 @@ absl::Status ExecuteSelect(DuckDBStorage::Impl* impl, absl::string_view sql,
   return absl::OkStatus();
 }
 
-#endif  // BIGQUERY_EMULATOR_HAS_DUCKDB
-
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
     const TableId& id) const {
-#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
-  (void)id;
-  return absl::UnimplementedError(
-      "DuckDBStorage::ScanRows: built without BIGQUERY_EMULATOR_HAS_DUCKDB");
-#else
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
@@ -1299,18 +1251,10 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   if (!status.ok()) return status;
   return std::unique_ptr<RowIterator>(
       new VectorRowIterator(std::move(rows)));
-#endif
 }
 
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     const TableId& id, const ReadFilter& filter) const {
-#ifndef BIGQUERY_EMULATOR_HAS_DUCKDB
-  (void)id;
-  (void)filter;
-  return absl::UnimplementedError(
-      "DuckDBStorage::CreateReadStream: built without "
-      "BIGQUERY_EMULATOR_HAS_DUCKDB");
-#else
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
   std::error_code ec;
@@ -1376,7 +1320,6 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   if (!status.ok()) return status;
   return std::unique_ptr<RowIterator>(
       new VectorRowIterator(std::move(rows)));
-#endif
 }
 
 }  // namespace duckdb

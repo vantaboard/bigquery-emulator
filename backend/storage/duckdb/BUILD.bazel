@@ -17,7 +17,6 @@ cc_library(
     name = "duckdb_storage",
     srcs = ["duckdb_storage.cc"],
     hdrs = ["duckdb_storage.h"],
-    local_defines = ["BIGQUERY_EMULATOR_HAS_DUCKDB=1"],
     deps = [
         "//backend/schema",
         "//backend/storage",

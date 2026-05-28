@@ -25,9 +25,7 @@ namespace frontend {
 //
 //   * `storage` is the `Storage` the analyzer's catalog adapter
 //     consults during name resolution. It must outlive the service
-//     instance. May be null on builds that compile without GoogleSQL
-//     linked in (the legacy CMake target), in which case `DryRun`
-//     and `ExecuteQuery` both surface `UNIMPLEMENTED`.
+//     instance.
 //
 // DryRun (Phase 4b) parses + analyzes the SQL via `googlesql::Analyzer`
 // and returns the resolved output schema + an estimated bytes-
@@ -90,10 +88,9 @@ class QueryService final : public v1::Query::Service {
 //   * `request.use_legacy_sql` is rejected (`INVALID_ARGUMENT`).
 //   * `request.project_id` and `request.sql` are required.
 //
-// Returns `UNIMPLEMENTED` on builds compiled without GoogleSQL linked
-// in (the legacy CMake target). The gRPC handler wraps this helper
-// with a one-line lambda; tests call it directly with a capturing
-// lambda and inspect the emitted messages.
+// The gRPC handler wraps this helper with a one-line lambda; tests
+// call it directly with a capturing lambda and inspect the emitted
+// messages.
 //
 // `engine` is the execution backend to forward to. When null, the
 // helper constructs a per-call reference-impl engine so the existing

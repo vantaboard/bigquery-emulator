@@ -1,36 +1,16 @@
 #include "backend/engine/duckdb/duckdb_engine.h"
 
-#include <memory>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/engine/engine.h"
-#include "backend/storage/storage.h"
-
-// The DuckDB engine needs both the GoogleSQL analyzer + resolved AST
-// (so it can transpile and walk for referenced tables) and libduckdb
-// (so it can execute the lowered SQL). The Bazel build sets both
-// defines; the legacy CMake build leaves `BIGQUERY_EMULATOR_HAS_GOOGLESQL`
-// unset and the engine compiles down to UNIMPLEMENTED stubs the same
-// way `backend/engine/reference_impl/reference_impl_engine.cc` does.
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL) && \
-    defined(BIGQUERY_EMULATOR_HAS_DUCKDB)
-#define BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED 1
-#endif
-
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
-#include "duckdb.h"
-#endif
-
-#ifdef BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
@@ -39,8 +19,11 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -52,7 +35,6 @@
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "proto/emulator.pb.h"
-#endif  // BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
 
 namespace bigquery_emulator {
 namespace backend {
@@ -61,63 +43,21 @@ namespace duckdb {
 
 namespace {
 
-// Returns the libduckdb C-API version when the build has it linked,
-// or a stub when it hasn't. Calling this in the constructor pulls
-// libduckdb's symbol table into the link line under `--as-needed` so
-// libduckdb.so stays on the binary's DT_NEEDED list.
-const char* DuckDBLibraryVersionOrStub() {
-#ifdef BIGQUERY_EMULATOR_HAS_DUCKDB
+// Returns the libduckdb C-API version. Calling this in the
+// constructor pulls libduckdb's symbol table into the link line
+// under `--as-needed` so libduckdb.so stays on the binary's
+// DT_NEEDED list.
+const char* DuckDBLibraryVersion() {
   return ::duckdb_library_version();
-#else
-  return "<duckdb-disabled>";
-#endif
 }
 
 }  // namespace
 
 DuckDBEngine::DuckDBEngine(storage::Storage* storage) : storage_(storage) {
-  (void)DuckDBLibraryVersionOrStub();
+  (void)DuckDBLibraryVersion();
 }
 
 DuckDBEngine::~DuckDBEngine() = default;
-
-#ifndef BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
-
-namespace {
-
-constexpr char kDisabledMsg[] =
-    "duckdb engine: this build was produced without GoogleSQL + "
-    "libduckdb linked in; rebuild via Bazel to enable Analyze / "
-    "DryRun / ExecuteQuery";
-
-}  // namespace
-
-absl::StatusOr<std::unique_ptr<AnalyzedQuery>> DuckDBEngine::Analyze(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kDisabledMsg);
-}
-
-absl::StatusOr<DryRunResult> DuckDBEngine::DryRun(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kDisabledMsg);
-}
-
-absl::StatusOr<std::unique_ptr<RowSource>> DuckDBEngine::ExecuteQuery(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kDisabledMsg);
-}
-
-absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kDisabledMsg);
-}
-
-absl::Status DuckDBEngine::ExecuteDdl(
-    const QueryRequest& /*request*/, ::googlesql::Catalog* /*catalog*/) {
-  return absl::UnimplementedError(kDisabledMsg);
-}
-
-#else  // BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
 
 namespace {
 
@@ -1695,8 +1635,6 @@ absl::Status DuckDBEngine::ExecuteDdl(const QueryRequest& request,
           "DROP TABLE / ALTER TABLE ADD COLUMN only)"));
   }
 }
-
-#endif  // BIGQUERY_EMULATOR_DUCKDB_ENGINE_ENABLED
 
 }  // namespace duckdb
 }  // namespace engine
