@@ -4,9 +4,11 @@
 # googlesql checkout, setup-bazel with a dedicated disk-cache key) and
 # runs `bazel coverage` over every `cc_test` target discovered via
 # `bazel query 'kind(cc_test, //...)'`. The aggregated lcov report at
-# `bazel-out/_coverage/_coverage_report.dat` is uploaded to Codecov with
-# the `cpp-bazel-amd64` flag so the result sits alongside the Go
-# (`go-amd64`) flag on the same project page.
+# `bazel-out/_coverage/_coverage_report.dat` is uploaded as the
+# `cpp-bazel-coverage` workflow artifact, which
+# `.github/workflows/coverage-publish.yml` aggregates with the
+# `go-coverage` artifact from ci.yml and publishes to the
+# self-hosted gh-pages coverage page.
 #
 # Why a separate workflow (not folded into ci.yml):
 #   * `bazel coverage` instrumentation roughly doubles the cold-link
@@ -137,15 +139,21 @@ jobs:
             TARGETS="${{ steps.targets.outputs.targets }}" \
             COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors"
 
-      - name: Upload C++ (Bazel) coverage to Codecov
+      # Hand off the LCOV combined report to coverage-publish.yml.
+      # That workflow_run-triggered consumer pairs this artifact with
+      # the `go-coverage` artifact uploaded by ci.yml, aggregates
+      # both, and publishes the combined badge/HTML/baseline to
+      # gh-pages on push-to-main (or runs the regression gate on
+      # pull_request). See .github/workflows/coverage-publish.yml for
+      # the consumer side of the pipeline.
+      - name: Upload C++ (Bazel) coverage artifact
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: actions/upload-artifact@v4
         with:
-          files: bazel-out/_coverage/_coverage_report.dat
-          flags: cpp-bazel-amd64
-          name: cpp-bazel-amd64
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: cpp-bazel-coverage
+          path: bazel-out/_coverage/_coverage_report.dat
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Release Bazel daemon
         if: always()

@@ -66,14 +66,20 @@ jobs:
       - name: go test (with coverage)
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      # Hand off coverage.out to coverage-publish.yml. That workflow's
+      # workflow_run trigger fires after this run completes, downloads
+      # the artifact via the REST API, and either publishes to
+      # gh-pages (push to main) or gates the PR against the last
+      # published baseline. See .github/workflows/coverage-publish.yml
+      # for the consumer side of the pipeline.
+      - name: Upload Go coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          files: ./coverage.out
-          flags: go-amd64
-          name: go-amd64
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 14
 
       # ---------------------------------------------------------------
       # Bazel build of emulator_main (canonical, full GoogleSQL)
