@@ -1,5 +1,12 @@
 # Project-wide Bazel options for bigquery-emulator.
 #
+# shellcheck shell=bash  # .bazelrc isn't shell, but editor shellcheck
+#                        # integrations sniff it as one. Pin a shell so
+#                        # SC2148 ("target shell is unknown") doesn't
+#                        # surface against `# Project-wide ...`. bash is
+#                        # close enough for the tip lookup; nothing here
+#                        # is actually executed.
+#
 # GoogleSQL is C++20 and ships a hermetic LLVM toolchain through its
 # own `MODULE.bazel`, but those toolchain registrations only fire when
 # this repo's build is *configured* the same way. Mirror the relevant
