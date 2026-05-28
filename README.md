@@ -119,22 +119,97 @@ Run `task --list` for the full set of namespaces (`emulator:`, `lint:`,
 ### Building the engine
 
 The C++ engine is built with Bazel. Run
-`task emulator:build-engine-bazel` (or directly
-`bazel build //binaries/emulator_main:emulator_main`). This links
-GoogleSQL's analyzer + reference-impl evaluator along with the
+`task emulator:build-engine:bazel` (alias: `task emulator:build-engine`).
+This links GoogleSQL's analyzer + reference-impl evaluator along with the
 DuckDB storage backend and gRPC, producing a binary that serves
 `Query.DryRun` and `Query.ExecuteQuery` end-to-end. The integration
 tests under `gateway/e2e/` drive this binary directly.
 
-GoogleSQL is vendored via a sibling `../googlesql/` checkout (see
-[`MODULE.bazel`](./MODULE.bazel)), and DuckDB v1.5.3 is pulled in
-as a prebuilt tarball through `http_archive` (see
+GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a
+prebuilt tarball through `http_archive` (see
 [`third_party/duckdb/`](./third_party/duckdb/)).
 
 Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain does
 not cross-build cleanly to linux/arm64 yet, so the engine binary
 ships only for amd64. Non-amd64 hosts should use the published
 Docker image.
+
+#### GoogleSQL build mode (prebuilt by default)
+
+`task emulator:build-engine:bazel` consumes a **prebuilt GoogleSQL
+artifact** by default — it does not recompile GoogleSQL on every
+build. Cold builds drop from the multi-hour source link to a few
+minutes once the cache is warm.
+
+`GOOGLESQL_SOURCE` selects the mode (defaulted to `prebuilt`):
+
+```bash
+# Default — prebuilt GoogleSQL from .cache/googlesql-prebuilt/.
+task emulator:build-engine:bazel
+
+# Explicit source rebuild from a sibling ../googlesql/ checkout.
+# Use this when iterating on a GoogleSQL upgrade or producer change.
+GOOGLESQL_SOURCE=local task emulator:build-engine:bazel
+```
+
+There is **no silent fallback**: if `GOOGLESQL_SOURCE=prebuilt` is
+selected (or defaulted) and the prebuilt cache is empty or stale,
+the build refuses to start with an actionable diagnostic instead
+of silently doing the wrong thing.
+
+Populate the cache once with either:
+
+```bash
+# Published artifact (URL + SHA-256 from the producer release notes).
+task googlesql:fetch-prebuilt URL=<asset url> SHA256=<64 hex chars>
+
+# Or a locally-built real artifact (uses your sibling ../googlesql/
+# checkout; ~25-55 min cold cache).
+task googlesql:stage-bazel
+```
+
+Inspect or revalidate the cache without rebuilding:
+
+```bash
+task googlesql:status    # what's currently staged
+task googlesql:validate  # re-run the safety validator over the cache
+```
+
+Escape hatch for the validator only (cache contents are still
+expected to be correct; **never** use this to mask a SHA mismatch):
+
+```bash
+BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1 \
+    task emulator:build-engine:bazel
+```
+
+#### Prebuilt GoogleSQL vs prebuilt emulator engine binary
+
+Two unrelated "prebuilt" surfaces both ship with releases — don't
+confuse them:
+
+| Asset | What it is | Who consumes it |
+|-------|------------|-----------------|
+| **Prebuilt GoogleSQL artifact** (`googlesql-prebuilt/v<...>+gs-<...>` GitHub release) | The `@googlesql//...` Bazel external repo packaged as a `.tar.gz` with `manifest.json`. Lets `task emulator:build-engine:bazel` link GoogleSQL without compiling its ~8K C++ TUs. | Engine **builders** (this repo's CI, Docker `engine-builder-bazel` stage, release.yml) — anyone who needs to link `emulator_main` from source. |
+| **Prebuilt emulator engine binary** (`bin/emulator_main` + `bin/libduckdb.so` inside the release archives and Docker image) | The already-linked C++ engine binary itself. Skips the Bazel build entirely. | Engine **users** — anyone who just wants to run the emulator (`docker run ghcr.io/...:vX.Y.Z`, the goreleaser tarballs, the Docker `ENGINE_SOURCE=prebuilt` stage). |
+
+If you are not running `bazel build` or `task emulator:build-engine:bazel`,
+you are using the prebuilt engine binary and the GoogleSQL artifact
+is irrelevant to you. The Docker image and the release archives both
+ship the prebuilt binary; the GoogleSQL artifact surface only matters
+if you are building the engine yourself.
+
+#### When the prebuilt artifact fetch or validation fails
+
+If the build refuses to start, the diagnostic line names the gate
+that tripped. Common shapes:
+
+- `GOOGLESQL_SOURCE=prebuilt (Phase 4 default) but the cache is empty at: <path>` — the cache has not been populated. Run `task googlesql:fetch-prebuilt URL=... SHA256=...` or fall back to source mode explicitly.
+- `validate_artifact: FAIL_PAYLOAD_SHA` (or any other `FAIL_*` token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The [GoogleSQL prebuilt troubleshooting guide](./docs/dev/googlesql-prebuilt/troubleshooting.md) maps every `FAIL_*` token to the likely owner and the next step; the [rollback playbook](./docs/dev/googlesql-prebuilt/rollback.md) covers the matching repin / revert procedures.
+
+For the full maintainer flow (publishing new artifacts, bumping the
+GoogleSQL pin, releasing) start at the
+[GoogleSQL prebuilt docs index](./docs/dev/googlesql-prebuilt/README.md).
 
 ### Docker
 

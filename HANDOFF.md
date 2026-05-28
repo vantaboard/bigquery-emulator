@@ -24,6 +24,26 @@ Build systems:
 
 Tooling pins live in `mise.toml` (with `direnv` driving `.envrc`); `Taskfile.yml` exposes `task lint:*`, `task ci:run`, `task emulator:build-engine:bazel`, etc.
 
+### GoogleSQL build mode (operator-visible default)
+
+`task emulator:build-engine:bazel` defaults to **prebuilt GoogleSQL**: it consumes a published artifact from `.cache/googlesql-prebuilt/` and skips the ~8K C++ TU GoogleSQL compile. The source build is one explicit env var away — `GOOGLESQL_SOURCE=local task emulator:build-engine:bazel` — and is reserved for upstream upgrades or producer debugging. There is no silent fallback when the prebuilt cache is empty; the pre-flight gate refuses the build with an actionable message.
+
+Maintainer surface (commands, workflows, runbooks):
+
+| Surface | Where |
+|---|---|
+| User-facing build flow + escape hatch | [`README.md`](README.md) §"Building the engine" |
+| Compatibility surface (label inventory, manifest schema, layout, upgrade rules) | [`docs/dev/googlesql-prebuilt/`](docs/dev/googlesql-prebuilt/) (start at the README) |
+| Maintainer artifact runbook (publish, pin, verify, roll back) | [`docs/dev/googlesql-prebuilt/maintainer-runbook.md`](docs/dev/googlesql-prebuilt/maintainer-runbook.md) |
+| GoogleSQL upgrade procedure (ordered checklist) | [`docs/dev/googlesql-prebuilt/upgrade-procedure.md`](docs/dev/googlesql-prebuilt/upgrade-procedure.md) |
+| Cache + performance expectations | [`docs/dev/googlesql-prebuilt/performance.md`](docs/dev/googlesql-prebuilt/performance.md) |
+| `FAIL_*` validator-token troubleshooting | [`docs/dev/googlesql-prebuilt/troubleshooting.md`](docs/dev/googlesql-prebuilt/troubleshooting.md) |
+| Rollback playbook (parity-failure / regression response) | [`docs/dev/googlesql-prebuilt/rollback.md`](docs/dev/googlesql-prebuilt/rollback.md) |
+| Producer workflow (manual dispatch) | [`.github/workflows/googlesql-prebuilt.yml`](.github/workflows/googlesql-prebuilt.yml) |
+| Source-vs-prebuilt parity workflow (PR / scheduled / release tiers) | [`.github/workflows/googlesql-parity.yml`](.github/workflows/googlesql-parity.yml) |
+| Release pin (`env.RELEASE_GOOGLESQL_PREBUILT_URL/_SHA256`) | [`.github/workflows/release.yml`](.github/workflows/release.yml) |
+| Repo-vars pin (consumer pin for all other CI lanes) | `vars.GOOGLESQL_PREBUILT_URL` / `vars.GOOGLESQL_PREBUILT_SHA256` |
+
 ---
 
 ## 2. Roadmap & orchestration model (already in motion)
