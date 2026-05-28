@@ -95,13 +95,42 @@ vars:
 
 tasks:
   default:
-    desc: Run golang-, python-, node-, java-, and python-bigquery-dataframes BigQuery third-party suites in order
+    desc: Run golang-, python-, node-, java-, and python-bigquery-dataframes BigQuery third-party suites in order; continues past per-suite failures and exits non-zero only after the summary if any suite failed
     cmds:
-      - task: golang-bigquery-tests
-      - task: python-bigquery-tests
-      - task: node-bigquery-tests
-      - task: java-bigquery-tests
-      - task: python-bigquery-dataframes-tests
+      # Each suite is invoked as a *child* `task thirdparty:<suite>`
+      # process (not a `task:` cmd reference) so that a non-zero exit
+      # from one suite does not abort the remaining ones — Task stops
+      # the cmds list on the first failing `task:` ref, which defeats
+      # the "run them all, report at the end" posture this aggregator
+      # exists to provide. The trade-off is that each suite re-enters
+      # its own `task: emulator-up` (+ conditionally `fake-gcs-up`)
+      # rather than sharing the in-process `run: once` collapse — but
+      # `docker compose up -d` is idempotent (see emulator-up's own
+      # comment) so this is just an extra healthz poll per suite, not
+      # a fresh container bringup.
+      - |
+        set -uo pipefail
+        suites="golang-bigquery-tests python-bigquery-tests node-bigquery-tests java-bigquery-tests python-bigquery-dataframes-tests"
+        failed=""
+        for suite in $suites; do
+          echo ""
+          echo "==> task thirdparty:${suite}"
+          if task "thirdparty:${suite}"; then
+            echo "thirdparty:${suite} OK"
+          else
+            rc=$?
+            echo "thirdparty:${suite} FAILED (exit=${rc})" >&2
+            failed="${failed:+${failed} }${suite}"
+          fi
+        done
+        echo ""
+        echo "thirdparty default summary:"
+        if [ -z "${failed}" ]; then
+          echo "  all suites passed"
+        else
+          echo "  failed suites: ${failed}" >&2
+          exit 1
+        fi
 
   # Convenience helpers for the docker compose `thirdparty` profile.
   # The default compose recipe (used by `task docker:smoke`) only
