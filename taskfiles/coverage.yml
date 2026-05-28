@@ -1,0 +1,158 @@
+# Local mirror of the self-hosted coverage pipeline that
+# `.github/workflows/coverage-publish.yml` runs in CI. The pipeline
+# replaces the paid Codecov SaaS: every output the workflow publishes
+# to the `gh-pages` branch (summary.json, badge*.json, the HTML
+# reports, baseline.json) can be reproduced here so contributors can
+# debug a coverage regression without round-tripping a CI run.
+#
+# Pipeline shape:
+#
+#   coverage:go    -> writes coverage.out
+#   bazel:coverage -> writes bazel-out/_coverage/_coverage_report.dat
+#   coverage:summarize -> writes coverage.summary.json
+#   coverage:badge -> writes badge*.json (optional; CI does this)
+#   coverage:html  -> writes html/{go.html,cpp/index.html}
+#   coverage:gate  -> compares against the latest gh-pages baseline
+#
+# All paths are relative to the repo root so the JSON artefacts land
+# next to the workflow-uploaded artifacts and can be opened directly
+# (`xdg-open coverage.html/go.html`).
+version: "3"
+
+vars:
+  GO_PROFILE: "coverage.out"
+  LCOV_PROFILE: "bazel-out/_coverage/_coverage_report.dat"
+  SUMMARY: "coverage.summary.json"
+  BASELINE: "coverage.baseline.json"
+  HTML_DIR: "coverage.html"
+  # Conservative defaults that match `.github/workflows/coverage-publish.yml`.
+  # Override at the CLI: `task coverage:gate TOLERANCE=2.0 FLOOR=60`.
+  TOLERANCE: "1.0"
+  FLOOR: "0"
+
+tasks:
+  default:
+    desc: |
+      Show the per-suite coverage commands. Run `task coverage:go` first to
+      populate coverage.out, then `coverage:summarize`, then `coverage:html`
+      or `coverage:gate`.
+    cmds:
+      - task --list-all | grep -E '^\* coverage:' || true
+    silent: true
+
+  go:
+    desc: Run `go test -covermode=atomic -coverprofile=...` matching the CI step in ci.yml.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go test -covermode=atomic -coverprofile={{.GO_PROFILE}} ./...
+
+  summarize:
+    desc: |
+      Combine the Go cover profile and (if present) the LCOV combined report
+      into {{.SUMMARY}}. Either input is optional; missing inputs leave the
+      matching per-flag field as the "n/a" sentinel.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        args=()
+        if [ -f "{{.GO_PROFILE}}" ]; then
+          args+=("--go={{.GO_PROFILE}}")
+        fi
+        if [ -f "{{.LCOV_PROFILE}}" ]; then
+          args+=("--lcov={{.LCOV_PROFILE}}")
+        fi
+        if [ ${#args[@]} -eq 0 ]; then
+          echo "coverage:summarize: no inputs found ({{.GO_PROFILE}} or {{.LCOV_PROFILE}})." >&2
+          echo "  Run 'task coverage:go' first, or 'task bazel:coverage TARGETS=...' for the C++ engine." >&2
+          exit 2
+        fi
+        commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+        go run ./tools/coverage summarize "${args[@]}" --commit="$commit" --out={{.SUMMARY}}
+        echo "wrote {{.SUMMARY}}"
+
+  badge:
+    desc: |
+      Render the three shields.io endpoint JSONs (overall / Go / C++) from
+      {{.SUMMARY}} into {{.HTML_DIR}}. Mirrors the CI publish step so
+      contributors can preview the badge JSON before opening a PR.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        if [ ! -f "{{.SUMMARY}}" ]; then
+          echo "coverage:badge: {{.SUMMARY}} not found; run 'task coverage:summarize' first." >&2
+          exit 2
+        fi
+        mkdir -p {{.HTML_DIR}}
+        go run ./tools/coverage badge --in={{.SUMMARY}} --field=total --label=coverage      --out={{.HTML_DIR}}/badge.json
+        go run ./tools/coverage badge --in={{.SUMMARY}} --field=go    --label="coverage (go)"  --out={{.HTML_DIR}}/badge-go.json
+        go run ./tools/coverage badge --in={{.SUMMARY}} --field=cpp   --label="coverage (cpp)" --out={{.HTML_DIR}}/badge-cpp.json
+        echo "wrote {{.HTML_DIR}}/badge*.json"
+
+  html:
+    desc: |
+      Generate the same browsable HTML reports the gh-pages workflow
+      publishes: `go tool cover -html` for the Go suite and `genhtml`
+      for the LCOV combined report. Requires `lcov` for the C++ side.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        mkdir -p {{.HTML_DIR}}
+        if [ -f "{{.GO_PROFILE}}" ]; then
+          go tool cover -html={{.GO_PROFILE}} -o {{.HTML_DIR}}/go.html
+          echo "wrote {{.HTML_DIR}}/go.html"
+        else
+          echo "coverage:html: skipping Go report ({{.GO_PROFILE}} missing)" >&2
+        fi
+        if [ -f "{{.LCOV_PROFILE}}" ]; then
+          if ! command -v genhtml >/dev/null 2>&1; then
+            echo "coverage:html: genhtml not on PATH; install 'lcov' to render the C++ report." >&2
+          else
+            genhtml --quiet --output-directory {{.HTML_DIR}}/cpp {{.LCOV_PROFILE}}
+            echo "wrote {{.HTML_DIR}}/cpp/index.html"
+          fi
+        else
+          echo "coverage:html: skipping C++ report ({{.LCOV_PROFILE}} missing)" >&2
+        fi
+
+  gate:
+    desc: |
+      Compare {{.SUMMARY}} against the latest gh-pages baseline.
+      Fetches `origin gh-pages:baseline.json` if available and falls back
+      to a local {{.BASELINE}} otherwise. Override TOLERANCE / FLOOR to
+      experiment with stricter thresholds before opening a PR.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        if [ ! -f "{{.SUMMARY}}" ]; then
+          echo "coverage:gate: {{.SUMMARY}} not found; run 'task coverage:summarize' first." >&2
+          exit 2
+        fi
+        # Best-effort baseline fetch: a fresh clone or a fork without the
+        # gh-pages branch will fall through to the local file (or trigger
+        # the gate's bootstrap path if neither exists).
+        if git fetch --no-tags --depth=1 origin gh-pages >/dev/null 2>&1; then
+          if git show origin/gh-pages:baseline.json > {{.BASELINE}} 2>/dev/null; then
+            echo "fetched baseline.json from origin/gh-pages"
+          fi
+        fi
+        go run ./tools/coverage gate \
+          --current={{.SUMMARY}} \
+          --baseline={{.BASELINE}} \
+          --tolerance={{.TOLERANCE}} \
+          --floor={{.FLOOR}}

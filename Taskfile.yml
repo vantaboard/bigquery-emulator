@@ -22,6 +22,7 @@ includes:
   thirdparty: ./taskfiles/thirdparty.yml
   testdata: ./taskfiles/testdata.yml
   compose: ./taskfiles/compose.yml
+  coverage: ./taskfiles/coverage.yml
 
 tasks:
   default:
