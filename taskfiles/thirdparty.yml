@@ -567,6 +567,30 @@ tasks:
         export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
         export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
         export BIGQUERY_DATASET_NAME="${BIGQUERY_DATASET_NAME:-test_dataset}"
+        # Stub the external-resource env vars the bigqueryconnection /
+        # bigquerydatatransfer ITs require at <clinit> / @BeforeClass.
+        # Without these the static initializers raise an
+        # AssertionError before the test method ever opens a gRPC/REST
+        # channel — which means even Phase B's shallow backends never
+        # see traffic from those ITs. The values themselves are inert
+        # (the emulator does not talk to AWS / MySQL / DTS); they only
+        # exist so JUnit's `requireEnvVar` short-circuits stop firing.
+        # See `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`
+        # (Phase A baseline rows 8–15) for the precondition matrix.
+        export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-000000000000}"
+        export AWS_ROLE_ID="${AWS_ROLE_ID:-emulator-role}"
+        export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-EMULATOR_FAKE_ACCESS_KEY}"
+        export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-EMULATOR_FAKE_SECRET}"
+        export AWS_BUCKET="${AWS_BUCKET:-emulator-fake-bucket}"
+        export MY_SQL_DATABASE="${MY_SQL_DATABASE:-emulator_fake_db}"
+        export MY_SQL_INSTANCE="${MY_SQL_INSTANCE:-emulator-fake-instance}"
+        # DTS_TRANSFER_CONFIG_NAME points at a transfer config the
+        # DisableTransferConfigIT / ReEnableTransferConfigIT ITs read
+        # by name. The emulator's datatransfer handler matches on the
+        # full resource name, so Phase B pre-creates a fixture config
+        # via the REST POST below (best-effort; ignored if the route
+        # isn't yet wired or the listener is unreachable).
+        export DTS_TRANSFER_CONFIG_NAME="${DTS_TRANSFER_CONFIG_NAME:-projects/${GOOGLE_CLOUD_PROJECT}/locations/us/transferConfigs/emulator-fixture}"
         # Pre-create the dataset so ITs whose fixtures assume an existing
         # BIGQUERY_DATASET_NAME (e.g. QueryMaterializedViewIT) can land their
         # tables. The emulator's REST POST /bigquery/v2/projects/<p>/datasets
@@ -578,6 +602,17 @@ tasks:
               -X POST -H 'Content-Type: application/json' \
               -d "{\"datasetReference\":{\"projectId\":\"${GOOGLE_CLOUD_PROJECT}\",\"datasetId\":\"${BIGQUERY_DATASET_NAME}\"}}" \
               "${_host_root}/bigquery/v2/projects/${GOOGLE_CLOUD_PROJECT}/datasets" \
+              2>/dev/null || true
+          # Pre-create a transfer config fixture for the DTS ITs that
+          # mutate an existing config (DisableTransferConfigIT,
+          # ReEnableTransferConfigIT). The fixture id matches the
+          # DTS_TRANSFER_CONFIG_NAME default exported above. Best
+          # effort: fails open when the datatransfer handler is not
+          # yet wired (Phase A) or returns 501 (legacy shell).
+          curl -fsS -o /dev/null \
+              -X POST -H 'Content-Type: application/json' \
+              -d "{\"name\":\"projects/${GOOGLE_CLOUD_PROJECT}/locations/us/transferConfigs/emulator-fixture\",\"displayName\":\"emulator fixture\",\"dataSourceId\":\"scheduled_query\",\"schedule\":\"every 24 hours\",\"disableAutoScheduling\":true,\"params\":{\"query\":\"SELECT 1\"}}" \
+              "${_host_root}/v1/projects/${GOOGLE_CLOUD_PROJECT}/locations/us/transferConfigs" \
               2>/dev/null || true
         fi
         # Prefer the user's JAVA_HOME, fall back to mise (`mise install` activates
