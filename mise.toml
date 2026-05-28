@@ -63,9 +63,10 @@ maven  = "3.9.15"          # `mvn -B package` runner for `task thirdparty:java-b
 goreleaser = "2.16.0"
 
 # Miscellaneous.
-gcloud     = "568.0.0"     # For poking real BigQuery while debugging parity.
-shellcheck = "0.11.0"      # Used by `task lint:shell` on docker/*.sh.
-hadolint   = "2.14.0"      # Dockerfile linter for `Dockerfile` / `docker/*`; recommended via .vscode/extensions.json.
+gcloud     = "568.0.0"            # For poking real BigQuery while debugging parity.
+shellcheck = "0.11.0"             # Used by `task lint:shell` on docker/*.sh.
+hadolint   = "2.14.0"             # Dockerfile linter for `Dockerfile` / `docker/*`; recommended via .vscode/extensions.json.
+java       = "temurin-17.0.19+10" # JDK 17+ (Temurin 17 in CI). The task prefers `JAVA_HOME` and falls back to `mise x -- mvn` when unset (run `mise install` to activate the project's Java per `mise.toml`). Maven artifacts under `third_party/java-bigquery-tests/**/target/` are gitignored; running `task thirdparty:java-bigquery-tests` populates a local `~/.m2/repository` mirror of the libraries-bom on first run.
 
 [env]
 # Put the project's `bin/` (where `task emulator:build`, `go install`,
