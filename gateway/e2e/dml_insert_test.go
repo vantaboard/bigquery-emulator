@@ -11,45 +11,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// skipIfDmlUnimplemented probes the gateway with a trivial INSERT
-// against a freshly created table, and skips the test when the engine
-// reports HTTP 501 notImplemented. Mirrors `skipIfExecuteQueryUnimplemented`
-// for the DML path: builds without GoogleSQL linked in (the legacy
-// CMake path) surface UNIMPLEMENTED for INSERT until Phase 6a's
-// canonical Bazel binary is wired into ./bin/emulator_main. The probe
-// keeps the test from failing on a CMake-only checkout while still
-// running for real once the Bazel binary lands.
-func skipIfDmlUnimplemented(t *testing.T, env *emulatorEnv) {
-	t.Helper()
-	const projectID = "proj-dml-probe"
-	const datasetID = "ds_dml_probe"
-	base := env.URL() + "/bigquery/v2/projects/" + projectID
-
-	// We need a real table to INSERT into, so the probe sets up a
-	// minimal `id` column table; if any of the catalog calls fail we
-	// fall through to the INSERT and let the skip / fail logic below
-	// decide.
-	_, _ = doJSON(t, http.MethodPost, base+"/datasets",
-		[]byte(`{"datasetReference":{"projectId":"`+projectID+
-			`","datasetId":"`+datasetID+`"},"location":"US"}`))
-	_, _ = doJSON(t, http.MethodPost,
-		base+"/datasets/"+datasetID+"/tables",
-		[]byte(`{"tableReference":{"projectId":"`+projectID+
-			`","datasetId":"`+datasetID+
-			`","tableId":"probe"},"schema":{"fields":[{"name":"id","type":"INT64","mode":"NULLABLE"}]}}`))
-
-	probeBody := `{"query":"INSERT INTO ` + datasetID +
-		`.probe (id) VALUES (0)","useLegacySql":false}`
-	status, body := doJSON(t, http.MethodPost,
-		base+"/queries", []byte(probeBody))
-	if status == http.StatusNotImplemented {
-		t.Skipf("emulator_main was built without an INSERT DML "+
-			"implementation (returns 501 notImplemented). Rebuild "+
-			"with the canonical googlesql-linked binary to exercise "+
-			"this E2E path. Probe body: %s", string(body))
-	}
-}
-
 // TestDMLInsertValuesRoundTrip is the Phase 6a end-to-end story for
 // INSERT VALUES: create a dataset and a typed table over REST, run
 // `INSERT INTO ds.t (...) VALUES (...)` through `jobs.query`, confirm
@@ -58,7 +19,6 @@ func skipIfDmlUnimplemented(t *testing.T, env *emulatorEnv) {
 // the storage round-trip lands as expected.
 func TestDMLInsertValuesRoundTrip(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
 
 	const (
 		projectID = "proj-dml-insert"
@@ -169,7 +129,6 @@ func TestDMLInsertValuesRoundTrip(t *testing.T) {
 // `row_list()` branch covered above).
 func TestDMLInsertSelectRoundTrip(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
 
 	const (
 		projectID = "proj-dml-insert-select"

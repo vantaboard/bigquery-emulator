@@ -11,28 +11,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// skipIfDryRunUnimplemented probes the gateway with a trivial dry-run
-// request and skips the test when the engine subprocess responds with
-// HTTP 501 notImplemented. The CMake build of `emulator_main` does
-// not link GoogleSQL (`BIGQUERY_EMULATOR_HAS_GOOGLESQL` unset), so
-// `Query.DryRun` returns `UNIMPLEMENTED` from the C++ handler and the
-// whole REST surface for dry-run queries falls back to 501. The
-// canonical Bazel build flips the define on; this probe lets us
-// auto-promote the test from skip → real check once the Bazel
-// `emulator_main` is wired.
-func skipIfDryRunUnimplemented(t *testing.T, env *emulatorEnv) {
-	t.Helper()
-	probeBody := `{"query":"SELECT 1","dryRun":true,"useLegacySql":false}`
-	status, body := doJSON(t, http.MethodPost,
-		env.URL()+"/bigquery/v2/projects/probe/queries", []byte(probeBody))
-	if status == http.StatusNotImplemented {
-		t.Skipf("emulator_main was built without GoogleSQL "+
-			"(Query.DryRun -> 501 notImplemented); rebuild with "+
-			"`bazel build //binaries/emulator_main` to exercise this "+
-			"E2E path. Probe body: %s", string(body))
-	}
-}
-
 // TestDryRunReturnsAnalyzedSchema is the Phase 4c end-to-end story:
 // register a dataset and a typed table over REST, run
 // `jobs.query?dryRun=true` against `SELECT * FROM ds.t`, and confirm
@@ -41,7 +19,6 @@ func skipIfDryRunUnimplemented(t *testing.T, env *emulatorEnv) {
 // REST -> gRPC -> Query.DryRun -> GoogleSQL path.
 func TestDryRunReturnsAnalyzedSchema(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDryRunUnimplemented(t, env)
 
 	const (
 		projectID = "proj-dryrun"
@@ -132,7 +109,6 @@ func TestDryRunReturnsAnalyzedSchema(t *testing.T) {
 // gateway/handlers/errors.go.
 func TestDryRunSyntaxErrorReturnsInvalidQuery(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDryRunUnimplemented(t, env)
 
 	base := env.URL() + "/bigquery/v2/projects/proj-dryrun-bad/queries"
 	status, body := doJSON(t, http.MethodPost, base,
@@ -165,7 +141,6 @@ func TestDryRunSyntaxErrorReturnsInvalidQuery(t *testing.T) {
 // HTTP 400 + invalidQuery.
 func TestDryRunUnknownTableReturnsInvalidQuery(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDryRunUnimplemented(t, env)
 
 	const (
 		projectID = "proj-dryrun-missing"

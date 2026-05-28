@@ -3,11 +3,13 @@
 // Package e2e holds end-to-end tests that exercise the BigQuery
 // emulator REST gateway against a real C++ engine subprocess
 // (emulator_main). They are gated behind the `integration` build tag
-// so `go test ./...` stays hermetic on machines without a CMake build,
-// and are skipped when the engine binary cannot be located.
+// so `go test ./...` stays hermetic on machines that have not built
+// the Bazel engine binary, and are skipped when the binary cannot be
+// located.
 //
 // Run via:
 //
+//	task emulator:build-engine-bazel
 //	go test -tags=integration ./gateway/e2e/...
 //
 // The tests build a gateway HTTP handler in-process (using
@@ -44,8 +46,9 @@ import (
 const engineReadyTimeout = 30 * time.Second
 
 // emulatorBinaryPath locates the C++ emulator_main binary by checking
-// (in order) BIGQUERY_EMULATOR_BIN, ./bin/, ./build-out/. Returns ""
-// when nothing is found so the test can Skip rather than fail.
+// (in order) BIGQUERY_EMULATOR_BIN, then ./bin/emulator_main staged
+// by `task emulator:build-engine-bazel`. Returns "" when nothing is
+// found so the test can Skip rather than fail.
 func emulatorBinaryPath() string {
 	if p := os.Getenv("BIGQUERY_EMULATOR_BIN"); p != "" {
 		if _, err := os.Stat(p); err == nil {
@@ -56,14 +59,9 @@ func emulatorBinaryPath() string {
 	if err != nil {
 		return ""
 	}
-	for _, rel := range []string{
-		filepath.Join("bin", "emulator_main"),
-		filepath.Join("build-out", "emulator_main"),
-	} {
-		candidate := filepath.Join(root, rel)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	candidate := filepath.Join(root, "bin", "emulator_main")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
 	}
 	return ""
 }

@@ -189,7 +189,6 @@ func TestDuckDBParityQuerySuite(t *testing.T) {
 				flags.dataDir = t.TempDir()
 			}
 			env := startEmulatorWithFlags(t, flags)
-			skipIfExecuteQueryUnimplemented(t, env)
 			seedDuckDBParityFixture(t, env, projectID, datasetID,
 				usersTable, eventsTbl)
 

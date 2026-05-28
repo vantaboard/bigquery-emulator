@@ -74,7 +74,6 @@ func TestQueryDuckDBArrowWireParity(t *testing.T) {
 				flags.dataDir = t.TempDir()
 			}
 			env := startEmulatorWithFlags(t, flags)
-			skipIfExecuteQueryUnimplemented(t, env)
 
 			base := env.URL() + "/bigquery/v2/projects/" + projectID
 			status, body := doJSON(t, http.MethodPost, base+"/datasets",

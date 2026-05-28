@@ -10,32 +10,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// skipIfExecuteQueryUnimplemented probes the gateway with a trivial
-// non-dryRun `SELECT 1` and skips the test when the engine subprocess
-// reports HTTP 501 notImplemented. Mirrors `skipIfDryRunUnimplemented`
-// for the streaming query path: the CMake build of `emulator_main`
-// links googlesql but its `Query.ExecuteQuery` handler is currently
-// scaffolded -- it returns `UNIMPLEMENTED` until the canonical Bazel
-// `cc_binary` target lands. This probe lets the SELECT E2E tests
-// auto-promote from skip → real check once the real engine is
-// available, without the suite breaking on a CMake-only checkout.
-//
-// Phase 5e plan note: a Bazel `binaries/emulator_main` target that
-// links googlesql + reference_impl + DuckDB + grpc is the eventual
-// driver for these tests. Until that lands we accept the skip.
-func skipIfExecuteQueryUnimplemented(t *testing.T, env *emulatorEnv) {
-	t.Helper()
-	probeBody := `{"query":"SELECT 1","useLegacySql":false}`
-	status, body := doJSON(t, http.MethodPost,
-		env.URL()+"/bigquery/v2/projects/probe/queries", []byte(probeBody))
-	if status == http.StatusNotImplemented {
-		t.Skipf("emulator_main was built without an ExecuteQuery "+
-			"implementation (returns 501 notImplemented). Rebuild "+
-			"with the canonical googlesql-linked binary to exercise "+
-			"this E2E path. Probe body: %s", string(body))
-	}
-}
-
 // TestQuerySelectOneRoundTrip is the Phase 5e end-to-end story for
 // trivial constant queries: a `SELECT 1` against a real running
 // emulator_main returns a single-row, single-column page on the
@@ -47,7 +21,6 @@ func skipIfExecuteQueryUnimplemented(t *testing.T, env *emulatorEnv) {
 // the synchronous query API.
 func TestQuerySelectOneRoundTrip(t *testing.T) {
 	env := startEmulator(t)
-	skipIfExecuteQueryUnimplemented(t, env)
 
 	const projectID = "proj-select1"
 	base := env.URL() + "/bigquery/v2/projects/" + projectID
@@ -124,7 +97,6 @@ func TestQuerySelectOneRoundTrip(t *testing.T) {
 // InMemoryStorage path plus the f/v cell encoding on both reads.
 func TestQuerySelectStarAfterInsertAll(t *testing.T) {
 	env := startEmulator(t)
-	skipIfExecuteQueryUnimplemented(t, env)
 
 	const (
 		projectID = "proj-selectstar"

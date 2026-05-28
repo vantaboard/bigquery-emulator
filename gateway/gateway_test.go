@@ -15,10 +15,11 @@ import (
 )
 
 // emulatorBinaryPath returns a path to a built emulator_main binary, or
-// "" if one cannot be located. The CMake build (`task emulator:build-
-// engine`) deposits the binary in build-out/, and `task emulator:build-
-// all` copies it into bin/. We check both, plus an explicit override
-// via the BIGQUERY_EMULATOR_BIN env var so CI can pin a path.
+// "" if one cannot be located. `task emulator:build-engine-bazel`
+// (the canonical engine build) stages the binary into ./bin via
+// `task emulator:build-all`. We honor an explicit override via the
+// BIGQUERY_EMULATOR_BIN env var so CI can pin a path, then fall back
+// to ./bin/emulator_main.
 func emulatorBinaryPath(t *testing.T) string {
 	t.Helper()
 	if p := os.Getenv("BIGQUERY_EMULATOR_BIN"); p != "" {
@@ -30,14 +31,9 @@ func emulatorBinaryPath(t *testing.T) string {
 	if err != nil {
 		return ""
 	}
-	for _, rel := range []string{
-		filepath.Join("bin", "emulator_main"),
-		filepath.Join("build-out", "emulator_main"),
-	} {
-		candidate := filepath.Join(root, rel)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	candidate := filepath.Join(root, "bin", "emulator_main")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
 	}
 	return ""
 }

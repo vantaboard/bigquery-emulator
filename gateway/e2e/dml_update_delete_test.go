@@ -20,8 +20,6 @@ import (
 // landed.
 func TestDMLUpdateRoundTrip(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
-
 	const (
 		projectID = "proj-dml-update"
 		datasetID = "ds_dml_update"
@@ -132,8 +130,6 @@ func TestDMLUpdateRoundTrip(t *testing.T) {
 // storage snapshot.
 func TestDMLDeleteRoundTrip(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
-
 	const (
 		projectID = "proj-dml-delete"
 		datasetID = "ds_dml_delete"
@@ -228,8 +224,6 @@ func TestDMLDeleteRoundTrip(t *testing.T) {
 // remove every row and surface a matching dmlStats count.
 func TestDMLDeleteWhereTrueClearsTable(t *testing.T) {
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
-
 	const (
 		projectID = "proj-dml-delete-all"
 		datasetID = "ds_dml_delete_all"
@@ -329,8 +323,6 @@ func TestDMLMergeOnDuckDB(t *testing.T) {
 		onUnknownFn: "fallback",
 		dataDir:     t.TempDir(),
 	})
-	skipIfDmlUnimplemented(t, env)
-
 	const (
 		projectID = "proj-dml-merge-duckdb"
 		datasetID = "ds_dml_merge_duckdb"
@@ -482,8 +474,6 @@ func TestDMLMergeOnReferenceImplIsUnimplemented(t *testing.T) {
 			engine)
 	}
 	env := startEmulator(t)
-	skipIfDmlUnimplemented(t, env)
-
 	const (
 		projectID = "proj-dml-merge"
 		datasetID = "ds_dml_merge"

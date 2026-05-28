@@ -5,10 +5,11 @@
 // seed fixtures shipped under `conformance/fixtures/`. The test is
 // gated by the `integration` build tag, matching the pattern in
 // `gateway/e2e/` so a default `go test ./...` stays hermetic on
-// machines that have not built the C++ engine.
+// machines that have not built the Bazel engine binary.
 //
 // Run with:
 //
+//	task emulator:build-engine-bazel
 //	go test -tags=integration ./conformance/...
 package main
 
@@ -26,9 +27,10 @@ import (
 )
 
 // emulatorBinaryPath mirrors the locator the gateway/e2e harness
-// uses: BIGQUERY_EMULATOR_BIN env override, then ./bin/emulator_main,
-// then ./build-out/emulator_main. Returns "" when nothing is found,
-// so the test can Skip rather than fail on a fresh checkout.
+// uses: BIGQUERY_EMULATOR_BIN env override, then ./bin/emulator_main
+// (staged by `task emulator:build-engine-bazel`). Returns "" when
+// nothing is found, so the test can Skip rather than fail on a fresh
+// checkout.
 func emulatorBinaryPath(t *testing.T) string {
 	t.Helper()
 	if p := os.Getenv("BIGQUERY_EMULATOR_BIN"); p != "" {
@@ -40,14 +42,9 @@ func emulatorBinaryPath(t *testing.T) string {
 	if err != nil {
 		return ""
 	}
-	for _, rel := range []string{
-		filepath.Join("bin", "emulator_main"),
-		filepath.Join("build-out", "emulator_main"),
-	} {
-		candidate := filepath.Join(root, rel)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
+	candidate := filepath.Join(root, "bin", "emulator_main")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
 	}
 	return ""
 }

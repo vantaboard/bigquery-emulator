@@ -41,7 +41,6 @@ func TestQueryDuckDBEngineEndToEnd(t *testing.T) {
 		onUnknownFn: "fallback",
 		dataDir:     t.TempDir(),
 	})
-	skipIfExecuteQueryUnimplemented(t, env)
 
 	const (
 		projectID = "proj-duckdb"

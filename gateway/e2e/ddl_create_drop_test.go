@@ -45,7 +45,6 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 		onUnknownFn: "fallback",
 		dataDir:     t.TempDir(),
 	})
-	skipIfDmlUnimplemented(t, env)
 
 	const (
 		projectID = "proj-ddl-ctas"

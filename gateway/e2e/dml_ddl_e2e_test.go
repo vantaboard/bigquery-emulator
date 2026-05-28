@@ -47,7 +47,6 @@ func TestDMLDDLFullRoundTrip(t *testing.T) {
 		onUnknownFn: "fallback",
 		dataDir:     t.TempDir(),
 	})
-	skipIfDmlUnimplemented(t, env)
 
 	const (
 		projectID = "proj-dml-ddl-e2e"
