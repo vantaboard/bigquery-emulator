@@ -3,6 +3,7 @@
 #include <cctype>
 #include <string>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
@@ -248,83 +249,98 @@ absl::string_view TypeHead(absl::string_view name) {
 
 }  // namespace
 
-ColumnType FromDuckDBType(absl::string_view duckdb_type) {
-  // Tolerate trailing `[]` so callers can pass `BIGINT[]` directly;
-  // strip it before inspecting the head so the array-ness is
-  // surfaced through the return value. We mirror the BigQuery
-  // schema convention where the "array-ness" lives on `mode`
-  // (REPEATED), not the type, so a `BIGINT[]` payload becomes
-  // `kInt64` here — the caller is responsible for flipping the
-  // owning ColumnSchema's mode to REPEATED.
-  absl::string_view name = duckdb_type;
+namespace {
+
+// Table-driven `head -> ColumnType` lookup powering `FromDuckDBType`.
+// Each row is an uppercase DuckDB type alias the engine accepts; the
+// `TIMESTAMP` head is intentionally absent because it disambiguates
+// on the `WITH TIME ZONE` suffix and is handled inline below.
+const absl::flat_hash_map<absl::string_view, ColumnType>& DuckDBTypeAliases() {
+  static const auto* kAliases =
+      new absl::flat_hash_map<absl::string_view, ColumnType>{
+          {"BIGINT", ColumnType::kInt64},
+          {"INT8", ColumnType::kInt64},
+          {"LONG", ColumnType::kInt64},
+          {"INT64", ColumnType::kInt64},
+          {"INTEGER", ColumnType::kInt64},
+          {"INT", ColumnType::kInt64},
+          {"INT4", ColumnType::kInt64},
+          {"SMALLINT", ColumnType::kInt64},
+          {"INT2", ColumnType::kInt64},
+          {"TINYINT", ColumnType::kInt64},
+          {"INT1", ColumnType::kInt64},
+          {"DOUBLE", ColumnType::kFloat64},
+          {"FLOAT8", ColumnType::kFloat64},
+          {"REAL", ColumnType::kFloat64},
+          {"FLOAT4", ColumnType::kFloat64},
+          {"FLOAT", ColumnType::kFloat64},
+          {"BOOLEAN", ColumnType::kBool},
+          {"BOOL", ColumnType::kBool},
+          {"VARCHAR", ColumnType::kString},
+          {"TEXT", ColumnType::kString},
+          {"STRING", ColumnType::kString},
+          {"CHAR", ColumnType::kString},
+          {"BLOB", ColumnType::kBytes},
+          {"BYTEA", ColumnType::kBytes},
+          {"BINARY", ColumnType::kBytes},
+          {"VARBINARY", ColumnType::kBytes},
+          {"BYTES", ColumnType::kBytes},
+          {"DATE", ColumnType::kDate},
+          {"TIME", ColumnType::kTime},
+          {"TIMESTAMPTZ", ColumnType::kTimestamp},
+          {"TIMESTAMP_TZ", ColumnType::kTimestamp},
+          {"DECIMAL", ColumnType::kNumeric},
+          {"NUMERIC", ColumnType::kNumeric},
+          {"HUGEINT", ColumnType::kBignumeric},
+          {"BIGNUMERIC", ColumnType::kBignumeric},
+          {"BIGDECIMAL", ColumnType::kBignumeric},
+          {"JSON", ColumnType::kJson},
+          {"GEOMETRY", ColumnType::kGeography},
+          {"GEOGRAPHY", ColumnType::kGeography},
+          {"STRUCT", ColumnType::kStruct},
+          {"ROW", ColumnType::kStruct},
+          {"RECORD", ColumnType::kStruct},
+          {"LIST", ColumnType::kArray},
+          {"ARRAY", ColumnType::kArray},
+      };
+  return *kAliases;
+}
+
+// Drop trailing `[]` markers so callers can pass `BIGINT[]` directly.
+// Mirrors the BigQuery schema convention where array-ness lives on
+// `mode` (REPEATED), not the type itself.
+absl::string_view StripArraySuffix(absl::string_view name) {
   while (!name.empty() && name.back() == ']')
     name.remove_suffix(1);
   while (!name.empty() && name.back() == '[')
     name.remove_suffix(1);
-  const absl::string_view head = TypeHead(name);
-  if (EqualsIgnoreCase(head, "BIGINT") || EqualsIgnoreCase(head, "INT8") ||
-      EqualsIgnoreCase(head, "LONG") || EqualsIgnoreCase(head, "INT64") ||
-      EqualsIgnoreCase(head, "INTEGER") || EqualsIgnoreCase(head, "INT") ||
-      EqualsIgnoreCase(head, "INT4") || EqualsIgnoreCase(head, "SMALLINT") ||
-      EqualsIgnoreCase(head, "INT2") || EqualsIgnoreCase(head, "TINYINT") ||
-      EqualsIgnoreCase(head, "INT1")) {
-    return ColumnType::kInt64;
-  }
-  if (EqualsIgnoreCase(head, "DOUBLE") || EqualsIgnoreCase(head, "FLOAT8") ||
-      EqualsIgnoreCase(head, "REAL") || EqualsIgnoreCase(head, "FLOAT4") ||
-      EqualsIgnoreCase(head, "FLOAT")) {
-    return ColumnType::kFloat64;
-  }
-  if (EqualsIgnoreCase(head, "BOOLEAN") || EqualsIgnoreCase(head, "BOOL")) {
-    return ColumnType::kBool;
-  }
-  if (EqualsIgnoreCase(head, "VARCHAR") || EqualsIgnoreCase(head, "TEXT") ||
-      EqualsIgnoreCase(head, "STRING") || EqualsIgnoreCase(head, "CHAR")) {
-    return ColumnType::kString;
-  }
-  if (EqualsIgnoreCase(head, "BLOB") || EqualsIgnoreCase(head, "BYTEA") ||
-      EqualsIgnoreCase(head, "BINARY") || EqualsIgnoreCase(head, "VARBINARY") ||
-      EqualsIgnoreCase(head, "BYTES")) {
-    return ColumnType::kBytes;
-  }
-  if (EqualsIgnoreCase(head, "DATE")) return ColumnType::kDate;
-  if (EqualsIgnoreCase(head, "TIME")) return ColumnType::kTime;
-  if (EqualsIgnoreCase(head, "TIMESTAMPTZ") ||
-      EqualsIgnoreCase(head, "TIMESTAMP_TZ")) {
+  return name;
+}
+
+// DuckDB's plain `TIMESTAMP` is naive (no zone) and maps to BigQuery
+// DATETIME; the zoned variant is rendered as `TIMESTAMP WITH TIME
+// ZONE` and shares the same head, so we peek at the full type
+// expression for the suffix to disambiguate.
+ColumnType ResolveTimestampVariant(absl::string_view name) {
+  if (absl::StrContains(absl::AsciiStrToUpper(std::string(name)),
+                        "WITH TIME ZONE")) {
     return ColumnType::kTimestamp;
   }
+  return ColumnType::kDatetime;
+}
+
+}  // namespace
+
+ColumnType FromDuckDBType(absl::string_view duckdb_type) {
+  const absl::string_view name = StripArraySuffix(duckdb_type);
+  const absl::string_view head = TypeHead(name);
   if (EqualsIgnoreCase(head, "TIMESTAMP")) {
-    // DuckDB's plain `TIMESTAMP` is naive (no zone) and maps to
-    // BigQuery DATETIME; the zoned variant is rendered as
-    // `TIMESTAMP WITH TIME ZONE`, sharing the same head — peek
-    // for the suffix to disambiguate before falling through to
-    // the naive case.
-    if (absl::StrContains(absl::AsciiStrToUpper(std::string(name)),
-                          "WITH TIME ZONE")) {
-      return ColumnType::kTimestamp;
-    }
-    return ColumnType::kDatetime;
+    return ResolveTimestampVariant(name);
   }
-  if (EqualsIgnoreCase(head, "DECIMAL") || EqualsIgnoreCase(head, "NUMERIC")) {
-    return ColumnType::kNumeric;
-  }
-  if (EqualsIgnoreCase(head, "HUGEINT") ||
-      EqualsIgnoreCase(head, "BIGNUMERIC") ||
-      EqualsIgnoreCase(head, "BIGDECIMAL")) {
-    return ColumnType::kBignumeric;
-  }
-  if (EqualsIgnoreCase(head, "JSON")) return ColumnType::kJson;
-  if (EqualsIgnoreCase(head, "GEOMETRY") ||
-      EqualsIgnoreCase(head, "GEOGRAPHY")) {
-    return ColumnType::kGeography;
-  }
-  if (EqualsIgnoreCase(head, "STRUCT") || EqualsIgnoreCase(head, "ROW") ||
-      EqualsIgnoreCase(head, "RECORD")) {
-    return ColumnType::kStruct;
-  }
-  if (EqualsIgnoreCase(head, "LIST") || EqualsIgnoreCase(head, "ARRAY")) {
-    return ColumnType::kArray;
-  }
+  const std::string head_upper = absl::AsciiStrToUpper(std::string(head));
+  const auto& aliases = DuckDBTypeAliases();
+  const auto it = aliases.find(head_upper);
+  if (it != aliases.end()) return it->second;
   return ColumnType::kUnknown;
 }
 
