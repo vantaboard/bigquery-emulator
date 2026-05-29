@@ -68,12 +68,12 @@ class GrpcServer final : public Server {
   }
 
  private:
-  std::unique_ptr<::grpc::Server> server_;
-  std::unique_ptr<CatalogService> catalog_;
-  std::unique_ptr<QueryService> query_;
-  std::unique_ptr<StorageReadService> storage_read_;
-  std::string host_;
-  int port_;
+  std::unique_ptr<::grpc::Server> server_{};
+  std::unique_ptr<CatalogService> catalog_{};
+  std::unique_ptr<QueryService> query_{};
+  std::unique_ptr<StorageReadService> storage_read_{};
+  std::string host_{};
+  int port_ = 0;
 };
 
 GrpcServer* g_server = nullptr;

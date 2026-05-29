@@ -154,7 +154,7 @@ class StorageReadService final : public v1::StorageRead::Service {
   backend::storage::Storage* storage_;  // not owned
   mutable absl::Mutex mu_;
   std::int64_t next_session_id_ ABSL_GUARDED_BY(mu_) = 1;
-  std::map<std::string, SessionState> sessions_ ABSL_GUARDED_BY(mu_);
+  std::map<std::string, SessionState> sessions_ ABSL_GUARDED_BY(mu_){};
 };
 
 }  // namespace frontend

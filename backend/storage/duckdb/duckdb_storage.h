@@ -134,7 +134,7 @@ class DuckDBStorage : public Storage {
   // is thread-safe per-connection but the dataset/table directory
   // mutations need to stay coherent with the DuckDB catalog rows we
   // emit alongside them.
-  std::unique_ptr<Impl> impl_;
+  std::unique_ptr<Impl> impl_{};
 };
 
 }  // namespace duckdb

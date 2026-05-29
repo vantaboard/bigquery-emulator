@@ -251,13 +251,13 @@ class StorageEvaluatorTableIterator
   }
 
  private:
-  std::unique_ptr<storage::RowIterator> rows_iter_;
-  schema::TableSchema bq_schema_;
-  std::vector<int> column_idxs_;
-  std::vector<std::string> column_names_;
-  std::vector<const ::googlesql::Type*> column_types_;
-  std::vector<::googlesql::Value> current_row_;
-  absl::Status status_;
+  std::unique_ptr<storage::RowIterator> rows_iter_{};
+  schema::TableSchema bq_schema_{};
+  std::vector<int> column_idxs_{};
+  std::vector<std::string> column_names_{};
+  std::vector<const ::googlesql::Type*> column_types_{};
+  std::vector<::googlesql::Value> current_row_{};
+  absl::Status status_{};
 };
 
 }  // namespace

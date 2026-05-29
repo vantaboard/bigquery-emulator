@@ -121,14 +121,14 @@ class Value {
                                std::vector<Value>>;
 
   Kind kind_ = Kind::kNull;
-  Variant data_;
+  Variant data_{};
 };
 
 // One row in a table: cells are ordered by the column list of the
 // table's `schema::TableSchema`. A NULL cell is represented as
 // `Value::Null()`, never as a missing entry.
 struct Row {
-  std::vector<Value> cells;
+  std::vector<Value> cells{};
 };
 
 // Forward iterator over a single scan of a table's rows. Storage

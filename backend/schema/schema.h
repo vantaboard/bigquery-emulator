@@ -74,7 +74,7 @@ struct ColumnSchema {
 
 // Whole-table schema: the ordered list of top-level columns.
 struct TableSchema {
-  std::vector<ColumnSchema> columns;
+  std::vector<ColumnSchema> columns{};
 };
 
 // ---------------------------------------------------------------------------

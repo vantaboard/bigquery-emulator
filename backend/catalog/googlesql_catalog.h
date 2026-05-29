@@ -144,18 +144,18 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
                               absl::string_view table_id);
 
   const std::string project_id_;
-  storage::Storage* const storage_;
-  ::googlesql::TypeFactory* const type_factory_;
+  storage::Storage* const storage_ = nullptr;
+  ::googlesql::TypeFactory* const type_factory_ = nullptr;
 
   mutable absl::Mutex mu_;
   // Owns every `StorageTable` we hand out to the analyzer / evaluator.
   // Keys are `CacheKey(project, dataset, table)`; values are non-null.
-  std::vector<std::unique_ptr<StorageTable>> tables_ ABSL_GUARDED_BY(mu_);
+  std::vector<std::unique_ptr<StorageTable>> tables_ ABSL_GUARDED_BY(mu_){};
   // Parallel-by-index lookup from cache key to `tables_` entry.
   // `flat_hash_map` would be cleaner but the catalog stays small per
   // query (BigQuery queries rarely reference more than a handful of
   // tables) and a linear scan keeps the dependency surface narrow.
-  std::vector<std::string> keys_ ABSL_GUARDED_BY(mu_);
+  std::vector<std::string> keys_ ABSL_GUARDED_BY(mu_){};
 };
 
 }  // namespace catalog
