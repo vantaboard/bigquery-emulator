@@ -378,11 +378,16 @@ QueryService::QueryService(backend::storage::Storage* storage,
       engine_);
 }
 
-::grpc::Status StreamQueryResults(
-    backend::storage::Storage* storage,
+namespace {
+
+// Validate the basic shape of an ExecuteQuery / StreamQueryResults
+// invocation: non-empty write callback, non-null storage, GoogleSQL
+// dialect, and the two required request fields. Returns OK when the
+// request is acceptable.
+::grpc::Status ValidateQueryRequest(
+    const backend::storage::Storage* storage,
     const v1::QueryRequest& request,
-    const std::function<bool(const v1::QueryResultRow&)>& write,
-    backend::engine::Engine* engine) {
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
   if (!write) {
     return ::grpc::Status(
         ::grpc::StatusCode::INTERNAL,
@@ -409,113 +414,58 @@ QueryService::QueryService(backend::storage::Storage* storage,
         ::grpc::StatusCode::INVALID_ARGUMENT,
         "QueryService::ExecuteQuery: request.sql is required");
   }
+  return ::grpc::Status::OK;
+}
 
-  // The catalog adapter materializes `googlesql::Table*`s out of
-  // `storage` lazily; its `TypeFactory` must outlive the
-  // RowSource the engine returns because the iterator's value
-  // pointers reach back into the catalog's type allocations. We
-  // therefore pin both the type factory and the catalog as locals
-  // here for the duration of the stream.
-  ::googlesql::TypeFactory type_factory;
-  ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
-  backend::catalog::GoogleSqlCatalog catalog(request.project_id(),
-                                             storage,
-                                             &type_factory,
-                                             analyzer_options.language());
-
-  // Pre-classify the statement so we can pick the right engine entry
-  // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
-  // and reject DDL with a friendly UNIMPLEMENTED. We pay for one
-  // analyzer pass here even though the engine re-analyzes inside
-  // `PreparedQuery::Prepare` / `PreparedModify::Prepare`; the cost is
-  // dominated by the catalog setup and a follow-up will fold the
-  // two analyses together.
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
-  absl::Status classify_status =
-      ::googlesql::AnalyzeStatement(request.sql(),
-                                    analyzer_options,
-                                    &catalog,
-                                    &type_factory,
-                                    &classify_output);
-  if (!classify_status.ok()) {
-    return AnalyzeStatusToGrpc(classify_status);
-  }
-  if (classify_output == nullptr ||
-      classify_output->resolved_statement() == nullptr) {
-    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
-                          "QueryService::ExecuteQuery: analyzer returned "
-                          "no resolved statement");
-  }
-  const ::googlesql::ResolvedStatement* stmt =
-      classify_output->resolved_statement();
-  const StatementClass cls = ClassifyStatement(stmt->node_kind());
-
-  // Engine selection: the production wire path
-  // (`binaries/emulator_main`) always supplies a DuckDB engine. Unit
-  // tests must construct one too; we no longer fall back to a
-  // per-call default engine because the reference-impl engine has
-  // been removed.
-  if (engine == nullptr) {
+// DML path: run `ExecuteDml`, then emit a single `dml_stats` message
+// describing the row counts. The caller is responsible for selecting
+// this path (i.e. having determined `cls == kDml`).
+::grpc::Status EmitDmlStats(
+    backend::engine::Engine* engine,
+    const backend::engine::QueryRequest& request,
+    ::googlesql::Catalog* catalog,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+  absl::StatusOr<backend::engine::DmlStats> stats =
+      engine->ExecuteDml(request, catalog);
+  if (!stats.ok()) return AnalyzeStatusToGrpc(stats.status());
+  // DML reply: no schema and no row messages, just a single
+  // `dml_stats` summary the gateway folds into BigQuery's
+  // `dmlStats` / `numDmlAffectedRows` envelope.
+  v1::QueryResultRow stats_message;
+  auto* proto_stats = stats_message.mutable_dml_stats();
+  proto_stats->set_inserted_row_count(stats->inserted_row_count);
+  proto_stats->set_updated_row_count(stats->updated_row_count);
+  proto_stats->set_deleted_row_count(stats->deleted_row_count);
+  if (!write(stats_message)) {
     return ::grpc::Status(
-        ::grpc::StatusCode::FAILED_PRECONDITION,
-        "QueryService::ExecuteQuery: engine backend is not configured");
+        ::grpc::StatusCode::CANCELLED,
+        "QueryService::ExecuteQuery: client cancelled stream before "
+        "dml_stats");
   }
-  backend::engine::Engine* active_engine = engine;
-  backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+  return ::grpc::Status::OK;
+}
 
-  switch (cls) {
-    case StatementClass::kSelect:
-      break;  // Fall through to the SELECT path below.
-    case StatementClass::kDml: {
-      absl::StatusOr<backend::engine::DmlStats> stats =
-          active_engine->ExecuteDml(engine_request, &catalog);
-      if (!stats.ok()) {
-        return AnalyzeStatusToGrpc(stats.status());
-      }
-      // DML reply: no schema and no row messages, just a single
-      // `dml_stats` summary the gateway folds into BigQuery's
-      // `dmlStats` / `numDmlAffectedRows` envelope.
-      v1::QueryResultRow stats_message;
-      auto* proto_stats = stats_message.mutable_dml_stats();
-      proto_stats->set_inserted_row_count(stats->inserted_row_count);
-      proto_stats->set_updated_row_count(stats->updated_row_count);
-      proto_stats->set_deleted_row_count(stats->deleted_row_count);
-      if (!write(stats_message)) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::CANCELLED,
-            "QueryService::ExecuteQuery: client cancelled stream before "
-            "dml_stats");
-      }
-      return ::grpc::Status::OK;
-    }
-    case StatementClass::kDdl: {
-      // DDL lives on the DuckDB engine; any UNIMPLEMENTED here
-      // surfaces as gRPC UNIMPLEMENTED so the gateway maps it to
-      // BigQuery's `notImplemented` reason.
-      absl::Status ddl_status =
-          active_engine->ExecuteDdl(engine_request, &catalog);
-      if (!ddl_status.ok()) {
-        return AnalyzeStatusToGrpc(ddl_status);
-      }
-      // DDL reply: an empty stream. The gateway reads zero
-      // messages, surfaces `jobComplete=true` with no schema and no
-      // rows, and the BigQuery REST client sees the matching
-      // "DDL succeeded" envelope.
-      return ::grpc::Status::OK;
-    }
-    case StatementClass::kOther:
-      return ::grpc::Status(
-          ::grpc::StatusCode::UNIMPLEMENTED,
-          absl::StrCat("QueryService::ExecuteQuery: statement kind ",
-                       stmt->node_kind_string(),
-                       " is not supported by the emulator"));
-  }
+// DDL path: run `ExecuteDdl` and propagate any failure. Successful
+// DDL emits an empty stream; the gateway's "DDL succeeded" envelope
+// shape relies on the zero-message reply.
+::grpc::Status EmitDdlResult(backend::engine::Engine* engine,
+                             const backend::engine::QueryRequest& request,
+                             ::googlesql::Catalog* catalog) {
+  absl::Status ddl_status = engine->ExecuteDdl(request, catalog);
+  if (!ddl_status.ok()) return AnalyzeStatusToGrpc(ddl_status);
+  return ::grpc::Status::OK;
+}
 
+// SELECT path: emit the schema message, then one row message per
+// `RowSource::Next` until end-of-stream.
+::grpc::Status StreamRows(
+    backend::engine::Engine* engine,
+    const backend::engine::QueryRequest& request,
+    ::googlesql::Catalog* catalog,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
-      active_engine->ExecuteQuery(engine_request, &catalog);
-  if (!source_or.ok()) {
-    return AnalyzeStatusToGrpc(source_or.status());
-  }
+      engine->ExecuteQuery(request, catalog);
+  if (!source_or.ok()) return AnalyzeStatusToGrpc(source_or.status());
   std::unique_ptr<backend::engine::RowSource> source =
       std::move(source_or).value();
   if (source == nullptr) {
@@ -544,9 +494,7 @@ QueryService::QueryService(backend::storage::Storage* storage,
   backend::storage::Row row;
   while (true) {
     absl::StatusOr<bool> next = source->Next(&row);
-    if (!next.ok()) {
-      return AnalyzeStatusToGrpc(next.status());
-    }
+    if (!next.ok()) return AnalyzeStatusToGrpc(next.status());
     if (!*next) break;
     v1::QueryResultRow row_message;
     for (const auto& cell : row.cells) {
@@ -559,6 +507,84 @@ QueryService::QueryService(backend::storage::Storage* storage,
     }
   }
   return ::grpc::Status::OK;
+}
+
+}  // namespace
+
+::grpc::Status StreamQueryResults(
+    backend::storage::Storage* storage,
+    const v1::QueryRequest& request,
+    const std::function<bool(const v1::QueryResultRow&)>& write,
+    backend::engine::Engine* engine) {
+  ::grpc::Status validated = ValidateQueryRequest(storage, request, write);
+  if (!validated.ok()) return validated;
+
+  // The catalog adapter materializes `googlesql::Table*`s out of
+  // `storage` lazily; its `TypeFactory` must outlive the
+  // RowSource the engine returns because the iterator's value
+  // pointers reach back into the catalog's type allocations. We
+  // therefore pin both the type factory and the catalog as locals
+  // here for the duration of the stream.
+  ::googlesql::TypeFactory type_factory;
+  ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
+  backend::catalog::GoogleSqlCatalog catalog(request.project_id(),
+                                             storage,
+                                             &type_factory,
+                                             analyzer_options.language());
+
+  // Pre-classify the statement so we can pick the right engine entry
+  // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
+  // and reject DDL with a friendly UNIMPLEMENTED. We pay for one
+  // analyzer pass here even though the engine re-analyzes inside
+  // `PreparedQuery::Prepare` / `PreparedModify::Prepare`; the cost is
+  // dominated by the catalog setup and a follow-up will fold the
+  // two analyses together.
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
+  absl::Status classify_status =
+      ::googlesql::AnalyzeStatement(request.sql(),
+                                    analyzer_options,
+                                    &catalog,
+                                    &type_factory,
+                                    &classify_output);
+  if (!classify_status.ok()) return AnalyzeStatusToGrpc(classify_status);
+  if (classify_output == nullptr ||
+      classify_output->resolved_statement() == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "QueryService::ExecuteQuery: analyzer returned "
+                          "no resolved statement");
+  }
+  const ::googlesql::ResolvedStatement* stmt =
+      classify_output->resolved_statement();
+  const StatementClass cls = ClassifyStatement(stmt->node_kind());
+
+  // Engine selection: the production wire path
+  // (`binaries/emulator_main`) always supplies a DuckDB engine. Unit
+  // tests must construct one too; we no longer fall back to a
+  // per-call default engine because the reference-impl engine has
+  // been removed.
+  if (engine == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        "QueryService::ExecuteQuery: engine backend is not configured");
+  }
+  backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+
+  switch (cls) {
+    case StatementClass::kSelect:
+      return StreamRows(engine, engine_request, &catalog, write);
+    case StatementClass::kDml:
+      return EmitDmlStats(engine, engine_request, &catalog, write);
+    case StatementClass::kDdl:
+      return EmitDdlResult(engine, engine_request, &catalog);
+    case StatementClass::kOther:
+      return ::grpc::Status(
+          ::grpc::StatusCode::UNIMPLEMENTED,
+          absl::StrCat("QueryService::ExecuteQuery: statement kind ",
+                       stmt->node_kind_string(),
+                       " is not supported by the emulator"));
+  }
+  return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                        "QueryService::ExecuteQuery: unreachable cls");
 }
 
 }  // namespace frontend
