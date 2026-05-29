@@ -66,19 +66,32 @@ def _eprint(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-def _run_aquery(target: str) -> dict:
+def _run_aquery(targets: list[str]) -> dict:
     """Run `bazel aquery --output=jsonproto` and return the parsed JSON.
+
+    `targets` is a list of Bazel labels — the script unions their
+    transitive `deps()` so the resulting compilation database covers
+    both the production binary and every first-party `cc_test`. The
+    test-target half matters because `task lint:cpp:tidy` lints
+    `*_test.cc` files alongside production sources; without the test
+    deps the test TUs would either be missing from the DB entirely
+    or fall back to clang's default include chain (no `gtest/gtest.h`,
+    no `gmock/gmock.h`).
 
     We deliberately avoid `--output=textproto` here — the JSON
     encoding is stable across Bazel versions and lets us walk the
     response with the stdlib alone.
     """
 
+    if not targets:
+        _eprint("compile_db: at least one --target is required")
+        sys.exit(2)
+    expr_inner = " + ".join(f"deps({t})" for t in targets)
     cmd = [
         "bazel",
         "aquery",
         "--output=jsonproto",
-        f'mnemonic("CppCompile", deps({target}))',
+        f'mnemonic("CppCompile", {expr_inner})',
     ]
     proc = subprocess.run(
         cmd,
@@ -95,6 +108,82 @@ def _run_aquery(target: str) -> dict:
     return json.loads(raw)
 
 
+def _promote_external_includes_to_system(args: list[str]) -> list[str]:
+    """Outrank `/usr/include`-resident copies of bazel-built deps.
+
+    Bazel emits external deps as `-iquote <path>` (quote-only). That
+    is fine for first-party `#include "absl/log/log.h"` style
+    references, but angle-form `#include <absl/...>` inside protobuf
+    /  googlesql falls back to clang's default system search path —
+    which on a stock Ubuntu box is `/usr/include/absl/...` (system
+    Abseil 20220623, well older than what protobuf expects). The
+    resulting compile-time `static_assert` errors and `enum-cast` ana-
+    lyzer hits flood `task lint:cpp:tidy`.
+
+    The fix promotes every `-iquote <path>` whose `<path>` lives
+    under `external/` or `bazel-out/.../external/` to also be emitted
+    as `-isystem <path>` at the front of the args (right after the
+    compiler), so angle-include lookup resolves through the
+    bazel-built copy before clang falls back to its default include
+    chain. Treating them as "system" headers also suppresses
+    warnings from those translation units, which we never want to
+    surface anyway.
+    """
+
+    if not args:
+        return args
+    compiler, rest = args[0], args[1:]
+    system_prefix: list[str] = []
+    seen: set[str] = set()
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        if a == "-iquote" and i + 1 < len(rest):
+            path = rest[i + 1]
+            if (
+                "external/" in path or path.startswith("external/")
+            ) and path not in seen:
+                system_prefix.extend(["-isystem", path])
+                seen.add(path)
+            i += 2
+            continue
+        i += 1
+    return [compiler, *system_prefix, *rest]
+
+
+def _bazel_exec_root(repo_root: Path) -> Path:
+    """Resolve the path that every `external/...` / `bazel-out/...`
+    argument in a `bazel aquery` response is relative to.
+
+    `bazel aquery` emits compile-action paths the same way Bazel
+    spawns the actual compile subprocess: relative to the **execroot**
+    (`<bazel cache>/execroot/_main`), not the workspace root. The
+    workspace root only contains `bazel-out/...` indirectly (via the
+    `bazel-out` convenience symlink) and never contains `external/...`
+    at all — the source headers under `external/abseil-cpp~/absl/log/`
+    live inside the execroot's `external/` directory, while the
+    workspace-root `bazel-out/.../bin/external/abseil-cpp~/` only
+    holds the compiled outputs (`.so` + `.cppmap`).
+
+    Without this resolution clang-tidy CDs into the workspace root,
+    `-iquote external/abseil-cpp~` resolves to a non-existent
+    directory, and angle-form `#include <absl/log/absl_check.h>`
+    inside protobuf either falls back to a stale `/usr/include/absl`
+    or fails to find the header at all.
+
+    Prefer the `bazel-<workspace>` convenience symlink Bazel writes
+    next to the `MODULE.bazel`; fall back to the workspace root if
+    the symlink is missing (cold checkout where no `bazel build` has
+    materialised it yet — the caller surfaces the resulting error
+    when aquery itself fails).
+    """
+
+    candidate = repo_root / f"bazel-{repo_root.name}"
+    if candidate.is_symlink() or candidate.is_dir():
+        return candidate.resolve()
+    return repo_root
+
+
 def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
     """Translate `aquery` actions into a JSON compilation database.
 
@@ -108,6 +197,7 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
     references that need a separate walk).
     """
 
+    directory = str(_bazel_exec_root(repo_root))
     out: list[dict] = []
     for action in aquery.get("actions", []):
         if action.get("mnemonic") != "CppCompile":
@@ -120,12 +210,13 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
             continue
         if not any(source.startswith(p) for p in FIRST_PARTY_PREFIXES):
             continue
+        args = _promote_external_includes_to_system(args)
         # `compile_commands.json` requires either a `command` string
         # or an `arguments` list. We use the latter so quoting stays
         # unambiguous on long invocations with embedded spaces.
         out.append(
             {
-                "directory": str(repo_root),
+                "directory": directory,
                 "file": source,
                 "arguments": args,
             }
@@ -153,7 +244,12 @@ def main() -> int:
     parser.add_argument(
         "--target",
         required=True,
-        help="Bazel label whose dependency graph clang-tidy should index",
+        action="append",
+        help=(
+            "Bazel label whose dependency graph clang-tidy should index. "
+            "Pass `--target` repeatedly to union the deps of several labels "
+            "(e.g. once for the production binary and once per test target)."
+        ),
     )
     parser.add_argument(
         "--output",

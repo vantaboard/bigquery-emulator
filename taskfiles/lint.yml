@@ -312,8 +312,21 @@ tasks:
           echo 'lint:cpp:compile-commands: tools/lint/cpp/compile_db.py is missing.' >&2
           exit 1
         fi
+        # Discover every first-party `cc_test` so the resulting
+        # compilation database covers gtest/gmock-using test TUs
+        # alongside the production binary. Without this, clang-tidy
+        # sees `*_test.cc` with no entry and falls back to the
+        # default include chain (no `gtest/gtest.h`, no
+        # `gmock/gmock.h`).
+        test_targets=$(bazel query \
+          'kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)' \
+          2>/dev/null | tr '\n' ' ')
+        target_args=( --target //binaries/emulator_main:emulator_main )
+        for t in $test_targets; do
+          target_args+=( --target "$t" )
+        done
         python3 tools/lint/cpp/compile_db.py \
-          --target //binaries/emulator_main:emulator_main \
+          "${target_args[@]}" \
           --output compile_commands.json
 
   cpp:test:
@@ -377,10 +390,66 @@ tasks:
         # suppression markers if needed; `--error-exitcode=1` makes a
         # finding fail CI without needing extra parsing.
         # shellcheck disable=SC2086  # intentional word-split for the file list
+        # `--language=c++` + `--std=c++20` matches the Bazel toolchain
+        # so cppcheck does not flag every `namespace foo {` as invalid
+        # C or treat every `TEST_F(...) { ... }` macro expansion as a
+        # syntax error. Without those flags it ran in
+        # auto-detect-from-extension mode and parsed our headers as C,
+        # which fired ~30 false-positive [syntaxError] entries.
+        #
+        # The `--suppress=*` block below silences known categories of
+        # false positive that come from cppcheck's necessarily-shallow
+        # view of our translation units:
+        #
+        #   * syntaxError:*_test.cc — gtest's `TEST` / `TEST_F` macros
+        #     expand to a free-standing function definition that
+        #     cppcheck cannot recover from without parsing the gtest
+        #     headers (which would re-introduce missingIncludeSystem
+        #     noise). The clang-tidy lane already parses these files
+        #     correctly, so duplicating the check here adds no value.
+        #
+        #   * missingReturn — fires on every member declared with
+        #     `ABSL_GUARDED_BY(mu_)` because cppcheck parses the
+        #     annotation as a function signature instead of a thread
+        #     annotation attribute.
+        #
+        #   * unusedStructMember — cppcheck only sees a single TU at a
+        #     time, so any DTO field consumed across translation units
+        #     (every field of `Row`, `ColumnSchema`, `QueryRequest`,
+        #     `Options`, …) looks unused.
+        #
+        #   * useStlAlgorithm — the loops it flags either have an
+        #     early-return on the first hit (which `std::any_of`
+        #     awkwardly emulates) or call themselves recursively, so
+        #     converting them to `std::transform` reduces clarity
+        #     without removing the helper function.
+        #
+        #   * invalidPrintfArgType_s in binaries/emulator_main/main.cc
+        #     — `__VERSION__` and `__clang_version__` are predefined
+        #     `const char*` macros (set by GCC/clang); cppcheck does
+        #     not model the predefines and infers `int`.
+        #
+        #   * knownConditionTrueFalse in
+        #     tools/googlesql-prebuilt/smoke/smoke_wrappers.cc — the
+        #     smoke check intentionally compares the address of a
+        #     statically-linked symbol to zero so that the link step
+        #     fails loudly if the symbol drops out; the address is by
+        #     definition non-null but the comparison is the point.
+        #
+        # `--error-exitcode=1` still makes any *new* category of finding
+        # fail the lint lane.
         cppcheck \
+          --language=c++ \
+          --std=c++20 \
           --enable=warning,style,performance,portability \
           --inline-suppr \
           --error-exitcode=1 \
           --suppress=missingIncludeSystem \
+          --suppress=syntaxError:*_test.cc \
+          --suppress=missingReturn \
+          --suppress=unusedStructMember \
+          --suppress=useStlAlgorithm \
+          --suppress=invalidPrintfArgType_s:binaries/emulator_main/main.cc \
+          --suppress=knownConditionTrueFalse:tools/googlesql-prebuilt/smoke/smoke_wrappers.cc \
           --quiet \
           $files
