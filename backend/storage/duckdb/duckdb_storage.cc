@@ -114,6 +114,57 @@ absl::StatusOr<std::string> RenderCellLiteral(
 // the storage layer compatible with the wire-shape stringification
 // the gateway performs while still surfacing malformed values as a
 // CAST failure from DuckDB rather than silently storing zero.
+// Render the DuckDB literal for a FLOAT64 cell. Mirrors the
+// counterpart in `duckdb_engine.cc::RenderFloatLiteral`; kept
+// duplicated for now (see follow-up de-dup task).
+std::string RenderFloatLiteral(const Value& cell) {
+  if (cell.kind() == Value::Kind::kString) {
+    return absl::StrCat("CAST('",
+                        EscapeStringLiteralInner(cell.string_value()),
+                        "' AS DOUBLE)");
+  }
+  const double v = cell.float64_value();
+  if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
+  if (std::isinf(v)) {
+    return std::string(v > 0 ? "'Infinity'::DOUBLE" : "'-Infinity'::DOUBLE");
+  }
+  return absl::StrFormat("%.17g", v);
+}
+
+// Render the DuckDB STRUCT literal `{'k1': v1, ...}` for a STRUCT
+// cell. Mirrors the counterpart in
+// `duckdb_engine.cc::RenderStructLiteral` (see follow-up de-dup task).
+absl::StatusOr<std::string> RenderStructLiteral(
+    const Value& cell, const schema::ColumnSchema& column) {
+  if (cell.kind() != Value::Kind::kStruct) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("AppendRows: column '",
+                     column.name,
+                     "' expects STRUCT but row provided non-struct cell"));
+  }
+  const auto& fields = cell.struct_value();
+  if (fields.size() != column.fields.size()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("AppendRows: STRUCT column '",
+                     column.name,
+                     "' has ",
+                     column.fields.size(),
+                     " fields but row provided ",
+                     fields.size()));
+  }
+  std::string out = "{";
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (i > 0) absl::StrAppend(&out, ", ");
+    absl::StrAppend(
+        &out, "'", EscapeStringLiteralInner(column.fields[i].name), "': ");
+    auto inner_or = RenderCellLiteral(fields[i], column.fields[i]);
+    if (!inner_or.ok()) return inner_or.status();
+    absl::StrAppend(&out, *inner_or);
+  }
+  absl::StrAppend(&out, "}");
+  return out;
+}
+
 absl::StatusOr<std::string> RenderScalarLiteral(
     const Value& cell, const schema::ColumnSchema& column) {
   switch (column.type) {
@@ -131,20 +182,8 @@ absl::StatusOr<std::string> RenderScalarLiteral(
                             "' AS BIGINT)");
       }
       return absl::StrCat(cell.int64_value());
-    case schema::ColumnType::kFloat64: {
-      if (cell.kind() == Value::Kind::kString) {
-        return absl::StrCat("CAST('",
-                            EscapeStringLiteralInner(cell.string_value()),
-                            "' AS DOUBLE)");
-      }
-      const double v = cell.float64_value();
-      if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
-      if (std::isinf(v)) {
-        return std::string(v > 0 ? "'Infinity'::DOUBLE"
-                                 : "'-Infinity'::DOUBLE");
-      }
-      return absl::StrFormat("%.17g", v);
-    }
+    case schema::ColumnType::kFloat64:
+      return RenderFloatLiteral(cell);
     case schema::ColumnType::kString:
     case schema::ColumnType::kJson:
     case schema::ColumnType::kGeography:
@@ -174,35 +213,8 @@ absl::StatusOr<std::string> RenderScalarLiteral(
                           "' AS ",
                           schema::ToDuckDBType(column.type),
                           ")");
-    case schema::ColumnType::kStruct: {
-      if (cell.kind() != Value::Kind::kStruct) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("AppendRows: column '",
-                         column.name,
-                         "' expects STRUCT but row provided non-struct cell"));
-      }
-      const auto& fields = cell.struct_value();
-      if (fields.size() != column.fields.size()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("AppendRows: STRUCT column '",
-                         column.name,
-                         "' has ",
-                         column.fields.size(),
-                         " fields but row provided ",
-                         fields.size()));
-      }
-      std::string out = "{";
-      for (size_t i = 0; i < fields.size(); ++i) {
-        if (i > 0) absl::StrAppend(&out, ", ");
-        absl::StrAppend(
-            &out, "'", EscapeStringLiteralInner(column.fields[i].name), "': ");
-        auto inner_or = RenderCellLiteral(fields[i], column.fields[i]);
-        if (!inner_or.ok()) return inner_or.status();
-        absl::StrAppend(&out, *inner_or);
-      }
-      absl::StrAppend(&out, "}");
-      return out;
-    }
+    case schema::ColumnType::kStruct:
+      return RenderStructLiteral(cell, column);
     case schema::ColumnType::kArray:
     case schema::ColumnType::kUnknown:
       return absl::StrCat(
@@ -333,7 +345,7 @@ absl::Status RunSql(DuckDBStorage::Impl* impl, absl::string_view sql) {
   const std::string sql_str(sql);
   const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
   if (state != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
+    const auto* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return DuckDBError(absl::StatusCode::kInternal,
@@ -883,12 +895,12 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
   // the same shape the engines emit; the integration test does not
   // exercise repeated cells, so we keep this branch on the textual
   // path and revisit when the engine needs typed arrays. Future
-  // TODO: switch to `duckdb_result_get_chunk` for typed extraction
-  // without the lossy varchar round-trip.
+  // TODO(brighten-tompkins): switch to `duckdb_result_get_chunk` for typed
+  // extraction without the lossy varchar round-trip.
   if (column.mode == schema::ColumnMode::kRepeated ||
       column.type == schema::ColumnType::kArray ||
       column.type == schema::ColumnType::kStruct) {
-    char* str = ::duckdb_value_varchar(result, col, row);
+    auto* str = ::duckdb_value_varchar(result, col, row);
     Value out = Value::String(str == nullptr ? std::string("") : str);
     if (str != nullptr) ::duckdb_free(str);
     return out;
@@ -926,7 +938,7 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
     case schema::ColumnType::kArray:
     case schema::ColumnType::kStruct:
     case schema::ColumnType::kUnknown: {
-      char* str = ::duckdb_value_varchar(result, col, row);
+      auto* str = ::duckdb_value_varchar(result, col, row);
       Value out = Value::String(str == nullptr ? std::string("") : str);
       if (str != nullptr) ::duckdb_free(str);
       return out;
@@ -947,22 +959,25 @@ class VectorRowIterator : public RowIterator {
   }
 
  private:
-  std::vector<Row> rows_;
-  size_t pos_;
+  std::vector<Row> rows_{};
+  size_t pos_ = 0;
 };
 
 }  // namespace
 
-absl::Status DuckDBStorage::AppendRows(const TableId& id,
-                                       absl::Span<const Row> rows) {
-  absl::MutexLock lock(&mu_);
-  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+namespace {
+
+// Validate that `id` names an existing dataset + table on disk.
+// Returns the on-disk `meta` path on success so callers can read it
+// directly instead of recomputing it.
+absl::StatusOr<fs::path> EnsureTableMetaExists(const TableId& id,
+                                               const fs::path& ds_dir,
+                                               const fs::path& meta_path) {
   std::error_code ec;
   if (!fs::exists(ds_dir, ec)) {
     return absl::NotFoundError(
         absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
   }
-  const fs::path meta_path = TableMetaPath(id);
   if (!fs::exists(meta_path, ec)) {
     return absl::NotFoundError(absl::StrCat("table not found: ",
                                             id.project_id,
@@ -971,17 +986,20 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
                                             ".",
                                             id.table_id));
   }
-  if (rows.empty()) return absl::OkStatus();
+  return meta_path;
+}
 
-  auto contents_or = ReadFile(meta_path);
-  if (!contents_or.ok()) return contents_or.status();
-  auto schema_or = ParseTableMetaJson(*contents_or);
-  if (!schema_or.ok()) return schema_or.status();
-  const schema::TableSchema& schema = *schema_or;
-  const size_t ncols = schema.columns.size();
+// Confirm every row's cell count matches the table's column count.
+// `tag` flows into the error message so the AppendRows / OverwriteRows
+// callers report which entry point caught the mismatch.
+absl::Status ValidateRowsShape(absl::string_view tag,
+                               const TableId& id,
+                               absl::Span<const Row> rows,
+                               size_t ncols) {
   for (size_t i = 0; i < rows.size(); ++i) {
     if (rows[i].cells.size() != ncols) {
-      return absl::InvalidArgumentError(absl::StrCat("AppendRows: row[",
+      return absl::InvalidArgumentError(absl::StrCat(tag,
+                                                     ": row[",
                                                      i,
                                                      "] has ",
                                                      rows[i].cells.size(),
@@ -996,6 +1014,90 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
                                                      " column(s)"));
     }
   }
+  return absl::OkStatus();
+}
+
+// Render `INSERT INTO <tmp_table> VALUES (...), (...), ...` for the
+// caller's row batch. Returns the literal-render error on the first
+// failing cell so the caller can tear the temp table down.
+absl::StatusOr<std::string> BuildBatchInsertSql(
+    absl::string_view tmp_table,
+    absl::Span<const Row> rows,
+    const schema::TableSchema& schema) {
+  const size_t ncols = schema.columns.size();
+  std::string insert_sql;
+  absl::StrAppend(&insert_sql, "INSERT INTO ", tmp_table, " VALUES ");
+  for (size_t r = 0; r < rows.size(); ++r) {
+    if (r > 0) absl::StrAppend(&insert_sql, ", ");
+    absl::StrAppend(&insert_sql, "(");
+    for (size_t c = 0; c < ncols; ++c) {
+      if (c > 0) absl::StrAppend(&insert_sql, ", ");
+      auto cell_or = RenderCellLiteral(rows[r].cells[c], schema.columns[c]);
+      if (!cell_or.ok()) return cell_or.status();
+      absl::StrAppend(&insert_sql, *cell_or);
+    }
+    absl::StrAppend(&insert_sql, ")");
+  }
+  return insert_sql;
+}
+
+// COPY the temp table to `tmp_path`, then atomically rename it over
+// `parquet_path`. Cleans up the temp table + temp file on any error.
+// `tag` flows into the error message so AppendRows / OverwriteRows
+// surface which caller hit the failure.
+absl::Status SnapshotTempTableToParquet(absl::string_view tag,
+                                        DuckDBStorage::Impl* impl,
+                                        absl::string_view tmp_table,
+                                        const std::string& tmp_path,
+                                        const std::string& parquet_path) {
+  std::error_code ec;
+  fs::remove(tmp_path, ec);
+  auto status = RunSql(impl,
+                       absl::StrCat("COPY ",
+                                    tmp_table,
+                                    " TO '",
+                                    EscapeStringLiteralInner(tmp_path),
+                                    "' (FORMAT PARQUET)"));
+  if (!status.ok()) {
+    TryDropTempTable(impl, std::string(tmp_table));
+    fs::remove(tmp_path, ec);
+    return status;
+  }
+  fs::rename(tmp_path, parquet_path, ec);
+  if (ec) {
+    TryDropTempTable(impl, std::string(tmp_table));
+    fs::remove(tmp_path, ec);
+    return absl::Status(absl::StatusCode::kInternal,
+                        absl::StrCat(tag,
+                                     ": failed to rename ",
+                                     tmp_path,
+                                     " -> ",
+                                     parquet_path,
+                                     ": ",
+                                     ec.message()));
+  }
+  TryDropTempTable(impl, std::string(tmp_table));
+  return absl::OkStatus();
+}
+
+}  // namespace
+
+absl::Status DuckDBStorage::AppendRows(const TableId& id,
+                                       absl::Span<const Row> rows) {
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  const fs::path meta_path = TableMetaPath(id);
+  auto meta_or = EnsureTableMetaExists(id, ds_dir, meta_path);
+  if (!meta_or.ok()) return meta_or.status();
+  if (rows.empty()) return absl::OkStatus();
+
+  auto contents_or = ReadFile(meta_path);
+  if (!contents_or.ok()) return contents_or.status();
+  auto schema_or = ParseTableMetaJson(*contents_or);
+  if (!schema_or.ok()) return schema_or.status();
+  const schema::TableSchema& schema = *schema_or;
+  auto valid = ValidateRowsShape("AppendRows", id, rows, schema.columns.size());
+  if (!valid.ok()) return valid;
 
   const std::string parquet_path = TableParquetPath(id);
   const std::string tmp_path = absl::StrCat(parquet_path, ".tmp");
@@ -1017,6 +1119,7 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // file is created by CreateTable so the normal path always has
   // one; a hand-curated dataset directory may not, in which case
   // we treat the table as empty.
+  std::error_code ec;
   if (fs::exists(parquet_path, ec)) {
     const std::string select_cols = RenderColumnIdentList(schema);
     status = RunSql(impl_.get(),
@@ -1037,105 +1140,38 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // for the whole batch. The literal renderer raises on shape
   // mismatches; on error we tear down the temp table and bail
   // without touching the parquet file.
-  std::string insert_sql;
-  absl::StrAppend(&insert_sql, "INSERT INTO ", tmp_table, " VALUES ");
-  for (size_t r = 0; r < rows.size(); ++r) {
-    if (r > 0) absl::StrAppend(&insert_sql, ", ");
-    absl::StrAppend(&insert_sql, "(");
-    for (size_t c = 0; c < ncols; ++c) {
-      if (c > 0) absl::StrAppend(&insert_sql, ", ");
-      auto cell_or = RenderCellLiteral(rows[r].cells[c], schema.columns[c]);
-      if (!cell_or.ok()) {
-        TryDropTempTable(impl_.get(), tmp_table);
-        return cell_or.status();
-      }
-      absl::StrAppend(&insert_sql, *cell_or);
-    }
-    absl::StrAppend(&insert_sql, ")");
+  auto insert_or = BuildBatchInsertSql(tmp_table, rows, schema);
+  if (!insert_or.ok()) {
+    TryDropTempTable(impl_.get(), tmp_table);
+    return insert_or.status();
   }
-  status = RunSql(impl_.get(), insert_sql);
+  status = RunSql(impl_.get(), *insert_or);
   if (!status.ok()) {
     TryDropTempTable(impl_.get(), tmp_table);
     return status;
   }
 
-  // 4. Write the rewritten table to a sibling tmp file so the
-  // rename in step 5 is the only window where readers see partial
-  // state — DuckDB's COPY itself is not atomic.
-  fs::remove(tmp_path, ec);
-  status = RunSql(impl_.get(),
-                  absl::StrCat("COPY ",
-                               tmp_table,
-                               " TO '",
-                               EscapeStringLiteralInner(tmp_path),
-                               "' (FORMAT PARQUET)"));
-  if (!status.ok()) {
-    TryDropTempTable(impl_.get(), tmp_table);
-    fs::remove(tmp_path, ec);
-    return status;
-  }
-
-  // 5. Atomic swap. POSIX rename(2) replaces the target on Linux
-  // so a concurrent reader either sees the old or the new snapshot,
-  // never a torn file.
-  fs::rename(tmp_path, parquet_path, ec);
-  if (ec) {
-    TryDropTempTable(impl_.get(), tmp_table);
-    fs::remove(tmp_path, ec);
-    return absl::Status(absl::StatusCode::kInternal,
-                        absl::StrCat("AppendRows: failed to rename ",
-                                     tmp_path,
-                                     " -> ",
-                                     parquet_path,
-                                     ": ",
-                                     ec.message()));
-  }
-  TryDropTempTable(impl_.get(), tmp_table);
-  return absl::OkStatus();
+  // 4 + 5. Snapshot to a sibling tmp parquet then atomic rename.
+  return SnapshotTempTableToParquet(
+      "AppendRows", impl_.get(), tmp_table, tmp_path, parquet_path);
 }
 
 absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
                                           absl::Span<const Row> rows) {
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
-  std::error_code ec;
-  if (!fs::exists(ds_dir, ec)) {
-    return absl::NotFoundError(
-        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
-  }
   const fs::path meta_path = TableMetaPath(id);
-  if (!fs::exists(meta_path, ec)) {
-    return absl::NotFoundError(absl::StrCat("table not found: ",
-                                            id.project_id,
-                                            ".",
-                                            id.dataset_id,
-                                            ".",
-                                            id.table_id));
-  }
+  auto meta_or = EnsureTableMetaExists(id, ds_dir, meta_path);
+  if (!meta_or.ok()) return meta_or.status();
 
   auto contents_or = ReadFile(meta_path);
   if (!contents_or.ok()) return contents_or.status();
   auto schema_or = ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
-  const size_t ncols = schema.columns.size();
-  for (size_t i = 0; i < rows.size(); ++i) {
-    if (rows[i].cells.size() != ncols) {
-      return absl::InvalidArgumentError(absl::StrCat("OverwriteRows: row[",
-                                                     i,
-                                                     "] has ",
-                                                     rows[i].cells.size(),
-                                                     " cell(s) but table ",
-                                                     id.project_id,
-                                                     ".",
-                                                     id.dataset_id,
-                                                     ".",
-                                                     id.table_id,
-                                                     " has ",
-                                                     ncols,
-                                                     " column(s)"));
-    }
-  }
+  auto valid =
+      ValidateRowsShape("OverwriteRows", id, rows, schema.columns.size());
+  if (!valid.ok()) return valid;
 
   const std::string parquet_path = TableParquetPath(id);
   const std::string tmp_path = absl::StrCat(parquet_path, ".tmp");
@@ -1152,56 +1188,20 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   if (!status.ok()) return status;
 
   if (!rows.empty()) {
-    std::string insert_sql;
-    absl::StrAppend(&insert_sql, "INSERT INTO ", tmp_table, " VALUES ");
-    for (size_t r = 0; r < rows.size(); ++r) {
-      if (r > 0) absl::StrAppend(&insert_sql, ", ");
-      absl::StrAppend(&insert_sql, "(");
-      for (size_t c = 0; c < ncols; ++c) {
-        if (c > 0) absl::StrAppend(&insert_sql, ", ");
-        auto cell_or = RenderCellLiteral(rows[r].cells[c], schema.columns[c]);
-        if (!cell_or.ok()) {
-          TryDropTempTable(impl_.get(), tmp_table);
-          return cell_or.status();
-        }
-        absl::StrAppend(&insert_sql, *cell_or);
-      }
-      absl::StrAppend(&insert_sql, ")");
+    auto insert_or = BuildBatchInsertSql(tmp_table, rows, schema);
+    if (!insert_or.ok()) {
+      TryDropTempTable(impl_.get(), tmp_table);
+      return insert_or.status();
     }
-    status = RunSql(impl_.get(), insert_sql);
+    status = RunSql(impl_.get(), *insert_or);
     if (!status.ok()) {
       TryDropTempTable(impl_.get(), tmp_table);
       return status;
     }
   }
 
-  fs::remove(tmp_path, ec);
-  status = RunSql(impl_.get(),
-                  absl::StrCat("COPY ",
-                               tmp_table,
-                               " TO '",
-                               EscapeStringLiteralInner(tmp_path),
-                               "' (FORMAT PARQUET)"));
-  if (!status.ok()) {
-    TryDropTempTable(impl_.get(), tmp_table);
-    fs::remove(tmp_path, ec);
-    return status;
-  }
-
-  fs::rename(tmp_path, parquet_path, ec);
-  if (ec) {
-    TryDropTempTable(impl_.get(), tmp_table);
-    fs::remove(tmp_path, ec);
-    return absl::Status(absl::StatusCode::kInternal,
-                        absl::StrCat("OverwriteRows: failed to rename ",
-                                     tmp_path,
-                                     " -> ",
-                                     parquet_path,
-                                     ": ",
-                                     ec.message()));
-  }
-  TryDropTempTable(impl_.get(), tmp_table);
-  return absl::OkStatus();
+  return SnapshotTempTableToParquet(
+      "OverwriteRows", impl_.get(), tmp_table, tmp_path, parquet_path);
 }
 
 namespace {
@@ -1227,7 +1227,7 @@ absl::Status ExecuteSelect(DuckDBStorage::Impl* impl,
   ::duckdb_result result;
   const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
   if (state != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
+    const auto* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return absl::InternalError(absl::StrCat(
