@@ -1,8 +1,10 @@
 #include "backend/engine/duckdb/duckdb_engine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -80,7 +82,7 @@ namespace {
 }
 
 absl::Status ValidateRequest(const QueryRequest& request,
-                             ::googlesql::Catalog* catalog) {
+                             const ::googlesql::Catalog* catalog) {
   if (catalog == nullptr) {
     return absl::FailedPreconditionError(
         "DuckDBEngine: catalog must be non-null");
@@ -124,8 +126,8 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
   }
 
  private:
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> output_;
-  schema::TableSchema schema_;
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output_{};
+  schema::TableSchema schema_{};
 };
 
 // Walks the resolved AST and collects every distinct
@@ -137,7 +139,14 @@ class TableScanCollector : public ::googlesql::ResolvedASTVisitor {
  public:
   absl::Status VisitResolvedTableScan(
       const ::googlesql::ResolvedTableScan* node) override {
-    if (node != nullptr && node->table() != nullptr) {
+    if (node == nullptr) {
+      // GoogleSQL never hands the visitor a null node, but the base
+      // class unconditionally dereferences `node` via DefaultVisit ->
+      // ChildrenAccept, so guarding here keeps the static analyzer
+      // happy and removes a real (if unreachable) NPE.
+      return absl::OkStatus();
+    }
+    if (node->table() != nullptr) {
       tables_.insert(node->table());
     }
     return ::googlesql::ResolvedASTVisitor::VisitResolvedTableScan(node);
@@ -148,7 +157,7 @@ class TableScanCollector : public ::googlesql::ResolvedASTVisitor {
   }
 
  private:
-  std::set<const ::googlesql::Table*> tables_;
+  std::set<const ::googlesql::Table*> tables_{};
 };
 
 // --- DuckDB SQL literal rendering -----------------------------------------
@@ -186,6 +195,58 @@ std::string RenderBlobLiteral(absl::string_view bytes) {
 absl::StatusOr<std::string> RenderCellLiteral(
     const storage::Value& cell, const schema::ColumnSchema& column);
 
+// Render the DuckDB literal for a FLOAT64 cell. Special-cases NaN /
+// +Inf / -Inf because DuckDB cannot parse them out of a bare numeric
+// literal; the typed cast lowers them through the IEEE-754 path
+// instead.
+std::string RenderFloatLiteral(const storage::Value& cell) {
+  if (cell.kind() == storage::Value::Kind::kString) {
+    return absl::StrCat("CAST('",
+                        EscapeStringLiteralInner(cell.string_value()),
+                        "' AS DOUBLE)");
+  }
+  const double v = cell.float64_value();
+  if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
+  if (std::isinf(v)) {
+    return std::string(v > 0 ? "'Infinity'::DOUBLE" : "'-Infinity'::DOUBLE");
+  }
+  return absl::StrFormat("%.17g", v);
+}
+
+// Render the DuckDB STRUCT literal `{'k1': v1, ...}` for a STRUCT
+// cell. Validates that the cell carries the expected struct shape
+// before recursing.
+absl::StatusOr<std::string> RenderStructLiteral(
+    const storage::Value& cell, const schema::ColumnSchema& column) {
+  if (cell.kind() != storage::Value::Kind::kStruct) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("DuckDBEngine: column '",
+                     column.name,
+                     "' expects STRUCT but row provided non-struct cell"));
+  }
+  const auto& fields = cell.struct_value();
+  if (fields.size() != column.fields.size()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("DuckDBEngine: STRUCT column '",
+                     column.name,
+                     "' has ",
+                     column.fields.size(),
+                     " fields but row provided ",
+                     fields.size()));
+  }
+  std::string out = "{";
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (i > 0) absl::StrAppend(&out, ", ");
+    absl::StrAppend(
+        &out, "'", EscapeStringLiteralInner(column.fields[i].name), "': ");
+    auto inner_or = RenderCellLiteral(fields[i], column.fields[i]);
+    if (!inner_or.ok()) return inner_or.status();
+    absl::StrAppend(&out, *inner_or);
+  }
+  absl::StrAppend(&out, "}");
+  return out;
+}
+
 absl::StatusOr<std::string> RenderScalarLiteral(
     const storage::Value& cell, const schema::ColumnSchema& column) {
   // Like `duckdb_storage.cc::RenderScalarLiteral`, we accept both the
@@ -211,20 +272,8 @@ absl::StatusOr<std::string> RenderScalarLiteral(
                             "' AS BIGINT)");
       }
       return absl::StrCat(cell.int64_value());
-    case schema::ColumnType::kFloat64: {
-      if (cell.kind() == storage::Value::Kind::kString) {
-        return absl::StrCat("CAST('",
-                            EscapeStringLiteralInner(cell.string_value()),
-                            "' AS DOUBLE)");
-      }
-      const double v = cell.float64_value();
-      if (std::isnan(v)) return std::string("'NaN'::DOUBLE");
-      if (std::isinf(v)) {
-        return std::string(v > 0 ? "'Infinity'::DOUBLE"
-                                 : "'-Infinity'::DOUBLE");
-      }
-      return absl::StrFormat("%.17g", v);
-    }
+    case schema::ColumnType::kFloat64:
+      return RenderFloatLiteral(cell);
     case schema::ColumnType::kString:
     case schema::ColumnType::kJson:
     case schema::ColumnType::kGeography:
@@ -251,35 +300,8 @@ absl::StatusOr<std::string> RenderScalarLiteral(
                           "' AS ",
                           schema::ToDuckDBType(column.type),
                           ")");
-    case schema::ColumnType::kStruct: {
-      if (cell.kind() != storage::Value::Kind::kStruct) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("DuckDBEngine: column '",
-                         column.name,
-                         "' expects STRUCT but row provided non-struct cell"));
-      }
-      const auto& fields = cell.struct_value();
-      if (fields.size() != column.fields.size()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("DuckDBEngine: STRUCT column '",
-                         column.name,
-                         "' has ",
-                         column.fields.size(),
-                         " fields but row provided ",
-                         fields.size()));
-      }
-      std::string out = "{";
-      for (size_t i = 0; i < fields.size(); ++i) {
-        if (i > 0) absl::StrAppend(&out, ", ");
-        absl::StrAppend(
-            &out, "'", EscapeStringLiteralInner(column.fields[i].name), "': ");
-        auto inner_or = RenderCellLiteral(fields[i], column.fields[i]);
-        if (!inner_or.ok()) return inner_or.status();
-        absl::StrAppend(&out, *inner_or);
-      }
-      absl::StrAppend(&out, "}");
-      return out;
-    }
+    case schema::ColumnType::kStruct:
+      return RenderStructLiteral(cell, column);
     case schema::ColumnType::kArray:
     case schema::ColumnType::kUnknown:
       return absl::StrCat(
@@ -393,8 +415,8 @@ class DuckDBRowSource : public RowSource {
  private:
   ::duckdb_database db_ = nullptr;
   ::duckdb_connection conn_ = nullptr;
-  ::duckdb_result result_;
-  schema::TableSchema schema_;
+  ::duckdb_result result_{};
+  schema::TableSchema schema_{};
   ::duckdb_data_chunk chunk_ = nullptr;
   ::idx_t chunk_size_ = 0;
   ::idx_t next_in_chunk_ = 0;
@@ -408,7 +430,7 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
   const std::string sql_str(sql);
   const auto state = ::duckdb_query(conn, sql_str.c_str(), &result);
   if (state != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
+    const auto* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return absl::InternalError(
@@ -814,7 +836,7 @@ absl::StatusOr<std::vector<storage::Row>> ReadBackTable(
   const std::string sql = absl::StrCat("SELECT * FROM ", quoted_table_name);
   ::duckdb_result result;
   if (::duckdb_query(conn, sql.c_str(), &result) != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
+    const auto* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return absl::InternalError(absl::StrCat(
@@ -1186,7 +1208,7 @@ absl::StatusOr<std::vector<storage::Row>> DrainTableRows(
   const std::string sql = absl::StrCat("SELECT * FROM ", quoted_table_name);
   ::duckdb_result result;
   if (::duckdb_query(conn, sql.c_str(), &result) != ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&result);
+    const auto* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
     return absl::InternalError(absl::StrCat(
@@ -1398,7 +1420,7 @@ absl::Status RunCreateTableAsSelect(
   ::duckdb_result ctas_result;
   if (::duckdb_query(conn, request.sql.c_str(), &ctas_result) !=
       ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&ctas_result);
+    const auto* err = ::duckdb_result_error(&ctas_result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&ctas_result);
     ::duckdb_disconnect(&conn);
@@ -1467,6 +1489,102 @@ absl::Status RunDropTable(storage::Storage& storage,
 // swallows the "column already present" case; we detect that by
 // looking up the new column's name in the existing schema before
 // touching the storage backend.
+// Translate a single RESOLVED_ADD_COLUMN_ACTION into a
+// `ColumnSchema`. Returns `nullopt` when `IF NOT EXISTS` skipped the
+// column because it already exists, or a non-OK status when the
+// action is malformed / refers to an already-existing column without
+// IF NOT EXISTS. Used by `RunAlterTableAddColumn` to keep the
+// per-action body off the parent's complexity budget.
+absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
+    const ::googlesql::ResolvedAlterAction* action,
+    const schema::TableSchema& existing,
+    const storage::TableId& target) {
+  if (action == nullptr) return std::optional<schema::ColumnSchema>{};
+  if (action->node_kind() != ::googlesql::RESOLVED_ADD_COLUMN_ACTION) {
+    return absl::UnimplementedError(
+        absl::StrCat("duckdb engine: ALTER TABLE action ",
+                     action->node_kind_string(),
+                     " is not implemented (only ADD COLUMN is supported)"));
+  }
+  const auto* add = action->GetAs<::googlesql::ResolvedAddColumnAction>();
+  const ::googlesql::ResolvedColumnDefinition* def = add->column_definition();
+  if (def == nullptr) {
+    return absl::InternalError(
+        "DuckDBEngine::ExecuteDdl: ADD COLUMN action has null column "
+        "definition");
+  }
+  const bool already = std::any_of(
+      existing.columns.begin(),
+      existing.columns.end(),
+      [&](const schema::ColumnSchema& c) { return c.name == def->name(); });
+  if (already) {
+    if (add->is_if_not_exists()) return std::optional<schema::ColumnSchema>{};
+    return absl::AlreadyExistsError(
+        absl::StrCat("duckdb engine: ALTER TABLE ADD COLUMN: column '",
+                     def->name(),
+                     "' already exists on table ",
+                     target.project_id,
+                     ".",
+                     target.dataset_id,
+                     ".",
+                     target.table_id));
+  }
+  v1::FieldSchema field;
+  absl::Status s =
+      backend::schema::TypeToFieldSchema(def->type(), def->name(), &field);
+  if (!s.ok()) return s;
+  ApplyAnnotations(def, &field);
+  absl::StatusOr<schema::ColumnSchema> column =
+      backend::schema::ColumnSchemaFromProto(field);
+  if (!column.ok()) return column.status();
+  return std::optional<schema::ColumnSchema>{*std::move(column)};
+}
+
+// Drain every row from `target` into an owned vector, padding each
+// row's cell list with NULL for every entry in `added_columns` so the
+// post-ALTER schema can be applied with a single OverwriteRows-style
+// rewrite. Used by `RunAlterTableAddColumn` to keep the row-rewrite
+// loop off the parent's complexity budget.
+absl::StatusOr<std::vector<storage::Row>> CopyRowsForAlter(
+    storage::Storage& storage,
+    const storage::TableId& target,
+    absl::Span<const schema::ColumnSchema> added_columns) {
+  absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
+      storage.ScanRows(target);
+  if (!iter.ok()) return iter.status();
+  std::vector<storage::Row> rows;
+  std::unique_ptr<storage::RowIterator> rows_iter = std::move(iter).value();
+  storage::Row row;
+  while (true) {
+    absl::StatusOr<bool> has = rows_iter->Next(&row);
+    if (!has.ok()) return has.status();
+    if (!*has) break;
+    rows.push_back(row);
+  }
+  for (storage::Row& r : rows) {
+    for (size_t i = 0; i < added_columns.size(); ++i) {
+      r.cells.push_back(storage::Value::Null());
+    }
+  }
+  return rows;
+}
+
+// Drop, recreate (with `new_schema`), and re-append `rows` to
+// `target` -- the scan-and-rewrite implementation of ALTER TABLE ADD
+// COLUMN that this engine relies on because DuckDB's `ALTER TABLE`
+// does not propagate to the storage backend's catalog yet.
+absl::Status RebuildTableWithColumns(storage::Storage& storage,
+                                     const storage::TableId& target,
+                                     const schema::TableSchema& new_schema,
+                                     absl::Span<const storage::Row> rows) {
+  absl::Status dropped = storage.DropTable(target);
+  if (!dropped.ok()) return dropped;
+  absl::Status created = storage.CreateTable(target, new_schema);
+  if (!created.ok()) return created;
+  if (rows.empty()) return absl::OkStatus();
+  return storage.AppendRows(target, rows);
+}
+
 absl::Status RunAlterTableAddColumn(
     storage::Storage& storage,
     absl::string_view project_id,
@@ -1495,87 +1613,27 @@ absl::Status RunAlterTableAddColumn(
   std::vector<schema::ColumnSchema> added_columns;
   added_columns.reserve(stmt->alter_action_list_size());
   for (int i = 0; i < stmt->alter_action_list_size(); ++i) {
-    const ::googlesql::ResolvedAlterAction* action = stmt->alter_action_list(i);
-    if (action == nullptr) continue;
-    if (action->node_kind() != ::googlesql::RESOLVED_ADD_COLUMN_ACTION) {
-      return absl::UnimplementedError(
-          absl::StrCat("duckdb engine: ALTER TABLE action ",
-                       action->node_kind_string(),
-                       " is not implemented (only ADD COLUMN is supported)"));
-    }
-    const auto* add = action->GetAs<::googlesql::ResolvedAddColumnAction>();
-    const ::googlesql::ResolvedColumnDefinition* def = add->column_definition();
-    if (def == nullptr) {
-      return absl::InternalError(
-          "DuckDBEngine::ExecuteDdl: ADD COLUMN action has null column "
-          "definition");
-    }
-    // Skip when IF NOT EXISTS and the column is already present.
-    bool already = false;
-    for (const schema::ColumnSchema& c : existing->columns) {
-      if (c.name == def->name()) {
-        already = true;
-        break;
-      }
-    }
-    if (already) {
-      if (add->is_if_not_exists()) continue;
-      return absl::AlreadyExistsError(
-          absl::StrCat("duckdb engine: ALTER TABLE ADD COLUMN: column '",
-                       def->name(),
-                       "' already exists on table ",
-                       target->project_id,
-                       ".",
-                       target->dataset_id,
-                       ".",
-                       target->table_id));
-    }
-    v1::FieldSchema field;
-    absl::Status s =
-        backend::schema::TypeToFieldSchema(def->type(), def->name(), &field);
-    if (!s.ok()) return s;
-    ApplyAnnotations(def, &field);
-    absl::StatusOr<schema::ColumnSchema> column =
-        backend::schema::ColumnSchemaFromProto(field);
+    absl::StatusOr<std::optional<schema::ColumnSchema>> column =
+        ProcessAddColumnAction(stmt->alter_action_list(i), *existing, *target);
     if (!column.ok()) return column.status();
-    added_columns.push_back(*std::move(column));
+    if (column->has_value()) added_columns.push_back(*std::move(*column));
   }
   if (added_columns.empty()) return absl::OkStatus();
 
   // Scan rows under the *current* schema before we touch anything;
-  // the rewrite below pads every existing row's cell list with NULL
+  // `CopyRowsForAlter` pads every existing row's cell list with NULL
   // for each newly added column so storage's per-row shape stays
   // aligned with the post-ALTER schema.
-  absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
-      storage.ScanRows(*target);
-  if (!iter.ok()) return iter.status();
-  std::vector<storage::Row> rows;
-  {
-    std::unique_ptr<storage::RowIterator> rows_iter = std::move(iter).value();
-    storage::Row row;
-    while (true) {
-      absl::StatusOr<bool> has = rows_iter->Next(&row);
-      if (!has.ok()) return has.status();
-      if (!*has) break;
-      rows.push_back(row);
-    }
-  }
+  absl::StatusOr<std::vector<storage::Row>> rows =
+      CopyRowsForAlter(storage, *target, added_columns);
+  if (!rows.ok()) return rows.status();
+
   schema::TableSchema new_schema = *existing;
   for (const schema::ColumnSchema& c : added_columns) {
     new_schema.columns.push_back(c);
   }
-  for (storage::Row& row : rows) {
-    for (size_t i = 0; i < added_columns.size(); ++i) {
-      row.cells.push_back(storage::Value::Null());
-    }
-  }
-
-  absl::Status dropped = storage.DropTable(*target);
-  if (!dropped.ok()) return dropped;
-  absl::Status created = storage.CreateTable(*target, new_schema);
-  if (!created.ok()) return created;
-  if (rows.empty()) return absl::OkStatus();
-  return storage.AppendRows(*target, absl::MakeConstSpan(rows));
+  return RebuildTableWithColumns(
+      storage, *target, new_schema, absl::MakeConstSpan(*rows));
 }
 
 }  // namespace
