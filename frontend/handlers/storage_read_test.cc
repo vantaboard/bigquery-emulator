@@ -54,7 +54,8 @@ fs::path MakeTempDataDir(absl::string_view prefix) {
   const char* tmpdir_env = std::getenv("TMPDIR");
   const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
   std::random_device rd;
-  std::mt19937_64 rng(rd());
+  std::seed_seq seed{rd(), rd()};
+  std::mt19937_64 rng(seed);
   fs::path out = fs::path(tmpdir) /
                  absl::StrCat("bqemu-", std::string(prefix), "-", rng());
   std::error_code ec;
@@ -119,9 +120,9 @@ class StorageReadServiceTest : public ::testing::Test {
     return req;
   }
 
-  fs::path data_dir_;
-  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
-  std::unique_ptr<StorageReadService> service_;
+  fs::path data_dir_{};
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_{};
+  std::unique_ptr<StorageReadService> service_{};
 };
 
 // ---------------------------------------------------------------------------
@@ -435,12 +436,12 @@ class StorageReadGrpcTest : public ::testing::Test {
             .ok());
   }
 
-  fs::path data_dir_;
-  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
-  std::unique_ptr<StorageReadService> service_;
-  std::unique_ptr<::grpc::Server> server_;
-  std::shared_ptr<::grpc::Channel> channel_;
-  std::unique_ptr<v1::StorageRead::Stub> stub_;
+  fs::path data_dir_{};
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_{};
+  std::unique_ptr<StorageReadService> service_{};
+  std::unique_ptr<::grpc::Server> server_{};
+  std::shared_ptr<::grpc::Channel> channel_{};
+  std::unique_ptr<v1::StorageRead::Stub> stub_{};
 };
 
 TEST_F(StorageReadGrpcTest, ReadRowsRoundTripsRowsInOrder) {

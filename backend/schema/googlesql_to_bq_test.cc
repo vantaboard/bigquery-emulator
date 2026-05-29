@@ -32,12 +32,12 @@ using ::googlesql::TypeFactory;
 
 class TypeReflectionTest : public ::testing::Test {
  protected:
-  TypeFactory factory_;
+  TypeFactory factory_{};
 };
 
 TEST_F(TypeReflectionTest, ScalarsRoundTripToBigQueryNames) {
   struct Case {
-    const Type* type;
+    const Type* type = nullptr;
     absl::string_view expected;
   };
   const Case cases[] = {

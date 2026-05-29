@@ -36,7 +36,8 @@ class DuckDBStorageTest : public ::testing::Test {
     const char* tmpdir_env = std::getenv("TMPDIR");
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
-    std::mt19937_64 rng(rd());
+    std::seed_seq seed{rd(), rd()};
+    std::mt19937_64 rng(seed);
     data_dir_ =
         fs::path(tmpdir) / absl::StrCat("bqemu-duckdb-storage-test-", rng());
     std::error_code ec;
@@ -48,7 +49,7 @@ class DuckDBStorageTest : public ::testing::Test {
     fs::remove_all(data_dir_, ec);
   }
 
-  fs::path data_dir_;
+  fs::path data_dir_{};
 };
 
 // Two-column toy schema: an INT64 primary key and a STRING name.
@@ -554,7 +555,7 @@ TEST_F(DuckDBStorageTest, CreateReadStreamPredicateBeforeOffsetLimit) {
 
 TEST(SchemaToDuckDBType, RoundTripsAllPlanCoveredTypes) {
   struct Case {
-    schema::ColumnType bq;
+    schema::ColumnType bq = schema::ColumnType::kUnknown;
     absl::string_view duckdb;
   };
   const Case cases[] = {

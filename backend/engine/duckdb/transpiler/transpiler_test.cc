@@ -151,10 +151,10 @@ class TranspilerTest : public ::testing::Test {
     return project->expr_list(0)->expr();
   }
 
-  std::unique_ptr<::googlesql::TypeFactory> type_factory_;
-  std::unique_ptr<::googlesql::SimpleCatalog> catalog_;
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_;
-  std::unique_ptr<Transpiler> transpiler_;
+  std::unique_ptr<::googlesql::TypeFactory> type_factory_{};
+  std::unique_ptr<::googlesql::SimpleCatalog> catalog_{};
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
+  std::unique_ptr<Transpiler> transpiler_{};
 };
 
 // Subclass that publishes the protected `Emit*` family so the tests

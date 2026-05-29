@@ -41,7 +41,8 @@ class QueryServiceTest : public ::testing::Test {
     const char* tmpdir_env = std::getenv("TMPDIR");
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
-    std::mt19937_64 rng(rd());
+    std::seed_seq seed{rd(), rd()};
+    std::mt19937_64 rng(seed);
     data_dir_ = fs::path(tmpdir) / absl::StrCat("bqemu-query-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
@@ -97,10 +98,10 @@ class QueryServiceTest : public ::testing::Test {
     ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
   }
 
-  fs::path data_dir_;
-  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_;
-  std::unique_ptr<backend::engine::duckdb::DuckDBEngine> engine_;
-  std::unique_ptr<QueryService> service_;
+  fs::path data_dir_{};
+  std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_{};
+  std::unique_ptr<backend::engine::duckdb::DuckDBEngine> engine_{};
+  std::unique_ptr<QueryService> service_{};
 };
 
 TEST_F(QueryServiceTest, DryRunSelect1ReturnsSingleInt64Column) {
@@ -241,7 +242,7 @@ class MessageCollector {
   }
 
  private:
-  std::vector<v1::QueryResultRow> messages_;
+  std::vector<v1::QueryResultRow> messages_{};
 };
 
 TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {

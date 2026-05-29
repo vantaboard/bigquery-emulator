@@ -57,7 +57,8 @@ class DuckDBEngineTest : public ::testing::Test {
     const char* tmpdir_env = std::getenv("TMPDIR");
     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : "/tmp";
     std::random_device rd;
-    std::mt19937_64 rng(rd());
+    std::seed_seq seed{rd(), rd()};
+    std::mt19937_64 rng(seed);
     data_dir_ =
         fs::path(tmpdir) / absl::StrCat("bqemu-duckdb-engine-test-", rng());
     std::error_code ec;
@@ -122,8 +123,8 @@ class DuckDBEngineTest : public ::testing::Test {
   }
 
   struct CatalogBundle {
-    std::unique_ptr<::googlesql::TypeFactory> type_factory;
-    std::unique_ptr<catalog::GoogleSqlCatalog> catalog;
+    std::unique_ptr<::googlesql::TypeFactory> type_factory{};
+    std::unique_ptr<catalog::GoogleSqlCatalog> catalog{};
   };
   CatalogBundle MakeCatalog() {
     auto type_factory = std::make_unique<::googlesql::TypeFactory>();
@@ -132,9 +133,9 @@ class DuckDBEngineTest : public ::testing::Test {
     return {std::move(type_factory), std::move(catalog)};
   }
 
-  fs::path data_dir_;
-  std::unique_ptr<storage::duckdb::DuckDBStorage> storage_;
-  std::unique_ptr<DuckDBEngine> engine_;
+  fs::path data_dir_{};
+  std::unique_ptr<storage::duckdb::DuckDBStorage> storage_{};
+  std::unique_ptr<DuckDBEngine> engine_{};
 };
 
 TEST_F(DuckDBEngineTest, AnalyzeSelect1ReturnsInt64Column) {
