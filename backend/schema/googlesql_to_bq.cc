@@ -58,6 +58,65 @@ absl::string_view BqScalarName(::googlesql::TypeKind kind) {
   }
 }
 
+absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
+                                const std::string& nested_path,
+                                v1::FieldSchema* out);
+
+// Populate `*nested` (a STRUCT child field) for an ARRAY-typed
+// `field.type`. Sets the REPEATED mode + lowers the element type
+// through `FillScalarOrStruct`. ARRAY<ARRAY<...>> is rejected because
+// BigQuery has no wire shape for it.
+absl::Status FillArrayField(const ::googlesql::Type* array_type,
+                            const std::string& child_path,
+                            v1::FieldSchema* nested) {
+  const ::googlesql::Type* element = array_type->AsArray()->element_type();
+  if (element != nullptr && element->IsArray()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("field '",
+                     child_path,
+                     "': ARRAY<ARRAY<...>> is not representable in BigQuery"));
+  }
+  absl::Status s = FillScalarOrStruct(element, child_path, nested);
+  if (!s.ok()) return s;
+  nested->set_mode("REPEATED");
+  return absl::OkStatus();
+}
+
+// Lower the field list of a STRUCT type into `out->fields`. Caller
+// has already set `out->type` to "STRUCT". `nested_path` is the
+// dotted-path prefix used in error messages.
+absl::Status FillStructFields(const ::googlesql::StructType* st,
+                              const std::string& nested_path,
+                              v1::FieldSchema* out) {
+  for (int i = 0; i < st->num_fields(); ++i) {
+    const ::googlesql::StructType::StructField& field = st->field(i);
+    v1::FieldSchema* nested = out->add_fields();
+    // BigQuery requires every STRUCT field to be named; unnamed
+    // fields are an analyzer error elsewhere but we surface them
+    // here as well so the failure mode is consistent.
+    if (field.name.empty()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "field '",
+          nested_path,
+          "': STRUCT field #",
+          i,
+          " has no name; BigQuery requires a name for every nested field"));
+    }
+    nested->set_name(field.name);
+    const std::string child_path =
+        nested_path.empty() ? field.name
+                            : absl::StrCat(nested_path, ".", field.name);
+    if (field.type != nullptr && field.type->IsArray()) {
+      absl::Status s = FillArrayField(field.type, child_path, nested);
+      if (!s.ok()) return s;
+    } else {
+      absl::Status s = FillScalarOrStruct(field.type, child_path, nested);
+      if (!s.ok()) return s;
+    }
+  }
+  return absl::OkStatus();
+}
+
 // Fills `*out->type` + `out->fields` for a struct or scalar type.
 // `out->name` is set by the caller; `out->mode` is set by the caller
 // when needed (the public entrypoint handles REPEATED). `nested_path`
@@ -70,51 +129,14 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
     return absl::InvalidArgumentError(
         absl::StrCat("field '", nested_path, "': null type"));
   }
-  const ::googlesql::TypeKind kind = type->kind();
-  const absl::string_view scalar = BqScalarName(kind);
+  const absl::string_view scalar = BqScalarName(type->kind());
   if (!scalar.empty()) {
     out->set_type(std::string(scalar));
     return absl::OkStatus();
   }
   if (type->IsStruct()) {
     out->set_type("STRUCT");
-    const ::googlesql::StructType* st = type->AsStruct();
-    for (int i = 0; i < st->num_fields(); ++i) {
-      const ::googlesql::StructType::StructField& field = st->field(i);
-      v1::FieldSchema* nested = out->add_fields();
-      // BigQuery requires every STRUCT field to be named; unnamed
-      // fields are an analyzer error elsewhere but we surface them
-      // here as well so the failure mode is consistent.
-      if (field.name.empty()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "field '",
-            nested_path,
-            "': STRUCT field #",
-            i,
-            " has no name; BigQuery requires a name for every nested field"));
-      }
-      nested->set_name(field.name);
-      const std::string child_path =
-          nested_path.empty() ? field.name
-                              : absl::StrCat(nested_path, ".", field.name);
-      if (field.type != nullptr && field.type->IsArray()) {
-        const ::googlesql::Type* element =
-            field.type->AsArray()->element_type();
-        if (element != nullptr && element->IsArray()) {
-          return absl::InvalidArgumentError(absl::StrCat(
-              "field '",
-              child_path,
-              "': ARRAY<ARRAY<...>> is not representable in BigQuery"));
-        }
-        absl::Status s = FillScalarOrStruct(element, child_path, nested);
-        if (!s.ok()) return s;
-        nested->set_mode("REPEATED");
-      } else {
-        absl::Status s = FillScalarOrStruct(field.type, child_path, nested);
-        if (!s.ok()) return s;
-      }
-    }
-    return absl::OkStatus();
+    return FillStructFields(type->AsStruct(), nested_path, out);
   }
   // Unsupported kinds (PROTO, ENUM, INTERVAL, RANGE, GRAPH_ELEMENT,
   // EXTENDED, UUID, ...) fall through here. Surface the GoogleSQL
