@@ -34,6 +34,7 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node.h"
@@ -155,6 +156,27 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // we cannot lower yet, so the caller can propagate the empty-string
   // contract.
   std::string EmitFrameBound(const ::googlesql::ResolvedWindowFrameExpr* expr);
+
+  // Per-clause helpers for `EmitAnalyticScan`. Each returns:
+  //   * `""` when the clause is legally absent (e.g. no PARTITION BY)
+  //   * `kAnalyticBail` when the shape is not yet lowerable and the
+  //     caller must abandon the analytic emit and let the engine
+  //     fall back to the reference-impl evaluator.
+  //   * the SQL fragment otherwise.
+  // The bail sentinel keeps the helpers' empty-string-as-fallback
+  // contract from colliding with the legitimate "clause omitted"
+  // value.
+  static constexpr absl::string_view kAnalyticBail =
+      "\x01"
+      "bail";
+  std::string BuildPartitionClause(
+      const ::googlesql::ResolvedWindowPartitioning* p);
+  std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o);
+  std::string BuildFrameClause(const ::googlesql::ResolvedWindowFrame* wf);
+  std::string BuildAnalyticProjection(
+      const ::googlesql::ResolvedComputedColumnBase* col,
+      absl::string_view partition_clause,
+      absl::string_view order_clause);
 };
 
 }  // namespace transpiler

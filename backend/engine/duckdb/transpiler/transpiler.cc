@@ -518,26 +518,136 @@ std::string Transpiler::EmitLimitOffsetScan(
   return sql;
 }
 
+namespace {
+
+// Suffix for the OVER (...) ORDER BY direction + NULL ordering.
+std::string OrderByItemSuffix(const ::googlesql::ResolvedOrderByItem* item) {
+  const char* dir = item->is_descending() ? "DESC" : "ASC";
+  const char* nulls = "";
+  switch (item->null_order()) {
+    case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+      nulls = " NULLS FIRST";
+      break;
+    case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+      nulls = " NULLS LAST";
+      break;
+    case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
+    default:
+      break;
+  }
+  return absl::StrCat(" ", dir, nulls);
+}
+
+}  // namespace
+
+std::string Transpiler::BuildPartitionClause(
+    const ::googlesql::ResolvedWindowPartitioning* p) {
+  if (p == nullptr) return "";
+  // PARTITION BY hints and collations are BQ-specific; bail back to
+  // the reference-impl fallback.
+  if (!p->collation_list().empty() || p->hint_list_size() > 0) {
+    return std::string(kAnalyticBail);
+  }
+  std::vector<std::string> cols;
+  cols.reserve(p->partition_by_list_size());
+  for (int i = 0; i < p->partition_by_list_size(); ++i) {
+    std::string c = EmitColumnRef(p->partition_by_list(i));
+    if (c.empty()) return std::string(kAnalyticBail);
+    cols.push_back(std::move(c));
+  }
+  if (cols.empty()) return "";
+  return absl::StrCat("PARTITION BY ", absl::StrJoin(cols, ", "));
+}
+
+std::string Transpiler::BuildOrderClause(
+    const ::googlesql::ResolvedWindowOrdering* o) {
+  if (o == nullptr) return "";
+  if (o->hint_list_size() > 0) return std::string(kAnalyticBail);
+  std::vector<std::string> items;
+  items.reserve(o->order_by_item_list_size());
+  for (int i = 0; i < o->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* it = o->order_by_item_list(i);
+    if (it == nullptr || it->column_ref() == nullptr)
+      return std::string(kAnalyticBail);
+    if (it->collation_name() != nullptr) return std::string(kAnalyticBail);
+    std::string col = EmitColumnRef(it->column_ref());
+    if (col.empty()) return std::string(kAnalyticBail);
+    items.push_back(absl::StrCat(col, OrderByItemSuffix(it)));
+  }
+  if (items.empty()) return "";
+  return absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
+}
+
+std::string Transpiler::BuildFrameClause(
+    const ::googlesql::ResolvedWindowFrame* wf) {
+  if (wf == nullptr) return "";
+  const char* unit = nullptr;
+  switch (wf->frame_unit()) {
+    case ::googlesql::ResolvedWindowFrame::ROWS:
+      unit = "ROWS";
+      break;
+    case ::googlesql::ResolvedWindowFrame::RANGE:
+      unit = "RANGE";
+      break;
+    default:
+      return std::string(kAnalyticBail);
+  }
+  std::string start = EmitFrameBound(wf->start_expr());
+  if (start.empty()) return std::string(kAnalyticBail);
+  std::string end = EmitFrameBound(wf->end_expr());
+  if (end.empty()) return std::string(kAnalyticBail);
+  return absl::StrCat(unit, " BETWEEN ", start, " AND ", end);
+}
+
+std::string Transpiler::BuildAnalyticProjection(
+    const ::googlesql::ResolvedComputedColumnBase* col,
+    absl::string_view partition_clause,
+    absl::string_view order_clause) {
+  if (col == nullptr || col->expr() == nullptr) return "";
+  if (col->expr()->node_kind() !=
+      ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+    return "";
+  }
+  const auto* afn =
+      col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+  std::string fn_sql = EmitAnalyticFunctionCall(afn);
+  if (fn_sql.empty()) return "";
+
+  // Frame clause sits *inside* the OVER (...). DuckDB requires an
+  // ORDER BY for ROWS / RANGE frames; we leave that contract to the
+  // analyzer (which rejects malformed cases at AnalyzeStatement time)
+  // and just propagate the bounds verbatim.
+  std::string frame_clause = BuildFrameClause(afn->window_frame());
+  if (frame_clause == kAnalyticBail) return "";
+
+  std::vector<absl::string_view> over_parts;
+  if (!partition_clause.empty()) over_parts.push_back(partition_clause);
+  if (!order_clause.empty()) over_parts.push_back(order_clause);
+  if (!frame_clause.empty()) over_parts.push_back(frame_clause);
+  std::string over =
+      absl::StrCat("OVER (", absl::StrJoin(over_parts, " "), ")");
+  return absl::StrCat(
+      fn_sql, " ", over, " AS ", QuoteIdent(col->column().name()));
+}
+
 std::string Transpiler::EmitAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan* node) {
   // Emit `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [frame])
   // AS "<col>", ... FROM (<input>)` -- one projection per analytic
   // function across every group. The OVER clause lives at the group
   // level (PARTITION / ORDER BY) plus per-function (window_frame), so
-  // we walk the function-group list once and stitch the two together
-  // for each analytic call.
+  // we walk the function-group list once and delegate the per-clause
+  // assembly to `BuildPartitionClause` / `BuildOrderClause` /
+  // `BuildAnalyticProjection`.
   //
-  // Skiplisted shapes the first emit pass does not cover:
+  // Skiplisted shapes the first emit pass does not cover (each helper
+  // returns `kAnalyticBail` for these, which we propagate as the
+  // empty-string fallback contract):
   //   * Hint lists on the partition / order spec (PARTITION BY ...
   //     OPTIONS(...) and similar) -- BQ-specific.
   //   * Collation lists on PARTITION BY -- collations land separately.
   //   * The `partition_by` `parameter_list` -- lateral-correlated
   //     analytics; defer to the lateral-rewrite plan.
-  //
-  // If any sub-emit returns "" (analytic function not on the
-  // disposition table, frame bound we cannot lower, ...) we propagate
-  // the empty string up; the engine takes the reference-impl fallback
-  // for the whole query.
   if (node == nullptr) return "";
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
@@ -548,114 +658,27 @@ std::string Transpiler::EmitAnalyticScan(
         node->function_group_list(g);
     if (group == nullptr) return "";
 
-    std::string partition_clause;
-    if (group->partition_by() != nullptr) {
-      const auto* p = group->partition_by();
-      if (!p->collation_list().empty() || p->hint_list_size() > 0) {
-        return "";
-      }
-      std::vector<std::string> cols;
-      cols.reserve(p->partition_by_list_size());
-      for (int i = 0; i < p->partition_by_list_size(); ++i) {
-        std::string c = EmitColumnRef(p->partition_by_list(i));
-        if (c.empty()) return "";
-        cols.push_back(std::move(c));
-      }
-      if (!cols.empty()) {
-        partition_clause =
-            absl::StrCat("PARTITION BY ", absl::StrJoin(cols, ", "));
-      }
-    }
-
-    std::string order_clause;
-    if (group->order_by() != nullptr) {
-      const auto* o = group->order_by();
-      if (o->hint_list_size() > 0) return "";
-      std::vector<std::string> items;
-      items.reserve(o->order_by_item_list_size());
-      for (int i = 0; i < o->order_by_item_list_size(); ++i) {
-        const ::googlesql::ResolvedOrderByItem* it = o->order_by_item_list(i);
-        if (it == nullptr || it->column_ref() == nullptr) return "";
-        if (it->collation_name() != nullptr) return "";
-        std::string col = EmitColumnRef(it->column_ref());
-        if (col.empty()) return "";
-        const char* dir = it->is_descending() ? "DESC" : "ASC";
-        const char* nulls = "";
-        switch (it->null_order()) {
-          case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-            nulls = " NULLS FIRST";
-            break;
-          case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-            nulls = " NULLS LAST";
-            break;
-          case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
-          default:
-            break;
-        }
-        items.push_back(absl::StrCat(col, " ", dir, nulls));
-      }
-      if (!items.empty()) {
-        order_clause = absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
-      }
-    }
+    std::string partition_clause = BuildPartitionClause(group->partition_by());
+    if (partition_clause == kAnalyticBail) return "";
+    std::string order_clause = BuildOrderClause(group->order_by());
+    if (order_clause == kAnalyticBail) return "";
 
     for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-      const ::googlesql::ResolvedComputedColumnBase* col =
-          group->analytic_function_list(f);
-      if (col == nullptr || col->expr() == nullptr) return "";
-      if (col->expr()->node_kind() !=
-          ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
-        return "";
-      }
-      const auto* afn =
-          col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-      std::string fn_sql = EmitAnalyticFunctionCall(afn);
-      if (fn_sql.empty()) return "";
-
-      // Frame clause sits *inside* the OVER (...). DuckDB requires an
-      // ORDER BY for ROWS / RANGE frames; we leave that contract to
-      // the analyzer (which rejects malformed cases at AnalyzeStatement
-      // time) and just propagate the bounds verbatim.
-      std::string frame_clause;
-      if (afn->window_frame() != nullptr) {
-        const auto* wf = afn->window_frame();
-        const char* unit = nullptr;
-        switch (wf->frame_unit()) {
-          case ::googlesql::ResolvedWindowFrame::ROWS:
-            unit = "ROWS";
-            break;
-          case ::googlesql::ResolvedWindowFrame::RANGE:
-            unit = "RANGE";
-            break;
-          default:
-            return "";
-        }
-        std::string start = EmitFrameBound(wf->start_expr());
-        if (start.empty()) return "";
-        std::string end = EmitFrameBound(wf->end_expr());
-        if (end.empty()) return "";
-        frame_clause = absl::StrCat(unit, " BETWEEN ", start, " AND ", end);
-      }
-
-      std::vector<std::string> over_parts;
-      if (!partition_clause.empty()) over_parts.push_back(partition_clause);
-      if (!order_clause.empty()) over_parts.push_back(order_clause);
-      if (!frame_clause.empty()) over_parts.push_back(frame_clause);
-      std::string over =
-          absl::StrCat("OVER (", absl::StrJoin(over_parts, " "), ")");
-      projections.push_back(absl::StrCat(
-          fn_sql, " ", over, " AS ", QuoteIdent(col->column().name())));
+      std::string projection = BuildAnalyticProjection(
+          group->analytic_function_list(f), partition_clause, order_clause);
+      if (projection.empty()) return "";
+      projections.push_back(std::move(projection));
     }
   }
 
-  std::string select_list;
   if (projections.empty()) {
     // No analytic functions in any group is a malformed AST; the
     // analyzer would not produce it, but we guard so an unexpected
     // shape falls back rather than emitting illegal SQL.
     return "";
   }
-  select_list = absl::StrCat("*, ", absl::StrJoin(projections, ", "));
+  std::string select_list =
+      absl::StrCat("*, ", absl::StrJoin(projections, ", "));
   return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
 }
 
@@ -744,7 +767,7 @@ std::string Transpiler::EmitFunctionCall(
   if (name == "$make_array") {
     return absl::StrCat("[", absl::StrJoin(args, ", "), "]");
   }
-  const FnEntry* entry = LookupFunction(name);
+  const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: function '" << name
               << "' has no disposition; falling back to reference-impl";
@@ -816,7 +839,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (a.empty()) return "";
     args.push_back(std::move(a));
   }
-  const FnEntry* entry = LookupFunction(name);
+  const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << name
               << "' has no disposition; falling back to reference-impl";
@@ -885,7 +908,7 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     if (!args.empty()) return "";
     return "COUNT(*)";
   }
-  const FnEntry* entry = LookupFunction(name);
+  const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: analytic function '" << name
               << "' has no disposition; falling back to reference-impl";
