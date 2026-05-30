@@ -197,18 +197,79 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
 // Statements ----------------------------------------------------------------
 
 std::string Transpiler::EmitQueryStmt(
-    const ::googlesql::ResolvedQueryStmt* /*node*/) {
-  // ResolvedQueryStmt wiring lands with the project/output-column
-  // emit plan (`transpiler-emit-join-agg_e6b7c8d9`). Today the
-  // dispatcher returns "" so the engine falls back to reference-impl.
-  return "";
+    const ::googlesql::ResolvedQueryStmt* node) {
+  // Lower the inner `query()` scan and then apply the
+  // `output_column_list()` mapping as the final SELECT list, so the
+  // user-visible aliases (`SELECT id AS user_id ...`) land on the
+  // outermost projection. The inner scan emit already produces a
+  // self-contained SELECT, so we wrap it as a derived table and let
+  // each `ResolvedOutputColumn` rewrite the column reference into the
+  // user-facing name.
+  //
+  // Value-table queries (`SELECT AS VALUE ...`) collapse the row to a
+  // single anonymous value; DuckDB has no direct analog, so we fall
+  // back via the empty-string contract per `SHAPE_TRACKER.md`.
+  if (node == nullptr) return "";
+  if (node->is_value_table()) return "";
+  std::string inner = EmitScan(node->query());
+  if (inner.empty()) return "";
+  std::vector<std::string> outputs;
+  outputs.reserve(node->output_column_list_size());
+  for (int i = 0; i < node->output_column_list_size(); ++i) {
+    std::string oc = EmitOutputColumn(node->output_column_list(i));
+    if (oc.empty()) return "";
+    outputs.push_back(std::move(oc));
+  }
+  if (outputs.empty()) return "";
+  return absl::StrCat(
+      "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
 }
 
 // Scans ---------------------------------------------------------------------
 
 std::string Transpiler::EmitProjectScan(
-    const ::googlesql::ResolvedProjectScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedProjectScan* node) {
+  // `SELECT <projections> FROM (<input>)`. The output `column_list`
+  // is the schema the upstream scan sees; each column either lives in
+  // `expr_list` (a `ResolvedComputedColumn` with the bound expression)
+  // or passes through from `input_scan`. Computed columns lower as
+  // `<expr> AS "<column-name>"`; pass-through columns reference the
+  // input column by name (the inner scan emits each input column with
+  // its `ResolvedColumn::name()` already).
+  //
+  // The empty-string contract: if any sub-emit returns "" (input scan
+  // we cannot lower, or a computed expression outside the function /
+  // literal whitelist), we propagate "" so the engine takes the
+  // reference-impl fallback for the whole query rather than emitting
+  // partial SQL.
+  if (node == nullptr) return "";
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+
+  std::vector<std::string> projections;
+  projections.reserve(node->column_list_size());
+  for (int i = 0; i < node->column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = node->column_list(i);
+    const ::googlesql::ResolvedComputedColumn* match = nullptr;
+    for (int j = 0; j < node->expr_list_size(); ++j) {
+      const ::googlesql::ResolvedComputedColumn* cc = node->expr_list(j);
+      if (cc != nullptr && cc->column().column_id() == col.column_id()) {
+        match = cc;
+        break;
+      }
+    }
+    if (match != nullptr) {
+      std::string emitted = EmitComputedColumn(match);
+      if (emitted.empty()) return "";
+      projections.push_back(std::move(emitted));
+    } else {
+      projections.push_back(QuoteIdent(col.name()));
+    }
+  }
+
+  std::string select_list =
+      projections.empty() ? "*" : absl::StrJoin(projections, ", ");
+  return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
 }
 
 std::string Transpiler::EmitTableScan(
@@ -257,8 +318,18 @@ std::string Transpiler::EmitTableScan(
 }
 
 std::string Transpiler::EmitSingleRowScan(
-    const ::googlesql::ResolvedSingleRowScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedSingleRowScan* node) {
+  // The analyzer represents "no FROM clause" (`SELECT 1`,
+  // `SELECT 'hi'`, ...) as a `ResolvedSingleRowScan`: a relation with
+  // exactly one row and no columns. DuckDB has no first-class
+  // single-row table, but a self-contained `SELECT 1` produces the
+  // same shape -- one row, with a synthetic column the surrounding
+  // `EmitProjectScan` wrap discards. Emitting it as a derived table
+  // keeps the composition contract every other scan emit follows
+  // (each scan returns a self-contained `SELECT` so a wrapping scan
+  // can splice it into `FROM (<inner>)` without re-emitting).
+  if (node == nullptr) return "";
+  return "SELECT 1";
 }
 
 std::string Transpiler::EmitFilterScan(
@@ -1043,13 +1114,35 @@ std::string Transpiler::EmitSubqueryExpr(
 // Column / output shape -----------------------------------------------------
 
 std::string Transpiler::EmitOutputColumn(
-    const ::googlesql::ResolvedOutputColumn* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedOutputColumn* node) {
+  // Final user-visible alias mapping. The inner query exposes each
+  // physical column under its `ResolvedColumn::name()`; the output
+  // schema renames it to `node->name()`. We collapse the alias when
+  // both are equal so the emitted SQL stays readable for the common
+  // case (`SELECT id FROM people` -> the output name and the
+  // physical column name both resolve to `"id"`).
+  if (node == nullptr) return "";
+  std::string col = QuoteIdent(node->column().name());
+  if (node->name() == node->column().name()) {
+    return col;
+  }
+  return absl::StrCat(col, " AS ", QuoteIdent(node->name()));
 }
 
 std::string Transpiler::EmitComputedColumn(
-    const ::googlesql::ResolvedComputedColumn* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedComputedColumn* node) {
+  // `column := expr` lowers to `<expr> AS "<column-name>"`. The
+  // upstream `EmitProjectScan` calls this once per
+  // `ResolvedComputedColumn` in `expr_list` and slots the result into
+  // the SELECT list. The empty-string fallback contract: any child
+  // expression we cannot lower (a function outside the disposition
+  // table, a parameter we have not implemented yet, ...) propagates
+  // back here and we hand "" to the caller so the engine takes the
+  // reference-impl fallback instead of emitting partial SQL.
+  if (node == nullptr) return "";
+  std::string expr = EmitExpr(node->expr());
+  if (expr.empty()) return "";
+  return absl::StrCat(expr, " AS ", QuoteIdent(node->column().name()));
 }
 
 }  // namespace transpiler

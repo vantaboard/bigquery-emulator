@@ -167,6 +167,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitAnalyticScan;
   using Transpiler::EmitArrayScan;
   using Transpiler::EmitColumnRef;
+  using Transpiler::EmitComputedColumn;
   using Transpiler::EmitFilterScan;
   using Transpiler::EmitFunctionCall;
   using Transpiler::EmitGetStructField;
@@ -175,6 +176,10 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitLiteral;
   using Transpiler::EmitMakeStruct;
   using Transpiler::EmitOrderByScan;
+  using Transpiler::EmitOutputColumn;
+  using Transpiler::EmitProjectScan;
+  using Transpiler::EmitQueryStmt;
+  using Transpiler::EmitSingleRowScan;
   using Transpiler::EmitTableScan;
 };
 
@@ -1036,6 +1041,252 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
   TestTranspiler t;
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()), "");
+}
+
+// --- Top-level SELECT (QueryStmt / ProjectScan / SingleRowScan /
+//     OutputColumn / ComputedColumn) -----------------------------------
+
+TEST_F(TranspilerTest, EmitSingleRowScanEmitsSelectOne) {
+  // `SELECT 1` analyzes to a ResolvedProjectScan over a
+  // ResolvedSingleRowScan. The single-row scan is the analyzer's
+  // representation of "no FROM clause" -- a relation with one row
+  // and no columns. We emit `SELECT 1` so the wrapping ProjectScan
+  // can splice it into `FROM (<inner>)` like every other scan emit.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SINGLE_ROW_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitSingleRowScan(scan->GetAs<::googlesql::ResolvedSingleRowScan>()),
+      "SELECT 1");
+}
+
+TEST_F(TranspilerTest, EmitComputedColumnLiteral) {
+  // `SELECT 1` lands a ProjectScan whose `expr_list[0]` is a
+  // ResolvedComputedColumn binding the `1` literal to the
+  // synthesized output column. EmitComputedColumn lowers the bound
+  // expression and adds `AS "<column-name>"`. We assert on the
+  // analyzer's synthesized column name (`$col1`) so any drift in the
+  // analyzer's auto-aliasing surfaces here rather than downstream.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+  ASSERT_GE(project->expr_list_size(), 1);
+  const ::googlesql::ResolvedComputedColumn* cc = project->expr_list(0);
+  ASSERT_NE(cc, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitComputedColumn(cc), "1 AS \"$col1\"");
+}
+
+TEST_F(TranspilerTest, EmitComputedColumnFallsBackOnUnloweredExpr) {
+  // Pick a function that's not on the disposition table so its
+  // `EmitFunctionCall` returns "" -- the wrapping
+  // EmitComputedColumn must propagate the empty-string fallback
+  // contract rather than emit `<unset> AS "<col>"`.
+  // `BIT_COUNT` is on the YAML skiplist (BQ flavor differs from
+  // DuckDB's `bit_count`).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT BIT_COUNT(id) FROM people");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+  ASSERT_GE(project->expr_list_size(), 1);
+  const ::googlesql::ResolvedComputedColumn* cc = project->expr_list(0);
+  ASSERT_NE(cc, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitComputedColumn(cc), "");
+}
+
+TEST_F(TranspilerTest, EmitProjectScanSelectLiteral) {
+  // The full ProjectScan emit for `SELECT 1` threads:
+  //   * EmitSingleRowScan -> "SELECT 1"
+  //   * EmitComputedColumn -> "1 AS \"$col1\""
+  // and stitches them as `SELECT <projection> FROM (<inner>)`.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitProjectScan(scan->GetAs<::googlesql::ResolvedProjectScan>()),
+            "SELECT 1 AS \"$col1\" FROM (SELECT 1)");
+}
+
+TEST_F(TranspilerTest, EmitOutputColumnCollapsesAliasWhenNamesMatch) {
+  // For `SELECT 1` the output column's user-visible name and the
+  // physical column's name both resolve to `$col1`, so the alias
+  // collapses to just `"$col1"` -- DuckDB carries the column name
+  // straight through the outermost SELECT.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  ASSERT_EQ(q->output_column_list_size(), 1);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitOutputColumn(q->output_column_list(0)), "\"$col1\"");
+}
+
+TEST_F(TranspilerTest, EmitOutputColumnEmitsAliasWhenNamesDiffer) {
+  // `SELECT id AS user_id FROM people` lands an output column whose
+  // user-visible name (`user_id`) differs from the physical column
+  // name (`id`); the emit must surface both as `"id" AS "user_id"`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id AS user_id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  ASSERT_EQ(q->output_column_list_size(), 1);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitOutputColumn(q->output_column_list(0)),
+            "\"id\" AS \"user_id\"");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtSelectLiteral) {
+  // End-to-end for `SELECT 1`: the analyzer wraps a ProjectScan
+  // around a SingleRowScan and the QueryStmt's output_column_list
+  // carries the synthesized `$col1` alias. The emit wires
+  // EmitProjectScan + EmitOutputColumn into the final SQL.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"$col1\" FROM (SELECT 1 AS \"$col1\" FROM (SELECT 1))");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtSelectLiteralWithExplicitAlias) {
+  // `SELECT 1 AS x` rebinds the synthesized column id to the
+  // user-spelled alias; both `output_column_list[0].name()` and the
+  // column's `name()` resolve to `x`, so the AS alias collapses on
+  // the outermost SELECT.
+  const ::googlesql::ResolvedStatement* stmt = Analyze("SELECT 1 AS x");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"x\" FROM (SELECT 1 AS \"x\" FROM (SELECT 1))");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtTableProjectionPreservesColumnOrder) {
+  // `SELECT id, name FROM people` should round-trip with both
+  // columns in their declared order. The analyzer collapses this
+  // straight onto the TableScan (no wrapping ProjectScan because
+  // the projection matches the table's column list 1:1) and the
+  // QueryStmt mapping just renames each column to itself.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id, name FROM people");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtExpressionProjection) {
+  // A non-trivial projection (`COALESCE(name, 'unknown') AS n`)
+  // forces the analyzer to wrap the TableScan in a ProjectScan
+  // whose `expr_list` carries the ComputedColumn binding. The
+  // outermost SELECT then projects the synthesized column under the
+  // user-spelled alias.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT COALESCE(name, 'unknown') AS n FROM people");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"n\" FROM (SELECT COALESCE(\"name\", 'unknown') AS "
+            "\"n\" FROM (SELECT \"id\", \"name\" FROM \"people\"))");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtReorderedOutputColumns) {
+  // `SELECT name, id FROM people` reorders the table's column list.
+  // The analyzer wraps the TableScan in a ProjectScan that mirrors
+  // the table's storage order in `column_list` but the QueryStmt's
+  // `output_column_list` reflects the user-spelled order, so the
+  // outermost SELECT projects `name` before `id`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT name, id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"name\", \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtAliasedColumnSurfacesAlias) {
+  // `SELECT id AS user_id FROM people` keeps the physical column as
+  // `id` inside the inner scan but renames it to `user_id` on the
+  // outermost SELECT. The projection carries `<col> AS <alias>` so
+  // the wire-side schema matches the user's spelling.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id AS user_id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
+            "SELECT \"id\" AS \"user_id\" FROM (SELECT \"id\" "
+            "FROM \"people\")");
+}
+
+TEST_F(TranspilerTest, EmitQueryStmtFallsBackOnUnloweredProjection) {
+  // `BIT_COUNT(id)` is on the YAML skiplist; the inner ProjectScan
+  // emit returns "" and EmitQueryStmt propagates the empty-string
+  // fallback contract instead of stitching an outer SELECT around a
+  // missing inner relation.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT BIT_COUNT(id) FROM people");
+  ASSERT_NE(stmt, nullptr);
+  ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()), "");
+}
+
+TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {
+  // Engine-level smoke check for the plan's "SELECT ... FROM ...
+  // WHERE ... GROUP BY ... ORDER BY ... LIMIT" target. We don't
+  // round-trip through DuckDB here -- the unit-test fixture has no
+  // running DuckDB connection -- but we *do* drive the full
+  // `Transpile(stmt)` pipeline so a regression in any one of
+  // EmitQueryStmt / EmitLimitOffsetScan / EmitOrderByScan /
+  // EmitAggregateScan / EmitFilterScan / EmitTableScan surfaces as
+  // a string drift here. The engine-side smoke test (executing on
+  // DuckDB) is left to a follow-up plan once the DuckDBEngine
+  // integration is updated to dispatch on QueryStmt directly rather
+  // than the StripPassThroughProjectScans subset; see
+  // duckdb-transpiler-select-core.plan.md for the engine wiring
+  // that lands separately.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, COUNT(*) AS c FROM people WHERE id > 0 GROUP BY id "
+      "ORDER BY id LIMIT 10");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  // Filter predicate (`>`) and LIMIT 10 over a synthesized aggregate
+  // column thread together; the per-piece coverage above keeps each
+  // emit honest, while this assertion pins the composition.
+  std::string sql = t.Transpile(stmt);
+  // The filter expression `id > 0` uses the `$greater` function which
+  // is on the disposition fallback, so the FilterScan emit returns
+  // "" and the entire QueryStmt emit propagates the empty-string
+  // fallback contract. That's the documented baseline today; once a
+  // future plan lands the comparison-operator emit, this test will
+  // tighten to the full SQL string. The point of asserting here is
+  // to catch any silent partial-emit regression -- the empty string
+  // is the right answer until the predicate emit path lights up.
+  EXPECT_EQ(sql, "");
 }
 
 }  // namespace

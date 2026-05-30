@@ -7,25 +7,49 @@
 // `googlesql::AnalyzeStatement` (see
 // `backend/engine/duckdb/duckdb_engine.cc`) and
 // emits a DuckDB-flavored SQL string the DuckDB C++ client can
-// execute. This file is the *skeleton* that the engine and the
-// follow-up plans (`transpiler-emit-scans_d5a6b7c8`, ...) fill in
-// one node kind at a time, mirroring the cloud-spanner-emulator
-// shape-tracker approach.
+// execute. The visitor's emit set grows one shape at a time per the
+// `SHAPE_TRACKER.md` file in this directory, mirroring the
+// cloud-spanner-emulator shape-tracker approach.
 //
 // The class inherits from `googlesql::ResolvedASTVisitor` so future
 // plans can either override `VisitResolved*` directly (for nodes
 // that need to recurse into children with non-default ordering) or
-// route through the per-shape `Emit*` helpers declared here. Today
-// every `Emit*` returns the empty string — the plan that lands the
-// emit logic for each shape flips the disposition in
-// `SHAPE_TRACKER.md` from `not_started` to `done`.
+// route through the per-shape `Emit*` helpers declared here. The
+// SHAPE_TRACKER row marked `done` for a given node corresponds to
+// an `Emit*` that returns DuckDB-flavored SQL; rows marked
+// `not_started` still bottom out at the empty string and the engine
+// fallback policy reads that as "not yet supported" and routes the
+// query to the reference-impl evaluator.
+//
+// Implemented baseline (top-level SELECT, the `transpiler-select-core`
+// plan):
+//
+// * `EmitQueryStmt` lowers the root statement: it walks `query()` for
+//   the relational tree, then renames each physical column through
+//   the `output_column_list()` mapping so the user-visible alias
+//   lands on the outermost SELECT.
+// * `EmitProjectScan` wraps `input_scan()` and projects the
+//   `column_list()` schema, picking each column out of the matching
+//   `expr_list()` entry (computed) or referencing it by name
+//   (pass-through).
+// * `EmitSingleRowScan` emits `SELECT 1` so a `ProjectScan` over
+//   `SingleRowScan` (the analyzer's "no FROM clause" shape) composes
+//   as a derived table.
+// * `EmitComputedColumn` lowers `column := expr` to
+//   `<expr> AS "<resolved-column-name>"`.
+// * `EmitOutputColumn` renders the final alias mapping
+//   (`<column-name> AS <output-name>`, collapsed when the names
+//   match).
+//
+// Earlier plans (`transpiler-emit-scans` etc.) cover the other
+// `done` rows in `SHAPE_TRACKER.md` (TableScan, FilterScan, JoinScan,
+// AggregateScan, OrderByScan, LimitOffsetScan, AnalyticScan, ...).
 //
 // `Transpile` is the public entry point: it accepts the root
 // `ResolvedQueryStmt` (or any subtree) and returns the lowered
-// DuckDB SQL. Today the result is the empty string for everything;
-// `DuckDBEngine::ExecuteQuery` (in `duckdb_engine.cc`) treats an
-// empty transpilation as "not yet supported" and falls back to the
-// reference-impl engine through the disposition table.
+// DuckDB SQL. `DuckDBEngine::ExecuteQuery` (in `duckdb_engine.cc`)
+// treats an empty transpilation as "not yet supported" and falls
+// back to the reference-impl engine through the disposition table.
 //
 // Threading: a `Transpiler` instance is *not* thread-safe — it
 // carries a per-traversal accumulator. The engine constructs a
@@ -56,11 +80,10 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Lower the resolved AST rooted at `node` (typically a
   // `ResolvedQueryStmt`) into a DuckDB SQL string.
   //
-  // Today this always returns the empty string -- the per-shape
-  // `Emit*` methods below are placeholders the follow-up plans
-  // fill in. Callers treat an empty result as "transpiler does not
-  // yet support this shape" and fall back to the reference-impl
-  // engine via the disposition table.
+  // Returns the DuckDB SQL for any shape covered by the per-shape
+  // `Emit*` methods below; an empty string means "transpiler cannot
+  // lower this shape yet" and callers treat that as a signal to fall
+  // back to the reference-impl engine via the disposition table.
   //
   // Safe to call with a null `node`; returns the empty string in
   // that case.
@@ -71,10 +94,11 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Per-shape Emit hooks.
   //
   // Each hook returns the DuckDB SQL fragment for one ResolvedAST
-  // node kind. The default implementations return the empty
-  // string; subsequent plans replace each with the real emit
-  // logic. Group them roughly by node category so the file diff
-  // for "add scan emit" / "add expr emit" stays focused.
+  // node kind. Hooks for `done` rows in `SHAPE_TRACKER.md` emit
+  // DuckDB SQL; hooks for `not_started` rows still return the empty
+  // string and trip the engine fallback. Group them roughly by node
+  // category so the file diff for "add scan emit" / "add expr emit"
+  // stays focused.
   //
   // The list below is *not* exhaustive — it tracks the node
   // kinds the SHAPE_TRACKER classifies as `not_started` and the

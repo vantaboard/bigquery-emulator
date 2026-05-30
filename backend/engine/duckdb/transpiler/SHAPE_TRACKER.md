@@ -30,7 +30,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedQueryStmt`                           | `not_started` | Top-level entry point for `SELECT`-shaped queries; covered by the DuckDB engine's first emit plan.|
+| `ResolvedQueryStmt`                           | `done`        | `transpiler-select-core`: lowers the root statement by emitting `query()` then renaming each physical column through `output_column_list()` on the outermost SELECT. `is_value_table()` queries (`SELECT AS VALUE ...`) still fall back to reference-impl. |
 | `ResolvedExplainStmt`                         | `skiplist`    | BigQuery `EXPLAIN` semantics differ from DuckDB; covered by reference-impl fallback.      |
 | `ResolvedCreateTableStmt`                     | `skiplist`    | DDL routes through the storage layer, not the transpiler. See the DDL plans.              |
 | `ResolvedCreateTableAsSelectStmt`             | `skiplist`    | Same: DDL via storage.                                                                    |
@@ -58,8 +58,8 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
 | `ResolvedTableScan`                           | `done`        | `SELECT "col" AS "alias", ... FROM "<table>"` — `transpiler-emit-scans` plan.             |
-| `ResolvedSingleRowScan`                       | `not_started` | `SELECT 1` shape; first emit lands with the scans plan.                                    |
-| `ResolvedProjectScan`                         | `not_started` | Scans plan.                                                                               |
+| `ResolvedSingleRowScan`                       | `done`        | `transpiler-select-core`: emits `SELECT 1` so the analyzer's "no FROM clause" representation composes as a derived table for the wrapping ProjectScan. |
+| `ResolvedProjectScan`                         | `done`        | `transpiler-select-core`: `SELECT <projections> FROM (<input>)` -- per-column lookup picks each output column out of `expr_list()` (computed) or references it by name (pass-through from `input_scan`). |
 | `ResolvedFilterScan`                          | `done`        | `SELECT * FROM (<input>) WHERE <expr>` — `transpiler-emit-scans` plan.                     |
 | `ResolvedJoinScan`                            | `done` (subset) | `transpiler-emit-join-agg`: INNER (+ CROSS) / LEFT / RIGHT / FULL via DuckDB's native join keywords. Lateral joins (`is_lateral`), `JOIN USING(...)` (`has_using`), and lateral correlated `parameter_list` still fall back to reference-impl. |
 | `ResolvedArrayScan`                           | `done` (subset) | `transpiler-struct-unnest`: standalone `UNNEST(<arr>) AS <col>` lowers to DuckDB `SELECT unnest(<arr>) AS "<col>"`. Multi-array `UNNEST(a, b, ...)` (`array_zip_mode`), `WITH OFFSET` (`array_offset_column`), `LEFT JOIN UNNEST` / cross-joined `FROM t, UNNEST(t.arr)` (non-`SingleRowScan` `input_scan` / `join_expr` / `is_outer`) all fall back to reference-impl pending the lateral-join + `generate_subscripts(...)` rewrites. |
@@ -129,8 +129,8 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedOutputColumn`                        | `not_started` | Maps an output alias onto its `ResolvedColumn`; emit plan.                                |
-| `ResolvedComputedColumn`                      | `not_started` | Carries an expression bound to a column id; emit plan.                                    |
+| `ResolvedOutputColumn`                        | `done`        | `transpiler-select-core`: `<column-name> AS <output-name>` (alias collapsed when the names match). Used by `EmitQueryStmt` for the outermost projection. |
+| `ResolvedComputedColumn`                      | `done`        | `transpiler-select-core`: `<expr> AS "<resolved-column-name>"`; child expression failures propagate the empty-string fallback contract. |
 | `ResolvedDeferredComputedColumn`              | `skiplist`    | Pipe-operator-only; fallback today.                                                       |
 | `ResolvedOrderByItem`                         | `done`        | `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` still falls back. |
 | `ResolvedColumnHolder`                        | `not_started` | UNNEST WITH OFFSET shape; emit plan.                                                      |
