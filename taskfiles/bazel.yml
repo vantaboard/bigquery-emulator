@@ -16,27 +16,50 @@ version: "3"
 
 vars:
   # Auto-detected defaults. The goal is "use the box without swamping
-  # the OS/IDE": jobs = nproc - 2 (floor 2) so two threads stay free
-  # for the editor, and memory = ~75% of MemTotal (floor 4 GiB) so the
-  # kernel page cache + IDE still have room. Override on the CLI when
-  # you want a different shape:
+  # the OS/IDE": never grab more than 75% of what the kernel reports as
+  # *currently available* memory (`MemAvailable`, which is free + most
+  # reclaimable buff/cache and is a much better proxy for "what bazel
+  # can actually take without making the OOM killer reap Cursor /
+  # Chrome" than `MemTotal`).
+  #
+  # Memory: BAZEL_MEM_MB = floor(MemAvailable_kB * 0.75 / 1024), with
+  # an absolute floor of 4096 MiB so the build can always make
+  # forward progress (the process-hygiene rule already requires us to
+  # bail and reclaim before launching a build when MemAvailable is
+  # below 4 GiB; the floor is just so the math never produces a
+  # nonsense value).
+  #
+  # Jobs: derived from the same memory budget rather than nproc alone.
+  # Each parallel clang process can spike to ~2 GiB peak RSS during a
+  # GoogleSQL-linked compile, so cap jobs at floor(BAZEL_MEM_MB / 2048),
+  # then floor at 2 and ceiling at nproc - 2 so the editor/IDE keep
+  # two cores. This stops the auto-detect from spawning 14 clangs
+  # against 8 GiB of available RAM and OOM-killing the whole host.
+  #
+  # Override either on the CLI when you want a different shape:
   #   BAZEL_JOBS=4 BAZEL_MEM_MB=8192 task bazel:build TARGETS=...
+  BAZEL_MEM_MB:
+    sh: |
+      if [ -n "${BAZEL_MEM_MB:-}" ]; then
+        echo "$BAZEL_MEM_MB"
+      elif [ -r /proc/meminfo ]; then
+        awk '/^MemAvailable:/ { mb = int($2 * 3 / 4 / 1024); if (mb < 4096) mb = 4096; print mb; exit }' /proc/meminfo
+      else
+        echo 8192
+      fi
   BAZEL_JOBS:
     sh: |
       if [ -n "${BAZEL_JOBS:-}" ]; then
         echo "$BAZEL_JOBS"
       else
         n=$(nproc 2>/dev/null || echo 4)
-        if [ "$n" -gt 4 ]; then echo $((n - 2)); else echo 2; fi
-      fi
-  BAZEL_MEM_MB:
-    sh: |
-      if [ -n "${BAZEL_MEM_MB:-}" ]; then
-        echo "$BAZEL_MEM_MB"
-      elif [ -r /proc/meminfo ]; then
-        awk '/^MemTotal:/ { mb = int($2 * 3 / 4 / 1024); if (mb < 4096) mb = 4096; print mb }' /proc/meminfo
-      else
-        echo 8192
+        if [ "$n" -gt 4 ]; then cpu_cap=$((n - 2)); else cpu_cap=2; fi
+        if [ -r /proc/meminfo ]; then
+          mem_cap=$(awk '/^MemAvailable:/ { mb = int($2 * 3 / 4 / 1024); jobs = int(mb / 2048); if (jobs < 2) jobs = 2; print jobs; exit }' /proc/meminfo)
+        else
+          mem_cap=$cpu_cap
+        fi
+        if [ "$mem_cap" -lt "$cpu_cap" ]; then echo "$mem_cap"; else echo "$cpu_cap"; fi
       fi
   # Pin the host toolchain to system clang-18; the `mise` clang-22 build
   # ships without C++ stdlib headers and breaks the cc_toolchain probe.
