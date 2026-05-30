@@ -31,11 +31,14 @@
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/id_string.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {
@@ -107,6 +110,16 @@ class TranspilerTest : public ::testing::Test {
   // it references) stays alive for the duration of the test.
   const ::googlesql::ResolvedStatement* Analyze(absl::string_view sql) {
     ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+    return AnalyzeWith(sql, options);
+  }
+
+  // Analyze `sql` with `options` already configured -- handy for the
+  // parameter-emit tests that need `AddQueryParameter` /
+  // `AddPositionalQueryParameter` calls before analysis. Same
+  // ownership contract as `Analyze`: the resolved AST lives in
+  // `last_output_` for the duration of the test.
+  const ::googlesql::ResolvedStatement* AnalyzeWith(
+      absl::string_view sql, const ::googlesql::AnalyzerOptions& options) {
     last_output_.reset();
     absl::Status s = ::googlesql::AnalyzeStatement(
         sql, options, catalog_.get(), type_factory_.get(), &last_output_);
@@ -166,9 +179,11 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitAggregateScan;
   using Transpiler::EmitAnalyticScan;
   using Transpiler::EmitArrayScan;
+  using Transpiler::EmitCast;
   using Transpiler::EmitColumnRef;
   using Transpiler::EmitComputedColumn;
   using Transpiler::EmitFilterScan;
+  using Transpiler::EmitFunctionArgument;
   using Transpiler::EmitFunctionCall;
   using Transpiler::EmitGetStructField;
   using Transpiler::EmitJoinScan;
@@ -177,10 +192,12 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitMakeStruct;
   using Transpiler::EmitOrderByScan;
   using Transpiler::EmitOutputColumn;
+  using Transpiler::EmitParameter;
   using Transpiler::EmitProjectScan;
   using Transpiler::EmitQueryStmt;
   using Transpiler::EmitSingleRowScan;
   using Transpiler::EmitTableScan;
+  using Transpiler::EmitWithExpr;
 };
 
 TEST_F(TranspilerTest, EmitLiteralInt64) {
@@ -1253,6 +1270,376 @@ TEST_F(TranspilerTest, EmitQueryStmtFallsBackOnUnloweredProjection) {
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_QUERY_STMT);
   TestTranspiler t;
   EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()), "");
+}
+
+// --- Parameters ---------------------------------------------------------
+
+TEST_F(TranspilerTest, EmitParameterNamed) {
+  // `SELECT @customer_id` analyzes to a ProjectScan whose only
+  // computed column is a `ResolvedParameter` carrying the
+  // analyzer-lowercased name (`customer_id`). We assert on both the
+  // emitted `$N` placeholder and the bind-order accumulator so a
+  // regression in either side surfaces here rather than downstream
+  // in the engine integration.
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ASSERT_TRUE(
+      options.AddQueryParameter("customer_id", type_factory_->get_int64())
+          .ok());
+  const ::googlesql::ResolvedStatement* stmt =
+      AnalyzeWith("SELECT @customer_id AS x", options);
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_PARAMETER);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitParameter(expr->GetAs<::googlesql::ResolvedParameter>()),
+            "$1");
+  ASSERT_EQ(t.parameter_order().size(), 1u);
+  EXPECT_EQ(t.parameter_order()[0].name, "customer_id");
+  EXPECT_EQ(t.parameter_order()[0].position, 0);
+}
+
+TEST_F(TranspilerTest, EmitParameterReuseSharesSlot) {
+  // Two textual references to the same named parameter must share a
+  // single DuckDB `$N` slot so the engine binds one value, not two.
+  // We hit `EmitParameter` twice on the same (or equivalent) node and
+  // assert both emits go to `$1` and the bind-order accumulator
+  // carries exactly one entry.
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ASSERT_TRUE(
+      options.AddQueryParameter("threshold", type_factory_->get_int64()).ok());
+  // Use the parameter twice in distinct projections: GoogleSQL
+  // produces two `ResolvedParameter` nodes (one per reference) but
+  // both carry the same `name()`, so the dedup collapses them.
+  const ::googlesql::ResolvedStatement* stmt =
+      AnalyzeWith("SELECT @threshold AS a, @threshold AS b", options);
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+  ASSERT_GE(project->expr_list_size(), 2);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitParameter(project->expr_list(0)
+                                ->expr()
+                                ->GetAs<::googlesql::ResolvedParameter>()),
+            "$1");
+  EXPECT_EQ(t.EmitParameter(project->expr_list(1)
+                                ->expr()
+                                ->GetAs<::googlesql::ResolvedParameter>()),
+            "$1");
+  ASSERT_EQ(t.parameter_order().size(), 1u);
+  EXPECT_EQ(t.parameter_order()[0].name, "threshold");
+}
+
+TEST_F(TranspilerTest, EmitParameterPositionalAssignsFreshSlots) {
+  // Positional parameters carry a 1-based `position()` and are
+  // referentially distinct on every analyzer reference; we never
+  // dedupe them. Two positional references emit `$1` then `$2` and
+  // the bind-order accumulator records both with the analyzer
+  // positions intact.
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  options.set_parameter_mode(::googlesql::PARAMETER_POSITIONAL);
+  ASSERT_TRUE(
+      options.AddPositionalQueryParameter(type_factory_->get_int64()).ok());
+  ASSERT_TRUE(
+      options.AddPositionalQueryParameter(type_factory_->get_string()).ok());
+  const ::googlesql::ResolvedStatement* stmt =
+      AnalyzeWith("SELECT ? AS a, ? AS b", options);
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+  ASSERT_GE(project->expr_list_size(), 2);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitParameter(project->expr_list(0)
+                                ->expr()
+                                ->GetAs<::googlesql::ResolvedParameter>()),
+            "$1");
+  EXPECT_EQ(t.EmitParameter(project->expr_list(1)
+                                ->expr()
+                                ->GetAs<::googlesql::ResolvedParameter>()),
+            "$2");
+  ASSERT_EQ(t.parameter_order().size(), 2u);
+  EXPECT_TRUE(t.parameter_order()[0].name.empty());
+  EXPECT_EQ(t.parameter_order()[0].position, 1);
+  EXPECT_TRUE(t.parameter_order()[1].name.empty());
+  EXPECT_EQ(t.parameter_order()[1].position, 2);
+}
+
+TEST_F(TranspilerTest, EmitLimitOffsetScanWithNamedParameter) {
+  // `LIMIT @n OFFSET @n` exercises the parameter-in-LIMIT path *and*
+  // named-parameter dedup inside a single scan emit: both LIMIT and
+  // OFFSET resolve `@n` to `$1` and the accumulator records one
+  // entry.
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ASSERT_TRUE(options.AddQueryParameter("n", type_factory_->get_int64()).ok());
+  const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(
+      "SELECT * FROM people ORDER BY id LIMIT @n OFFSET @n", options);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLimitOffsetScan(
+                scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()),
+            "SELECT * FROM (SELECT * FROM (SELECT \"id\", \"name\" FROM "
+            "\"people\") ORDER BY \"id\" ASC) LIMIT $1 OFFSET $1");
+  ASSERT_EQ(t.parameter_order().size(), 1u);
+  EXPECT_EQ(t.parameter_order()[0].name, "n");
+}
+
+TEST_F(TranspilerTest, EmitParameterInsideFunctionArgument) {
+  // Parameters thread through `EmitFunctionCall`'s argument loop
+  // exactly like any other expression: `IFNULL(@s, 'x')` lowers to
+  // `IFNULL($1, 'x')` and the parameter accumulator records the
+  // single `@s` slot. `IFNULL` is on the function disposition table
+  // so the surrounding emit composes fully.
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ASSERT_TRUE(options.AddQueryParameter("s", type_factory_->get_string()).ok());
+  const ::googlesql::ResolvedStatement* stmt =
+      AnalyzeWith("SELECT IFNULL(@s, 'x') FROM people", options);
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "IFNULL($1, 'x')");
+  ASSERT_EQ(t.parameter_order().size(), 1u);
+  EXPECT_EQ(t.parameter_order()[0].name, "s");
+}
+
+// --- Cast ---------------------------------------------------------------
+
+TEST_F(TranspilerTest, EmitCastInt64ToString) {
+  // `CAST(id AS STRING)` produces a `ResolvedCast` whose `expr` is
+  // the column ref and whose target `Type` is STRING. The emit
+  // composes both via `EmitColumnRef` + `ToDuckDBSqlType`, so the
+  // result threads quoted-identifier and DuckDB type-name conventions
+  // together.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT CAST(id AS STRING) FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitCast(expr->GetAs<::googlesql::ResolvedCast>()),
+            "CAST(\"id\" AS VARCHAR)");
+}
+
+TEST_F(TranspilerTest, EmitCastStringToInt64) {
+  // CAST against a column ref of the right source type lands on the
+  // expected DuckDB `BIGINT` (BQ INT64 -> DuckDB BIGINT, see
+  // `types.cc`). The shape is symmetrical to the int->string case
+  // above and pins the type-name mapping for INT64.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT CAST(name AS INT64) FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitCast(expr->GetAs<::googlesql::ResolvedCast>()),
+            "CAST(\"name\" AS BIGINT)");
+}
+
+TEST_F(TranspilerTest, EmitSafeCastUsesTryCast) {
+  // `SAFE_CAST(<expr> AS T)` sets `return_null_on_error()` on the
+  // ResolvedCast; we lower it to DuckDB's `TRY_CAST(...)` which
+  // matches BigQuery's "return NULL on conversion failure" contract.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT SAFE_CAST(name AS INT64) FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitCast(expr->GetAs<::googlesql::ResolvedCast>()),
+            "TRY_CAST(\"name\" AS BIGINT)");
+}
+
+TEST_F(TranspilerTest, EmitCastNestedInsideFunctionCall) {
+  // CAST nested inside another function call exercises the dispatch
+  // path: `EmitFunctionCall` calls `EmitExpr` per argument, which
+  // routes the cast through `EmitCast`. The full lower stays on the
+  // DuckDB path because both COALESCE (disposition table) and CAST
+  // (whitelisted target) are first-class.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT COALESCE(CAST(id AS STRING), 'x') FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "COALESCE(CAST(\"id\" AS VARCHAR), 'x')");
+}
+
+TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {
+  // ARRAY casts thread `ToDuckDBSqlType`'s recursive type expansion;
+  // ARRAY<STRING> -> VARCHAR[] mirrors DuckDB's native list-of
+  // syntax. We wrap a non-const expression (`[id]`) inside the cast
+  // so the analyzer cannot constant-fold the whole expression onto
+  // a `ResolvedLiteral` -- a folded array-of-int64 would skip the
+  // ResolvedCast entirely and the test would fail with "expected
+  // RESOLVED_CAST, got RESOLVED_LITERAL".
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT CAST([id] AS ARRAY<STRING>) FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
+  TestTranspiler t;
+  // `[id]` is a non-const ARRAY constructor; it lowers through
+  // `$make_array` to DuckDB's bracket syntax.
+  EXPECT_EQ(t.EmitCast(expr->GetAs<::googlesql::ResolvedCast>()),
+            "CAST([\"id\"] AS VARCHAR[])");
+}
+
+// --- WithExpr -----------------------------------------------------------
+
+// Helper: synthesize a `ResolvedWithExpr` directly so the test does
+// not depend on the analyzer preserving a `WITH(...)` expression
+// against constant-folding / inlining heuristics. Each entry in
+// `bindings` is `{name, expression}`; the helper allocates a fresh
+// `ResolvedColumn` per binding, wraps the expression in a
+// `ResolvedComputedColumn`, and emits a `ResolvedColumnRef` to the
+// first binding for the body. Body type is taken from the first
+// binding so the WithExpr's `type()` lines up.
+//
+// Returns nullptr when `bindings` is empty (a malformed WithExpr the
+// analyzer would never produce). Callers transfer ownership of the
+// binding expressions into the helper via `std::move`.
+struct TestWithExprBinding {
+  std::string name;
+  std::unique_ptr<const ::googlesql::ResolvedExpr> expr;
+};
+std::unique_ptr<::googlesql::ResolvedWithExpr> MakeTestWithExpr(
+    std::vector<TestWithExprBinding> bindings) {
+  if (bindings.empty()) return nullptr;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
+      assignments;
+  std::vector<::googlesql::ResolvedColumn> columns;
+  int next_id = 1;
+  for (auto& binding : bindings) {
+    if (binding.expr == nullptr) return nullptr;
+    const ::googlesql::Type* t = binding.expr->type();
+    ::googlesql::ResolvedColumn col(
+        next_id++,
+        /*table_name=*/::googlesql::IdString::MakeGlobal("$with"),
+        /*name=*/::googlesql::IdString::MakeGlobal(binding.name),
+        t);
+    columns.push_back(col);
+    auto cc =
+        ::googlesql::MakeResolvedComputedColumn(col, std::move(binding.expr));
+    assignments.push_back(std::move(cc));
+  }
+  std::unique_ptr<const ::googlesql::ResolvedExpr> body =
+      ::googlesql::MakeResolvedColumnRef(columns.front(),
+                                         /*is_correlated=*/false);
+  return ::googlesql::MakeResolvedWithExpr(
+      columns.front().type(), std::move(assignments), std::move(body));
+}
+
+TEST_F(TranspilerTest, EmitWithExprSingleBindingFromAnalyzer) {
+  // `WITH(<assigns>, <body>)` is hard to keep alive against
+  // analyzer constant-folding when both sides are constant, so we
+  // thread a column ref through a function call (`IFNULL(name,
+  // 'x')`) for the binding and reuse the binding column twice in
+  // the body via an outer `IFNULL`. That keeps the binding
+  // necessary -- inlining would evaluate the
+  // `IFNULL(name, 'x')` twice, which would break the semantic
+  // contract the WithExpr exists to preserve.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT WITH(a AS IFNULL(name, 'x'), IFNULL(a, a)) FROM people");
+  if (stmt == nullptr) {
+    GTEST_SKIP() << "analyzer rejected WITH(...) expression -- skip";
+  }
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  if (expr == nullptr || expr->node_kind() != ::googlesql::RESOLVED_WITH_EXPR) {
+    GTEST_SKIP() << "WITH(...) lowered to a non-WithExpr shape -- skip";
+  }
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithExpr(expr->GetAs<::googlesql::ResolvedWithExpr>()),
+            "(SELECT IFNULL(\"a\", \"a\") FROM (SELECT IFNULL(\"name\", 'x') "
+            "AS \"a\"))");
+}
+
+TEST_F(TranspilerTest, EmitWithExprSingleBindingDirect) {
+  // Direct construction of a `ResolvedWithExpr`: one binding to an
+  // INT64 literal, body references the binding. This pins the emit
+  // shape independently of any analyzer rewrite -- we own the AST,
+  // so a regression in `EmitWithExpr` itself surfaces here without
+  // needing the WITH(...) parser feature to be on.
+  std::vector<TestWithExprBinding> bindings;
+  bindings.push_back(
+      {"a", ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(42))});
+  auto with_expr = MakeTestWithExpr(std::move(bindings));
+  ASSERT_NE(with_expr, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithExpr(with_expr.get()),
+            "(SELECT \"a\" FROM (SELECT 42 AS \"a\"))");
+}
+
+TEST_F(TranspilerTest, EmitWithExprMultipleBindingsDirect) {
+  // Two bindings (`a`, `b`) -> body references the first via
+  // ColumnRef. We pin the emit shape against analyzer rewrites by
+  // constructing the AST directly.
+  std::vector<TestWithExprBinding> bindings;
+  bindings.push_back(
+      {"a", ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1))});
+  bindings.push_back(
+      {"b", ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(2))});
+  auto with_expr = MakeTestWithExpr(std::move(bindings));
+  ASSERT_NE(with_expr, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithExpr(with_expr.get()),
+            "(SELECT \"a\" FROM (SELECT 1 AS \"a\", 2 AS \"b\"))");
+}
+
+TEST_F(TranspilerTest, EmitWithExprFallsBackOnUnloweredBinding) {
+  // Bindings whose expression cannot lower (here a `ResolvedParameter`
+  // marked untyped, which falls back per `EmitParameter`) propagate
+  // the empty-string contract through the WithExpr emit.
+  std::vector<TestWithExprBinding> bindings;
+  bindings.push_back({"a",
+                      ::googlesql::MakeResolvedParameter(
+                          /*type=*/type_factory_->get_int64(),
+                          /*name=*/"x",
+                          /*position=*/0,
+                          /*is_untyped=*/true)});
+  auto with_expr = MakeTestWithExpr(std::move(bindings));
+  ASSERT_NE(with_expr, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithExpr(with_expr.get()), "");
+}
+
+// --- FunctionArgument ---------------------------------------------------
+
+TEST_F(TranspilerTest, EmitFunctionArgumentRoutesThroughExpr) {
+  // `ResolvedFunctionArgument` is the wrapper the analyzer produces
+  // for `generic_argument_list` slots; today's emit only knows how
+  // to lower the `expr()` slot. Constructing one directly with a
+  // small literal lets us assert on the routing without needing a
+  // builtin function whose AST exposes a generic argument list (the
+  // BigQuery surface that produces them is mostly TVFs / lambdas,
+  // which is outside this plan).
+  auto literal =
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(42));
+  auto arg = ::googlesql::MakeResolvedFunctionArgument();
+  arg->set_expr(std::move(literal));
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionArgument(arg.get()), "42");
+}
+
+TEST_F(TranspilerTest, EmitFunctionArgumentNonExprSlotFallsBack) {
+  // A bare `MakeResolvedFunctionArgument()` (every slot null) has no
+  // expression to route through; the emit must propagate "" so the
+  // engine takes the reference-impl fallback for the surrounding
+  // function call. This is the named-argument-only / TVF / lambda
+  // shape the plan defers to a follow-up.
+  auto arg = ::googlesql::MakeResolvedFunctionArgument();
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitFunctionArgument(arg.get()), "");
 }
 
 TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {

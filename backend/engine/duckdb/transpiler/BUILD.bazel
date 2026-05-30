@@ -72,6 +72,7 @@ cc_library(
     deps = [
         ":functions",
         ":types",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
         # The function-call emit consults `Function::Name()` and the

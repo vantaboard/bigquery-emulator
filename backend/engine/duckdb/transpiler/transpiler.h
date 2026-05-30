@@ -45,6 +45,25 @@
 // `done` rows in `SHAPE_TRACKER.md` (TableScan, FilterScan, JoinScan,
 // AggregateScan, OrderByScan, LimitOffsetScan, AnalyticScan, ...).
 //
+// Expression-core (`transpiler-expression-core`) layers four scalar
+// shapes on top of the baseline:
+//
+// * `EmitParameter` lowers `@<name>` and positional `?` parameters
+//   to DuckDB `$N` placeholders and accumulates a `ParameterRef`
+//   per unique slot in `parameter_order()` so the engine can copy
+//   values across in bind order.
+// * `EmitCast` lowers `CAST(<expr> AS <type>)` (and `SAFE_CAST(...)`
+//   -> `TRY_CAST(...)`) for every type kind that `types.h` exposes a
+//   first-class DuckDB analog for. Format / time-zone / extended /
+//   type-modifier shapes stay on the fallback.
+// * `EmitFunctionArgument` routes a `ResolvedFunctionArgument`
+//   through the `expr()` slot it wraps; non-expression slots
+//   (scan / model / lambda / ...) stay on the fallback.
+// * `EmitWithExpr` lowers `WITH(<a> AS <expr>, ...) <body>` to a
+//   DuckDB scalar subquery that exposes each binding as a column on
+//   an inner SELECT and then projects the body off it, preserving
+//   GoogleSQL's once-per-row evaluation semantics.
+//
 // `Transpile` is the public entry point: it accepts the root
 // `ResolvedQueryStmt` (or any subtree) and returns the lowered
 // DuckDB SQL. `DuckDBEngine::ExecuteQuery` (in `duckdb_engine.cc`)
@@ -57,7 +76,9 @@
 // is not an issue.
 
 #include <string>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
@@ -71,6 +92,27 @@ namespace transpiler {
 
 class Transpiler : public ::googlesql::ResolvedASTVisitor {
  public:
+  // Bind metadata for one DuckDB `$N` placeholder emitted by the
+  // transpiler. The accumulator is exposed through
+  // `parameter_order()` so the engine can copy GoogleSQL
+  // `Value`s into DuckDB's bind buffer in placeholder-numerical
+  // order.
+  //
+  // Exactly one of {`name`, `position`} carries the GoogleSQL
+  // identity:
+  //   * Named parameter: `name` is the analyzer-lowercased
+  //     identifier (e.g. "@CustomerId" -> "customerid"); `position`
+  //     is 0.
+  //   * Positional parameter: `name` is empty; `position` is the
+  //     1-based GoogleSQL position the analyzer assigned.
+  // Either way the entry's index in `parameter_order()` is the
+  // 0-based DuckDB placeholder slot (slot `i` is `$<i+1>`), so
+  // multiple references to the same named parameter share one slot.
+  struct ParameterRef {
+    std::string name;
+    int position = 0;
+  };
+
   Transpiler();
   ~Transpiler() override;
 
@@ -88,6 +130,17 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Safe to call with a null `node`; returns the empty string in
   // that case.
   std::string Transpile(const ::googlesql::ResolvedNode* node);
+
+  // Bind-order accumulator for the GoogleSQL parameters encountered
+  // during the most recent traversal. Slot `i` (0-based) is the
+  // parameter the transpiler emitted as `$<i+1>`. The engine reads
+  // this back to copy values into DuckDB's bind buffer; named
+  // parameters that appear multiple times in the SQL share a single
+  // slot (see `EmitParameter`), so the vector contains one entry per
+  // unique placeholder, not one per textual reference.
+  const std::vector<ParameterRef>& parameter_order() const {
+    return parameter_order_;
+  }
 
  protected:
   // ---------------------------------------------------------------
@@ -154,6 +207,18 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedGetStructField* node);
   virtual std::string EmitSubqueryExpr(
       const ::googlesql::ResolvedSubqueryExpr* node);
+  virtual std::string EmitWithExpr(const ::googlesql::ResolvedWithExpr* node);
+
+  // Function-argument wrapper --------------------------------------
+  // `ResolvedFunctionArgument` carries one of {expr, scan, model,
+  // connection, descriptor, lambda, sequence, graph}. Today we
+  // route through the `expr()` slot so callers that walk
+  // `generic_argument_list` can treat a wrapped scalar argument as a
+  // first-class expression. Every other slot stays on the
+  // empty-string fallback (no caller proves the corresponding
+  // function-argument syntax lowers cleanly to DuckDB yet).
+  virtual std::string EmitFunctionArgument(
+      const ::googlesql::ResolvedFunctionArgument* node);
 
   // Column / output shape ------------------------------------------
   virtual std::string EmitOutputColumn(
@@ -201,6 +266,25 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedComputedColumnBase* col,
       absl::string_view partition_clause,
       absl::string_view order_clause);
+
+  // Look up (or assign) the DuckDB `$N` slot for a named GoogleSQL
+  // parameter. The first reference appends a new `ParameterRef` to
+  // `parameter_order_`; subsequent references reuse the same slot
+  // so a query like `WHERE @x AND @x` carries only one bind value.
+  // The returned slot is 1-based to match DuckDB's `$1` notation.
+  int LookupOrAssignNamedParameter(absl::string_view name);
+
+  // Append a new positional `ParameterRef` and return its 1-based
+  // slot. Positional GoogleSQL parameters are referentially distinct
+  // every time they appear, so we never dedupe them.
+  int AssignPositionalParameter(int analyzer_position);
+
+  // Bind-order accumulator. Each entry is a `ParameterRef` whose
+  // index `i` is the 0-based DuckDB placeholder slot (slot `i` is
+  // `$<i+1>`). Named parameter lookups go through
+  // `name_to_slot_` for dedup; positional ones always append.
+  std::vector<ParameterRef> parameter_order_;
+  absl::flat_hash_map<std::string, int> name_to_slot_;
 };
 
 }  // namespace transpiler

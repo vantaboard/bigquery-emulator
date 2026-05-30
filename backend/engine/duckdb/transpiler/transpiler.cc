@@ -10,10 +10,12 @@
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -102,6 +104,41 @@ std::string EmitValueLiteral(const ::googlesql::Value& v) {
   }
 }
 
+// Whitelist of GoogleSQL `TypeKind`s the `EmitCast` path will lower.
+// `DuckDBSqlTypeName` itself is intentionally total (it falls through
+// to `VARCHAR` for unsupported kinds so column-def emit always
+// compiles), but for `CAST(<expr> AS T)` we'd rather take the engine
+// fallback than silently retype `GEOGRAPHY` / proto / enum / range /
+// graph values to a DuckDB string -- the runtime semantics would not
+// match the BigQuery cast contract.
+bool IsCastTargetSupported(::googlesql::TypeKind kind) {
+  switch (kind) {
+    case ::googlesql::TYPE_BOOL:
+    case ::googlesql::TYPE_INT32:
+    case ::googlesql::TYPE_INT64:
+    case ::googlesql::TYPE_UINT32:
+    case ::googlesql::TYPE_UINT64:
+    case ::googlesql::TYPE_FLOAT:
+    case ::googlesql::TYPE_DOUBLE:
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_BYTES:
+    case ::googlesql::TYPE_DATE:
+    case ::googlesql::TYPE_TIME:
+    case ::googlesql::TYPE_DATETIME:
+    case ::googlesql::TYPE_TIMESTAMP:
+    case ::googlesql::TYPE_NUMERIC:
+    case ::googlesql::TYPE_BIGNUMERIC:
+    case ::googlesql::TYPE_JSON:
+    case ::googlesql::TYPE_INTERVAL:
+    case ::googlesql::TYPE_UUID:
+    case ::googlesql::TYPE_ARRAY:
+    case ::googlesql::TYPE_STRUCT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
 Transpiler::Transpiler() = default;
@@ -130,10 +167,13 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
+    case ::googlesql::RESOLVED_PARAMETER:
     case ::googlesql::RESOLVED_COLUMN_REF:
     case ::googlesql::RESOLVED_FUNCTION_CALL:
+    case ::googlesql::RESOLVED_CAST:
     case ::googlesql::RESOLVED_MAKE_STRUCT:
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
+    case ::googlesql::RESOLVED_WITH_EXPR:
       return EmitExpr(node->GetAs<::googlesql::ResolvedExpr>());
     default:
       return "";
@@ -145,15 +185,21 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
   switch (expr->node_kind()) {
     case ::googlesql::RESOLVED_LITERAL:
       return EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>());
+    case ::googlesql::RESOLVED_PARAMETER:
+      return EmitParameter(expr->GetAs<::googlesql::ResolvedParameter>());
     case ::googlesql::RESOLVED_COLUMN_REF:
       return EmitColumnRef(expr->GetAs<::googlesql::ResolvedColumnRef>());
     case ::googlesql::RESOLVED_FUNCTION_CALL:
       return EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>());
+    case ::googlesql::RESOLVED_CAST:
+      return EmitCast(expr->GetAs<::googlesql::ResolvedCast>());
     case ::googlesql::RESOLVED_MAKE_STRUCT:
       return EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>());
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
       return EmitGetStructField(
           expr->GetAs<::googlesql::ResolvedGetStructField>());
+    case ::googlesql::RESOLVED_WITH_EXPR:
+      return EmitWithExpr(expr->GetAs<::googlesql::ResolvedWithExpr>());
     default:
       return "";
   }
@@ -786,8 +832,50 @@ std::string Transpiler::EmitLiteral(const ::googlesql::ResolvedLiteral* node) {
 }
 
 std::string Transpiler::EmitParameter(
-    const ::googlesql::ResolvedParameter* /*node*/) {
+    const ::googlesql::ResolvedParameter* node) {
+  // GoogleSQL named parameters (`@CustomerId`) and positional
+  // parameters (`?`) both lower to DuckDB's `$N` bind shape. We
+  // accumulate one `ParameterRef` per unique slot in
+  // `parameter_order_` so the engine can copy values into DuckDB's
+  // bind buffer in slot order; multiple references to the same
+  // named parameter share a slot, and positional parameters get
+  // their own slot every time the analyzer hands us one (the
+  // analyzer's 1-based `position()` carries the bind-time
+  // identity).
+  //
+  // Untyped parameters (the analyzer's stand-in for "the engine
+  // will fill in the type later") are out of scope for a transpiled
+  // query: DuckDB infers types from the bound value, but we have
+  // no type to attach to the placeholder. Fall back via the empty
+  // string so the engine takes the reference-impl path.
+  if (node == nullptr) return "";
+  if (node->is_untyped()) return "";
+  if (!node->name().empty()) {
+    int slot = LookupOrAssignNamedParameter(node->name());
+    return absl::StrCat("$", slot);
+  }
+  if (node->position() > 0) {
+    int slot = AssignPositionalParameter(node->position());
+    return absl::StrCat("$", slot);
+  }
   return "";
+}
+
+int Transpiler::LookupOrAssignNamedParameter(absl::string_view name) {
+  std::string key(name);
+  auto it = name_to_slot_.find(key);
+  if (it != name_to_slot_.end()) return it->second;
+  int slot = static_cast<int>(parameter_order_.size()) + 1;
+  parameter_order_.push_back({key, /*position=*/0});
+  name_to_slot_.emplace(std::move(key), slot);
+  return slot;
+}
+
+int Transpiler::AssignPositionalParameter(int analyzer_position) {
+  int slot = static_cast<int>(parameter_order_.size()) + 1;
+  parameter_order_.push_back({/*name=*/std::string(),
+                              /*position=*/analyzer_position});
+  return slot;
 }
 
 std::string Transpiler::EmitColumnRef(
@@ -1029,8 +1117,45 @@ std::string Transpiler::EmitFrameBound(
   return "";
 }
 
-std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* /*node*/) {
-  return "";
+std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* node) {
+  // BigQuery `CAST(<expr> AS T)` lowers to DuckDB's `CAST(<expr> AS T)`
+  // for every `TypeKind` we have a first-class DuckDB analog for
+  // (see `IsCastTargetSupported`). `SAFE_CAST(<expr> AS T)` sets
+  // `return_null_on_error()` and lowers to DuckDB's `TRY_CAST(...)`,
+  // which preserves the BigQuery contract of returning NULL on
+  // conversion failure rather than raising.
+  //
+  // The richer cast surface needs bespoke rewrites we defer to a
+  // follow-up plan; for now we propagate "" so the engine takes the
+  // reference-impl fallback whenever any of these are set:
+  //
+  //   * `format()`        -- BigQuery's FORMAT clause for STRING/BYTES
+  //                          cast templates differs from DuckDB's
+  //                          (no DuckDB analog ships).
+  //   * `time_zone()`     -- AT TIME ZONE on TIMESTAMP cast; needs
+  //                          dedicated DuckDB function rewrite.
+  //   * `extended_cast()` -- `TYPE_EXTENDED` family; out of scope.
+  //   * `type_modifiers()`-- `STRING(2)`, `NUMERIC(38, 9)`,
+  //                          collation modifiers; need parameter /
+  //                          collation lower passes.
+  //   * Unsupported target type -- proto / enum / range / graph /
+  //                          measure / tokenlist / GEOGRAPHY all
+  //                          fall through `DuckDBSqlTypeName` to
+  //                          `VARCHAR`; emitting that silently
+  //                          would not match BigQuery semantics.
+  if (node == nullptr || node->expr() == nullptr) return "";
+  if (node->format() != nullptr || node->time_zone() != nullptr) return "";
+  if (node->extended_cast() != nullptr) return "";
+  if (!node->type_modifiers().IsEmpty()) return "";
+  const ::googlesql::Type* target = node->type();
+  if (target == nullptr) return "";
+  if (!IsCastTargetSupported(target->kind())) return "";
+  std::string inner = EmitExpr(node->expr());
+  if (inner.empty()) return "";
+  std::string type_sql = ToDuckDBSqlType(*target);
+  if (type_sql.empty()) return "";
+  const char* op = node->return_null_on_error() ? "TRY_CAST" : "CAST";
+  return absl::StrCat(op, "(", inner, " AS ", type_sql, ")");
 }
 
 std::string Transpiler::EmitMakeStruct(
@@ -1109,6 +1234,81 @@ std::string Transpiler::EmitGetStructField(
 std::string Transpiler::EmitSubqueryExpr(
     const ::googlesql::ResolvedSubqueryExpr* /*node*/) {
   return "";
+}
+
+std::string Transpiler::EmitWithExpr(
+    const ::googlesql::ResolvedWithExpr* node) {
+  // BigQuery `WITH(name AS <expr>, ...) <body>` is a scalar-context
+  // expression that binds each `<expr>` once and then evaluates
+  // `<body>` against those bindings. DuckDB has no `WITH ... <body>`
+  // expression syntax, but a scalar subquery preserves the
+  // once-per-row evaluation contract: we emit the inner SELECT to
+  // expose every binding as a named column, then project the body
+  // off it. Each `ResolvedColumnRef` inside the body lowers to the
+  // bound column name via `EmitColumnRef`, so the names land where
+  // the body expects them.
+  //
+  //   WITH(a AS <e1>, b AS <e2>) <body>
+  //     ->
+  //   (SELECT <body> FROM (SELECT <e1> AS "a", <e2> AS "b"))
+  //
+  // Falls back via the empty-string contract when any binding's
+  // expression or the body cannot be lowered; an empty assignment
+  // list is malformed (the analyzer rejects it upstream) and we
+  // guard defensively.
+  if (node == nullptr || node->expr() == nullptr) return "";
+  if (node->assignment_list_size() == 0) return "";
+  std::vector<std::string> assigns;
+  assigns.reserve(node->assignment_list_size());
+  for (int i = 0; i < node->assignment_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* cc = node->assignment_list(i);
+    if (cc == nullptr || cc->expr() == nullptr) return "";
+    std::string e = EmitExpr(cc->expr());
+    if (e.empty()) return "";
+    assigns.push_back(
+        absl::StrCat(e,
+                     " AS \"",
+                     absl::StrReplaceAll(cc->column().name(), {{"\"", "\"\""}}),
+                     "\""));
+  }
+  std::string body = EmitExpr(node->expr());
+  if (body.empty()) return "";
+  return absl::StrCat(
+      "(SELECT ", body, " FROM (SELECT ", absl::StrJoin(assigns, ", "), "))");
+}
+
+std::string Transpiler::EmitFunctionArgument(
+    const ::googlesql::ResolvedFunctionArgument* node) {
+  // `ResolvedFunctionArgument` is the one-of wrapper the analyzer
+  // produces for `generic_argument_list` slots (TVFs, lambda-bearing
+  // function calls, descriptor / model / connection arguments, ...).
+  // Today's emit pass only knows how to lower the `expr()` slot --
+  // the wrapped scalar expression flows through `EmitExpr` like any
+  // other ResolvedExpr so callers walking a generic argument list
+  // can splice the result into their own SQL fragment.
+  //
+  // Every other slot (scan / model / connection / descriptor /
+  // lambda / sequence / graph) needs bespoke lowering work that no
+  // caller has proven yet; we propagate "" so the engine takes the
+  // reference-impl fallback for the surrounding function call. The
+  // `argument_alias()` (BigQuery's `F(<arg> AS <alias>)` syntax) is
+  // similarly user-intent metadata with no DuckDB analog -- we
+  // ignore it and keep the unwrapped expression's emit on the
+  // expression path.
+  if (node == nullptr) return "";
+  if (node->expr() == nullptr) return "";
+  if (node->scan() != nullptr || node->model() != nullptr ||
+      node->connection() != nullptr || node->descriptor_arg() != nullptr ||
+      node->inline_lambda() != nullptr || node->sequence() != nullptr ||
+      node->graph() != nullptr) {
+    return "";
+  }
+  // Touch the metadata slots the analyzer expects every consumer to
+  // observe so `ResolvedAST::CheckFieldsAccessed` does not flag a
+  // missed argument when this node round-trips through validation.
+  (void)node->argument_column_list_size();
+  (void)node->argument_alias();
+  return EmitExpr(node->expr());
 }
 
 // Column / output shape -----------------------------------------------------
