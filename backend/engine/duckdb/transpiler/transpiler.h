@@ -205,6 +205,15 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedMakeStruct* node);
   virtual std::string EmitGetStructField(
       const ::googlesql::ResolvedGetStructField* node);
+  // BigQuery `<json>.<field>` lowers through DuckDB's `->` operator
+  // when the result type is JSON (the common case for chained
+  // `<json>.a.b` access) and through `->>` when the analyzer
+  // resolves the return as a scalar (rare today; reserved for
+  // analyzer-driven coercion). See the `EmitGetJsonField` body for
+  // the deliberate choice between `->` / `->>` and
+  // `json_extract` / `json_extract_string`.
+  virtual std::string EmitGetJsonField(
+      const ::googlesql::ResolvedGetJsonField* node);
   virtual std::string EmitSubqueryExpr(
       const ::googlesql::ResolvedSubqueryExpr* node);
   virtual std::string EmitWithExpr(const ::googlesql::ResolvedWithExpr* node);

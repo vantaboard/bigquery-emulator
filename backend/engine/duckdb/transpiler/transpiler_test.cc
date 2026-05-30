@@ -185,6 +185,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitFilterScan;
   using Transpiler::EmitFunctionArgument;
   using Transpiler::EmitFunctionCall;
+  using Transpiler::EmitGetJsonField;
   using Transpiler::EmitGetStructField;
   using Transpiler::EmitJoinScan;
   using Transpiler::EmitLimitOffsetScan;
@@ -705,16 +706,18 @@ TEST_F(TranspilerTest, EmitMakeStructNamedFields) {
             "{'a': \"id\", 'b': 'x'}");
 }
 
-TEST_F(TranspilerTest, EmitMakeStructAnonymousFieldsFallsBack) {
+TEST_F(TranspilerTest, EmitMakeStructAnonymousFieldsSynthesizeNames) {
   // `STRUCT(id, 'x')` (no `AS <name>`) resolves to a
-  // `ResolvedMakeStruct` whose `StructType` carries *empty* field
-  // names (`StructField{name: ""}`). DuckDB does not support
-  // unnamed struct fields, so the emit propagates "" to take the
-  // reference-impl fallback per the disposition policy. The
-  // conformance harness pins this shape on the reference-impl
-  // engine until a follow-up plan synthesizes positional names.
-  // The first arg is a column ref so the analyzer can't fold the
-  // whole expression onto a `ResolvedLiteral`.
+  // `ResolvedMakeStruct` whose `StructType` may still carry an
+  // analyzer-derived name for the column-ref slot (`id` here -- BQ
+  // copies the source column name as a courtesy) and an empty name
+  // for the literal slot. The empty-name slot synthesizes a
+  // positional DuckDB-side name (`_1`) so the lowered struct still
+  // has a key per field; the column-ref slot keeps its
+  // analyzer-supplied name verbatim. `EmitGetStructField` uses the
+  // same convention, so anonymous-field access round-trips through
+  // the DuckDB engine. The column ref keeps the analyzer from
+  // folding the whole expression onto a `ResolvedLiteral`.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT STRUCT(id, 'x') AS s FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
@@ -722,7 +725,34 @@ TEST_F(TranspilerTest, EmitMakeStructAnonymousFieldsFallsBack) {
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_MAKE_STRUCT);
   TestTranspiler t;
   EXPECT_EQ(t.EmitMakeStruct(expr->GetAs<::googlesql::ResolvedMakeStruct>()),
-            "");
+            "{'id': \"id\", '_1': 'x'}");
+}
+
+TEST_F(TranspilerTest, EmitMakeStructFullyAnonymousLiteralFields) {
+  // To pin the *fully* anonymous case (every field empty-named) we
+  // synthesize the AST directly: the analyzer would normally fold
+  // a struct of two literals onto a `ResolvedLiteral` (covered by
+  // `EmitMakeStructLiteralAnonymousAllConst`) so this construction
+  // exercises the `EmitMakeStruct` path with both names empty. The
+  // emit synthesizes `_0` / `_1` end-to-end and never reaches the
+  // empty-string fallback.
+  const ::googlesql::Type* int64_t_ty = type_factory_->get_int64();
+  const ::googlesql::Type* string_ty = type_factory_->get_string();
+  std::vector<::googlesql::StructType::StructField> fields = {
+      {/*name=*/"", int64_t_ty},
+      {/*name=*/"", string_ty},
+  };
+  const ::googlesql::StructType* struct_ty = nullptr;
+  ASSERT_TRUE(type_factory_->MakeStructType(fields, &struct_ty).ok());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> field_list;
+  field_list.push_back(
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1)));
+  field_list.push_back(
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::String("a")));
+  auto make_struct =
+      ::googlesql::MakeResolvedMakeStruct(struct_ty, std::move(field_list));
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitMakeStruct(make_struct.get()), "{'_0': 1, '_1': 'a'}");
 }
 
 TEST_F(TranspilerTest, EmitGetStructFieldNamedAccess) {
@@ -744,6 +774,97 @@ TEST_F(TranspilerTest, EmitGetStructFieldNamedAccess) {
   EXPECT_EQ(
       t.EmitGetStructField(expr->GetAs<::googlesql::ResolvedGetStructField>()),
       "{'a': 1, 'b': 'x'}.\"a\"");
+}
+
+TEST_F(TranspilerTest, EmitMakeStructLiteralAnonymousAllConst) {
+  // `STRUCT(1, 'a')` with all-constant arguments folds to a
+  // `ResolvedLiteral` of TYPE_STRUCT in the analyzer -- the
+  // `EmitValueLiteral` private helper handles it instead of
+  // `EmitMakeStruct`. We assert on the same synthesized-name
+  // shape so the literal path stays in lock-step with the
+  // construction path; otherwise serialization on the literal
+  // would diverge from runtime construction for the same
+  // BigQuery shape.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT STRUCT(1, 'a') AS s");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
+            "{'_0': 1, '_1': 'a'}");
+}
+
+TEST_F(TranspilerTest, EmitGetStructFieldAnonymousUsesSynthesizedName) {
+  // Anonymous-field access can't always be expressed cleanly in BQ
+  // surface SQL (positional access lands on different shapes
+  // depending on the source surface), so we construct the AST
+  // directly to pin the emit. A literal `STRUCT(1, 'a')` yields a
+  // `ResolvedLiteral` whose value is a constant struct with
+  // anonymous fields; wrapping it in a `ResolvedGetStructField`
+  // with `field_idx=0` produces exactly the access shape the
+  // analyzer would emit when the BigQuery surface allows
+  // positional access. The expected DuckDB SQL uses `_0` (the
+  // synthesized name) on both the construction and the access
+  // side, so the lowered struct round-trips.
+  const ::googlesql::Type* int64_t_ty = type_factory_->get_int64();
+  const ::googlesql::Type* string_ty = type_factory_->get_string();
+  std::vector<::googlesql::StructType::StructField> fields = {
+      {/*name=*/"", int64_t_ty},
+      {/*name=*/"", string_ty},
+  };
+  const ::googlesql::StructType* struct_ty = nullptr;
+  ASSERT_TRUE(type_factory_->MakeStructType(fields, &struct_ty).ok());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> field_list;
+  field_list.push_back(
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1)));
+  field_list.push_back(
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::String("a")));
+  auto make_struct =
+      ::googlesql::MakeResolvedMakeStruct(struct_ty, std::move(field_list));
+  auto get_field = ::googlesql::MakeResolvedGetStructField(
+      int64_t_ty,
+      std::move(make_struct),
+      /*field_idx=*/0,
+      /*field_expr_is_positional=*/true);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetStructField(get_field.get()),
+            "{'_0': 1, '_1': 'a'}.\"_0\"");
+}
+
+TEST_F(TranspilerTest, EmitLiteralArrayOfNamedStructs) {
+  // BigQuery `[STRUCT(1 AS a, 'x' AS b), STRUCT(2 AS a, 'y' AS b)]`
+  // resolves to a constant-folded `ResolvedLiteral` of type
+  // `ARRAY<STRUCT<a INT64, b STRING>>`. The emit recurses through
+  // `EmitValueLiteral` so each inner struct lowers to
+  // `{'a': N, 'b': '...'}`. This pins the named-field shape inside
+  // an array (the conformance harness exercises this through
+  // ARRAY_AGG / generated arrays in conformance suites).
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT [STRUCT(1 AS a, 'x' AS b), STRUCT(2 AS a, 'y' AS b)] AS arr");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
+            "[{'a': 1, 'b': 'x'}, {'a': 2, 'b': 'y'}]");
+}
+
+TEST_F(TranspilerTest, EmitLiteralArrayOfAnonymousStructs) {
+  // Anonymous nested struct literal: each element is `STRUCT(N, 'x')`
+  // with empty field names, so both inner structs synthesize the
+  // same positional names (`_0`, `_1`). The test pins the lockstep
+  // contract between the literal emit and the make-struct emit -- a
+  // future drift would surface as one path emitting `_0` and the
+  // other emitting some other key.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT [STRUCT(1, 'x'), STRUCT(2, 'y')] AS arr");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_LITERAL);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()),
+            "[{'_0': 1, '_1': 'x'}, {'_0': 2, '_1': 'y'}]");
 }
 
 TEST_F(TranspilerTest, EmitArrayScanStandaloneUnnestLiteral) {
@@ -1640,6 +1761,112 @@ TEST_F(TranspilerTest, EmitFunctionArgumentNonExprSlotFallsBack) {
   auto arg = ::googlesql::MakeResolvedFunctionArgument();
   TestTranspiler t;
   EXPECT_EQ(t.EmitFunctionArgument(arg.get()), "");
+}
+
+// --- JSON field access --------------------------------------------------
+
+// Helper: synthesize a `ResolvedColumnRef` to a JSON-typed column.
+// We construct the AST for `EmitGetJsonField` directly so the emit
+// is exercised independently of how the analyzer represents BQ JSON
+// dot access (which can be analyzer-folded for fully constant LHS).
+// Reusing this helper across the JSON tests keeps each case focused
+// on the field-name + nested-access shape.
+std::unique_ptr<::googlesql::ResolvedColumnRef> MakeJsonColumnRef(
+    const ::googlesql::Type* json_ty) {
+  ::googlesql::ResolvedColumn col(
+      /*column_id=*/1,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$test"),
+      /*name=*/::googlesql::IdString::MakeGlobal("data"),
+      json_ty);
+  return ::googlesql::MakeResolvedColumnRef(col, /*is_correlated=*/false);
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldObjectAccess) {
+  // `data.user` where `data` is JSON resolves to a
+  // `ResolvedGetJsonField` whose `expr` is the column ref and whose
+  // `field_name` is `user`. The result type is JSON (BQ keeps the
+  // type as JSON for `<json>.<field>` access), so the emit uses
+  // DuckDB's `->` operator -- which also returns JSON.
+  const ::googlesql::Type* json_ty = type_factory_->get_json();
+  auto get = ::googlesql::MakeResolvedGetJsonField(json_ty,
+                                                   MakeJsonColumnRef(json_ty),
+                                                   /*field_name=*/"user");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(get.get()), "(\"data\" -> 'user')");
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldNestedAccess) {
+  // `data.user.name` chains two `ResolvedGetJsonField` nodes; the
+  // outer one's `expr` is the inner one's whole `(<json> -> 'user')`
+  // emit, so the composition lands as `((data -> 'user') -> 'name')`.
+  // Each level is a fresh `EmitExpr` call so the emit composes
+  // recursively without any bespoke flattening.
+  const ::googlesql::Type* json_ty = type_factory_->get_json();
+  auto inner = ::googlesql::MakeResolvedGetJsonField(json_ty,
+                                                     MakeJsonColumnRef(json_ty),
+                                                     /*field_name=*/"user");
+  auto outer = ::googlesql::MakeResolvedGetJsonField(json_ty,
+                                                     std::move(inner),
+                                                     /*field_name=*/"name");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(outer.get()),
+            "((\"data\" -> 'user') -> 'name')");
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldEscapesSingleQuotes) {
+  // BigQuery JSON keys can contain arbitrary characters including
+  // `'`. The DuckDB-side string literal must double the quote so
+  // the SQL stays well-formed. We do not need a JSON-path escape
+  // step because the `->` operator takes a STRING (not a JSON path
+  // expression) so the only escaping that matters is the SQL
+  // string-literal one `QuoteString` already provides.
+  const ::googlesql::Type* json_ty = type_factory_->get_json();
+  auto get = ::googlesql::MakeResolvedGetJsonField(json_ty,
+                                                   MakeJsonColumnRef(json_ty),
+                                                   /*field_name=*/"O'Brien");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(get.get()), "(\"data\" -> 'O''Brien')");
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldHandlesUnicodeFieldName) {
+  // Unicode-bearing JSON field name. `QuoteString` is a byte-wise
+  // wrapper so multibyte UTF-8 sequences flow through unchanged --
+  // we pin the assertion on the same UTF-8 bytes the field name
+  // carries.
+  const ::googlesql::Type* json_ty = type_factory_->get_json();
+  auto get = ::googlesql::MakeResolvedGetJsonField(json_ty,
+                                                   MakeJsonColumnRef(json_ty),
+                                                   /*field_name=*/"naïve");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(get.get()), "(\"data\" -> 'naïve')");
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldScalarReturnUsesArrowGreater) {
+  // When the analyzer types the GetJsonField result as something
+  // other than JSON (a STRING coerced result, in some BQ analyzer
+  // configurations), the emit picks DuckDB's `->>` operator so the
+  // returned column is VARCHAR rather than JSON. This pins the
+  // type-driven branch in `EmitGetJsonField` for the rare
+  // scalar-coerced case.
+  const ::googlesql::Type* json_ty = type_factory_->get_json();
+  const ::googlesql::Type* string_ty = type_factory_->get_string();
+  auto get = ::googlesql::MakeResolvedGetJsonField(string_ty,
+                                                   MakeJsonColumnRef(json_ty),
+                                                   /*field_name=*/"name");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(get.get()), "(\"data\" ->> 'name')");
+}
+
+TEST_F(TranspilerTest, EmitGetJsonFieldNullExprFallsBack) {
+  // A malformed `ResolvedGetJsonField` with a null inner expression
+  // can't be lowered; the emit must propagate "" so the engine
+  // takes the reference-impl fallback for the whole query rather
+  // than emitting partial SQL. The analyzer doesn't produce this
+  // shape, but we guard so a future change to the GetJsonField
+  // construction surface doesn't silently emit `(<empty> -> ...)`.
+  auto get = ::googlesql::MakeResolvedGetJsonField();
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitGetJsonField(get.get()), "");
 }
 
 TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {

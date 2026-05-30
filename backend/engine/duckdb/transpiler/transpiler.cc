@@ -45,6 +45,38 @@ std::string QuoteString(absl::string_view text) {
   return absl::StrCat("'", absl::StrReplaceAll(text, {{"'", "''"}}), "'");
 }
 
+// Synthesize a stable DuckDB-side field name for a BigQuery STRUCT
+// field that was declared without one (e.g. `STRUCT(1, 'a')`). DuckDB
+// requires every struct field to be named, so we pick a positional
+// scheme (`_0`, `_1`, ...) and use the *same* convention everywhere
+// the transpiler emits SQL that mentions the field:
+//
+//   * `EmitValueLiteral` (folded constant struct) and `EmitMakeStruct`
+//     emit the synthesized name as the key in `{'_<i>': <value>}`.
+//   * `EmitGetStructField` resolves a positional access to the same
+//     synthesized name on the dotted form (`<expr>."_<i>"`).
+//
+// Stable, monotonic positional names match BigQuery's positional
+// field-order semantics one-for-one and keep the conformance harness
+// from having to round-trip the BQ-side name (which is empty
+// regardless of how the user spelled the access).
+std::string SynthesizeAnonymousFieldName(int idx) {
+  return absl::StrCat("_", idx);
+}
+
+// Pick the DuckDB field name to use for STRUCT field `idx` of type
+// `st`. Returns the analyzer's name when set, or the synthesized
+// positional name (`_<idx>`) for an anonymous field. Centralizing the
+// choice keeps `EmitValueLiteral`, `EmitMakeStruct`, and
+// `EmitGetStructField` aligned -- a drift between the literal/maker
+// emit and the field-access emit would silently produce DuckDB
+// "field does not exist" runtime errors.
+std::string ResolveStructFieldName(const ::googlesql::StructType& st, int idx) {
+  const ::googlesql::StructField& f = st.field(idx);
+  if (f.name.empty()) return SynthesizeAnonymousFieldName(idx);
+  return f.name;
+}
+
 // Lower a GoogleSQL `Value` into a DuckDB SQL literal expression.
 //
 // Scalars route through `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`
@@ -61,9 +93,11 @@ std::string QuoteString(absl::string_view text) {
 // * Structs: DuckDB struct literals are `{'k1': v1, 'k2': v2, ...}`
 //   keyed by name. BQ STRUCT field order is positional (the type
 //   carries the names), so we walk the StructType for the keys in
-//   parallel with the value list. Anonymous fields (empty name) have
-//   no DuckDB analog and force the caller back to the reference-impl
-//   fallback by returning the empty string.
+//   parallel with the value list. Anonymous BigQuery fields (empty
+//   name) get a synthesized positional name (`_0`, `_1`, ...) via
+//   `ResolveStructFieldName` so the literal emits as
+//   `{'_0': 1, '_1': 'a'}`; `EmitGetStructField` uses the same
+//   convention on the access side.
 //
 // Returns the empty string when any element / field cannot be lowered;
 // callers propagate that up so the engine fallback fires per the
@@ -91,11 +125,10 @@ std::string EmitValueLiteral(const ::googlesql::Value& v) {
       std::vector<std::string> kvs;
       kvs.reserve(v.num_fields());
       for (int i = 0; i < v.num_fields(); ++i) {
-        const ::googlesql::StructField& f = st->field(i);
-        if (f.name.empty()) return "";
         std::string fv = EmitValueLiteral(v.field(i));
         if (fv.empty()) return "";
-        kvs.push_back(absl::StrCat(QuoteString(f.name), ": ", fv));
+        kvs.push_back(absl::StrCat(
+            QuoteString(ResolveStructFieldName(*st, i)), ": ", fv));
       }
       return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
     }
@@ -173,6 +206,7 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_CAST:
     case ::googlesql::RESOLVED_MAKE_STRUCT:
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
+    case ::googlesql::RESOLVED_GET_JSON_FIELD:
     case ::googlesql::RESOLVED_WITH_EXPR:
       return EmitExpr(node->GetAs<::googlesql::ResolvedExpr>());
     default:
@@ -198,6 +232,8 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
       return EmitGetStructField(
           expr->GetAs<::googlesql::ResolvedGetStructField>());
+    case ::googlesql::RESOLVED_GET_JSON_FIELD:
+      return EmitGetJsonField(expr->GetAs<::googlesql::ResolvedGetJsonField>());
     case ::googlesql::RESOLVED_WITH_EXPR:
       return EmitWithExpr(expr->GetAs<::googlesql::ResolvedWithExpr>());
     default:
@@ -1176,10 +1212,11 @@ std::string Transpiler::EmitMakeStruct(
   //     we double-check defensively because a drift would silently
   //     produce a struct DuckDB rejects.
   //   * DuckDB STRUCTs *require* named fields; BigQuery permits
-  //     anonymous ones (`STRUCT(1, 2)`). Anonymous fields fall back
-  //     to reference-impl via the empty-string contract; a follow-up
-  //     plan could synthesize positional names (`_0`, `_1`, ...) and
-  //     teach `EmitGetStructField` to look them up.
+  //     anonymous ones (`STRUCT(1, 2)`). We synthesize a positional
+  //     name (`_0`, `_1`, ...) via `ResolveStructFieldName` so the
+  //     emit yields `{'_0': 1, '_1': 2}`; `EmitGetStructField` looks
+  //     up the same synthesized name on the access side so positional
+  //     field access composes byte-for-byte.
   //   * NULL field values propagate through `EmitExpr` /
   //     `EmitValueLiteral` as the literal `NULL`; DuckDB matches
   //     BigQuery's "absent NULL field" semantics for struct literals.
@@ -1193,11 +1230,10 @@ std::string Transpiler::EmitMakeStruct(
   std::vector<std::string> kvs;
   kvs.reserve(node->field_list_size());
   for (int i = 0; i < node->field_list_size(); ++i) {
-    const ::googlesql::StructField& f = st->field(i);
-    if (f.name.empty()) return "";
     std::string v = EmitExpr(node->field_list(i));
     if (v.empty()) return "";
-    kvs.push_back(absl::StrCat(QuoteString(f.name), ": ", v));
+    kvs.push_back(
+        absl::StrCat(QuoteString(ResolveStructFieldName(*st, i)), ": ", v));
   }
   return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
 }
@@ -1208,10 +1244,15 @@ std::string Transpiler::EmitGetStructField(
   // `ResolvedGetStructField` carrying the parent expression, the
   // 0-indexed `field_idx`, and `field_expr_is_positional` (which is
   // user-intent only; it does not change semantics). DuckDB's struct
-  // field access is also `<expr>.<name>` or `<expr>['<name>']`; we
-  // pick the dotted form for readability when the source struct's
-  // field has a name. Anonymous fields are out of scope (see the
-  // `EmitMakeStruct` comment) and fall back here too.
+  // field access is `<expr>.<name>` or `<expr>['<name>']`; we pick
+  // the dotted form for readability.
+  //
+  // Named fields use the analyzer-supplied name verbatim. Anonymous
+  // fields (empty `StructField::name`) resolve to the synthesized
+  // positional name (`_<idx>`) via `ResolveStructFieldName`; that
+  // matches the convention `EmitMakeStruct` and `EmitValueLiteral`
+  // use on the construction side, so anonymous-field access
+  // round-trips through DuckDB.
   if (node == nullptr || node->expr() == nullptr) return "";
   const ::googlesql::Type* base_type = node->expr()->type();
   if (base_type == nullptr || !base_type->IsStruct()) return "";
@@ -1219,8 +1260,6 @@ std::string Transpiler::EmitGetStructField(
   if (st == nullptr) return "";
   int idx = node->field_idx();
   if (idx < 0 || idx >= st->num_fields()) return "";
-  const ::googlesql::StructField& f = st->field(idx);
-  if (f.name.empty()) return "";
   std::string base = EmitExpr(node->expr());
   if (base.empty()) return "";
   // Mark `field_expr_is_positional` accessed even though it carries
@@ -1228,7 +1267,53 @@ std::string Transpiler::EmitGetStructField(
   // `ResolvedAST::CheckFieldsAccessed` otherwise tears down deep
   // copies through the conformance harness.
   (void)node->field_expr_is_positional();
-  return absl::StrCat(base, ".", QuoteIdent(f.name));
+  return absl::StrCat(base, ".", QuoteIdent(ResolveStructFieldName(*st, idx)));
+}
+
+std::string Transpiler::EmitGetJsonField(
+    const ::googlesql::ResolvedGetJsonField* node) {
+  // BigQuery `<json>.<field>` lowers to a `ResolvedGetJsonField`
+  // whose `expr()` carries the parent JSON expression and whose
+  // `field_name()` is the unescaped field key. The analyzer also
+  // sets `type()` on the node: BigQuery semantics keep the result
+  // as JSON for `<json>.<field>` access (use `JSON_VALUE` or the
+  // `JSON`-to-scalar cast suite for a scalar pull), so the typical
+  // case lands with `type()->IsJson()`.
+  //
+  // DuckDB has two JSON access surfaces and the choice matters --
+  // they differ on the *return type*, not on what they read:
+  //
+  //   * `<json> -> 'k'`      -> JSON     (json_extract)
+  //   * `<json> ->> 'k'`     -> VARCHAR  (json_extract_string)
+  //
+  // We deliberately key off the resolved return type so the lowered
+  // SQL preserves BQ's contract: a JSON-typed result emits `->`
+  // (DuckDB returns JSON); a non-JSON-typed result emits `->>`
+  // (DuckDB returns the scalar text). Picking the wrong operator
+  // would leak DuckDB's auto-stringification into a query the user
+  // expected to keep typed as JSON, or vice versa -- a silent
+  // semantic drift the conformance harness would have to chase
+  // down through serialization.
+  //
+  // Nested `<json>.a.b` chains compose naturally: the outer call
+  // recurses through `EmitExpr` into another `EmitGetJsonField`
+  // whose result is already a parenthesized `<json> -> 'a'`, and
+  // we wrap our own emit in parentheses so a downstream operator
+  // splice (`IS NULL`, `=`, function-arg) stays unambiguous against
+  // DuckDB precedence rules.
+  //
+  // The string-literal field key uses `QuoteString`, which doubles
+  // embedded `'` -- that's the same shape every other STRING
+  // literal in the transpiler emits, so unicode / quote characters
+  // round-trip without bespoke JSON-path escaping.
+  if (node == nullptr || node->expr() == nullptr) return "";
+  std::string inner = EmitExpr(node->expr());
+  if (inner.empty()) return "";
+  const ::googlesql::Type* result_type = node->type();
+  const char* op =
+      (result_type != nullptr && result_type->IsJson()) ? "->" : "->>";
+  return absl::StrCat(
+      "(", inner, " ", op, " ", QuoteString(node->field_name()), ")");
 }
 
 std::string Transpiler::EmitSubqueryExpr(
