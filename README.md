@@ -13,12 +13,22 @@ A locally-runnable emulator of Google Cloud BigQuery, intended for local
 development and integration testing of applications that target the
 BigQuery REST API.
 
-> **Status:** very early scaffold. The Go REST gateway boots, answers a
-> health probe, and registers every documented BigQuery v2 REST endpoint
-> as a 501 stub. The C++ engine is a placeholder. See
-> [`ROADMAP.md`](./ROADMAP.md) for the capability-area plan and
-> [`docs/REST_API.md`](./docs/REST_API.md) for the per-endpoint mapping
-> and current status.
+> **Status:** preview (`v0.x`). The Go REST gateway implements
+> projects / datasets / tables / tabledata / jobs / queries end-to-end
+> against the C++ engine, plus wired stubs for the surfaces client
+> libraries probe at startup (models, routines, row-access policies,
+> migration, data transfer, discovery). The C++ engine links GoogleSQL
+> directly, transpiles the resolved AST to DuckDB SQL, and executes
+> through DuckDB; results land back as REST `f`/`v` JSON or, on the
+> internal gRPC Storage Read API, as native Arrow batches.
+> `MERGE`, `CREATE TABLE`, `CREATE TABLE AS SELECT`, and `DROP TABLE`
+> work today; `INSERT VALUES` / `UPDATE` / `DELETE` still surface
+> `UNIMPLEMENTED` — seed rows via `tabledata.insertAll` while those
+> close. See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
+> narrative, [`docs/REST_API.md`](./docs/REST_API.md) for the
+> per-endpoint mapping + current status, and
+> [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the DuckDB-only
+> policy.
 
 ## Architecture
 
@@ -58,32 +68,55 @@ rationale.
 ```
 bigquery-emulator/
   binaries/
-    gateway_main/main.go    # Go REST gateway entrypoint
-    emulator_main/main.cc   # C++ engine entrypoint (links GoogleSQL)
+    gateway_main/         # Go REST gateway entrypoint (cli.go, main.go)
+    emulator_main/        # C++ engine entrypoint (main.cc + version glue)
   gateway/              # Go: HTTP server + subprocess manager
     gateway.go            # Lifecycle: spawn engine, run HTTP, shutdown
     server.go             # HTTP routing
     handlers/             # BigQuery REST handlers (one file per resource)
+    middleware/           # Auth + request logging middleware
     bqtypes/              # Wire-compatible BigQuery REST types
-    enginepb/             # Generated Go bindings for proto/emulator.proto
+    enginepb/             # Generated Go bindings for proto/*.proto
+    engine/               # gRPC client wrapper for emulator_main
+    jobs/                 # In-process job lifecycle (creation -> done)
+    seed/, seedfile/      # Seed-data REST API + YAML applier
+    e2e/                  # Integration tests against a real engine
   frontend/             # C++: gRPC server that fronts the engine
     server/                 # gRPC plumbing
-    handlers/               # Implements proto/emulator.proto services
-  backend/              # C++: DuckDB storage / schema / catalog
+    handlers/               # Catalog + Query + StorageRead services
+  backend/              # C++: catalog / schema / storage / engine
+    catalog/, schema/       # GoogleSQL catalog adapter + type mapping
+    storage/duckdb/         # DuckDB-backed catalog.duckdb persistence
+    engine/duckdb/          # Resolved-AST -> DuckDB SQL transpiler
   proto/                # Internal Go <-> C++ contract
-    emulator.proto
-  build/                # Bazel + Docker glue (planned)
-  Taskfile.yml          # Common dev commands (build, run, test, lint)
-  Makefile              # Same as Taskfile, for users who prefer make
-  BUILD.bazel           # Bazel root (planned)
-  MODULE.bazel          # Bzlmod root (planned)
-  go.mod / go.sum       # Go module
+    emulator.proto        # Catalog + Query services
+    storage_read.proto    # bigquery_emulator.v1.StorageRead
+  conformance/          # YAML fixture runner + diff harness
+    cmd/runner/             # `go run ./conformance/cmd/runner`
+    fixtures/               # YAML fixtures (SELECT / GROUP BY / JOIN / DDL / ...)
+  third_party/          # Vendored upstream client-library sample suites
+    golang-bigquery-tests/, node-bigquery-tests/,
+    python-bigquery-tests/, python-bigquery-dataframes-tests/,
+    java-bigquery-tests/, duckdb/  # DuckDB pin
   docs/                 # Documentation
     REST_API.md           # Endpoint -> handler mapping (read this when
                           # debugging a specific BigQuery REST call)
+    ENGINE_POLICY.md      # DuckDB-only policy + UNIMPLEMENTED shapes
+    SEEDING.md            # Declarative + template + REST seeding
+    dev/                  # C++ lint policy, prebuilt GoogleSQL playbooks
     bigquery/             # Vendored copy of the upstream BigQuery docs
                           # corpus, used as the source of truth when
                           # verifying request/response shapes
+  taskfiles/            # Per-namespace Task includes (emulator:, lint:,
+                        # test:, docker:, conformance:, thirdparty:, ...)
+  Taskfile.yml          # Common dev commands (build, run, test, lint)
+  Makefile              # Same as Taskfile, for users who prefer make
+  BUILD.bazel           # Bazel root
+  MODULE.bazel          # Bzlmod root (GoogleSQL via local_path_override,
+                        # DuckDB via http_archive)
+  Dockerfile            # Multi-stage build: engine-builder-bazel + runtime
+  docker-compose.yml    # `docker compose up` runtime + smoke recipe
+  go.mod / go.sum       # Go module
   ROADMAP.md            # Capability-area plan (read this first)
   README.md
   LICENSE               # MIT
@@ -122,32 +155,50 @@ suppression markers — see [`docs/dev/cpp-lint.md`](./docs/dev/cpp-lint.md).
 
 ## Quickstart
 
-> Right now only the Go side builds and runs. Engine wiring is the
-> internal-gRPC-contract work tracked in [`ROADMAP.md`](./ROADMAP.md).
+The fastest path is the published Docker image — no Bazel build, no
+GoogleSQL toolchain, just `docker run`:
 
 ```bash
-# Build the gateway.
-go build -o bin/gateway_main ./binaries/gateway_main
-
-# Run the gateway. It will try to spawn the engine; for now you can disable
-# the engine subprocess with --engine_binary="" while we are still scaffolding.
-./bin/gateway_main --engine_binary="" --http_port=9050
+docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:latest
 
 # In another shell:
-curl -sS http://localhost:9050/        # health check
-curl -sS http://localhost:9050/bigquery/v2/projects/test/datasets
+curl -fsS http://localhost:9050/healthz
+curl -fsS -X POST http://localhost:9050/bigquery/v2/projects/test/queries \
+    -H 'Content-Type: application/json' \
+    -d '{"query":"SELECT 1 AS n","useLegacySql":false}'
 ```
 
-When the C++ side starts being implemented (once the internal gRPC
-contract lands), the default flow becomes:
+To build and run locally instead:
 
 ```bash
-task emulator:build-all   # build both gateway_main and emulator_main
-task emulator:run-full    # run gateway, which spawns the engine
+# One-time toolchain setup (Go, Bazel, task, clang, buf, ...).
+mise install                              # or: task tools:install
+
+# Build the C++ engine (consumes a prebuilt GoogleSQL artifact by
+# default, so cold builds finish in a few minutes once the cache is
+# warm). Stages bin/emulator_main + bin/libduckdb.so.
+task emulator:build-engine:bazel
+
+# Build the gateway and run the pair locally (gateway on :9050,
+# engine on :9060). The gateway spawns the engine as a subprocess
+# and shuts it down on exit.
+task emulator:run-full
+
+# Smoke it.
+curl -fsS http://localhost:9050/healthz
+curl -fsS http://localhost:9050/bigquery/v2/projects/test/datasets
 ```
 
-Run `task --list` for the full set of namespaces (`emulator:`, `lint:`,
-`test:`, `docker:`, `ci:`, `tools:`).
+The engine binary discovery defaults to looking for `emulator_main`
+next to `bigquery-emulator-gateway` (or its parent directory). Pass
+`--engine_binary=<path>` to point at a specific build, or
+`--engine_binary=""` to skip the engine subprocess entirely (useful
+when you only want to hit the gateway's REST routes that don't talk
+to the engine — e.g. health, discovery, the wired-stub surfaces).
+
+Run `task --list` for the full set of namespaces (`emulator:`,
+`lint:`, `test:`, `docker:`, `conformance:`, `thirdparty:`,
+`googlesql:`, `release:`, `ci:`, `tools:`).
 
 ### Building the engine
 
