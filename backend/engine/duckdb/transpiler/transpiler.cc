@@ -198,6 +198,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_ORDER_BY_SCAN:
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
+    case ::googlesql::RESOLVED_SET_OPERATION_SCAN:
+    case ::googlesql::RESOLVED_SAMPLE_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_PARAMETER:
@@ -267,6 +269,11 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
           scan->GetAs<::googlesql::ResolvedLimitOffsetScan>());
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
       return EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>());
+    case ::googlesql::RESOLVED_SET_OPERATION_SCAN:
+      return EmitSetOperationScan(
+          scan->GetAs<::googlesql::ResolvedSetOperationScan>());
+    case ::googlesql::RESOLVED_SAMPLE_SCAN:
+      return EmitSampleScan(scan->GetAs<::googlesql::ResolvedSampleScan>());
     default:
       return "";
   }
@@ -599,9 +606,130 @@ std::string Transpiler::EmitAggregateScan(
   return sql;
 }
 
+std::string Transpiler::EmitSetOperationItem(
+    const ::googlesql::ResolvedSetOperationItem* item,
+    const ::googlesql::ResolvedSetOperationScan* parent) {
+  // Lower one item of a `ResolvedSetOperationScan`. The parent's
+  // `column_list()` names the *new* columns the set operation
+  // produces; each item's `output_column_list[i]` is the
+  // ResolvedColumn (from the child scan) that maps into the
+  // parent's `column_list(i)`. The two lists are guaranteed 1:1 by
+  // the GoogleSQL contract, so we project each output column under
+  // the parent's name (collapsed when the names already match).
+  //
+  // We wrap the child scan as a derived table (`FROM (<scan>)`)
+  // because every scan emit returns a self-contained SELECT; the
+  // resulting per-item SQL is itself a SELECT so the SetOpScan
+  // splice can join two-or-more items with the UNION / INTERSECT /
+  // EXCEPT keyword between them.
+  if (item == nullptr || parent == nullptr || item->scan() == nullptr) {
+    return "";
+  }
+  if (item->output_column_list_size() != parent->column_list_size()) {
+    return "";
+  }
+  std::string inner = EmitScan(item->scan());
+  if (inner.empty()) return "";
+  std::vector<std::string> projections;
+  projections.reserve(item->output_column_list_size());
+  for (int i = 0; i < item->output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& src = item->output_column_list(i);
+    const ::googlesql::ResolvedColumn& dst = parent->column_list(i);
+    std::string src_q = QuoteIdent(src.name());
+    if (src.name() == dst.name()) {
+      projections.push_back(std::move(src_q));
+    } else {
+      projections.push_back(
+          absl::StrCat(src_q, " AS ", QuoteIdent(dst.name())));
+    }
+  }
+  std::string select_list =
+      projections.empty() ? "*" : absl::StrJoin(projections, ", ");
+  return absl::StrCat("SELECT ", select_list, " FROM (", inner, ")");
+}
+
 std::string Transpiler::EmitSetOperationScan(
-    const ::googlesql::ResolvedSetOperationScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedSetOperationScan* node) {
+  // BigQuery `<lhs> UNION ALL <rhs>`, `<lhs> UNION DISTINCT <rhs>`,
+  // `<lhs> INTERSECT DISTINCT <rhs>`, `<lhs> EXCEPT DISTINCT <rhs>`
+  // all lower onto a `ResolvedSetOperationScan` whose
+  // `input_item_list()` carries one `ResolvedSetOperationItem` per
+  // arm and whose `column_list()` is the new set of ResolvedColumns
+  // the operation produces. We render the items in order with the
+  // matching DuckDB keyword between them:
+  //
+  //   UNION_ALL            -> "UNION ALL"
+  //   UNION_DISTINCT       -> "UNION"      (DuckDB's UNION is DISTINCT)
+  //   INTERSECT_DISTINCT   -> "INTERSECT"  (DuckDB's default behavior)
+  //   EXCEPT_DISTINCT      -> "EXCEPT"     (DuckDB's default behavior)
+  //   INTERSECT_ALL        -> "INTERSECT ALL"
+  //   EXCEPT_ALL           -> "EXCEPT ALL"
+  //
+  // The `INTERSECT ALL` / `EXCEPT ALL` variants are included for
+  // completeness even though BigQuery's surface SQL only exposes
+  // the DISTINCT forms today. DuckDB has supported the ALL
+  // variants since v0.10 with the standard SQL bag semantics
+  // (`min(m, n)` for INTERSECT ALL, `max(m - n, 0)` for EXCEPT
+  // ALL), which is also what GoogleSQL's INTERSECT_ALL /
+  // EXCEPT_ALL define when the analyzer surfaces them (see
+  // `ResolvedSetOperationScan` docs in
+  // `googlesql/resolved_ast/resolved_ast.h`). The kept-in-sync
+  // semantics are documented on the row in `SHAPE_TRACKER.md`.
+  //
+  // Fallbacks (return ""):
+  //   * `column_match_mode != BY_POSITION` -- `CORRESPONDING` /
+  //     `CORRESPONDING_BY` need name-based reshuffling that the
+  //     positional projection in `EmitSetOperationItem` does not
+  //     handle yet.
+  //   * Fewer than two inputs (a malformed AST the analyzer would
+  //     not produce, but the GoogleSQL contract says "at least
+  //     two", so we guard defensively).
+  //   * Any item whose child scan is on the empty-string fallback.
+  if (node == nullptr) return "";
+  if (node->column_match_mode() !=
+      ::googlesql::ResolvedSetOperationScan::BY_POSITION) {
+    return "";
+  }
+  // `column_propagation_mode` is documented as informational for
+  // engines; for BY_POSITION matching it is essentially
+  // load-bearing only when CORRESPONDING is in play. Touch the
+  // accessor so `CheckFieldsAccessed` does not flag a missed read
+  // when this node round-trips through validation.
+  (void)node->column_propagation_mode();
+  if (node->input_item_list_size() < 2) return "";
+
+  const char* op_kw = nullptr;
+  switch (node->op_type()) {
+    case ::googlesql::ResolvedSetOperationScan::UNION_ALL:
+      op_kw = "UNION ALL";
+      break;
+    case ::googlesql::ResolvedSetOperationScan::UNION_DISTINCT:
+      op_kw = "UNION";
+      break;
+    case ::googlesql::ResolvedSetOperationScan::INTERSECT_DISTINCT:
+      op_kw = "INTERSECT";
+      break;
+    case ::googlesql::ResolvedSetOperationScan::EXCEPT_DISTINCT:
+      op_kw = "EXCEPT";
+      break;
+    case ::googlesql::ResolvedSetOperationScan::INTERSECT_ALL:
+      op_kw = "INTERSECT ALL";
+      break;
+    case ::googlesql::ResolvedSetOperationScan::EXCEPT_ALL:
+      op_kw = "EXCEPT ALL";
+      break;
+    default:
+      return "";
+  }
+
+  std::vector<std::string> items;
+  items.reserve(node->input_item_list_size());
+  for (int i = 0; i < node->input_item_list_size(); ++i) {
+    std::string s = EmitSetOperationItem(node->input_item_list(i), node);
+    if (s.empty()) return "";
+    items.push_back(std::move(s));
+  }
+  return absl::StrJoin(items, absl::StrCat(" ", op_kw, " "));
 }
 
 std::string Transpiler::EmitOrderByScan(
@@ -836,8 +964,78 @@ std::string Transpiler::EmitAnalyticScan(
 }
 
 std::string Transpiler::EmitSampleScan(
-    const ::googlesql::ResolvedSampleScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedSampleScan* node) {
+  // BigQuery `TABLESAMPLE <method> (<n> PERCENT)` lowers to a
+  // `ResolvedSampleScan` whose `method()` carries the user-spelled
+  // method (`SYSTEM` for BQ surface SQL), `size()` is the size
+  // expression (literal or parameter), and `unit()` is PERCENT or
+  // ROWS. DuckDB spells the equivalent shape as:
+  //
+  //   SELECT * FROM <input> USING SAMPLE <size> PERCENT (<method>)
+  //   SELECT * FROM <input> USING SAMPLE <size> ROWS    (<method>)
+  //
+  // DuckDB ships three sampling methods (see
+  // https://duckdb.org/docs/sql/samples):
+  //
+  //   * `system`    -- coarse-grained block sampling; PERCENT only.
+  //                    Matches BigQuery's `TABLESAMPLE SYSTEM` shape.
+  //   * `bernoulli` -- per-row sampling; PERCENT only.
+  //                    The independent-Bernoulli semantics match the
+  //                    standard SQL definition GoogleSQL surfaces.
+  //   * `reservoir` -- fixed-row sampling; ROWS only.
+  //                    Matches the "exactly N rows" target.
+  //
+  // We bail (return "") on anything outside that matrix so the
+  // engine falls back to the reference-impl evaluator rather than
+  // emitting SQL with a method/unit combination DuckDB rejects at
+  // parse time. The plan also asks us to fall back on:
+  //
+  //   * `repeatable_argument()` -- DuckDB has REPEATABLE (<seed>),
+  //     but the seed-derived PRNG is not byte-equivalent to BQ's
+  //     `REPEATABLE`; rather than silently producing a different
+  //     sample for the same seed, we defer to a follow-up plan.
+  //   * `weight_column()` -- DuckDB has no `WITH WEIGHT` analog.
+  //   * `partition_by_list()` -- BigQuery's STRATIFY BY surface; no
+  //     DuckDB analog.
+  if (node == nullptr || node->input_scan() == nullptr) return "";
+  if (node->repeatable_argument() != nullptr) return "";
+  if (node->weight_column() != nullptr) return "";
+  if (node->partition_by_list_size() > 0) return "";
+
+  std::string method_lower = absl::AsciiStrToLower(node->method());
+  const bool is_system = (method_lower == "system");
+  const bool is_bernoulli = (method_lower == "bernoulli");
+  const bool is_reservoir = (method_lower == "reservoir");
+  if (!is_system && !is_bernoulli && !is_reservoir) return "";
+
+  std::string input = EmitScan(node->input_scan());
+  if (input.empty()) return "";
+  if (node->size() == nullptr) return "";
+  std::string size = EmitExpr(node->size());
+  if (size.empty()) return "";
+
+  std::string sample_amount;
+  switch (node->unit()) {
+    case ::googlesql::ResolvedSampleScan::PERCENT:
+      // SYSTEM and BERNOULLI consume PERCENT. RESERVOIR is rows-only.
+      if (is_reservoir) return "";
+      sample_amount = absl::StrCat(size, " PERCENT");
+      break;
+    case ::googlesql::ResolvedSampleScan::ROWS:
+      // RESERVOIR is the only DuckDB method that consumes ROWS.
+      if (!is_reservoir) return "";
+      sample_amount = absl::StrCat(size, " ROWS");
+      break;
+    default:
+      return "";
+  }
+  return absl::StrCat("SELECT * FROM (",
+                      input,
+                      ") USING SAMPLE ",
+                      sample_amount,
+                      " (",
+                      method_lower,
+                      ")");
 }
 
 std::string Transpiler::EmitWithRefScan(

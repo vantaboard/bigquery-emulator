@@ -45,6 +45,23 @@
 // `done` rows in `SHAPE_TRACKER.md` (TableScan, FilterScan, JoinScan,
 // AggregateScan, OrderByScan, LimitOffsetScan, AnalyticScan, ...).
 //
+// Set operations + sampling (`transpiler-setops-sample`) layer two
+// more scan kinds onto the dispatcher:
+//
+// * `EmitSetOperationScan` lowers `UNION ALL`, `UNION DISTINCT`,
+//   `INTERSECT DISTINCT`, `EXCEPT DISTINCT` (and the DuckDB-native
+//   `INTERSECT ALL` / `EXCEPT ALL` extensions that match standard
+//   SQL bag semantics) by routing each `ResolvedSetOperationItem`
+//   through a private `EmitSetOperationItem` helper. The helper
+//   honors BigQuery's column-name propagation by projecting each
+//   item's `output_column_list(i)` onto the parent's
+//   `column_list(i)` name.
+// * `EmitSampleScan` lowers BigQuery `TABLESAMPLE` to DuckDB's
+//   `USING SAMPLE` for the `SYSTEM` / `BERNOULLI` (PERCENT) and
+//   `RESERVOIR` (ROWS) shapes whose semantics match. Weight columns,
+//   stratify (`PARTITION BY`) lists, and repeatable seeds stay on
+//   the empty-string fallback for now.
+//
 // Expression-core (`transpiler-expression-core`) layers four scalar
 // shapes on top of the baseline:
 //
@@ -275,6 +292,19 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedComputedColumnBase* col,
       absl::string_view partition_clause,
       absl::string_view order_clause);
+
+  // Lower one `ResolvedSetOperationItem` into a derived-table SELECT
+  // that projects `parent->column_list()` in order. Each
+  // `output_column_list[i]` names the column the item's child scan
+  // exposes for the parent's `column_list(i)` slot, so we wrap the
+  // child scan as `FROM (<scan>)` and project `"<output_i>" AS
+  // "<parent_i>"` (collapsed when the names already match). Returns
+  // the empty string when the child scan cannot lower or the
+  // output/parent column counts disagree, so callers propagate the
+  // empty-string fallback contract.
+  std::string EmitSetOperationItem(
+      const ::googlesql::ResolvedSetOperationItem* item,
+      const ::googlesql::ResolvedSetOperationScan* parent);
 
   // Look up (or assign) the DuckDB `$N` slot for a named GoogleSQL
   // parameter. The first reference appends a new `ParameterRef` to

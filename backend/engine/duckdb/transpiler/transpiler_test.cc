@@ -196,6 +196,8 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitParameter;
   using Transpiler::EmitProjectScan;
   using Transpiler::EmitQueryStmt;
+  using Transpiler::EmitSampleScan;
+  using Transpiler::EmitSetOperationScan;
   using Transpiler::EmitSingleRowScan;
   using Transpiler::EmitTableScan;
   using Transpiler::EmitWithExpr;
@@ -1867,6 +1869,611 @@ TEST_F(TranspilerTest, EmitGetJsonFieldNullExprFallsBack) {
   auto get = ::googlesql::MakeResolvedGetJsonField();
   TestTranspiler t;
   EXPECT_EQ(t.EmitGetJsonField(get.get()), "");
+}
+
+// --- Set operations ----------------------------------------------------
+
+TEST_F(TranspilerTest, EmitSetOperationScanUnionAll) {
+  // BigQuery `<lhs> UNION ALL <rhs>` analyzes to a
+  // `ResolvedSetOperationScan` whose `op_type=UNION_ALL`,
+  // `column_match_mode=BY_POSITION`, and two
+  // `ResolvedSetOperationItem`s. GoogleSQL takes the parent
+  // column's name from the leftmost input's column (`id` here), so
+  // the LHS item's projection collapses (`"id"` -> `"id"`) and the
+  // RHS item renames `order_id` to `id` to land on the parent's
+  // column name.
+  //
+  // The analyzer wraps each `SELECT <col> FROM <table>` arm in a
+  // ResolvedProjectScan over the ResolvedTableScan (because the
+  // selected columns are a subset of the table's full column list),
+  // which is why the per-arm SQL has the extra `(SELECT ... FROM
+  // (SELECT ... FROM ...))` nesting -- the outer SELECT is the
+  // set-op item's projection, the middle SELECT is the analyzer's
+  // ProjectScan, and the inner SELECT is the TableScan.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people UNION ALL SELECT order_id FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " UNION ALL "
+            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanUnionDistinct) {
+  // `UNION DISTINCT` lowers to DuckDB's bare `UNION` (DuckDB's
+  // default duplicate-handling on `UNION` is DISTINCT, matching the
+  // BigQuery semantics). The per-item projection shape is the same
+  // as UNION ALL because the duplicate-handling is the only
+  // difference between the two ops.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people UNION DISTINCT SELECT order_id FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " UNION "
+            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanIntersectDistinct) {
+  // `INTERSECT DISTINCT` lowers to DuckDB's bare `INTERSECT` (also
+  // DISTINCT by default). Same item shape as UNION; only the
+  // keyword between items changes. The output column name comes
+  // from the leftmost input's column.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people INTERSECT DISTINCT SELECT order_id FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " INTERSECT "
+            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanExceptDistinct) {
+  // `EXCEPT DISTINCT` lowers to DuckDB's bare `EXCEPT` (DISTINCT by
+  // default). BigQuery's EXCEPT DISTINCT semantics (row R in LHS at
+  // least once and absent from RHS) match DuckDB's bag-difference
+  // followed by DISTINCT.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people EXCEPT DISTINCT SELECT order_id FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " EXCEPT "
+            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanIdenticalArmsBothCollapse) {
+  // When both arms expose the same column name as the parent's
+  // output column, the per-item AS aliases collapse on both sides.
+  // Identical-arm `SELECT id FROM people UNION ALL SELECT id FROM
+  // people` is the smallest input that exercises the both-side
+  // collapse path -- both items project `"id"` onto the parent's
+  // `id` column, so neither projection needs an AS keyword. This
+  // pins the symmetric-collapse path that the per-arm-rename tests
+  // above leave only half-covered.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people UNION ALL SELECT id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " UNION ALL "
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanMultiColumnPreservesOrder) {
+  // Two-column UNION ALL. The LHS exposes `id, name`; the RHS
+  // (`SELECT order_id, CAST(amount AS STRING) FROM orders`)
+  // renames both columns to land on the LHS-named output columns
+  // (`id`, `name`). The test pins that the per-item projections
+  // honor positional column matching even when each column needs a
+  // different rename direction.
+  //
+  // The analyzer assigns column IDs across the whole query and
+  // hands the synthesized computed-column name through them; the
+  // CAST in the RHS lands as `$col2` (slot 2 in the overall
+  // computed-column ordering), not `$col1`. The set-op item
+  // renames both onto the parent's `id` / `name`.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, name FROM people UNION ALL "
+      "SELECT order_id, CAST(amount AS STRING) FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitSetOperationScan(
+          scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+      "SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\"))"
+      " UNION ALL "
+      "SELECT \"order_id\" AS \"id\", \"$col2\" AS \"name\" FROM (SELECT "
+      "\"order_id\", CAST(\"amount\" AS VARCHAR) AS \"$col2\" FROM (SELECT "
+      "\"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanThreeArmFlattening) {
+  // BigQuery / GoogleSQL flattens same-op chains so a three-way
+  // `UNION ALL` lands as a single `ResolvedSetOperationScan` with
+  // three items, not a tree. The emit joins all three items with
+  // the keyword.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people UNION ALL SELECT order_id FROM orders "
+      "UNION ALL SELECT amount FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  const auto* set_op = scan->GetAs<::googlesql::ResolvedSetOperationScan>();
+  ASSERT_EQ(set_op->input_item_list_size(), 3);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(set_op),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " UNION ALL "
+            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))"
+            " UNION ALL "
+            "SELECT \"amount\" AS \"id\" FROM (SELECT \"amount\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanNestedDifferentOps) {
+  // Mixing operators (UNION ALL outside, INTERSECT DISTINCT inside)
+  // forces the analyzer to nest: the outer UNION ALL has one
+  // TableScan-y item plus one SetOperationScan item. The emit
+  // composes recursively -- each item's child scan goes through
+  // `EmitScan`, which dispatches back to `EmitSetOperationScan`
+  // for the inner set-op.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people UNION ALL "
+      "(SELECT order_id FROM orders INTERSECT DISTINCT "
+      "SELECT amount FROM orders)");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  // The inner INTERSECT's parent column name is `order_id` (the
+  // leftmost input's column), and the outer UNION ALL renames it
+  // onto its own parent column `id` for the second arm.
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
+            "FROM \"people\"))"
+            " UNION ALL "
+            "SELECT \"order_id\" AS \"id\" FROM ("
+            "SELECT \"order_id\" FROM (SELECT \"order_id\" FROM (SELECT "
+            "\"order_id\", \"amount\" FROM \"orders\"))"
+            " INTERSECT "
+            "SELECT \"amount\" AS \"order_id\" FROM (SELECT \"amount\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))"
+            ")");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanFallsBackOnUnloweredChild) {
+  // If any child scan returns "" the whole set-op emit must
+  // propagate the empty string. `BIT_COUNT` is on the YAML
+  // skiplist so the right-hand ProjectScan's computed column emit
+  // returns "" -> ProjectScan returns "" -> set-op item returns
+  // "" -> set-op scan returns "".
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people UNION ALL SELECT BIT_COUNT(amount) FROM orders");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(
+                scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
+            "");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanUnionAllDuplicateBehaviorContrast) {
+  // Execution-style contrast between UNION ALL and UNION DISTINCT
+  // on the *same* input shape. We assert on the SQL strings (this
+  // fixture does not have a running DuckDB connection) so a
+  // regression in either keyword choice surfaces here. The
+  // expected duplicate behavior is documented in
+  // `ResolvedSetOperationScan`'s comment block in
+  // `resolved_ast.h` (UNION ALL keeps all rows, UNION DISTINCT
+  // dedupes); DuckDB's `UNION ALL` and `UNION` (DISTINCT by
+  // default) match that contract.
+  //
+  // We compute each side's SQL fully and discard the analyzer's
+  // output before re-`Analyze`-ing for the next side. The fixture
+  // `last_output_` slot is single-shot (the second `Analyze` call
+  // would otherwise free the first AST out from under us), so the
+  // strings are the durable artifact we compare across the two
+  // emits.
+  std::string sql_all;
+  {
+    const ::googlesql::ResolvedStatement* stmt =
+        Analyze("SELECT id FROM people UNION ALL SELECT id FROM people");
+    ASSERT_NE(stmt, nullptr);
+    const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+    ASSERT_NE(scan, nullptr);
+    ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+    TestTranspiler t;
+    sql_all = t.EmitSetOperationScan(
+        scan->GetAs<::googlesql::ResolvedSetOperationScan>());
+  }
+  std::string sql_distinct;
+  {
+    const ::googlesql::ResolvedStatement* stmt =
+        Analyze("SELECT id FROM people UNION DISTINCT SELECT id FROM people");
+    ASSERT_NE(stmt, nullptr);
+    const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+    ASSERT_NE(scan, nullptr);
+    ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+    TestTranspiler t;
+    sql_distinct = t.EmitSetOperationScan(
+        scan->GetAs<::googlesql::ResolvedSetOperationScan>());
+  }
+  EXPECT_NE(sql_all, sql_distinct);
+  EXPECT_NE(sql_all.find(" UNION ALL "), std::string::npos);
+  EXPECT_EQ(sql_all.find(" UNION DISTINCT "), std::string::npos);
+  EXPECT_EQ(sql_distinct.find(" UNION ALL "), std::string::npos);
+  // The bare ` UNION ` keyword (with spaces on both sides) needs
+  // to land in the distinct emit; we deliberately do NOT match a
+  // substring `UNION` because that would also match `UNION ALL`.
+  EXPECT_NE(sql_distinct.find(" UNION "), std::string::npos);
+}
+
+// Helper: synthesize a `ResolvedSetOperationScan` directly so the
+// fallback paths can be exercised without depending on the
+// analyzer producing the matching surface SQL. Each "arm" of the
+// set operation is a fresh `ResolvedSingleRowScan` so the inner
+// emit composes onto `SELECT 1`. The parent's `column_list` is
+// left empty so the per-item projection lands on `SELECT *`,
+// which keeps the fallback assertions focused on the
+// kind/mode-bail behavior of `EmitSetOperationScan` rather than
+// the per-item projection logic.
+std::unique_ptr<::googlesql::ResolvedSetOperationScan> MakeTestSetOperationScan(
+    ::googlesql::ResolvedSetOperationScan::SetOperationType op_type,
+    ::googlesql::ResolvedSetOperationScan::SetOperationColumnMatchMode
+        match_mode) {
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedSetOperationItem>>
+      items;
+  items.push_back(::googlesql::MakeResolvedSetOperationItem(
+      ::googlesql::MakeResolvedSingleRowScan(),
+      /*output_column_list=*/{}));
+  items.push_back(::googlesql::MakeResolvedSetOperationItem(
+      ::googlesql::MakeResolvedSingleRowScan(),
+      /*output_column_list=*/{}));
+  auto scan = ::googlesql::MakeResolvedSetOperationScan(
+      /*column_list=*/{}, op_type, std::move(items));
+  scan->set_column_match_mode(match_mode);
+  scan->set_column_propagation_mode(
+      ::googlesql::ResolvedSetOperationScan::STRICT);
+  return scan;
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanCorrespondingFallsBack) {
+  // `CORRESPONDING` reshuffles columns by name -- our positional
+  // projection in `EmitSetOperationItem` does not implement the
+  // reshuffle, so the emit must propagate "" to take the
+  // reference-impl fallback.
+  auto scan = MakeTestSetOperationScan(
+      ::googlesql::ResolvedSetOperationScan::UNION_ALL,
+      ::googlesql::ResolvedSetOperationScan::CORRESPONDING);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(scan.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanIntersectAllEmitsKeyword) {
+  // `INTERSECT_ALL` (DuckDB-native extension; not in BQ surface
+  // SQL) emits the matching `INTERSECT ALL` keyword. The standard
+  // SQL bag semantics (`min(m, n)`) match the GoogleSQL
+  // `INTERSECT_ALL` contract per `resolved_ast.h`, so the lowered
+  // SQL preserves the analyzer's intent.
+  auto scan = MakeTestSetOperationScan(
+      ::googlesql::ResolvedSetOperationScan::INTERSECT_ALL,
+      ::googlesql::ResolvedSetOperationScan::BY_POSITION);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(scan.get()),
+            "SELECT * FROM (SELECT 1) INTERSECT ALL SELECT * FROM (SELECT 1)");
+}
+
+TEST_F(TranspilerTest, EmitSetOperationScanExceptAllEmitsKeyword) {
+  // `EXCEPT_ALL` similarly emits `EXCEPT ALL`. DuckDB has shipped
+  // `EXCEPT ALL` with standard SQL bag-difference semantics
+  // (`max(m - n, 0)`) since v0.10; the GoogleSQL contract is the
+  // same.
+  auto scan = MakeTestSetOperationScan(
+      ::googlesql::ResolvedSetOperationScan::EXCEPT_ALL,
+      ::googlesql::ResolvedSetOperationScan::BY_POSITION);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSetOperationScan(scan.get()),
+            "SELECT * FROM (SELECT 1) EXCEPT ALL SELECT * FROM (SELECT 1)");
+}
+
+// --- Sample scan -------------------------------------------------------
+
+TEST_F(TranspilerTest, EmitSampleScanSystemPercentFromSurface) {
+  // BigQuery `TABLESAMPLE SYSTEM (10 PERCENT)` lowers to a
+  // `ResolvedSampleScan` whose `method=SYSTEM`, `unit=PERCENT`,
+  // and `size=10`. DuckDB's `USING SAMPLE 10 PERCENT (system)`
+  // matches the BQ semantics (block-level sampling at the chosen
+  // percent).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT * FROM people TABLESAMPLE SYSTEM (10 PERCENT)");
+  if (stmt == nullptr) {
+    GTEST_SKIP() << "analyzer rejected TABLESAMPLE SYSTEM -- skip";
+  }
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  if (scan == nullptr ||
+      scan->node_kind() != ::googlesql::RESOLVED_SAMPLE_SCAN) {
+    GTEST_SKIP() << "analyzer did not produce ResolvedSampleScan -- skip";
+  }
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(scan->GetAs<::googlesql::ResolvedSampleScan>()),
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "USING SAMPLE 10 PERCENT (system)");
+}
+
+// Helper: synthesize a `ResolvedSampleScan` directly so each
+// emit-shape (method + unit + optional repeatable/weight/stratify)
+// can be exercised without driving the analyzer through the
+// (sometimes BQ-only) surface SQL forms. The input is a fresh
+// `ResolvedSingleRowScan` so the wrapped child scan always emits
+// `SELECT 1`. Callers transfer ownership of the size / repeatable
+// / weight / partition_by expressions through `std::move`. Returns
+// nullptr only when the size expression is missing (a malformed
+// SampleScan the analyzer would never produce).
+struct TestSampleScanArgs {
+  std::string method;
+  ::googlesql::ResolvedSampleScan::SampleUnit unit =
+      ::googlesql::ResolvedSampleScan::PERCENT;
+  std::unique_ptr<const ::googlesql::ResolvedExpr> size;
+  std::unique_ptr<const ::googlesql::ResolvedExpr> repeatable;
+  std::unique_ptr<const ::googlesql::ResolvedColumnHolder> weight;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> partition_by;
+};
+std::unique_ptr<::googlesql::ResolvedSampleScan> MakeTestSampleScan(
+    TestSampleScanArgs args) {
+  if (args.size == nullptr) return nullptr;
+  return ::googlesql::MakeResolvedSampleScan(
+      /*column_list=*/{},
+      ::googlesql::MakeResolvedSingleRowScan(),
+      args.method,
+      std::move(args.size),
+      args.unit,
+      std::move(args.repeatable),
+      std::move(args.weight),
+      std::move(args.partition_by));
+}
+
+TEST_F(TranspilerTest, EmitSampleScanBernoulliPercentDirect) {
+  // BERNOULLI sampling over PERCENT is the second DuckDB
+  // method/unit combination the plan calls out. Direct
+  // construction sidesteps any analyzer-surface variability around
+  // method names other than SYSTEM. The expected SQL pins the
+  // DuckDB shape `USING SAMPLE <n> PERCENT (bernoulli)`.
+  TestSampleScanArgs args;
+  args.method = "BERNOULLI";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(25));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()),
+            "SELECT * FROM (SELECT 1) USING SAMPLE 25 PERCENT (bernoulli)");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanReservoirRowsDirect) {
+  // RESERVOIR over ROWS. DuckDB picks reservoir sampling to hit an
+  // exact row count, matching the BQ `RESERVOIR` semantics for
+  // ROWS-shape sampling. We construct directly so the assertion
+  // does not depend on the BQ surface accepting the `RESERVOIR
+  // (50 ROWS)` form.
+  TestSampleScanArgs args;
+  args.method = "RESERVOIR";
+  args.unit = ::googlesql::ResolvedSampleScan::ROWS;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(50));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()),
+            "SELECT * FROM (SELECT 1) USING SAMPLE 50 ROWS (reservoir)");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanSystemPercentDirect) {
+  // SYSTEM over PERCENT through direct construction, mirroring the
+  // surface-driven SYSTEM test so a future analyzer-side rewrite
+  // of TABLESAMPLE leaves the direct-construction assertion as a
+  // stable contract.
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(5));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()),
+            "SELECT * FROM (SELECT 1) USING SAMPLE 5 PERCENT (system)");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanReservoirPercentMismatchFallsBack) {
+  // RESERVOIR with PERCENT does not have a clean DuckDB analog --
+  // reservoir sampling targets a specific row count -- so we fall
+  // back rather than emit `USING SAMPLE N PERCENT (reservoir)`,
+  // which DuckDB rejects at parse time.
+  TestSampleScanArgs args;
+  args.method = "RESERVOIR";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanSystemRowsMismatchFallsBack) {
+  // SYSTEM with ROWS has no DuckDB equivalent (system sampling is
+  // a percent-form block sampler). Fall back so the engine takes
+  // the reference-impl path for the whole query.
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::ROWS;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(100));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanUnknownMethodFallsBack) {
+  // Methods outside the {SYSTEM, BERNOULLI, RESERVOIR} matrix do
+  // not have a DuckDB analog. The emit falls back rather than
+  // emitting `USING SAMPLE ... (other)`, which DuckDB rejects.
+  TestSampleScanArgs args;
+  args.method = "OTHER";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanWithRepeatableSeedFallsBack) {
+  // `REPEATABLE (<seed>)` has a DuckDB analog but the seed-derived
+  // PRNG is not byte-equivalent to BQ's. Falling back keeps the
+  // conformance harness from pinning sample tests onto the DuckDB
+  // engine with a different sampled set.
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  args.repeatable =
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(42));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanWithWeightColumnFallsBack) {
+  // BigQuery `WITH WEIGHT <col>` lowers to a `weight_column` on
+  // the SampleScan. DuckDB has no native weighted-sampling
+  // keyword on `USING SAMPLE`, so we fall back. The test uses a
+  // synthetic ResolvedColumn for the weight column so the
+  // assertion does not depend on a particular surface that exposes
+  // weighted sampling.
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  ::googlesql::ResolvedColumn weight_col(
+      /*column_id=*/1,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$sample"),
+      /*name=*/::googlesql::IdString::MakeGlobal("w"),
+      type_factory_->get_double());
+  args.weight = ::googlesql::MakeResolvedColumnHolder(weight_col);
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanWithStratifyFallsBack) {
+  // BigQuery STRATIFY-BY surface populates `partition_by_list`.
+  // DuckDB's `USING SAMPLE` has no per-partition sampling clause,
+  // so we fall back. We push one stratify expression onto the
+  // list (a literal so the fallback assertion is about the list
+  // being non-empty, not about a sub-expression failure).
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  args.partition_by.push_back(
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1)));
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanUnloweredSizeFallsBack) {
+  // A size expression we cannot lower (an untyped parameter)
+  // propagates "" through `EmitExpr`; the SampleScan emit must
+  // then return "" rather than emit `USING SAMPLE  PERCENT (...)`.
+  TestSampleScanArgs args;
+  args.method = "SYSTEM";
+  args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  args.size = ::googlesql::MakeResolvedParameter(type_factory_->get_int64(),
+                                                 /*name=*/"n",
+                                                 /*position=*/0,
+                                                 /*is_untyped=*/true);
+  auto sample = MakeTestSampleScan(std::move(args));
+  ASSERT_NE(sample, nullptr);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSampleScanPercentVsRowsContrast) {
+  // Execution-style contrast: PERCENT and ROWS produce different
+  // DuckDB shapes for the same numeric value. We assert on the
+  // surface forms so a regression in the unit selector surfaces
+  // here. Both methods are direct-construction so we can pin the
+  // exact emit shape regardless of analyzer-side rewrites.
+  TestSampleScanArgs percent_args;
+  percent_args.method = "BERNOULLI";
+  percent_args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
+  percent_args.size =
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  auto percent_sample = MakeTestSampleScan(std::move(percent_args));
+  ASSERT_NE(percent_sample, nullptr);
+  TestSampleScanArgs rows_args;
+  rows_args.method = "RESERVOIR";
+  rows_args.unit = ::googlesql::ResolvedSampleScan::ROWS;
+  rows_args.size =
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(10));
+  auto rows_sample = MakeTestSampleScan(std::move(rows_args));
+  ASSERT_NE(rows_sample, nullptr);
+  TestTranspiler t_percent;
+  TestTranspiler t_rows;
+  std::string percent_sql = t_percent.EmitSampleScan(percent_sample.get());
+  std::string rows_sql = t_rows.EmitSampleScan(rows_sample.get());
+  EXPECT_NE(percent_sql, rows_sql);
+  EXPECT_NE(percent_sql.find(" PERCENT "), std::string::npos);
+  EXPECT_NE(rows_sql.find(" ROWS "), std::string::npos);
 }
 
 TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {
