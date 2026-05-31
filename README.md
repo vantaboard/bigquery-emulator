@@ -442,8 +442,8 @@ gateway:
 
 > **Preview-grade.** The `v0.x` series is an explicit preview: the REST
 > surface, gRPC contract, and on-disk format may break across releases.
-> Stable promises arrive at `v1.0.0`. See [`HANDOFF.md`](./HANDOFF.md)
-> §6 and [`ROADMAP.md`](./ROADMAP.md) for the active plan.
+> Stable promises arrive at `v1.0.0`. See [`ROADMAP.md`](./ROADMAP.md)
+> for the active plan.
 
 Releases are cut by tag push today. Tag the commit you want to release
 with `vX.Y.Z` and push the tag; that triggers

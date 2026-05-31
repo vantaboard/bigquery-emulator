@@ -6,7 +6,7 @@
 # to GHCR, and runs goreleaser to upload the gateway archives +
 # checksums to the GitHub release page. The semantic-release config
 # at `.releaserc.yml` is parked for the eventual automatic-release
-# flip; see HANDOFF.md §6 for the migration plan.
+# flip.
 #
 # Local sanity targets (these never push):
 #   task release:check     - `goreleaser check` on .goreleaser.yml

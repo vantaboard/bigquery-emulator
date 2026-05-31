@@ -139,9 +139,8 @@ release:
     > **Preview release.** The `v0.x` series is preview-grade; the REST
     > surface, gRPC contract, and on-disk format may break across
     > releases. Stable promises arrive at `v1.0.0`. See
-    > [`HANDOFF.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/HANDOFF.md)
-    > for the active roadmap and the [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
-    > capability-area narrative.
+    > [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
+    > for the active capability-area narrative.
     >
     > **Engine binary is linux/amd64 only.** macOS + linux/arm64
     > archives include the gateway binary but no engine. On those

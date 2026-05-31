@@ -93,7 +93,6 @@ storage is the only supported runtime.
 
 ## Cross-references
 
-- `HANDOFF.md` §4 — engine-architecture context.
 - `conformance/README.md` — fixture authoring guide; references
   this document from its "Contributing a new fixture" section.
 - [`README.md` "Runtime configuration"](../README.md#runtime-configuration) —

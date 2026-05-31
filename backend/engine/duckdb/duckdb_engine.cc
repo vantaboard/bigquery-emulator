@@ -939,9 +939,9 @@ absl::StatusOr<DmlStats> DuckDBEngine::ExecuteDml(
   }
   const ::googlesql::ResolvedStatement* stmt = output->resolved_statement();
   if (stmt->node_kind() != ::googlesql::RESOLVED_MERGE_STMT) {
-    // DML ENGINE POLICY (HANDOFF.md §4.3 path 3): the DuckDB engine
-    // only implements MERGE today; INSERT / UPDATE / DELETE surface
-    // UNIMPLEMENTED for now.
+    // DML ENGINE POLICY (see `docs/ENGINE_POLICY.md`): the DuckDB
+    // engine only implements MERGE today; INSERT / UPDATE / DELETE
+    // surface UNIMPLEMENTED for now.
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: ExecuteDml only implements MERGE today; got ",
         stmt->node_kind_string()));

@@ -16,8 +16,8 @@ import (
 // storage configuration. The DDL surface is implemented entirely on
 // the DuckDB engine (see
 // `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`). Plan 35's
-// engine-policy decision (extending HANDOFF.md §4.3 path 3's
-// "DuckDB-only MERGE" pattern) is what this test pins.
+// engine-policy decision (extending the "DuckDB-only" pattern
+// documented in `docs/ENGINE_POLICY.md`) is what this test pins.
 //
 // The test:
 //

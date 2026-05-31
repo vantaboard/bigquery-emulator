@@ -73,9 +73,8 @@ are populated, every lane above runs against the prebuilt artifact:
 
 The release lane in particular benefits the most: it used to do the
 cold-cache GoogleSQL link on every release (or twice, once on host
-and once in the engine-builder container, see the historical
-gh#26485361700 noted in [`HANDOFF.md`](../../../HANDOFF.md)
-§6.1).
+and once in the engine-builder container -- see the historical
+`gh#26485361700` thread for the original triage).
 
 ### Docker `ENGINE_SOURCE=bazel`
 
