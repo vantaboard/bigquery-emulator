@@ -20,8 +20,11 @@ one of three statuses, and the follow-up plans flip rows from
 The tracker is the source of truth for which `ResolvedAST` shapes the
 DuckDB engine accepts on a given build. The engine consults the
 disposition before it dispatches a query at run time; the conformance
-harness consults it when it decides whether to pin a test case to
-DuckDB or to the reference-impl engine.
+harness consults it when it decides whether a fixture can run against
+the DuckDB engine today. Shapes outside the `done` set surface as
+`UNIMPLEMENTED` from the engine -- there is no second engine catching
+them since the reference-impl + FallbackEngine bridge was removed (see
+`docs/ENGINE_POLICY.md`).
 
 When you add (or change) an emit, edit the matching row here in the
 same commit that touches `transpiler.cc` so the doc stays honest.
@@ -30,8 +33,8 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 
 | Node                                          | Status        | Notes                                                                                     |
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
-| `ResolvedQueryStmt`                           | `done`        | `transpiler-select-core`: lowers the root statement by emitting `query()` then renaming each physical column through `output_column_list()` on the outermost SELECT. `is_value_table()` queries (`SELECT AS VALUE ...`) still fall back to reference-impl. |
-| `ResolvedExplainStmt`                         | `skiplist`    | BigQuery `EXPLAIN` semantics differ from DuckDB; covered by reference-impl fallback.      |
+| `ResolvedQueryStmt`                           | `done`        | `transpiler-select-core`: lowers the root statement by emitting `query()` then renaming each physical column through `output_column_list()` on the outermost SELECT. `is_value_table()` queries (`SELECT AS VALUE ...`) still surface UNIMPLEMENTED. |
+| `ResolvedExplainStmt`                         | `skiplist`    | BigQuery `EXPLAIN` semantics differ from DuckDB; UNIMPLEMENTED today.                      |
 | `ResolvedCreateTableStmt`                     | `skiplist`    | DDL routes through the storage layer, not the transpiler. See the DDL plans.              |
 | `ResolvedCreateTableAsSelectStmt`             | `skiplist`    | Same: DDL via storage.                                                                    |
 | `ResolvedCreateViewStmt`                      | `skiplist`    | DDL via storage.                                                                          |
@@ -48,9 +51,9 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedCallStmt`                            | `skiplist`    | Scripting; out of scope today.                                                            |
 | `ResolvedAssignmentStmt`                      | `skiplist`    | Scripting; out of scope today.                                                            |
 | `ResolvedExecuteImmediateStmt`                | `skiplist`    | Scripting; out of scope today.                                                            |
-| `ResolvedAnalyzeStmt`                         | `skiplist`    | BigQuery `ANALYZE` is a metadata op; reference-impl fallback today.                       |
+| `ResolvedAnalyzeStmt`                         | `skiplist`    | BigQuery `ANALYZE` is a metadata op; UNIMPLEMENTED today.                       |
 | `ResolvedAuxLoadDataStmt`                     | `skiplist`    | LOAD DATA routes through the storage layer.                                               |
-| `ResolvedAssertStmt`                          | `skiplist`    | BigQuery `ASSERT` runtime semantics differ; fallback today.                               |
+| `ResolvedAssertStmt`                          | `skiplist`    | BigQuery `ASSERT` runtime semantics differ; UNIMPLEMENTED today.                               |
 | `ResolvedExportDataStmt`                      | `skiplist`    | EXPORT routes through the gateway, not the transpiler.                                    |
 
 ## Relational scans
@@ -59,37 +62,37 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
 | `ResolvedTableScan`                           | `done`        | `SELECT "col" AS "alias", ... FROM "<table>"` — `transpiler-emit-scans` plan.             |
 | `ResolvedSingleRowScan`                       | `done`        | `transpiler-select-core`: emits `SELECT 1` so the analyzer's "no FROM clause" representation composes as a derived table for the wrapping ProjectScan. |
-| `ResolvedProjectScan`                         | `done`        | `transpiler-select-core`: `SELECT <projections> FROM (<input>)` -- per-column lookup picks each output column out of `expr_list()` (computed) or references it by name (pass-through from `input_scan`). |
+| `ResolvedProjectScan`                         | `done`        | `transpiler-select-core`: `SELECT <projections> FROM (<input>)` -- per-column lookup picks each output column out of `expr_list()` (computed) or references it by name (pass-through from `input_scan`). No-op layers (`expr_list()` empty AND `column_list()` is a permutation of `input_scan()->column_list()` by column id) elide so the analyzer's always-inserted ProjectScan over a TableScan does not stack a redundant `SELECT * FROM (SELECT * FROM ...)` wrap onto every scan emit. |
 | `ResolvedFilterScan`                          | `done`        | `SELECT * FROM (<input>) WHERE <expr>` — `transpiler-emit-scans` plan.                     |
-| `ResolvedJoinScan`                            | `done` (subset) | `transpiler-emit-join-agg`: INNER (+ CROSS) / LEFT / RIGHT / FULL via DuckDB's native join keywords. Lateral joins (`is_lateral`), `JOIN USING(...)` (`has_using`), and lateral correlated `parameter_list` still fall back to reference-impl. |
-| `ResolvedArrayScan`                           | `done` (subset) | `transpiler-struct-unnest`: standalone `UNNEST(<arr>) AS <col>` lowers to DuckDB `SELECT unnest(<arr>) AS "<col>"`. Multi-array `UNNEST(a, b, ...)` (`array_zip_mode`), `WITH OFFSET` (`array_offset_column`), `LEFT JOIN UNNEST` / cross-joined `FROM t, UNNEST(t.arr)` (non-`SingleRowScan` `input_scan` / `join_expr` / `is_outer`) all fall back to reference-impl pending the lateral-join + `generate_subscripts(...)` rewrites. |
-| `ResolvedAggregateScan`                       | `done` (subset) | `transpiler-emit-join-agg`: GROUP BY + simple aggregates (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`COUNT(*)`) via `ResolvedAggregateFunctionCall`. ROLLUP/CUBE/GROUPING SETS/GROUPING() still fall back to reference-impl. |
-| `ResolvedAnonymizedAggregateScan`             | `skiplist`    | Differential-privacy variant; reference-impl fallback today.                              |
+| `ResolvedJoinScan`                            | `done` (subset) | `transpiler-emit-join-agg`: INNER (+ CROSS) / LEFT / RIGHT / FULL via DuckDB's native join keywords. Lateral joins (`is_lateral`), `JOIN USING(...)` (`has_using`), and lateral correlated `parameter_list` still surface UNIMPLEMENTED. |
+| `ResolvedArrayScan`                           | `done` (subset) | `transpiler-struct-unnest`: standalone `UNNEST(<arr>) AS <col>` lowers to DuckDB `SELECT unnest(<arr>) AS "<col>"`. Multi-array `UNNEST(a, b, ...)` (`array_zip_mode`), `WITH OFFSET` (`array_offset_column`), `LEFT JOIN UNNEST` / cross-joined `FROM t, UNNEST(t.arr)` (non-`SingleRowScan` `input_scan` / `join_expr` / `is_outer`) all surface UNIMPLEMENTED pending the lateral-join + `generate_subscripts(...)` rewrites. |
+| `ResolvedAggregateScan`                       | `done` (subset) | `transpiler-emit-join-agg`: GROUP BY + simple aggregates (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`COUNT(*)`) via `ResolvedAggregateFunctionCall`. ROLLUP/CUBE/GROUPING SETS/GROUPING() still surface UNIMPLEMENTED. |
+| `ResolvedAnonymizedAggregateScan`             | `skiplist`    | Differential-privacy variant; UNIMPLEMENTED today.                              |
 | `ResolvedDifferentialPrivacyAggregateScan`    | `skiplist`    | Same DP family.                                                                           |
 | `ResolvedAggregationThresholdAggregateScan`   | `skiplist`    | Same DP family.                                                                           |
 | `ResolvedSetOperationScan`                    | `done` (subset) | `transpiler-setops-sample`: `UNION ALL` / `UNION DISTINCT` / `INTERSECT DISTINCT` / `EXCEPT DISTINCT` (plus DuckDB-native `INTERSECT ALL` / `EXCEPT ALL` whose bag semantics match the GoogleSQL `*_ALL` shapes) all lower to the matching DuckDB keyword joined between the per-item SELECTs. Each `ResolvedSetOperationItem` projects its `output_column_list(i)` onto the parent's `column_list(i)` name (collapsed when the names match). `column_match_mode=CORRESPONDING` / `CORRESPONDING_BY` and any input with a non-lowerable child scan still fall back via the empty-string contract. |
 | `ResolvedOrderByScan`                         | `done`        | `transpiler-emit-join-agg`: `ORDER BY <col> [ASC|DESC] [NULLS FIRST|LAST]` per item, dropping the null-order keyword when unspecified. `COLLATE` still falls back. |
 | `ResolvedLimitOffsetScan`                     | `done`        | `transpiler-emit-join-agg`: `LIMIT <n> [OFFSET <m>]` via the literal-emit subset.          |
-| `ResolvedAnalyticScan`                        | `done` (subset) | `transpiler-functions-window`: emits `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [ROWS\|RANGE BETWEEN ... AND ...]) AS "<col>", ... FROM (<input>)` per analytic function group. ROW_NUMBER / RANK / DENSE_RANK / SUM/COUNT/AVG/MIN/MAX OVER (...) all lower through the YAML disposition table. Hint lists, collation lists, lateral `parameter_list`, and `RANGE` over non-numeric ORDER BY still fall back to reference-impl. |
+| `ResolvedAnalyticScan`                        | `done` (subset) | `transpiler-functions-window`: emits `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [ROWS\|RANGE BETWEEN ... AND ...]) AS "<col>", ... FROM (<input>)` per analytic function group. ROW_NUMBER / RANK / DENSE_RANK / SUM/COUNT/AVG/MIN/MAX OVER (...) all lower through the YAML disposition table. Hint lists, collation lists, lateral `parameter_list`, and `RANGE` over non-numeric ORDER BY still surface UNIMPLEMENTED. |
 | `ResolvedSampleScan`                          | `done` (subset) | `transpiler-setops-sample`: lowers `TABLESAMPLE` to DuckDB `SELECT * FROM (<input>) USING SAMPLE <size> {PERCENT\|ROWS} (<method>)` for the method/unit matrix whose semantics match -- `system` / `bernoulli` over PERCENT, `reservoir` over ROWS. Repeatable seeds (`repeatable_argument`), weight columns (`weight_column`), stratified partition lists (`partition_by_list`), and any unsupported method/unit combo (e.g. SYSTEM with ROWS) fall back via the empty-string contract. |
 | `ResolvedWithScan`                            | `not_started` | CTEs; emit plan.                                                                          |
 | `ResolvedWithRefScan`                         | `not_started` | CTE references; emit plan.                                                                |
-| `ResolvedRecursiveScan`                       | `skiplist`    | Recursive CTEs land later; reference-impl fallback today.                                 |
+| `ResolvedRecursiveScan`                       | `skiplist`    | Recursive CTEs land later; UNIMPLEMENTED today.                                 |
 | `ResolvedRecursiveRefScan`                    | `skiplist`    | Recursive CTEs land later.                                                                |
-| `ResolvedPivotScan`                           | `skiplist`    | PIVOT / UNPIVOT semantics; reference-impl fallback today.                                 |
+| `ResolvedPivotScan`                           | `skiplist`    | PIVOT / UNPIVOT semantics; UNIMPLEMENTED today.                                 |
 | `ResolvedUnpivotScan`                         | `skiplist`    | Same.                                                                                     |
-| `ResolvedMatchRecognizeScan`                  | `skiplist`    | MATCH_RECOGNIZE is BigQuery-only; reference-impl fallback today.                          |
-| `ResolvedGroupRowsScan`                       | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedTVFScan`                             | `skiplist`    | Table-valued functions; reference-impl fallback today.                                    |
-| `ResolvedRelationArgumentScan`                | `skiplist`    | Module / function arguments; reference-impl fallback today.                               |
-| `ResolvedBarrierScan`                         | `skiplist`    | Pipe-operator-only optimizer barrier; reference-impl fallback today.                      |
-| `ResolvedPipeIfScan`                          | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedPipeForkScan`                        | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedPipeTeeScan`                         | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedPipeExportDataScan`                  | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedPipeCreateTableScan`                 | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedPipeInsertScan`                      | `skiplist`    | Pipe operator surface; reference-impl fallback today.                                     |
-| `ResolvedGraph*Scan`                          | `skiplist`    | Graph query family (`GQL`); reference-impl fallback today.                                |
+| `ResolvedMatchRecognizeScan`                  | `skiplist`    | MATCH_RECOGNIZE is BigQuery-only; UNIMPLEMENTED today.                          |
+| `ResolvedGroupRowsScan`                       | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedTVFScan`                             | `skiplist`    | Table-valued functions; UNIMPLEMENTED today.                                    |
+| `ResolvedRelationArgumentScan`                | `skiplist`    | Module / function arguments; UNIMPLEMENTED today.                               |
+| `ResolvedBarrierScan`                         | `skiplist`    | Pipe-operator-only optimizer barrier; UNIMPLEMENTED today.                      |
+| `ResolvedPipeIfScan`                          | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedPipeForkScan`                        | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedPipeTeeScan`                         | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedPipeExportDataScan`                  | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedPipeCreateTableScan`                 | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedPipeInsertScan`                      | `skiplist`    | Pipe operator surface; UNIMPLEMENTED today.                                     |
+| `ResolvedGraph*Scan`                          | `skiplist`    | Graph query family (`GQL`); UNIMPLEMENTED today.                                |
 
 ## Expressions
 
@@ -99,8 +102,8 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedParameter`                           | `done`        | `transpiler-expression-core`: named (`@p`) and positional (`?`) parameters lower to DuckDB `$N` placeholders. The transpiler accumulates one `ParameterRef` per unique slot in `parameter_order()` so the engine can copy values into DuckDB's bind buffer in slot order; named-parameter references dedupe to a single slot. Untyped parameters fall back via the empty-string contract. |
 | `ResolvedColumnRef`                           | `done`        | Emits the quoted `ResolvedColumn::name()` — `transpiler-emit-scans` plan.                  |
 | `ResolvedFunctionCall`                        | `done` (subset) | `transpiler-emit-scans` covers `COALESCE` + `IFNULL`; `transpiler-struct-unnest` adds `$make_array(<args>)` for the non-const array constructor; `transpiler-functions-window` routes everything else through the YAML-backed disposition table (`functions.yaml` -> `functions_table.inc`). Math (`ABS`, `ROUND`, ...), string (`CONCAT`, `LENGTH`, `LOWER`, `UPPER`, `SUBSTR`, `STARTS_WITH`, `ENDS_WITH`, ...), and array (`ARRAY_LENGTH`, `ARRAY_CONCAT`, `GENERATE_ARRAY`) lower as `kMap`. Datetime / regex / format functions are marked `kFallback` pending dedicated rewrite passes. BQ-specific (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `HLL_COUNT.*`, `KEYS.*`, `ST_*`) are `kSkiplist`. `SAFE.<fn>(...)` (`SAFE_ERROR_MODE`) short-circuits regardless of disposition. |
-| `ResolvedAggregateFunctionCall`               | `done` (subset) | `transpiler-emit-join-agg` baseline + `transpiler-functions-window` disposition-table dispatch: `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) plus YAML-table entries `ARRAY_AGG`, `STRING_AGG`, `ANY_VALUE`, `LOGICAL_AND`, `LOGICAL_OR`, `BIT_AND/OR/XOR`. Optional `DISTINCT` lowers as a prefix. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, `SAFE.<agg>(...)`, and skiplisted aggregates (`APPROX_QUANTILES`, `COUNTIF`, ...) still fall back. |
-| `ResolvedAnalyticFunctionCall`                | `done` (subset) | `transpiler-functions-window`: ROW_NUMBER, RANK, DENSE_RANK, PERCENT_RANK, CUME_DIST, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE, and aggregate-over-window (`SUM/COUNT/AVG/MIN/MAX`) dispatch through the YAML disposition table. The OVER clause (PARTITION BY / ORDER BY / ROWS\|RANGE BETWEEN) is stitched on by `EmitAnalyticScan`. IGNORE/RESPECT NULLS and `SAFE.<fn>(...)` still fall back. |
+| `ResolvedAggregateFunctionCall`               | `done` (subset) | `transpiler-emit-join-agg` baseline + `transpiler-functions-window` disposition-table dispatch: `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) plus YAML-table entries `ARRAY_AGG`, `STRING_AGG`, `ANY_VALUE`, `LOGICAL_AND`, `LOGICAL_OR`, `BIT_AND/OR/XOR`. Optional `DISTINCT` lowers as a prefix. HAVING MAX/MIN, ORDER BY / LIMIT modifiers, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate filtering, `SAFE.<agg>(...)`, and skiplisted aggregates (`APPROX_QUANTILES`, `COUNTIF`, ...) still surface UNIMPLEMENTED. |
+| `ResolvedAnalyticFunctionCall`                | `done` (subset) | `transpiler-functions-window`: ROW_NUMBER, RANK, DENSE_RANK, PERCENT_RANK, CUME_DIST, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE, and aggregate-over-window (`SUM/COUNT/AVG/MIN/MAX`) dispatch through the YAML disposition table. The OVER clause (PARTITION BY / ORDER BY / ROWS\|RANGE BETWEEN) is stitched on by `EmitAnalyticScan`. IGNORE/RESPECT NULLS and `SAFE.<fn>(...)` still surface UNIMPLEMENTED. |
 | `ResolvedCast`                                | `done` (subset) | `transpiler-expression-core`: `CAST(<expr> AS T)` -> `CAST(<expr> AS <duckdb-type>)` (and SAFE_CAST -> `TRY_CAST(...)`) for every `TypeKind` `IsCastTargetSupported` whitelists (BOOL/INT/FLOAT/DOUBLE/STRING/BYTES/DATE/TIME/DATETIME/TIMESTAMP/NUMERIC/BIGNUMERIC/JSON/INTERVAL/UUID/ARRAY/STRUCT). The `types.h` mapping carries the DuckDB type expression (including ARRAY element / STRUCT field shape). Format / time-zone / extended-cast / type-modifier / collation cases and casts whose target is `TYPE_GEOGRAPHY` / proto / enum / range / graph / measure / tokenlist still fall back via the empty-string contract. |
 | `ResolvedMakeStruct`                          | `done`        | `transpiler-struct-unnest`: named-field `STRUCT(<expr> AS <name>, ...)` lowers to DuckDB's `{'<name>': <value>, ...}` struct literal, walking the `StructType` for ordered names and `field_list` for parallel values. `transpiler-json-struct-completion`: anonymous-field structs (`STRUCT(1, 2)`) synthesize positional DuckDB-side names (`_0`, `_1`, ...) so the construction emits `{'_0': 1, '_1': 2}` and `EmitGetStructField` resolves anonymous-field accesses to the same synthesized name. |
 | `ResolvedGetStructField`                      | `done`        | `transpiler-struct-unnest`: named-field access lowers to `<expr>."<field_name>"`. `transpiler-json-struct-completion`: anonymous fields (empty `StructField::name`) lower to `<expr>."_<field_idx>"` so positional access matches the synthesized names `EmitMakeStruct` / `EmitValueLiteral` use on the construction side. `field_expr_is_positional` is user-intent only and does not affect the emit. |
@@ -110,18 +113,18 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 | `ResolvedReplaceField`                        | `skiplist`    | Proto-only; out of scope today.                                                           |
 | `ResolvedGetJsonField`                        | `done`        | `transpiler-json-struct-completion`: BigQuery `<json>.<field>` lowers to DuckDB's `(<json> -> '<field>')` when the resolved return type is JSON (the common case -- chained `<json>.a.b` composes naturally as `((<json> -> 'a') -> 'b')`) and to `(<json> ->> '<field>')` when the analyzer types the result as a scalar. The deliberate operator choice keeps BQ scalar-vs-JSON return-type semantics explicit; SQL string-literal escaping flows through `QuoteString` so unicode / quote characters round-trip without bespoke JSON-path escaping. |
 | `ResolvedGetRowField`                         | `skiplist`    | MEASURE type; out of scope today.                                                         |
-| `ResolvedFlatten`                             | `skiplist`    | BigQuery FLATTEN; reference-impl fallback today.                                          |
+| `ResolvedFlatten`                             | `skiplist`    | BigQuery FLATTEN; UNIMPLEMENTED today.                                          |
 | `ResolvedFlattenedArg`                        | `skiplist`    | Same.                                                                                     |
 | `ResolvedSubqueryExpr`                        | `not_started` | Scalar / IN / EXISTS / ARRAY subqueries; expr emit plan.                                  |
 | `ResolvedWithExpr`                            | `done`        | `transpiler-expression-core`: `WITH(<a> AS <e1>, ...) <body>` -> `(SELECT <body> FROM (SELECT <e1> AS "a", ...))`. The inner SELECT exposes each binding under its `ResolvedColumn::name()` so the body's `ResolvedColumnRef`s resolve there, and the surrounding scalar subquery preserves once-per-row evaluation. Bindings whose expression cannot lower (or a body the emit subset cannot lower) propagate the empty-string fallback. |
-| `ResolvedInlineLambda`                        | `skiplist`    | Lambda-arg only used by a few BQ-specific function families; fallback today.              |
+| `ResolvedInlineLambda`                        | `skiplist`    | Lambda-arg only used by a few BQ-specific function families; UNIMPLEMENTED today.              |
 | `ResolvedFilterField`                         | `skiplist`    | Proto-only; out of scope today.                                                           |
 | `ResolvedFilterFieldArg`                      | `skiplist`    | Proto-only.                                                                               |
-| `ResolvedConstant`                            | `skiplist`    | Constant resolution comes from the module surface; fallback today.                        |
-| `ResolvedSystemVariable`                      | `skiplist`    | Scripting surface; fallback today.                                                        |
+| `ResolvedConstant`                            | `skiplist`    | Constant resolution comes from the module surface; UNIMPLEMENTED today.                        |
+| `ResolvedSystemVariable`                      | `skiplist`    | Scripting surface; UNIMPLEMENTED today.                                                        |
 | `ResolvedSequence`                            | `skiplist`    | SEQUENCE objects are out of scope today.                                                  |
-| `ResolvedArgumentRef` / `ResolvedArgumentDef` | `skiplist`    | UDF / TVF arguments; reference-impl fallback today.                                       |
-| `ResolvedCatalogColumnRef`                    | `skiplist`    | Catalog-time column ref (DDL surface); reference-impl fallback today.                     |
+| `ResolvedArgumentRef` / `ResolvedArgumentDef` | `skiplist`    | UDF / TVF arguments; UNIMPLEMENTED today.                                       |
+| `ResolvedCatalogColumnRef`                    | `skiplist`    | Catalog-time column ref (DDL surface); UNIMPLEMENTED today.                     |
 | `ResolvedExpressionColumn`                    | `skiplist`    | Expression-mode analyzer; emulator does not use it.                                       |
 | `ResolvedUpdateConstructor`                   | `skiplist`    | DML expr; covered by the DML plans.                                                       |
 
@@ -131,12 +134,12 @@ same commit that touches `transpiler.cc` so the doc stays honest.
 |-----------------------------------------------|---------------|-------------------------------------------------------------------------------------------|
 | `ResolvedOutputColumn`                        | `done`        | `transpiler-select-core`: `<column-name> AS <output-name>` (alias collapsed when the names match). Used by `EmitQueryStmt` for the outermost projection. |
 | `ResolvedComputedColumn`                      | `done`        | `transpiler-select-core`: `<expr> AS "<resolved-column-name>"`; child expression failures propagate the empty-string fallback contract. |
-| `ResolvedDeferredComputedColumn`              | `skiplist`    | Pipe-operator-only; fallback today.                                                       |
+| `ResolvedDeferredComputedColumn`              | `skiplist`    | Pipe-operator-only; UNIMPLEMENTED today.                                                       |
 | `ResolvedOrderByItem`                         | `done`        | `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` still falls back. |
 | `ResolvedColumnHolder`                        | `not_started` | UNNEST WITH OFFSET shape; emit plan.                                                      |
 | `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` | `not_started` | Aggregate emit plan (GROUPING SETS / ROLLUP / CUBE via DuckDB syntax).         |
 | `ResolvedAggregateHavingModifier`             | `not_started` | HAVING inside aggregate; aggregate emit plan.                                             |
-| `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` | `done` (subset) | `transpiler-functions-window`: `ROWS|RANGE BETWEEN <bound> AND <bound>` lowered via `EmitFrameBound` (UNBOUNDED PRECEDING / CURRENT ROW / `<n>` PRECEDING / `<n>` FOLLOWING / UNBOUNDED FOLLOWING). Frame bounds with non-literal offsets that the expr emit cannot lower fall back. |
+| `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` | `done` (subset) | `transpiler-functions-window`: `ROWS|RANGE BETWEEN <bound> AND <bound>` lowered via `EmitFrameBound` (UNBOUNDED PRECEDING / CURRENT ROW / `<n>` PRECEDING / `<n>` FOLLOWING / UNBOUNDED FOLLOWING). Frame bounds with non-literal offsets that the expr emit cannot lower surface UNIMPLEMENTED. |
 | `ResolvedSetOperationItem`                    | `done`        | `transpiler-setops-sample`: lowered inside the private `EmitSetOperationItem` helper as `SELECT "<output_i>" [AS "<parent_i>"], ... FROM (<scan>)`. Drives the per-item projection that `EmitSetOperationScan` joins with the set-operation keyword. |
 | `ResolvedFunctionArgument`                    | `done` (subset) | `transpiler-expression-core`: routes a `generic_argument_list` slot through `EmitExpr(arg->expr())` so callers can splice the wrapped scalar into their own SQL fragment. Non-expression slots (`scan` / `model` / `connection` / `descriptor` / `inline_lambda` / `sequence` / `graph`) -- TVF / lambda / descriptor / model / connection / sequence / graph arguments -- still fall back via the empty-string contract until a caller proves the surrounding function-argument syntax lowers cleanly. |
 | `ResolvedReturningClause`                     | `skiplist`    | RETURNING is DML-only; covered by the DML plans.                                          |
@@ -169,8 +172,10 @@ same commit that touches `transpiler.cc` so the doc stays honest.
     DuckDB function name, e.g. `ABS`, `LENGTH`, `SUBSTRING`,
     `ARRAY_AGG`, `ROW_NUMBER`).
   * `kFallback` — lowering deferred (e.g. `date_add`, `format`,
-    `if`, `mod`); the emit returns "" and the engine falls back to
-    reference-impl, with a `LOG(INFO)` recording the miss.
+    `if`, `mod`); the emit returns "" and the engine surfaces
+    UNIMPLEMENTED, with a `LOG(INFO)` recording the miss. (The
+    `kFallback` name is vestigial from the reference-impl bridge era;
+    today it has the same runtime behavior as `kSkiplist`.)
   * `kSkiplist` — out of scope today (`approx_quantiles`, `ml.*`,
     `net.*`, `keys.*`, `st_*`, `hll_count.*`, `bit_count`,
     `generate_uuid`, `session_user`, ...).
@@ -185,7 +190,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
     access side (`EmitGetStructField` resolves an empty
     `StructField::name` to `_<field_idx>`), so anonymous-field
     BigQuery STRUCTs round-trip through the DuckDB engine without
-    falling back to the reference-impl evaluator.
+    surfacing UNIMPLEMENTED.
   * **DuckDB `LIST` ↔ BigQuery `ARRAY`.** Both spell their literal as
     `[a, b, c]`, so the emit is a direct join. NULL element
     semantics also match (`NULL` propagates as the literal `NULL`).
@@ -193,7 +198,7 @@ same commit that touches `transpiler.cc` so the doc stays honest.
     DuckDB matches against BigQuery's "absent NULL field" semantics
     for struct literals.
   * **UNNEST + WITH OFFSET / lateral joins / multi-array zip / outer
-    UNNEST** all fall back today; they need bespoke
+    UNNEST** all surface UNIMPLEMENTED today; they need bespoke
     `generate_subscripts(...)` / `CROSS JOIN unnest(...) AS _(col)`
     rewrites the standalone-UNNEST subset does not cover.
 * **Next plan(s):**
@@ -204,12 +209,12 @@ same commit that touches `transpiler.cc` so the doc stays honest.
   * `transpiler-emit-project-stmt` (TBD) — flip `ResolvedProjectScan`
     and `ResolvedQueryStmt` so a full `SELECT ... FROM ... WHERE
     ... GROUP BY ... ORDER BY ... LIMIT ...` query lowers end to
-    end without falling back to reference-impl.
-* **Skiplist policy:** the rows tagged `skiplist` above stay on the
-  reference-impl engine until a deliberate plan moves them. Promoting
-  a row out of `skiplist` requires both an emit method and a
-  conformance label that pins the affected tests onto the DuckDB
-  engine (see the conformance-harness section of ROADMAP.md). The
-  function-disposition `kSkiplist`
-  entries in `functions.yaml` follow the same policy: deliberate
-  reference-impl pin until a function-specific lowering plan ships.
+    end without surfacing UNIMPLEMENTED.
+* **Skiplist policy:** the rows tagged `skiplist` above stay
+  UNIMPLEMENTED until a deliberate plan moves them. Promoting a row
+  out of `skiplist` requires an emit method that lowers the shape
+  cleanly to DuckDB SQL plus the conformance fixtures that exercise
+  it (see the conformance-harness section of ROADMAP.md). The
+  function-disposition `kSkiplist` entries in `functions.yaml` follow
+  the same policy: deliberate UNIMPLEMENTED until a function-specific
+  lowering plan ships.
