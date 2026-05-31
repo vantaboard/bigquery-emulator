@@ -326,12 +326,49 @@ std::string Transpiler::EmitProjectScan(
   // input column by name (the inner scan emits each input column with
   // its `ResolvedColumn::name()` already).
   //
+  // No-op elision: when `expr_list` is empty AND `column_list` is a
+  // permutation of `input_scan->column_list` by column id, this
+  // ProjectScan is doing nothing the wrapping scan / QueryStmt cannot
+  // do on its own outermost SELECT (column reordering / aliasing
+  // happens by name there). Returning the inner emit directly
+  // strips a redundant `SELECT * FROM (SELECT * FROM ...)` layer that
+  // otherwise stacks on top of every analyzer-introduced
+  // ProjectScan-over-TableScan pair, e.g. for `SELECT id FROM
+  // people` the analyzer always inserts a no-op ProjectScan even
+  // though `output_column_list` already references the TableScan
+  // columns. We keep the wrap when ProjectScan narrows the column
+  // list (strict subset) or when any computed expression lives on
+  // it, so semantic-bearing projections are unaffected.
+  //
   // The empty-string contract: if any sub-emit returns "" (input scan
   // we cannot lower, or a computed expression outside the function /
   // literal whitelist), we propagate "" so the engine takes the
   // reference-impl fallback for the whole query rather than emitting
   // partial SQL.
   if (node == nullptr) return "";
+
+  if (node->expr_list_size() == 0 && node->input_scan() != nullptr &&
+      node->input_scan()->column_list_size() == node->column_list_size()) {
+    bool same_set = true;
+    for (int i = 0; i < node->column_list_size(); ++i) {
+      const int wanted_id = node->column_list(i).column_id();
+      bool found = false;
+      for (int j = 0; j < node->input_scan()->column_list_size(); ++j) {
+        if (node->input_scan()->column_list(j).column_id() == wanted_id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        same_set = false;
+        break;
+      }
+    }
+    if (same_set) {
+      return EmitScan(node->input_scan());
+    }
+  }
+
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
 

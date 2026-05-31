@@ -31,7 +31,11 @@
 // * `EmitProjectScan` wraps `input_scan()` and projects the
 //   `column_list()` schema, picking each column out of the matching
 //   `expr_list()` entry (computed) or referencing it by name
-//   (pass-through).
+//   (pass-through). When `expr_list()` is empty and `column_list()`
+//   is a permutation of `input_scan()->column_list()` by column id,
+//   the wrap is elided so the redundant
+//   `SELECT * FROM (SELECT * FROM ...)` layer the analyzer always
+//   inserts above a TableScan does not stack onto every scan emit.
 // * `EmitSingleRowScan` emits `SELECT 1` so a `ProjectScan` over
 //   `SingleRowScan` (the analyzer's "no FROM clause" shape) composes
 //   as a derived table.

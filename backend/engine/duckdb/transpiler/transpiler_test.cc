@@ -1261,6 +1261,35 @@ TEST_F(TranspilerTest, EmitProjectScanSelectLiteral) {
             "SELECT 1 AS \"$col1\" FROM (SELECT 1)");
 }
 
+TEST_F(TranspilerTest, EmitProjectScanElidesNoOpPermutation) {
+  // For `SELECT name, id FROM people` the analyzer wraps the
+  // TableScan in a no-op ProjectScan: `expr_list` is empty and
+  // `column_list` is a permutation of the input scan's column list
+  // by column id. The emit should drop the wrap and return the inner
+  // TableScan SQL directly so the outer `EmitQueryStmt`'s projection
+  // is the only one that does the reordering -- otherwise we stack
+  // `SELECT "name", "id" FROM (SELECT "id", "name" ...)` redundantly
+  // on top of the TableScan emit. Same applies to identity-only
+  // projections (`SELECT id, name FROM people`) and analyzer-pruned
+  // shapes where `column_list` is a single-column subset of the
+  // table's columns; both reduce to the inner TableScan SQL.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT name, id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(q, nullptr);
+  const ::googlesql::ResolvedScan* scan = q->query();
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PROJECT_SCAN);
+  const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+  ASSERT_EQ(project->expr_list_size(), 0);
+  TestTranspiler t;
+  // Emit must equal the *input* TableScan's emit, not a wrapping
+  // SELECT around it.
+  EXPECT_EQ(t.EmitProjectScan(project),
+            "SELECT \"id\", \"name\" FROM \"people\"");
+}
+
 TEST_F(TranspilerTest, EmitOutputColumnCollapsesAliasWhenNamesMatch) {
   // For `SELECT 1` the output column's user-visible name and the
   // physical column's name both resolve to `$col1`, so the alias
@@ -1368,7 +1397,14 @@ TEST_F(TranspilerTest, EmitQueryStmtAliasedColumnSurfacesAlias) {
   // `SELECT id AS user_id FROM people` keeps the physical column as
   // `id` inside the inner scan but renames it to `user_id` on the
   // outermost SELECT. The projection carries `<col> AS <alias>` so
-  // the wire-side schema matches the user's spelling.
+  // the wire-side schema matches the user's spelling. The analyzer
+  // does not prune the underlying TableScan's column_list down to
+  // `[id]` here -- it keeps the full `[id, name]` table column list
+  // and lets the wrapping ProjectScan narrow to `[id]`. The
+  // EmitProjectScan no-op elision deliberately skips narrowing
+  // layers (`column_list` is a strict subset of input, sizes
+  // differ), so the wrap that drops `name` survives and the inner
+  // emit shows three nested SELECTs.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id AS user_id FROM people");
   ASSERT_NE(stmt, nullptr);
@@ -1376,7 +1412,7 @@ TEST_F(TranspilerTest, EmitQueryStmtAliasedColumnSurfacesAlias) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitQueryStmt(stmt->GetAs<::googlesql::ResolvedQueryStmt>()),
             "SELECT \"id\" AS \"user_id\" FROM (SELECT \"id\" "
-            "FROM \"people\")");
+            "FROM (SELECT \"id\", \"name\" FROM \"people\"))");
 }
 
 TEST_F(TranspilerTest, EmitQueryStmtFallsBackOnUnloweredProjection) {
@@ -2016,8 +2052,7 @@ TEST_F(TranspilerTest, EmitSetOperationScanMultiColumnPreservesOrder) {
   EXPECT_EQ(
       t.EmitSetOperationScan(
           scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-      "SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" FROM (SELECT "
-      "\"id\", \"name\" FROM \"people\"))"
+      "SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" FROM \"people\")"
       " UNION ALL "
       "SELECT \"order_id\" AS \"id\", \"$col2\" AS \"name\" FROM (SELECT "
       "\"order_id\", CAST(\"amount\" AS VARCHAR) AS \"$col2\" FROM (SELECT "
