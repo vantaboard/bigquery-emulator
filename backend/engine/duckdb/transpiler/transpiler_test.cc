@@ -13,8 +13,8 @@
 // an INT64 and a STRING column) plus the GoogleSQL builtins
 // registered through `AddBuiltinFunctionsAndTypes`. That mirrors the
 // shape the production catalog (`backend/catalog/googlesql_catalog.h`)
-// hands to the analyzer in the reference-impl engine, minus the
-// `Storage` adapter the engine layers on top.
+// hands to the analyzer, minus the `Storage` adapter the engine
+// layers on top.
 
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 
@@ -222,8 +222,8 @@ TEST_F(TranspilerTest, EmitLiteralString) {
   // text as an *identifier*, so a `"hi"` literal would be a column
   // reference rather than a string. EmitLiteral overrides
   // GoogleSQL's default double-quoted form on TYPE_STRING for
-  // exactly this reason -- the conformance harness would otherwise
-  // pin every string-bearing query onto the reference-impl engine.
+  // exactly this reason -- otherwise every string-bearing query
+  // would surface UNIMPLEMENTED instead of a real result.
   EXPECT_EQ(t.EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>()), "'hi'");
 }
 
@@ -285,9 +285,8 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
 TEST_F(TranspilerTest, EmitFunctionCallSkiplistReturnsEmpty) {
   // `BIT_COUNT` is on the skiplist in `functions.yaml` (BQ flavor
   // differs from DuckDB's `bit_count` and the conformance harness
-  // pins it on the reference-impl engine for now). The emit returns
-  // "" so the engine takes the reference-impl fallback for the
-  // whole query.
+  // does not exercise it today). The emit returns "" so the engine
+  // surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT BIT_COUNT(id) AS n FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
@@ -460,8 +459,8 @@ TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
 TEST_F(TranspilerTest, EmitJoinScanFallsBackOnUnsupportedPredicate) {
   // `=` isn't on the function-call whitelist used by the scan
   // emits, so the join_expr emit returns "" and the JoinScan emit
-  // propagates the empty string up to the engine. The disposition
-  // policy then takes the reference-impl fallback for this shape.
+  // propagates the empty string up to the engine. The engine
+  // surfaces UNIMPLEMENTED for this shape.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id FROM people INNER JOIN orders ON id = order_id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -546,8 +545,7 @@ TEST_F(TranspilerTest, EmitAggregateScanArrayAggMapsThroughTable) {
 TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnSkiplistedAggregate) {
   // `APPROX_QUANTILES` is on the skiplist; the aggregate emit
   // returns "" and the AggregateScan emit propagates the empty
-  // string. The disposition policy then takes the reference-impl
-  // fallback for the whole query.
+  // string. The engine surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id, APPROX_QUANTILES(id, 2) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -892,7 +890,7 @@ TEST_F(TranspilerTest, EmitArrayScanWithOffsetFallsBack) {
   // (`generate_subscripts(arr, 1)` is the typical rewrite) and the
   // standalone-UNNEST subset we lower today does not cover the
   // join-on-offset shape, so the emit propagates "" and the engine
-  // takes the reference-impl fallback for the whole query.
+  // surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT x, pos FROM UNNEST([1, 2]) AS x WITH OFFSET pos");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -1166,8 +1164,7 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
   // function-call decoration, not an OVER-time modifier) but sets
   // `error_mode = SAFE_ERROR_MODE`. The per-call SAFE short-circuit
   // returns "" and the analytic emit propagates the empty string,
-  // exactly the disposition policy the engine reads for the
-  // reference-impl fallback.
+  // so the engine surfaces UNIMPLEMENTED.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT SAFE.SUM(id) OVER (ORDER BY id) FROM people");
   if (stmt == nullptr) {
@@ -1757,9 +1754,9 @@ TEST_F(TranspilerTest, EmitFunctionArgumentRoutesThroughExpr) {
 TEST_F(TranspilerTest, EmitFunctionArgumentNonExprSlotFallsBack) {
   // A bare `MakeResolvedFunctionArgument()` (every slot null) has no
   // expression to route through; the emit must propagate "" so the
-  // engine takes the reference-impl fallback for the surrounding
-  // function call. This is the named-argument-only / TVF / lambda
-  // shape the plan defers to a follow-up.
+  // engine surfaces UNIMPLEMENTED for the surrounding function call.
+  // This is the named-argument-only / TVF / lambda shape the plan
+  // defers to a follow-up.
   auto arg = ::googlesql::MakeResolvedFunctionArgument();
   TestTranspiler t;
   EXPECT_EQ(t.EmitFunctionArgument(arg.get()), "");
@@ -1862,10 +1859,10 @@ TEST_F(TranspilerTest, EmitGetJsonFieldScalarReturnUsesArrowGreater) {
 TEST_F(TranspilerTest, EmitGetJsonFieldNullExprFallsBack) {
   // A malformed `ResolvedGetJsonField` with a null inner expression
   // can't be lowered; the emit must propagate "" so the engine
-  // takes the reference-impl fallback for the whole query rather
-  // than emitting partial SQL. The analyzer doesn't produce this
-  // shape, but we guard so a future change to the GetJsonField
-  // construction surface doesn't silently emit `(<empty> -> ...)`.
+  // surfaces UNIMPLEMENTED rather than emitting partial SQL. The
+  // analyzer doesn't produce this shape, but we guard so a future
+  // change to the GetJsonField construction surface doesn't silently
+  // emit `(<empty> -> ...)`.
   auto get = ::googlesql::MakeResolvedGetJsonField();
   TestTranspiler t;
   EXPECT_EQ(t.EmitGetJsonField(get.get()), "");
@@ -2187,8 +2184,8 @@ std::unique_ptr<::googlesql::ResolvedSetOperationScan> MakeTestSetOperationScan(
 TEST_F(TranspilerTest, EmitSetOperationScanCorrespondingFallsBack) {
   // `CORRESPONDING` reshuffles columns by name -- our positional
   // projection in `EmitSetOperationItem` does not implement the
-  // reshuffle, so the emit must propagate "" to take the
-  // reference-impl fallback.
+  // reshuffle, so the emit propagates "" and the engine surfaces
+  // UNIMPLEMENTED.
   auto scan = MakeTestSetOperationScan(
       ::googlesql::ResolvedSetOperationScan::UNION_ALL,
       ::googlesql::ResolvedSetOperationScan::CORRESPONDING);
@@ -2346,8 +2343,8 @@ TEST_F(TranspilerTest, EmitSampleScanReservoirPercentMismatchFallsBack) {
 
 TEST_F(TranspilerTest, EmitSampleScanSystemRowsMismatchFallsBack) {
   // SYSTEM with ROWS has no DuckDB equivalent (system sampling is
-  // a percent-form block sampler). Fall back so the engine takes
-  // the reference-impl path for the whole query.
+  // a percent-form block sampler). Bail so the engine surfaces
+  // UNIMPLEMENTED for the whole query.
   TestSampleScanArgs args;
   args.method = "SYSTEM";
   args.unit = ::googlesql::ResolvedSampleScan::ROWS;

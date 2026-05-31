@@ -1,11 +1,12 @@
 #include "backend/engine/engine.h"
 
 // This file ships only the abstract engine interfaces; the
-// reference-impl and DuckDB engines live in their own translation
-// units. This translation unit exists so the engine library has at
-// least one source file for the build system to compile, and so the
-// v-tables for the abstract classes have a single definition site
-// (otherwise -Wweak-vtables can fire on the concrete impls).
+// concrete DuckDB engine lives in its own translation unit under
+// `backend/engine/duckdb/`. This translation unit exists so the
+// engine library has at least one source file for the build system
+// to compile, and so the v-tables for the abstract classes have a
+// single definition site (otherwise -Wweak-vtables can fire on the
+// concrete impl).
 
 namespace bigquery_emulator {
 namespace backend {

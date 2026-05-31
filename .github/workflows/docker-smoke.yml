@@ -10,9 +10,8 @@
 # drift. See `taskfiles/docker.yml`.
 #
 # Time budget: the canonical Bazel `//binaries/emulator_main:emulator_main`
-# build links the full GoogleSQL + reference-impl + DuckDB + gRPC stack,
-# which is a long pole on a cold cache (~25-55 min depending on the
-# runner). The Docker-internal Bazel cache is held in a BuildKit cache
+# build links the full GoogleSQL + DuckDB + gRPC stack, which is a
+# long pole on a cold cache (~25-55 min depending on the runner). The Docker-internal Bazel cache is held in a BuildKit cache
 # mount (`docker/dockerfile:1.7` syntax). actions/cache wires that
 # cache to GitHub's cache backend so warm-cache rebuilds drop into
 # minutes. A first-of-the-day cold run on a fresh `main` will exceed

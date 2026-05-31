@@ -43,10 +43,11 @@ const queryResponseKind = "bigquery#queryResponse"
 //     `jobs.get`.
 //
 // SQL dialect: BigQuery's `useLegacySql` field defaults to true on the
-// wire. The emulator only supports GoogleSQL because the engine is
-// GoogleSQL's analyzer + reference impl. Queries that explicitly set
-// `useLegacySql=true` are rejected with HTTP 400 + `reason: invalidQuery`;
-// unset and `useLegacySql=false` are both treated as GoogleSQL.
+// wire. The emulator only supports GoogleSQL because the engine pairs
+// GoogleSQL's analyzer with the DuckDB transpiler. Queries that
+// explicitly set `useLegacySql=true` are rejected with HTTP 400 +
+// `reason: invalidQuery`; unset and `useLegacySql=false` are both
+// treated as GoogleSQL.
 //
 // Idempotency: `requestId` provides 15-minute idempotency for matching
 // requests, per the upstream docs.
@@ -74,8 +75,9 @@ func QueryRun(deps Dependencies) http.HandlerFunc {
 			}
 		}
 		// Reject legacy SQL up front. The emulator only supports
-		// GoogleSQL because the engine is GoogleSQL's analyzer +
-		// reference impl; see docs/REST_API.md "SQL dialect".
+		// GoogleSQL because the engine pairs GoogleSQL's analyzer
+		// with the DuckDB transpiler; see docs/REST_API.md "SQL
+		// dialect".
 		if req.UseLegacySQL != nil && *req.UseLegacySQL {
 			writeError(w, http.StatusBadRequest, "invalidQuery",
 				"useLegacySql=true is not supported by the BigQuery emulator. "+

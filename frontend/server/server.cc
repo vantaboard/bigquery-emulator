@@ -32,9 +32,9 @@ namespace {
 //     registers when EnableDefaultHealthCheckService(true) is called.
 //
 // Catalog + Query are wired end-to-end against the storage backend
-// and the (DuckDB or reference-impl) engine; StorageRead lights up
-// `CreateReadSession` today and returns UNIMPLEMENTED from `ReadRows`
-// until plan 38 (`storage-read-rows`) wires the streaming reply.
+// and the DuckDB engine; StorageRead lights up `CreateReadSession`
+// today and returns UNIMPLEMENTED from `ReadRows` until plan 38
+// (`storage-read-rows`) wires the streaming reply.
 class GrpcServer final : public Server {
  public:
   GrpcServer(std::unique_ptr<::grpc::Server> server,

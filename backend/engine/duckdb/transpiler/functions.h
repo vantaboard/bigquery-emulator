@@ -64,8 +64,8 @@ struct FnEntry {
 
 // Returns the disposition for `bq_name` (case-insensitive). Returns
 // nullptr when the function is *not* in the table -- callers treat
-// that the same as `kFallback` so an unknown function falls back to
-// the reference-impl engine rather than emitting garbage SQL.
+// that the same as `kFallback` so an unknown function surfaces
+// UNIMPLEMENTED rather than emitting garbage SQL.
 const FnEntry* LookupFunction(absl::string_view bq_name);
 
 }  // namespace transpiler

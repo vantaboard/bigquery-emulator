@@ -34,19 +34,20 @@
 //     gateway maps to a `notFound` BigQuery REST error.
 //
 // Materialized tables are `backend::catalog::StorageTable` instances
-// (a `SimpleTable` subclass with a working `CreateEvaluatorTableIterator`
-// that streams rows out of the underlying `Storage`). The same
-// catalog instance therefore drives both analyzer name resolution
-// and reference-impl execution.
+// (a `SimpleTable` subclass with a working
+// `CreateEvaluatorTableIterator` that streams rows out of the
+// underlying `Storage`). The catalog drives analyzer name
+// resolution; the DuckDB engine then reads the resolved AST and
+// executes through DuckDB directly.
 //
 // The catalog inherits from `googlesql::SimpleCatalog` so the
-// analyzer / evaluator can look up GoogleSQL built-in functions and
-// types through the standard `SimpleCatalog::AddBuiltinFunctionsAndTypes`
+// analyzer can look up GoogleSQL built-in functions and types
+// through the standard `SimpleCatalog::AddBuiltinFunctionsAndTypes`
 // path -- the constructor wires that up once per query so the
-// reference-impl PreparedQuery sees `COUNT`, `SUM`, `CONCAT`, and
-// friends. We override `FindTable` to short-circuit the SimpleCatalog
-// default and hit `Storage` directly for the BigQuery
-// `<dataset>.<table>` / `<project>.<dataset>.<table>` path shapes.
+// analyzer sees `COUNT`, `SUM`, `CONCAT`, and friends. We override
+// `FindTable` to short-circuit the SimpleCatalog default and hit
+// `Storage` directly for the BigQuery `<dataset>.<table>` /
+// `<project>.<dataset>.<table>` path shapes.
 
 #include <memory>
 #include <string>

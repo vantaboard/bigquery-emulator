@@ -66,10 +66,10 @@ class QueryService final : public v1::Query::Service {
   backend::engine::Engine* engine_;  // not owned; may be null
 };
 
-// Executes `request` against the reference-impl engine and emits the
-// result through `write`. The first emitted message carries the
-// resolved output schema (with `cells` empty); every subsequent
-// message carries one result row (with `schema` unset).
+// Executes `request` against the DuckDB engine and emits the result
+// through `write`. The first emitted message carries the resolved
+// output schema (with `cells` empty); every subsequent message
+// carries one result row (with `schema` unset).
 //
 // `write(msg)` is invoked once per emitted message. It must return
 // `true` if the message was accepted by the downstream consumer and

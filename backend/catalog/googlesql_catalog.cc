@@ -135,8 +135,8 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
   // Register every GoogleSQL builtin function and type that `language`
   // enables on this catalog. The analyzer's name resolution falls
   // back to the catalog for non-operator function calls (`COUNT`,
-  // `SUM`, ...), and the reference-impl evaluator needs the same
-  // entries to algebrize them at execution time.
+  // `SUM`, ...) so the resolved AST the DuckDB transpiler walks
+  // carries the right `googlesql::Function*` for each call.
   //
   // This registration is per-catalog (i.e., per-query in our
   // usage). The underlying built-in tables are populated lazily once

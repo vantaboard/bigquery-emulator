@@ -1,7 +1,7 @@
 # Bzlmod root for bigquery-emulator.
 #
-# Bazel is the sole build system for the C++ engine (the analyzer,
-# reference-impl evaluator, DuckDB engine, and the production
+# Bazel is the sole build system for the C++ engine (the GoogleSQL
+# analyzer, the DuckDB engine + transpiler, and the production
 # `emulator_main` binary). GoogleSQL is Bazel-only, and
 # `cloud-spanner-emulator` builds the same way, so the C++ engine of
 # bigquery-emulator follows suit.
@@ -65,7 +65,7 @@ module(
     version = "0.0.0",
 )
 
-# GoogleSQL — name resolution / analyzer / reference-impl.
+# GoogleSQL — name resolution / analyzer / resolved-AST.
 #
 # Default mode: SOURCE. Built from the sibling checkout
 # (`../googlesql`) via `local_path_override`. Override at build time

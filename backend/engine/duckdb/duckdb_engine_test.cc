@@ -84,9 +84,8 @@ class DuckDBEngineTest : public ::testing::Test {
   }
 
   // Two-column people table (id INT64 REQUIRED, name STRING
-  // NULLABLE). Matches the reference-impl engine test's fixture so
-  // the two engines can be compared head-to-head against the same
-  // shape.
+  // NULLABLE). Canonical shape used across the DuckDB engine tests
+  // so the SELECT / DML test cases below all share one fixture.
   void CreatePeopleTable() {
     schema::TableSchema bq_schema;
     schema::ColumnSchema id;

@@ -18,8 +18,8 @@
 // SHAPE_TRACKER row marked `done` for a given node corresponds to
 // an `Emit*` that returns DuckDB-flavored SQL; rows marked
 // `not_started` still bottom out at the empty string and the engine
-// fallback policy reads that as "not yet supported" and routes the
-// query to the reference-impl evaluator.
+// reads that as "not yet supported" and surfaces UNIMPLEMENTED to
+// the gateway.
 //
 // Implemented baseline (top-level SELECT, the `transpiler-select-core`
 // plan):
@@ -84,8 +84,9 @@
 // `Transpile` is the public entry point: it accepts the root
 // `ResolvedQueryStmt` (or any subtree) and returns the lowered
 // DuckDB SQL. `DuckDBEngine::ExecuteQuery` (in `duckdb_engine.cc`)
-// treats an empty transpilation as "not yet supported" and falls
-// back to the reference-impl engine through the disposition table.
+// treats an empty transpilation as "not yet supported" and surfaces
+// UNIMPLEMENTED to the gateway through the engine's empty-string
+// contract.
 //
 // Threading: a `Transpiler` instance is *not* thread-safe — it
 // carries a per-traversal accumulator. The engine constructs a
@@ -141,8 +142,8 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   //
   // Returns the DuckDB SQL for any shape covered by the per-shape
   // `Emit*` methods below; an empty string means "transpiler cannot
-  // lower this shape yet" and callers treat that as a signal to fall
-  // back to the reference-impl engine via the disposition table.
+  // lower this shape yet" and callers treat that as a signal for
+  // the engine to surface UNIMPLEMENTED.
   //
   // Safe to call with a null `node`; returns the empty string in
   // that case.
@@ -255,9 +256,9 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
  private:
   // Dispatch a `ResolvedExpr` to the matching `Emit*` method based on
   // its `node_kind()`. Returns the empty string for any expression
-  // kind whose `Emit*` still returns `""` -- the engine fallback
-  // policy treats an empty fragment the same way `Transpile()` does
-  // and re-runs the query through the reference-impl evaluator.
+  // kind whose `Emit*` still returns `""` -- the engine treats an
+  // empty fragment the same way `Transpile()` does and surfaces
+  // UNIMPLEMENTED to the gateway.
   std::string EmitExpr(const ::googlesql::ResolvedExpr* expr);
 
   // Dispatch a `ResolvedScan` to the matching `Emit*` method. Same
@@ -276,7 +277,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   //   * `""` when the clause is legally absent (e.g. no PARTITION BY)
   //   * `kAnalyticBail` when the shape is not yet lowerable and the
   //     caller must abandon the analytic emit and let the engine
-  //     fall back to the reference-impl evaluator.
+  //     surface UNIMPLEMENTED.
   //   * the SQL fragment otherwise.
   // The bail sentinel keeps the helpers' empty-string-as-fallback
   // contract from colliding with the legitimate "clause omitted"

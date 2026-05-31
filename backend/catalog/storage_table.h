@@ -1,16 +1,25 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_CATALOG_STORAGE_TABLE_H_
 #define BIGQUERY_EMULATOR_BACKEND_CATALOG_STORAGE_TABLE_H_
 
-// StorageTable is the `googlesql::Table` adapter that lets the
-// GoogleSQL reference-impl evaluator stream rows out of the active
-// `backend::storage::Storage`. It is the execution-side counterpart of
+// StorageTable is the `googlesql::Table` adapter that exposes a row
+// stream out of the active `backend::storage::Storage` to any
+// GoogleSQL consumer that pulls rows through
+// `EvaluatorTableIterator`. It is the execution-side counterpart of
 // the analysis-only `SimpleTable` instances `GoogleSqlCatalog`
 // produces during analyzer name resolution: same column shape, same
-// `googlesql::Type*`
-// allocations, but with a working `CreateEvaluatorTableIterator`
-// override that wraps `Storage::ScanRows` and converts each storage
-// `Value` into a `googlesql::Value` of the matching column type as
-// the evaluator pulls rows.
+// `googlesql::Type*` allocations, but with a working
+// `CreateEvaluatorTableIterator` override that wraps
+// `Storage::ScanRows` and converts each storage `Value` into a
+// `googlesql::Value` of the matching column type as the consumer
+// pulls rows.
+//
+// The DuckDB engine does not drive this iterator (it ATTACHes the
+// underlying DuckDB storage and lets DuckDB scan rows directly), so
+// the override is currently exercised only by callers that walk a
+// `googlesql::Table` interface. We keep it because `SimpleTable`'s
+// default returns "not supported" and the abstract surface keeps
+// the door open for future analyzer-side callers (e.g. constant-
+// folding, dryRun planning) that may want a row stream.
 //
 // We subclass `googlesql::SimpleTable` so column-list management
 // (NumColumns / GetColumn / FindColumnByName / set_full_name / ...)

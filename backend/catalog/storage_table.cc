@@ -285,20 +285,21 @@ StorageTable::StorageTable(absl::string_view name,
   // infallible for our inputs, so we discard.
   (void)set_full_name(full_name);
 
-  // Designate the first column as the (synthetic) primary key so the
-  // reference-impl evaluator's `PreparedModify` can run UPDATE /
-  // DELETE statements -- both rely on `Table::PrimaryKey()` to drive
+  // Designate the first column as the (synthetic) primary key. This
+  // is vestigial from when the now-removed reference-impl evaluator's
+  // `PreparedModify` drove UPDATE / DELETE: it called
+  // `Table::PrimaryKey()` to drive
   // `EvaluatorTableModifyIterator::GetOriginalKeyValue` and to dedupe
-  // post-mutation row sets. BigQuery itself does not have explicit
-  // primary keys, so this is a pragmatic choice for the DML path: the first
-  // column's values must be unique across the table for DML to
-  // succeed (`Modification resulted in duplicate primary key`),
-  // duplicate-row INSERTs that share the first column are rejected,
-  // and the first column cannot be updated (the evaluator implicitly
-  // enables `FEATURE_DISALLOW_PRIMARY_KEY_UPDATES`). Tables with
-  // zero columns leave the PK unset; SimpleTable's
-  // `SetPrimaryKey({0})` would otherwise return an InvalidArgument
-  // status that we have no good way to surface from a constructor.
+  // post-mutation row sets. The DuckDB engine does its own DML
+  // through a transpiled UPDATE / DELETE SQL fragment and does not
+  // consult `PrimaryKey()`, so the designation is currently a
+  // no-op on the live execution path -- but BigQuery itself has no
+  // primary-key concept either, so leaving the first column marked
+  // is harmless and keeps `googlesql::Table` consumers (analyzer
+  // optimizations, future planners) happy. Tables with zero columns
+  // leave the PK unset; SimpleTable's `SetPrimaryKey({0})` would
+  // otherwise return an InvalidArgument status we have no good way
+  // to surface from a constructor.
   if (NumColumns() > 0) {
     (void)SetPrimaryKey({0});
   }

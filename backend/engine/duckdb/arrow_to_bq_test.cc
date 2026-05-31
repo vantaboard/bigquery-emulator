@@ -2,7 +2,8 @@
 // The tests run a handful of canonical query shapes through a real
 // in-memory DuckDB connection (using the libduckdb C API the engine
 // itself drives) and assert that each fetched data chunk lowers to
-// the same `storage::Value` shape the reference-impl engine returns.
+// the canonical `storage::Value` shape the engine streams back to
+// the gateway.
 //
 // We exercise the converter against the chunk API rather than against
 // the higher-level DuckDBEngine so the test does not pull in

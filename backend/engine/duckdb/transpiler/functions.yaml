@@ -2,16 +2,17 @@
 #
 # Each line is `<bq_function>: <disposition>` where `<disposition>` is one of:
 #   * a DuckDB function name (the transpiler emits `<NAME>(<args>)`)
-#   * `skiplist`  — out of scope today; engine falls back to reference-impl
-#   * `fallback`  — lowering not yet implemented; engine falls back to reference-impl
+#   * `skiplist`  — out of scope today; engine surfaces UNIMPLEMENTED
+#   * `fallback`  — lowering not yet implemented; engine surfaces UNIMPLEMENTED
 #
 # Keys are case-insensitive; the loader lowercases them at parse time.
 # Functions registered as both scalar (`ResolvedFunctionCall`) and
 # aggregate (`ResolvedAggregateFunctionCall`) get one entry here; the
 # transpiler dispatches to the right emit path based on the resolved
 # node kind. SAFE.* prefix (`error_mode == SAFE_ERROR_MODE`) is not
-# represented here -- the emit short-circuits to `""` so the fallback
-# fires regardless of the underlying function disposition.
+# represented here -- the emit short-circuits to `""` so the engine
+# surfaces UNIMPLEMENTED regardless of the underlying function
+# disposition.
 #
 # Order does not affect resolution; entries are grouped by category for
 # readability. Keep this file the source of truth -- the genrule
@@ -166,8 +167,9 @@ last_value: LAST_VALUE
 nth_value: NTH_VALUE
 
 # --- Skiplist ----------------------------------------------------------
-# Out of scope today; reference-impl handles these and the harness pins
-# them to the reference-impl engine via session labels.
+# Out of scope today; the engine surfaces UNIMPLEMENTED for these
+# until a deliberate plan adds the lowering (see `SHAPE_TRACKER.md`'s
+# skiplist policy).
 approx_quantiles: skiplist
 approx_count_distinct: skiplist
 approx_top_count: skiplist

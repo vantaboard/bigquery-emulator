@@ -182,8 +182,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
   // `Emit*` methods can recurse through `EmitExpr` / `EmitScan` /
   // `Transpile` without each one knowing the full node hierarchy.
   // Returning "" is the contract `DuckDBEngine::ExecuteQuery` reads
-  // as "not yet supported" -- the engine falls back to the
-  // reference-impl evaluator through the disposition policy.
+  // as "not yet supported" -- the engine surfaces UNIMPLEMENTED to
+  // the gateway through the empty-string contract.
   if (node == nullptr) return "";
   switch (node->node_kind()) {
     case ::googlesql::RESOLVED_QUERY_STMT:
@@ -365,13 +365,11 @@ std::string Transpiler::EmitTableScan(
     const ::googlesql::ResolvedTableScan* node) {
   // Emit a self-contained SELECT so the result composes as a derived
   // table for any outer scan (FilterScan, ProjectScan, JoinScan, ...)
-  // that wraps it. The shape mirrors what the reference-impl engine
-  // sees on its `EvaluatorTableIterator`: each `column_list` entry
-  // pulls one column from the underlying `Table` via the position
-  // recorded in `column_index_list`. The DuckDB-side table name is
-  // whatever the catalog's `Table::Name()` returned -- the engine is
-  // responsible for ATTACHing storage so the bare name resolves at
-  // execution time.
+  // that wraps it. Each `column_list` entry pulls one column from the
+  // underlying `Table` via the position recorded in `column_index_list`. The
+  // DuckDB-side table name is whatever the catalog's `Table::Name()` returned
+  // -- the engine is responsible for ATTACHing storage so the bare name
+  // resolves at execution time.
   if (node == nullptr || node->table() == nullptr) return "";
   const ::googlesql::Table* table = node->table();
   std::vector<std::string> projections;
@@ -430,7 +428,7 @@ std::string Transpiler::EmitFilterScan(
   // table scan emits its own `SELECT`, so we can't strip it back to
   // a bare relation here without re-emitting). If either child emits
   // "" (still on the disposition fallback) we propagate the empty
-  // string up so the engine knows to take the reference-impl path.
+  // string up so the engine surfaces UNIMPLEMENTED.
   if (node == nullptr) return "";
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
@@ -450,8 +448,8 @@ std::string Transpiler::EmitJoinScan(
   //
   // Lateral joins, JOIN USING(...) (`has_using`), and the lateral
   // `parameter_list` need bespoke rewrite passes that the first emit
-  // pass doesn't cover; we return "" so the engine takes the
-  // reference-impl fallback for those shapes.
+  // pass doesn't cover; we return "" so the engine surfaces
+  // UNIMPLEMENTED for those shapes.
   if (node == nullptr) return "";
   if (node->is_lateral() || node->has_using() ||
       node->parameter_list_size() > 0) {
@@ -504,8 +502,8 @@ std::string Transpiler::EmitArrayScan(
   // per array element with the column carrying `<col>` as its name.
   //
   // The full BigQuery `ResolvedArrayScan` surface is wider than what
-  // we lower today; everything outside the standalone case falls
-  // back to the reference-impl engine via the disposition policy:
+  // we lower today; everything outside the standalone case surfaces
+  // UNIMPLEMENTED via the empty-string contract:
   //
   //   * `FROM t, UNNEST(t.arr)` (`input_scan != nullptr` and the
   //     input is not a `SingleRowScan`) needs DuckDB's lateral
@@ -554,8 +552,8 @@ std::string Transpiler::EmitAggregateScan(
   //
   // ROLLUP / CUBE / GROUPING SETS / GROUPING() function calls all set
   // one of the grouping-set / rollup / grouping_call lists on the
-  // node; we leave those shapes on the reference-impl fallback until
-  // a dedicated lower pass lands.
+  // node; we leave those shapes UNIMPLEMENTED until a dedicated
+  // lower pass lands.
   if (node == nullptr) return "";
   if (node->grouping_set_list_size() > 0 ||
       node->rollup_column_list_size() > 0 ||
@@ -824,8 +822,8 @@ std::string OrderByItemSuffix(const ::googlesql::ResolvedOrderByItem* item) {
 std::string Transpiler::BuildPartitionClause(
     const ::googlesql::ResolvedWindowPartitioning* p) {
   if (p == nullptr) return "";
-  // PARTITION BY hints and collations are BQ-specific; bail back to
-  // the reference-impl fallback.
+  // PARTITION BY hints and collations are BQ-specific; bail so the
+  // engine surfaces UNIMPLEMENTED.
   if (!p->collation_list().empty() || p->hint_list_size() > 0) {
     return std::string(kAnalyticBail);
   }
@@ -986,9 +984,9 @@ std::string Transpiler::EmitSampleScan(
   //                    Matches the "exactly N rows" target.
   //
   // We bail (return "") on anything outside that matrix so the
-  // engine falls back to the reference-impl evaluator rather than
-  // emitting SQL with a method/unit combination DuckDB rejects at
-  // parse time. The plan also asks us to fall back on:
+  // engine surfaces UNIMPLEMENTED rather than emitting SQL with a
+  // method/unit combination DuckDB rejects at parse time. The plan
+  // also asks us to bail on:
   //
   //   * `repeatable_argument()` -- DuckDB has REPEATABLE (<seed>),
   //     but the seed-derived PRNG is not byte-equivalent to BQ's
@@ -1059,8 +1057,8 @@ std::string Transpiler::EmitLiteral(const ::googlesql::ResolvedLiteral* node) {
   //     DuckDB-flavored quoting rather than `"..."` / `(...)`.
   //   * STRUCT: DuckDB struct literals are `{'k': v, ...}` keyed by
   //     field name. Anonymous fields (empty name) have no DuckDB
-  //     analog and force the caller back to the reference-impl
-  //     fallback via the empty-string contract.
+  //     analog; we surface UNIMPLEMENTED via the empty-string
+  //     contract.
   if (node == nullptr) return "";
   return EmitValueLiteral(node->value());
 }
@@ -1080,8 +1078,8 @@ std::string Transpiler::EmitParameter(
   // Untyped parameters (the analyzer's stand-in for "the engine
   // will fill in the type later") are out of scope for a transpiled
   // query: DuckDB infers types from the bound value, but we have
-  // no type to attach to the placeholder. Fall back via the empty
-  // string so the engine takes the reference-impl path.
+  // no type to attach to the placeholder. Return the empty string
+  // so the engine surfaces UNIMPLEMENTED.
   if (node == nullptr) return "";
   if (node->is_untyped()) return "";
   if (!node->name().empty()) {
@@ -1137,15 +1135,14 @@ std::string Transpiler::EmitFunctionCall(
   //     bracket-literal syntax so we emit it directly rather than
   //     going through a `kMap` entry that would render as
   //     `$MAKE_ARRAY(...)`.
-  // Anything outside the table falls back to the reference-impl
-  // engine via the empty-string contract; the LOG(INFO) records the
-  // miss so debug builds can audit which functions still need a
-  // disposition row.
+  // Anything outside the table surfaces UNIMPLEMENTED via the
+  // empty-string contract; the LOG(INFO) records the miss so debug
+  // builds can audit which functions still need a disposition row.
   if (node == nullptr || node->function() == nullptr) return "";
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-    LOG(INFO) << "duckdb transpiler: SAFE function call falls back to "
-                 "reference-impl (function="
+    LOG(INFO) << "duckdb transpiler: SAFE function call surfaces "
+                 "UNIMPLEMENTED (function="
               << node->function()->Name() << ")";
     return "";
   }
@@ -1163,18 +1160,18 @@ std::string Transpiler::EmitFunctionCall(
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: function '" << name
-              << "' has no disposition; falling back to reference-impl";
+              << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
   switch (entry->kind) {
     case FnKind::kSkiplist:
       LOG(INFO) << "duckdb transpiler: function '" << name
                 << "' is skiplisted (BigQuery-specific / no DuckDB "
-                   "analog); falling back to reference-impl";
+                   "analog); surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kFallback:
       LOG(INFO) << "duckdb transpiler: function '" << name
-                << "' lowering deferred; falling back to reference-impl";
+                << "' lowering deferred; surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kMap:
       return absl::StrCat(
@@ -1196,14 +1193,14 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // The richer modifiers (HAVING MAX/MIN, ORDER BY / LIMIT inside the
   // aggregate, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate
   // filtering) all need bespoke lower passes; we propagate "" so the
-  // engine takes the reference-impl fallback whenever one of them is
-  // set. `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) follows the same
-  // fallback contract `EmitFunctionCall` uses.
+  // engine surfaces UNIMPLEMENTED whenever one of them is set.
+  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) follows the same
+  // empty-string contract `EmitFunctionCall` uses.
   if (node == nullptr || node->function() == nullptr) return "";
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-    LOG(INFO) << "duckdb transpiler: SAFE aggregate falls back to "
-                 "reference-impl (function="
+    LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces "
+                 "UNIMPLEMENTED (function="
               << node->function()->Name() << ")";
     return "";
   }
@@ -1217,7 +1214,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
               DEFAULT_NULL_HANDLING) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
               << "' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / "
-                 "NULL-handling) that has no DuckDB analog yet; falling back";
+                 "NULL-handling) that has no DuckDB analog yet; surfacing "
+                 "UNIMPLEMENTED";
     return "";
   }
   const std::string name = absl::AsciiStrToLower(node->function()->Name());
@@ -1235,17 +1233,17 @@ std::string Transpiler::EmitAggregateFunctionCall(
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << name
-              << "' has no disposition; falling back to reference-impl";
+              << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
   switch (entry->kind) {
     case FnKind::kSkiplist:
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' is skiplisted; falling back to reference-impl";
+                << "' is skiplisted; surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kFallback:
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' lowering deferred; falling back to reference-impl";
+                << "' lowering deferred; surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kMap: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
@@ -1275,8 +1273,8 @@ std::string Transpiler::EmitAnalyticFunctionCall(
   if (node == nullptr || node->function() == nullptr) return "";
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-    LOG(INFO) << "duckdb transpiler: SAFE analytic function falls back to "
-                 "reference-impl (function="
+    LOG(INFO) << "duckdb transpiler: SAFE analytic function surfaces "
+                 "UNIMPLEMENTED (function="
               << node->function()->Name() << ")";
     return "";
   }
@@ -1286,7 +1284,7 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     // LAST_VALUE semantics; DuckDB has the same keywords but the
     // rewrite needs more care than this emit pass covers.
     LOG(INFO) << "duckdb transpiler: analytic '" << node->function()->Name()
-              << "' uses IGNORE/RESPECT NULLS; falling back";
+              << "' uses IGNORE/RESPECT NULLS; surfacing UNIMPLEMENTED";
     return "";
   }
   std::vector<std::string> args;
@@ -1304,17 +1302,17 @@ std::string Transpiler::EmitAnalyticFunctionCall(
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: analytic function '" << name
-              << "' has no disposition; falling back to reference-impl";
+              << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
   switch (entry->kind) {
     case FnKind::kSkiplist:
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' is skiplisted; falling back to reference-impl";
+                << "' is skiplisted; surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kFallback:
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' lowering deferred; falling back to reference-impl";
+                << "' lowering deferred; surfacing UNIMPLEMENTED";
       return "";
     case FnKind::kMap: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
@@ -1360,8 +1358,8 @@ std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* node) {
   // conversion failure rather than raising.
   //
   // The richer cast surface needs bespoke rewrites we defer to a
-  // follow-up plan; for now we propagate "" so the engine takes the
-  // reference-impl fallback whenever any of these are set:
+  // follow-up plan; for now we propagate "" so the engine surfaces
+  // UNIMPLEMENTED whenever any of these are set:
   //
   //   * `format()`        -- BigQuery's FORMAT clause for STRING/BYTES
   //                          cast templates differs from DuckDB's
@@ -1572,8 +1570,8 @@ std::string Transpiler::EmitFunctionArgument(
   //
   // Every other slot (scan / model / connection / descriptor /
   // lambda / sequence / graph) needs bespoke lowering work that no
-  // caller has proven yet; we propagate "" so the engine takes the
-  // reference-impl fallback for the surrounding function call. The
+  // caller has proven yet; we propagate "" so the engine surfaces
+  // UNIMPLEMENTED for the surrounding function call. The
   // `argument_alias()` (BigQuery's `F(<arg> AS <alias>)` syntax) is
   // similarly user-intent metadata with no DuckDB analog -- we
   // ignore it and keep the unwrapped expression's emit on the
@@ -1617,11 +1615,11 @@ std::string Transpiler::EmitComputedColumn(
   // `column := expr` lowers to `<expr> AS "<column-name>"`. The
   // upstream `EmitProjectScan` calls this once per
   // `ResolvedComputedColumn` in `expr_list` and slots the result into
-  // the SELECT list. The empty-string fallback contract: any child
-  // expression we cannot lower (a function outside the disposition
-  // table, a parameter we have not implemented yet, ...) propagates
-  // back here and we hand "" to the caller so the engine takes the
-  // reference-impl fallback instead of emitting partial SQL.
+  // the SELECT list. The empty-string contract: any child expression
+  // we cannot lower (a function outside the disposition table, a
+  // parameter we have not implemented yet, ...) propagates back here
+  // and we hand "" to the caller so the engine surfaces UNIMPLEMENTED
+  // instead of emitting partial SQL.
   if (node == nullptr) return "";
   std::string expr = EmitExpr(node->expr());
   if (expr.empty()) return "";
