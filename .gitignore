@@ -86,9 +86,11 @@ third_party/**/.flattened-pom.xml
 
 # Bazel local disk cache (action outputs keyed by content hash).
 # Populated automatically by every `bazel build|test|run|coverage`
-# under this workspace via the `--disk_cache=%workspace%/.cache/bazel-disk`
-# entry in `.bazelrc`. Typically 6-10 GiB after a full cold engine build;
-# wipe with `task bazel:cache:clear` to reclaim space.
+# under this workspace via the `--disk_cache=.cache/bazel-disk` entry
+# in `.bazelrc` (the path is workspace-root-relative; Bazel resolves
+# it against the workspace root at invocation time). Typically 6-10
+# GiB after a full cold engine build; wipe with `task
+# bazel:cache:clear` to reclaim space.
 /.cache/bazel-disk/
 
 # Clang-tidy compilation database produced by

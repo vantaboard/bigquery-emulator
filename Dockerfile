@@ -180,8 +180,10 @@ COPY tools/googlesql-prebuilt ./tools/googlesql-prebuilt
 #   * If `GOOGLESQL_PREBUILT_URL` + `GOOGLESQL_PREBUILT_SHA256` are
 #     set, fetch + verify (SHA gate) + unpack into
 #     `/src/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/`,
-#     where `%workspace%/.cache/googlesql-prebuilt/...` from
-#     `.bazelrc` resolves under `--config=googlesql-prebuilt`.
+#     where `--override_module=googlesql=.cache/googlesql-prebuilt/...`
+#     from `.bazelrc` resolves under `--config=googlesql-prebuilt`
+#     (the path is workspace-root-relative; Bazel resolves it against
+#     the workspace root at invocation time).
 #   * Otherwise clone `google/googlesql@${GOOGLESQL_VERSION}` at
 #     `/googlesql` (so `MODULE.bazel`'s
 #     `local_path_override(path = "../googlesql")` resolves) and apply

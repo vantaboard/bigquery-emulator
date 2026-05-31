@@ -284,7 +284,8 @@ tasks:
       # `--config={{.GOOGLESQL_SOURCE}}` resolves to either
       # `--config=googlesql-source` (no-op, source default) or
       # `--config=googlesql-prebuilt` (`--override_module=googlesql=
-      # %workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64`).
+      # .cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64`,
+      # workspace-root-relative).
       # The `_GOOGLESQL_PREBUILT_CHECK` var (above) refuses the build
       # before bazel runs if prebuilt mode is requested but the cache
       # is missing / mis-named.

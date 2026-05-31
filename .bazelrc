@@ -89,7 +89,7 @@ build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 #                                `--override_module=googlesql=...`
 #                                points Bazel's resolver at the
 #                                unpacked tarball under
-#                                `%workspace%/.cache/googlesql-prebuilt/
+#                                `<workspace>/.cache/googlesql-prebuilt/
 #                                googlesql_prebuilt_linux_amd64`. The
 #                                cache is populated by
 #                                `task googlesql:fetch-prebuilt` (real
@@ -117,14 +117,20 @@ build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 
 # Prebuilt mode points the `googlesql` module at the on-disk
-# unpacked artifact. The path is `%workspace%`-relative so the same
-# config works regardless of where the repo is checked out. The
-# cache is populated by `task googlesql:fetch-prebuilt` /
-# `task googlesql:stage-bazel` / `task googlesql:stage-fixture`
-# (see `taskfiles/googlesql.yml`) — those helpers verify the
-# artifact's SHA-256 BEFORE writing into the cache, so a build under
-# `--config=googlesql-prebuilt` can trust the cache contents.
-build:googlesql-prebuilt --override_module=googlesql=%workspace%/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
+# unpacked artifact. The path is workspace-root-relative on purpose
+# (Bazel resolves relative `--override_module` paths against the
+# workspace root) so the same config works regardless of where the
+# repo is checked out. We deliberately do NOT use `%workspace%/...`
+# here — that token is only substituted in `.bazelrc` `import` /
+# `try-import` directives, not in option values, so the literal
+# string would land Bazel at a bogus `./%workspace%/.cache/...`
+# directory. The cache is populated by
+# `task googlesql:fetch-prebuilt` / `task googlesql:stage-bazel` /
+# `task googlesql:stage-fixture` (see `taskfiles/googlesql.yml`) —
+# those helpers verify the artifact's SHA-256 BEFORE writing into
+# the cache, so a build under `--config=googlesql-prebuilt` can
+# trust the cache contents.
+build:googlesql-prebuilt --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
 # ABI parity with the prebuilt artifact. The compatibility-surface manifest commits
 # the producer to `-DNDEBUG` (see
@@ -180,10 +186,17 @@ build:googlesql-prebuilt --host_copt=-DNDEBUG
 # cache across all three is correct (Bazel keys by hash), so this lives
 # under `build` so the `test`/`run`/`coverage` lines below also inherit
 # it via Bazel's flag inheritance.
-build --disk_cache=%workspace%/.cache/bazel-disk
-test  --disk_cache=%workspace%/.cache/bazel-disk
-run   --disk_cache=%workspace%/.cache/bazel-disk
-coverage --disk_cache=%workspace%/.cache/bazel-disk
+# NOTE: path is workspace-root-relative on purpose. Bazel resolves
+# relative `--disk_cache` values against the workspace root at
+# invocation time, so a single literal here works regardless of where
+# the repo is checked out. Do NOT use `%workspace%/...` — that token
+# is only substituted in `import` / `try-import` directives, not in
+# option values, so `--disk_cache=%workspace%/...` would create a
+# literal `./%workspace%/` directory next to this file.
+build --disk_cache=.cache/bazel-disk
+test  --disk_cache=.cache/bazel-disk
+run   --disk_cache=.cache/bazel-disk
+coverage --disk_cache=.cache/bazel-disk
 
 # ---------------------------------------------------------------------------
 # First-party C++ warning profile.
