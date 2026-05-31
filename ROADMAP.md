@@ -445,7 +445,15 @@ and
   `emulator_main` accepts `--host_port` and `--data_dir` only;
   `--engine` / `--storage` / `--on_unknown_fn` were removed when
   the ReferenceImpl + in-memory backends were deleted.
-- ⏳ Document `gcloud emulators bigquery start`-equivalent usage
+- ✅ Install / launch flow documented in README §Quickstart,
+  §Install via Docker, §Install via release archive, and
+  §Pointing client libraries at the emulator (`docker run` +
+  `BIGQUERY_EMULATOR_HOST` env-var override). Note: there is **no**
+  `gcloud emulators bigquery start` subcommand — gcloud ships
+  emulator subgroups only for Firestore and Spanner (plus
+  pubsub / datastore / bigtable in alpha/beta), so the "gcloud
+  install path" some users expect by analogy with Spanner does
+  not exist for BigQuery and is not on the roadmap to add
 
 ---
 
