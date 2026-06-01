@@ -6,31 +6,43 @@ deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
 - The **engine is C++** and links GoogleSQL directly. GoogleSQL is the
   source of truth for SQL parsing, name resolution, type inference, and
-  analysis; the DuckDB engine lowers the resolved AST to DuckDB SQL for
-  execution. We do not re-port any of it to Go.
+  analysis. Execution sits behind a single `Engine` interface and is
+  split into local strategies — DuckDB fast path, DuckDB UDFs /
+  rewrites, a local semantic executor, and catalog/control handlers —
+  chosen per resolved-AST shape by a local execution router. We do not
+  re-port any of GoogleSQL to Go.
 - The **frontend is a Go HTTP server** that implements BigQuery's public REST
   surface (projects/datasets/tables/jobs/queries/insertAll/...) and forwards
   query work to the C++ engine over an internal gRPC channel.
 - The Go gateway spawns the C++ engine binary as a subprocess on startup and
   shuts it down on exit, identical to the Spanner emulator's
   `gateway_main` -> `emulator_main` pattern.
+- Everything runs **local-only**. There is no fallback to the real
+  BigQuery service; coverage and parity are responsibilities the
+  multi-strategy coordinator owns inside this process.
 
 [spanner]: https://github.com/GoogleCloudPlatform/cloud-spanner-emulator
 
 ## Execution plans
 
-The remaining unscoped work is the DuckDB transpiler shape coverage —
-flipping every `skiplist` / `not_started` row in
-[`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
-to `done`. The execution order, dependencies, and per-shape plans
-live under [`.cursor/plans/`](.cursor/plans/); start with the index:
+The remaining unscoped work is the **local multi-strategy execution
+coordinator** — building out the route classifier and the per-route
+executors (DuckDB fast path, DuckDB UDF/polyfill library, semantic
+executor, control-op executor) so every shape the analyzer accepts has
+a planned route disposition with conformance coverage. The execution
+order, terminology, done criteria, and per-route plans live under
+[`.cursor/plans/`](.cursor/plans/); start with the index:
 
-- [`.cursor/plans/duckdb-transpiler-shape-roadmap-index.plan.md`](.cursor/plans/duckdb-transpiler-shape-roadmap-index.plan.md) — execution order across the 16 transpiler plans, with shared rules and per-shape done criteria
+- [`.cursor/plans/local-execution-roadmap-index.plan.md`](.cursor/plans/local-execution-roadmap-index.plan.md) — execution order across the local-execution plan set, with route vocabulary, done criteria, and the rule that every user-visible shape gets a routing disposition plus conformance coverage.
 
-The older 46-plan capability-area scaffold (one plan per gateway /
-engine / storage / conformance slice) has been retired now that its
-slices have either landed or collapsed into the shape-tracker work
-below.
+The earlier DuckDB-only transpiler plan set (one plan per AST family,
+all targeting DuckDB SQL lowering) has been retired. Its landed
+accomplishments — scans, filters, projections, joins, aggregates,
+windows, set operations, struct / array literals, JSON field access,
+Arrow output — carry forward as `duckdb_native` / `duckdb_rewrite`
+entries in the new tracker. The earlier 46-plan capability-area
+scaffold (one plan per gateway / engine / storage / conformance
+slice) was retired before that.
 
 ## Engine and storage
 
@@ -38,14 +50,39 @@ The C++ side is structured around two narrow interfaces
 (`backend/engine/engine.h`, `backend/storage/storage.h`) so the heavy
 machinery can be swapped without touching the gateway, the gRPC
 contract, or the conformance harness. Today there is exactly one
-implementation behind each interface:
+public implementation behind each interface; the `Engine`
+implementation is itself a local **multi-strategy coordinator** that
+routes resolved-AST shapes to the right local executor.
 
-- **`Engine` interface — DuckDB engine** (`backend/engine/duckdb/`).
-  Transpiles the GoogleSQL `ResolvedAST` into a DuckDB-flavored SQL
-  string via a custom C++ AST visitor/unparser, then executes it
-  through DuckDB's C++ client. Massive OLAP speedup and Arrow-native
-  results, at the cost of dialect fidelity for cases the unparser
-  can't yet handle (see Open Questions).
+- **`Engine` interface — local execution coordinator**
+  (`backend/engine/`). Owns a route classifier that consults the
+  shape tracker for each resolved-AST node kind and dispatches to one
+  of:
+
+  - **DuckDB fast path** (`backend/engine/duckdb/transpiler/`): emits
+    DuckDB-flavored SQL via a custom C++ AST visitor/unparser and
+    executes through DuckDB's C++ client. Owns the OLAP-shape wins —
+    scans, filters, projections, joins, aggregates, windows, set
+    operations, struct / array literals, JSON field access, Arrow
+    output.
+  - **DuckDB rewrites and UDFs** (planned): DuckDB SQL expressed in
+    terms of UDFs / macros / structural rewrites for the BigQuery
+    functions whose semantics are close enough to DuckDB's that they
+    can be made correct locally without a separate executor.
+  - **Local semantic executor** (planned): a row/array/value
+    interpreter that runs against scanned Arrow batches when the
+    BigQuery semantics differ enough from DuckDB to make a rewrite
+    risky (exact NULL behavior, BigQuery-specific date arithmetic
+    edge cases, SAFE-mode error surfaces, deep STRUCT mutation,
+    `UNNEST WITH OFFSET`, multi-array zip, ...).
+  - **Catalog / control ops** (planned for full coverage): DDL,
+    metadata, and other "this is really a storage / catalog
+    operation" statements bypass query execution entirely and run
+    through the storage layer.
+
+  Each strategy returns rows through the same `RowSource`
+  abstraction; callers cannot tell which one served a query (the
+  conformance harness can, via route labels).
 
 - **`Storage` interface — DuckDB storage** (`backend/storage/duckdb/`).
   A single `catalog.duckdb` file under `--data_dir` (default
@@ -57,8 +94,11 @@ An earlier iteration carried a second `Engine` implementation
 (ReferenceImpl, on top of `googlesql::reference_impl::Evaluator`)
 bridged to DuckDB by a `FallbackEngine` wrapper, plus an in-memory
 storage backend for hermetic tests. Both were removed once DuckDB
-covered the supported surface; see `docs/ENGINE_POLICY.md` for the
-deprecation rationale.
+covered the supported surface; the new multi-strategy coordinator
+is the deliberate replacement for that pattern, with route
+selection happening at AST-classification time rather than at
+runtime error catch time. See `docs/ENGINE_POLICY.md` for the
+current execution policy and the deprecation rationale.
 
 The point of this roadmap is to keep the work bite-sized, ordered by
 dependency, and honest about what is "in" vs. "vendored from upstream."
@@ -206,13 +246,17 @@ BigQuery REST" question.
 ## Catalog, Storage, and Engine abstractions (C++)
 
 Goal: define the two pluggable interfaces, ship the DuckDB
-implementation of `Storage`, ship the DuckDB `Engine` impl (the
-transpiler + execution surface tracked in the Query execution
-section below), and wire `tabledata.insertAll` / `tabledata.list`
-end-to-end against `DuckDBStorage`. The interfaces stay narrow so
-a future second implementation (e.g. a remote engine, an alternate
-storage layout) can land without disturbing the gateway or the gRPC
-contract; today there is exactly one impl behind each.
+implementation of `Storage`, ship the local-coordinator `Engine`
+impl (today: DuckDB fast path; the route classifier + DuckDB
+UDF/polyfill library + semantic executor + control-op executor land
+incrementally behind the same interface — see the Execution
+strategies section below), and wire `tabledata.insertAll` /
+`tabledata.list` end-to-end against `DuckDBStorage`. The interfaces
+stay narrow so additional internal strategies (or, eventually, an
+alternate storage layout) can land without disturbing the gateway
+or the gRPC contract; today there is exactly one public impl
+behind each, and the multi-strategy coordinator is the only
+`Engine` implementation callers see.
 
 ### Interfaces
 
@@ -262,11 +306,25 @@ contract; today there is exactly one impl behind each.
 
 ### Engine scaffolding
 
-- ✅ [`backend/engine/duckdb/`](./backend/engine/duckdb/): the
-  transpiler + DuckDB execution path are the sole engine implementation.
-  Per-shape coverage is tracked in
+- ✅ [`backend/engine/duckdb/`](./backend/engine/duckdb/): the DuckDB
+  fast path. The transpiler + DuckDB execution surface is the only
+  routed strategy with substantial production coverage today; per-shape
+  dispositions are tracked in
   [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
-  and worked through the plans linked from the index above
+  using the route-aware status vocabulary
+  (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
+  `semantic_executor`, `control_op`, `unsupported`)
+- 🟡 Local execution router behind `backend/engine/engine.h`: dispatches
+  each query to the strategy that fits its resolved-AST shape. The
+  scaffolding plan is `engine-router-foundation.plan.md`; today the
+  router degenerates to "always DuckDB fast path" and shapes not in
+  the `duckdb_native` set surface `UNIMPLEMENTED`
+- ⏳ Local semantic executor scaffolding
+  (`semantic-executor-core.plan.md`)
+- ⏳ DuckDB UDF / polyfill library
+  (`duckdb-polyfill-udf-library.plan.md`)
+- ⏳ Control-op executor for DDL / metadata
+  (`control-op-executor.plan.md`)
 
 ## Query analysis (C++ via GoogleSQL)
 
@@ -289,18 +347,23 @@ yet executing.
 
 ## Query execution
 
-Goal: run real queries through the DuckDB engine. The gateway forwards
-analyzed queries to `emulator_main` over gRPC and never branches on
-engine choice. The engine lowers the GoogleSQL `ResolvedAST` into
-DuckDB SQL and executes it via the DuckDB C++ client.
+Goal: run real queries through the local execution coordinator. The
+gateway forwards analyzed queries to `emulator_main` over gRPC and
+never branches on engine choice. Inside the engine, the route
+classifier inspects the GoogleSQL `ResolvedAST` and dispatches to the
+strategy that fits: DuckDB fast path (today's primary), DuckDB
+rewrite / UDF, local semantic executor, or a catalog/control-op
+handler.
 
 - 🟡 [`backend/engine/duckdb/transpiler/`](./backend/engine/duckdb/transpiler/):
-  a `googlesql::ResolvedASTVisitor` that emits DuckDB SQL strings.
-  Implemented one node kind at a time, shape-tracker style; per-row
-  status lives in
-  [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
-  and the remaining `skiplist` / `not_started` rows are scheduled by
-  the index plan linked at the top of this document
+  the **DuckDB fast path**. A `googlesql::ResolvedASTVisitor` that
+  emits DuckDB SQL strings, implemented one node kind at a time;
+  per-shape route disposition (`duckdb_native` /
+  `duckdb_rewrite` / `duckdb_udf` / `semantic_executor` /
+  `control_op` / `unsupported`) lives in
+  [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md).
+  Shapes routed to the other strategies are scheduled by the
+  local-execution roadmap index linked at the top of this document
 - ✅ Type lowering: BigQuery / GoogleSQL types -> DuckDB types
   (`INT64`, `FLOAT64`, `STRING`, `BYTES`, `BOOL`, `DATE`, `TIMESTAMP`,
   `NUMERIC`, `BIGNUMERIC`, `JSON`, `INTERVAL`, `UUID`, `ARRAY<T>`,
@@ -314,22 +377,34 @@ DuckDB SQL and executes it via the DuckDB C++ client.
 - 🟡 UNNEST handling: standalone `UNNEST(arr) AS col` lowers to
   DuckDB `SELECT unnest(arr) AS "col"`. `WITH OFFSET`, multi-array
   zip, outer `UNNEST`, and lateral / cross-join shapes still surface
-  `UNIMPLEMENTED` pending the lateral-join rewrites tracked in
-  `duckdb-transpiler-array-lateral.plan.md`
+  `  UNIMPLEMENTED` pending the lateral / multi-array / WITH OFFSET
+  shapes, which reroute from the DuckDB fast path to the local
+  semantic executor via `array-struct-semantic-path.plan.md`
 - 🟡 Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
   conditional, array, aggregation, window, and BQ-specific
   categories). A Bazel `genrule` materializes it into
   `functions_table.inc`, which `functions.cc` includes inside an
-  `absl::flat_hash_map`. Per-function disposition is `kMap` (emit a
-  DuckDB function call), `kFallback` (deferred lowering, surfaces
-  UNIMPLEMENTED), or `kSkiplist` (out of scope today —
-  `APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...).
-  `SAFE.<fn>(...)` is handled uniformly regardless of disposition
-- ✅ DuckDB execution path: file-backed `catalog.duckdb` connection,
-  the transpiled SQL is bound and executed via the DuckDB C++ client,
-  DuckDB errors are translated back to the BigQuery error envelope
+  `absl::flat_hash_map`. The current per-function disposition is
+  `kMap` (emit a DuckDB function call — i.e. `duckdb_native` /
+  `duckdb_rewrite`), `kFallback` (deferred lowering, surfaces
+  UNIMPLEMENTED today; each entry has a planned route in either
+  `duckdb-polyfill-udf-library.plan.md` or
+  `semantic-functions-compliance.plan.md`), or `kSkiplist`
+  (`unsupported` per `specialized-feature-policy.plan.md` —
+  `APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...). The
+  `execution-disposition-registry.plan.md` plan retires
+  `kMap`/`kFallback`/`kSkiplist` in favor of the six-route
+  vocabulary used everywhere else. `SAFE.<fn>(...)` is handled
+  uniformly regardless of disposition
+- ✅ DuckDB fast-path execution: file-backed `catalog.duckdb`
+  connection, the transpiled SQL is bound and executed via the DuckDB
+  C++ client, DuckDB errors are translated back to the BigQuery error
+  envelope. Routes that resolve to the semantic executor / control-op
+  handlers will reuse the same connection for storage scans but bypass
+  DuckDB's SQL engine for the BigQuery-semantics-sensitive evaluation
+  step
 - ✅ Result marshaling: DuckDB Arrow `RecordBatch` -> BigQuery REST
   row JSON (column-major Arrow walked into the row-major `f`/`v`
   shape; NULL bitmap honored; nested STRUCTs/ARRAYs recursed). The
@@ -339,22 +414,52 @@ DuckDB SQL and executes it via the DuckDB C++ client.
   (`creationTime`, `startTime`, `endTime`, `totalBytesProcessed`)
   surfaced through [`gateway/jobs/`](./gateway/jobs/)
 
+## Execution strategies
+
+The router maps every `ResolvedAST` shape to one of six route
+dispositions; the same vocabulary lives in
+[`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
+on a per-node basis and in
+[`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) as the
+public-facing policy.
+
+| Route                | What it is                                                                                  | Plan                                              |
+|----------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------|
+| `duckdb_native`      | Lowers directly to DuckDB SQL with semantics that already match BigQuery's exactly.         | `duckdb-fast-path-stabilization.plan.md`          |
+| `duckdb_rewrite`     | Lowers to DuckDB SQL with a deliberate rewrite (e.g. struct/array shape rewrites, BigQuery JSON operators -> DuckDB JSON operators). | `duckdb-fast-path-stabilization.plan.md`          |
+| `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | `duckdb-polyfill-udf-library.plan.md`             |
+| `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | `semantic-executor-core.plan.md` + per-family plans |
+| `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | `control-op-executor.plan.md`                     |
+| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error.        | `specialized-feature-policy.plan.md`              |
+
+- 🟡 Route classifier behind `Engine::Analyze` /
+  `Engine::ExecuteQuery`
+- 🟡 Per-shape dispositions recorded in the shape tracker
+- ⏳ Route labels surfaced on conformance fixture output so passing
+  rows can't hide accidental drift between strategies
+  (`conformance-routing-matrix.plan.md`)
+
 ## DML / DDL
 
-- 🟡 DML through the DuckDB transpiler. `MERGE` is supported;
-  `INSERT VALUES` / `INSERT ... SELECT`, `UPDATE`, and `DELETE`
-  still return `UNIMPLEMENTED` (see
-  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) and the
-  `duckdb-transpiler-dml.plan.md` plan). Until INSERT lands,
-  conformance fixtures and tests seed rows with
-  `tabledata.insertAll` instead
-- 🟡 DDL: `CREATE TABLE`, `CREATE TABLE AS SELECT`, and
-  `DROP TABLE` lower today; `CREATE VIEW`, `CREATE MATERIALIZED
-  VIEW`, and `ALTER TABLE` still return `UNIMPLEMENTED` (see
-  `duckdb-transpiler-ddl.plan.md`)
-- ⏳ `CREATE TEMP FUNCTION`, scripting basics (UDFs / TVFs /
-  procedures) — `duckdb-transpiler-udf-tvf-module.plan.md` and
-  `duckdb-transpiler-procedural.plan.md`
+- 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast path
+  today; `INSERT VALUES` / `INSERT ... SELECT`, `UPDATE`, and
+  `DELETE` still return `UNIMPLEMENTED`. The completion plan
+  (`dml-local-executor.plan.md`) routes the harder shapes through a
+  storage-aware local executor instead of forcing them through
+  DuckDB SQL, and owns `numDmlAffectedRows` correctness. Until
+  INSERT lands, conformance fixtures and tests seed rows with
+  `tabledata.insertAll` instead. See
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
+  routing decisions.
+- 🟡 DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
+  SELECT`, and `DROP TABLE` are wired today via the storage layer;
+  `CREATE VIEW`, `CREATE MATERIALIZED VIEW`, and `ALTER TABLE` still
+  return `UNIMPLEMENTED`. Completion lives in
+  `control-op-executor.plan.md`
+- ⏳ Scripting / UDFs / TVFs (CALL, ASSERT, EXECUTE IMMEDIATE,
+  procedure bodies, statement sequencing) routed to a local
+  scripting executor — `procedural-scripting-executor.plan.md` and
+  `udf-tvf-module-routing.plan.md`
 - ⏳ Job stats: `numDmlAffectedRows`
 
 ## Storage Read API (gRPC)
@@ -441,10 +546,14 @@ and
   `binaries/emulator_main/BUILD.bazel`
 - ✅ Runtime configuration documented in README §Runtime configuration;
   the conformance harness (`conformance/README.md`) and the engine
-  policy (`docs/ENGINE_POLICY.md`) cover the DuckDB-only runtime.
-  `emulator_main` accepts `--host_port` and `--data_dir` only;
-  `--engine` / `--storage` / `--on_unknown_fn` were removed when
-  the ReferenceImpl + in-memory backends were deleted.
+  policy (`docs/ENGINE_POLICY.md`) cover the local-only execution
+  model and the per-route catalog. `emulator_main` accepts
+  `--host_port` and `--data_dir` only; `--engine` / `--storage` /
+  `--on_unknown_fn` were removed when the ReferenceImpl + in-memory
+  backends were deleted, and the multi-strategy coordinator
+  intentionally keeps that same single-knob posture (route selection
+  happens internally at AST-classification time, not via a runtime
+  flag).
 - ✅ Install / launch flow documented in README §Quickstart,
   §Install via Docker, §Install via release archive, and
   §Pointing client libraries at the emulator (`docker run` +
@@ -461,24 +570,35 @@ and
 
 - No Go port of GoogleSQL. Engine is C++. If GoogleSQL changes, we rebuild;
   we do not chase semantics in Go.
+- No fallback to the real BigQuery service. Everything runs locally,
+  full stop — coverage and parity are responsibilities the
+  multi-strategy coordinator owns inside this process. There is no
+  cloud-passthrough mode and there is no plan to add one.
 - Persistence is best-effort, not promised. The DuckDB-backed
   `--data_dir` is what runs in production; we don't claim durability
   semantics, replication, or backup.
-- No production performance promises. The DuckDB engine is the only
-  execution backend; we aren't competing with the real BigQuery
-  service. Expect competitive numbers for OLAP shapes the transpiler
-  covers; expect `UNIMPLEMENTED` for shapes it does not lower yet
-  (INSERT / UPDATE / DELETE / scalar-only SELECT today).
+- No production performance promises. We aren't competing with the
+  real BigQuery service. Expect competitive numbers for the OLAP
+  shapes that route through the DuckDB fast path; expect "fast
+  enough for tests, not fast enough for benchmarks" for shapes that
+  route through the semantic executor; expect `UNIMPLEMENTED` for
+  shapes still on the `unsupported` route
+  (INSERT / UPDATE / DELETE / scalar-only SELECT today, plus the
+  unsupported-by-design families documented in
+  `specialized-feature-policy.plan.md`).
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
-  later if there's demand.
+  later if there's demand, and only with a local implementation or a
+  deterministic stub — never with a cloud passthrough.
 
 ## Build systems
 
 The C++ engine is built with Bazel. The
 `//binaries/emulator_main:emulator_main` `cc_binary` links
-GoogleSQL's analyzer, the DuckDB engine + DuckDB storage backend,
-the catalog/query/storage-read gRPC handlers, and grpc++ in one
-binary that serves `Query.DryRun`, `Query.ExecuteQuery`, and
+GoogleSQL's analyzer, the local execution coordinator (DuckDB fast
+path today; the semantic executor / control-op executor / DuckDB UDF
+polyfills link into the same binary as they land), the DuckDB storage
+backend, the catalog/query/storage-read gRPC handlers, and grpc++ in
+one binary that serves `Query.DryRun`, `Query.ExecuteQuery`, and
 `bigquery_emulator.v1.StorageRead` end-to-end.
 
 GoogleSQL is consumed in one of two modes selected by
@@ -527,39 +647,49 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   (`google.cloud.bigquery.storage.v1.BigQueryWrite`) is not yet
   wired. The Storage Read API surface lands first; Write API is
   scheduled behind the DML INSERT plan.
-- **Dialect translation friction (ZetaSQL <-> DuckDB).** The DuckDB
-  transpiler is the single riskiest piece of the project; semantic drift
-  between BigQuery and DuckDB is real and unevenly distributed. Known
-  hazards we'll have to design around:
+- **Dialect translation friction (GoogleSQL <-> DuckDB).** The DuckDB
+  fast path is no longer the project's whole story, but the friction
+  it surfaces is exactly why the local coordinator exists: shapes
+  where DuckDB SQL diverges from BigQuery semantics get routed to a
+  DuckDB rewrite, a DuckDB UDF, or the semantic executor instead of
+  silently degrading. Known hazards we design routes around:
   - **`MERGE`.** GoogleSQL's `MERGE` permits `INSERT`, `UPDATE`, `DELETE`,
     and conditional branches on `WHEN MATCHED`, `WHEN NOT MATCHED BY
     SOURCE`, and `WHEN NOT MATCHED BY TARGET`. DuckDB's `INSERT ... ON
     CONFLICT` plus separate `UPDATE` / `DELETE` statements doesn't cover
-    the full matrix. The current path lowers `MERGE` into a
-    transactional sequence of statements where possible; shapes the
-    transpiler can't yet model return `UNIMPLEMENTED` so the gap is
-    pinned by the conformance harness.
+    the full matrix. The easy shapes route `duckdb_native` /
+    `duckdb_rewrite` today; the harder branches will route through the
+    `dml-local-executor.plan.md` semantic path so we don't have to
+    pretend DuckDB SQL can model them.
   - **Deep STRUCT mutations.** `UPDATE t SET s.a.b = ...` is well-defined
-    in BigQuery but DuckDB's struct field updates are limited; we'll need
-    to rewrite as `s = struct_update(s, ...)` and chain. Worse, deeply
-    nested updates may need to round-trip through JSON to preserve
+    in BigQuery but DuckDB's struct field updates are limited.
+    Anything past a single-level rewrite routes through the
+    `array-struct-semantic-path.plan.md` semantic executor so deep
+    nested updates don't have to round-trip through JSON to fake
     field-existence semantics.
   - **Google-specific built-ins.** `APPROX_QUANTILES`, `HLL_COUNT.*`,
     `ML.*`, `BIT_COUNT`, `NET.*`, `KEYS.NEW_KEYSET`, GIS / GEOGRAPHY
     functions, and date-arithmetic edge cases (`DATE_ADD(d, INTERVAL 1
     MONTH)` semantics on month-end) often have no DuckDB analog. The
-    function-disposition table absorbs the ones we can map or
-    polyfill; the rest return `UNIMPLEMENTED` so the conformance
-    harness pins each gap.
+    function-disposition table now records a routing disposition per
+    entry; close-enough functions become `duckdb_udf`, BigQuery-exact
+    ones become `semantic_executor`, and entire families
+    (`specialized-feature-policy.plan.md`) declare a policy of "local
+    implementation now," "deterministic stub with BigQuery-shaped
+    error," or "unsupported by design."
   - **NULL-equality, ordering, and float corner cases** between the two
     engines are subtly different (e.g., NaN ordering, `IS NULL` in joins,
-    integer overflow behavior) and need explicit conformance coverage
-    before declaring the DuckDB engine on for a given workload.
+    integer overflow behavior). Shapes that depend on these route to
+    the semantic executor (`semantic-functions-compliance.plan.md`)
+    rather than being approximated in DuckDB SQL.
   - **JSON.** BigQuery's `JSON` type and `JSON_VALUE` / `JSON_QUERY`
-    functions are mostly portable, but precisely-typed JSON (`JSON` vs.
-    `STRING`-encoded JSON) and the dot/path navigators have lookalike
-    DuckDB functions that aren't quite the same.
-  - The pragmatic answer to most of the above is per-shape and
-    per-function disposition tables and an honest skiplist for what
-    DuckDB can't yet handle; unmapped shapes return `UNIMPLEMENTED`
-    rather than silently degrading.
+    functions are mostly portable. The common cases route
+    `duckdb_native` / `duckdb_rewrite` today; the precisely-typed
+    edges (`JSON` vs. `STRING`-encoded JSON, exact path-navigator
+    semantics) become `duckdb_udf` or `semantic_executor` as their
+    semantic gaps surface.
+  - The pragmatic answer to all of the above is the route catalog,
+    not "everything becomes a transpiler shape." Unmapped shapes return
+    `UNIMPLEMENTED` rather than silently degrading, but the router has
+    five places to put a shape before that and the plan set names which
+    one each remaining unsupported shape is going to land in.

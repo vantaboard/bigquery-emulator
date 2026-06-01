@@ -18,8 +18,13 @@ BigQuery REST API.
 > against the C++ engine, plus wired stubs for the surfaces client
 > libraries probe at startup (models, routines, row-access policies,
 > migration, data transfer, discovery). The C++ engine links GoogleSQL
-> directly, transpiles the resolved AST to DuckDB SQL, and executes
-> through DuckDB; results land back as REST `f`/`v` JSON or, on the
+> directly and runs a **local execution coordinator** behind a single
+> `Engine` interface: a resolved-AST router dispatches each query
+> shape to the strategy that fits — DuckDB-native SQL for fast
+> analytical work, DuckDB UDFs / rewrites for the BigQuery functions
+> we can polyfill, a local semantic executor for exact BigQuery
+> evaluation, and storage/catalog handlers for DDL and metadata
+> operations. Results land back as REST `f`/`v` JSON or, on the
 > internal gRPC Storage Read API, as native Arrow batches.
 > `MERGE`, `CREATE TABLE`, `CREATE TABLE AS SELECT`, and `DROP TABLE`
 > work today; `INSERT VALUES` / `UPDATE` / `DELETE` still surface
@@ -27,8 +32,8 @@ BigQuery REST API.
 > close. See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
 > narrative, [`docs/REST_API.md`](./docs/REST_API.md) for the
 > per-endpoint mapping + current status, and
-> [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the DuckDB-only
-> policy.
+> [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the
+> local-only execution policy and route catalog.
 
 ## Architecture
 
@@ -36,25 +41,38 @@ This emulator is modeled directly on Google's
 [`cloud-spanner-emulator`](https://github.com/GoogleCloudPlatform/cloud-spanner-emulator):
 
 ```
-+-------------------------------+        +--------------------------------+
-|  gateway_main (Go)            |  gRPC  |  emulator_main (C++)           |
-|                               | <----> |                                |
-|  - Implements BigQuery REST   |        |  - Links GoogleSQL directly    |
-|    (projects/datasets/tables/ |        |  - DuckDB engine + storage     |
-|     jobs/queries/insertAll)   |        |  - Persistent catalog/storage  |
-|  - Spawns engine as subproc   |        |                                |
-+-------------------------------+        +--------------------------------+
++-------------------------------+        +-----------------------------------+
+|  gateway_main (Go)            |  gRPC  |  emulator_main (C++)              |
+|                               | <----> |                                   |
+|  - Implements BigQuery REST   |        |  - Links GoogleSQL directly       |
+|    (projects/datasets/tables/ |        |  - Local execution coordinator:   |
+|     jobs/queries/insertAll)   |        |      - DuckDB fast path           |
+|  - Spawns engine as subproc   |        |      - DuckDB UDFs / rewrites     |
+|                               |        |      - Local semantic executor    |
+|                               |        |      - Catalog / control ops      |
+|                               |        |  - DuckDB-backed persistent store |
++-------------------------------+        +-----------------------------------+
 ```
 
 - The **engine is C++** so it can link [GoogleSQL](https://github.com/google/googlesql)
-  directly. SQL parsing, name resolution, type inference come from upstream;
-  execution lowers to DuckDB. We do **not** re-port that surface to Go.
+  directly. SQL parsing, name resolution, and type inference come from
+  upstream; execution dispatches through a local route classifier that
+  picks the right local strategy for each resolved-AST shape. We do
+  **not** re-port any of GoogleSQL's surface to Go.
+- DuckDB is the **fast analytical path**, not the whole engine. Shapes
+  that lower cleanly run there; shapes that need exact BigQuery
+  semantics run on a local semantic executor; DDL and metadata ops go
+  through the catalog/storage layer directly. The router is internal —
+  callers only see one `Engine` gRPC service.
 - The **REST gateway is Go** because that is where the BigQuery-specific
   value lives: REST routes, jobs lifecycle, datasets/tables/projects model,
   streaming inserts, error envelope, discovery doc.
 - The Go gateway spawns the C++ engine as a subprocess on startup and
   shuts it down cleanly on exit, identical to how `gateway_main` spawns
   `emulator_main` in the Spanner emulator.
+- The whole stack runs **local-only**. The emulator never forwards
+  query work to a real BigQuery project; full local coverage is the
+  explicit non-goal that drives the multi-strategy execution layout.
 
 This split is the same one Google's own emulator team picked for Spanner,
 and the same one [`goccy/bigquery-emulator`][goccy] has converged on (via
@@ -87,7 +105,12 @@ bigquery-emulator/
   backend/              # C++: catalog / schema / storage / engine
     catalog/, schema/       # GoogleSQL catalog adapter + type mapping
     storage/duckdb/         # DuckDB-backed catalog.duckdb persistence
-    engine/duckdb/          # Resolved-AST -> DuckDB SQL transpiler
+    engine/                 # Engine interface + local execution coordinator
+    engine/duckdb/          # DuckDB fast path: AST -> DuckDB SQL transpiler
+                            # (additional strategies — semantic executor,
+                            # DuckDB UDF/polyfill library, control-op
+                            # executor — live alongside duckdb/ as they
+                            # land; see ROADMAP.md "Execution strategies")
   proto/                # Internal Go <-> C++ contract
     emulator.proto        # Catalog + Query services
     storage_read.proto    # bigquery_emulator.v1.StorageRead
@@ -101,7 +124,7 @@ bigquery-emulator/
   docs/                 # Documentation
     REST_API.md           # Endpoint -> handler mapping (read this when
                           # debugging a specific BigQuery REST call)
-    ENGINE_POLICY.md      # DuckDB-only policy + UNIMPLEMENTED shapes
+    ENGINE_POLICY.md      # Local-only execution policy + route catalog
     SEEDING.md            # Declarative + template + REST seeding
     dev/                  # C++ lint policy, prebuilt GoogleSQL playbooks
     bigquery/             # Vendored copy of the upstream BigQuery docs
@@ -204,10 +227,12 @@ Run `task --list` for the full set of namespaces (`emulator:`,
 
 The C++ engine is built with Bazel. Run
 `task emulator:build-engine:bazel` (alias: `task emulator:build-engine`).
-This links GoogleSQL's analyzer with the DuckDB engine + DuckDB storage
-backend and gRPC, producing a binary that serves `Query.DryRun` and
-`Query.ExecuteQuery` end-to-end. The integration tests under
-`gateway/e2e/` drive this binary directly.
+This links GoogleSQL's analyzer with the local execution coordinator
+(DuckDB fast path today, with the semantic executor / control-op
+executor / DuckDB UDF polyfills slotting in behind the same `Engine`
+interface), the DuckDB storage backend, and gRPC. The output binary
+serves `Query.DryRun` and `Query.ExecuteQuery` end-to-end. The
+integration tests under `gateway/e2e/` drive this binary directly.
 
 GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a
 prebuilt tarball through `http_archive` (see
@@ -300,8 +325,8 @@ GoogleSQL pin, releasing) start at the
 The repo ships a multi-stage [`Dockerfile`](./Dockerfile) that builds
 both the Go gateway and the C++ engine (the canonical Bazel
 `//binaries/emulator_main:emulator_main` target, which links the full
-GoogleSQL analyzer + DuckDB engine + DuckDB storage) and packages
-them into a single runtime image. The layout mirrors the
+GoogleSQL analyzer + the local execution coordinator + DuckDB
+storage) and packages them into a single runtime image. The layout mirrors the
 `gcr.io/cloud-spanner-emulator/emulator` image. A
 `docker/gateway_main.sh` shim injects `--hostname=0.0.0.0` inside the
 container so the published port is reachable from the host without
@@ -368,11 +393,18 @@ docker run --rm -p 9050:9050 bigquery-emulator:dev \
 
 ## Runtime configuration
 
-`emulator_main` runs a single fixed runtime today: the DuckDB engine
-backed by DuckDB storage. There are no `--engine` / `--storage` /
-`--on_unknown_fn` selectors anymore (those were removed when the
-ReferenceImpl engine and in-memory storage backends were deleted).
-The only knobs are `--host_port` and `--data_dir`:
+`emulator_main` runs a single local emulator process with a single
+`Engine` interface and a single persistent storage backend
+(`DuckDBStorage`, `catalog.duckdb` under `--data_dir`). Query
+execution behind that interface is multi-strategy — the local
+coordinator chooses DuckDB-native SQL, a DuckDB rewrite/UDF, the
+semantic executor, or a catalog/control handler per query — but the
+runtime surface stays a single emulator binary with no runtime
+backend selector. There are no `--engine` / `--storage` /
+`--on_unknown_fn` flags (those were removed when the ReferenceImpl
+engine and in-memory storage backends were deleted, and the new
+multi-strategy coordinator intentionally keeps the same single-knob
+posture). The only flags are `--host_port` and `--data_dir`:
 
 ```bash
 # Default: bind to 127.0.0.1:9060, use $HOME/.bigquery-emulator as the
@@ -395,8 +427,10 @@ docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1 \
 ```
 
 See [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the
-DuckDB-only policy decision and which DML / DDL shapes are still
-UNIMPLEMENTED, and the conformance harness
+local-only execution policy, the per-shape route catalog (DuckDB
+fast path / DuckDB rewrite / DuckDB UDF / semantic executor /
+control op / unsupported-by-design), and which DML / DDL shapes
+are still UNIMPLEMENTED, and the conformance harness
 ([`conformance/README.md`](./conformance/README.md)) for the shape of
 the per-fixture diff.
 
@@ -458,8 +492,8 @@ is intentionally **not** modeled.
 
 BigQuery's `useLegacySql` field defaults to `true` on the wire (older
 clients still rely on this). The emulator only supports GoogleSQL,
-because the engine is GoogleSQL's analyzer feeding the DuckDB engine.
-The query handlers will:
+because the engine is GoogleSQL's analyzer feeding the local
+execution coordinator. The query handlers will:
 
 - Treat `useLegacySql` unset or `false` as GoogleSQL.
 - Reject `useLegacySql=true` with HTTP 400 + `reason: invalidQuery`.
@@ -477,11 +511,13 @@ The repository runs two parallel conformance lanes against the same
 gateway:
 
 1. **Fixture conformance** — `task conformance:*` drives YAML fixtures
-   through the in-repo runner and pins SQL semantics for the
-   `duckdb` profile (the only profile today; see
-   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)). See
-   [`conformance/README.md`](./conformance/README.md) for the fixture
-   schema, profile matrix, and authoring guide.
+   through the in-repo runner and pins SQL semantics against the local
+   execution coordinator (the single `local` profile today, which
+   covers every routed strategy: DuckDB fast path, DuckDB rewrites,
+   DuckDB UDFs, semantic executor, and control ops). See
+   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the route
+   catalog and [`conformance/README.md`](./conformance/README.md) for
+   the fixture schema, profile matrix, and authoring guide.
 2. **Third-party client conformance** — `task thirdparty:*` runs the
    imported BigQuery client-library sample suites (Go, Node.js, Python,
    BigQuery DataFrames) end-to-end against the gateway's REST + gRPC
