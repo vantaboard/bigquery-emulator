@@ -87,6 +87,81 @@ TEST_F(StringMacrosTest, StrposNullPropagation) {
   EXPECT_TRUE(RunIsNull("SELECT bq_strpos(NULL::VARCHAR, NULL::VARCHAR)"));
 }
 
+// --- bq_split ----------------------------------------------------
+
+// Helper for LIST-returning macros: wraps the macro call in
+// `list_aggregate(<call>, 'string_agg', '|')` so the result is a
+// single VARCHAR with the list elements joined by `|`. The
+// per-test assertions compare that joined form (easier to eyeball
+// than a manually-walked column buffer; the macro's contract is
+// fully captured by the ordered set of elements).
+//
+// Note: BigQuery SPLIT's return type is LIST(VARCHAR); DuckDB's
+// `string_split` returns the same shape, and DuckDB's
+// `array_to_string(list, sep)` flattens it. We use `'|'` as the
+// join separator so test fixtures that include `,` in the data
+// stay readable.
+std::string JoinSplit(::duckdb_connection conn, const std::string& macro_call) {
+  ::duckdb_result result;
+  const std::string wrapped =
+      "SELECT array_to_string(" + macro_call + ", '|')";
+  auto rc = ::duckdb_query(conn, wrapped.c_str(), &result);
+  if (rc != ::DuckDBSuccess) {
+    ADD_FAILURE() << "DuckDB rejected: "
+                  << (::duckdb_result_error(&result) == nullptr
+                          ? "(no error)"
+                          : ::duckdb_result_error(&result))
+                  << " (sql=" << wrapped << ")";
+    ::duckdb_destroy_result(&result);
+    return "(rejected)";
+  }
+  char* raw = ::duckdb_value_varchar(&result, 0, 0);
+  std::string out = raw == nullptr ? std::string("") : std::string(raw);
+  ::duckdb_free(raw);
+  ::duckdb_destroy_result(&result);
+  return out;
+}
+
+TEST_F(StringMacrosTest, SplitDefaultDelimiterIsComma) {
+  // Edge case pinned: BigQuery SPLIT(value) (single-arg form)
+  // defaults to splitting on `,`. A regression that registered
+  // the macro without a `delimiter := ','` default would surface
+  // here as a binder error.
+  EXPECT_EQ(JoinSplit(conn_, "bq_split('a,b,c')"), "a|b|c");
+  EXPECT_EQ(JoinSplit(conn_, "bq_split('one,two')"), "one|two");
+}
+
+TEST_F(StringMacrosTest, SplitCustomDelimiter) {
+  EXPECT_EQ(JoinSplit(conn_, "bq_split('a;b;c', ';')"), "a|b|c");
+  EXPECT_EQ(JoinSplit(conn_, "bq_split('foo-bar-baz', '-')"), "foo|bar|baz");
+}
+
+TEST_F(StringMacrosTest, SplitEmptyInputReturnsSingleEmpty) {
+  // Edge case pinned: BigQuery SPLIT('', ',') returns a list
+  // containing one empty string (BQ contract: a non-empty
+  // delimiter always splits, even an empty input). DuckDB's
+  // string_split agrees today; the test pins it.
+  EXPECT_EQ(JoinSplit(conn_, "bq_split('', ',')"), "");
+}
+
+TEST_F(StringMacrosTest, SplitNullPropagation) {
+  // Wrap in a `r IS NULL` SQL boolean rather than relying on
+  // `duckdb_value_is_null` for LIST cells; the C API's NULL
+  // detector for LIST columns is shape-sensitive across DuckDB
+  // versions, and a SQL-level `IS NULL` is unambiguous.
+  ::duckdb_result result;
+  for (const char* sql : {
+           "SELECT bq_split(NULL::VARCHAR) IS NULL",
+           "SELECT bq_split('a,b,c', NULL::VARCHAR) IS NULL",
+       }) {
+    auto rc = ::duckdb_query(conn_, sql, &result);
+    ASSERT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: " << sql;
+    EXPECT_TRUE(::duckdb_value_boolean(&result, 0, 0))
+        << "expected NULL propagation for " << sql;
+    ::duckdb_destroy_result(&result);
+  }
+}
+
 }  // namespace
 }  // namespace udf
 }  // namespace duckdb

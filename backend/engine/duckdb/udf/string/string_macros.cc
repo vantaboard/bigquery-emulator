@@ -43,6 +43,52 @@ absl::Status RegisterString(::duckdb_connection conn) {
     return s;
   }
 
+  // `bq_split(value [, delimiter])` --- BigQuery SPLIT with `,` as
+  // the default delimiter.
+  //
+  // BigQuery SPLIT(VALUE [, DELIMITER]) returns ARRAY<STRING> of the
+  // substrings of `VALUE` separated by `DELIMITER`; the default
+  // delimiter when omitted is the comma `,`. DuckDB's
+  // `string_split(string, separator)` returns LIST(VARCHAR) and
+  // requires both arguments. The macro uses a DEFAULT value
+  // (`delimiter := ','`) to support both `SPLIT(v)` and
+  // `SPLIT(v, d)` callsites under a single registered name; DuckDB
+  // allows the default to be omitted at the call site, so
+  // `bq_split('a,b,c')` evaluates to `['a','b','c']` (single-arg
+  // BQ contract).
+  //
+  // Edge cases the unit test pins:
+  //   * Default delimiter is the comma (`bq_split('a,b,c') ==
+  //     ['a','b','c']`).
+  //   * Custom delimiter (`bq_split('a;b;c', ';') ==
+  //     ['a','b','c']`).
+  //   * Empty input with non-empty delimiter returns a list
+  //     containing one empty string (`bq_split('', ',') == ['']`,
+  //     matching BigQuery's "still one element, even if the input
+  //     is empty" contract).
+  //   * NULL propagation in either operand returns NULL. DuckDB's
+  //     `string_split` propagates NULL in `value` but NOT in
+  //     `separator` (a NULL separator returns the input wrapped
+  //     as a single-element list, not NULL). BigQuery DOES
+  //     propagate NULL in either argument, so the macro adds an
+  //     explicit `CASE WHEN delimiter IS NULL THEN NULL` arm.
+  //
+  // Edge case the macro does NOT pin (documented in YAML notes):
+  // `bq_split(value, '')` -- BigQuery splits into individual
+  // characters; DuckDB's `string_split(value, '')` returns the
+  // input wrapped in a single-element list. BYTES inputs are also
+  // not supported by this macro (DuckDB's string_split is
+  // VARCHAR-only); BigQuery SPLIT on BYTES needs a separate path
+  // tracked in the YAML notes.
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_split(value, delimiter := ',') AS "
+          "CASE WHEN delimiter IS NULL THEN NULL "
+          "ELSE string_split(value, delimiter) END");
+      !s.ok()) {
+    return s;
+  }
+
   return absl::OkStatus();
 }
 

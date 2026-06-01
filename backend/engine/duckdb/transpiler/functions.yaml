@@ -177,7 +177,28 @@ from_hex: duckdb_native duckdb_name=FROM_HEX
 # BigQuery's RE2 dialect differs from DuckDB's; FORMAT is %-style,
 # DuckDB has PRINTF which differs subtly. The polyfill UDF library
 # owns the rewrite path.
-split: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ SPLIT(value [, delimiter]) returns ARRAY<STRING> of `value`'s
+# substrings between non-overlapping `delimiter` occurrences. The
+# delimiter defaults to `,` when omitted. DuckDB's `string_split`
+# requires both arguments; the `bq_split` macro (registered by
+# `backend/engine/duckdb/udf/string/string_macros.cc`) uses a
+# default value (`delimiter := ','`) so both `SPLIT(v)` and
+# `SPLIT(v, d)` callsites lower through the same registered name.
+# Unit test `string_macros_test::SplitDefaultDelimiterIsComma` pins
+# the default-delimiter contract; `SplitEmptyInputReturnsSingleEmpty`
+# pins the BQ "still one element on empty input" edge.
+#
+# Edge cases NOT pinned by the macro (documented and acceptable):
+#   * Empty delimiter (`SPLIT(v, '')`): BigQuery splits into
+#     characters; DuckDB returns the input as a single-element
+#     list. Hitting this case surfaces DuckDB's behavior, not
+#     BigQuery's. A future polyfill iteration can close the gap
+#     with a CASE arm that swaps to `regexp_split_to_array(value,
+#     '')` (or equivalent) when the delimiter is empty.
+#   * BYTES input: BigQuery SPLIT works on both STRING and BYTES;
+#     DuckDB's `string_split` is VARCHAR-only. The BYTES path is
+#     out of scope today.
+split: duckdb_udf duckdb_name=bq_split plan=duckdb-polyfill-udf-library.plan.md
 # BQ REGEXP_CONTAINS(value, regex) -> BOOL. Both BigQuery and
 # DuckDB v1.5.3 use RE2 for regex evaluation, so the dialects
 # agree on anchoring, character classes, embedded `(?i)`

@@ -1,0 +1,50 @@
+# function_split: BigQuery SPLIT via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_split` macro through the
+# gateway. The macro closes one gap: DuckDB's `string_split`
+# requires both arguments, while BigQuery's SPLIT defaults to a
+# comma when the delimiter is omitted.
+#
+# Edge cases pinned:
+#   * Default delimiter is `,` for the single-arg `SPLIT(v)` form.
+#   * Custom delimiter splits on the supplied separator.
+#   * Empty input with non-empty delimiter returns a single
+#     empty-string element (matching BigQuery's "always split"
+#     contract).
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_split
+description: |
+  BigQuery SPLIT lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/string/string_macros.cc`'s
+  `bq_split` macro). Verifies the default comma delimiter, the
+  two-arg custom delimiter form, and the empty-input contract.
+project_id: proj-functions-split
+dataset_id: ds_functions_split
+setup:
+  - dataset: ds_functions_split
+  - table:
+      dataset: ds_functions_split
+      id: strings
+      schema:
+        - {name: id,  type: INT64,  mode: REQUIRED}
+        - {name: val, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_split
+      table: strings
+      rows:
+        - {id: 1, val: 'a,b,c'}
+        - {id: 2, val: 'foo-bar-baz'}
+        - {id: 3, val: ''}
+query: |
+  SELECT id,
+         ARRAY_TO_STRING(SPLIT(val), '|')      AS default_delim,
+         ARRAY_TO_STRING(SPLIT(val, '-'), '|') AS dash_delim
+    FROM ds_functions_split.strings
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", default_delim: "a|b|c",         dash_delim: "a,b,c"}
+    - {id: "2", default_delim: "foo-bar-baz",   dash_delim: "foo|bar|baz"}
+    - {id: "3", default_delim: "",              dash_delim: ""}

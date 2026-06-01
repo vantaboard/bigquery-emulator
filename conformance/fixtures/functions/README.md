@@ -21,7 +21,7 @@ Families today:
   `status=planned` because their capture-group semantic needs
   pattern introspection).
 - `conditional/` — `bq_if`, `bq_isnull`.
-- `string/` — `bq_strpos`.
+- `string/` — `bq_strpos`, `bq_split`.
 - `aggregate/` — `countif` (routed `duckdb_native` to DuckDB's
   `count_if` aggregate; no UDF wrapper needed because v1.5.3's
   `count_if` already matches BQ COUNTIF on NULL / FALSE handling).
