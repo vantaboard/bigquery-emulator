@@ -27,13 +27,23 @@ Always go through `taskfiles/bazel.yml` and `taskfiles/emulator.yml`:
 - `task bazel:status` — list current bazel/clang/wrapper PIDs and the daemon's running time.
 - `task bazel:shutdown` — releases the persistent server (frees JVM heap, lets the next invocation start fresh).
 - `task bazel:kill-strays` — full-tree kill (`pkill -TERM -P` then `-KILL`) for any leftover wrapper / bazelisk / clang / process-wrapper, then `bazel shutdown`.
-- `task emulator:build-engine:bazel` — the canonical throttled `emulator_main` build (jobs=2, mem cap, env-pinned clang-18, trap-driven shutdown on signal).
+- `task emulator:build-engine:bazel` — the canonical throttled `emulator_main` build (jobs=2, mem cap, env-pinned clang-18, signal-driven shutdown — daemon stays warm between back-to-back wrapper calls within a plan; see below).
 
 Direct `bazel ...` invocations are allowed for one-off targets but MUST:
 
 1. Pass throttled `--jobs=N --local_resources=cpu=N --local_resources=memory=M` flags that leave headroom for the OS/IDE. The shared `task bazel:*` helpers auto-detect from `MemAvailable` (free + reclaimable buff/cache) so a build never exceeds 75% of what the kernel reports as currently available: `memory = max(4096, 75% of MemAvailable MB)`, and `jobs = min(nproc - 2, floor(memory / 2048))` (floor 2). Match those numbers (or smaller) unless the user explicitly raised the cap for this run.
 2. Use the system clang via `CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH` + `--action_env=CC=/usr/bin/clang --action_env=CXX=/usr/bin/clang++` (the `mise` clang-22 lacks libstdc++ headers).
-3. Run `bazel shutdown` afterward (`trap 'bazel shutdown' EXIT INT TERM` when scripted in bash; Task's mvdan/sh shell does NOT accept the symbolic signal names, so wrap such commands in `bash -c '...'`).
+3. Trap signals (not normal EXIT) for daemon cleanup: `trap 'bazel shutdown' INT TERM`. The shared wrappers in `taskfiles/bazel.yml` do this so the daemon stays warm between back-to-back wrapper calls within a plan (each call reuses the in-memory analysis cache for ~7700 targets, saving 5–10 s per invocation). End-of-plan shutdown happens via the cleanup block below. Task's mvdan/sh shell does NOT accept symbolic signal names, so wrap such commands in `bash -c '...'`.
+
+## Warm-daemon-per-plan (do NOT shutdown between scoped tests)
+
+Inside a single plan / subagent, do NOT call `task bazel:shutdown` between scoped `task bazel:test` / `task bazel:build` invocations. The shared wrappers are deliberately written so a successful (or failed) bazel call leaves the daemon alive, because:
+
+- The in-memory analysis cache is large (~7700 targets for a typical first-party test). Restarting the daemon forces a full cold reload.
+- A wrapper invocation followed by another wrapper invocation under the same plan is the dominant pattern (engine build → many scoped tests; or scoped test → scoped test as you iterate on a family of changes).
+- The disk cache and GoogleSQL prebuilt artifact survive shutdown, but the analysis cache and dependency graph do not.
+
+The wrapper still shuts the daemon down on SIGINT / SIGTERM (so canceling a build does not orphan multi-GB of JVM heap). End-of-plan shutdown is enforced by the cleanup block below, NOT by per-invocation traps.
 
 ## When a build looks stuck or you change direction
 

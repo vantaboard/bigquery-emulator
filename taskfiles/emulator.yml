@@ -258,7 +258,13 @@ tasks:
           set -eo pipefail
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
-          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          # Trap on SIGINT/SIGTERM only (NOT EXIT) so the daemon stays
+          # warm for the scoped tests that usually follow an engine
+          # build inside the same plan. End-of-plan shutdown still
+          # happens via the MANDATORY cleanup block in
+          # `.cursor/rules/process-hygiene.mdc`. Same trade-off as the
+          # shared `task bazel:build/test/coverage` wrappers.
+          trap "bazel shutdown 2>/dev/null || true" INT TERM
           echo "[build-engine-bazel] mode: --config={{.GOOGLESQL_SOURCE}} ({{._GOOGLESQL_ARTIFACT_ID}})"
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
           EMULATOR_VERSION={{.EMULATOR_VERSION}} \

@@ -156,8 +156,12 @@ tasks:
       Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
       (default `prebuilt`; consumes the published GoogleSQL artifact from
       .cache/googlesql-prebuilt/ so this wrapper shares the same disk-cache
-      ABI lane as `task emulator:build-engine:bazel`). Runs `bazel shutdown`
-      on exit (success, failure, or signal).
+      ABI lane as `task emulator:build-engine:bazel`). Releases the
+      Bazel daemon on SIGINT/SIGTERM cancellation, but keeps it warm
+      after normal success/failure so the next wrapper call inside
+      the same plan reuses the analysis cache. End-of-plan shutdown
+      is the caller's responsibility (see the cleanup block in
+      `.cursor/rules/process-hygiene.mdc`; `task bazel:shutdown`).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
       # Canonicalise GOOGLESQL_SOURCE the same way
@@ -186,6 +190,20 @@ tasks:
       # not accept `INT`/`TERM` (or numeric `2`/`15`) in `trap`. Bash
       # is the only shell on the path where the exit-trap shutdown
       # actually fires on signal cancellation.
+      #
+      # Trap on SIGINT/SIGTERM only (NOT EXIT). The previous EXIT trap
+      # shut the bazel daemon down after every successful wrapper call,
+      # which costs ~5-10 s of "Starting local Bazel server" + cold
+      # analysis-cache reload (177 packages, 7706 targets for a typical
+      # scoped test) on the NEXT invocation. Within a single plan the
+      # agent usually runs the wrapper many times back-to-back; keeping
+      # the daemon warm between successful calls is a significant
+      # wall-time win. End-of-plan shutdown still happens via the
+      # MANDATORY cleanup block in `.cursor/rules/process-hygiene.mdc`
+      # (`task bazel:shutdown && task bazel:kill-strays`), and CI does
+      # the same via its final `bazel shutdown` step. Signal-only trap
+      # still releases the daemon on Ctrl-C so a cancelled build does
+      # not orphan a multi-GB JVM.
       - |
         bash -c '
           set -eo pipefail
@@ -195,7 +213,7 @@ tasks:
           fi
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
-          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          trap "bazel shutdown 2>/dev/null || true" INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel build \
               --config={{.GOOGLESQL_SOURCE}} \
@@ -214,8 +232,10 @@ tasks:
       (default `prebuilt`; consumes the published GoogleSQL artifact from
       .cache/googlesql-prebuilt/ so a scoped test shares the same disk-cache
       ABI lane as `task emulator:build-engine:bazel` and skips the
-      ~8K-TU GoogleSQL recompile). Runs `bazel shutdown` on exit
-      (success, failure, or signal).
+      ~8K-TU GoogleSQL recompile). Releases the Bazel daemon on
+      SIGINT/SIGTERM cancellation, but keeps it warm after normal
+      success/failure (warm-daemon-per-plan; end-of-plan shutdown is
+      the caller's responsibility — see `.cursor/rules/process-hygiene.mdc`).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
       TEST_FLAGS: '{{.TEST_FLAGS | default "--test_output=errors"}}'
@@ -233,8 +253,9 @@ tasks:
     cmds:
       # Leading colon = absolute task path (see `bazel:build` for why).
       - task: :googlesql:preflight
-      # See `bazel:build` for why we wrap in bash. Task's mvdan/sh
-      # cannot trap non-EXIT signals.
+      # See `bazel:build` for why we wrap in bash AND why the trap is
+      # SIGINT/SIGTERM-only (warm-daemon-per-plan). Task's mvdan/sh
+      # cannot trap non-EXIT signals so we still need real bash.
       - |
         bash -c '
           set -eo pipefail
@@ -244,7 +265,7 @@ tasks:
           fi
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
-          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          trap "bazel shutdown 2>/dev/null || true" INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel test \
               --config={{.GOOGLESQL_SOURCE}} \
@@ -315,8 +336,11 @@ tasks:
       ABI lane as the engine build). Emits a single combined lcov report at
       `bazel-out/_coverage/_coverage_report.dat` via `--combined_report=lcov`,
       which the in-repo `tools/coverage` summarizer (run via
-      `task coverage:summarize`) ingests directly. Runs `bazel shutdown`
-      on exit (success, failure, or signal).
+      `task coverage:summarize`) ingests directly. Releases the Bazel
+      daemon on SIGINT/SIGTERM cancellation, but keeps it warm after
+      normal success/failure (warm-daemon-per-plan; end-of-plan
+      shutdown is the caller's responsibility — see
+      `.cursor/rules/process-hygiene.mdc`).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
       COVERAGE_FLAGS: '{{.COVERAGE_FLAGS | default "--combined_report=lcov --test_output=errors"}}'
@@ -334,9 +358,10 @@ tasks:
     cmds:
       # Leading colon = absolute task path (see `bazel:build` for why).
       - task: :googlesql:preflight
-      # Same wrap-in-bash trick as `bazel:test`: Task's mvdan/sh shell
-      # does not accept symbolic signal names in `trap`, so the daemon
-      # shutdown trap has to live inside a real bash invocation.
+      # Same wrap-in-bash trick as `bazel:test`, and SIGINT/SIGTERM-only
+      # trap for warm-daemon-per-plan: Task's mvdan/sh shell does not
+      # accept symbolic signal names in `trap`, so the trap has to live
+      # inside a real bash invocation.
       - |
         bash -c '
           set -eo pipefail
@@ -346,7 +371,7 @@ tasks:
           fi
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
-          trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
+          trap "bazel shutdown 2>/dev/null || true" INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel coverage \
               --config={{.GOOGLESQL_SOURCE}} \
