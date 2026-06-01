@@ -652,6 +652,21 @@ PY
         '@com_google_differential_privacy//proto:summary_cc_proto'
     )
 
+    # `--output_groups=+compilation_outputs` is load-bearing for the
+    # raw `.pic.o` harvest below. `cc_library`'s DEFAULT outputs are
+    # the per-target `lib<target>.[pic.]a` archive — the intermediate
+    # `_objs/<target>/<src>.pic.o` objects are NOT declared outputs,
+    # so on a Bazel disk-cache hit they remain in the CAS directory
+    # and never get materialized into `bazel-out/.../_objs/`. The
+    # harvest's `find ... -name '*.pic.o'` then matches zero files
+    # and `extract_to_combined` dies with
+    # `no .pic.o objects matched for main under bazel-bin/googlesql`.
+    # Adding `+compilation_outputs` widens the requested-output set to
+    # include the `.pic.o`s, so Bazel restores them from the disk
+    # cache (or produces them on a cold build) into `_objs/` where the
+    # harvest expects them. Same fix applies to the `umbrella_targets`,
+    # `proto_targets`, and `external_proto_targets` — all `cc_library`
+    # / `cc_proto_library` outputs flow through the same group.
     (
         cd "$GOOGLESQL_SRC"
         CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
@@ -666,6 +681,7 @@ PY
             --copt=-fPIC \
             --copt=-fno-omit-frame-pointer \
             --copt=-DNDEBUG \
+            --output_groups=+compilation_outputs \
             "${umbrella_targets[@]}" \
             "${proto_targets[@]}" \
             "${external_proto_targets[@]}"
