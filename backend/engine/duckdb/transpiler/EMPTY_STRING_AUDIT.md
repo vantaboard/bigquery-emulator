@@ -371,3 +371,47 @@ The deferred property-gates land via their owning plans
 `status=planned` marker or ships its own classifier override, the
 matching transpiler `""` gate becomes unreachable in practice
 and gets removed in the same commit.
+
+## Item 3 -- `functions.yaml` audit
+
+Item 3 of the same plan asks: every `(planned)` row whose
+underlying DuckDB target already matches BigQuery semantics flips
+to `duckdb_native` / `duckdb_rewrite` (with a fixture in the same
+commit, per "no silent approximation").
+
+We walked every `status=planned` row in
+`backend/engine/duckdb/transpiler/functions.yaml` (commit
+`792278e`'s baseline). Each row's `notes` / inline comment
+documents a SPECIFIC BigQuery semantic the DuckDB target does NOT
+match:
+
+| BQ function | Reason DuckDB target differs (paraphrased from row notes) | Owning plan |
+|-------------|-----------------------------------------------------------|-------------|
+| `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `duckdb-polyfill-udf-library.plan.md` |
+| `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `duckdb-polyfill-udf-library.plan.md` |
+| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `duckdb-polyfill-udf-library.plan.md` |
+| `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `semantic-functions-compliance.plan.md` |
+| `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `semantic-functions-compliance.plan.md` |
+| `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `duckdb-polyfill-udf-library.plan.md` |
+| `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `duckdb-polyfill-udf-library.plan.md` |
+| `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `duckdb-polyfill-udf-library.plan.md` |
+| `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `duckdb-polyfill-udf-library.plan.md` |
+| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `duckdb-polyfill-udf-library.plan.md` |
+| `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `duckdb-polyfill-udf-library.plan.md` |
+
+**Migration list: zero rows.** Every `(planned)` row carries a
+documented edge-case BigQuery cares about that DuckDB does NOT
+match without a structural rewrite (`duckdb_rewrite`) or a
+polyfill UDF (`duckdb_udf`). Per "no silent approximation" we do
+NOT promote any of these rows in plan 2; the polyfill plan
+(`duckdb-polyfill-udf-library.plan.md`) and the
+semantic-functions plan
+(`semantic-functions-compliance.plan.md`) own the migration when
+they ship.
+
+The Done-Criterion 3 (`functions.yaml` has no `(planned)` row
+whose DuckDB target already matches BigQuery semantics; every
+remaining non-`duckdb_*` row carries a planned route from one of
+the new-route plans named in the row's `plan=` field) is
+therefore satisfied today as the baseline -- no plan-2 changes to
+`functions.yaml` were needed.
