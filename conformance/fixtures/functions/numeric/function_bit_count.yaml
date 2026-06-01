@@ -1,0 +1,33 @@
+# function_bit_count: BigQuery BIT_COUNT via the semantic executor.
+#
+# Pins the BigQuery two's-complement contract:
+# `BIT_COUNT(-1) == 64` because every bit of the INT64
+# representation is set. DuckDB v1.5.3's `bit_count` accepts only
+# unsigned arguments, so a thin macro wrapper cannot match this
+# without losing the sign bit; the row routes to the semantic
+# executor's `BitCount` helper instead.
+#
+# The query is scalar-only (no FROM clause) so the route
+# classifier promotes the SELECT to the `semantic_executor` route
+# unconditionally. Route-label assertion deferred to plan 16.
+#
+# Edge cases pinned:
+#   * negative-one returns 64 (full bit pattern)
+#   * INT64_MIN returns 1 (only the sign bit)
+#   * small positive returns the small-int popcount
+#   * zero returns 0
+name: function_bit_count
+description: |
+  BigQuery BIT_COUNT(INT64) lowered through the semantic executor's
+  `numeric_edges::BitCount` helper. Verifies two's-complement
+  semantics on negative inputs that a thin DuckDB UDF wrapper
+  cannot match.
+project_id: proj-functions-bit-count
+query: |
+  SELECT BIT_COUNT(0) AS zero,
+         BIT_COUNT(7) AS seven,
+         BIT_COUNT(-1) AS neg_one,
+         BIT_COUNT(-9223372036854775808) AS int64_min
+expected:
+  rows:
+    - {zero: "0", seven: "3", neg_one: "64", int64_min: "1"}

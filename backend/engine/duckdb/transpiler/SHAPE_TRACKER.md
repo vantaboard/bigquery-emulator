@@ -222,9 +222,14 @@ semantic-executor / control-op code) so the doc stays honest.
     `semantic-functions-compliance.plan.md`.
   * `unsupported` — deliberately out of scope locally
     (`approx_quantiles`, `ml.*`, `net.*`, `keys.*`, `st_*`,
-    `hll_count.*`, `bit_count`, `generate_uuid`, `session_user`,
+    `hll_count.*`, `generate_uuid`, `session_user`,
     `error`). Every row points at
-    `specialized-feature-policy.plan.md`.
+    `specialized-feature-policy.plan.md`. `BIT_COUNT` was on this
+    list before `semantic-functions-compliance.plan.md` shipped a
+    two's-complement-correct implementation in the semantic
+    executor; `IEEE_DIVIDE` is also owned by the semantic
+    executor for the IEEE 754 sentinel contract DuckDB's `/`
+    cannot match.
 * **DuckDB STRUCT / ARRAY quirks the fast path honors:**
   * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
     are keyed by name. The transpiler walks the resolved `StructType`

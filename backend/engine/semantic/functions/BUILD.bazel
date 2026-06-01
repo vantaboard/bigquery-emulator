@@ -1,0 +1,88 @@
+# Bazel build for the semantic-executor function families.
+#
+# This package owns the BigQuery-exact implementations for every
+# function whose `functions.yaml` row picks the `semantic_executor`
+# disposition with `plan=semantic-functions-compliance.plan.md`.
+# `EvalFunctionCall` (in `backend/engine/semantic/eval_expr.cc`)
+# forwards to `:dispatch::Dispatch` after the in-line operator /
+# SAFE_* handling, so a new function only needs (a) a per-family
+# .h/.cc implementation, (b) a dispatch entry, and (c) a
+# `functions.yaml` row flip from `status=planned` to ready in the
+# same commit.
+#
+# See `.cursor/plans/semantic-functions-compliance.plan.md` for the
+# full scope and the per-family ordering.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "numeric_edges",
+    srcs = ["numeric_edges.cc"],
+    hdrs = ["numeric_edges.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "numeric_edges_test",
+    srcs = ["numeric_edges_test.cc"],
+    deps = [
+        ":numeric_edges",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "dispatch",
+    srcs = ["dispatch.cc"],
+    hdrs = ["dispatch.h"],
+    deps = [
+        ":numeric_edges",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_test(
+    name = "dispatch_test",
+    srcs = ["dispatch_test.cc"],
+    deps = [
+        ":dispatch",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)

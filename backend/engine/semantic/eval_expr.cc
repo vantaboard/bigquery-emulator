@@ -17,6 +17,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/dispatch.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/numeric_value.h"
@@ -681,6 +682,15 @@ absl::StatusOr<Value> DispatchFunctionByName(
   }
   if (name == "safe_divide") {
     return WrapSafe(DispatchDiv(args, return_type), return_type);
+  }
+  // Fall through to the per-family dispatch table for functions
+  // whose `functions.yaml` row picks the `semantic_executor`
+  // disposition with `plan=semantic-functions-compliance.plan.md`.
+  // `functions::Dispatch` returns nullopt when the name is not
+  // wired here; we surface NOT_IMPLEMENTED in that case so the
+  // gateway envelope stays the same as for an unknown function.
+  if (auto dispatched = functions::Dispatch(name, args, return_type)) {
+    return *std::move(dispatched);
   }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,

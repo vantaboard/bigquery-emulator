@@ -135,6 +135,22 @@ sqrt_numeric: semantic_executor plan=semantic-functions-compliance.plan.md statu
 cbrt: duckdb_native duckdb_name=CBRT
 is_inf: duckdb_native duckdb_name=ISINF
 is_nan: duckdb_native duckdb_name=ISNAN
+# BQ IEEE_DIVIDE(x, y) returns the IEEE 754 floating-point quotient
+# and NEVER errors: 1.0/0.0 -> +Inf, -1.0/0.0 -> -Inf, 0.0/0.0 ->
+# NaN. DuckDB's bare `/` raises on division by zero for FLOAT64,
+# so a thin macro cannot match the IEEE-754 contract without
+# re-implementing the special-case dispatch in macro syntax. The
+# semantic executor owns the BigQuery-exact result.
+# (`backend/engine/semantic/functions/numeric_edges.cc::IeeeDivide`).
+ieee_divide: semantic_executor plan=semantic-functions-compliance.plan.md
+# BQ BIT_COUNT(INT64) counts the bits set in the two's-complement
+# representation; `BIT_COUNT(-1) == 64`. DuckDB v1.5.3's
+# `bit_count` accepts only unsigned arguments, so a thin macro
+# cannot match the negative-input contract without an explicit
+# cast that loses the two's-complement bit pattern. The semantic
+# executor (`backend/engine/semantic/functions/numeric_edges.cc::BitCount`)
+# owns the BigQuery-exact result.
+bit_count: semantic_executor plan=semantic-functions-compliance.plan.md
 # BQ SAFE_DIVIDE returns NULL on /0; DuckDB raises. SAFE semantics
 # are exact, not close, so the semantic executor owns these.
 safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
@@ -473,7 +489,6 @@ st_distance: unsupported plan=specialized-feature-policy.plan.md
 st_within: unsupported plan=specialized-feature-policy.plan.md
 st_contains: unsupported plan=specialized-feature-policy.plan.md
 st_intersects: unsupported plan=specialized-feature-policy.plan.md
-bit_count: unsupported plan=specialized-feature-policy.plan.md
 generate_uuid: unsupported plan=specialized-feature-policy.plan.md
 session_user: unsupported plan=specialized-feature-policy.plan.md
 error: unsupported plan=specialized-feature-policy.plan.md

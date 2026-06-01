@@ -1,0 +1,29 @@
+# function_ieee_divide: BigQuery IEEE_DIVIDE via the semantic executor.
+#
+# Pins the IEEE 754 contract: 0.0/0.0 -> NaN, 1.0/0.0 -> +Inf,
+# -1.0/0.0 -> -Inf, finite path returns the exact quotient.
+# BigQuery's IEEE_DIVIDE never errors; this is the divergence from
+# DuckDB's `/` (which raises on FLOAT64 division by zero) and from
+# SAFE_DIVIDE (which returns NULL).
+#
+# Wire shape: NaN renders as "NaN", +/-Inf as "+Inf" / "-Inf" --
+# `gateway/handlers/tabledata.go` formats FLOAT64 cells with
+# `strconv.FormatFloat(val, 'g', -1, 64)`, and the conformance
+# differ's `canonicalCell` round-trips the wire string through
+# `strconv.ParseFloat`, which accepts "+Inf" / "-Inf" / "NaN".
+#
+# Route-label assertion deferred to plan 16.
+name: function_ieee_divide
+description: |
+  BigQuery IEEE_DIVIDE lowered through the semantic executor's
+  `numeric_edges::IeeeDivide` helper. Verifies the IEEE 754
+  sentinel contract that BigQuery's documentation pins.
+project_id: proj-functions-ieee-divide
+query: |
+  SELECT IEEE_DIVIDE(10.0, 4.0) AS finite,
+         IEEE_DIVIDE(1.0, 0.0) AS pos_inf,
+         IEEE_DIVIDE(-1.0, 0.0) AS neg_inf,
+         IEEE_DIVIDE(0.0, 0.0) AS nan
+expected:
+  rows:
+    - {finite: "2.5", pos_inf: "+Inf", neg_inf: "-Inf", nan: "NaN"}
