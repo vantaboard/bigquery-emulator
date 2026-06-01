@@ -40,6 +40,7 @@ cc_library(
         "//backend/engine",
         "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb/transpiler",
+        "//backend/engine/duckdb/udf:registrar",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",

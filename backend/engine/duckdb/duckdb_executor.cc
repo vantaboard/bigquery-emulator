@@ -21,6 +21,7 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -532,6 +533,19 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
         "DuckDbExecutor::ExecuteQuery: duckdb_connect failed");
   }
 
+  // 4b. Register the BigQuery polyfill UDF library on the fresh
+  // connection. Every BigQuery function whose disposition is
+  // `duckdb_udf` lowers to a UDF / macro the registrar installs
+  // here; the transpiler then emits a plain `<udf_name>(<args>)`
+  // call below. Registration failure is fail-fast: there is no
+  // runtime "missing UDF -> fall back to another route" path
+  // (per `duckdb-polyfill-udf-library.plan.md`'s Done Criterion 2).
+  if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return reg;
+  }
+
   // 5. Materialize each storage table inside the DuckDB connection.
   // The transpiler assumes `Table::Name()` resolves to a relation
   // already present in the connection's default schema.
@@ -838,6 +852,15 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
     ::duckdb_close(&db);
     return absl::InternalError(
         "DuckDbExecutor::ExecuteDml: duckdb_connect failed");
+  }
+  // Same polyfill registration as the SELECT path: the MERGE
+  // statement can carry BigQuery scalar / aggregate calls that
+  // route through `duckdb_udf`, so the UDFs must be installed
+  // before DuckDB sees the user-submitted SQL.
+  if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return reg;
   }
 
   // 5. Materialize each referenced storage table inside the DuckDB
@@ -1160,6 +1183,15 @@ absl::Status RunCreateTableAsSelect(
     ::duckdb_close(&db);
     return absl::InternalError(
         "DuckDBEngine::ExecuteDdl: duckdb_connect failed");
+  }
+  // CTAS executes its inner SELECT on the DuckDB side, so install
+  // the polyfill UDFs before passing the user-submitted DDL through;
+  // a `CREATE TABLE ... AS SELECT bq_mod(x, y) ...` body would
+  // otherwise fail to resolve.
+  if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return reg;
   }
 
   // Pre-create the target dataset schema on the DuckDB side so the

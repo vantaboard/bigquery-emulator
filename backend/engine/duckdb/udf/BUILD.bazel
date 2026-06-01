@@ -1,0 +1,71 @@
+# Bazel build for the BigQuery polyfill UDF library.
+#
+# This package owns the DuckDB UDFs / macros that close the BigQuery
+# / DuckDB semantic gap for the function rows in
+# `backend/engine/duckdb/transpiler/functions.yaml` whose
+# disposition is `duckdb_udf`. The library's single public entry
+# point is `udf::RegisterAll(conn)`; `DuckDbExecutor` calls it
+# against every fresh DuckDB connection it opens, so the macros are
+# in place before the transpiled SQL executes.
+#
+# Per-family files live under `<family>/<name>.cc` and export a
+# single `Register<Family>(conn)` function (see `registrar.cc`'s
+# extern declarations). Each family lands in its own commit
+# alongside its `functions.yaml` row flips and per-function
+# conformance fixtures (per the plan's "no silent approximation"
+# rule).
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Internal helper shared by every per-family registrar. Hidden under
+# the `internal/` prefix so external callers stay on the public
+# `:registrar` target.
+cc_library(
+    name = "run_macro_internal",
+    srcs = ["internal/run_macro.cc"],
+    hdrs = ["internal/run_macro.h"],
+    visibility = [":__subpackages__"],
+    deps = [
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+# The polyfill UDF registrar. Public entry point is
+# `udf::RegisterAll(conn)`. Adding a new family means: drop a
+# `<family>/<name>.cc` source, declare `Register<Family>(conn)` in
+# `registrar.cc`, and add the file to the `srcs` list here.
+cc_library(
+    name = "registrar",
+    srcs = [
+        "conditional/conditional_macros.cc",
+        "numeric/numeric_macros.cc",
+        "registrar.cc",
+        "string/string_macros.cc",
+    ],
+    hdrs = ["registrar.h"],
+    deps = [
+        ":run_macro_internal",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+# Smoke-tests the public registrar contract: null connection rejects,
+# fresh connection registers cleanly, repeated registration is
+# idempotent. Per-UDF tests live next to each family's source under
+# `<family>/<name>_test.cc` and exercise the UDF body directly; this
+# test only owns the shared invariant.
+cc_test(
+    name = "registrar_test",
+    srcs = ["registrar_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
