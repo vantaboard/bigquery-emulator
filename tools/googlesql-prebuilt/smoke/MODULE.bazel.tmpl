@@ -13,6 +13,17 @@ Substituted at smoke time by `tools/googlesql-prebuilt/verify.sh`:
 - {{PROTOBUF_VERSION}}   mirrors the artifact's manifest.toolchain pin.
 - {{GRPC_VERSION}}       mirrors the artifact's manifest.toolchain pin.
 
+Module-identity vs. repo-name (see `tools/googlesql-prebuilt/README.md`
+section "Compatibility-surface clarification: artifact MODULE.bazel
+identity is `googlesql`"): the published artifact's MODULE.bazel
+advertises `module(name = "googlesql", ...)` so source-mode and
+prebuilt-mode share the same `@googlesql//...` BUILD references. The
+SHIPPED repo name (`@googlesql_prebuilt_linux_amd64`, the tarball
+top-level dir + the consumer's wrapper-BUILD label prefix) is layered
+on via a `repo_name =` alias on `bazel_dep`, mirroring how this same
+template aliases abseil-cpp → com_google_absl, protobuf →
+com_google_protobuf, and grpc → com_github_grpc_grpc above.
+
 The smoke workspace is intentionally minimal: just enough to resolve
 the prebuilt repo's deps and build one `cc_binary`.
 """
@@ -31,8 +42,12 @@ single_version_override(
 bazel_dep(name = "protobuf", version = "{{PROTOBUF_VERSION}}", repo_name = "com_google_protobuf")
 bazel_dep(name = "grpc", version = "{{GRPC_VERSION}}", repo_name = "com_github_grpc_grpc")
 
-bazel_dep(name = "googlesql_prebuilt_linux_amd64", version = "{{ARTIFACT_VERSION}}")
+bazel_dep(
+    name = "googlesql",
+    version = "{{ARTIFACT_VERSION}}",
+    repo_name = "googlesql_prebuilt_linux_amd64",
+)
 local_path_override(
-    module_name = "googlesql_prebuilt_linux_amd64",
+    module_name = "googlesql",
     path = "{{ARTIFACT_PATH}}",
 )
