@@ -1,7 +1,58 @@
 ---
 name: ""
 overview: ""
-todos: []
+todos:
+  - id: todo-1780309600001-subagent-01
+    content: "execution-disposition-registry.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600002-subagent-02
+    content: "engine-router-foundation.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600003-subagent-03
+    content: "duckdb-fast-path-stabilization.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600004-subagent-04
+    content: "duckdb-polyfill-udf-library.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600005-subagent-05
+    content: "control-op-executor.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600006-subagent-06
+    content: "semantic-executor-core.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600007-subagent-07
+    content: "semantic-functions-compliance.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: completed
+  - id: todo-1780309600008-subagent-08
+    content: "array-struct-semantic-path.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: in_progress
+  - id: todo-1780309600009-subagent-09
+    content: "dml-local-executor.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600010-subagent-10
+    content: "cte-subquery-routing.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600011-subagent-11
+    content: "advanced-relational-routing.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600012-subagent-12
+    content: "procedural-scripting-executor.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600013-subagent-13
+    content: "udf-tvf-module-routing.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600014-subagent-14
+    content: "specialized-feature-policy.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600015-subagent-15
+    content: "storage-read-write-api-plan.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600016-subagent-16
+    content: "conformance-routing-matrix.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
+  - id: todo-1780309600017-subagent-17
+    content: "migration-cleanup-docs.plan.md: launch background subagent per Subagent Dispatch Workflow."
+    status: pending
 isProject: false
 ---
 
@@ -159,3 +210,92 @@ are layered on; semantic executor, control ops, and DML follow.
 - No remaining docs or plan files reference the retired DuckDB-only
   transpiler plan set (validated by
   `migration-cleanup-docs.plan.md`).
+
+## Subagent Dispatch Workflow
+
+Each `todos:` entry above expands to the five-phase workflow below
+against the plan file named in the entry. Run the phases strictly in
+order; do not advance to the next todo until the current todo has
+cleared **Phase 5 (Validate)**. If any phase fails, leave the todo
+`in_progress` and resolve the failure before moving on — never
+silently skip ahead.
+
+### Phase 1 — Pre-flight (parent agent)
+- `rtk git status --short` — confirm a clean working tree (anything
+  uncommitted from a prior subagent must be reconciled first).
+- `rtk free -h | head -2` and `rtk task bazel:status` — refuse to
+  dispatch if MemAvailable < 4 GiB or any non-`emulator_main`
+  bazel/clang processes are alive (the persistent
+  `emulator_main` PID is the user's; leave it untouched).
+- Read the target plan file and confirm its done-criteria are still
+  current.
+
+### Phase 2 — Launch (parent agent)
+- Dispatch a single subagent via `Task` with
+  `run_in_background: true`. Plan content is the source of truth;
+  the prompt summarises non-obvious context (the optimization
+  posture below, the per-plan "Notes & deferrals" inherited from
+  earlier subagents). Do not dispatch a second subagent for the
+  same plan in parallel.
+
+### Phase 3 — Monitor (parent agent)
+- Wait for the subagent's completion notification. Do not poll
+  reflexively; multitask on tangential work or end the turn and let
+  the notification surface.
+
+### Phase 4 — Cleanup (parent agent, MANDATORY after every subagent)
+- Run the full cleanup block from
+  `.cursor/rules/process-hygiene.mdc` (catalog audit, bazel
+  shutdown, emulator/gateway/runner kill, docker compose down if
+  applicable). Confirm `(clean)` for every catalog before moving on.
+- This is the boundary at which the warm-daemon-per-plan posture
+  ends. Inside the subagent the daemon stays warm; here we release
+  the multi-GB JVM heap so the next subagent starts in a known
+  state.
+
+### Phase 5 — Validate (parent agent)
+- Read the subagent's commit list (`git log`), spot-check the
+  done-criteria from the target plan, and decide:
+  - **Pass:** mark the todo `completed`, advance to the next.
+  - **Partial-but-acceptable:** document the deferral in the next
+    subagent's prompt, mark completed, advance. Use this when the
+    "no silent approximation" rule forced the subagent to defer
+    scope (precedent: plans 4, 5, 7).
+  - **Fail:** leave the todo `in_progress`, dispatch a focused
+    follow-up subagent that targets only the gap.
+
+### Build optimization posture (post-`1c7cf99` + `0d11cfb`)
+
+The shared `task bazel:build` / `task bazel:test` / `task bazel:coverage`
+wrappers now resolve `GOOGLESQL_SOURCE` to `--config=googlesql-prebuilt`
+by default — sharing the disk-cache ABI lane with
+`task emulator:build-engine:bazel` so cold scoped tests skip the
+~8K-TU GoogleSQL recompile. The wrappers also trap signals only
+(`INT TERM`, not `EXIT`), so the Bazel daemon stays warm between
+back-to-back wrapper calls inside one subagent (the analysis cache
+covers ~7700 targets; reusing it saves 5–10 s per invocation).
+`.bazelrc` quiets per-action progress to once / 15 s.
+
+**Every dispatched subagent prompt MUST tell the subagent to:**
+
+- Use `task bazel:test TARGETS=...` (and `bazel:build` / `bazel:coverage`)
+  directly. Do NOT pass `--config=googlesql-source` unless there is
+  a specific reason — default `prebuilt` is correct and is what the
+  engine build uses.
+- Do NOT call `task bazel:shutdown` between scoped test invocations
+  within your own work. Only run it ONCE at end-of-work as part of
+  the cleanup block.
+- Expect the FIRST scoped test after the optimization landed to pay
+  a one-time disk-cache rebuild (the wrapper ABI lane switched from
+  source to prebuilt); subsequent calls within the same subagent
+  are fast.
+- Continue to defer `task conformance:fastpath` end-to-end live-run
+  when the local `bin/emulator_main` predates the subagent's
+  changes — CI exercises it. (Unchanged from prior subagents.)
+- Follow `.cursor/rules/process-hygiene.mdc` for the per-spawn
+  audit, mid-loop poll, and cleanup block; the warm-daemon posture
+  is documented in `.cursor/rules/bazel-process-hygiene.mdc`.
+
+End-of-plan shutdown still happens via the parent's **Phase 4**
+cleanup block; warm-daemon-per-plan applies only inside a subagent's
+own work, never across subagent boundaries.
