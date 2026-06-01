@@ -202,12 +202,15 @@ unix_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 ifnull: duckdb_native duckdb_name=IFNULL
 coalesce: duckdb_native duckdb_name=COALESCE
 nullif: duckdb_native duckdb_name=NULLIF
-# BQ IF(cond, a, b) has CASE-of equivalence in DuckDB but corner
-# cases differ; polyfill UDF owns the rewrite.
-if: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-# BQ has no IS NULL function form; emitter normally sees the
-# operator. UDF rewrite owns the call-form path.
-isnull: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ IF(cond, a, b) returns A when cond is TRUE and B otherwise; a
+# NULL cond falls through to B. The `bq_if` macro pins that contract
+# via `CASE WHEN cond THEN A ELSE B END`; unit test
+# `IfNullCondFallsThroughToElse` guards the NULL-cond edge case.
+if: duckdb_udf duckdb_name=bq_if plan=duckdb-polyfill-udf-library.plan.md
+# BQ ISNULL(x) is the call-form of the `IS NULL` operator. The
+# `bq_isnull` macro pins the contract via `(x IS NULL)`; unit test
+# `IsNullOnNonNullValues` pins the empty-string-is-not-NULL case.
+isnull: duckdb_udf duckdb_name=bq_isnull plan=duckdb-polyfill-udf-library.plan.md
 
 # --- Array -------------------------------------------------------------
 array_length: duckdb_native duckdb_name=LEN

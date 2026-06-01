@@ -84,3 +84,17 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# Conditional family per-UDF tests. Covers `bq_if` (NULL-cond
+# fall-through to the ELSE branch) and `bq_isnull` (empty-string
+# is NOT null in BQ).
+cc_test(
+    name = "conditional_macros_test",
+    srcs = ["conditional/conditional_macros_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

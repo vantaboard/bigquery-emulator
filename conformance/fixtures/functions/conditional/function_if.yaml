@@ -1,0 +1,43 @@
+# function_if: BigQuery IF via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_if` macro through the gateway.
+# Edge case the macro exists to pin: a NULL `cond` falls through to
+# the ELSE branch (BigQuery treats NULL as not-TRUE in IF). Any
+# regression that mapped IF to `CASE cond WHEN TRUE THEN ... END`
+# (BOOLEAN-equality semantics that propagate NULL) would surface
+# the NULL row as NULL instead of "fallback".
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_if
+description: |
+  BigQuery IF lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/conditional/conditional_macros.cc`'s
+  `bq_if` macro). Verifies common-path branch selection AND the
+  NULL-cond fall-through to ELSE.
+project_id: proj-functions-if
+dataset_id: ds_functions_if
+setup:
+  - dataset: ds_functions_if
+  - table:
+      dataset: ds_functions_if
+      id: flags
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: flag, type: BOOL, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_if
+      table: flags
+      rows:
+        - {id: 1, flag: true}
+        - {id: 2, flag: false}
+        - {id: 3, flag: null}
+query: |
+  SELECT id, IF(flag, 'then', 'else') AS label
+    FROM ds_functions_if.flags
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", label: "then"}
+    - {id: "2", label: "else"}
+    - {id: "3", label: "else"}   # NULL cond falls through to ELSE
