@@ -85,6 +85,24 @@ class NumericMacrosTest : public ::testing::Test {
     return rc != ::DuckDBSuccess;
   }
 
+  // Runs `sql` and returns a DOUBLE from row 0, column 0.
+  double RunDouble(const std::string& sql) {
+    ::duckdb_result result;
+    auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
+    if (rc != ::DuckDBSuccess) {
+      ADD_FAILURE() << "DuckDB rejected: "
+                    << (::duckdb_result_error(&result) == nullptr
+                            ? "(no error string)"
+                            : ::duckdb_result_error(&result))
+                    << " (sql=" << sql << ")";
+      ::duckdb_destroy_result(&result);
+      return 0.0;
+    }
+    double value = ::duckdb_value_double(&result, 0, 0);
+    ::duckdb_destroy_result(&result);
+    return value;
+  }
+
   ::duckdb_database db_ = nullptr;
   ::duckdb_connection conn_ = nullptr;
 };
@@ -146,6 +164,38 @@ TEST_F(NumericMacrosTest, DivNullPropagation) {
 
 TEST_F(NumericMacrosTest, DivByZeroRaises) {
   EXPECT_TRUE(RunRejects("SELECT bq_div(7, 0)"));
+}
+
+// --- bq_log ------------------------------------------------------
+
+TEST_F(NumericMacrosTest, LogSingleArgIsNaturalLog) {
+  // Edge case pinned: BigQuery LOG(x) returns the NATURAL log,
+  // unlike DuckDB's bare `log(x)` which returns base-10. The macro
+  // routes to `ln(x)`; a regression that swapped to `log10(x)`
+  // would surface here as ~2.302585... instead of ~2.302585...
+  // (wait -- log10(10) == 1 and ln(10) == 2.302585...; the literal
+  // 10 was deliberately picked because the two diverge there).
+  EXPECT_NEAR(RunDouble("SELECT bq_log(1.0::DOUBLE)"), 0.0, 1e-9);
+  EXPECT_NEAR(RunDouble("SELECT bq_log(10.0::DOUBLE)"), 2.302585092994046,
+              1e-9);
+}
+
+TEST_F(NumericMacrosTest, LogTwoArgIdentity) {
+  // Edge case pinned: BigQuery LOG(X, Y) returns log_Y(X) with X
+  // as the FIRST argument; DuckDB's two-arg `log(b, x)` has the
+  // base FIRST. The macro re-derives through `ln(x) / ln(base)`
+  // so the argument order matches BigQuery regardless of how
+  // DuckDB's two-arg log is wired.
+  EXPECT_NEAR(RunDouble("SELECT bq_log(100.0::DOUBLE, 10.0::DOUBLE)"), 2.0,
+              1e-9);
+  EXPECT_NEAR(RunDouble("SELECT bq_log(8.0::DOUBLE, 2.0::DOUBLE)"), 3.0, 1e-9);
+  EXPECT_NEAR(RunDouble("SELECT bq_log(27.0::DOUBLE, 3.0::DOUBLE)"), 3.0, 1e-9);
+}
+
+TEST_F(NumericMacrosTest, LogNullPropagation) {
+  EXPECT_TRUE(RunIsNull("SELECT bq_log(NULL::DOUBLE)"));
+  EXPECT_TRUE(RunIsNull("SELECT bq_log(NULL::DOUBLE, 10.0::DOUBLE)"));
+  EXPECT_TRUE(RunIsNull("SELECT bq_log(100.0::DOUBLE, NULL::DOUBLE)"));
 }
 
 }  // namespace

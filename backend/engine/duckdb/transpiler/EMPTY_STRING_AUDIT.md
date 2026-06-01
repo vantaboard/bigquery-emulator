@@ -432,6 +432,7 @@ rows flipped from `status=planned duckdb_udf` to ready
 | `isnull`    | `conditional/conditional_macros.cc::bq_isnull` | Empty string is NOT NULL in BigQuery | `conditional_macros_test::IsNullOnNonNullValues` |
 | `strpos`    | `string/string_macros.cc::bq_strpos`    | 1-based index; missing needle returns 0 (not NULL); empty needle returns 1 | `string_macros_test::StrposReturnsOneBasedIndex`, `StrposMissingNeedleReturnsZero`, `StrposEmptyNeedle` |
 | `countif`   | n/a -- routed `duckdb_native duckdb_name=count_if` (no macro layer; DuckDB v1.5.3's `count_if` matches BQ COUNTIF on NULL / FALSE handling) | NULL inputs are NOT counted (treated as FALSE-like) | `conformance/fixtures/functions/aggregate/function_countif.yaml` (NULL row excluded from the `true_count`) |
+| `log`       | `numeric/numeric_macros.cc::bq_log` (variadic: `bq_log(x)` natural-log, `bq_log(x, base)` base-second per BQ argument order) | `LOG(x)` is BASE-e (not base-10 like DuckDB's bare `log`); `LOG(x, base)` argument order is value-first (DuckDB's `log(b, x)` is base-first) | `numeric_macros_test::LogSingleArgIsNaturalLog`, `LogTwoArgIdentity`, `LogNullPropagation` |
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
@@ -443,12 +444,12 @@ re-pointed at `semantic-functions-compliance.plan.md` (still
 | `contains_substr` | BigQuery applies Unicode NFKC + case-folding before substring search; DuckDB's `contains` is exact byte-level match and DuckDB v1.5.3 ships no NFKC primitive. |
 | `instr` | BigQuery INSTR is variadic with negative-position semantics; DuckDB's `instr` is 2-arg only. The variadic surface is more naturally implemented in Go. |
 | `soundex` | DuckDB v1.5.3 does not ship a `soundex` scalar function (verified: `SELECT soundex('Robert')` -> Catalog Error). |
+| `sqrt_numeric` | Placeholder row for the case where BigQuery SQRT is called with a NUMERIC argument and the transpiler needs to insert an explicit cast. The current emit path looks up by lowercase function NAME only and never lowers anything to `sqrt_numeric` (the analyzer resolves to `sqrt`). Closing the gap requires signature-aware function dispatch in the transpiler -- a transpiler architecture change, not a thin polyfill macro. |
 
 Rows that remain at `status=planned duckdb_udf` (polyfill plan
 still owns them; the wrapper has not landed but the plan still
 considers a thin-macro path achievable):
 
-* `log`, `sqrt_numeric` (numeric formula tweaks).
 * `format` (printf-spec divergence; potentially landable via macro
   but the spec-translation table is non-trivial and was not
   scoped into this polyfill landing).

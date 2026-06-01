@@ -93,9 +93,21 @@ least: duckdb_native duckdb_name=LEAST
 pi: duckdb_native duckdb_name=PI
 ln: duckdb_native duckdb_name=LN
 log10: duckdb_native duckdb_name=LOG10
-# Two-arg LOG(x, base) needs a polyfill (BQ LOG(x) == LN(x), DuckDB
-# LOG(x) == LOG10(x)); single-arg LOG also diverges.
-log: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BigQuery LOG(X) returns the natural log (LN); DuckDB's bare
+# `log(x)` returns base-10. The `bq_log` macro (registered by
+# `backend/engine/duckdb/udf/numeric/numeric_macros.cc`) closes the
+# single-arg gap by routing to `ln(x)` and closes the two-arg gap
+# by re-deriving `bq_log(x, base)` through `ln(x) / ln(base)` (BQ's
+# LOG(X, Y) takes X first, DuckDB's two-arg `log(b, x)` takes the
+# base first; the identity sidesteps the ordering ambiguity).
+# Edge cases the macro does NOT pin: X <= 0 or base <= 0 / 1 in
+# BigQuery raise an error while DuckDB's `ln` returns NaN /
+# -Infinity / NULL depending on version. Common-path correctness
+# is pinned by `numeric_macros_test::LogSingleArgIsNaturalLog`,
+# `LogTwoArgIdentity`, and `LogNullPropagation`; the
+# error-path divergence is documented and acceptable because
+# every common-path call surfaces a numerically-correct result.
+log: duckdb_udf duckdb_name=bq_log plan=duckdb-polyfill-udf-library.plan.md
 # BQ MOD(x, y) returns the remainder with sign-of-dividend
 # (truncated-division semantics). DuckDB's `%` agrees today; the
 # `bq_mod` macro (registered by
@@ -107,8 +119,19 @@ log: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 mod: duckdb_udf duckdb_name=bq_mod plan=duckdb-polyfill-udf-library.plan.md
 pow: duckdb_native duckdb_name=POW
 power: duckdb_native duckdb_name=POW
-# BQ SQRT over NUMERIC needs an explicit cast.
-sqrt_numeric: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# `sqrt_numeric` is a placeholder row for the case where BigQuery
+# SQRT is called with a NUMERIC argument and the transpiler needs
+# to insert an explicit cast (the analyzer resolves it to the
+# bare `sqrt` function, not `sqrt_numeric`, so this row is
+# effectively unreachable today). Closing this gap requires
+# signature-aware function dispatch in the transpiler -- the
+# current emit path looks up by lowercase function NAME only and
+# does not discriminate by argument type. That's a transpiler
+# architecture change, not a thin polyfill macro, so the row
+# re-points at the semantic-functions plan where the
+# argument-type-aware emit can be addressed alongside the other
+# NUMERIC / BIGNUMERIC dispatch cases.
+sqrt_numeric: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 cbrt: duckdb_native duckdb_name=CBRT
 is_inf: duckdb_native duckdb_name=ISINF
 is_nan: duckdb_native duckdb_name=ISNAN

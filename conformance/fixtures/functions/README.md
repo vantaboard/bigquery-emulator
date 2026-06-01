@@ -15,7 +15,7 @@ conformance/fixtures/functions/
 
 Families today:
 
-- `numeric/` — `bq_mod`, `bq_div`.
+- `numeric/` — `bq_mod`, `bq_div`, `bq_log`.
 - `conditional/` — `bq_if`, `bq_isnull`.
 - `string/` — `bq_strpos`.
 - `aggregate/` — `countif` (routed `duckdb_native` to DuckDB's

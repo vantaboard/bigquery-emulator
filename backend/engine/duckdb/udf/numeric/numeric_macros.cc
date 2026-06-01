@@ -49,6 +49,51 @@ absl::Status RegisterNumeric(::duckdb_connection conn) {
     return s;
   }
 
+  // `bq_log(x [, base])` --- BigQuery LOG with BQ's e-not-10 default
+  // base.
+  //
+  // BigQuery LOG(X) returns the NATURAL log (base e), and LOG(X, Y)
+  // returns log_Y(X). DuckDB's bare `log(x)` returns base-10
+  // (matching LOG10, not BQ's LOG); the two-arg `log(b, x)` exists
+  // in DuckDB but the ARGUMENT ORDER is flipped (base first in
+  // DuckDB, value first in BigQuery). We close both gaps by always
+  // re-deriving through `ln(x) / ln(base)` -- DuckDB's `ln` is the
+  // natural log and matches BQ's LN exactly, so the identity is
+  // exact for any valid input. The single-arg form maps directly
+  // to `ln(x)`.
+  //
+  // DuckDB v1.5.3 does NOT overload macros by arity (each
+  // `CREATE OR REPLACE MACRO foo(...)` replaces all prior `foo`
+  // definitions regardless of parameter count). To support both
+  // `LOG(x)` and `LOG(x, base)` callsites under a single
+  // registered name, the macro declares `base` with a DEFAULT
+  // value of `exp(1.0)` (i.e. e). DuckDB allows the default to be
+  // omitted at the call site, so `bq_log(10)` evaluates with
+  // `base = e` (-> `ln(10) / ln(e) == ln(10)`, the BigQuery
+  // single-arg semantic) and `bq_log(100, 10)` passes 10
+  // positionally (-> `ln(100) / ln(10) == 2`).
+  //
+  // Edge cases the unit tests pin:
+  //   * `bq_log(1) == 0` (natural log of 1).
+  //   * `bq_log(100, 10) == 2`, `bq_log(8, 2) == 3` (two-arg
+  //     identity matches BigQuery's argument order).
+  //   * NULL propagation in either operand returns NULL.
+  //
+  // Edge cases the macro does NOT pin (and which BigQuery raises
+  // on while DuckDB's `ln` may return NaN / -Infinity / NULL): X
+  // <= 0 in either form, Y <= 0 or Y = 1 in the two-arg form. BQ
+  // raises an error; we let DuckDB's `ln` behavior surface. This
+  // is documented in the YAML row's notes and is acceptable
+  // because the common path is exact and the error path stays
+  // observable (the conformance fixture pins the common path).
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_log(x, base := exp(1.0)) AS "
+          "ln(x) / ln(base)");
+      !s.ok()) {
+    return s;
+  }
+
   // `bq_div(x, y)` --- BigQuery DIV (truncated integer division)
   // plus BigQuery's "Y=0 raises" contract.
   //

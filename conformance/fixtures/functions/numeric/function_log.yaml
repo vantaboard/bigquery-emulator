@@ -1,0 +1,55 @@
+# function_log: BigQuery LOG via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_log` macro through the gateway.
+# Two edge cases the wrapper closes:
+#   1. Single-arg LOG. BigQuery returns the NATURAL log (LN);
+#      DuckDB's bare `log(x)` returns base-10. A regression that
+#      routed BQ LOG(X) to DuckDB `LOG(X)` would surface here as
+#      `LOG(10) == 1.0` instead of `LOG(10) == 2.302585...`.
+#   2. Two-arg LOG argument order. BigQuery is LOG(X, Y) (value
+#      first, base second); DuckDB's `log(b, x)` has the base
+#      first. The macro re-derives through `ln(x) / ln(base)` so
+#      the argument order matches BigQuery regardless of DuckDB's
+#      signature. A regression that called DuckDB `log(base, x)`
+#      directly would surface here as `LOG(8, 2) == ln(2)/ln(8)
+#      == 0.333...` instead of `LOG(8, 2) == 3`.
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_log
+description: |
+  BigQuery LOG lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/numeric/numeric_macros.cc`'s
+  `bq_log` macro). Verifies the natural-log default base AND the
+  two-arg argument order edge case.
+project_id: proj-functions-log
+dataset_id: ds_functions_log
+setup:
+  - dataset: ds_functions_log
+  - table:
+      dataset: ds_functions_log
+      id: inputs
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: x,  type: FLOAT64, mode: NULLABLE}
+        - {name: b,  type: FLOAT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_log
+      table: inputs
+      rows:
+        - {id: 1, x: 1.0,   b: null}
+        - {id: 2, x: 100.0, b: 10.0}
+        - {id: 3, x: 8.0,   b: 2.0}
+        - {id: 4, x: 27.0,  b: 3.0}
+query: |
+  SELECT id,
+         CAST(ROUND(LOG(x), 6) AS STRING)    AS log_one_arg,
+         CAST(ROUND(LOG(x, b), 6) AS STRING) AS log_two_arg
+    FROM ds_functions_log.inputs
+   WHERE b IS NOT NULL
+   ORDER BY id
+expected:
+  rows:
+    - {id: "2", log_one_arg: "4.60517",  log_two_arg: "2"}
+    - {id: "3", log_one_arg: "2.079442", log_two_arg: "3"}
+    - {id: "4", log_one_arg: "3.295837", log_two_arg: "3"}
