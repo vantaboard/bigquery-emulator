@@ -1,0 +1,33 @@
+# ddl_create_table_round_trip: CREATE TABLE landed by the
+# control-op executor.
+#
+# Per `.cursor/plans/control-op-executor.plan.md`, CREATE TABLE
+# leaves the DuckDB SQL evaluator entirely and routes through
+# `backend/engine/control/control_op_executor.cc::RunCreateTable`,
+# which mutates `Storage` directly. The follow-up SELECT verifies
+# the new table is queryable end-to-end (catalog reflection +
+# row-level read), pinning the post-DDL catalog state the gateway
+# / e2e suite would otherwise have to bring up its own emulator
+# subprocess to observe.
+#
+# This fixture is the per-statement conformance-side artifact the
+# control-op executor plan requires alongside the per-handler unit
+# test (`backend/engine/control/control_op_executor_test.cc`) and
+# the gateway/e2e test
+# (`gateway/e2e/ddl_create_drop_test.go::TestDDLStatementTypeEnvelopeMatchesBigQueryRESTValues`).
+# No hard route-label assertion: plan 16
+# (`conformance-routing-matrix.plan.md`) owns those.
+name: ddl_create_table_round_trip
+description: |
+  CREATE TABLE -> SELECT round-trip on both engine profiles. Pins
+  that the control-op executor's CREATE TABLE handler leaves the
+  catalog in a state a follow-up SELECT can hit and that the new
+  table reflects an empty row set under the requested schema.
+project_id: proj-ddl-create
+dataset_id: ds_ddl_create
+setup:
+  - dataset: ds_ddl_create
+  - sql: CREATE TABLE ds_ddl_create.people (id INT64, name STRING)
+query: SELECT id, name FROM ds_ddl_create.people
+expected:
+  rows: []
