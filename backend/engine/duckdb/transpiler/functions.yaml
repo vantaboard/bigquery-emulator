@@ -222,16 +222,38 @@ regexp_contains: duckdb_udf duckdb_name=bq_regexp_contains plan=duckdb-polyfill-
 # contract (`'aaaa' / 'a' / 'b' -> 'bbbb'`); a regression that
 # dropped the `'g'` would surface as `'baaa'`.
 regexp_replace: duckdb_udf duckdb_name=bq_regexp_replace plan=duckdb-polyfill-udf-library.plan.md
-regexp_extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-regexp_extract_all: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-format: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ REGEXP_EXTRACT / REGEXP_EXTRACT_ALL diverge from DuckDB's
+# `regexp_extract` / `regexp_extract_all` on capture-group
+# semantics. BigQuery contract: "If the regular expression contains
+# a capturing group, the function returns the substring matched by
+# the FIRST capturing group; otherwise the entire matched
+# substring." DuckDB always returns the whole match by default and
+# exposes the group via a separate numeric `group` argument. A
+# thin macro cannot introspect the regex pattern to choose between
+# the two behaviors. The discrimination is a few lines of Go in
+# the semantic executor (parse the regex, count `(...)` groups
+# minus non-capturing `(?:...)`, dispatch to `regexp_extract(..., 1)`
+# or `regexp_extract(..., 0)` accordingly), so the rows re-point
+# at `semantic-functions-compliance.plan.md`.
+regexp_extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+regexp_extract_all: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ FORMAT is printf-style with BigQuery extensions: `%t` /
+# `%T` for type-aware rendering, `%p` for parameterized
+# substitution, type-specific format codes for ARRAY / STRUCT /
+# JSON, and the BQ-specific `%E4Y` / `%E*Y` extended-year extensions
+# carried over from FORMAT_TIMESTAMP. DuckDB's `printf` / `format`
+# implement only a subset of POSIX printf and do not understand
+# the BigQuery extensions. The format-spec translation table is
+# non-trivial (parses the spec, dispatches per type) and is more
+# naturally expressed as Go in the semantic executor.
+format: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 # BQ CONTAINS_SUBSTR applies Unicode NFKC normalization plus
 # case-folding to both arguments before substring search; DuckDB's
 # `contains` does exact byte-level match. The gap is wider than a
 # thin macro (no DuckDB NFKC primitive), so the row re-points at
 # the semantic executor per the polyfill plan's "no silent
 # approximation" rule.
-contains_substr: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
+contains_substr: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 # BQ STRPOS returns 1-based index; DuckDB strpos agrees today. The
 # `bq_strpos` macro pins the contract under our name so a future
 # DuckDB upgrade flipping to 0-based would surface as a unit-test
@@ -246,13 +268,13 @@ strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.m
 # available the negative-position case needs a separate path). The
 # row re-points at the semantic executor where the variadic surface
 # can be implemented straight-line in Go.
-instr: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
+instr: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 # DuckDB v1.5.3 does NOT ship a `soundex` scalar function (verified
 # directly: `SELECT soundex('Robert')` -> Catalog Error). A thin
 # macro wrapper is therefore impossible; the row re-points at the
 # semantic executor where the algorithm can be implemented in
 # native Go.
-soundex: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
+soundex: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 
 # --- Datetime ----------------------------------------------------------
 # Most datetime functions need interval-semantics rewriting before
@@ -264,24 +286,76 @@ current_timestamp: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
 current_date: duckdb_native duckdb_name=CURRENT_DATE
 current_time: duckdb_native duckdb_name=CURRENT_TIME
 current_datetime: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
-date_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-date_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-date_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-date_trunc: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-datetime_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-datetime_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-datetime_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-timestamp_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-timestamp_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-timestamp_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-timestamp_trunc: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-format_timestamp: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-format_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-format_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-parse_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-parse_timestamp: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-parse_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ DATE_ADD / DATE_SUB / DATETIME_ADD / DATETIME_SUB /
+# TIMESTAMP_ADD / TIMESTAMP_SUB all diverge from DuckDB's
+# `<value> + INTERVAL N PART` arithmetic on the MONTH-END SNAP
+# semantic: BigQuery clamps the result to the last day of the
+# target month when the source day-of-month doesn't exist
+# (`DATE_ADD(DATE '2024-01-31', INTERVAL 1 MONTH) == DATE
+# '2024-02-29'`), while DuckDB overflows into the next month
+# (`DATE '2024-01-31' + INTERVAL 1 MONTH == DATE '2024-03-02'`).
+# Closing the gap requires a CASE-arm rewrite that checks
+# whether the resulting day exists in the target month and snaps
+# to LAST_DAY when it does not -- doable as a macro, but the
+# logic also has to be applied to TIMESTAMP_ADD's timezone-aware
+# variant and to the QUARTER / YEAR units (BQ snaps for YEAR too:
+# `DATE_ADD(DATE '2020-02-29', INTERVAL 1 YEAR) == DATE
+# '2021-02-28'`). The semantic executor owns this rewrite
+# alongside the rest of BigQuery-exact date arithmetic.
+date_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+date_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ DATE_DIFF / DATETIME_DIFF / TIMESTAMP_DIFF count CALENDAR
+# BOUNDARIES (not whole units): `DATE_DIFF(DATE '2024-01-31',
+# DATE '2024-01-01', MONTH) == 0` because only the day-of-month
+# changed within the same calendar month (BQ's "boundary crossings"
+# rule), while a naive subtraction-based macro would return 30. The
+# WEEK part also has a parameterizable start-of-week (defaults to
+# Sunday in BQ, configurable to MONDAY .. SATURDAY), and ISOWEEK
+# uses ISO-8601 week numbering. DuckDB's `date_diff` is
+# elapsed-units based and does not match either contract. The
+# semantic executor owns the rewrite.
+date_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ DATE_TRUNC / DATETIME_TRUNC / TIMESTAMP_TRUNC differ from
+# DuckDB's `date_trunc(part, value)` on the calendar-week
+# definitions (WEEK with Sunday vs Monday start, ISOWEEK, ISOYEAR,
+# QUARTER alignment) and on the TIMESTAMP_TRUNC timezone argument
+# (BQ TIMESTAMP_TRUNC takes an explicit timezone; DuckDB
+# date_trunc has no zone parameter and truncates in the column's
+# zone). The semantic executor owns the rewrite alongside the
+# DIFF family.
+date_trunc: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+datetime_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+datetime_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+datetime_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+timestamp_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+timestamp_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+timestamp_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+timestamp_trunc: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ EXTRACT(part FROM value) has BigQuery-specific parts
+# (DATE / TIME / DATETIME extraction from a TIMESTAMP at a
+# specified timezone, ISOYEAR, ISOWEEK, MICROSECOND with
+# explicit precision, DAYOFYEAR / DAYOFWEEK with BQ's
+# Sunday-is-1 convention). DuckDB's `extract` covers a different
+# subset and uses ISO-8601 conventions where BQ uses the
+# Sunday-start convention. A thin macro cannot translate the
+# part token between dialects without losing edge cases.
+extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ FORMAT_TIMESTAMP / FORMAT_DATE / FORMAT_DATETIME and the
+# matching PARSE_* family use BigQuery's extended strftime
+# specification (`%E4Y` for 4-digit zero-padded year, `%E*S` for
+# fractional seconds with adaptive precision, `%Q` for quarter,
+# `%Ez` for ISO-8601 timezone, `%Z` for IANA timezone name) on
+# top of POSIX strftime. DuckDB's `strftime` / `strptime`
+# implement the POSIX core but not the `%E*` / `%Q` / `%Ez`
+# extensions. The format-spec translation table is doable but
+# extensive (each spec needs a translated emit + a fallback for
+# unsupported specs); more naturally expressed in Go.
+format_timestamp: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+format_date: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+format_datetime: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+parse_date: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+parse_timestamp: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+parse_datetime: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 # BQ UNIX_SECONDS(timestamp) returns BIGINT seconds since
 # 1970-01-01 UTC with sub-second precision truncated. DuckDB's
 # `epoch(timestamp)` returns DOUBLE; the `bq_unix_seconds` macro

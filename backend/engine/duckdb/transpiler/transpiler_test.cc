@@ -995,18 +995,16 @@ TEST(FunctionsTableTest, LookupUnsupportedFunction) {
   EXPECT_FALSE(e->planned);
 }
 
-TEST(FunctionsTableTest, LookupPlannedDuckdbUdfFunction) {
-  // Some `duckdb_udf` rows are still `status=planned` because the
-  // polyfill UDF library has not landed their wrapper yet (datetime
-  // arithmetic, regex, JSON path navigators, ...). The transpiler
-  // surfaces UNIMPLEMENTED for these.
-  const FnEntry* e = LookupFunction("date_add");
-  ASSERT_NE(e, nullptr);
-  EXPECT_EQ(e->disposition, Disposition::kDuckdbUdf);
-  EXPECT_TRUE(e->duckdb_name.empty());
-  EXPECT_EQ(e->plan, "duckdb-polyfill-udf-library.plan.md");
-  EXPECT_TRUE(e->planned);
-}
+// `LookupPlannedDuckdbUdfFunction` was deleted alongside the
+// polyfill UDF library plan's wrap-up commit (every former
+// `status=planned duckdb_udf` row pointing at the polyfill plan
+// either flipped to ready `duckdb_udf` / `duckdb_native` or
+// re-pointed to `status=planned semantic_executor` per the
+// plan's "no silent approximation" rule). The reverse-direction
+// invariant ("no `status=planned duckdb_udf` row points at the
+// polyfill plan anymore") is enforced by the YAML genrule + the
+// `CoverageMeetsPlanThreshold` test below; tabling the
+// per-function planned-shape probe here would just shadow that.
 
 TEST(FunctionsTableTest, LookupReadyDuckdbUdfFunction) {
   // Ready `duckdb_udf` rows store the registered macro name in

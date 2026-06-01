@@ -452,19 +452,21 @@ re-pointed at `semantic-functions-compliance.plan.md` (still
 | `instr` | BigQuery INSTR is variadic with negative-position semantics; DuckDB's `instr` is 2-arg only. The variadic surface is more naturally implemented in Go. |
 | `soundex` | DuckDB v1.5.3 does not ship a `soundex` scalar function (verified: `SELECT soundex('Robert')` -> Catalog Error). |
 | `sqrt_numeric` | Placeholder row for the case where BigQuery SQRT is called with a NUMERIC argument and the transpiler needs to insert an explicit cast. The current emit path looks up by lowercase function NAME only and never lowers anything to `sqrt_numeric` (the analyzer resolves to `sqrt`). Closing the gap requires signature-aware function dispatch in the transpiler -- a transpiler architecture change, not a thin polyfill macro. |
+| `regexp_extract`, `regexp_extract_all` | BigQuery returns the FIRST capturing group when the regex contains one and falls back to the whole match otherwise; DuckDB always returns the whole match by default and exposes the group via a separate numeric `group` argument. A thin macro cannot introspect the regex pattern to choose the right behavior. The discrimination is a few lines of Go in the semantic executor (parse the regex, count `(...)` groups minus non-capturing `(?:...)`, dispatch to `regexp_extract(..., 1)` or `regexp_extract(..., 0)`). |
+| `format` | Printf-style with BigQuery extensions (`%t` / `%T` type-aware rendering, `%p` parameterized substitution, type-specific ARRAY / STRUCT / JSON format codes, `%E*` extended-year extensions). DuckDB's `printf` / `format` implement only a subset of POSIX printf. The format-spec translation table is more naturally expressed in Go. |
+| `date_add`, `date_sub`, `datetime_add`, `datetime_sub`, `timestamp_add`, `timestamp_sub` | BigQuery's MONTH-END SNAP: `DATE_ADD(DATE '2024-01-31', INTERVAL 1 MONTH) == DATE '2024-02-29'`. DuckDB overflows into the next month. Same snap applies to YEAR additions on Feb 29. Closing the gap requires a CASE-arm rewrite plus timezone-aware variants and is more naturally expressed in Go. |
+| `date_diff`, `datetime_diff`, `timestamp_diff` | BigQuery counts CALENDAR BOUNDARIES (e.g. `DATE_DIFF(DATE '2024-01-31', DATE '2024-01-01', MONTH) == 0` because no calendar-month boundary was crossed). DuckDB's `date_diff` is elapsed-units based. WEEK parts also have a parameterizable start-of-week. The semantic executor owns the rewrite. |
+| `date_trunc`, `datetime_trunc`, `timestamp_trunc` | Calendar-week / ISOWEEK / ISOYEAR / QUARTER alignment differs; TIMESTAMP_TRUNC takes an explicit timezone argument that DuckDB's `date_trunc` doesn't accept. |
+| `extract` | BigQuery-specific parts (DATE / TIME / DATETIME extraction with TZ, ISOYEAR, ISOWEEK, MICROSECOND, DAYOFYEAR / DAYOFWEEK with Sunday-is-1 convention) diverge from DuckDB's ISO-8601-only `extract`. |
+| `format_timestamp`, `format_date`, `format_datetime`, `parse_timestamp`, `parse_date`, `parse_datetime` | BigQuery uses extended strftime (`%E4Y`, `%E*S`, `%Q`, `%Ez`, `%Z`) on top of POSIX strftime. DuckDB's `strftime` / `strptime` implement the POSIX core but not the `%E*` / `%Q` / `%Ez` / `%Z` extensions. The format-spec translation table is extensive and more naturally expressed in Go. |
 
-Rows that remain at `status=planned duckdb_udf` (polyfill plan
-still owns them; the wrapper has not landed but the plan still
-considers a thin-macro path achievable):
-
-* `format` (printf-spec divergence; potentially landable via macro
-  but the spec-translation table is non-trivial and was not
-  scoped into this polyfill landing).
-* `regexp_extract`, `regexp_extract_all`, `format`, the
-  `date_*` / `datetime_*` / `timestamp_*` arithmetic family,
-  `extract`, and the `format_*` / `parse_*` family --- documented
-  per row in `functions.yaml` with the specific BigQuery semantic
-  the wrapper needs to close. Each of these is a candidate for a
-  future polyfill landing in the same plan; none are silent
-  approximations today (every call surfaces UNIMPLEMENTED via the
-  transpiler's empty-string contract).
+Net result: **zero `status=planned duckdb_udf` rows** remain in
+`functions.yaml` after this plan landing -- every former
+`status=planned duckdb_udf` row either flipped to ready
+`duckdb_udf` / `duckdb_native` with a wrapper + unit test +
+conformance fixture, or re-pointed at
+`status=planned semantic_executor plan=semantic-functions-compliance.plan.md`
+with a documented BigQuery / DuckDB gap that no thin macro can
+close. The polyfill plan is no longer the owning plan for any
+remaining gap; the semantic-functions plan picks up where this
+plan left off.
