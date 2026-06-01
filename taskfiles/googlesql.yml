@@ -303,3 +303,38 @@ tasks:
         set -eo pipefail
         rm -rf "{{.CACHE_DIR}}"
         echo "removed {{.CACHE_DIR}}"
+
+  smoke-local:
+    desc: |
+      Fast iteration loop for wrapper-deps work
+      (tools/googlesql-prebuilt/templates/BUILD.bazel +
+      tools/googlesql-prebuilt/wrapper_writer.py).
+      Reuses the already-staged prebuilt at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}/
+      (the static archives don't change between wrapper-deps edits),
+      overlays the workspace's current wrapper templates onto a tmp
+      copy, and runs the same Bazel smoke wiring the producer pipeline
+      uses — without rebuilding the ~8k C++ TUs that take ~2h on a
+      runner. Loop time: ~30-60s warm, ~5-10min cold.
+      Optional: KEEP_TMP=1 (preserve the overlay tmpdir for inspection),
+      BAZEL_JOBS=N, BAZEL_MEM_MB=N.
+    vars:
+      KEEP_TMP: '{{.KEEP_TMP | default ""}}'
+      BAZEL_JOBS: '{{.BAZEL_JOBS | default ""}}'
+      BAZEL_MEM_MB: '{{.BAZEL_MEM_MB | default ""}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -d "{{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" ]; then
+          echo "smoke-local: cache is empty at {{.CACHE_DIR}}/{{.PREBUILT_REPO_NAME}}" >&2
+          echo "Stage a prebuilt artifact first (any of):" >&2
+          echo "  task googlesql:stage-bazel                       # local real (~25-55 min, one-time)" >&2
+          echo "  task googlesql:fetch-prebuilt URL=... SHA256=... # published artifact" >&2
+          exit 1
+        fi
+        args=()
+        [ -n "{{.KEEP_TMP}}" ] && args+=( --keep-tmp )
+        [ -n "{{.BAZEL_JOBS}}" ] && args+=( --jobs "{{.BAZEL_JOBS}}" )
+        [ -n "{{.BAZEL_MEM_MB}}" ] && args+=( --mem-mb "{{.BAZEL_MEM_MB}}" )
+        bash tools/googlesql-prebuilt/local_smoke.sh "${args[@]}"
