@@ -48,6 +48,51 @@ cc_library(
     ],
 )
 
+# Stub executors covering the three non-DuckDB routes the
+# classifier can pick today (`semantic_executor`, `control_op`,
+# `unsupported`). Each one returns UNIMPLEMENTED with a
+# disposition-aware message pointing at the downstream plan that
+# fills in the real behavior; this keeps the coordinator a complete
+# dispatcher while plans `semantic-executor-core.plan.md`,
+# `control-op-executor.plan.md`, and `specialized-feature-policy.plan.md`
+# ship the real implementations.
+cc_library(
+    name = "stub_executors",
+    srcs = ["stub_executors.cc"],
+    hdrs = ["stub_executors.h"],
+    deps = [
+        ":executor",
+        "//backend/engine",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "stub_executors_test",
+    srcs = ["stub_executors_test.cc"],
+    deps = [
+        ":stub_executors",
+        "//backend/engine",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
 cc_test(
     name = "route_classifier_test",
     srcs = ["route_classifier_test.cc"],
