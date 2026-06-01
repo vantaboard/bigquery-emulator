@@ -1,0 +1,57 @@
+# function_regexp_replace: BigQuery REGEXP_REPLACE via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_regexp_replace` macro
+# through the gateway. The macro closes one specific gap: DuckDB's
+# `regexp_replace` defaults to replacing ONLY the first match,
+# while BigQuery replaces ALL non-overlapping matches. The
+# wrapper forwards the `'g'` global option so the BQ contract
+# holds at the call site.
+#
+# Edge cases pinned:
+#   * Global replacement (`'aaaa' / 'a' / 'b' -> 'bbbb'`, not
+#     `'baaa'`).
+#   * No-match returns input unchanged.
+#   * `\1` / `\2` backreference round-trip (both engines vendor
+#     RE2 and accept identical replacement syntax).
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_regexp_replace
+description: |
+  BigQuery REGEXP_REPLACE lowered through the polyfill UDF
+  library (`backend/engine/duckdb/udf/regex/regex_macros.cc`'s
+  `bq_regexp_replace` macro). Verifies the global-replacement
+  contract (all matches, not just the first) and `\1` / `\2`
+  backreference handling.
+project_id: proj-functions-regexp-replace
+dataset_id: ds_functions_regexp_replace
+setup:
+  - dataset: ds_functions_regexp_replace
+  - table:
+      dataset: ds_functions_regexp_replace
+      id: strings
+      schema:
+        - {name: id,  type: INT64,  mode: REQUIRED}
+        - {name: val, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_regexp_replace
+      table: strings
+      rows:
+        - {id: 1, val: 'aaaa'}
+        - {id: 2, val: 'foo bar foo'}
+        - {id: 3, val: 'John Doe'}
+        - {id: 4, val: 'abc'}
+query: |
+  SELECT id,
+         REGEXP_REPLACE(val, 'a', 'b')              AS replace_all,
+         REGEXP_REPLACE(val, 'foo', 'baz')          AS replace_word,
+         REGEXP_REPLACE(val, r'(\w+) (\w+)', r'\2 \1') AS swap,
+         REGEXP_REPLACE(val, 'xyz', 'q')            AS no_match
+    FROM ds_functions_regexp_replace.strings
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", replace_all: "bbbb",        replace_word: "aaaa",        swap: "aaaa",        no_match: "aaaa"}
+    - {id: "2", replace_all: "foo bbr foo", replace_word: "baz bar baz", swap: "bar foo foo", no_match: "foo bar foo"}
+    - {id: "3", replace_all: "John Doe",    replace_word: "John Doe",    swap: "Doe John",    no_match: "John Doe"}
+    - {id: "4", replace_all: "bbc",         replace_word: "abc",         swap: "abc",         no_match: "abc"}

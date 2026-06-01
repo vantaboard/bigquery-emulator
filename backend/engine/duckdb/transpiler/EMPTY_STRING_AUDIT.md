@@ -433,6 +433,8 @@ rows flipped from `status=planned duckdb_udf` to ready
 | `strpos`    | `string/string_macros.cc::bq_strpos`    | 1-based index; missing needle returns 0 (not NULL); empty needle returns 1 | `string_macros_test::StrposReturnsOneBasedIndex`, `StrposMissingNeedleReturnsZero`, `StrposEmptyNeedle` |
 | `countif`   | n/a -- routed `duckdb_native duckdb_name=count_if` (no macro layer; DuckDB v1.5.3's `count_if` matches BQ COUNTIF on NULL / FALSE handling) | NULL inputs are NOT counted (treated as FALSE-like) | `conformance/fixtures/functions/aggregate/function_countif.yaml` (NULL row excluded from the `true_count`) |
 | `log`       | `numeric/numeric_macros.cc::bq_log` (variadic: `bq_log(x)` natural-log, `bq_log(x, base)` base-second per BQ argument order) | `LOG(x)` is BASE-e (not base-10 like DuckDB's bare `log`); `LOG(x, base)` argument order is value-first (DuckDB's `log(b, x)` is base-first) | `numeric_macros_test::LogSingleArgIsNaturalLog`, `LogTwoArgIdentity`, `LogNullPropagation` |
+| `regexp_contains` | `regex/regex_macros.cc::bq_regexp_contains` (thin alias around DuckDB `regexp_matches`; both engines vendor RE2) | RE2 dialect compatibility (anchoring, case-sensitive by default, `(?i)` inline flags) -- the macro pins our own name so a future DuckDB upgrade swapping regex engines would surface as a unit-test failure | `regex_macros_test::RegexpContainsAnchoredMatch`, `RegexpContainsCaseSensitiveByDefault`, `RegexpContainsHonorsInlineFlags`, `RegexpContainsNullPropagation` |
+| `regexp_replace` | `regex/regex_macros.cc::bq_regexp_replace` (forwards `'g'` to DuckDB's `regexp_replace`) | BigQuery replaces ALL non-overlapping matches; DuckDB defaults to FIRST-only. The macro hardcodes the global flag so the BQ contract holds at the call site | `regex_macros_test::RegexpReplaceIsGlobal`, `RegexpReplaceHonorsBackreferences`, `RegexpReplaceNullPropagation` |
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
@@ -453,11 +455,11 @@ considers a thin-macro path achievable):
 * `format` (printf-spec divergence; potentially landable via macro
   but the spec-translation table is non-trivial and was not
   scoped into this polyfill landing).
-* `split`, `regexp_*`, `format`, the `date_*` / `datetime_*` /
-  `timestamp_*` arithmetic family, `extract`, the `format_*` /
-  `parse_*` / `unix_*` family --- documented per row in
-  `functions.yaml` with the specific BigQuery semantic the wrapper
-  needs to close. Each of these is a candidate for a future
-  polyfill landing in the same plan; none are silent approximations
-  today (every call surfaces UNIMPLEMENTED via the transpiler's
-  empty-string contract).
+* `split`, `regexp_extract`, `regexp_extract_all`, `format`, the
+  `date_*` / `datetime_*` / `timestamp_*` arithmetic family,
+  `extract`, the `format_*` / `parse_*` / `unix_*` family ---
+  documented per row in `functions.yaml` with the specific
+  BigQuery semantic the wrapper needs to close. Each of these is a
+  candidate for a future polyfill landing in the same plan; none
+  are silent approximations today (every call surfaces
+  UNIMPLEMENTED via the transpiler's empty-string contract).

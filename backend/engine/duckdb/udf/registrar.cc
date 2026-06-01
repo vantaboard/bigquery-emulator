@@ -24,6 +24,7 @@ namespace udf {
 absl::Status RegisterNumeric(::duckdb_connection conn);
 absl::Status RegisterConditional(::duckdb_connection conn);
 absl::Status RegisterString(::duckdb_connection conn);
+absl::Status RegisterRegex(::duckdb_connection conn);
 
 absl::Status RegisterAll(::duckdb_connection conn) {
   if (conn == nullptr) {
@@ -33,6 +34,7 @@ absl::Status RegisterAll(::duckdb_connection conn) {
   if (auto s = RegisterNumeric(conn); !s.ok()) return s;
   if (auto s = RegisterConditional(conn); !s.ok()) return s;
   if (auto s = RegisterString(conn); !s.ok()) return s;
+  if (auto s = RegisterRegex(conn); !s.ok()) return s;
   return absl::OkStatus();
 }
 

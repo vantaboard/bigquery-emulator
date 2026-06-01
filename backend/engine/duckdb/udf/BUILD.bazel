@@ -43,6 +43,7 @@ cc_library(
     srcs = [
         "conditional/conditional_macros.cc",
         "numeric/numeric_macros.cc",
+        "regex/regex_macros.cc",
         "registrar.cc",
         "string/string_macros.cc",
     ],
@@ -108,6 +109,26 @@ cc_test(
 cc_test(
     name = "string_macros_test",
     srcs = ["string/string_macros_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# Regex family per-UDF tests. Covers `bq_regexp_contains` (RE2
+# dialect compatibility + anchoring + inline-flag handling) and
+# `bq_regexp_replace` (global-replacement contract + backref
+# handling). `regexp_extract` / `regexp_extract_all` stay at
+# `status=planned` and re-point to
+# `semantic-functions-compliance.plan.md` because the BQ
+# capture-group semantic (return group 1 when present, fall back
+# to whole match otherwise) requires pattern introspection that
+# is not expressible as a thin macro.
+cc_test(
+    name = "regex_macros_test",
+    srcs = ["regex/regex_macros_test.cc"],
     deps = [
         ":registrar",
         "//third_party/duckdb",

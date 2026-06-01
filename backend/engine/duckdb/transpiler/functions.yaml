@@ -178,8 +178,29 @@ from_hex: duckdb_native duckdb_name=FROM_HEX
 # DuckDB has PRINTF which differs subtly. The polyfill UDF library
 # owns the rewrite path.
 split: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-regexp_contains: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-regexp_replace: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ REGEXP_CONTAINS(value, regex) -> BOOL. Both BigQuery and
+# DuckDB v1.5.3 use RE2 for regex evaluation, so the dialects
+# agree on anchoring, character classes, embedded `(?i)`
+# inline flags, and backreference numbering. The `bq_regexp_contains`
+# macro (registered by
+# `backend/engine/duckdb/udf/regex/regex_macros.cc`) is a thin
+# alias around DuckDB's `regexp_matches` that pins the contract
+# under our own name. Unit tests
+# `regex_macros_test::RegexpContainsAnchoredMatch`,
+# `RegexpContainsCaseSensitiveByDefault`, and
+# `RegexpContainsHonorsInlineFlags` guard against silent
+# RE2-dialect drift.
+regexp_contains: duckdb_udf duckdb_name=bq_regexp_contains plan=duckdb-polyfill-udf-library.plan.md
+# BQ REGEXP_REPLACE(value, regex, replacement) replaces ALL
+# non-overlapping matches; DuckDB's `regexp_replace` defaults to
+# replacing ONLY the first match. The `bq_regexp_replace` macro
+# closes the gap by forwarding the `'g'` global option
+# unconditionally; backreference syntax (`\1`, `\2`, ...) round-trips
+# unchanged because both engines vendor RE2. Unit test
+# `regex_macros_test::RegexpReplaceIsGlobal` pins the global
+# contract (`'aaaa' / 'a' / 'b' -> 'bbbb'`); a regression that
+# dropped the `'g'` would surface as `'baaa'`.
+regexp_replace: duckdb_udf duckdb_name=bq_regexp_replace plan=duckdb-polyfill-udf-library.plan.md
 regexp_extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 regexp_extract_all: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 format: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned

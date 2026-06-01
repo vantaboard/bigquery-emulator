@@ -16,6 +16,10 @@ conformance/fixtures/functions/
 Families today:
 
 - `numeric/` — `bq_mod`, `bq_div`, `bq_log`.
+- `regex/` — `bq_regexp_contains`, `bq_regexp_replace` (re2-vendored
+  thin wrappers; `regexp_extract` / `regexp_extract_all` stay at
+  `status=planned` because their capture-group semantic needs
+  pattern introspection).
 - `conditional/` — `bq_if`, `bq_isnull`.
 - `string/` — `bq_strpos`.
 - `aggregate/` — `countif` (routed `duckdb_native` to DuckDB's

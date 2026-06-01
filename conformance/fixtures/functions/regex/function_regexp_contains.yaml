@@ -1,0 +1,53 @@
+# function_regexp_contains: BigQuery REGEXP_CONTAINS via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_regexp_contains` macro
+# through the gateway. The macro is a thin alias around DuckDB's
+# `regexp_matches`; both engines vendor Google's RE2, so the
+# fixture only needs to pin three semantics the macro inherits
+# from RE2 (anchoring, case-sensitivity by default, inline flags).
+#
+# Edge cases pinned:
+#   * `^` and `$` anchor to the string boundaries, not to a
+#     line / match boundary.
+#   * Case-sensitive by default (no implicit case folding).
+#   * The `(?i)` inline flag triggers case-insensitive matching.
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_regexp_contains
+description: |
+  BigQuery REGEXP_CONTAINS lowered through the polyfill UDF
+  library (`backend/engine/duckdb/udf/regex/regex_macros.cc`'s
+  `bq_regexp_contains` macro). Verifies anchoring, case-sensitive
+  default, and the `(?i)` inline flag.
+project_id: proj-functions-regexp-contains
+dataset_id: ds_functions_regexp_contains
+setup:
+  - dataset: ds_functions_regexp_contains
+  - table:
+      dataset: ds_functions_regexp_contains
+      id: strings
+      schema:
+        - {name: id,  type: INT64,  mode: REQUIRED}
+        - {name: val, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_regexp_contains
+      table: strings
+      rows:
+        - {id: 1, val: 'abc'}
+        - {id: 2, val: 'ABC'}
+        - {id: 3, val: 'abcdef'}
+        - {id: 4, val: null}
+query: |
+  SELECT id,
+         REGEXP_CONTAINS(val, '^a')      AS starts_with_a,
+         REGEXP_CONTAINS(val, 'abc')     AS contains_abc_cs,
+         REGEXP_CONTAINS(val, '(?i)abc') AS contains_abc_ci
+    FROM ds_functions_regexp_contains.strings
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", starts_with_a: "true",  contains_abc_cs: "true",  contains_abc_ci: "true"}
+    - {id: "2", starts_with_a: "false", contains_abc_cs: "false", contains_abc_ci: "true"}
+    - {id: "3", starts_with_a: "true",  contains_abc_cs: "true",  contains_abc_ci: "true"}
+    - {id: "4", starts_with_a: null,    contains_abc_cs: null,    contains_abc_ci: null}
