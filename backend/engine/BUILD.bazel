@@ -4,7 +4,7 @@
 # header-only-ish, no GoogleSQL on the link line. The DuckDB engine
 # implementation lives in `//backend/engine/duckdb/` and pulls
 # GoogleSQL in.
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,5 +18,29 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+# Canonical execution-route disposition enum. Header-only-ish (the
+# `.cc` just hosts the `DispositionToString` switch) so callers can
+# depend on it without dragging the engine link chain along; the
+# generated `functions_table.inc` and `node_dispositions_table.inc`
+# both include it.
+cc_library(
+    name = "disposition",
+    srcs = ["disposition.cc"],
+    hdrs = ["disposition.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "disposition_test",
+    srcs = ["disposition_test.cc"],
+    deps = [
+        ":disposition",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
     ],
 )
