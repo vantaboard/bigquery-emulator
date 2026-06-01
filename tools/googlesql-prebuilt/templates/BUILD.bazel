@@ -63,22 +63,37 @@ cc_library(
     name = "_all_hdrs",
     hdrs = glob(["include/googlesql/**/*.h"]),
     strip_include_prefix = "/include",
-    # Third-party header packages reached transitively from the
-    # exported `googlesql/...` include tree. Discovered during
-    # consumer-wiring prebuilt-mode link verification: e.g. `googlesql/base/bits.h`
-    # `#include`s `gtest/gtest_prod.h`, `googlesql/base/exactfloat.h`
-    # `#include`s `openssl/bn.h`, `googlesql/public/functions/regexp.h`
-    # `#include`s `re2/re2.h`. Adding them here lets every wrapper
-    # `cc_library` (which deps on `:_all_hdrs`) resolve those headers
-    # under strict-deps + sandboxing without enumerating them per
-    # wrapper.
+    # `:_all_hdrs` is the consumer-facing transitive-header-coverage
+    # library. It exposes the full include tree under strict-deps +
+    # sandboxing so each wrapper does not have to enumerate every
+    # transitively-included `*.h` / `*.pb.h` it touches.
     #
-    # The combined `lib/libgooglesql.a` archive carries unresolved
-    # external symbols into these libraries (the producer-side build
-    # linked against them), so listing them as `deps` also closes the
-    # link surface for consumers' final emulator binary. Versions are
-    # pinned in this artifact's `MODULE.bazel` to match the producer's
-    # link state.
+    # Header-only deps (gtest is `gtest/gtest_prod.h`, used by
+    # `googlesql/base/bits.h` and `value.h`). gtest's runtime symbols
+    # are NOT referenced by the bundled archive, so it does not need
+    # link-line ordering against `lib/libgooglesql.a`.
+    #
+    # Symbol-providing third-party deps (`@boringssl//...` for
+    # `googlesql/base/exactfloat.h` -> `openssl/bn.h`,
+    # `@com_googlesource_code_re2//...` for
+    # `googlesql/public/functions/regexp.h` -> `re2/re2.h`) live in
+    # `:_archive`'s `deps` instead, NOT here. The bundled `.pic.o`
+    # objects inside `lib/libgooglesql.a` carry unresolved external
+    # references into those libraries, and the linker resolves them
+    # lazily only against archives that appear AFTER `libgooglesql.a`
+    # in the link line. If they were listed here, the wrappers' DFS
+    # link order (`:_all_hdrs` -> `:_archive` -> ...) would put
+    # `libcrypto.a` / `libre2.a` BEFORE `libgooglesql.a`, the linker
+    # would scan them with an empty unresolved-symbol set, skip them,
+    # then unresolve their symbols when it walks `libgooglesql.a`.
+    # See the `:_archive` rationale below for the full link-order
+    # explanation.
+    #
+    # The wrappers still resolve `re2/re2.h` / `openssl/bn.h` / etc.
+    # under strict-deps because `:_archive`'s deps propagate
+    # `CcInfo.compilation_context` (i.e. the header set) up through
+    # the wrapper's transitive deps. Moving the deps to `:_archive`
+    # closes the link line WITHOUT losing header visibility.
     #
     # ICU + farmhash + differential-privacy are statically BUNDLED
     # into `lib/libgooglesql.a` by `tools/googlesql-prebuilt/package.sh`
@@ -90,10 +105,7 @@ cc_library(
     # `MODULE.bazel.tmpl` for the rationale (none of the three has a
     # BCR module compatible with the producer's ABI).
     deps = [
-        "@boringssl//:crypto",
-        "@boringssl//:ssl",
         "@com_google_googletest//:gtest",
-        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -155,6 +167,26 @@ cc_import(
 #     separate `cc_proto_library` targets, NOT in `:protobuf`; the
 #     runtime in `:protobuf` only carries the descriptor machinery.
 #
+#   * `@com_google_protobuf//:duration_cc_proto`
+#     The bundled archive references `google::protobuf::Duration::*`
+#     (default-instance + Reflection metadata) from
+#     `googlesql/common/builtin_function_internal_3.cc::
+#     GetProto3ConversionFunctions()`, which materialises a runtime
+#     mapping from each well-known proto type to its conversion
+#     callback. Same separate-cc_proto rationale as
+#     `:timestamp_cc_proto`.
+#
+#   * `@com_google_protobuf//:wrappers_cc_proto`
+#     The bundled archive references the proto3 wrapper Message
+#     subclasses (`DoubleValue`, `FloatValue`, `Int64Value`,
+#     `UInt64Value`, `Int32Value`, `UInt32Value`, `BoolValue`,
+#     `StringValue`, `BytesValue`) and their default instances from
+#     `googlesql/common/builtin_function_internal_3.cc::
+#     GetProto3ConversionFunctions()`. Same conversion-mapping entry
+#     as `:duration_cc_proto`; protobuf 29 keeps these in a single
+#     combined `cc_proto_library` covering all nine
+#     `google/protobuf/wrappers.proto` messages.
+#
 #   * `@com_google_protobuf//:differencer`
 #     The bundled archive references
 #     `google::protobuf::util::MessageDifferencer::*` and
@@ -174,6 +206,24 @@ cc_import(
 #     small absl subsets the per-wrapper deps lists already declare
 #     (`absl/status`, `absl/strings`, `absl/time`, …) do NOT cover
 #     the flag registration machinery.
+#
+#   * `@com_googlesource_code_re2//:re2`
+#     `googlesql/public/error_helpers.cc` (in the bundled archive)
+#     uses `re2::RE2` for the error-message stability regex rewriter
+#     (`ApplyErrorMessageStabilityMode` -> `RE2::QuoteMeta`,
+#     `RE2::FullMatchN`, ctor / dtor). Other googlesql code (e.g.
+#     `public/functions/regexp.cc`) reaches RE2 via the same library;
+#     all references collapse into this single dep at the prebuilt
+#     boundary.
+#
+#   * `@boringssl//:crypto` + `@boringssl//:ssl`
+#     `googlesql/base/exactfloat.cc` (in the bundled archive) uses
+#     OpenSSL big-number primitives from `openssl/bn.h` (provided by
+#     `@boringssl//:crypto`). `:ssl` is included for symmetry with
+#     the producer-side link state (boringssl ships both as a unit
+#     and the producer's `MODULE.bazel` pins both); keeping the dep
+#     close immunises the wrapper against future SSL refs being
+#     added upstream without paying a separate link-order fix.
 cc_library(
     name = "_archive",
     deps = [
@@ -183,8 +233,13 @@ cc_library(
         "@com_google_googleapis//google/type:latlng_cc_proto",
         "@com_google_googleapis//google/rpc:status_cc_proto",
         "@com_google_protobuf//:timestamp_cc_proto",
+        "@com_google_protobuf//:duration_cc_proto",
+        "@com_google_protobuf//:wrappers_cc_proto",
         "@com_google_protobuf//:differencer",
         "@com_google_absl//absl/flags:flag",
+        "@com_googlesource_code_re2//:re2",
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
     ],
 )
 
