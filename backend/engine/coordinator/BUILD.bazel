@@ -1,0 +1,28 @@
+# Bazel build for the local execution coordinator.
+#
+# `LocalCoordinatorEngine` (the only `Engine` implementation
+# constructed by `binaries/emulator_main`) owns a
+# `RouteClassifier` that picks one of the six route dispositions
+# (see `backend/engine/disposition.h`) per query, plus one
+# `Executor` instance per route. The interface library
+# (`:executor`) stays free of GoogleSQL on its link line; the
+# classifier and the coordinator pull GoogleSQL in because they
+# walk a `ResolvedAST`.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Route-typed adapter interface. Header-only-ish (the `.cc` only
+# hosts the destructor anchor) so per-route executors can depend on
+# it without dragging GoogleSQL along.
+cc_library(
+    name = "executor",
+    srcs = ["executor.cc"],
+    hdrs = ["executor.h"],
+    deps = [
+        "//backend/engine",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
