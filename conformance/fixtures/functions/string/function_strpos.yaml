@@ -1,0 +1,46 @@
+# function_strpos: BigQuery STRPOS via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_strpos` macro through the
+# gateway. The macro is a thin alias around DuckDB's `strpos` today
+# (which agrees on the 1-based-index-or-zero contract), but the
+# fixture pins the BigQuery contract end-to-end so a future DuckDB
+# `strpos` change would surface as a fixture failure.
+#
+# Edge cases pinned: 1-based index, missing needle returns 0,
+# empty needle returns 1, NULL propagation.
+#
+# Route-label assertion: deferred to plan 16.
+name: function_strpos
+description: |
+  BigQuery STRPOS lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/string/string_macros.cc`'s `bq_strpos`
+  macro). Verifies 1-based indexing and the zero-on-miss contract.
+project_id: proj-functions-strpos
+dataset_id: ds_functions_strpos
+setup:
+  - dataset: ds_functions_strpos
+  - table:
+      dataset: ds_functions_strpos
+      id: words
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: haystack, type: STRING, mode: NULLABLE}
+        - {name: needle, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_strpos
+      table: words
+      rows:
+        - {id: 1, haystack: "hello", needle: "ll"}
+        - {id: 2, haystack: "hello", needle: "h"}
+        - {id: 3, haystack: "hello", needle: "zz"}    # missing -> 0
+        - {id: 4, haystack: "abc",   needle: ""}      # empty needle -> 1
+query: |
+  SELECT id, STRPOS(haystack, needle) AS pos
+    FROM ds_functions_strpos.words
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", pos: "3"}
+    - {id: "2", pos: "1"}
+    - {id: "3", pos: "0"}   # missing needle -> 0 (not NULL, not -1)
+    - {id: "4", pos: "1"}   # empty needle matches at position 1

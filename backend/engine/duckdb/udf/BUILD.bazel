@@ -98,3 +98,20 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# String family per-UDF tests. Covers `bq_strpos` (1-based index +
+# zero-on-miss + NULL propagation). Functions whose BigQuery /
+# DuckDB gap is wider than a thin macro (CONTAINS_SUBSTR's NFKC
+# normalization, INSTR's full variadic surface, SOUNDEX's missing
+# DuckDB analog, FORMAT's printf-spec divergence) stay at
+# `status=planned` and re-point to `semantic-functions-compliance.plan.md`.
+cc_test(
+    name = "string_macros_test",
+    srcs = ["string/string_macros_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

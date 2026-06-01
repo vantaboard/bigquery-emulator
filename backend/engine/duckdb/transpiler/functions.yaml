@@ -161,7 +161,12 @@ regexp_extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=plann
 regexp_extract_all: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 format: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 contains_substr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-strpos: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ STRPOS returns 1-based index; DuckDB strpos agrees today. The
+# `bq_strpos` macro pins the contract under our name so a future
+# DuckDB upgrade flipping to 0-based would surface as a unit-test
+# failure (`StrposReturnsOneBasedIndex`) instead of as a silent
+# off-by-one regression.
+strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.md
 instr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 soundex: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 

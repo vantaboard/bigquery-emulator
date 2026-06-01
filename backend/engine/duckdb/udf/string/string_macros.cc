@@ -1,18 +1,14 @@
 // BigQuery string polyfill macros.
 //
-// This file installs DuckDB SQL macros that close the BigQuery /
-// DuckDB semantic gap for the string functions whose
-// `functions.yaml` row is `duckdb_udf`. Each macro's body documents
-// the specific BigQuery edge case it pins; the per-macro unit test
-// (`string_macros_test.cc`) drives the macro directly against an
-// in-process DuckDB connection and exercises both the common path
-// and the edge case.
-//
-// Foundation commit: this file ships empty. Subsequent commits
-// install one macro per BigQuery function and flip its
-// `functions.yaml` row from `status=planned` to ready.
+// Each macro installed here pins a specific BigQuery / DuckDB
+// string-function gap. The body documents the gap; the per-macro
+// unit test (`string_macros_test.cc`) exercises both the common
+// path AND the BigQuery-specific edge case so a future DuckDB
+// regression surfaces as a unit-test failure rather than as silent
+// semantic drift.
 
 #include "absl/status/status.h"
+#include "backend/engine/duckdb/udf/internal/run_macro.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {
@@ -21,10 +17,32 @@ namespace engine {
 namespace duckdb {
 namespace udf {
 
-absl::Status RegisterString(::duckdb_connection /*conn*/) {
-  // Intentionally empty: foundation commit only wires the registrar
-  // skeleton. Each string macro lands in a follow-up commit alongside
-  // its functions.yaml row flip + unit test + conformance fixture.
+absl::Status RegisterString(::duckdb_connection conn) {
+  // `bq_strpos(value, subvalue)` --- BigQuery STRPOS (1-based).
+  //
+  // BigQuery STRPOS(value, subvalue) returns the 1-based index of
+  // the first occurrence of `subvalue` inside `value`, or 0 if
+  // `subvalue` is not found. DuckDB's `strpos(value, subvalue)`
+  // agrees today on the 1-based-index-or-zero contract and on the
+  // NULL propagation contract, so the macro is a thin alias that
+  // pins the BigQuery contract under our own name. Future DuckDB
+  // upgrades that change `strpos`'s indexing convention would
+  // surface as the unit test below failing rather than as a silent
+  // off-by-one regression at the gateway.
+  //
+  // Edge cases the unit test pins:
+  //   * 1-based index (`bq_strpos('hello', 'll') == 3`).
+  //   * Empty needle is matched at position 1 (BQ contract).
+  //   * Missing needle returns 0 (NOT -1, NOT NULL).
+  //   * NULL propagation in either operand returns NULL.
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_strpos(value, subvalue) AS "
+          "strpos(value, subvalue)");
+      !s.ok()) {
+    return s;
+  }
+
   return absl::OkStatus();
 }
 
