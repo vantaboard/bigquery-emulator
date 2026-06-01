@@ -22,6 +22,12 @@
 // coordinator's `control_op_executor_` member now references that
 // package, not this header.
 //
+// `SemanticExecutor` also graduated out of this stub file when
+// `.cursor/plans/semantic-executor-core.plan.md` landed -- the
+// real local row/array/value interpreter lives at
+// `backend/engine/semantic/executor.{h,cc}`. The coordinator's
+// `semantic_executor_` member references the new package.
+//
 // Until the remaining plans land, the coordinator hands every query
 // the `RouteClassifier` routes off DuckDB straight into one of
 // these stubs. The stubs never mutate state and never re-enter the
@@ -44,35 +50,6 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace coordinator {
-
-// SemanticExecutor handles the `kSemanticExecutor` route -- queries
-// the classifier flagged as needing a BigQuery-exact semantic
-// implementation (SAFE_DIVIDE, SAFE_CAST, ...). All methods return
-// UNIMPLEMENTED with a pointer at `semantic-executor-core.plan.md`
-// for now.
-class SemanticExecutor : public Executor {
- public:
-  SemanticExecutor() = default;
-  ~SemanticExecutor() override;
-
-  SemanticExecutor(const SemanticExecutor&) = delete;
-  SemanticExecutor& operator=(const SemanticExecutor&) = delete;
-
-  [[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-
-  [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-
-  [[nodiscard]] absl::Status ExecuteDdl(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-};
 
 // UnsupportedExecutor handles the `kUnsupported` route -- any
 // statement / node / function the classifier sees flagged as

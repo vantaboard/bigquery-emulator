@@ -10,6 +10,7 @@
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/value.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "googlesql/public/analyzer.h"
@@ -18,6 +19,8 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
@@ -109,6 +112,93 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
   schema::TableSchema schema_{};
 };
 
+// Map a `QueryParameter::type_kind` spelling to a
+// `::googlesql::Type*` instance the analyzer accepts on
+// `AddQueryParameter` / `AddPositionalQueryParameter`. Mirrors
+// `backend/engine/semantic/value.cc::ParseTypeKindName` and the
+// builtin type accessors in `googlesql/public/types/type_factory.h`.
+// Returns INVALID_ARGUMENT when the type kind is unknown or one of
+// the compound types (ARRAY / STRUCT) that the upstream parameter
+// plumbing has not yet wired through.
+absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
+    absl::string_view type_kind_name) {
+  ::googlesql::TypeKind kind = semantic::ParseTypeKindName(type_kind_name);
+  switch (kind) {
+    case ::googlesql::TYPE_BOOL:
+      return ::googlesql::types::BoolType();
+    case ::googlesql::TYPE_INT64:
+      return ::googlesql::types::Int64Type();
+    case ::googlesql::TYPE_DOUBLE:
+      return ::googlesql::types::DoubleType();
+    case ::googlesql::TYPE_STRING:
+      return ::googlesql::types::StringType();
+    case ::googlesql::TYPE_BYTES:
+      return ::googlesql::types::BytesType();
+    case ::googlesql::TYPE_DATE:
+      return ::googlesql::types::DateType();
+    case ::googlesql::TYPE_TIME:
+      return ::googlesql::types::TimeType();
+    case ::googlesql::TYPE_DATETIME:
+      return ::googlesql::types::DatetimeType();
+    case ::googlesql::TYPE_TIMESTAMP:
+      return ::googlesql::types::TimestampType();
+    case ::googlesql::TYPE_NUMERIC:
+      return ::googlesql::types::NumericType();
+    case ::googlesql::TYPE_BIGNUMERIC:
+      return ::googlesql::types::BigNumericType();
+    case ::googlesql::TYPE_JSON:
+      return ::googlesql::types::JsonType();
+    case ::googlesql::TYPE_GEOGRAPHY:
+      return ::googlesql::types::GeographyType();
+    case ::googlesql::TYPE_INTERVAL:
+      return ::googlesql::types::IntervalType();
+    case ::googlesql::TYPE_UUID:
+      return ::googlesql::types::UuidType();
+    default:
+      return absl::InvalidArgumentError(absl::StrCat(
+          "LocalCoordinatorEngine: parameter type kind '",
+          type_kind_name,
+          "' is not supported by the coordinator's analyzer plumbing"));
+  }
+}
+
+// Add the request's parameter declarations to `options`. The
+// analyzer needs to see every parameter the SQL references at
+// `AnalyzeStatement` time so it can produce typed
+// `ResolvedParameter` nodes the semantic executor binds against.
+absl::Status PopulateParameterOptions(const QueryRequest& request,
+                                      ::googlesql::AnalyzerOptions& options) {
+  if (request.parameters.empty()) return absl::OkStatus();
+  bool has_named = false;
+  bool has_positional = false;
+  for (const QueryParameter& p : request.parameters) {
+    if (p.name.empty()) {
+      has_positional = true;
+    } else {
+      has_named = true;
+    }
+  }
+  if (has_named && has_positional) {
+    return absl::InvalidArgumentError(
+        "LocalCoordinatorEngine: request mixes named and positional "
+        "parameters");
+  }
+  options.set_parameter_mode(has_positional ? ::googlesql::PARAMETER_POSITIONAL
+                                            : ::googlesql::PARAMETER_NAMED);
+  for (const QueryParameter& p : request.parameters) {
+    auto type_or = ParameterTypeForKind(p.type_kind);
+    if (!type_or.ok()) return type_or.status();
+    if (p.name.empty()) {
+      absl::Status s = options.AddPositionalQueryParameter(*type_or);
+      if (!s.ok()) return s;
+    } else {
+      absl::Status s = options.AddQueryParameter(p.name, *type_or);
+      if (!s.ok()) return s;
+    }
+  }
+  return absl::OkStatus();
+}
+
 // Analyze `request.sql` against `catalog` and return the
 // `AnalyzerOutput` (which owns the resolved AST).
 absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
@@ -118,6 +208,8 @@ AnalyzeStatementImpl(const QueryRequest& request,
   ::googlesql::AnalyzerOptions options =
       all_statements ? MakeAnalyzerOptionsAllStatements()
                      : MakeAnalyzerOptions();
+  absl::Status param_status = PopulateParameterOptions(request, options);
+  if (!param_status.ok()) return param_status;
   ::googlesql::TypeFactory type_factory;
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(

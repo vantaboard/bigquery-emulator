@@ -37,49 +37,13 @@ std::string MakeUnimplementedMessage(absl::string_view route,
 
 }  // namespace
 
-// --- SemanticExecutor -----------------------------------------------------
-
-SemanticExecutor::~SemanticExecutor() = default;
-
-absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("semantic_executor",
-                               "ExecuteQuery",
-                               stmt.node_kind_string(),
-                               "semantic-executor-core.plan.md"));
-}
-
-absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("semantic_executor",
-                               "ExecuteDml",
-                               stmt.node_kind_string(),
-                               "semantic-executor-core.plan.md"));
-}
-
-absl::Status SemanticExecutor::ExecuteDdl(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("semantic_executor",
-                               "ExecuteDdl",
-                               stmt.node_kind_string(),
-                               "semantic-executor-core.plan.md"));
-}
-
+// `SemanticExecutor` graduated out of this stub file when
+// `semantic-executor-core.plan.md` landed. It now lives at
+// `backend/engine/semantic/executor.{h,cc}` with the real
+// scalar-only SELECT / expression evaluator. The coordinator's
+// `semantic_executor_` member references the new package; this
+// file is intentionally silent on `kSemanticExecutor`.
+//
 // `ControlOpExecutor` graduated out of this stub file when
 // `control-op-executor.plan.md` landed. It now lives at
 // `backend/engine/control/control_op_executor.{h,cc}` with real

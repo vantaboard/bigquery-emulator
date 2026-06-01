@@ -140,7 +140,15 @@ TEST_F(RouteClassifierTest, PlannedSemanticExecutorFunctionDoesNotPromote) {
   // `status=planned` from this row, this test will fail on the
   // disposition expectation; update it to assert
   // `Disposition::kSemanticExecutor` then.
-  const auto* stmt = Analyze("SELECT SAFE_DIVIDE(1, 0)");
+  //
+  // The call is wrapped in `SELECT ... FROM people` rather than a
+  // scalar SELECT so the shape-based promotion in
+  // `VisitResolvedQueryStmt` (scalar-only SELECT ->
+  // `kSemanticExecutor`, shipped by
+  // `.cursor/plans/semantic-executor-core.plan.md`) does not fire
+  // -- this test isolates the function-row contract, not the
+  // node-shape contract.
+  const auto* stmt = Analyze("SELECT SAFE_DIVIDE(id, 0) FROM people");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
@@ -202,6 +210,33 @@ TEST_F(RouteClassifierTest, UnsupportedDominatesPlannedSemanticInSameQuery) {
   RouteDecision d = classifier_.Classify(*stmt);
   EXPECT_EQ(d.disposition, Disposition::kUnsupported);
   EXPECT_EQ(d.offending_node, "function:approx_quantiles");
+}
+
+TEST_F(RouteClassifierTest, ScalarOnlySelectPromotesToSemanticExecutor) {
+  // `SELECT 1` (and any other no-FROM SELECT) resolves to
+  // `ResolvedQueryStmt(query=ResolvedProjectScan(input_scan=
+  // ResolvedSingleRowScan))`. Per
+  // `.cursor/plans/semantic-executor-core.plan.md` the classifier
+  // promotes this shape to `kSemanticExecutor` at planning time
+  // so the semantic executor's strict NULL / overflow / error
+  // contracts handle the evaluation; the DuckDB fast path keeps
+  // every shape that has a real FROM clause.
+  const auto* stmt = Analyze("SELECT 1 + 2");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedQueryStmt(scalar-only SELECT)");
+}
+
+TEST_F(RouteClassifierTest, SelectWithFromStaysOnFastPath) {
+  // The companion to the scalar-only promotion above: a SELECT
+  // with a FROM clause keeps its `duckdb_native` route, so the
+  // existing fast-path TableScan -> ProjectScan -> QueryStmt
+  // surface continues to flow through DuckDB.
+  const auto* stmt = Analyze("SELECT id FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
 }
 
 TEST_F(RouteClassifierTest,

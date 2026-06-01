@@ -74,32 +74,10 @@ class StubExecutorsTest : public ::testing::Test {
   std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
 };
 
-TEST_F(StubExecutorsTest, SemanticExecuteQueryNamesRoute) {
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();
-  ASSERT_NE(stmt, nullptr);
-  SemanticExecutor exec;
-  auto out = exec.ExecuteQuery(MakeRequest(), *stmt, catalog_.get());
-  ASSERT_FALSE(out.ok());
-  EXPECT_EQ(out.status().code(), absl::StatusCode::kUnimplemented);
-  const std::string msg(out.status().message());
-  EXPECT_NE(msg.find("semantic_executor"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("semantic-executor-core.plan.md"), std::string::npos)
-      << msg;
-  EXPECT_NE(msg.find("ExecuteQuery"), std::string::npos) << msg;
-}
-
-TEST_F(StubExecutorsTest, SemanticExecuteDmlNamesRoute) {
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();
-  ASSERT_NE(stmt, nullptr);
-  SemanticExecutor exec;
-  auto out = exec.ExecuteDml(MakeRequest(), *stmt, catalog_.get());
-  ASSERT_FALSE(out.ok());
-  EXPECT_EQ(out.status().code(), absl::StatusCode::kUnimplemented);
-  const std::string msg(out.status().message());
-  EXPECT_NE(msg.find("semantic_executor"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("ExecuteDml"), std::string::npos) << msg;
-}
-
+// `SemanticExecutor` graduated out of `stub_executors.h`; its
+// per-route contract is exercised by the real executor's own
+// tests at `backend/engine/semantic/executor_test.cc`.
+//
 // `ControlOpExecutor` graduated out of `stub_executors.h`; its
 // per-route + per-statement contract is exercised by the real
 // executor's own tests at `backend/engine/control/

@@ -13,6 +13,7 @@
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -96,23 +97,53 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
         node);
   }
 
-  // Property-based promotion for `ResolvedQueryStmt`: the wrapping
-  // `is_value_table()` flag means `SELECT AS VALUE ...`, which has
-  // no DuckDB analog (DuckDB has no value-table row shape). The
-  // node-class disposition is `duckdb_native`, but the property
-  // promotes to `semantic_executor` so the route reflects the
-  // BigQuery-only contract at planning time. Plan ownership lives
-  // with the semantic executor (`semantic-executor-core.plan.md`);
-  // the stub `SemanticExecutor` returns `UNIMPLEMENTED` until the
-  // owning plan ships, which is the same end-user-visible outcome
-  // the transpiler's empty-string gate produced.
+  // Property-based promotion for `ResolvedQueryStmt`:
+  //
+  //   1. `is_value_table()` means `SELECT AS VALUE ...`, which has
+  //      no DuckDB analog (DuckDB has no value-table row shape).
+  //      The node-class disposition is `duckdb_native`, but the
+  //      property promotes to `semantic_executor` so the route
+  //      reflects the BigQuery-only contract at planning time.
+  //   2. A scalar-only SELECT (no FROM, i.e. the inner query is a
+  //      `ResolvedProjectScan` over a `ResolvedSingleRowScan`)
+  //      routes to `semantic_executor` per
+  //      `.cursor/plans/semantic-executor-core.plan.md`. DuckDB
+  //      can render the SQL on its side, but the semantic
+  //      executor's strict NULL / overflow / error contracts are
+  //      what the gateway/e2e suite asserts on. Promoting at the
+  //      planning layer avoids a runtime "fast path returned an
+  //      approximate answer" fallback.
   absl::Status VisitResolvedQueryStmt(
       const ::googlesql::ResolvedQueryStmt* node) override {
-    if (node != nullptr && node->is_value_table()) {
-      MaybePromote(Disposition::kSemanticExecutor,
-                   "ResolvedQueryStmt(is_value_table=true)");
+    if (node != nullptr) {
+      if (node->is_value_table()) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedQueryStmt(is_value_table=true)");
+      } else if (IsScalarOnlySelect(node)) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedQueryStmt(scalar-only SELECT)");
+      }
     }
     return ::googlesql::ResolvedASTVisitor::VisitResolvedQueryStmt(node);
+  }
+
+  // Detect the scalar-only-SELECT shape:
+  // `ResolvedQueryStmt(query=ResolvedProjectScan(input_scan=
+  // ResolvedSingleRowScan))`. This matches every shape the
+  // semantic executor's scalar-only path handles today; FROM-
+  // clause shapes (TableScan / JoinScan / ArrayScan / ...)
+  // bypass this branch and stay on the DuckDB fast path until the
+  // downstream plans pick them up.
+  static bool IsScalarOnlySelect(const ::googlesql::ResolvedQueryStmt* node) {
+    if (node == nullptr || node->query() == nullptr) return false;
+    const ::googlesql::ResolvedScan* query = node->query();
+    if (query->node_kind() != ::googlesql::RESOLVED_PROJECT_SCAN) {
+      return false;
+    }
+    const auto* project = query->GetAs<::googlesql::ResolvedProjectScan>();
+    const ::googlesql::ResolvedScan* input = project->input_scan();
+    return input != nullptr &&
+           input->node_kind() == ::googlesql::RESOLVED_SINGLE_ROW_SCAN;
   }
 
   // Property-based promotion for `ResolvedJoinScan`: `is_lateral()`

@@ -383,6 +383,68 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDdlAlterTableAddColumnPadsRows) {
   EXPECT_EQ(rows_seen, 3);
 }
 
+TEST_F(LocalCoordinatorEngineTest, ExecuteQueryScalarSelectRoutesToSemantic) {
+  // Scalar-only SELECT (no FROM) classifies to
+  // `kSemanticExecutor` after `semantic-executor-core.plan.md`
+  // landed; the coordinator dispatches to the local
+  // `semantic::SemanticExecutor`, which evaluates the expression
+  // tree directly and returns a one-row Arrow batch matching the
+  // DuckDB fast-path output shape. This pins the end-to-end
+  // happy path for the scalar SELECT family.
+  CatalogBundle bundle = MakeCatalog();
+  auto source =
+      engine_->ExecuteQuery(MakeRequest("SELECT 1 + 2"), bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  ASSERT_EQ((*source)->schema().columns.size(), 1u);
+  EXPECT_EQ((*source)->schema().columns[0].type, schema::ColumnType::kInt64);
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  EXPECT_EQ(row.cells[0].int64_value(), 3);
+  has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  EXPECT_FALSE(*has);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryScalarSelectDivisionByZeroSurfacesError) {
+  // `SELECT 1.0 / 0` lowers through the semantic executor's
+  // strict arithmetic; the error envelope carries an
+  // INVALID_ARGUMENT status with the semantic
+  // `kDivisionByZero` reason payload that the gateway maps onto
+  // BigQuery's REST envelope.
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(MakeRequest("SELECT 1.0 / 0"),
+                                      bundle.catalog.get());
+  ASSERT_FALSE(source.ok());
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryScalarSelectWithParameterBindsViaCoordinator) {
+  // End-to-end coordinator wire-up for named parameters: the
+  // request carries `@p = 41`, the coordinator declares the
+  // parameter to the analyzer (so the resolved AST contains a
+  // typed `ResolvedParameter`), and the semantic executor reads
+  // the value off `request.parameters`.
+  CatalogBundle bundle = MakeCatalog();
+  QueryRequest req = MakeRequest("SELECT @p + 1");
+  QueryParameter p;
+  p.name = "p";
+  p.type_kind = "INT64";
+  p.value_json = "41";
+  req.parameters.push_back(p);
+  auto source = engine_->ExecuteQuery(req, bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  EXPECT_EQ(row.cells[0].int64_value(), 42);
+}
+
 TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsLegacySql) {
   CatalogBundle bundle = MakeCatalog();
   QueryRequest req = MakeRequest("SELECT 1");

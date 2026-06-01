@@ -39,6 +39,7 @@
 #include "backend/engine/coordinator/stub_executors.h"
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/executor.h"
 #include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
@@ -81,7 +82,7 @@ class LocalCoordinatorEngine : public Engine {
 
   RouteClassifier classifier_{};
   duckdb::DuckDbExecutor duckdb_executor_;
-  SemanticExecutor semantic_executor_{};
+  semantic::SemanticExecutor semantic_executor_{};
   control::ControlOpExecutor control_op_executor_;
   UnsupportedExecutor unsupported_executor_{};
 };
