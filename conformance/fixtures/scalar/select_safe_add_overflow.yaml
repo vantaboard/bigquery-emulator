@@ -1,0 +1,15 @@
+# select_safe_add_overflow: SAFE_ADD on INT64 boundary.
+#
+# BigQuery's SAFE_<fn> family converts arithmetic overflow into
+# NULL instead of an error. The semantic executor detects the
+# `safe_add` function name and wraps the underlying add with the
+# SAFE-mode trampoline (`backend/engine/semantic/eval_expr.cc`).
+name: scalar_select_safe_add_overflow
+description: |
+  SAFE_ADD on the INT64_MAX + 1 overflow corner returns NULL on
+  the wire (matching BigQuery's documented SAFE-mode contract).
+project_id: proj-scalar-safe-add
+query: SELECT SAFE_ADD(9223372036854775807, 1) AS sum
+expected:
+  rows:
+    - {sum: null}

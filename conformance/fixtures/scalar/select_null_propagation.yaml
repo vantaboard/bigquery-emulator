@@ -1,0 +1,15 @@
+# select_null_propagation: BigQuery NULL semantics on +.
+#
+# `NULL + 1` evaluates to NULL even though the right operand is
+# well-formed -- BigQuery propagates NULL through every arithmetic
+# operator. The semantic executor's `NullIfAnyNull` helper
+# (`backend/engine/semantic/eval_expr.cc`) is the gate.
+name: scalar_select_null_propagation
+description: |
+  CAST(NULL AS INT64) + 1 returns NULL on the wire. Pins the
+  semantic executor's NULL-propagation invariant for arithmetic.
+project_id: proj-scalar-null-propagation
+query: SELECT CAST(NULL AS INT64) + 1 AS n
+expected:
+  rows:
+    - {n: null}

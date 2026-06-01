@@ -1,0 +1,16 @@
+# error_division_by_zero: structured semantic-executor error.
+#
+# `SELECT 1.0 / 0` returns BigQuery's `invalidQuery` envelope
+# with HTTP 400. The semantic executor tags the failure with the
+# `kDivisionByZero` reason payload; the gateway maps the
+# INVALID_ARGUMENT status onto the BigQuery REST 400.
+name: scalar_error_division_by_zero
+description: |
+  Negative-path: `1.0 / 0` surfaces a structured 400 invalidQuery
+  envelope mentioning "division by zero".
+project_id: proj-scalar-divzero
+query: SELECT 1.0 / 0 AS n
+expected:
+  error:
+    code: 400
+    message_contains: "division by zero"

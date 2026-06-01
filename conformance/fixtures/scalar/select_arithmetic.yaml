@@ -1,0 +1,16 @@
+# select_arithmetic: scalar arithmetic via the semantic executor.
+#
+# `SELECT 1 + 2 AS n` analyzes to a ResolvedProjectScan over a
+# ResolvedSingleRowScan, which the route classifier promotes to
+# the semantic executor. Verifies the INT64 + INT64 add path in
+# `backend/engine/semantic/eval_expr.cc` matches BigQuery's wire
+# encoding.
+name: scalar_select_arithmetic
+description: |
+  Scalar arithmetic on integer literals. Pins the semantic
+  executor's INT64 + INT64 path returning "3" on the wire.
+project_id: proj-scalar-select-arith
+query: SELECT 1 + 2 AS n
+expected:
+  rows:
+    - {n: "3"}

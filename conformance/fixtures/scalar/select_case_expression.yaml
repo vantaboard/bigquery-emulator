@@ -1,0 +1,20 @@
+# select_case_expression: CASE WHEN ... THEN ... END (no FROM).
+#
+# Pins the semantic executor's `$case_no_value` handler. The
+# analyzer lowers `CASE WHEN p THEN a WHEN q THEN b ELSE c END`
+# onto a flat function call whose arguments alternate
+# (predicate, result, predicate, result, ..., else); the executor
+# walks that flat list picking the first truthy predicate.
+name: scalar_select_case_expression
+description: |
+  Searched CASE expression evaluates the first matching branch.
+  Pins the semantic executor's `$case_no_value` dispatch and the
+  branch ordering ELSE-falls-through.
+project_id: proj-scalar-case
+query: |
+  SELECT CASE WHEN 1 = 2 THEN 'a'
+              WHEN 1 = 1 THEN 'b'
+              ELSE 'c' END AS label
+expected:
+  rows:
+    - {label: "b"}
