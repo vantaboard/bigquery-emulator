@@ -96,6 +96,43 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
         node);
   }
 
+  // Property-based promotion for `ResolvedQueryStmt`: the wrapping
+  // `is_value_table()` flag means `SELECT AS VALUE ...`, which has
+  // no DuckDB analog (DuckDB has no value-table row shape). The
+  // node-class disposition is `duckdb_native`, but the property
+  // promotes to `semantic_executor` so the route reflects the
+  // BigQuery-only contract at planning time. Plan ownership lives
+  // with the semantic executor (`semantic-executor-core.plan.md`);
+  // the stub `SemanticExecutor` returns `UNIMPLEMENTED` until the
+  // owning plan ships, which is the same end-user-visible outcome
+  // the transpiler's empty-string gate produced.
+  absl::Status VisitResolvedQueryStmt(
+      const ::googlesql::ResolvedQueryStmt* node) override {
+    if (node != nullptr && node->is_value_table()) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedQueryStmt(is_value_table=true)");
+    }
+    return ::googlesql::ResolvedASTVisitor::VisitResolvedQueryStmt(node);
+  }
+
+  // Property-based promotion for `ResolvedJoinScan`: `is_lateral()`
+  // marks the lateral / correlated join shape. BigQuery's lateral
+  // evaluation order does not map cleanly onto DuckDB's
+  // `LATERAL` / `unnest(...)` model, so the semantic executor owns
+  // the shape (`array-struct-semantic-path.plan.md`).
+  // `has_using()` / lateral `parameter_list_size > 0` stay in the
+  // transpiler's empty-string defense-in-depth gate today; they
+  // are picked up by `array-struct-semantic-path.plan.md` /
+  // `cte-subquery-routing.plan.md` when those plans ship.
+  absl::Status VisitResolvedJoinScan(
+      const ::googlesql::ResolvedJoinScan* node) override {
+    if (node != nullptr && node->is_lateral()) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedJoinScan(is_lateral=true)");
+    }
+    return ::googlesql::ResolvedASTVisitor::VisitResolvedJoinScan(node);
+  }
+
  private:
   // Look up `node`'s class disposition in
   // `node_dispositions.yaml`. The YAML keys are the full class

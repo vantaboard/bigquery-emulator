@@ -211,6 +211,43 @@ TEST_F(RouteClassifierTest, UnsupportedDominatesPlannedSemanticInSameQuery) {
   EXPECT_EQ(d.offending_node, "function:approx_quantiles");
 }
 
+TEST_F(RouteClassifierTest,
+       ValueTableQueryStatementPromotesToSemanticExecutor) {
+  // `SELECT AS VALUE STRUCT(1, 'a')` is BigQuery's value-table
+  // surface: the row collapses to a single anonymous value. DuckDB
+  // has no value-table row shape, so the classifier promotes the
+  // route to `kSemanticExecutor` via the
+  // `VisitResolvedQueryStmt(is_value_table=true)` override in
+  // `route_classifier.cc`. Plan-2 owner is the semantic executor
+  // (`semantic-executor-core.plan.md`); the stub returns
+  // UNIMPLEMENTED today, which is the same end-user-visible
+  // outcome as the prior empty-string gate inside `EmitQueryStmt`.
+  const auto* stmt = Analyze("SELECT AS VALUE STRUCT(1 AS a, 'b' AS b)");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedQueryStmt(is_value_table=true)");
+  EXPECT_NE(d.reason.find("semantic"), std::string::npos)
+      << "reason should mention semantic-executor route; got: " << d.reason;
+}
+
+// NOTE on `ResolvedJoinScan(is_lateral=true)` coverage: the
+// classifier carries a `VisitResolvedJoinScan` override that
+// promotes the lateral join shape to `kSemanticExecutor` (see
+// `route_classifier.cc`'s plan-2 additions). Triggering
+// `is_lateral=true` from a SimpleCatalog-backed SQL query
+// requires the `LATERAL` keyword plus a correlated subquery shape
+// that a minimal in-process catalog cannot easily express:
+// surface SQL forms like `JOIN UNNEST(<col>)` analyze to a
+// `ResolvedArrayScan` (NOT a `ResolvedJoinScan`), so they exercise
+// a different route-promotion path. The lateral-promotion route
+// will be pinned by the integration suite owned by
+// `array-struct-semantic-path.plan.md` once that plan ships its
+// catalog. Until then, the override stays in place as
+// defense-in-depth -- the only cost of the dead branch is the
+// per-Visit dispatch and a `MaybePromote` bookkeeping call.
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records

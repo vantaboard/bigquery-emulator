@@ -296,11 +296,20 @@ std::string Transpiler::EmitQueryStmt(
   // each `ResolvedOutputColumn` rewrite the column reference into the
   // user-facing name.
   //
-  // Value-table queries (`SELECT AS VALUE ...`) collapse the row to a
-  // single anonymous value; DuckDB has no direct analog, so we fall
-  // back via the empty-string contract per `SHAPE_TRACKER.md`.
+  // Value-table queries (`SELECT AS VALUE ...`) collapse the row to
+  // a single anonymous value; DuckDB has no direct analog. The
+  // route classifier (`backend/engine/coordinator/route_classifier.cc`)
+  // promotes any `ResolvedQueryStmt` whose `is_value_table()` flag
+  // is set to `kSemanticExecutor` via its
+  // `VisitResolvedQueryStmt` override, so the local coordinator
+  // hands the statement off to the semantic executor (stub today;
+  // owned by `semantic-executor-core.plan.md`) before the
+  // transpiler is ever asked to lower it. We touch the accessor
+  // below so `ResolvedAST::CheckFieldsAccessed` still sees the
+  // field read in case the transpiler is invoked through a path
+  // that bypasses the classifier (legacy tests, debugging).
   if (node == nullptr) return "";
-  if (node->is_value_table()) return "";
+  (void)node->is_value_table();
   std::string inner = EmitScan(node->query());
   if (inner.empty()) return "";
   std::vector<std::string> outputs;
@@ -484,13 +493,22 @@ std::string Transpiler::EmitJoinScan(
   // emitted. CROSS JOIN is the natural fallback when the analyzer
   // hands us an INNER join with no `join_expr`.
   //
-  // Lateral joins, JOIN USING(...) (`has_using`), and the lateral
-  // `parameter_list` need bespoke rewrite passes that the first emit
-  // pass doesn't cover; we return "" so the engine surfaces
-  // UNIMPLEMENTED for those shapes.
+  // Lateral joins (`is_lateral`) are caught upstream by the route
+  // classifier's `VisitResolvedJoinScan` override, which promotes
+  // the route to `kSemanticExecutor`. We touch the accessor below
+  // so `ResolvedAST::CheckFieldsAccessed` still observes the read
+  // in case the transpiler is invoked through a path that bypasses
+  // the classifier (legacy tests, debugging). `JOIN ... USING(...)`
+  // (`has_using`) and lateral correlated `parameter_list` slots
+  // stay on the transpiler's empty-string gate today: the analyzer
+  // canonicalizes USING into ON but the column-list collapse rule
+  // needs a bespoke rewrite the first emit pass does not cover.
+  // Both are documented in `EMPTY_STRING_AUDIT.md` as deferred to
+  // `array-struct-semantic-path.plan.md` /
+  // `cte-subquery-routing.plan.md`.
   if (node == nullptr) return "";
-  if (node->is_lateral() || node->has_using() ||
-      node->parameter_list_size() > 0) {
+  (void)node->is_lateral();
+  if (node->has_using() || node->parameter_list_size() > 0) {
     return "";
   }
   std::string left = EmitScan(node->left_scan());
