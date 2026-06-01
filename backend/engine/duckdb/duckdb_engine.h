@@ -1,20 +1,22 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_DUCKDB_ENGINE_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_DUCKDB_ENGINE_H_
 
-// DuckDBEngine is the scaffold for the DuckDB-backed engine.
-// Every `Engine` method returns `absl::UnimplementedError` so the CLI
-// factory in `binaries/emulator_main/main.cc` can already construct
-// the engine while the ZetaSQL → DuckDB SQL transpiler lands in a
-// later change.
+// `DuckDBEngine` is a thin `Engine`-surface shim that owns the
+// analyzer plumbing and forwards execution to a `DuckDbExecutor`
+// (see `duckdb_executor.h`). The transpiler / DuckDB connection /
+// Arrow result-row path lives on the executor now; this class only
+// exists until the `LocalCoordinatorEngine` introduced by
+// `.cursor/plans/engine-router-foundation.plan.md` lands and the
+// `emulator_main` factory is rewired to construct the coordinator
+// directly (plan step 6).
 //
-// The constructor takes a non-owning `Storage*` because the DuckDB
-// engine will attach the active storage backend's Parquet/Arrow files
-// as DuckDB tables at query time. We thread the pointer through now so
-// the scaffold compiles against the real interface and not a stub.
+// The constructor takes a non-owning `Storage*` and threads it
+// through to the executor. The pointer must outlive this instance.
 
 #include <memory>
 
 #include "absl/status/statusor.h"
+#include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/engine.h"
 #include "backend/storage/storage.h"
 
@@ -25,9 +27,10 @@ namespace duckdb {
 
 class DuckDBEngine : public Engine {
  public:
-  // `storage` must outlive this engine instance. The scaffold does not
-  // dereference the pointer; the query-execution path wires it into a
-  // per-query DuckDB connection that attaches the storage's backing files.
+  // `storage` must outlive this engine instance. The pointer is
+  // forwarded to the underlying `DuckDbExecutor`, which dereferences
+  // it from the DML / DDL paths (the SELECT path only reads through
+  // the analyzer catalog).
   explicit DuckDBEngine(storage::Storage* storage);
   ~DuckDBEngine() override;
 
@@ -43,7 +46,7 @@ class DuckDBEngine : public Engine {
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, googlesql::Catalog* catalog) override;
 
-  // DML. The DuckDB engine implements MERGE end-to-end; INSERT,
+  // DML. The DuckDB executor implements MERGE end-to-end; INSERT,
   // UPDATE, and DELETE currently return UNIMPLEMENTED so callers see
   // a stable status code when they land on DuckDB.
   absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
@@ -51,15 +54,13 @@ class DuckDBEngine : public Engine {
 
   // DDL. Implements CREATE TABLE, CREATE TABLE AS SELECT, DROP
   // TABLE, and ALTER TABLE ADD COLUMN by analyzing the GoogleSQL
-  // statement, mapping the resolved name path to a
-  // `storage::TableId`, and driving the underlying `Storage` (scan
-  // + rewrite where necessary for ALTER, plus a per-query DuckDB
-  // connection for CTAS).
+  // statement and dispatching to the underlying `DuckDbExecutor`.
   absl::Status ExecuteDdl(const QueryRequest& request,
                           googlesql::Catalog* catalog) override;
 
  private:
   storage::Storage* storage_;  // not owned
+  DuckDbExecutor executor_;
 };
 
 }  // namespace duckdb

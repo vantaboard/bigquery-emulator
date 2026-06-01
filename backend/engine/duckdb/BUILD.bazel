@@ -26,14 +26,19 @@ cc_library(
     ],
 )
 
+# DuckDbExecutor is the `coordinator::Executor` adapter that owns
+# the transpiler / per-query DuckDB connection / Arrow result-row
+# path. The coordinator hands it an already-analyzed
+# `ResolvedStatement`; the executor never re-parses the SQL itself.
 cc_library(
-    name = "duckdb_engine",
-    srcs = ["duckdb_engine.cc"],
-    hdrs = ["duckdb_engine.h"],
+    name = "duckdb_executor",
+    srcs = ["duckdb_executor.cc"],
+    hdrs = ["duckdb_executor.h"],
     deps = [
         ":arrow_to_bq",
         "//backend/catalog:storage_table",
         "//backend/engine",
+        "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb/transpiler",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
@@ -46,6 +51,31 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+# DuckDBEngine is the thin `Engine`-surface shim that analyses the
+# SQL and forwards execution into `DuckDbExecutor`. Lives behind the
+# `Engine` interface until the `LocalCoordinatorEngine` lands and
+# `emulator_main` is rewired to construct the coordinator directly.
+cc_library(
+    name = "duckdb_engine",
+    srcs = ["duckdb_engine.cc"],
+    hdrs = ["duckdb_engine.h"],
+    deps = [
+        ":duckdb_executor",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@googlesql//googlesql/public:analyzer",
         "@googlesql//googlesql/public:analyzer_options",
         "@googlesql//googlesql/public:analyzer_output",
@@ -75,6 +105,35 @@ cc_test(
         "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:type",
+    ],
+)
+
+# Drives `DuckDbExecutor` directly with a pre-resolved statement (the
+# coordinator interface), without re-using the `DuckDBEngine` shim.
+# Covers the contract that the future `LocalCoordinatorEngine` will
+# rely on: each method takes an already-analyzed `ResolvedStatement`
+# and produces the same wire-facing reply the engine path used to.
+cc_test(
+    name = "duckdb_executor_test",
+    srcs = ["duckdb_executor_test.cc"],
+    deps = [
+        ":duckdb_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
     ],
 )
 
