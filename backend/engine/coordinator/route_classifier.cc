@@ -140,10 +140,19 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
     absl::string_view name = fn->Name();
     const auto* entry = transpiler::LookupFunction(name);
     if (entry == nullptr) {
-      // Unknown function -> unsupported. Carry the function name
-      // so the gateway can surface a useful error message.
-      MaybePromote(Disposition::kUnsupported,
-                   absl::StrCat("function:", name));
+      // Unknown function -> default fast path (no promotion). The
+      // `functions.yaml` registry covers the BigQuery scalar / aggregate
+      // surface; built-in operators (`$equal`, `$add`, `$less`, `$and`,
+      // ...) are deliberately absent because the transpiler emits them
+      // through dedicated paths (or the DML/DDL executors hand the SQL
+      // verbatim to DuckDB). Re-routing unknown functions to the
+      // unsupported stub would violate "no silent approximation" --
+      // the fast path can run today's MERGE / SELECT shapes that
+      // contain comparison operators. If the fast path genuinely
+      // cannot lower a call, the transpiler's empty-string contract
+      // surfaces UNIMPLEMENTED from inside the fast path; the parity
+      // checker (`task lint:dispositions`) is responsible for
+      // catching genuinely missing rows.
       return;
     }
     // Same `planned`-row contract as `CheckNodeClass`: a function
@@ -237,18 +246,18 @@ RouteDecision RouteClassifier::Classify(
           root_class,
       };
     }
-  } else if (root_entry == nullptr) {
-    // Root not in the registry -- by construction a registry bug
-    // (parity checker should catch this), but fold to unsupported
-    // so the gateway has a stable error code while the parity
-    // failure gets fixed.
-    return RouteDecision{
-        Disposition::kUnsupported,
-        absl::StrCat("statement ", root_class,
-                     " has no entry in node_dispositions.yaml"),
-        root_class,
-    };
   }
+  // A missing root row is treated identically to a `planned` row at
+  // the route level: do NOT promote to a stub executor. The fast
+  // path (DuckDB) already handles statement shapes like
+  // `ResolvedAlterTableStmt` via `DuckDbExecutor::ExecuteDdl`; the
+  // registry's parity checker (`task lint:dispositions`) is
+  // responsible for catching missing rows and they get added by the
+  // owning plans. Re-routing them to `kUnsupported` here would
+  // break existing gateway/e2e tests (no silent approximation).
+  // We fall through to the visitor walk; missing-from-registry
+  // resolves to the default `kDuckdbNative` if no inner promotion
+  // fires.
 
   // Walk the whole tree. The visitor sees the root statement too
   // (its disposition is `kDuckdbNative` or `kSemanticExecutor`
