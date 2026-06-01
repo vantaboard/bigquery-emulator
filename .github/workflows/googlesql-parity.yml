@@ -241,7 +241,7 @@ jobs:
 
       - name: Upload prebuilt-mode results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: parity-prebuilt-results
           path: |
@@ -359,7 +359,7 @@ jobs:
 
       - name: Upload source-mode results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: parity-source-results
           path: |

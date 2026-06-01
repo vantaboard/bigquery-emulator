@@ -267,7 +267,7 @@ jobs:
 
       - name: Upload gateway log on failure
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: thirdparty-gateway-log
           path: gateway.log

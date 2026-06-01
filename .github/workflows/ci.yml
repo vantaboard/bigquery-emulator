@@ -98,7 +98,7 @@ jobs:
       # for the consumer side of the pipeline.
       - name: Upload Go coverage artifact
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: go-coverage
           path: coverage.out
