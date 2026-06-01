@@ -1,0 +1,174 @@
+# Per-`ResolvedAST` node-kind disposition registry.
+#
+# Authoritative source for the routing disposition the local
+# execution coordinator assigns to each `ResolvedAST` node kind. The
+# parallel human-readable view lives in `SHAPE_TRACKER.md` next to
+# this file; the markdown is a mirror of this YAML, enforced by
+# `tools/check_disposition_parity` (run via `task lint:dispositions`).
+#
+# Line format:
+#
+#   <NodeKind>: <disposition> [plan=<plan-file>] [status=<status>]
+#
+# Where:
+#   - `<NodeKind>` is the (exact, case-sensitive) GoogleSQL resolved
+#     AST class name from `googlesql/resolved_ast/resolved_ast.h`
+#     (e.g. `ResolvedQueryStmt`). One node class per line. Composite
+#     SHAPE_TRACKER rows (`Foo / Bar`) expand to one line per class
+#     here.
+#   - `<disposition>` is one of the six route names from
+#     `backend/engine/disposition.h`:
+#       * `duckdb_native`     - lowers to DuckDB SQL directly.
+#       * `duckdb_rewrite`    - lowers via a structural rewrite.
+#       * `duckdb_udf`        - lowers via a DuckDB UDF/macro.
+#       * `semantic_executor` - runs on the local row/value executor.
+#       * `control_op`        - routed through storage/catalog.
+#       * `unsupported`       - deliberately out of scope locally.
+#   - `plan=<plan-file>` (optional) names the
+#     `.cursor/plans/*.plan.md` file that owns the row. Mandatory for
+#     `unsupported` rows so a reader can trace why a route is closed
+#     (those rows all point at `specialized-feature-policy.plan.md`).
+#   - `status=planned` (optional) marks rows whose owning plan has
+#     not yet landed an implementation. The engine surfaces
+#     `UNIMPLEMENTED` for these until their owning plan ships.
+#
+# Blank lines and `#`-only lines are ignored; trailing `# ...`
+# inline comments are stripped.
+#
+# Editing rules:
+#
+#  * Keep this file the source of truth. Edits land alongside the
+#    matching `SHAPE_TRACKER.md` row in the same commit so the
+#    parity checker stays green.
+#  * Do NOT promote a row off `unsupported` (or off `status=planned`)
+#    without landing the implementation + conformance fixture(s) in
+#    the same commit. See
+#    `.cursor/plans/local-execution-roadmap-index.plan.md`'s
+#    "Disposition + emit + conformance land together" rule.
+
+# --- Statements --------------------------------------------------------
+ResolvedQueryStmt: duckdb_native
+ResolvedExplainStmt: unsupported plan=specialized-feature-policy.plan.md
+ResolvedCreateTableStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateTableAsSelectStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateViewStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateMaterializedViewStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateProcedureStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedCreateFunctionStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateTableFunctionStmt: control_op plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedDropStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedDropFunctionStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedInsertStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
+ResolvedUpdateStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
+ResolvedDeleteStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
+ResolvedMergeStmt: duckdb_rewrite plan=dml-local-executor.plan.md
+ResolvedCallStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedAssignmentStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedExecuteImmediateStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedAnalyzeStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedAuxLoadDataStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedAssertStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedExportDataStmt: control_op plan=control-op-executor.plan.md status=planned
+
+# --- Relational scans --------------------------------------------------
+ResolvedTableScan: duckdb_native
+ResolvedSingleRowScan: duckdb_native
+ResolvedProjectScan: duckdb_native
+ResolvedFilterScan: duckdb_native
+ResolvedJoinScan: duckdb_native
+ResolvedArrayScan: duckdb_native
+ResolvedAggregateScan: duckdb_native
+ResolvedAnonymizedAggregateScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedDifferentialPrivacyAggregateScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedAggregationThresholdAggregateScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedSetOperationScan: duckdb_native
+ResolvedOrderByScan: duckdb_native
+ResolvedLimitOffsetScan: duckdb_native
+ResolvedAnalyticScan: duckdb_native
+ResolvedSampleScan: duckdb_native
+ResolvedWithScan: duckdb_native plan=cte-subquery-routing.plan.md status=planned
+ResolvedWithRefScan: duckdb_native plan=cte-subquery-routing.plan.md status=planned
+ResolvedRecursiveScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedRecursiveRefScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedPivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedUnpivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedMatchRecognizeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedGroupRowsScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedTVFScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedRelationArgumentScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedBarrierScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedPipeIfScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedPipeForkScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedPipeTeeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedPipeExportDataScan: control_op plan=control-op-executor.plan.md status=planned
+ResolvedPipeCreateTableScan: control_op plan=control-op-executor.plan.md status=planned
+ResolvedPipeInsertScan: semantic_executor plan=dml-local-executor.plan.md status=planned
+# `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
+# query (GQL) surface is deliberately out of scope locally; every
+# graph scan class enumerated in
+# `googlesql/resolved_ast/resolved_ast.h` is recorded here so the
+# parity checker can read them off this YAML directly instead of
+# inferring from a wildcard.
+ResolvedGraphTableScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphLinearScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphRefScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphCallScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphElementScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphNodeScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphEdgeScan: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGraphPathScan: unsupported plan=specialized-feature-policy.plan.md
+
+# --- Expressions -------------------------------------------------------
+ResolvedLiteral: duckdb_native
+ResolvedParameter: duckdb_native
+ResolvedColumnRef: duckdb_native
+ResolvedFunctionCall: duckdb_native
+ResolvedAggregateFunctionCall: duckdb_native
+ResolvedAnalyticFunctionCall: duckdb_native
+ResolvedCast: duckdb_native
+ResolvedMakeStruct: duckdb_rewrite
+ResolvedGetStructField: duckdb_rewrite
+ResolvedMakeProto: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGetProtoField: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGetProtoOneof: unsupported plan=specialized-feature-policy.plan.md
+ResolvedReplaceField: unsupported plan=specialized-feature-policy.plan.md
+ResolvedGetJsonField: duckdb_rewrite
+ResolvedGetRowField: unsupported plan=specialized-feature-policy.plan.md
+ResolvedFlatten: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
+ResolvedFlattenedArg: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
+ResolvedSubqueryExpr: duckdb_native plan=cte-subquery-routing.plan.md status=planned
+ResolvedWithExpr: duckdb_native
+ResolvedInlineLambda: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+ResolvedFilterField: unsupported plan=specialized-feature-policy.plan.md
+ResolvedFilterFieldArg: unsupported plan=specialized-feature-policy.plan.md
+ResolvedConstant: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedSystemVariable: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedSequence: unsupported plan=specialized-feature-policy.plan.md
+ResolvedArgumentRef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedArgumentDef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedCatalogColumnRef: control_op plan=control-op-executor.plan.md status=planned
+ResolvedExpressionColumn: unsupported plan=specialized-feature-policy.plan.md
+ResolvedUpdateConstructor: semantic_executor plan=dml-local-executor.plan.md status=planned
+
+# --- Per-row metadata / shape helpers ----------------------------------
+ResolvedOutputColumn: duckdb_native
+ResolvedComputedColumn: duckdb_native
+ResolvedDeferredComputedColumn: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedOrderByItem: duckdb_native
+ResolvedColumnHolder: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
+# `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row
+# from SHAPE_TRACKER.md, expanded to per-class rows for the parity
+# checker.
+ResolvedGroupingSet: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedRollup: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedCube: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedAggregateHavingModifier: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` row from
+# SHAPE_TRACKER.md, expanded to per-class rows.
+ResolvedWindowFrame: duckdb_native
+ResolvedWindowFrameExpr: duckdb_native
+ResolvedAnalyticFunctionGroup: duckdb_native
+ResolvedSetOperationItem: duckdb_native
+ResolvedFunctionArgument: duckdb_native
+ResolvedReturningClause: semantic_executor plan=dml-local-executor.plan.md status=planned

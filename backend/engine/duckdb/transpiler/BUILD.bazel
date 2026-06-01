@@ -65,6 +65,49 @@ cc_library(
     ],
 )
 
+# Convert the per-`ResolvedAST` node-kind YAML registry
+# (`node_dispositions.yaml`) into a C++ initializer fragment that
+# `node_dispositions.cc` `#include`s inside its static
+# `absl::flat_hash_map<std::string, NodeDispositionEntry>`. Same
+# awk-only rationale as `:functions_table_inc` above: keep the
+# generator dependency-free so a malformed YAML edit lands as a
+# Bazel error, not a runtime skip.
+genrule(
+    name = "node_dispositions_table_inc",
+    srcs = [
+        "node_dispositions.yaml",
+        "node_dispositions_table_gen.awk",
+    ],
+    outs = ["node_dispositions_table.inc"],
+    cmd = ("awk -f $(location node_dispositions_table_gen.awk) " +
+           "$(location node_dispositions.yaml) > $@"),
+)
+
+cc_library(
+    name = "node_dispositions",
+    srcs = [
+        "node_dispositions.cc",
+        ":node_dispositions_table_inc",
+    ],
+    hdrs = ["node_dispositions.h"],
+    deps = [
+        "//backend/engine:disposition",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "node_dispositions_test",
+    srcs = ["node_dispositions_test.cc"],
+    deps = [
+        ":node_dispositions",
+        "//backend/engine:disposition",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "transpiler",
     srcs = ["transpiler.cc"],
