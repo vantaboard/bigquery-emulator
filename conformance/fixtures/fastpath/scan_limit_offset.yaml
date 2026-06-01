@@ -1,0 +1,41 @@
+# scan_limit_offset: ResolvedLimitOffsetScan with LIMIT + OFFSET.
+#
+# The transpiler emits `LIMIT <n> [OFFSET <m>]` directly. The
+# analyzer guarantees both expressions are constant INT64-coercible,
+# so EmitExpr lowers them as literals. We pin both the number of
+# rows returned and the row order at the offset boundary so a
+# regression in either part of the emit (e.g. dropping OFFSET) is
+# caught.
+name: scan_limit_offset
+description: |
+  LIMIT 2 OFFSET 1 against a 5-row table. Verifies the engine
+  honors both the row count and the offset boundary, and that
+  the wrapping ORDER BY is applied before the limit/offset.
+project_id: proj-fastpath-limit-offset
+dataset_id: ds_fastpath_limit_offset
+setup:
+  - dataset: ds_fastpath_limit_offset
+  - table:
+      dataset: ds_fastpath_limit_offset
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: label, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_limit_offset
+      table: items
+      rows:
+        - {id: 1, label: alpha}
+        - {id: 2, label: bravo}
+        - {id: 3, label: charlie}
+        - {id: 4, label: delta}
+        - {id: 5, label: echo}
+query: |
+  SELECT id, label
+    FROM ds_fastpath_limit_offset.items
+   ORDER BY id
+   LIMIT 2 OFFSET 1
+expected:
+  rows:
+    - {id: "2", label: "bravo"}
+    - {id: "3", label: "charlie"}

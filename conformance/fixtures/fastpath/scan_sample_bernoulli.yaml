@@ -1,0 +1,42 @@
+# scan_sample_bernoulli: ResolvedSampleScan with BERNOULLI sampling.
+#
+# Sampling produces a non-deterministic row set, so we use
+# match=schema_only to assert only that the engine accepts the
+# TABLESAMPLE shape and routes it through the fast path with the
+# expected schema. The transpiler emits
+# `SELECT * FROM (<input>) USING SAMPLE <pct> PERCENT (bernoulli)`.
+# Pin the column shape here so a regression in EmitSampleScan that
+# silently drops to UNIMPLEMENTED would surface as a fixture error
+# rather than a row-diff failure.
+name: scan_sample_bernoulli
+description: |
+  TABLESAMPLE BERNOULLI(50 PERCENT). Asserts the engine accepts
+  the shape and returns rows with the seeded schema. Row count
+  and identity are non-deterministic so we use match=schema_only.
+project_id: proj-fastpath-sample-bernoulli
+dataset_id: ds_fastpath_sample_bernoulli
+setup:
+  - dataset: ds_fastpath_sample_bernoulli
+  - table:
+      dataset: ds_fastpath_sample_bernoulli
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_sample_bernoulli
+      table: items
+      rows:
+        - {id: 1, kind: alpha}
+        - {id: 2, kind: bravo}
+        - {id: 3, kind: charlie}
+        - {id: 4, kind: delta}
+        - {id: 5, kind: echo}
+query: |
+  SELECT id, kind
+    FROM ds_fastpath_sample_bernoulli.items TABLESAMPLE BERNOULLI(50 PERCENT)
+expected:
+  match: schema_only
+  schema:
+    - {name: id, type: INT64}
+    - {name: kind, type: STRING}

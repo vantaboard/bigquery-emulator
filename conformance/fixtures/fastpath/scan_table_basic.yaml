@@ -1,0 +1,42 @@
+# scan_table_basic: ResolvedTableScan + ResolvedProjectScan baseline.
+#
+# Pins the simplest fast-path shape: SELECT every column from a
+# user-created table, ordered by the primary key. Today's fast path
+# emits a self-contained SELECT that lists each column under its
+# storage name and wraps it in the analyzer's outermost
+# output_column_list() projection. This fixture catches a regression
+# in either half (the inner TableScan emit narrowing, or the
+# outermost OutputColumn alias mapping) by pinning both the column
+# names and the row order.
+name: scan_table_basic
+description: |
+  ResolvedTableScan: full-column SELECT against a 3-column table.
+  Verifies the engine emits all storage columns under their original
+  names and preserves row order against an explicit ORDER BY.
+project_id: proj-fastpath-table-basic
+dataset_id: ds_fastpath_table_basic
+setup:
+  - dataset: ds_fastpath_table_basic
+  - table:
+      dataset: ds_fastpath_table_basic
+      id: people
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: REQUIRED}
+        - {name: age, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_fastpath_table_basic
+      table: people
+      rows:
+        - {id: 1, name: ada, age: 36}
+        - {id: 2, name: linus, age: 56}
+        - {id: 3, name: grace, age: null}
+query: |
+  SELECT id, name, age
+    FROM ds_fastpath_table_basic.people
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada",   age: "36"}
+    - {id: "2", name: "linus", age: "56"}
+    - {id: "3", name: "grace", age: null}

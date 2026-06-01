@@ -1,0 +1,25 @@
+# scan_array_unnest: ResolvedArrayScan standalone UNNEST.
+#
+# The transpiler covers the standalone `UNNEST(<arr>)` shape
+# (`array_expr_list_size==1` AND no `array_offset_column` AND no
+# `join_expr` AND no `array_zip_mode` AND `is_outer==false` AND
+# `input_scan` is null/SingleRow). This emits
+# `SELECT unnest(<arr>) AS "<col>"`. The cross-joined
+# `FROM t, UNNEST(t.arr)` and `WITH OFFSET` shapes belong to the
+# semantic executor (see `array-struct-semantic-path.plan.md`)
+# and are intentionally NOT exercised here.
+name: scan_array_unnest
+description: |
+  Standalone UNNEST of a literal STRING ARRAY. Verifies the
+  transpiler emits one row per array element, with the element
+  exposed under the analyzer-supplied column name.
+project_id: proj-fastpath-array-unnest
+query: |
+  SELECT n
+    FROM UNNEST(['ada', 'linus', 'grace']) AS n
+   ORDER BY n
+expected:
+  rows:
+    - {n: "ada"}
+    - {n: "grace"}
+    - {n: "linus"}

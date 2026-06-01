@@ -1,0 +1,45 @@
+# scan_project_subset: ResolvedProjectScan narrows table columns.
+#
+# Direct regression for the fix in `duckdb_executor.cc` that hands
+# the entire ResolvedQueryStmt to the transpiler so EmitQueryStmt's
+# outermost projection narrows the result columns to the
+# analyzer-output schema. The underlying TableScan has 3 columns
+# (id, name, tags) but the SELECT projects only 2 (id, name). The
+# legacy strip-and-bypass shortcut fed the bare TableScan to the
+# transpiler and produced a 3-column Arrow batch, which
+# `arrow_to_bq` then rejected with "chunk has 3 columns but
+# analyzer output schema has 2".
+name: scan_project_subset
+description: |
+  Pin the arrow_to_bq column-narrowing fix: a 3-column source with
+  a 2-column SELECT must yield a 2-column result. Mirrors the
+  duckdb_executor regression test
+  ExecuteQueryNarrowsColumnsWhenAnalyzerSchemaIsSubsetOfTable but
+  drives it end-to-end through the gateway.
+project_id: proj-fastpath-project-subset
+dataset_id: ds_fastpath_project_subset
+setup:
+  - dataset: ds_fastpath_project_subset
+  - table:
+      dataset: ds_fastpath_project_subset
+      id: wide
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+        - {name: tags, type: STRING, mode: REPEATED}
+  - rows:
+      dataset: ds_fastpath_project_subset
+      table: wide
+      rows:
+        - {id: 1, name: ada,   tags: ["math", "cs"]}
+        - {id: 2, name: linus, tags: ["os"]}
+        - {id: 3, name: grace, tags: []}
+query: |
+  SELECT id, name
+    FROM ds_fastpath_project_subset.wide
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "2", name: "linus"}
+    - {id: "3", name: "grace"}

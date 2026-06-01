@@ -1,0 +1,51 @@
+# scan_set_op_except_distinct: ResolvedSetOperationScan
+# EXCEPT DISTINCT.
+#
+# `EXCEPT DISTINCT` is the BigQuery surface form: rows in the
+# first arm that have no match in the second arm, deduplicated.
+# The transpiler emits DuckDB's bare `EXCEPT` keyword which has
+# the same DISTINCT semantics.
+name: scan_set_op_except_distinct
+description: |
+  EXCEPT DISTINCT of two tables. Verifies the engine returns one
+  row per value that is in the first arm but absent from the
+  second arm, deduplicating multiple occurrences.
+project_id: proj-fastpath-set-op-except-distinct
+dataset_id: ds_fastpath_set_op_except_distinct
+setup:
+  - dataset: ds_fastpath_set_op_except_distinct
+  - table:
+      dataset: ds_fastpath_set_op_except_distinct
+      id: a
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_set_op_except_distinct
+      id: b
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_set_op_except_distinct
+      table: a
+      rows:
+        - {id: 1}
+        - {id: 1}
+        - {id: 2}
+        - {id: 3}
+  - rows:
+      dataset: ds_fastpath_set_op_except_distinct
+      table: b
+      rows:
+        - {id: 2}
+        - {id: 4}
+query: |
+  SELECT * FROM (
+    SELECT id FROM ds_fastpath_set_op_except_distinct.a
+    EXCEPT DISTINCT
+    SELECT id FROM ds_fastpath_set_op_except_distinct.b
+  )
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1"}
+    - {id: "3"}

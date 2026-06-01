@@ -1,0 +1,54 @@
+# scan_join_right: ResolvedJoinScan RIGHT OUTER JOIN.
+#
+# join_inner.yaml + join_left_outer.yaml cover INNER / LEFT; this
+# fixture pins RIGHT OUTER JOIN. The transpiler's EmitJoinScan
+# emits `RIGHT JOIN` directly via DuckDB; the contract under test
+# is that an unmatched left row drops out and an unmatched right
+# row arrives with NULLs in the left columns.
+name: scan_join_right
+description: |
+  RIGHT OUTER JOIN of users + events. Verifies events that lack a
+  matching user row still appear with NULLs in the user columns,
+  and users that have no matching event drop out.
+project_id: proj-fastpath-join-right
+dataset_id: ds_fastpath_join_right
+setup:
+  - dataset: ds_fastpath_join_right
+  - table:
+      dataset: ds_fastpath_join_right
+      id: users
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_join_right
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: user_id, type: INT64, mode: NULLABLE}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_join_right
+      table: users
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
+  - rows:
+      dataset: ds_fastpath_join_right
+      table: events
+      rows:
+        - {id: 10, user_id: 1, kind: login}
+        - {id: 11, user_id: 2, kind: click}
+        - {id: 12, user_id: null, kind: anonymous}
+query: |
+  SELECT u.name AS user_name, e.id AS event_id, e.kind
+    FROM ds_fastpath_join_right.users AS u
+   RIGHT JOIN ds_fastpath_join_right.events AS e
+      ON u.id = e.user_id
+   ORDER BY e.id
+expected:
+  rows:
+    - {user_name: "ada",   event_id: "10", kind: "login"}
+    - {user_name: "linus", event_id: "11", kind: "click"}
+    - {user_name: null,    event_id: "12", kind: "anonymous"}

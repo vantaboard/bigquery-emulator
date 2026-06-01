@@ -1,0 +1,55 @@
+# scan_join_full: ResolvedJoinScan FULL OUTER JOIN.
+#
+# The transpiler emits FULL JOIN directly; the semantics under
+# test are that unmatched rows on either side appear with NULLs
+# on the missing side and matched rows appear once.
+name: scan_join_full
+description: |
+  FULL OUTER JOIN of users + events. Verifies that matched rows
+  show up with both sides populated, an unmatched user appears
+  with NULL event columns, and an unmatched event appears with
+  NULL user columns.
+project_id: proj-fastpath-join-full
+dataset_id: ds_fastpath_join_full
+setup:
+  - dataset: ds_fastpath_join_full
+  - table:
+      dataset: ds_fastpath_join_full
+      id: users
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_join_full
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: user_id, type: INT64, mode: NULLABLE}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_join_full
+      table: users
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+  - rows:
+      dataset: ds_fastpath_join_full
+      table: events
+      rows:
+        - {id: 10, user_id: 1, kind: login}
+        - {id: 11, user_id: null, kind: anonymous}
+query: |
+  SELECT COALESCE(CAST(u.id AS STRING), 'no-user') AS user_id,
+         COALESCE(CAST(e.id AS STRING), 'no-event') AS event_id,
+         COALESCE(u.name, '<none>') AS name,
+         COALESCE(e.kind, '<none>') AS kind
+    FROM ds_fastpath_join_full.users AS u
+    FULL OUTER JOIN ds_fastpath_join_full.events AS e
+      ON u.id = e.user_id
+   ORDER BY user_id, event_id
+expected:
+  match: unordered
+  rows:
+    - {user_id: "1", event_id: "10", name: "ada", kind: "login"}
+    - {user_id: "2", event_id: "no-event", name: "linus", kind: "<none>"}
+    - {user_id: "no-user", event_id: "11", name: "<none>", kind: "anonymous"}

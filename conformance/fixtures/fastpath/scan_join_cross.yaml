@@ -1,0 +1,54 @@
+# scan_join_cross: ResolvedJoinScan CROSS JOIN.
+#
+# The analyzer represents `CROSS JOIN` as a `ResolvedJoinScan` of
+# kind INNER with `join_expr = nullptr`. The transpiler picks that
+# up in `EmitJoinScan` and emits `CROSS JOIN` directly. Pinning
+# the cartesian-product cardinality (3 x 2 = 6) here keeps the
+# emit honest if a future refactor turns the no-condition INNER
+# into an empty-WHERE INNER (which DuckDB would happily accept
+# but would change the explain plan).
+name: scan_join_cross
+description: |
+  CROSS JOIN of a 3-row table against a 2-row table. Verifies the
+  emit produces every (left, right) pair (cardinality = 3 x 2 = 6)
+  and the column-name aliasing flows through both sides.
+project_id: proj-fastpath-join-cross
+dataset_id: ds_fastpath_join_cross
+setup:
+  - dataset: ds_fastpath_join_cross
+  - table:
+      dataset: ds_fastpath_join_cross
+      id: colors
+      schema:
+        - {name: name, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_join_cross
+      id: shapes
+      schema:
+        - {name: name, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_join_cross
+      table: colors
+      rows:
+        - {name: red}
+        - {name: green}
+        - {name: blue}
+  - rows:
+      dataset: ds_fastpath_join_cross
+      table: shapes
+      rows:
+        - {name: square}
+        - {name: circle}
+query: |
+  SELECT c.name AS color, s.name AS shape
+    FROM ds_fastpath_join_cross.colors AS c
+   CROSS JOIN ds_fastpath_join_cross.shapes AS s
+   ORDER BY color, shape
+expected:
+  rows:
+    - {color: "blue",  shape: "circle"}
+    - {color: "blue",  shape: "square"}
+    - {color: "green", shape: "circle"}
+    - {color: "green", shape: "square"}
+    - {color: "red",   shape: "circle"}
+    - {color: "red",   shape: "square"}

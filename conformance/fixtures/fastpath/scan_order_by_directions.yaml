@@ -1,0 +1,44 @@
+# scan_order_by_directions: ResolvedOrderByScan with ASC / DESC and
+# the explicit NULLS FIRST / NULLS LAST modifiers.
+#
+# The transpiler emits `<col> ASC|DESC` plus an explicit
+# `NULLS FIRST|LAST` whenever the analyzer carries a non-default
+# `null_order`. BigQuery defaults to NULLS FIRST for ASC and
+# NULLS LAST for DESC; spelling the modifier explicitly here
+# pins the behavior even if a future emit refactor decides to
+# elide the default suffix.
+name: scan_order_by_directions
+description: |
+  ORDER BY <col> DESC NULLS LAST against a NULLABLE INT64 column.
+  Verifies the emit produces ascending DuckDB ordering for the
+  inverted direction and pushes NULLs after non-NULL values.
+project_id: proj-fastpath-order-by-directions
+dataset_id: ds_fastpath_order_by_directions
+setup:
+  - dataset: ds_fastpath_order_by_directions
+  - table:
+      dataset: ds_fastpath_order_by_directions
+      id: scored
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: score, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_fastpath_order_by_directions
+      table: scored
+      rows:
+        - {id: 1, score: 50}
+        - {id: 2, score: null}
+        - {id: 3, score: 80}
+        - {id: 4, score: null}
+        - {id: 5, score: 65}
+query: |
+  SELECT id, score
+    FROM ds_fastpath_order_by_directions.scored
+   ORDER BY score DESC NULLS LAST, id ASC
+expected:
+  rows:
+    - {id: "3", score: "80"}
+    - {id: "5", score: "65"}
+    - {id: "1", score: "50"}
+    - {id: "2", score: null}
+    - {id: "4", score: null}

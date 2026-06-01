@@ -1,0 +1,54 @@
+# scan_set_op_union_all: ResolvedSetOperationScan UNION ALL.
+#
+# Pins the bag-semantics path: UNION ALL preserves duplicates
+# across both arms. The transpiler joins per-item SELECTs with
+# `UNION ALL` between them; this fixture seeds the second arm
+# with a duplicate of one row from the first arm so a regression
+# that silently de-duplicates would surface as a row-count diff.
+name: scan_set_op_union_all
+description: |
+  UNION ALL of two tables that share a duplicate row. Verifies the
+  engine returns the full bag-union (duplicates preserved) and
+  preserves the per-arm row order via an explicit ORDER BY on the
+  combined result.
+project_id: proj-fastpath-set-op-union-all
+dataset_id: ds_fastpath_set_op_union_all
+setup:
+  - dataset: ds_fastpath_set_op_union_all
+  - table:
+      dataset: ds_fastpath_set_op_union_all
+      id: a
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_set_op_union_all
+      id: b
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_set_op_union_all
+      table: a
+      rows:
+        - {id: 1, kind: alpha}
+        - {id: 2, kind: bravo}
+  - rows:
+      dataset: ds_fastpath_set_op_union_all
+      table: b
+      rows:
+        - {id: 2, kind: bravo}
+        - {id: 3, kind: charlie}
+query: |
+  SELECT * FROM (
+    SELECT id, kind FROM ds_fastpath_set_op_union_all.a
+    UNION ALL
+    SELECT id, kind FROM ds_fastpath_set_op_union_all.b
+  )
+   ORDER BY id, kind
+expected:
+  rows:
+    - {id: "1", kind: "alpha"}
+    - {id: "2", kind: "bravo"}
+    - {id: "2", kind: "bravo"}
+    - {id: "3", kind: "charlie"}

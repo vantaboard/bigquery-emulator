@@ -1,0 +1,53 @@
+# scan_set_op_intersect_distinct: ResolvedSetOperationScan
+# INTERSECT DISTINCT.
+#
+# DuckDB's bare `INTERSECT` keyword carries the same DISTINCT
+# semantics BigQuery's `INTERSECT DISTINCT` requires (one row per
+# value present in both arms, regardless of multiplicity). The
+# transpiler emits `INTERSECT` for INTERSECT_DISTINCT and
+# `INTERSECT ALL` for INTERSECT_ALL.
+name: scan_set_op_intersect_distinct
+description: |
+  INTERSECT DISTINCT of two tables. Verifies the engine returns
+  one row per value present in both arms (de-duplicating multiple
+  occurrences) and that values present in only one arm drop out.
+project_id: proj-fastpath-set-op-intersect-distinct
+dataset_id: ds_fastpath_set_op_intersect_distinct
+setup:
+  - dataset: ds_fastpath_set_op_intersect_distinct
+  - table:
+      dataset: ds_fastpath_set_op_intersect_distinct
+      id: a
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_set_op_intersect_distinct
+      id: b
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_set_op_intersect_distinct
+      table: a
+      rows:
+        - {id: 1}
+        - {id: 2}
+        - {id: 2}
+        - {id: 3}
+  - rows:
+      dataset: ds_fastpath_set_op_intersect_distinct
+      table: b
+      rows:
+        - {id: 2}
+        - {id: 3}
+        - {id: 4}
+query: |
+  SELECT * FROM (
+    SELECT id FROM ds_fastpath_set_op_intersect_distinct.a
+    INTERSECT DISTINCT
+    SELECT id FROM ds_fastpath_set_op_intersect_distinct.b
+  )
+   ORDER BY id
+expected:
+  rows:
+    - {id: "2"}
+    - {id: "3"}

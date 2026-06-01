@@ -1,0 +1,44 @@
+# scan_filter_where: ResolvedFilterScan WHERE clause.
+#
+# Pins the fast path's FilterScan emit: the analyzer wraps a
+# user-spelled WHERE in a ResolvedFilterScan over the inner
+# (project|table) scan; the transpiler emits
+# `SELECT * FROM (<input>) WHERE <expr>`. We use a simple
+# comparison + AND so both binary-operator dispatch (via the
+# functions.yaml `$equal` / `$less`-class entries the transpiler
+# resolves through dedicated code paths) and the filter wrap stay
+# under load.
+name: scan_filter_where
+description: |
+  ResolvedFilterScan: filter rows by a numeric range and a STRING
+  equality test. Verifies WHERE expression composition and that
+  the filter is applied before the outer ORDER BY.
+project_id: proj-fastpath-filter-where
+dataset_id: ds_fastpath_filter_where
+setup:
+  - dataset: ds_fastpath_filter_where
+  - table:
+      dataset: ds_fastpath_filter_where
+      id: orders
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+        - {name: total, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_filter_where
+      table: orders
+      rows:
+        - {id: 1, kind: retail, total: 10}
+        - {id: 2, kind: wholesale, total: 250}
+        - {id: 3, kind: retail, total: 75}
+        - {id: 4, kind: retail, total: 5}
+        - {id: 5, kind: wholesale, total: 80}
+query: |
+  SELECT id, kind, total
+    FROM ds_fastpath_filter_where.orders
+   WHERE kind = 'retail' AND total >= 10
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", kind: "retail", total: "10"}
+    - {id: "3", kind: "retail", total: "75"}
