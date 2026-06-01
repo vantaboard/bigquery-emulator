@@ -152,8 +152,13 @@ ieee_divide: semantic_executor plan=semantic-functions-compliance.plan.md
 # owns the BigQuery-exact result.
 bit_count: semantic_executor plan=semantic-functions-compliance.plan.md
 # BQ SAFE_DIVIDE returns NULL on /0; DuckDB raises. SAFE semantics
-# are exact, not close, so the semantic executor owns these.
-safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# are exact, not close, so the semantic executor owns these. The
+# semantic executor wraps the strict `$divide` operator with a
+# SAFE trampoline that converts overflow / division-by-zero into
+# NULL of the FLOAT64 return type
+# (`backend/engine/semantic/eval_expr.cc::DispatchFunctionByName`
+# `safe_divide` case + `WrapSafe`).
+safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md
 # BQ DIV truncates toward zero; DuckDB's `//` operator is FLOOR
 # division, which disagrees on mixed-sign inputs
 # (`DIV(-5, 2) == -2` vs `-5 // 2 == -3`). The `bq_div` macro
@@ -163,7 +168,12 @@ safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md status
 # `DivTruncatesNotFloors` pins the mixed-sign edge case.
 div: duckdb_udf duckdb_name=bq_div plan=duckdb-polyfill-udf-library.plan.md
 # BQ SAFE_NEGATE returns NULL on INT64 overflow; DuckDB raises.
-safe_negate: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# The semantic executor wraps the strict unary-minus operator with
+# the SAFE trampoline so `SAFE_NEGATE(INT64_MIN)` returns NULL
+# instead of erroring out
+# (`backend/engine/semantic/eval_expr.cc::DispatchFunctionByName`
+# `safe_negate` case + `WrapSafe`).
+safe_negate: semantic_executor plan=semantic-functions-compliance.plan.md
 
 # --- String ------------------------------------------------------------
 concat: duckdb_native duckdb_name=CONCAT

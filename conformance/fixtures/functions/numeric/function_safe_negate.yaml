@@ -1,0 +1,23 @@
+# function_safe_negate: BigQuery SAFE_NEGATE via the semantic executor.
+#
+# Pins the SAFE_NEGATE contract: `-INT64_MIN` overflows INT64,
+# and BigQuery's SAFE-mode form returns NULL instead of erroring.
+# The bare `-x` operator surfaces a structured overflow error on
+# the same input; SAFE_NEGATE swaps it to NULL via the semantic
+# executor's `WrapSafe` trampoline.
+#
+# Route-label assertion deferred to plan 16.
+name: function_safe_negate
+description: |
+  BigQuery SAFE_NEGATE lowered through the semantic executor's
+  SAFE trampoline (`WrapSafe` around `DispatchUnaryMinus` in
+  `backend/engine/semantic/eval_expr.cc`). Verifies the NULL
+  swap on INT64 overflow and the finite-path round-trip.
+project_id: proj-functions-safe-negate
+query: |
+  SELECT SAFE_NEGATE(1) AS finite,
+         SAFE_NEGATE(-9223372036854775808) AS overflow,
+         SAFE_NEGATE(CAST(NULL AS INT64)) AS null_in
+expected:
+  rows:
+    - {finite: "-1", overflow: null, null_in: null}

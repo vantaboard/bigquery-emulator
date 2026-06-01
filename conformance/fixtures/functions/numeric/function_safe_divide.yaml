@@ -1,0 +1,24 @@
+# function_safe_divide: BigQuery SAFE_DIVIDE via the semantic executor.
+#
+# Pins the SAFE_DIVIDE contract: division by zero returns NULL
+# instead of erroring out. This is BigQuery's documented
+# divergence from the bare `/` operator (which surfaces a
+# `divisionByZero` error envelope). DuckDB's `/` also raises on
+# FLOAT64 / 0, so the SAFE-mode swap must run inside the local
+# semantic executor.
+#
+# Route-label assertion deferred to plan 16.
+name: function_safe_divide
+description: |
+  BigQuery SAFE_DIVIDE lowered through the semantic executor's
+  SAFE trampoline (`WrapSafe` around `DispatchDiv` in
+  `backend/engine/semantic/eval_expr.cc`). Verifies the NULL
+  swap on division-by-zero and the finite-path round-trip.
+project_id: proj-functions-safe-divide
+query: |
+  SELECT SAFE_DIVIDE(10.0, 4.0) AS finite,
+         SAFE_DIVIDE(1.0, 0.0) AS by_zero,
+         SAFE_DIVIDE(CAST(NULL AS FLOAT64), 2.0) AS null_left
+expected:
+  rows:
+    - {finite: "2.5", by_zero: null, null_left: null}

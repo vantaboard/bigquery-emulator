@@ -119,3 +119,61 @@ func TestQuerySemanticFunctionIeeeDivideZeroOverZeroProducesNaN(t *testing.T) {
 		t.Errorf("rows[0].f[0].v = %v, want NaN", resp.Rows[0].F[0].V)
 	}
 }
+
+// TestQuerySemanticFunctionSafeDivideByZeroProducesNull pins the
+// SAFE_DIVIDE NULL-swap contract end-to-end through the gateway.
+// The bare `/` operator on the same operands surfaces a
+// `divisionByZero` HTTP 400 envelope; SAFE_DIVIDE swaps that to a
+// JSON `null` cell via the semantic executor's `WrapSafe`
+// trampoline.
+func TestQuerySemanticFunctionSafeDivideByZeroProducesNull(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-semfn-safe-divide-null"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":"SELECT SAFE_DIVIDE(1.0, 0.0)","useLegacySql":false}`))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query SAFE_DIVIDE(1,0) -> %d: %s", status, string(body))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(body))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if resp.Rows[0].F[0].V != nil {
+		t.Errorf("SAFE_DIVIDE(1,0) should produce NULL; got %v",
+			resp.Rows[0].F[0].V)
+	}
+}
+
+// TestQuerySemanticFunctionSafeNegateOverflowProducesNull pins the
+// SAFE_NEGATE NULL-swap contract on the `-INT64_MIN` overflow
+// corner. Bare `-` on the same input surfaces a structured
+// `overflow` envelope; SAFE_NEGATE swaps it to NULL.
+func TestQuerySemanticFunctionSafeNegateOverflowProducesNull(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-semfn-safe-negate-null"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":"SELECT SAFE_NEGATE(-9223372036854775808)",`+
+			`"useLegacySql":false}`))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query SAFE_NEGATE overflow -> %d: %s",
+			status, string(body))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(body))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if resp.Rows[0].F[0].V != nil {
+		t.Errorf("SAFE_NEGATE overflow should produce NULL; got %v",
+			resp.Rows[0].F[0].V)
+	}
+}
