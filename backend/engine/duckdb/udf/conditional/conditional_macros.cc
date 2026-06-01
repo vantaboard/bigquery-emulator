@@ -53,8 +53,7 @@ absl::Status RegisterConditional(::duckdb_connection conn) {
   //   * `bq_isnull(0) == FALSE` (a literal zero is NOT null).
   //   * `bq_isnull('') == FALSE` (empty string is NOT null in BQ).
   if (auto s = internal::RunMacroDdl(
-          conn,
-          "CREATE OR REPLACE MACRO bq_isnull(x) AS (x IS NULL)");
+          conn, "CREATE OR REPLACE MACRO bq_isnull(x) AS (x IS NULL)");
       !s.ok()) {
     return s;
   }

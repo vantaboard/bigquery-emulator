@@ -36,12 +36,11 @@ class ConditionalMacrosTest : public ::testing::Test {
   int64_t RunInt64(const std::string& sql) {
     ::duckdb_result result;
     auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
-    EXPECT_EQ(rc, ::DuckDBSuccess)
-        << "DuckDB rejected: "
-        << (::duckdb_result_error(&result) == nullptr
-                ? "(no error)"
-                : ::duckdb_result_error(&result))
-        << " (sql=" << sql << ")";
+    EXPECT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: "
+                                   << (::duckdb_result_error(&result) == nullptr
+                                           ? "(no error)"
+                                           : ::duckdb_result_error(&result))
+                                   << " (sql=" << sql << ")";
     int64_t v = ::duckdb_value_int64(&result, 0, 0);
     ::duckdb_destroy_result(&result);
     return v;
@@ -50,12 +49,11 @@ class ConditionalMacrosTest : public ::testing::Test {
   bool RunBool(const std::string& sql) {
     ::duckdb_result result;
     auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
-    EXPECT_EQ(rc, ::DuckDBSuccess)
-        << "DuckDB rejected: "
-        << (::duckdb_result_error(&result) == nullptr
-                ? "(no error)"
-                : ::duckdb_result_error(&result))
-        << " (sql=" << sql << ")";
+    EXPECT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: "
+                                   << (::duckdb_result_error(&result) == nullptr
+                                           ? "(no error)"
+                                           : ::duckdb_result_error(&result))
+                                   << " (sql=" << sql << ")";
     bool v = ::duckdb_value_boolean(&result, 0, 0);
     ::duckdb_destroy_result(&result);
     return v;
@@ -64,8 +62,7 @@ class ConditionalMacrosTest : public ::testing::Test {
   bool RunIsNull(const std::string& sql) {
     ::duckdb_result result;
     auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
-    EXPECT_EQ(rc, ::DuckDBSuccess)
-        << "DuckDB rejected: " << sql;
+    EXPECT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: " << sql;
     bool v = ::duckdb_value_is_null(&result, 0, 0);
     ::duckdb_destroy_result(&result);
     return v;

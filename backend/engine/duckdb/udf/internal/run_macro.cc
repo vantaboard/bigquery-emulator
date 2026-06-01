@@ -22,12 +22,11 @@ absl::Status RunMacroDdl(::duckdb_connection conn, absl::string_view sql) {
     const char* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
-    return absl::InternalError(absl::StrCat(
-        "DuckDB polyfill UDF registrar: ",
-        detail,
-        " (sql=",
-        nul_terminated,
-        ")"));
+    return absl::InternalError(absl::StrCat("DuckDB polyfill UDF registrar: ",
+                                            detail,
+                                            " (sql=",
+                                            nul_terminated,
+                                            ")"));
   }
   ::duckdb_destroy_result(&result);
   return absl::OkStatus();

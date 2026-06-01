@@ -415,3 +415,47 @@ remaining non-`duckdb_*` row carries a planned route from one of
 the new-route plans named in the row's `plan=` field) is
 therefore satisfied today as the baseline -- no plan-2 changes to
 `functions.yaml` were needed.
+
+## Item 3 -- update from the polyfill UDF library landing
+
+`.cursor/plans/duckdb-polyfill-udf-library.plan.md` shipped the
+first set of `duckdb_udf` wrappers. The following `functions.yaml`
+rows flipped from `status=planned duckdb_udf` to ready
+`duckdb_udf` and now point at a registered macro in
+`backend/engine/duckdb/udf/`:
+
+| BQ function | Macro (in `backend/engine/duckdb/udf/`) | BigQuery edge case the macro closes | Unit test that pins it |
+|-------------|-----------------------------------------|-------------------------------------|------------------------|
+| `mod`       | `numeric/numeric_macros.cc::bq_mod`     | Sign-of-dividend on negatives; raises on Y=0 | `numeric_macros_test::ModSignTracksDividend`, `ModByZeroRaises` |
+| `div`       | `numeric/numeric_macros.cc::bq_div`     | Truncated (not floor) integer division; raises on Y=0 | `numeric_macros_test::DivTruncatesNotFloors`, `DivByZeroRaises` |
+| `if`        | `conditional/conditional_macros.cc::bq_if` | NULL cond falls through to ELSE (not the THEN branch) | `conditional_macros_test::IfNullCondFallsThroughToElse` |
+| `isnull`    | `conditional/conditional_macros.cc::bq_isnull` | Empty string is NOT NULL in BigQuery | `conditional_macros_test::IsNullOnNonNullValues` |
+| `strpos`    | `string/string_macros.cc::bq_strpos`    | 1-based index; missing needle returns 0 (not NULL); empty needle returns 1 | `string_macros_test::StrposReturnsOneBasedIndex`, `StrposMissingNeedleReturnsZero`, `StrposEmptyNeedle` |
+
+The following rows were investigated during the polyfill landing
+and found to require more than a thin DuckDB macro; they
+re-pointed at `semantic-functions-compliance.plan.md` (still
+`status=planned`):
+
+| BQ function | Reason the gap is wider than a thin macro |
+|-------------|--------------------------------------------|
+| `contains_substr` | BigQuery applies Unicode NFKC + case-folding before substring search; DuckDB's `contains` is exact byte-level match and DuckDB v1.5.3 ships no NFKC primitive. |
+| `instr` | BigQuery INSTR is variadic with negative-position semantics; DuckDB's `instr` is 2-arg only. The variadic surface is more naturally implemented in Go. |
+| `soundex` | DuckDB v1.5.3 does not ship a `soundex` scalar function (verified: `SELECT soundex('Robert')` -> Catalog Error). |
+
+Rows that remain at `status=planned duckdb_udf` (polyfill plan
+still owns them; the wrapper has not landed but the plan still
+considers a thin-macro path achievable):
+
+* `log`, `sqrt_numeric` (numeric formula tweaks).
+* `format` (printf-spec divergence; potentially landable via macro
+  but the spec-translation table is non-trivial and was not
+  scoped into this polyfill landing).
+* `split`, `regexp_*`, `format`, the `date_*` / `datetime_*` /
+  `timestamp_*` arithmetic family, `extract`, the `format_*` /
+  `parse_*` / `unix_*` family, and `countif` --- documented per
+  row in `functions.yaml` with the specific BigQuery semantic the
+  wrapper needs to close. Each of these is a candidate for a
+  future polyfill landing in the same plan; none are silent
+  approximations today (every call surfaces UNIMPLEMENTED via the
+  transpiler's empty-string contract).

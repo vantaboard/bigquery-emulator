@@ -160,15 +160,34 @@ regexp_replace: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=plann
 regexp_extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 regexp_extract_all: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 format: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-contains_substr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ CONTAINS_SUBSTR applies Unicode NFKC normalization plus
+# case-folding to both arguments before substring search; DuckDB's
+# `contains` does exact byte-level match. The gap is wider than a
+# thin macro (no DuckDB NFKC primitive), so the row re-points at
+# the semantic executor per the polyfill plan's "no silent
+# approximation" rule.
+contains_substr: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
 # BQ STRPOS returns 1-based index; DuckDB strpos agrees today. The
 # `bq_strpos` macro pins the contract under our name so a future
 # DuckDB upgrade flipping to 0-based would surface as a unit-test
 # failure (`StrposReturnsOneBasedIndex`) instead of as a silent
 # off-by-one regression.
 strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.md
-instr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-soundex: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ INSTR is variadic: `INSTR(value, subvalue [, position [, occurrence]])`
+# where `position` may be negative (search from the right) and
+# `occurrence` selects the Nth match. DuckDB's `instr` is 2-arg
+# only; the 3- and 4-arg surface needs more than a thin macro
+# (variadic-macro support varies by DuckDB version and even where
+# available the negative-position case needs a separate path). The
+# row re-points at the semantic executor where the variadic surface
+# can be implemented straight-line in Go.
+instr: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
+# DuckDB v1.5.3 does NOT ship a `soundex` scalar function (verified
+# directly: `SELECT soundex('Robert')` -> Catalog Error). A thin
+# macro wrapper is therefore impossible; the row re-points at the
+# semantic executor where the algorithm can be implemented in
+# native Go.
+soundex: duckdb_udf plan=semantic-functions-compliance.plan.md status=planned
 
 # --- Datetime ----------------------------------------------------------
 # Most datetime functions need interval-semantics rewriting before
