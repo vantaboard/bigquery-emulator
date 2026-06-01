@@ -1,0 +1,55 @@
+# Array / struct shapes the DuckDB fast path cannot lower.
+#
+# This package owns the local evaluator for the divergent subset of
+# `ResolvedArrayScan` (UNNEST WITH OFFSET, outer UNNEST, multi-array
+# zip; the correlated and FLATTEN cases stay
+# `kNotImplemented` until follow-up subagents of
+# `array-struct-semantic-path.plan.md` land them).
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "array_scan",
+    srcs = ["array_scan.cc"],
+    hdrs = ["array_scan.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "array_scan_test",
+    srcs = ["array_scan_test.cc"],
+    deps = [
+        ":array_scan",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
