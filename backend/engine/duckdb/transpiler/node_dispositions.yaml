@@ -156,7 +156,7 @@ ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
 ResolvedDeferredComputedColumn: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedOrderByItem: duckdb_native
-ResolvedColumnHolder: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
+ResolvedColumnHolder: semantic_executor plan=array-struct-semantic-path.plan.md
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row
 # from SHAPE_TRACKER.md, expanded to per-class rows for the parity
 # checker.

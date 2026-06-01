@@ -115,6 +115,19 @@ tasks:
           --output "{{.OUTPUT}}" \
           --profile duckdb \
           $OUTPUT_FILE_FLAG
+        # array-struct fixtures (`conformance/fixtures/array_struct/`)
+        # pin the divergent `ResolvedArrayScan` shapes routed through
+        # the semantic executor by `array-struct-semantic-path.plan.md`.
+        # Requires `bin/emulator_main` to include the executor's
+        # ArrayScan dispatch (plan 8 +); a pre-plan-8 binary will
+        # surface NOT_IMPLEMENTED here.
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures conformance/fixtures/array_struct \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --profile duckdb \
+          $OUTPUT_FILE_FLAG
 
   run-fixture:
     desc: Run a single fixture (FIXTURE=path/to/fixture.yaml). Honors PROFILE.

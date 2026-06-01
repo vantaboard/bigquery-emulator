@@ -1,0 +1,35 @@
+# unnest_with_offset: ResolvedArrayScan WITH OFFSET via semantic_executor.
+#
+# Pins BigQuery's `UNNEST(<arr>) WITH OFFSET` contract end-to-end:
+# one row per array element with a 0-based INT64 offset column. The
+# route is `semantic_executor` (the divergent ArrayScan subset
+# promoted by `route_classifier.cc::VisitResolvedArrayScan` because
+# the analyzer sets `array_offset_column`), backed by
+# `backend/engine/semantic/array_struct/array_scan.cc`. DuckDB's
+# `LIST` cannot produce the offset column directly; rerouting here
+# is mandatory.
+#
+# Edge case pinned: arrays of length N produce offsets 0..N-1
+# regardless of the element type, and the analyzer-supplied
+# alias for the offset column (`WITH OFFSET AS idx`) flows through
+# the projection.
+#
+# Route-label assertion: deferred to plan 16 (the route-label
+# infrastructure does not yet inspect ResolvedArrayScan promotion
+# decisions; see `conformance/fixtures/functions/README.md`).
+name: unnest_with_offset
+description: |
+  Standalone UNNEST of a STRING ARRAY with WITH OFFSET AS idx.
+  Verifies the semantic executor emits one row per element, with
+  the analyzer-bound offset alias materialized as a 0-based INT64
+  alongside the element.
+project_id: proj-array-struct-unnest-with-offset
+query: |
+  SELECT n, idx
+    FROM UNNEST(['ada', 'linus', 'grace']) AS n WITH OFFSET AS idx
+   ORDER BY idx
+expected:
+  rows:
+    - {n: "ada", idx: "0"}
+    - {n: "linus", idx: "1"}
+    - {n: "grace", idx: "2"}
