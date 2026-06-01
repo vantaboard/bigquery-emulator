@@ -9,6 +9,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
@@ -1170,7 +1171,7 @@ std::string Transpiler::EmitFunctionCall(
   //   * `$make_array(...)` is the analyzer's representation of a
   //     non-const ARRAY literal (`[a, col, b]`); DuckDB shares the
   //     bracket-literal syntax so we emit it directly rather than
-  //     going through a `kMap` entry that would render as
+  //     going through a `kDuckdbNative` entry that would render as
   //     `$MAKE_ARRAY(...)`.
   // Anything outside the table surfaces UNIMPLEMENTED via the
   // empty-string contract; the LOG(INFO) records the miss so debug
@@ -1200,19 +1201,24 @@ std::string Transpiler::EmitFunctionCall(
               << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
-  switch (entry->kind) {
-    case FnKind::kSkiplist:
-      LOG(INFO) << "duckdb transpiler: function '" << name
-                << "' is skiplisted (BigQuery-specific / no DuckDB "
-                   "analog); surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kFallback:
-      LOG(INFO) << "duckdb transpiler: function '" << name
-                << "' lowering deferred; surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kMap:
+  switch (entry->disposition) {
+    case Disposition::kDuckdbNative:
+    case Disposition::kDuckdbRewrite:
       return absl::StrCat(
           entry->duckdb_name, "(", absl::StrJoin(args, ", "), ")");
+    case Disposition::kDuckdbUdf:
+    case Disposition::kSemanticExecutor:
+    case Disposition::kControlOp:
+      LOG(INFO) << "duckdb transpiler: function '" << name
+                << "' route=" << DispositionToString(entry->disposition)
+                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
+    case Disposition::kUnsupported:
+      LOG(INFO) << "duckdb transpiler: function '" << name
+                << "' unsupported (plan=" << entry->plan
+                << "); surfacing UNIMPLEMENTED";
+      return "";
   }
   return "";
 }
@@ -1222,7 +1228,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // Aggregate dispatch lives in the same disposition table the scalar
   // emit consults; we just guard the unsupported modifier set first.
   // `$count_star` is the analyzer's representation of `COUNT(*)` -- we
-  // emit it directly rather than going through a kMap entry because
+  // emit it directly rather than going through a kDuckdbNative entry
+  // because
   // the dispatch passes zero argument expressions (not even a single
   // `*` placeholder), so the standard `<NAME>(<args>)` shape wouldn't
   // apply.
@@ -1273,20 +1280,26 @@ std::string Transpiler::EmitAggregateFunctionCall(
               << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
-  switch (entry->kind) {
-    case FnKind::kSkiplist:
-      LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' is skiplisted; surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kFallback:
-      LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' lowering deferred; surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kMap: {
+  switch (entry->disposition) {
+    case Disposition::kDuckdbNative:
+    case Disposition::kDuckdbRewrite: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
       return absl::StrCat(
           entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
+    case Disposition::kDuckdbUdf:
+    case Disposition::kSemanticExecutor:
+    case Disposition::kControlOp:
+      LOG(INFO) << "duckdb transpiler: aggregate '" << name
+                << "' route=" << DispositionToString(entry->disposition)
+                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
+    case Disposition::kUnsupported:
+      LOG(INFO) << "duckdb transpiler: aggregate '" << name
+                << "' unsupported (plan=" << entry->plan
+                << "); surfacing UNIMPLEMENTED";
+      return "";
   }
   return "";
 }
@@ -1300,9 +1313,10 @@ std::string Transpiler::EmitAnalyticFunctionCall(
   //
   // The function table flags ROW_NUMBER / RANK / DENSE_RANK / CUME_DIST
   // / PERCENT_RANK / NTILE / LAG / LEAD / FIRST_VALUE / LAST_VALUE /
-  // NTH_VALUE as `kMap` so they fall through here; aggregate-over-
-  // window calls (SUM / COUNT / AVG / MIN / MAX OVER (...)) flow
-  // through the same map entries the scalar aggregate emit uses.
+  // NTH_VALUE as `kDuckdbNative` so they fall through here;
+  // aggregate-over-window calls (SUM / COUNT / AVG / MIN / MAX OVER
+  // (...)) flow through the same map entries the scalar aggregate
+  // emit uses.
   //
   // We share the SAFE-mode / modifier-rejection contract with
   // `EmitAggregateFunctionCall` because GoogleSQL hands us the same
@@ -1342,20 +1356,26 @@ std::string Transpiler::EmitAnalyticFunctionCall(
               << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
   }
-  switch (entry->kind) {
-    case FnKind::kSkiplist:
-      LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' is skiplisted; surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kFallback:
-      LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' lowering deferred; surfacing UNIMPLEMENTED";
-      return "";
-    case FnKind::kMap: {
+  switch (entry->disposition) {
+    case Disposition::kDuckdbNative:
+    case Disposition::kDuckdbRewrite: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
       return absl::StrCat(
           entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
+    case Disposition::kDuckdbUdf:
+    case Disposition::kSemanticExecutor:
+    case Disposition::kControlOp:
+      LOG(INFO) << "duckdb transpiler: analytic function '" << name
+                << "' route=" << DispositionToString(entry->disposition)
+                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
+    case Disposition::kUnsupported:
+      LOG(INFO) << "duckdb transpiler: analytic function '" << name
+                << "' unsupported (plan=" << entry->plan
+                << "); surfacing UNIMPLEMENTED";
+      return "";
   }
   return "";
 }

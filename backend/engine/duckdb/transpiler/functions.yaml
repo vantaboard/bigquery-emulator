@@ -1,9 +1,50 @@
 # BigQuery -> DuckDB function disposition table.
 #
-# Each line is `<bq_function>: <disposition>` where `<disposition>` is one of:
-#   * a DuckDB function name (the transpiler emits `<NAME>(<args>)`)
-#   * `skiplist`  — out of scope today; engine surfaces UNIMPLEMENTED
-#   * `fallback`  — lowering not yet implemented; engine surfaces UNIMPLEMENTED
+# Each line is
+#
+#   <bq_function>: <disposition> [duckdb_name=<name>] [plan=<plan>]
+#                                [status=planned]
+#
+# Where `<disposition>` is one of the six route names from
+# `backend/engine/disposition.h` (see `node_dispositions.yaml` for
+# the per-`ResolvedAST` analog):
+#
+#   * `duckdb_native`     - emit `<duckdb_name>(<args>)` directly.
+#                            Requires `duckdb_name=...`.
+#   * `duckdb_rewrite`    - emit via a structural rewrite that still
+#                            lands on a DuckDB function. Requires
+#                            `duckdb_name=...`. No current rows
+#                            (rewrites today live in transpiler.cc
+#                            outside this table); kept as a valid
+#                            disposition so a future row can land
+#                            here without YAML schema churn.
+#   * `duckdb_udf`        - emit via a DuckDB UDF/macro registered
+#                            at engine startup. The transpiler does
+#                            not yet have an emit for this path;
+#                            until `duckdb-polyfill-udf-library.plan.md`
+#                            lands, rows on this disposition surface
+#                            UNIMPLEMENTED.
+#   * `semantic_executor` - run on the local row/value semantic
+#                            executor. Until
+#                            `semantic-functions-compliance.plan.md`
+#                            lands, rows on this disposition surface
+#                            UNIMPLEMENTED.
+#   * `control_op`        - DDL/metadata; no function-table use case
+#                            today but accepted by the generator.
+#   * `unsupported`       - intentionally out of scope today; the
+#                            engine surfaces UNIMPLEMENTED.
+#                            `specialized-feature-policy.plan.md`
+#                            owns these rows.
+#
+# Optional metadata:
+#   * `plan=<plan-file>`  - owning `.cursor/plans/*.plan.md`.
+#                            Mandatory for `unsupported` rows.
+#   * `status=planned`    - the owning plan has not landed; the
+#                            engine surfaces UNIMPLEMENTED. Only
+#                            valid alongside dispositions that the
+#                            transpiler does not yet emit
+#                            (`duckdb_udf` / `semantic_executor` /
+#                            `control_op`).
 #
 # Keys are case-insensitive; the loader lowercases them at parse time.
 # Functions registered as both scalar (`ResolvedFunctionCall`) and
@@ -14,187 +55,212 @@
 # surfaces UNIMPLEMENTED regardless of the underlying function
 # disposition.
 #
-# Order does not affect resolution; entries are grouped by category for
-# readability. Keep this file the source of truth -- the genrule
+# Order does not affect resolution; entries are grouped by category
+# for readability. Keep this file the source of truth -- the genrule
 # `functions_table_inc` regenerates `functions_table.inc` from this
 # YAML at build time.
+#
+# Planned-route policy (per the plan's "Shared Rules"): every
+# previously-`kFallback` row picks the real planned route owned by
+# the matching `local-execution-roadmap-index.plan.md` follow-up
+# plan, with `status=planned` so the runtime keeps surfacing
+# UNIMPLEMENTED until the implementation lands alongside its
+# conformance fixture. The disposition does NOT get promoted off
+# `status=planned` without the matching emit + conformance fixture
+# landing in the same commit.
 
 # --- Math --------------------------------------------------------------
-abs: ABS
-ceil: CEIL
-ceiling: CEIL
-floor: FLOOR
-round: ROUND
-trunc: TRUNC
-sqrt: SQRT
-exp: EXP
-sign: SIGN
-greatest: GREATEST
-least: LEAST
-pi: PI
-ln: LN
-log10: LOG10
-log: fallback             # BQ LOG(x) == ln; two-arg LOG(x,base) needs a rewrite
-mod: fallback             # BQ MOD(x,y) returns y's type; DuckDB MOD diverges on signed
-pow: POW
-power: POW
-sqrt_numeric: fallback    # BQ SQRT over NUMERIC needs an explicit cast
-cbrt: CBRT
-is_inf: ISINF
-is_nan: ISNAN
-safe_divide: fallback     # BQ semantics differ (returns NULL on /0; DuckDB raises)
-div: fallback             # BQ DIV truncates toward zero; DuckDB / coerces to FLOAT
-safe_negate: fallback     # BQ returns NULL on INT64 overflow; DuckDB raises
+abs: duckdb_native duckdb_name=ABS
+ceil: duckdb_native duckdb_name=CEIL
+ceiling: duckdb_native duckdb_name=CEIL
+floor: duckdb_native duckdb_name=FLOOR
+round: duckdb_native duckdb_name=ROUND
+trunc: duckdb_native duckdb_name=TRUNC
+sqrt: duckdb_native duckdb_name=SQRT
+exp: duckdb_native duckdb_name=EXP
+sign: duckdb_native duckdb_name=SIGN
+greatest: duckdb_native duckdb_name=GREATEST
+least: duckdb_native duckdb_name=LEAST
+pi: duckdb_native duckdb_name=PI
+ln: duckdb_native duckdb_name=LN
+log10: duckdb_native duckdb_name=LOG10
+# Two-arg LOG(x, base) needs a polyfill (BQ LOG(x) == LN(x), DuckDB
+# LOG(x) == LOG10(x)); single-arg LOG also diverges.
+log: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ MOD(x, y) returns y's type; DuckDB MOD diverges on signed.
+mod: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+pow: duckdb_native duckdb_name=POW
+power: duckdb_native duckdb_name=POW
+# BQ SQRT over NUMERIC needs an explicit cast.
+sqrt_numeric: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+cbrt: duckdb_native duckdb_name=CBRT
+is_inf: duckdb_native duckdb_name=ISINF
+is_nan: duckdb_native duckdb_name=ISNAN
+# BQ SAFE_DIVIDE returns NULL on /0; DuckDB raises. SAFE semantics
+# are exact, not close, so the semantic executor owns these.
+safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# BQ DIV truncates toward zero; DuckDB / coerces to FLOAT.
+div: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ SAFE_NEGATE returns NULL on INT64 overflow; DuckDB raises.
+safe_negate: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 
 # --- String ------------------------------------------------------------
-concat: CONCAT
-length: LENGTH
-char_length: LENGTH
-character_length: LENGTH
-byte_length: OCTET_LENGTH
-lower: LOWER
-upper: UPPER
-substr: SUBSTRING
-substring: SUBSTRING
-replace: REPLACE
-trim: TRIM
-ltrim: LTRIM
-rtrim: RTRIM
-lpad: LPAD
-rpad: RPAD
-reverse: REVERSE
-ascii: ASCII
-chr: CHR
-starts_with: STARTS_WITH
-ends_with: ENDS_WITH
-to_hex: TO_HEX
-from_hex: FROM_HEX
+concat: duckdb_native duckdb_name=CONCAT
+length: duckdb_native duckdb_name=LENGTH
+char_length: duckdb_native duckdb_name=LENGTH
+character_length: duckdb_native duckdb_name=LENGTH
+byte_length: duckdb_native duckdb_name=OCTET_LENGTH
+lower: duckdb_native duckdb_name=LOWER
+upper: duckdb_native duckdb_name=UPPER
+substr: duckdb_native duckdb_name=SUBSTRING
+substring: duckdb_native duckdb_name=SUBSTRING
+replace: duckdb_native duckdb_name=REPLACE
+trim: duckdb_native duckdb_name=TRIM
+ltrim: duckdb_native duckdb_name=LTRIM
+rtrim: duckdb_native duckdb_name=RTRIM
+lpad: duckdb_native duckdb_name=LPAD
+rpad: duckdb_native duckdb_name=RPAD
+reverse: duckdb_native duckdb_name=REVERSE
+ascii: duckdb_native duckdb_name=ASCII
+chr: duckdb_native duckdb_name=CHR
+starts_with: duckdb_native duckdb_name=STARTS_WITH
+ends_with: duckdb_native duckdb_name=ENDS_WITH
+to_hex: duckdb_native duckdb_name=TO_HEX
+from_hex: duckdb_native duckdb_name=FROM_HEX
 
 # --- Regex / format ----------------------------------------------------
-# BigQuery's RE2 dialect differs from DuckDB's; FORMAT is %-style, DuckDB
-# has PRINTF which differs subtly. Keep these on the fallback path until
-# a dedicated regex / format rewriter lands.
-split: fallback
-regexp_contains: fallback
-regexp_replace: fallback
-regexp_extract: fallback
-regexp_extract_all: fallback
-format: fallback
-contains_substr: fallback
-strpos: fallback
-instr: fallback
-soundex: fallback
+# BigQuery's RE2 dialect differs from DuckDB's; FORMAT is %-style,
+# DuckDB has PRINTF which differs subtly. The polyfill UDF library
+# owns the rewrite path.
+split: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+regexp_contains: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+regexp_replace: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+regexp_extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+regexp_extract_all: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+format: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+contains_substr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+strpos: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+instr: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+soundex: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 
 # --- Datetime ----------------------------------------------------------
-# Most datetime functions need interval-semantics rewriting before they
-# can target DuckDB equivalents safely (month-end arithmetic, calendar
-# weeks, etc.). The zero-arg "current_*" family is safe to map.
-current_timestamp: GET_CURRENT_TIMESTAMP
-current_date: CURRENT_DATE
-current_time: CURRENT_TIME
-current_datetime: GET_CURRENT_TIMESTAMP
-date_add: fallback
-date_sub: fallback
-date_diff: fallback
-date_trunc: fallback
-datetime_add: fallback
-datetime_sub: fallback
-datetime_diff: fallback
-timestamp_add: fallback
-timestamp_sub: fallback
-timestamp_diff: fallback
-timestamp_trunc: fallback
-extract: fallback
-format_timestamp: fallback
-format_date: fallback
-format_datetime: fallback
-parse_date: fallback
-parse_timestamp: fallback
-parse_datetime: fallback
-unix_seconds: fallback
-unix_millis: fallback
-unix_micros: fallback
-unix_date: fallback
+# Most datetime functions need interval-semantics rewriting before
+# they can target DuckDB equivalents safely (month-end arithmetic,
+# calendar weeks, etc.). The zero-arg `current_*` family is safe to
+# map directly. The interval-arithmetic and format/parse families
+# land on the polyfill UDF library.
+current_timestamp: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
+current_date: duckdb_native duckdb_name=CURRENT_DATE
+current_time: duckdb_native duckdb_name=CURRENT_TIME
+current_datetime: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
+date_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+date_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+date_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+date_trunc: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+datetime_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+datetime_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+datetime_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+timestamp_add: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+timestamp_sub: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+timestamp_diff: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+timestamp_trunc: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+extract: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+format_timestamp: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+format_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+format_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+parse_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+parse_timestamp: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+parse_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+unix_seconds: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+unix_millis: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+unix_micros: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+unix_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 
 # --- Conditional / null-handling --------------------------------------
-ifnull: IFNULL
-coalesce: COALESCE
-nullif: NULLIF
-if: fallback             # BQ IF(cond,a,b); DuckDB has CASE-of equivalence but corner cases differ
-isnull: fallback         # BQ has no IS NULL function-form; emitter sees the operator
+ifnull: duckdb_native duckdb_name=IFNULL
+coalesce: duckdb_native duckdb_name=COALESCE
+nullif: duckdb_native duckdb_name=NULLIF
+# BQ IF(cond, a, b) has CASE-of equivalence in DuckDB but corner
+# cases differ; polyfill UDF owns the rewrite.
+if: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ has no IS NULL function form; emitter normally sees the
+# operator. UDF rewrite owns the call-form path.
+isnull: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 
 # --- Array -------------------------------------------------------------
-array_length: LEN
-array_to_string: ARRAY_TO_STRING
-array_concat: ARRAY_CONCAT
-array_reverse: ARRAY_REVERSE
-generate_array: GENERATE_SERIES
+array_length: duckdb_native duckdb_name=LEN
+array_to_string: duckdb_native duckdb_name=ARRAY_TO_STRING
+array_concat: duckdb_native duckdb_name=ARRAY_CONCAT
+array_reverse: duckdb_native duckdb_name=ARRAY_REVERSE
+generate_array: duckdb_native duckdb_name=GENERATE_SERIES
 
 # --- Aggregation -------------------------------------------------------
 # The transpiler routes aggregates through `EmitAggregateFunctionCall`,
-# which still owns the DISTINCT / ORDER BY / HAVING modifier rejection
-# (those have no native DuckDB OVER analog yet). Entries here only
-# control whether the bare aggregate name lowers cleanly.
-count: COUNT
-sum: SUM
-avg: AVG
-min: MIN
-max: MAX
-any_value: ANY_VALUE
-array_agg: ARRAY_AGG
-string_agg: STRING_AGG
-countif: fallback        # BQ COUNTIF(b) ↔ DuckDB COUNT(*) FILTER (WHERE b); needs rewrite
-logical_and: BOOL_AND
-logical_or: BOOL_OR
-bit_and: BIT_AND
-bit_or: BIT_OR
-bit_xor: BIT_XOR
+# which still owns the DISTINCT / ORDER BY / HAVING modifier
+# rejection (those have no native DuckDB OVER analog yet). Entries
+# here only control whether the bare aggregate name lowers cleanly.
+count: duckdb_native duckdb_name=COUNT
+sum: duckdb_native duckdb_name=SUM
+avg: duckdb_native duckdb_name=AVG
+min: duckdb_native duckdb_name=MIN
+max: duckdb_native duckdb_name=MAX
+any_value: duckdb_native duckdb_name=ANY_VALUE
+array_agg: duckdb_native duckdb_name=ARRAY_AGG
+string_agg: duckdb_native duckdb_name=STRING_AGG
+# BQ COUNTIF(b) <-> DuckDB COUNT(*) FILTER (WHERE b); UDF/macro
+# owns the rewrite.
+countif: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+logical_and: duckdb_native duckdb_name=BOOL_AND
+logical_or: duckdb_native duckdb_name=BOOL_OR
+bit_and: duckdb_native duckdb_name=BIT_AND
+bit_or: duckdb_native duckdb_name=BIT_OR
+bit_xor: duckdb_native duckdb_name=BIT_XOR
 
 # --- Window functions --------------------------------------------------
-# Ranking analytics route through `EmitAnalyticFunctionCall` -- listed
-# here so `LookupFunction` agrees the disposition is "lower it" rather
-# than "fall back".
-row_number: ROW_NUMBER
-rank: RANK
-dense_rank: DENSE_RANK
-percent_rank: PERCENT_RANK
-cume_dist: CUME_DIST
-ntile: NTILE
-lag: LAG
-lead: LEAD
-first_value: FIRST_VALUE
-last_value: LAST_VALUE
-nth_value: NTH_VALUE
+# Ranking analytics route through `EmitAnalyticFunctionCall`. Listed
+# here so `LookupFunction` agrees the disposition is "lower it"
+# rather than "fall back".
+row_number: duckdb_native duckdb_name=ROW_NUMBER
+rank: duckdb_native duckdb_name=RANK
+dense_rank: duckdb_native duckdb_name=DENSE_RANK
+percent_rank: duckdb_native duckdb_name=PERCENT_RANK
+cume_dist: duckdb_native duckdb_name=CUME_DIST
+ntile: duckdb_native duckdb_name=NTILE
+lag: duckdb_native duckdb_name=LAG
+lead: duckdb_native duckdb_name=LEAD
+first_value: duckdb_native duckdb_name=FIRST_VALUE
+last_value: duckdb_native duckdb_name=LAST_VALUE
+nth_value: duckdb_native duckdb_name=NTH_VALUE
 
-# --- Skiplist ----------------------------------------------------------
-# Out of scope today; the engine surfaces UNIMPLEMENTED for these
-# until a deliberate plan adds the lowering (see `SHAPE_TRACKER.md`'s
-# skiplist policy).
-approx_quantiles: skiplist
-approx_count_distinct: skiplist
-approx_top_count: skiplist
-approx_top_sum: skiplist
-hll_count.init: skiplist
-hll_count.merge: skiplist
-hll_count.merge_partial: skiplist
-hll_count.extract: skiplist
-ml.predict: skiplist
-ml.forecast: skiplist
-ml.evaluate: skiplist
-net.ip_from_string: skiplist
-net.ip_to_string: skiplist
-net.host: skiplist
-net.public_suffix: skiplist
-keys.new_keyset: skiplist
-keys.encrypt: skiplist
-keys.decrypt_bytes: skiplist
-st_geogfromtext: skiplist
-st_geogfromwkb: skiplist
-st_distance: skiplist
-st_within: skiplist
-st_contains: skiplist
-st_intersects: skiplist
-bit_count: skiplist
-generate_uuid: skiplist
-session_user: skiplist
-error: skiplist
+# --- Unsupported -------------------------------------------------------
+# Deliberately out of scope today; the engine surfaces UNIMPLEMENTED
+# for these. `specialized-feature-policy.plan.md` documents the
+# deliberate posture and any planned local implementation.
+approx_quantiles: unsupported plan=specialized-feature-policy.plan.md
+approx_count_distinct: unsupported plan=specialized-feature-policy.plan.md
+approx_top_count: unsupported plan=specialized-feature-policy.plan.md
+approx_top_sum: unsupported plan=specialized-feature-policy.plan.md
+hll_count.init: unsupported plan=specialized-feature-policy.plan.md
+hll_count.merge: unsupported plan=specialized-feature-policy.plan.md
+hll_count.merge_partial: unsupported plan=specialized-feature-policy.plan.md
+hll_count.extract: unsupported plan=specialized-feature-policy.plan.md
+ml.predict: unsupported plan=specialized-feature-policy.plan.md
+ml.forecast: unsupported plan=specialized-feature-policy.plan.md
+ml.evaluate: unsupported plan=specialized-feature-policy.plan.md
+net.ip_from_string: unsupported plan=specialized-feature-policy.plan.md
+net.ip_to_string: unsupported plan=specialized-feature-policy.plan.md
+net.host: unsupported plan=specialized-feature-policy.plan.md
+net.public_suffix: unsupported plan=specialized-feature-policy.plan.md
+keys.new_keyset: unsupported plan=specialized-feature-policy.plan.md
+keys.encrypt: unsupported plan=specialized-feature-policy.plan.md
+keys.decrypt_bytes: unsupported plan=specialized-feature-policy.plan.md
+st_geogfromtext: unsupported plan=specialized-feature-policy.plan.md
+st_geogfromwkb: unsupported plan=specialized-feature-policy.plan.md
+st_distance: unsupported plan=specialized-feature-policy.plan.md
+st_within: unsupported plan=specialized-feature-policy.plan.md
+st_contains: unsupported plan=specialized-feature-policy.plan.md
+st_intersects: unsupported plan=specialized-feature-policy.plan.md
+bit_count: unsupported plan=specialized-feature-policy.plan.md
+generate_uuid: unsupported plan=specialized-feature-policy.plan.md
+session_user: unsupported plan=specialized-feature-policy.plan.md
+error: unsupported plan=specialized-feature-policy.plan.md

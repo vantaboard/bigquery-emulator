@@ -1,23 +1,63 @@
 # functions_table_gen.awk
 #
-# Converts the line-oriented `functions.yaml` disposition table into a
-# C++ initializer list fragment (`functions_table.inc`) the `Functions`
-# loader includes inside its static `absl::flat_hash_map<std::string,
-# FnEntry>` literal.
+# Converts the line-oriented `functions.yaml` disposition table into
+# a C++ initializer list fragment (`functions_table.inc`) the
+# `Functions` loader includes inside its static
+# `absl::flat_hash_map<std::string, FnEntry>` literal.
 #
-# The YAML format is intentionally narrow:
-#   * blank lines are ignored
-#   * `#`-comment lines are ignored
-#   * `<key>: <value>` lines map a BigQuery function name to either a
-#     DuckDB function name (emit `<NAME>(<args>)`) or the literal
-#     `skiplist` / `fallback` markers.
-#   * trailing `#` inline comments are stripped.
+# The YAML grammar is the same shape as
+# `node_dispositions_table_gen.awk`:
+#
+#   <bq_function>: <disposition> [duckdb_name=<name>]
+#                                [plan=<plan>] [status=planned]
+#
+# Where:
+#   * blank lines and `#`-comment lines are ignored
+#   * trailing `# ...` inline comments are stripped
+#   * `<disposition>` is one of `duckdb_native`, `duckdb_rewrite`,
+#     `duckdb_udf`, `semantic_executor`, `control_op`, `unsupported`
+#     (must match `backend/engine/disposition.h`'s `Disposition` enum)
+#   * `duckdb_name=<NAME>` is mandatory for `duckdb_native` /
+#     `duckdb_rewrite` rows (the transpiler emits `<NAME>(<args>)`)
+#     and forbidden for the other dispositions (no DuckDB function
+#     name to dispatch to)
+#   * `plan=<plan-file>` is mandatory for `unsupported` rows; the
+#     convention is to point at `specialized-feature-policy.plan.md`
+#   * `status=planned` is optional and only valid alongside
+#     dispositions whose runtime emit does not yet exist
+#     (`duckdb_udf`, `semantic_executor`, `control_op`)
 #
 # Anything else aborts the build with a non-zero exit so a malformed
-# YAML edit lands as a Bazel error rather than a silent skip.
+# YAML edit lands as a Bazel error rather than as a silent skip at
+# run time.
+#
+# Same awk-only design rationale as `node_dispositions_table_gen.awk`:
+# every developer host already has POSIX awk via the GoogleSQL
+# hermetic toolchain's coreutils set, so we avoid a srcs_version
+# dependency on the Python toolchain.
 
 BEGIN {
     FS = ":"
+    # Map of `kFoo` C++ enum spellings keyed by the YAML disposition
+    # string. Keep in lock-step with `backend/engine/disposition.h`'s
+    # `Disposition` enum and `DispositionToString`.
+    kind["duckdb_native"]     = "kDuckdbNative"
+    kind["duckdb_rewrite"]    = "kDuckdbRewrite"
+    kind["duckdb_udf"]        = "kDuckdbUdf"
+    kind["semantic_executor"] = "kSemanticExecutor"
+    kind["control_op"]        = "kControlOp"
+    kind["unsupported"]       = "kUnsupported"
+
+    # Dispositions whose runtime emit does not yet exist; only these
+    # may carry `status=planned`.
+    plannable["duckdb_udf"]        = 1
+    plannable["semantic_executor"] = 1
+    plannable["control_op"]        = 1
+
+    # Dispositions that emit a `<duckdb_name>(<args>)` call. Only
+    # these may carry (and MUST carry) `duckdb_name=...`.
+    needs_duckdb_name["duckdb_native"]  = 1
+    needs_duckdb_name["duckdb_rewrite"] = 1
 }
 
 /^[[:space:]]*$/ { next }
@@ -25,7 +65,6 @@ BEGIN {
 
 {
     line = $0
-    # Strip inline `# ...` comment.
     sub(/[[:space:]]*#.*$/, "", line)
     pos = index(line, ":")
     if (pos == 0) {
@@ -44,14 +83,65 @@ BEGIN {
     }
     # Lowercase the key for case-insensitive lookup at runtime.
     key = tolower(key)
-    if (val == "skiplist") {
-        printf("    {\"%s\", FnEntry{FnKind::kSkiplist, \"\"}},\n", key)
-    } else if (val == "fallback") {
-        printf("    {\"%s\", FnEntry{FnKind::kFallback, \"\"}},\n", key)
-    } else if (length(val) > 0) {
-        printf("    {\"%s\", FnEntry{FnKind::kMap, \"%s\"}},\n", key, val)
-    } else {
-        printf("functions_table_gen.awk: empty value for key %s\n", key) > "/dev/stderr"
+
+    n = split(val, parts, /[[:space:]]+/)
+    if (n < 1 || length(parts[1]) == 0) {
+        printf("functions_table_gen.awk: missing disposition for key %s\n", key) > "/dev/stderr"
         exit 1
     }
+    disposition = parts[1]
+    if (!(disposition in kind)) {
+        printf("functions_table_gen.awk: unknown disposition %s for key %s (allowed: duckdb_native, duckdb_rewrite, duckdb_udf, semantic_executor, control_op, unsupported)\n", disposition, key) > "/dev/stderr"
+        exit 1
+    }
+
+    duckdb_name = ""
+    plan = ""
+    status = ""
+    for (i = 2; i <= n; i++) {
+        tok = parts[i]
+        if (length(tok) == 0) continue
+        eq = index(tok, "=")
+        if (eq <= 1) {
+            printf("functions_table_gen.awk: expected key=value token, got %s (key %s)\n", tok, key) > "/dev/stderr"
+            exit 1
+        }
+        meta_key = substr(tok, 1, eq - 1)
+        meta_val = substr(tok, eq + 1)
+        if (meta_key == "duckdb_name") {
+            duckdb_name = meta_val
+        } else if (meta_key == "plan") {
+            plan = meta_val
+        } else if (meta_key == "status") {
+            if (meta_val != "planned") {
+                printf("functions_table_gen.awk: unknown status %s for key %s (allowed: planned)\n", meta_val, key) > "/dev/stderr"
+                exit 1
+            }
+            status = meta_val
+        } else {
+            printf("functions_table_gen.awk: unknown metadata key %s for entry %s\n", meta_key, key) > "/dev/stderr"
+            exit 1
+        }
+    }
+
+    if ((disposition in needs_duckdb_name) && length(duckdb_name) == 0) {
+        printf("functions_table_gen.awk: %s needs duckdb_name=... for disposition %s\n", key, disposition) > "/dev/stderr"
+        exit 1
+    }
+    if (!(disposition in needs_duckdb_name) && length(duckdb_name) > 0) {
+        printf("functions_table_gen.awk: %s carries duckdb_name=%s but disposition %s does not emit a DuckDB function call\n", key, duckdb_name, disposition) > "/dev/stderr"
+        exit 1
+    }
+    if (disposition == "unsupported" && length(plan) == 0) {
+        printf("functions_table_gen.awk: %s is unsupported but has no plan= pointer (expected specialized-feature-policy.plan.md)\n", key) > "/dev/stderr"
+        exit 1
+    }
+    if (length(status) > 0 && !(disposition in plannable)) {
+        printf("functions_table_gen.awk: %s carries status=planned but disposition %s already has a runtime emit\n", key, disposition) > "/dev/stderr"
+        exit 1
+    }
+
+    is_planned = (length(status) > 0) ? "true" : "false"
+    printf("    {\"%s\", FnEntry{Disposition::%s, \"%s\", \"%s\", %s}},\n",
+           key, kind[disposition], duckdb_name, plan, is_planned)
 }

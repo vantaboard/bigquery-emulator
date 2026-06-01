@@ -5,6 +5,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/disposition.h"
 
 namespace bigquery_emulator {
 namespace backend {

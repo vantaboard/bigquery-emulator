@@ -25,6 +25,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
@@ -937,15 +938,17 @@ TEST_F(TranspilerTest, EmitFunctionCallMakeArrayWithColumn) {
 // --- Functions disposition table ----------------------------------------
 
 TEST(FunctionsTableTest, LookupKnownMappedScalar) {
-  // Sanity check on a representative `kMap` entry. The lookup is
-  // case-insensitive (we accept `ABS`, `abs`, `Abs` all the same).
+  // Sanity check on a representative `kDuckdbNative` entry. The
+  // lookup is case-insensitive (we accept `ABS`, `abs`, `Abs` all
+  // the same).
   const FnEntry* e = LookupFunction("abs");
   ASSERT_NE(e, nullptr);
-  EXPECT_EQ(e->kind, FnKind::kMap);
+  EXPECT_EQ(e->disposition, Disposition::kDuckdbNative);
   EXPECT_EQ(e->duckdb_name, "ABS");
+  EXPECT_FALSE(e->planned);
   const FnEntry* upper = LookupFunction("ABS");
   ASSERT_NE(upper, nullptr);
-  EXPECT_EQ(upper->kind, FnKind::kMap);
+  EXPECT_EQ(upper->disposition, Disposition::kDuckdbNative);
   EXPECT_EQ(upper->duckdb_name, "ABS");
 }
 
@@ -954,39 +957,58 @@ TEST(FunctionsTableTest, LookupKnownAggregate) {
   // through it; ditto for the SUM / COUNT family.
   const FnEntry* agg = LookupFunction("array_agg");
   ASSERT_NE(agg, nullptr);
-  EXPECT_EQ(agg->kind, FnKind::kMap);
+  EXPECT_EQ(agg->disposition, Disposition::kDuckdbNative);
   EXPECT_EQ(agg->duckdb_name, "ARRAY_AGG");
   const FnEntry* sum = LookupFunction("sum");
   ASSERT_NE(sum, nullptr);
-  EXPECT_EQ(sum->kind, FnKind::kMap);
+  EXPECT_EQ(sum->disposition, Disposition::kDuckdbNative);
   EXPECT_EQ(sum->duckdb_name, "SUM");
 }
 
-TEST(FunctionsTableTest, LookupSkiplistedFunction) {
-  // Skiplist disposition: the lookup succeeds but the kind tells the
-  // caller to short-circuit to "" so the engine falls back.
+TEST(FunctionsTableTest, LookupUnsupportedFunction) {
+  // `unsupported` disposition: the lookup succeeds but the
+  // disposition tells the caller to short-circuit to "" so the
+  // engine surfaces UNIMPLEMENTED. Owning plan is the specialised
+  // feature policy.
   const FnEntry* e = LookupFunction("approx_quantiles");
   ASSERT_NE(e, nullptr);
-  EXPECT_EQ(e->kind, FnKind::kSkiplist);
+  EXPECT_EQ(e->disposition, Disposition::kUnsupported);
   EXPECT_TRUE(e->duckdb_name.empty());
+  EXPECT_EQ(e->plan, "specialized-feature-policy.plan.md");
+  EXPECT_FALSE(e->planned);
 }
 
-TEST(FunctionsTableTest, LookupFallbackFunction) {
-  // Fallback disposition: same runtime behavior as skiplist, but the
-  // entry is in the table (with kind=kFallback) so we can tell
-  // "deliberately deferred" from "no row in the table". `date_add`
-  // is fallback today because BigQuery's INTERVAL semantics need a
-  // dedicated rewrite pass.
+TEST(FunctionsTableTest, LookupPlannedDuckdbUdfFunction) {
+  // Previously-`kFallback` rows now carry their planned route. For
+  // BigQuery's interval-semantics datetime arithmetic the planned
+  // route is `kDuckdbUdf` via the polyfill plan; runtime stays
+  // UNIMPLEMENTED until that plan lands.
   const FnEntry* e = LookupFunction("date_add");
   ASSERT_NE(e, nullptr);
-  EXPECT_EQ(e->kind, FnKind::kFallback);
+  EXPECT_EQ(e->disposition, Disposition::kDuckdbUdf);
+  EXPECT_TRUE(e->duckdb_name.empty());
+  EXPECT_EQ(e->plan, "duckdb-polyfill-udf-library.plan.md");
+  EXPECT_TRUE(e->planned);
+}
+
+TEST(FunctionsTableTest, LookupPlannedSemanticExecutorFunction) {
+  // SAFE-family rows route to the semantic executor (BigQuery-exact
+  // semantics differ from DuckDB's raise-on-overflow). Runtime
+  // stays UNIMPLEMENTED until `semantic-functions-compliance.plan.md`
+  // lands.
+  const FnEntry* e = LookupFunction("safe_divide");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->disposition, Disposition::kSemanticExecutor);
+  EXPECT_TRUE(e->duckdb_name.empty());
+  EXPECT_EQ(e->plan, "semantic-functions-compliance.plan.md");
+  EXPECT_TRUE(e->planned);
 }
 
 TEST(FunctionsTableTest, LookupUnknownReturnsNull) {
   // Functions not in the YAML disposition table return nullptr; the
-  // transpiler treats nullptr the same as a `kFallback` entry, but
-  // the distinction lets the LOG(INFO) tell "configured fallback"
-  // from "no disposition row".
+  // transpiler treats nullptr the same as a planned-but-not-
+  // implemented entry, but the distinction lets the LOG(INFO) tell
+  // "configured planned route" from "no disposition row".
   EXPECT_EQ(LookupFunction("totally_made_up_function"), nullptr);
 }
 
@@ -1120,7 +1142,8 @@ TEST_F(TranspilerTest, EmitAnalyticScanDenseRank) {
 
 TEST_F(TranspilerTest, EmitAnalyticScanSumOverWithFrame) {
   // Aggregate-over-window with an explicit ROWS frame. SUM is a
-  // `kMap` entry shared with the scalar aggregate emit, so the
+  // `kDuckdbNative` entry shared with the scalar aggregate emit, so
+  // the
   // analytic path renders it the same way (`SUM(<expr>)`) and the
   // OVER clause carries the ROWS BETWEEN bound. UNBOUNDED PRECEDING
   // / CURRENT ROW are both supported boundary types.
