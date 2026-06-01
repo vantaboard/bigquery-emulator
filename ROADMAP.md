@@ -287,10 +287,15 @@ behind each, and the multi-strategy coordinator is the only
   type metadata, conversion to/from
   `google.cloud.bigquery.v2.TableSchema` and to DuckDB schema strings
   (`backend/schema/googlesql_to_bq.{h,cc}`)
-- 🟡 BigQuery DDL through the DuckDB transpiler: `CREATE TABLE`,
-  `CREATE TABLE AS SELECT`, and `DROP TABLE` lower today;
-  `ALTER TABLE`, `CREATE VIEW`, partitioning / clustering hints,
-  and direct external-Parquet drop-in still pending
+- 🟡 BigQuery DDL routed to the control-op executor: `CREATE TABLE`,
+  `CREATE TABLE AS SELECT`, `DROP TABLE`, and `ANALYZE` flow through
+  `backend/engine/control/control_op_executor.{h,cc}` and mutate
+  `Storage` directly (no longer through the DuckDB SQL evaluator).
+  `ALTER TABLE` still lowers through the DuckDB transpiler pending
+  its own migration; `CREATE VIEW`, `CREATE MATERIALIZED VIEW` (full
+  refresh), `EXPORT DATA`, function registration, partitioning /
+  clustering hints, and direct external-Parquet drop-in still
+  pending
 
 ### Catalog wiring
 
@@ -451,11 +456,20 @@ public-facing policy.
   `tabledata.insertAll` instead. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
-- 🟡 DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
-  SELECT`, and `DROP TABLE` are wired today via the storage layer;
-  `CREATE VIEW`, `CREATE MATERIALIZED VIEW`, and `ALTER TABLE` still
-  return `UNIMPLEMENTED`. Completion lives in
-  `control-op-executor.plan.md`
+- ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
+  SELECT`, `DROP TABLE`, and `ANALYZE` are wired today via a
+  dedicated `ControlOpExecutor` that mutates `Storage` directly and
+  emits a BigQuery-shaped envelope (`Job.statistics.query.statementType`
+  populated per the BigQuery REST reference). The DuckDB SQL evaluator
+  no longer carries any DDL paths — the route classifier dispatches
+  every `control_op` statement root to `ControlOpExecutor`.
+  `CREATE VIEW`, `CREATE MATERIALIZED VIEW` (full-refresh execution),
+  `EXPORT DATA`, function registration, `ALTER TABLE` still surface
+  `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE` continues
+  to lower through the DuckDB engine pending its own subagent. Tracked
+  via `control-op-executor.plan.md` for the deferred handlers and
+  `specialized-feature-policy.plan.md` for materialized-view refresh
+  semantics
 - ⏳ Scripting / UDFs / TVFs (CALL, ASSERT, EXECUTE IMMEDIATE,
   procedure bodies, statement sequencing) routed to a local
   scripting executor — `procedural-scripting-executor.plan.md` and
