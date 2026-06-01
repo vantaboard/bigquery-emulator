@@ -431,6 +431,7 @@ rows flipped from `status=planned duckdb_udf` to ready
 | `if`        | `conditional/conditional_macros.cc::bq_if` | NULL cond falls through to ELSE (not the THEN branch) | `conditional_macros_test::IfNullCondFallsThroughToElse` |
 | `isnull`    | `conditional/conditional_macros.cc::bq_isnull` | Empty string is NOT NULL in BigQuery | `conditional_macros_test::IsNullOnNonNullValues` |
 | `strpos`    | `string/string_macros.cc::bq_strpos`    | 1-based index; missing needle returns 0 (not NULL); empty needle returns 1 | `string_macros_test::StrposReturnsOneBasedIndex`, `StrposMissingNeedleReturnsZero`, `StrposEmptyNeedle` |
+| `countif`   | n/a -- routed `duckdb_native duckdb_name=count_if` (no macro layer; DuckDB v1.5.3's `count_if` matches BQ COUNTIF on NULL / FALSE handling) | NULL inputs are NOT counted (treated as FALSE-like) | `conformance/fixtures/functions/aggregate/function_countif.yaml` (NULL row excluded from the `true_count`) |
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
@@ -453,9 +454,9 @@ considers a thin-macro path achievable):
   scoped into this polyfill landing).
 * `split`, `regexp_*`, `format`, the `date_*` / `datetime_*` /
   `timestamp_*` arithmetic family, `extract`, the `format_*` /
-  `parse_*` / `unix_*` family, and `countif` --- documented per
-  row in `functions.yaml` with the specific BigQuery semantic the
-  wrapper needs to close. Each of these is a candidate for a
-  future polyfill landing in the same plan; none are silent
-  approximations today (every call surfaces UNIMPLEMENTED via the
-  transpiler's empty-string contract).
+  `parse_*` / `unix_*` family --- documented per row in
+  `functions.yaml` with the specific BigQuery semantic the wrapper
+  needs to close. Each of these is a candidate for a future
+  polyfill landing in the same plan; none are silent approximations
+  today (every call surfaces UNIMPLEMENTED via the transpiler's
+  empty-string contract).

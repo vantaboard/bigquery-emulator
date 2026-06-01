@@ -256,9 +256,17 @@ max: duckdb_native duckdb_name=MAX
 any_value: duckdb_native duckdb_name=ANY_VALUE
 array_agg: duckdb_native duckdb_name=ARRAY_AGG
 string_agg: duckdb_native duckdb_name=STRING_AGG
-# BQ COUNTIF(b) <-> DuckDB COUNT(*) FILTER (WHERE b); UDF/macro
-# owns the rewrite.
-countif: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ COUNTIF(b) returns the count of TRUE values for `b`; NULL and
+# FALSE values are not counted. DuckDB v1.5.3 ships an aggregate
+# `count_if(arg)` with identical semantics ("Returns the number of
+# times when arg has been TRUE"). The two agree on NULL handling
+# (DuckDB count_if does not count NULL, matching BQ). Routed as
+# `duckdb_native` directly -- no macro layer needed because the
+# DuckDB function name maps 1:1 to the BigQuery contract; a
+# regression that drifted DuckDB's count_if behavior would surface
+# in the per-function conformance fixture under
+# `conformance/fixtures/functions/aggregate/function_countif.yaml`.
+countif: duckdb_native duckdb_name=COUNT_IF
 logical_and: duckdb_native duckdb_name=BOOL_AND
 logical_or: duckdb_native duckdb_name=BOOL_OR
 bit_and: duckdb_native duckdb_name=BIT_AND

@@ -16,6 +16,11 @@ conformance/fixtures/functions/
 Families today:
 
 - `numeric/` — `bq_mod`, `bq_div`.
+- `conditional/` — `bq_if`, `bq_isnull`.
+- `string/` — `bq_strpos`.
+- `aggregate/` — `countif` (routed `duckdb_native` to DuckDB's
+  `count_if` aggregate; no UDF wrapper needed because v1.5.3's
+  `count_if` already matches BQ COUNTIF on NULL / FALSE handling).
 
 Families landed by follow-up commits within the same plan ship one
 fixture per BigQuery function alongside the macro itself (per the

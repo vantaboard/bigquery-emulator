@@ -1,0 +1,44 @@
+# function_countif: BigQuery COUNTIF via `duckdb_native` route.
+#
+# Pins the COUNTIF aggregate's BigQuery contract end-to-end through
+# the gateway. The `functions.yaml` row routes COUNTIF directly to
+# DuckDB's `count_if(arg)` aggregate -- DuckDB v1.5.3's `count_if`
+# matches BigQuery COUNTIF's "count of TRUE values, with NULL and
+# FALSE not counted" semantics, so no UDF wrapper is needed today.
+#
+# Edge case pinned: NULL inputs are NOT counted (treated as
+# false-like, matching BigQuery). A regression that counted NULLs
+# would surface here as 3 instead of 2.
+#
+# Route-label assertion: deferred to plan 16 per
+# `conformance/fixtures/functions/README.md`.
+name: function_countif
+description: |
+  BigQuery COUNTIF lowered through `duckdb_native` to DuckDB's
+  `count_if` aggregate. Verifies common-path TRUE counting AND the
+  NULL-not-counted edge case.
+project_id: proj-functions-countif
+dataset_id: ds_functions_countif
+setup:
+  - dataset: ds_functions_countif
+  - table:
+      dataset: ds_functions_countif
+      id: flags
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: flag, type: BOOL, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_countif
+      table: flags
+      rows:
+        - {id: 1, flag: true}
+        - {id: 2, flag: true}
+        - {id: 3, flag: false}
+        - {id: 4, flag: null}
+query: |
+  SELECT COUNTIF(flag) AS true_count,
+         COUNT(*)      AS total_rows
+    FROM ds_functions_countif.flags
+expected:
+  rows:
+    - {true_count: "2", total_rows: "4"}
