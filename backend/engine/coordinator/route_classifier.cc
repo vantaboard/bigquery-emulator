@@ -164,6 +164,61 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
     return ::googlesql::ResolvedASTVisitor::VisitResolvedJoinScan(node);
   }
 
+  // Property-based promotion for `ResolvedArrayScan`: the YAML row is
+  // `duckdb_native` because the standalone `UNNEST(<arr>) AS <col>`
+  // shape lowers cleanly to DuckDB's `SELECT unnest(...)`. The
+  // divergent subset listed in `array-struct-semantic-path.plan.md`
+  // promotes to the semantic executor because DuckDB's `LIST` model
+  // does not match BigQuery's `ARRAY` model in those cases:
+  //
+  //   * `array_offset_column != nullptr` -> `UNNEST(<arr>) WITH
+  //     OFFSET AS <idx>`. BigQuery's ordinal column is load-bearing;
+  //     DuckDB's lateral unnest doesn't expose it cleanly.
+  //   * `is_outer == true` -> outer UNNEST. BigQuery emits a single
+  //     all-NULL row when the array is empty; DuckDB drops the row.
+  //   * `array_expr_list_size() > 1` (and the matching
+  //     `array_zip_mode != nullptr`) -> multi-array zip. The
+  //     PAD/STRICT/TRUNCATE modes are BigQuery-only.
+  //   * `join_expr != nullptr` -> `LEFT JOIN UNNEST(<arr>) ON ...`,
+  //     a correlated array scan owned by Family 4 of this plan.
+  //   * `input_scan` is non-NULL and not a `ResolvedSingleRowScan`
+  //     -> `FROM t, UNNEST(t.arr)`, a correlated lateral scan
+  //     owned by Family 4.
+  //
+  // Families 4 (correlated) and 5 (FLATTEN) are deferred from this
+  // subagent per the plan's pragmatic posture; the classifier still
+  // promotes them so the user surfaces a clean
+  // `semantic-executor not-implemented` envelope instead of the
+  // transpiler's empty-string UNIMPLEMENTED. The owning plan rows
+  // in `node_dispositions.yaml` continue to point at
+  // `array-struct-semantic-path.plan.md` until a follow-up subagent
+  // lands them.
+  absl::Status VisitResolvedArrayScan(
+      const ::googlesql::ResolvedArrayScan* node) override {
+    if (node != nullptr) {
+      if (node->array_offset_column() != nullptr) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedArrayScan(array_offset_column)");
+      } else if (node->is_outer()) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedArrayScan(is_outer=true)");
+      } else if (node->array_zip_mode() != nullptr ||
+                 node->array_expr_list_size() > 1) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedArrayScan(array_zip_mode)");
+      } else if (node->join_expr() != nullptr) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedArrayScan(join_expr)");
+      } else if (node->input_scan() != nullptr &&
+                 node->input_scan()->node_kind() !=
+                     ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedArrayScan(correlated_input_scan)");
+      }
+    }
+    return ::googlesql::ResolvedASTVisitor::VisitResolvedArrayScan(node);
+  }
+
  private:
   // Look up `node`'s class disposition in
   // `node_dispositions.yaml`. The YAML keys are the full class

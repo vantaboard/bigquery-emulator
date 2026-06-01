@@ -84,6 +84,22 @@ class RouteClassifierTest : public ::testing::Test {
             {"name", type_factory_->get_string()},
         });
     catalog_->AddOwnedTable(std::move(people));
+
+    // Toy table for correlated array-scan shapes
+    // (`FROM t, UNNEST(t.arr)`). One INT64 id plus an INT64 ARRAY
+    // column the analyzer can resolve `t.arr` against.
+    const ::googlesql::Type* int64_array_type = nullptr;
+    ASSERT_TRUE(
+        type_factory_
+            ->MakeArrayType(type_factory_->get_int64(), &int64_array_type)
+            .ok());
+    auto arr_table = std::make_unique<::googlesql::SimpleTable>(
+        "arr_table",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"arr", int64_array_type},
+        });
+    catalog_->AddOwnedTable(std::move(arr_table));
   }
 
   // Analyze `sql` against the fixture catalog and return the
@@ -121,39 +137,21 @@ TEST_F(RouteClassifierTest, PureDuckDbNativeSelectRoutesToDuckDb) {
   EXPECT_TRUE(d.reason.empty()) << d.reason;
 }
 
-TEST_F(RouteClassifierTest, PlannedSemanticExecutorFunctionDoesNotPromote) {
-  // `SAFE_DIVIDE`'s `functions.yaml` row currently carries
-  // `status=planned`: the disposition is `semantic_executor` but
-  // the executor for that route is not landed yet (owned by
-  // `semantic-functions-compliance.plan.md`). The upstream
-  // execution-disposition-registry contract is that `planned`
-  // rows must NOT be silently promoted -- they stay on the
-  // default `duckdb_native` route until the owning plan lands the
-  // real executor and drops the `planned` marker from the YAML.
-  // The DuckDB transpiler then surfaces UNIMPLEMENTED from inside
-  // its emit (per the empty-string contract), which is "no silent
-  // approximation": a planned shape does not get re-routed onto a
-  // stub executor that would also surface UNIMPLEMENTED but with
-  // a different error envelope.
-  //
-  // When `semantic-functions-compliance.plan.md` lands and drops
-  // `status=planned` from this row, this test will fail on the
-  // disposition expectation; update it to assert
-  // `Disposition::kSemanticExecutor` then.
-  //
-  // The call is wrapped in `SELECT ... FROM people` rather than a
-  // scalar SELECT so the shape-based promotion in
-  // `VisitResolvedQueryStmt` (scalar-only SELECT ->
-  // `kSemanticExecutor`, shipped by
-  // `.cursor/plans/semantic-executor-core.plan.md`) does not fire
-  // -- this test isolates the function-row contract, not the
-  // node-shape contract.
+TEST_F(RouteClassifierTest, SafeDivideRoutesToSemanticExecutor) {
+  // `SAFE_DIVIDE`'s `functions.yaml` row dropped `status=planned`
+  // in `edfb141` (the semantic-functions slice). The classifier
+  // now promotes a SELECT containing `SAFE_DIVIDE` to the
+  // semantic executor so the BigQuery-exact division-by-zero ->
+  // NULL contract fires. The call is wrapped in
+  // `SELECT ... FROM people` so the scalar-only promotion in
+  // `VisitResolvedQueryStmt` does not also fire (we want to pin
+  // the function-row contract, not the node-shape contract).
   const auto* stmt = Analyze("SELECT SAFE_DIVIDE(id, 0) FROM people");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
-  EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "function:safe_divide");
 }
 
 TEST_F(RouteClassifierTest, ControlOpStatementRoutesToControlOp) {
@@ -275,6 +273,87 @@ TEST_F(RouteClassifierTest,
 // catalog. Until then, the override stays in place as
 // defense-in-depth -- the only cost of the dead branch is the
 // per-Visit dispatch and a `MaybePromote` bookkeeping call.
+
+TEST_F(RouteClassifierTest, UnnestWithOffsetPromotesToSemanticExecutor) {
+  // `UNNEST(<arr>) WITH OFFSET <name>` resolves to a
+  // `ResolvedArrayScan` carrying a non-null `array_offset_column`.
+  // The DuckDB fast path's standalone-UNNEST emit (`EmitArrayScan`)
+  // returns "" for any `array_offset_column != nullptr` case, so
+  // the classifier promotes the whole query to `kSemanticExecutor`
+  // via the `VisitResolvedArrayScan` override. See
+  // `.cursor/plans/array-struct-semantic-path.plan.md` Family 1.
+  const auto* stmt =
+      Analyze("SELECT n, idx FROM UNNEST([1, 2, 3]) AS n WITH OFFSET AS idx");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_offset_column)");
+}
+
+TEST_F(RouteClassifierTest, OuterUnnestPromotesToSemanticExecutor) {
+  // `LEFT JOIN UNNEST(<arr>)` (the outer form) flips `is_outer` to
+  // true; BigQuery emits one all-NULL row when the array is empty,
+  // DuckDB drops the row. Classifier promotes the query to the
+  // semantic executor so the empty-array NULL-row contract gets
+  // honored. See `array-struct-semantic-path.plan.md` Family 2.
+  const auto* stmt = Analyze(
+      "SELECT id, n FROM arr_table LEFT JOIN UNNEST(arr_table.arr) AS n "
+      "ON TRUE");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  // The first promotion in the visitor walk wins -- either the
+  // outer flag (this test's intent) or the join_expr (the inner
+  // ArrayScan's `ON TRUE` clause). Either is correct; both pin
+  // the same family.
+  EXPECT_TRUE(d.offending_node == "ResolvedArrayScan(is_outer=true)" ||
+              d.offending_node == "ResolvedArrayScan(join_expr)")
+      << "got: " << d.offending_node;
+}
+
+TEST_F(RouteClassifierTest, MultiArrayUnnestZipPromotesToSemanticExecutor) {
+  // `UNNEST(<a>, <b>)` is BigQuery's array-zip surface (multiway
+  // UNNEST). The analyzer produces a `ResolvedArrayScan` with
+  // `array_expr_list_size() > 1` and (when GoogleSQL's
+  // FEATURE_MULTIWAY_UNNEST is enabled by
+  // `EnableMaximumLanguageFeatures`) attaches an `array_zip_mode`
+  // ENUM literal (PAD by default). DuckDB has no native array
+  // zip, so the classifier promotes the query to
+  // `kSemanticExecutor`. See
+  // `array-struct-semantic-path.plan.md` Family 3.
+  const auto* stmt = Analyze("SELECT * FROM UNNEST([1, 2, 3], [10, 20, 30])");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_zip_mode)");
+}
+
+TEST_F(RouteClassifierTest, CorrelatedArrayScanPromotesToSemanticExecutor) {
+  // `FROM t, UNNEST(t.arr)` (the cross-join form) resolves to a
+  // `ResolvedArrayScan` whose `input_scan` is the `t` TableScan
+  // (not a SingleRowScan). The DuckDB fast path's standalone-UNNEST
+  // emit returns "" for this shape; the classifier promotes the
+  // query to `kSemanticExecutor`. See Family 4 of
+  // `array-struct-semantic-path.plan.md`.
+  const auto* stmt =
+      Analyze("SELECT id, n FROM arr_table, UNNEST(arr_table.arr) AS n");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(correlated_input_scan)");
+}
+
+TEST_F(RouteClassifierTest, StandaloneUnnestStaysOnFastPath) {
+  // Defense-in-depth: `SELECT n FROM UNNEST([1,2,3]) AS n` (no
+  // offset / not outer / single array / no FROM-side input) MUST
+  // stay on `kDuckdbNative` so the fast path keeps the standalone
+  // shape it already handles. This pins that the
+  // `VisitResolvedArrayScan` override above does not over-promote.
+  const auto* stmt = Analyze("SELECT n FROM UNNEST([1, 2, 3]) AS n");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+}
 
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
