@@ -9,7 +9,7 @@
 # classifier and the coordinator pull GoogleSQL in because they
 # walk a `ResolvedAST`.
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -24,5 +24,53 @@ cc_library(
         "//backend/engine",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+# Route classifier. Walks a resolved AST and returns one
+# `Disposition` per query, plus a structured `RouteDecision` the
+# coordinator dispatches on. Consults the per-node-kind and
+# per-function disposition registries shipped by
+# `execution-disposition-registry.plan.md`; never re-routes at
+# runtime.
+cc_library(
+    name = "route_classifier",
+    srcs = ["route_classifier.cc"],
+    hdrs = ["route_classifier.h"],
+    deps = [
+        "//backend/engine:disposition",
+        "//backend/engine/duckdb/transpiler:functions",
+        "//backend/engine/duckdb/transpiler:node_dispositions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "route_classifier_test",
+    srcs = ["route_classifier_test.cc"],
+    deps = [
+        ":route_classifier",
+        "//backend/engine:disposition",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        # `transpiler_test`'s pattern: drive a real `AnalyzeStatement`
+        # against a tiny `SimpleCatalog` so the ResolvedAST nodes
+        # the classifier sees are exactly the ones the engine sees
+        # at runtime.
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
     ],
 )
