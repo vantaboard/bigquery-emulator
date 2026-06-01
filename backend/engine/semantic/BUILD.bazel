@@ -1,0 +1,203 @@
+# Bazel build for the semantic executor.
+#
+# `semantic_executor` is the local row/array/value interpreter the
+# `LocalCoordinatorEngine` dispatches to on the
+# `Disposition::kSemanticExecutor` route. The package owns:
+#
+#   * The structured error surface (`error`) the gateway maps onto
+#     BigQuery REST `error.errors[0].reason` tokens.
+#   * The unit-of-evaluation `Value` type plus type-system helpers
+#     for converting to / from the wire-facing `storage::Value`.
+#   * `EvalExpr`, the resolved-AST walker that drives expression
+#     evaluation across the BigQuery type system.
+#   * `SemanticExecutor`, the per-route `Executor` adapter the
+#     coordinator dispatches to.
+#   * A `RowSource` adapter that lets downstream plans compose with
+#     `DuckDbExecutor` output.
+#
+# See `.cursor/plans/semantic-executor-core.plan.md` for the full
+# scope and design constraints.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "error",
+    srcs = ["error.cc"],
+    hdrs = ["error.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:cord",
+    ],
+)
+
+cc_test(
+    name = "error_test",
+    srcs = ["error_test.cc"],
+    deps = [
+        ":error",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "value",
+    srcs = ["value.cc"],
+    hdrs = ["value.h"],
+    deps = [
+        ":error",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@googlesql//googlesql/public:civil_time",
+        "@googlesql//googlesql/public:interval_value",
+        "@googlesql//googlesql/public:numeric_value",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:uuid_value",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "value_test",
+    srcs = ["value_test.cc"],
+    deps = [
+        ":error",
+        ":value",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:numeric_value",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "eval_expr",
+    srcs = ["eval_expr.cc"],
+    hdrs = ["eval_expr.h"],
+    deps = [
+        ":error",
+        ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:numeric_value",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "eval_expr_test",
+    srcs = ["eval_expr_test.cc"],
+    deps = [
+        ":error",
+        ":eval_expr",
+        ":value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "row_source",
+    srcs = ["row_source.cc"],
+    hdrs = ["row_source.h"],
+    deps = [
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "row_source_test",
+    srcs = ["row_source_test.cc"],
+    deps = [
+        ":row_source",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "executor",
+    srcs = ["executor.cc"],
+    hdrs = ["executor.h"],
+    deps = [
+        ":error",
+        ":eval_expr",
+        ":row_source",
+        ":value",
+        "//backend/engine",
+        "//backend/engine/coordinator:executor",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "executor_test",
+    srcs = ["executor_test.cc"],
+    deps = [
+        ":error",
+        ":executor",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
