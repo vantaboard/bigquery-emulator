@@ -100,29 +100,10 @@ TEST_F(StubExecutorsTest, SemanticExecuteDmlNamesRoute) {
   EXPECT_NE(msg.find("ExecuteDml"), std::string::npos) << msg;
 }
 
-TEST_F(StubExecutorsTest, ControlOpExecuteQueryNamesRoute) {
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();
-  ASSERT_NE(stmt, nullptr);
-  ControlOpExecutor exec;
-  auto out = exec.ExecuteQuery(MakeRequest(), *stmt, catalog_.get());
-  ASSERT_FALSE(out.ok());
-  EXPECT_EQ(out.status().code(), absl::StatusCode::kUnimplemented);
-  const std::string msg(out.status().message());
-  EXPECT_NE(msg.find("control_op"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("control-op-executor.plan.md"), std::string::npos) << msg;
-}
-
-TEST_F(StubExecutorsTest, ControlOpExecuteDdlNamesRoute) {
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();
-  ASSERT_NE(stmt, nullptr);
-  ControlOpExecutor exec;
-  absl::Status s = exec.ExecuteDdl(MakeRequest(), *stmt, catalog_.get());
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented);
-  const std::string msg(s.message());
-  EXPECT_NE(msg.find("control_op"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("ExecuteDdl"), std::string::npos) << msg;
-}
+// `ControlOpExecutor` graduated out of `stub_executors.h`; its
+// per-route + per-statement contract is exercised by the real
+// executor's own tests at `backend/engine/control/
+// control_op_executor_test.cc`.
 
 TEST_F(StubExecutorsTest, UnsupportedExecuteQueryNamesRoute) {
   const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();

@@ -1,8 +1,8 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_COORDINATOR_STUB_EXECUTORS_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_COORDINATOR_STUB_EXECUTORS_H_
 
-// Placeholder executors for the three non-DuckDB routes the
-// `RouteClassifier` can pick today. Each one returns
+// Placeholder executors for the non-DuckDB / non-control-op routes
+// the `RouteClassifier` can pick today. Each one returns
 // `absl::UnimplementedError` with a disposition-aware message that
 // points the operator at the downstream plan that fills in the real
 // behavior (see
@@ -11,13 +11,21 @@
 // real implementations land in:
 //
 //   * `semantic-executor-core.plan.md` -- `SemanticExecutor`
-//   * `control-op-executor.plan.md`   -- `ControlOpExecutor`
 //   * `specialized-feature-policy.plan.md` -- `UnsupportedExecutor`
 //
-// Until those plans land, the coordinator hands every query the
-// `RouteClassifier` routes off DuckDB straight into one of these
-// stubs. The stubs never mutate state and never re-enter the DuckDB
-// path; "single planned route per shape" is enforced at the
+// `ControlOpExecutor` used to live here too, but
+// `.cursor/plans/control-op-executor.plan.md` lifted it into its own
+// `backend/engine/control/` package once it grew real per-statement
+// handlers (CREATE TABLE / CTAS / DROP TABLE / ANALYZE today, with
+// the rest of the control_op surface dispatched as
+// UNIMPLEMENTED-with-pointer in the same per-statement table). The
+// coordinator's `control_op_executor_` member now references that
+// package, not this header.
+//
+// Until the remaining plans land, the coordinator hands every query
+// the `RouteClassifier` routes off DuckDB straight into one of
+// these stubs. The stubs never mutate state and never re-enter the
+// DuckDB path; "single planned route per shape" is enforced at the
 // coordinator level, not at the executor level.
 
 #include <memory>
@@ -49,35 +57,6 @@ class SemanticExecutor : public Executor {
 
   SemanticExecutor(const SemanticExecutor&) = delete;
   SemanticExecutor& operator=(const SemanticExecutor&) = delete;
-
-  [[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-
-  [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-
-  [[nodiscard]] absl::Status ExecuteDdl(
-      const QueryRequest& request,
-      const ::googlesql::ResolvedStatement& stmt,
-      ::googlesql::Catalog* catalog) override;
-};
-
-// ControlOpExecutor handles the `kControlOp` route -- DDL roots,
-// transaction-control statements, session-state statements, and any
-// other "control operation" that mutates engine / catalog state
-// without producing a row stream. All methods return UNIMPLEMENTED
-// with a pointer at `control-op-executor.plan.md` for now.
-class ControlOpExecutor : public Executor {
- public:
-  ControlOpExecutor() = default;
-  ~ControlOpExecutor() override;
-
-  ControlOpExecutor(const ControlOpExecutor&) = delete;
-  ControlOpExecutor& operator=(const ControlOpExecutor&) = delete;
 
   [[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request,

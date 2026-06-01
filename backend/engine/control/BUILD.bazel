@@ -1,0 +1,63 @@
+# Bazel build for the control-op executor.
+#
+# `ControlOpExecutor` is the route-typed adapter for the
+# `kControlOp` route -- DDL, metadata, and catalog ops that bypass
+# the DuckDB SQL evaluator entirely. It mutates the storage layer
+# directly (CREATE TABLE / DROP TABLE / ANALYZE) and lowers the few
+# shapes that need DuckDB SQL as an implementation primitive (CTAS)
+# through a per-query in-memory DuckDB connection. See plan
+# `.cursor/plans/control-op-executor.plan.md`.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "control_op_executor",
+    srcs = ["control_op_executor.cc"],
+    hdrs = ["control_op_executor.h"],
+    deps = [
+        "//backend/catalog:storage_table",
+        "//backend/engine",
+        "//backend/engine/coordinator:executor",
+        "//backend/engine/duckdb:arrow_to_bq",
+        "//backend/engine/duckdb/udf:registrar",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "control_op_executor_test",
+    srcs = ["control_op_executor_test.cc"],
+    deps = [
+        ":control_op_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)

@@ -16,10 +16,12 @@
 //   2. Unsupported function surfaces UNIMPLEMENTED via the
 //      `UnsupportedExecutor` stub with a disposition-aware
 //      message.
-//   3. Existing DDL (`CREATE TABLE`) preserves the historical
-//      behavior; the classifier short-circuits planned
-//      `control_op` rows back onto the DuckDB route so the
-//      gateway/e2e tests do not regress.
+//   3. DDL (`CREATE TABLE` / CTAS / `DROP TABLE`) routes through
+//      `kControlOp` to `backend/engine/control/control_op_executor`
+//      and mutates `Storage` directly; ALTER TABLE keeps using
+//      `DuckDbExecutor::ExecuteDdl` until a follow-up plan lands
+//      it on the control-op executor. This regression-pins the
+//      end-state every gateway/e2e DDL test depends on.
 //
 // The harness mirrors `duckdb_engine_test.cc` so a future merge of
 // the legacy `DuckDBEngine` tests onto this fixture is mechanical.
@@ -240,16 +242,15 @@ TEST_F(LocalCoordinatorEngineTest,
 }
 
 TEST_F(LocalCoordinatorEngineTest,
-       ExecuteDdlCreateTablePreservesDuckDbBehavior) {
-  // `ResolvedCreateTableStmt` has `status=planned control_op` in
-  // `node_dispositions.yaml`. The classifier's
-  // planned-row short-circuit keeps the route at `kDuckdbNative`
-  // until `control-op-executor.plan.md` lands the real executor,
-  // so the coordinator's `ExecuteDdl` dispatches to the
-  // `DuckDbExecutor` -- which carries the historical CREATE TABLE
-  // implementation. This pins the gateway/e2e/ddl_create_drop
-  // test's expected behavior against the coordinator-aware
-  // engine.
+       ExecuteDdlCreateTableRoutesThroughControlOp) {
+  // `ResolvedCreateTableStmt` is `disposition=control_op` (no
+  // `status=planned`) in `node_dispositions.yaml`. The classifier
+  // routes the root statement to `kControlOp` and the coordinator
+  // dispatches CREATE TABLE through
+  // `backend/engine/control/control_op_executor.cc::RunCreateTable`
+  // -- which mutates the `Storage` backend directly. This pins the
+  // gateway/e2e/ddl_create_drop test's expected behavior against
+  // the coordinator-aware engine.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   CatalogBundle bundle = MakeCatalog();
   auto status = engine_->ExecuteDdl(
@@ -268,13 +269,16 @@ TEST_F(LocalCoordinatorEngineTest,
 // MERGE / DDL coverage migrated from the legacy `duckdb_engine_test.cc`.
 //
 // These pin the through-the-coordinator behavior of every shape
-// the legacy `DuckDBEngine` used to own end-to-end. Each one
-// classifies to `kDuckdbNative` (MERGE is not `planned`) or
-// reaches DuckDB through the `planned`-row short-circuit on the
-// `control_op` rows, then dispatches to `DuckDbExecutor`. The
-// gateway/e2e suite leans on the same paths; pinning them at the
-// engine surface lets a regression here surface as a unit-test
-// failure first.
+// the legacy `DuckDBEngine` used to own end-to-end. MERGE
+// classifies to `kDuckdbNative` and dispatches through the
+// `DuckDbExecutor`; CREATE TABLE / CTAS / DROP TABLE classify to
+// `kControlOp` and dispatch through
+// `backend/engine/control/control_op_executor.cc`; ALTER TABLE
+// has no registry row so it falls through to `kDuckdbNative` and
+// stays on `DuckDbExecutor::ExecuteDdl` until a future plan lands
+// it on the control-op executor. The gateway/e2e suite leans on
+// the same paths; pinning them at the engine surface lets a
+// regression here surface as a unit-test failure first.
 // ---------------------------------------------------------------------------
 
 TEST_F(LocalCoordinatorEngineTest,

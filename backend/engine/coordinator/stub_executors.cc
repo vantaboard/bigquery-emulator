@@ -80,48 +80,14 @@ absl::Status SemanticExecutor::ExecuteDdl(
                                "semantic-executor-core.plan.md"));
 }
 
-// --- ControlOpExecutor ----------------------------------------------------
-
-ControlOpExecutor::~ControlOpExecutor() = default;
-
-absl::StatusOr<std::unique_ptr<RowSource>> ControlOpExecutor::ExecuteQuery(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("control_op",
-                               "ExecuteQuery",
-                               stmt.node_kind_string(),
-                               "control-op-executor.plan.md"));
-}
-
-absl::StatusOr<DmlStats> ControlOpExecutor::ExecuteDml(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("control_op",
-                               "ExecuteDml",
-                               stmt.node_kind_string(),
-                               "control-op-executor.plan.md"));
-}
-
-absl::Status ControlOpExecutor::ExecuteDdl(
-    const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return absl::UnimplementedError(
-      MakeUnimplementedMessage("control_op",
-                               "ExecuteDdl",
-                               stmt.node_kind_string(),
-                               "control-op-executor.plan.md"));
-}
+// `ControlOpExecutor` graduated out of this stub file when
+// `control-op-executor.plan.md` landed. It now lives at
+// `backend/engine/control/control_op_executor.{h,cc}` with real
+// per-statement handlers (CREATE TABLE / CTAS / DROP TABLE /
+// ANALYZE) plus a focused-UNIMPLEMENTED dispatch table for the rest
+// of the control-op surface. The coordinator's
+// `control_op_executor_` member references the new package; this
+// file is intentionally silent on `kControlOp`.
 
 // --- UnsupportedExecutor --------------------------------------------------
 

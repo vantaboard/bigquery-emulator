@@ -33,6 +33,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/engine/control/control_op_executor.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/coordinator/stub_executors.h"
@@ -81,7 +82,7 @@ class LocalCoordinatorEngine : public Engine {
   RouteClassifier classifier_{};
   duckdb::DuckDbExecutor duckdb_executor_;
   SemanticExecutor semantic_executor_{};
-  ControlOpExecutor control_op_executor_{};
+  control::ControlOpExecutor control_op_executor_;
   UnsupportedExecutor unsupported_executor_{};
 };
 

@@ -148,29 +148,22 @@ TEST_F(RouteClassifierTest, PlannedSemanticExecutorFunctionDoesNotPromote) {
   EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
 }
 
-TEST_F(RouteClassifierTest, PlannedControlOpStatementDoesNotPromote) {
-  // `ResolvedCreateTableStmt` has `disposition=control_op
-  // status=planned` in `node_dispositions.yaml`. Same contract as
-  // the planned function-row case above: planned rows surface
-  // their target disposition for documentation but the classifier
-  // keeps the actual route at `kDuckdbNative` until the owning
-  // plan (`control-op-executor.plan.md`) lands the real executor
-  // and drops the `planned` marker. The fast path (DuckDB) already
-  // implements DDL via `DuckDbExecutor::ExecuteDdl`; routing CREATE
-  // TABLE through the classifier-aware coordinator must preserve
-  // the existing `gateway/e2e/ddl_create_drop_test.go` behavior,
-  // which this test pins.
-  //
-  // When `control-op-executor.plan.md` lands and drops
-  // `status=planned`, this test will fail on the disposition
-  // expectation; update it to assert `Disposition::kControlOp`
-  // then.
+TEST_F(RouteClassifierTest, ControlOpStatementRoutesToControlOp) {
+  // `ResolvedCreateTableStmt` is `disposition=control_op` (no
+  // `status=planned`) in `node_dispositions.yaml`. Per
+  // `control-op-executor.plan.md` the executor for that disposition
+  // shipped, so the classifier promotes the root statement to
+  // `kControlOp` and the coordinator dispatches DDL through
+  // `backend/engine/control/control_op_executor.cc` -- not through
+  // the DuckDB SQL evaluator.
   const auto* stmt = Analyze("CREATE TABLE new_table (a INT64, b STRING)");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
-  EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
+  EXPECT_EQ(d.disposition, Disposition::kControlOp);
+  EXPECT_EQ(d.offending_node, "ResolvedCreateTableStmt");
+  EXPECT_NE(d.reason.find("control-op executor"), std::string::npos)
+      << "reason should name the control-op executor; got: " << d.reason;
 }
 
 TEST_F(RouteClassifierTest, ApproxQuantilesFunctionRoutesToUnsupported) {

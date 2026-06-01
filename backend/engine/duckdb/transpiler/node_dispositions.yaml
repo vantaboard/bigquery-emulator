@@ -49,15 +49,15 @@
 # --- Statements --------------------------------------------------------
 ResolvedQueryStmt: duckdb_native
 ResolvedExplainStmt: unsupported plan=specialized-feature-policy.plan.md
-ResolvedCreateTableStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedCreateTableAsSelectStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedCreateViewStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedCreateMaterializedViewStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateTableStmt: control_op plan=control-op-executor.plan.md
+ResolvedCreateTableAsSelectStmt: control_op plan=control-op-executor.plan.md
+ResolvedCreateViewStmt: control_op plan=control-op-executor.plan.md
+ResolvedCreateMaterializedViewStmt: control_op plan=control-op-executor.plan.md
 ResolvedCreateProcedureStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
-ResolvedCreateFunctionStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedCreateTableFunctionStmt: control_op plan=udf-tvf-module-routing.plan.md status=planned
-ResolvedDropStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedDropFunctionStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateFunctionStmt: control_op plan=control-op-executor.plan.md
+ResolvedCreateTableFunctionStmt: control_op plan=udf-tvf-module-routing.plan.md
+ResolvedDropStmt: control_op plan=control-op-executor.plan.md
+ResolvedDropFunctionStmt: control_op plan=control-op-executor.plan.md
 ResolvedInsertStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
 ResolvedUpdateStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
 ResolvedDeleteStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
@@ -65,10 +65,10 @@ ResolvedMergeStmt: duckdb_rewrite plan=dml-local-executor.plan.md
 ResolvedCallStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedAssignmentStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedExecuteImmediateStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
-ResolvedAnalyzeStmt: control_op plan=control-op-executor.plan.md status=planned
-ResolvedAuxLoadDataStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedAnalyzeStmt: control_op plan=control-op-executor.plan.md
+ResolvedAuxLoadDataStmt: control_op plan=control-op-executor.plan.md
 ResolvedAssertStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
-ResolvedExportDataStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedExportDataStmt: control_op plan=control-op-executor.plan.md
 
 # --- Relational scans --------------------------------------------------
 ResolvedTableScan: duckdb_native
@@ -100,8 +100,8 @@ ResolvedBarrierScan: semantic_executor plan=advanced-relational-routing.plan.md 
 ResolvedPipeIfScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedPipeForkScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedPipeTeeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
-ResolvedPipeExportDataScan: control_op plan=control-op-executor.plan.md status=planned
-ResolvedPipeCreateTableScan: control_op plan=control-op-executor.plan.md status=planned
+ResolvedPipeExportDataScan: control_op plan=control-op-executor.plan.md
+ResolvedPipeCreateTableScan: control_op plan=control-op-executor.plan.md
 ResolvedPipeInsertScan: semantic_executor plan=dml-local-executor.plan.md status=planned
 # `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
 # query (GQL) surface is deliberately out of scope locally; every
@@ -147,7 +147,7 @@ ResolvedSystemVariable: semantic_executor plan=procedural-scripting-executor.pla
 ResolvedSequence: unsupported plan=specialized-feature-policy.plan.md
 ResolvedArgumentRef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
 ResolvedArgumentDef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
-ResolvedCatalogColumnRef: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCatalogColumnRef: control_op plan=control-op-executor.plan.md
 ResolvedExpressionColumn: unsupported plan=specialized-feature-policy.plan.md
 ResolvedUpdateConstructor: semantic_executor plan=dml-local-executor.plan.md status=planned
 

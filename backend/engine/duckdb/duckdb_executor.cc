@@ -951,35 +951,30 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
 }
 
 // ---------------------------------------------------------------------------
-// ExecuteDdl (Plan 35 -- DuckDB-only DDL)
+// ExecuteDdl (DuckDB engine -- ALTER TABLE only after Plan 47)
 //
-// The DuckDB engine owns the DDL surface end-to-end: CREATE TABLE,
-// CREATE TABLE AS SELECT, DROP TABLE, and ALTER TABLE ADD COLUMN.
+// CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE all moved to
+// `backend/engine/control/control_op_executor.{h,cc}` when
+// `.cursor/plans/control-op-executor.plan.md` landed: those rows
+// dropped `status=planned` from `node_dispositions.yaml`, so the
+// route classifier dispatches them to the `ControlOpExecutor`
+// directly and the DuckDB executor never sees them.
 //
-// Shape decisions:
+// `ResolvedAlterTableStmt` stays here because the alter-action
+// surface is deliberately out of scope for plan 47 (the plan only
+// migrated CREATE / DROP / ANALYZE shapes). The classifier's
+// fallthrough for shapes missing from `node_dispositions.yaml`
+// keeps `ALTER` on the `kDuckdbNative` route, the coordinator
+// dispatches it here, and the legacy scan-drop-create-append cycle
+// below applies the new column without an in-place schema-evolution
+// API on `Storage`.
 //
-//   * Schema sources differ by kind. CREATE TABLE pulls the schema
-//     out of `column_definition_list`; CTAS pulls it out of the
-//     analyzer's `output_column_list` (which already folded the
-//     inner-query types through GoogleSQL's type inference and the
-//     external product mode); DROP needs no schema; ALTER builds an
-//     extended schema by appending the new column's
-//     `column_definition` to the existing storage schema.
-//   * Name-path resolution mirrors GoogleSqlCatalog's contract:
-//     two-element paths are interpreted as `<dataset>.<table>`
-//     under `request.project_id`; three-element paths are
-//     interpreted as `<project>.<dataset>.<table>`. Anything else
-//     (zero, one, or four-plus elements) returns INVALID_ARGUMENT.
-//   * CTAS executes the user's SQL verbatim against a per-query
-//     in-memory DuckDB connection after pre-creating each
-//     referenced dataset schema and materializing every source
-//     `StorageTable` under its `"<dataset>"."<table>"` qualified
-//     name. We then read back the rows from the DuckDB-side target
-//     table and ship them into `Storage` via `CreateTable` +
-//     `AppendRows`. Three-segment target names get rewritten to
-//     two-segment names inside the engine because DuckDB's catalog
-//     does not have a project layer (the project we run under is
-//     implicit at engine-construction time).
+// Shape decisions for the surviving ALTER path:
+//
+//   * Name-path resolution mirrors `GoogleSqlCatalog::FindTable`'s
+//     rules: two-segment paths default the project from
+//     `request.project_id`; three-segment paths override it.
+//     Anything else surfaces as INVALID_ARGUMENT.
 //   * ALTER TABLE ADD COLUMN runs a scan-drop-create-append cycle
 //     because the `Storage` interface has no in-place schema
 //     evolution today; we leave each new column's cells as
@@ -1028,326 +1023,6 @@ void ApplyAnnotations(const ::googlesql::ResolvedColumnDefinition* def,
   if (ann != nullptr && ann->not_null()) {
     field->set_mode("REQUIRED");
   }
-}
-
-// Build a `schema::TableSchema` from an analyzer's
-// `column_definition_list`. Used by CREATE TABLE (the schema is
-// supplied explicitly) and CTAS (the analyzer also fills the
-// column_definition_list with the inferred types so both shapes
-// land on the same helper).
-absl::StatusOr<schema::TableSchema> ColumnDefinitionListToTableSchema(
-    const std::vector<
-        std::unique_ptr<const ::googlesql::ResolvedColumnDefinition>>&
-        column_definition_list) {
-  v1::TableSchema proto;
-  for (const auto& def : column_definition_list) {
-    if (def == nullptr) {
-      return absl::InvalidArgumentError(
-          "duckdb engine: column_definition_list has a null entry");
-    }
-    v1::FieldSchema* field = proto.add_fields();
-    absl::Status s =
-        backend::schema::TypeToFieldSchema(def->type(), def->name(), field);
-    if (!s.ok()) return s;
-    ApplyAnnotations(def.get(), field);
-  }
-  return backend::schema::TableSchemaFromProto(proto);
-}
-
-// Drain every row out of `quoted_table_name` in `conn` and return
-// them in the engine-agnostic `storage::Row` shape that matches
-// `bq_schema`. Shared with the SELECT and MERGE paths via the
-// chunked `arrow_to_bq::ChunkRowToCells` converter so the cell
-// representation is identical across engines.
-absl::StatusOr<std::vector<storage::Row>> DrainTableRows(
-    ::duckdb_connection conn,
-    absl::string_view quoted_table_name,
-    const schema::TableSchema& bq_schema) {
-  const std::string sql = absl::StrCat("SELECT * FROM ", quoted_table_name);
-  ::duckdb_result result;
-  if (::duckdb_query(conn, sql.c_str(), &result) != ::DuckDBSuccess) {
-    const auto* err = ::duckdb_result_error(&result);
-    std::string detail = err == nullptr ? std::string("") : std::string(err);
-    ::duckdb_destroy_result(&result);
-    return absl::InternalError(absl::StrCat(
-        "DuckDBEngine: failed to read back DDL target ", sql, ": ", detail));
-  }
-  std::vector<storage::Row> rows;
-  while (true) {
-    ::duckdb_data_chunk chunk = ::duckdb_fetch_chunk(result);
-    if (chunk == nullptr) break;
-    const ::idx_t n = ::duckdb_data_chunk_get_size(chunk);
-    for (::idx_t i = 0; i < n; ++i) {
-      absl::StatusOr<storage::Row> rendered =
-          arrow_to_bq::ChunkRowToCells(chunk, i, bq_schema);
-      if (!rendered.ok()) {
-        ::duckdb_destroy_data_chunk(&chunk);
-        ::duckdb_destroy_result(&result);
-        return rendered.status();
-      }
-      rows.push_back(std::move(rendered).value());
-    }
-    ::duckdb_destroy_data_chunk(&chunk);
-  }
-  ::duckdb_destroy_result(&result);
-  return rows;
-}
-
-// Decide whether `existing_status` from `Storage::CreateTable`
-// should be treated as success given the resolved `create_mode`.
-// CREATE_IF_NOT_EXISTS swallows ALREADY_EXISTS; the other modes
-// propagate it verbatim.
-absl::Status ApplyCreateMode(
-    absl::Status existing_status,
-    ::googlesql::ResolvedCreateStatement::CreateMode create_mode) {
-  if (existing_status.ok()) return absl::OkStatus();
-  if (create_mode ==
-          ::googlesql::ResolvedCreateStatement::CREATE_IF_NOT_EXISTS &&
-      existing_status.code() == absl::StatusCode::kAlreadyExists) {
-    return absl::OkStatus();
-  }
-  return existing_status;
-}
-
-// CREATE TABLE (schema-only) executor. The analyzer's
-// `column_definition_list` carries the explicit schema; we map it
-// straight onto `Storage::CreateTable`.
-absl::Status RunCreateTable(storage::Storage& storage,
-                            absl::string_view project_id,
-                            const ::googlesql::ResolvedCreateTableStmt* stmt) {
-  if (stmt == nullptr) {
-    return absl::InternalError(
-        "DuckDBEngine::ExecuteDdl: CREATE TABLE has null resolved statement");
-  }
-  absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
-  if (!target.ok()) return target.status();
-  absl::StatusOr<schema::TableSchema> bq_schema =
-      ColumnDefinitionListToTableSchema(stmt->column_definition_list());
-  if (!bq_schema.ok()) return bq_schema.status();
-
-  // CREATE OR REPLACE: drop a pre-existing table before recreating.
-  // NOT_FOUND on the drop is fine -- it just means the table was
-  // never there. Any other failure propagates.
-  if (stmt->create_mode() ==
-      ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
-    absl::Status dropped = storage.DropTable(*target);
-    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
-      return dropped;
-    }
-  }
-  return ApplyCreateMode(storage.CreateTable(*target, *bq_schema),
-                         stmt->create_mode());
-}
-
-// CREATE TABLE AS SELECT executor. We materialize the source tables
-// inside a per-query in-memory DuckDB connection, pass the user's
-// SQL through verbatim, then read back the resulting rows and ship
-// them into storage. The output schema we register on storage comes
-// from the analyzer's `column_definition_list` (which the analyzer
-// has already projected from the inner-query output types), not
-// from DuckDB's inferred types -- DuckDB infers e.g. INTEGER for
-// `SELECT 1` while BigQuery infers INT64, and we want the BigQuery
-// view of the schema on storage.
-absl::Status RunCreateTableAsSelect(
-    storage::Storage& storage,
-    absl::string_view project_id,
-    const QueryRequest& request,
-    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt,
-    const ::googlesql::ResolvedStatement* root_stmt) {
-  if (stmt == nullptr) {
-    return absl::InternalError(
-        "DuckDBEngine::ExecuteDdl: CTAS has null resolved statement");
-  }
-  absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
-  if (!target.ok()) return target.status();
-  absl::StatusOr<schema::TableSchema> bq_schema =
-      ColumnDefinitionListToTableSchema(stmt->column_definition_list());
-  if (!bq_schema.ok()) return bq_schema.status();
-
-  // Collect every source table the analyzer pulled in so we know
-  // what to materialize on the DuckDB side before passing the
-  // user's SQL through.
-  TableScanCollector collector;
-  absl::Status visit_status = root_stmt->Accept(&collector);
-  if (!visit_status.ok()) return visit_status;
-
-  ::duckdb_database db = nullptr;
-  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
-    return absl::InternalError(
-        "DuckDBEngine::ExecuteDdl: duckdb_open(in-memory) failed");
-  }
-  ::duckdb_connection conn = nullptr;
-  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
-    ::duckdb_close(&db);
-    return absl::InternalError(
-        "DuckDBEngine::ExecuteDdl: duckdb_connect failed");
-  }
-  // CTAS executes its inner SELECT on the DuckDB side, so install
-  // the polyfill UDFs before passing the user-submitted DDL through;
-  // a `CREATE TABLE ... AS SELECT bq_mod(x, y) ...` body would
-  // otherwise fail to resolve.
-  if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return reg;
-  }
-
-  // Pre-create the target dataset schema on the DuckDB side so the
-  // user-submitted CTAS SQL (`CREATE TABLE ds.new AS ...`) resolves
-  // `ds` as a DuckDB schema. We do not pre-create the target table
-  // itself -- DuckDB does that for us when it runs the CTAS.
-  absl::Status target_schema_status =
-      RunSqlNoResult(conn,
-                     absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                  QuoteIdent(target->dataset_id)));
-  if (!target_schema_status.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return target_schema_status;
-  }
-
-  // Materialize every referenced source table under its
-  // schema-qualified name so the inner SELECT resolves names
-  // end-to-end against the DuckDB catalog the way it would against
-  // the BigQuery catalog.
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (source_table == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "DuckDBEngine::ExecuteDdl: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "' for CTAS; rebuild against a "
-          "GoogleSqlCatalog-backed analyzer"));
-    }
-    const storage::TableId& id = source_table->storage_table_id();
-    absl::Status schema_status =
-        RunSqlNoResult(conn,
-                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                    QuoteIdent(id.dataset_id)));
-    if (!schema_status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return schema_status;
-    }
-    const std::string qualified =
-        absl::StrCat(QuoteIdent(id.dataset_id), ".", QuoteIdent(id.table_id));
-    absl::Status attach =
-        AttachStorageTableAt(conn, &storage, *source_table, qualified);
-    if (!attach.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return attach;
-    }
-  }
-
-  // Pass the user's SQL to DuckDB verbatim. For the 2-segment
-  // target case (`CREATE TABLE ds.new AS ...`), DuckDB interprets
-  // `ds.new` as `<schema>.<table>` and lands the new table where we
-  // expect to read it back. The 3-segment case
-  // (`CREATE TABLE proj.ds.new AS ...`) needs a SQL rewrite because
-  // DuckDB has no notion of a "project" layer -- we keep the
-  // verbatim path for the 2-segment case (the BigQuery REST
-  // contract auto-fills the project from the URL path so most
-  // clients send 2-segment names) and surface UNIMPLEMENTED for
-  // the 3-segment case so the operator notices the gap until a
-  // followup plan adds the rewrite.
-  if (stmt->name_path_size() == 3) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return absl::UnimplementedError(
-        absl::StrCat("duckdb engine: CTAS with a project-qualified target ('",
-                     stmt->name_path(0),
-                     ".",
-                     stmt->name_path(1),
-                     ".",
-                     stmt->name_path(2),
-                     "') is not yet implemented; drop the project segment "
-                     "(the BigQuery REST `projectId` path parameter already "
-                     "carries it) and re-run with a 2-segment target"));
-  }
-
-  // For CREATE OR REPLACE we drop the storage-side table first so
-  // the post-CTAS append lands on a fresh schema. The DuckDB side
-  // accepts `CREATE OR REPLACE` natively, so we just pass the
-  // user's SQL through; the storage rebuild happens below.
-  if (stmt->create_mode() ==
-      ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
-    absl::Status dropped = storage.DropTable(*target);
-    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return dropped;
-    }
-  }
-
-  ::duckdb_result ctas_result;
-  if (::duckdb_query(conn, request.sql.c_str(), &ctas_result) !=
-      ::DuckDBSuccess) {
-    const auto* err = ::duckdb_result_error(&ctas_result);
-    std::string detail = err == nullptr ? std::string("") : std::string(err);
-    ::duckdb_destroy_result(&ctas_result);
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return absl::InvalidArgumentError(
-        absl::StrCat("DuckDBEngine: DuckDB rejected CTAS: ",
-                     detail,
-                     " (sql=",
-                     request.sql,
-                     ")"));
-  }
-  ::duckdb_destroy_result(&ctas_result);
-
-  // Read back the post-CTAS rows under the bq_schema so the cell
-  // shape lands aligned with what `Storage::AppendRows` expects.
-  const std::string quoted_target = absl::StrCat(
-      QuoteIdent(target->dataset_id), ".", QuoteIdent(target->table_id));
-  absl::StatusOr<std::vector<storage::Row>> after_rows =
-      DrainTableRows(conn, quoted_target, *bq_schema);
-  ::duckdb_disconnect(&conn);
-  ::duckdb_close(&db);
-  if (!after_rows.ok()) return after_rows.status();
-
-  // CREATE the target table in storage (with the BigQuery-typed
-  // schema) and append the rows we just materialized through
-  // DuckDB. The IF_NOT_EXISTS / DEFAULT / OR_REPLACE modes were
-  // already collapsed onto a "table is absent" state above, so
-  // CreateTable always sees an empty slot at this point.
-  absl::Status created = ApplyCreateMode(
-      storage.CreateTable(*target, *bq_schema), stmt->create_mode());
-  if (!created.ok()) return created;
-  if (after_rows->empty()) return absl::OkStatus();
-  return storage.AppendRows(*target, absl::MakeConstSpan(*after_rows));
-}
-
-// DROP TABLE executor. The analyzer carries `object_type()` to
-// disambiguate DROP TABLE / DROP VIEW / etc; we only implement
-// "TABLE" today. `is_if_exists()` swallows NOT_FOUND.
-absl::Status RunDropTable(storage::Storage& storage,
-                          absl::string_view project_id,
-                          const ::googlesql::ResolvedDropStmt* stmt) {
-  if (stmt == nullptr) {
-    return absl::InternalError(
-        "DuckDBEngine::ExecuteDdl: DROP has null resolved statement");
-  }
-  if (stmt->object_type() != "TABLE") {
-    return absl::UnimplementedError(
-        absl::StrCat("duckdb engine: DROP ",
-                     stmt->object_type(),
-                     " is not implemented (only DROP TABLE is supported)"));
-  }
-  absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
-  if (!target.ok()) return target.status();
-  absl::Status dropped = storage.DropTable(*target);
-  if (!dropped.ok() && stmt->is_if_exists() &&
-      dropped.code() == absl::StatusCode::kNotFound) {
-    return absl::OkStatus();
-  }
-  return dropped;
 }
 
 // ALTER TABLE ADD COLUMN executor. The storage interface has no
@@ -1517,31 +1192,28 @@ absl::Status DuckDbExecutor::ExecuteDdl(
 
   const absl::string_view project_id = request.project_id;
   switch (stmt.node_kind()) {
-    case ::googlesql::RESOLVED_CREATE_TABLE_STMT:
-      return RunCreateTable(*storage_,
-                            project_id,
-                            stmt.GetAs<::googlesql::ResolvedCreateTableStmt>());
-    case ::googlesql::RESOLVED_CREATE_TABLE_AS_SELECT_STMT:
-      return RunCreateTableAsSelect(
-          *storage_,
-          project_id,
-          request,
-          stmt.GetAs<::googlesql::ResolvedCreateTableAsSelectStmt>(),
-          &stmt);
-    case ::googlesql::RESOLVED_DROP_STMT:
-      return RunDropTable(
-          *storage_, project_id, stmt.GetAs<::googlesql::ResolvedDropStmt>());
     case ::googlesql::RESOLVED_ALTER_TABLE_STMT:
       return RunAlterTableAddColumn(
           *storage_,
           project_id,
           stmt.GetAs<::googlesql::ResolvedAlterTableStmt>());
     default:
+      // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
+      // `backend/engine/control/control_op_executor.cc` when
+      // `control-op-executor.plan.md` landed; the route classifier
+      // dispatches them to the `ControlOpExecutor` directly. If
+      // one reaches us here, the classifier or the YAML
+      // disposition row drifted out of sync with this dispatch
+      // table -- surface UNIMPLEMENTED so the gateway/e2e suite
+      // catches the regression instead of silently routing the
+      // statement through DuckDB.
       return absl::UnimplementedError(absl::StrCat(
-          "duckdb engine: ExecuteDdl does not implement ",
+          "duckdb engine: ExecuteDdl only handles ALTER TABLE today; got ",
           stmt.node_kind_string(),
-          " (Plan 35 ships CREATE TABLE / CREATE TABLE AS SELECT / "
-          "DROP TABLE / ALTER TABLE ADD COLUMN only)"));
+          ". CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE / "
+          "ANALYZE are owned by ControlOpExecutor "
+          "(see backend/engine/control/control_op_executor.cc) and "
+          "the route classifier should never dispatch them here."));
   }
 }
 

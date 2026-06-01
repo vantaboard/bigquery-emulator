@@ -108,6 +108,7 @@ cc_library(
         ":stub_executors",
         "//backend/engine",
         "//backend/engine:disposition",
+        "//backend/engine/control:control_op_executor",
         "//backend/engine/duckdb:duckdb_executor",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",

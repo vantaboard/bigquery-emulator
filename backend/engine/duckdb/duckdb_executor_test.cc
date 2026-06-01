@@ -331,12 +331,18 @@ TEST_F(DuckDbExecutorTest, ExecuteQueryRejectsNonQueryStatement) {
       << source.status();
 }
 
-TEST_F(DuckDbExecutorTest, ExecuteDdlCreateTableCreatesStorageTable) {
-  // Round-trip CREATE TABLE through the executor and confirm the
-  // table appears in storage with the requested schema. This pins
-  // the contract the coordinator's control-op route will rely on
-  // until the dedicated `ControlOpExecutor` is built out.
-  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+TEST_F(DuckDbExecutorTest,
+       ExecuteDdlRejectsCreateTableAfterControlOpMigration) {
+  // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
+  // `backend/engine/control/control_op_executor.cc` when
+  // `control-op-executor.plan.md` landed. The coordinator's
+  // `RouteClassifier` dispatches them to the `ControlOpExecutor`
+  // directly; the DuckDB executor's `ExecuteDdl` only handles
+  // `ALTER TABLE`. Defensively, calling the DuckDB executor with a
+  // CREATE TABLE statement (the routing-bug case) must surface
+  // UNIMPLEMENTED with a message that names the new owning
+  // package, so a routing regression shows up loudly instead of
+  // silently re-running the legacy code path.
   CatalogBundle bundle = MakeCatalog();
   auto analyzed = Analyze("CREATE TABLE ds.t (id INT64, name STRING)",
                           bundle.catalog.get(),
@@ -350,15 +356,11 @@ TEST_F(DuckDbExecutorTest, ExecuteDdlCreateTableCreatesStorageTable) {
       MakeRequest("CREATE TABLE ds.t (id INT64, name STRING)"),
       *stmt,
       bundle.catalog.get());
-  ASSERT_TRUE(s.ok()) << s;
-
-  auto schema = storage_->GetSchema({"proj-test", "ds", "t"});
-  ASSERT_TRUE(schema.ok()) << schema.status();
-  ASSERT_EQ(schema->columns.size(), 2u);
-  EXPECT_EQ(schema->columns[0].name, "id");
-  EXPECT_EQ(schema->columns[0].type, schema::ColumnType::kInt64);
-  EXPECT_EQ(schema->columns[1].name, "name");
-  EXPECT_EQ(schema->columns[1].type, schema::ColumnType::kString);
+  ASSERT_FALSE(s.ok());
+  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
+  EXPECT_NE(std::string(s.message()).find("ControlOpExecutor"),
+            std::string::npos)
+      << s.message();
 }
 
 }  // namespace
