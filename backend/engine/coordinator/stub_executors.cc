@@ -47,11 +47,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "semantic_executor",
-      "ExecuteQuery",
-      stmt.node_kind_string(),
-      "semantic-executor-core.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("semantic_executor",
+                               "ExecuteQuery",
+                               stmt.node_kind_string(),
+                               "semantic-executor-core.plan.md"));
 }
 
 absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
@@ -60,11 +60,11 @@ absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "semantic_executor",
-      "ExecuteDml",
-      stmt.node_kind_string(),
-      "semantic-executor-core.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("semantic_executor",
+                               "ExecuteDml",
+                               stmt.node_kind_string(),
+                               "semantic-executor-core.plan.md"));
 }
 
 absl::Status SemanticExecutor::ExecuteDdl(
@@ -73,11 +73,11 @@ absl::Status SemanticExecutor::ExecuteDdl(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "semantic_executor",
-      "ExecuteDdl",
-      stmt.node_kind_string(),
-      "semantic-executor-core.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("semantic_executor",
+                               "ExecuteDdl",
+                               stmt.node_kind_string(),
+                               "semantic-executor-core.plan.md"));
 }
 
 // --- ControlOpExecutor ----------------------------------------------------
@@ -90,11 +90,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> ControlOpExecutor::ExecuteQuery(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "control_op",
-      "ExecuteQuery",
-      stmt.node_kind_string(),
-      "control-op-executor.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("control_op",
+                               "ExecuteQuery",
+                               stmt.node_kind_string(),
+                               "control-op-executor.plan.md"));
 }
 
 absl::StatusOr<DmlStats> ControlOpExecutor::ExecuteDml(
@@ -103,11 +103,11 @@ absl::StatusOr<DmlStats> ControlOpExecutor::ExecuteDml(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "control_op",
-      "ExecuteDml",
-      stmt.node_kind_string(),
-      "control-op-executor.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("control_op",
+                               "ExecuteDml",
+                               stmt.node_kind_string(),
+                               "control-op-executor.plan.md"));
 }
 
 absl::Status ControlOpExecutor::ExecuteDdl(
@@ -116,11 +116,11 @@ absl::Status ControlOpExecutor::ExecuteDdl(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "control_op",
-      "ExecuteDdl",
-      stmt.node_kind_string(),
-      "control-op-executor.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("control_op",
+                               "ExecuteDdl",
+                               stmt.node_kind_string(),
+                               "control-op-executor.plan.md"));
 }
 
 // --- UnsupportedExecutor --------------------------------------------------
@@ -133,11 +133,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> UnsupportedExecutor::ExecuteQuery(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "unsupported",
-      "ExecuteQuery",
-      stmt.node_kind_string(),
-      "specialized-feature-policy.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("unsupported",
+                               "ExecuteQuery",
+                               stmt.node_kind_string(),
+                               "specialized-feature-policy.plan.md"));
 }
 
 absl::StatusOr<DmlStats> UnsupportedExecutor::ExecuteDml(
@@ -146,11 +146,11 @@ absl::StatusOr<DmlStats> UnsupportedExecutor::ExecuteDml(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "unsupported",
-      "ExecuteDml",
-      stmt.node_kind_string(),
-      "specialized-feature-policy.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("unsupported",
+                               "ExecuteDml",
+                               stmt.node_kind_string(),
+                               "specialized-feature-policy.plan.md"));
 }
 
 absl::Status UnsupportedExecutor::ExecuteDdl(
@@ -159,11 +159,11 @@ absl::Status UnsupportedExecutor::ExecuteDdl(
     ::googlesql::Catalog* catalog) {
   (void)request;
   (void)catalog;
-  return absl::UnimplementedError(MakeUnimplementedMessage(
-      "unsupported",
-      "ExecuteDdl",
-      stmt.node_kind_string(),
-      "specialized-feature-policy.plan.md"));
+  return absl::UnimplementedError(
+      MakeUnimplementedMessage("unsupported",
+                               "ExecuteDdl",
+                               stmt.node_kind_string(),
+                               "specialized-feature-policy.plan.md"));
 }
 
 }  // namespace coordinator

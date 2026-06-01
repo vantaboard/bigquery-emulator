@@ -71,10 +71,10 @@ class Executor {
   // outlast the call (the coordinator owns the analyzer output for
   // the duration of the call, and the returned `RowSource` is
   // detached from `stmt` once it leaves the executor).
-  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowSource>>
-  ExecuteQuery(const QueryRequest& request,
-               const ::googlesql::ResolvedStatement& stmt,
-               ::googlesql::Catalog* catalog) = 0;
+  [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
+      const QueryRequest& request,
+      const ::googlesql::ResolvedStatement& stmt,
+      ::googlesql::Catalog* catalog) = 0;
 
   // Execute a DML statement (INSERT / UPDATE / DELETE / MERGE).
   [[nodiscard]] virtual absl::StatusOr<DmlStats> ExecuteDml(

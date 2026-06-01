@@ -100,7 +100,9 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
                     schema::TableSchema schema)
       : output_(std::move(output)), schema_(std::move(schema)) {}
 
-  const schema::TableSchema& output_schema() const override { return schema_; }
+  const schema::TableSchema& output_schema() const override {
+    return schema_;
+  }
 
  private:
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output_{};
@@ -113,9 +115,9 @@ absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
 AnalyzeStatementImpl(const QueryRequest& request,
                      ::googlesql::Catalog* catalog,
                      bool all_statements) {
-  ::googlesql::AnalyzerOptions options = all_statements
-                                             ? MakeAnalyzerOptionsAllStatements()
-                                             : MakeAnalyzerOptions();
+  ::googlesql::AnalyzerOptions options =
+      all_statements ? MakeAnalyzerOptionsAllStatements()
+                     : MakeAnalyzerOptions();
   ::googlesql::TypeFactory type_factory;
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
@@ -235,8 +237,8 @@ absl::StatusOr<DmlStats> LocalCoordinatorEngine::ExecuteDml(
   return executor->ExecuteDml(request, *stmt, catalog);
 }
 
-absl::Status LocalCoordinatorEngine::ExecuteDdl(
-    const QueryRequest& request, ::googlesql::Catalog* catalog) {
+absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
+                                                ::googlesql::Catalog* catalog) {
   absl::Status valid = ValidateRequest(request, catalog);
   if (!valid.ok()) return valid;
   absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>> output =

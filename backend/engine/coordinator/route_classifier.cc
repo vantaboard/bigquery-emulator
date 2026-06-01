@@ -62,8 +62,12 @@ int Priority(Disposition d) {
 // consult the per-function registry.
 class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
  public:
-  Disposition disposition() const { return disposition_; }
-  const std::string& offending_node() const { return offending_node_; }
+  Disposition disposition() const {
+    return disposition_;
+  }
+  const std::string& offending_node() const {
+    return offending_node_;
+  }
 
   absl::Status DefaultVisit(const ::googlesql::ResolvedNode* node) override {
     if (node != nullptr) {
@@ -109,8 +113,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // surface UNIMPLEMENTED from the transpiler for shapes it cannot
   // lower; that is a fast-path bug, not a classifier bug).
   void CheckNodeClass(const ::googlesql::ResolvedNode* node) {
-    std::string class_name =
-        absl::StrCat("Resolved", node->node_kind_string());
+    std::string class_name = absl::StrCat("Resolved", node->node_kind_string());
     const auto* entry = transpiler::LookupNodeDisposition(class_name);
     if (entry == nullptr) return;
     if (entry->planned) return;
@@ -132,7 +135,8 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
     if (node->Is<::googlesql::ResolvedFunctionCall>()) {
       fn = node->GetAs<::googlesql::ResolvedFunctionCall>()->function();
     } else if (node->Is<::googlesql::ResolvedAggregateFunctionCall>()) {
-      fn = node->GetAs<::googlesql::ResolvedAggregateFunctionCall>()->function();
+      fn =
+          node->GetAs<::googlesql::ResolvedAggregateFunctionCall>()->function();
     } else if (node->Is<::googlesql::ResolvedAnalyticFunctionCall>()) {
       fn = node->GetAs<::googlesql::ResolvedAnalyticFunctionCall>()->function();
     }
@@ -187,20 +191,21 @@ std::string ReasonFor(Disposition d,
     case Disposition::kDuckdbNative:
       return std::string("");
     case Disposition::kDuckdbRewrite:
-      return absl::StrCat("query lowers via duckdb_rewrite (promoted by ",
-                          offending_node, ")");
+      return absl::StrCat(
+          "query lowers via duckdb_rewrite (promoted by ", offending_node, ")");
     case Disposition::kDuckdbUdf:
-      return absl::StrCat("query lowers via duckdb_udf (promoted by ",
-                          offending_node, ")");
+      return absl::StrCat(
+          "query lowers via duckdb_udf (promoted by ", offending_node, ")");
     case Disposition::kSemanticExecutor:
       return absl::StrCat("query requires the semantic executor (promoted by ",
-                          offending_node, ")");
+                          offending_node,
+                          ")");
     case Disposition::kControlOp:
-      return absl::StrCat("statement ", root_class,
-                          " routes to the control-op executor");
+      return absl::StrCat(
+          "statement ", root_class, " routes to the control-op executor");
     case Disposition::kUnsupported:
-      return absl::StrCat("query is unsupported (offending node: ",
-                          offending_node, ")");
+      return absl::StrCat(
+          "query is unsupported (offending node: ", offending_node, ")");
   }
   return std::string("");
 }

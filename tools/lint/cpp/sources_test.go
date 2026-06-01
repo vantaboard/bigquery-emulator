@@ -25,7 +25,7 @@ func TestFilterFirstParty(t *testing.T) {
 		// First party — must pass.
 		SentinelEngine,
 		"backend/engine/engine.h",
-		"backend/engine/duckdb/duckdb_engine.cc",
+		"backend/engine/duckdb/duckdb_executor.cc",
 		"backend/storage/duckdb/duckdb_storage.cc",
 		SentinelEmulatorMain,
 		SentinelEmulatorVersionH,
@@ -65,7 +65,7 @@ func TestFilterFirstParty(t *testing.T) {
 		"tools/coverage/main.go",
 	}
 	want := []string{
-		"backend/engine/duckdb/duckdb_engine.cc",
+		"backend/engine/duckdb/duckdb_executor.cc",
 		SentinelEngine,
 		"backend/engine/engine.h",
 		"backend/storage/duckdb/duckdb_storage.cc",

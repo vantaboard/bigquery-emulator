@@ -21,7 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "backend/engine/duckdb/duckdb_engine.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
@@ -51,7 +51,8 @@ class QueryServiceTest : public ::testing::Test {
     ASSERT_TRUE(opened.ok()) << opened.status();
     storage_ = std::move(opened).value();
     engine_ =
-        std::make_unique<backend::engine::duckdb::DuckDBEngine>(storage_.get());
+        std::make_unique<backend::engine::coordinator::LocalCoordinatorEngine>(
+            storage_.get());
     service_ = std::make_unique<QueryService>(storage_.get(), engine_.get());
   }
 
@@ -100,7 +101,8 @@ class QueryServiceTest : public ::testing::Test {
 
   fs::path data_dir_{};
   std::unique_ptr<backend::storage::duckdb::DuckDBStorage> storage_{};
-  std::unique_ptr<backend::engine::duckdb::DuckDBEngine> engine_{};
+  std::unique_ptr<backend::engine::coordinator::LocalCoordinatorEngine>
+      engine_{};
   std::unique_ptr<QueryService> service_{};
 };
 

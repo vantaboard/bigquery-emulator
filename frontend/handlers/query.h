@@ -89,8 +89,9 @@ class QueryService final : public v1::Query::Service {
 //
 // `engine` is the execution backend to forward to. The handler
 // returns `FAILED_PRECONDITION` when the engine is null; the
-// `binaries/emulator_main` wire path and unit tests construct a
-// `DuckDBEngine` explicitly.
+// `binaries/emulator_main` wire path constructs a
+// `LocalCoordinatorEngine` explicitly (unit tests construct the
+// same engine through the coordinator alias).
 ::grpc::Status StreamQueryResults(
     backend::storage::Storage* storage,
     const v1::QueryRequest& request,

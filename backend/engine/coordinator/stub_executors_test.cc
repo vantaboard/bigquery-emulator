@@ -53,9 +53,11 @@ class StubExecutorsTest : public ::testing::Test {
   const ::googlesql::ResolvedStatement* AnalyzeSelect1() {
     last_output_.reset();
     ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
-    absl::Status s = ::googlesql::AnalyzeStatement(
-        "SELECT 1", options, catalog_.get(), type_factory_.get(),
-        &last_output_);
+    absl::Status s = ::googlesql::AnalyzeStatement("SELECT 1",
+                                                   options,
+                                                   catalog_.get(),
+                                                   type_factory_.get(),
+                                                   &last_output_);
     EXPECT_TRUE(s.ok()) << s;
     if (!s.ok() || last_output_ == nullptr) return nullptr;
     return last_output_->resolved_statement();

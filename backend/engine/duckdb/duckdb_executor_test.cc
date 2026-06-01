@@ -1,7 +1,9 @@
 // Unit tests for the route-typed DuckDB executor. These exercise
 // the contract the future `LocalCoordinatorEngine` relies on: each
 // method takes an already-analyzed `ResolvedStatement` and produces
-// the same wire-facing reply the `DuckDBEngine` path used to. We
+// the same wire-facing reply the legacy `DuckDBEngine` shim used
+// to produce before `engine-router-foundation.plan.md` deleted it
+// in favor of `LocalCoordinatorEngine`. We
 // rebuild the analyzer up-front (the way the coordinator will) and
 // hand the resolved root straight to the executor, so the executor's
 // pre-resolution validation, transpiler invocation, DuckDB
@@ -55,7 +57,7 @@ namespace fs = std::filesystem;
   return language;
 }
 
-// Mirrors `DuckDBEngine`'s internal analyzer setup (with the
+// Mirrors `LocalCoordinatorEngine`'s analyzer setup (with the
 // supports-all-statements allowlist flipped on for DML / DDL).
 ::googlesql::AnalyzerOptions MakeAnalyzerOptions(bool all_statements) {
   ::googlesql::AnalyzerOptions options(MakeLanguageOptions());
@@ -178,10 +180,12 @@ TEST_F(DuckDbExecutorTest, ExecuteQuerySelectStarFromTableStreamsAllRows) {
   // analyze-then-execute split that the coordinator will rely on.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = Analyze(
-      "SELECT * FROM ds.people", bundle.catalog.get(), /*all_statements=*/false);
+  auto analyzed = Analyze("SELECT * FROM ds.people",
+                          bundle.catalog.get(),
+                          /*all_statements=*/false);
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
-  const ::googlesql::ResolvedStatement* stmt = (*analyzed)->resolved_statement();
+  const ::googlesql::ResolvedStatement* stmt =
+      (*analyzed)->resolved_statement();
   ASSERT_NE(stmt, nullptr);
 
   absl::StatusOr<std::unique_ptr<RowSource>> source = executor_->ExecuteQuery(
@@ -221,12 +225,12 @@ TEST_F(DuckDbExecutorTest, ExecuteQueryRejectsNonQueryStatement) {
   // statement on its query surface so a routing bug surfaces loudly
   // instead of looking like a transpiler gap.
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = Analyze(
-      "CREATE TABLE ds.t (id INT64)",
-      bundle.catalog.get(),
-      /*all_statements=*/true);
+  auto analyzed = Analyze("CREATE TABLE ds.t (id INT64)",
+                          bundle.catalog.get(),
+                          /*all_statements=*/true);
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
-  const ::googlesql::ResolvedStatement* stmt = (*analyzed)->resolved_statement();
+  const ::googlesql::ResolvedStatement* stmt =
+      (*analyzed)->resolved_statement();
   ASSERT_NE(stmt, nullptr);
 
   auto source = executor_->ExecuteQuery(
@@ -243,12 +247,12 @@ TEST_F(DuckDbExecutorTest, ExecuteDdlCreateTableCreatesStorageTable) {
   // until the dedicated `ControlOpExecutor` is built out.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = Analyze(
-      "CREATE TABLE ds.t (id INT64, name STRING)",
-      bundle.catalog.get(),
-      /*all_statements=*/true);
+  auto analyzed = Analyze("CREATE TABLE ds.t (id INT64, name STRING)",
+                          bundle.catalog.get(),
+                          /*all_statements=*/true);
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
-  const ::googlesql::ResolvedStatement* stmt = (*analyzed)->resolved_statement();
+  const ::googlesql::ResolvedStatement* stmt =
+      (*analyzed)->resolved_statement();
   ASSERT_NE(stmt, nullptr);
 
   absl::Status s = executor_->ExecuteDdl(

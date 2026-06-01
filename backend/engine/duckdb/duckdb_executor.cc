@@ -1510,10 +1510,9 @@ absl::Status DuckDbExecutor::ExecuteDdl(
   const absl::string_view project_id = request.project_id;
   switch (stmt.node_kind()) {
     case ::googlesql::RESOLVED_CREATE_TABLE_STMT:
-      return RunCreateTable(
-          *storage_,
-          project_id,
-          stmt.GetAs<::googlesql::ResolvedCreateTableStmt>());
+      return RunCreateTable(*storage_,
+                            project_id,
+                            stmt.GetAs<::googlesql::ResolvedCreateTableStmt>());
     case ::googlesql::RESOLVED_CREATE_TABLE_AS_SELECT_STMT:
       return RunCreateTableAsSelect(
           *storage_,

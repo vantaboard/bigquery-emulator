@@ -5,11 +5,15 @@
 // for the Go gateway to call into. The Go gateway spawns this binary on
 // startup; the binary blocks until the gateway terminates it.
 //
-// Runtime shape: the engine is always DuckDB and the storage backend is
-// always the DuckDB Parquet/Arrow store under `--data_dir`. The
-// `--host_port` flag selects the gRPC listen address (default
-// `localhost:9060`); `--data_dir` selects the persistent catalog
-// root (default `$HOME/.bigquery-emulator`, see `DefaultDataDir`).
+// Runtime shape: the `Engine` is a `LocalCoordinatorEngine` that owns a
+// `RouteClassifier` plus one executor per route (DuckDB / semantic /
+// control-op / unsupported); see
+// `.cursor/plans/engine-router-foundation.plan.md` and
+// `docs/ENGINE_POLICY.md`. The storage backend is the DuckDB
+// Parquet/Arrow store under `--data_dir`. The `--host_port` flag
+// selects the gRPC listen address (default `localhost:9060`);
+// `--data_dir` selects the persistent catalog root (default
+// `$HOME/.bigquery-emulator`, see `DefaultDataDir`).
 
 #include <cstdio>
 #include <cstdlib>
@@ -19,7 +23,7 @@
 #include <string_view>
 
 #include "absl/status/statusor.h"
-#include "backend/engine/duckdb/duckdb_engine.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/engine.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
@@ -208,12 +212,12 @@ int main(int argc, char** argv) {
       std::move(storage_or).value();
 
   std::unique_ptr<bigquery_emulator::backend::engine::Engine> engine(
-      new bigquery_emulator::backend::engine::duckdb::DuckDBEngine(
-          storage.get()));
+      new bigquery_emulator::backend::engine::coordinator::
+          LocalCoordinatorEngine(storage.get()));
 
   std::fprintf(stderr,
-               "[emulator_main] starting engine=duckdb storage=duckdb "
-               "data_dir=%s host_port=%s\n",
+               "[emulator_main] starting engine=local_coordinator "
+               "storage=duckdb data_dir=%s host_port=%s\n",
                flags.data_dir.c_str(),
                flags.host_port.c_str());
 

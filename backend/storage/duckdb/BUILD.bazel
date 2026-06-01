@@ -29,7 +29,7 @@ cc_library(
 # The cc_test inherits the `-Wl,-rpath,$ORIGIN` linker flag from
 # //third_party/duckdb's cc_import so the libduckdb.so sibling that
 # lands in the runfiles tree is discoverable without LD_LIBRARY_PATH;
-# the duckdb_engine_test above relies on the same plumbing.
+# the duckdb_executor_test follow-up uses the same plumbing.
 cc_test(
     name = "duckdb_storage_test",
     srcs = ["duckdb_storage_test.cc"],

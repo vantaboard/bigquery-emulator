@@ -133,7 +133,7 @@ func TestCheckStatusAntiPatterns_Discarded(t *testing.T) {
   engine.ExecuteDdl(req, catalog);
 }
 `)
-	got := checkStatusAntiPatterns("backend/engine/duckdb/duckdb_engine.cc", splitLines(body))
+	got := checkStatusAntiPatterns("backend/engine/duckdb/duckdb_executor.cc", splitLines(body))
 	if len(got) != 2 {
 		for _, f := range got {
 			t.Logf("finding: %s", f.Format())

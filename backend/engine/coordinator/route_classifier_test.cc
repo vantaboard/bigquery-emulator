@@ -165,8 +165,7 @@ TEST_F(RouteClassifierTest, PlannedControlOpStatementDoesNotPromote) {
   // `status=planned`, this test will fail on the disposition
   // expectation; update it to assert `Disposition::kControlOp`
   // then.
-  const auto* stmt =
-      Analyze("CREATE TABLE new_table (a INT64, b STRING)");
+  const auto* stmt = Analyze("CREATE TABLE new_table (a INT64, b STRING)");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);

@@ -48,10 +48,10 @@ class Server {
 
     // Execution backend the Query service forwards `DryRun` and
     // `ExecuteQuery` RPCs to. The `binaries/emulator_main/main.cc`
-    // wiring path constructs a `DuckDBEngine` and threads it
-    // through here. Must outlive the returned `Server`. When null
-    // the Query service returns `FAILED_PRECONDITION` for
-    // `ExecuteQuery`.
+    // wiring path constructs a `LocalCoordinatorEngine` and
+    // threads it through here. Must outlive the returned
+    // `Server`. When null the Query service returns
+    // `FAILED_PRECONDITION` for `ExecuteQuery`.
     backend::engine::Engine* engine = nullptr;
   };
 

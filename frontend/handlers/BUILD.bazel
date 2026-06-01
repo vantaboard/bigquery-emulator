@@ -34,7 +34,8 @@ cc_library(
         "//backend/catalog:googlesql_catalog",
         # `backend/engine` carries the required `Engine*` parameter on
         # `QueryService` and `StreamQueryResults`; the wire path in
-        # `binaries/emulator_main/main.cc` threads in a DuckDBEngine.
+        # `binaries/emulator_main/main.cc` threads in a
+        # `LocalCoordinatorEngine`.
         "//backend/engine",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
@@ -64,7 +65,7 @@ cc_test(
     srcs = ["query_test.cc"],
     deps = [
         ":query_handler",
-        "//backend/engine/duckdb:duckdb_engine",
+        "//backend/engine/coordinator:local_coordinator_engine",
         "//backend/schema",
         "//backend/storage",
         "//backend/storage/duckdb:duckdb_storage",

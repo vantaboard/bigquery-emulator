@@ -5,12 +5,13 @@
 // the canonical `storage::Value` shape the engine streams back to
 // the gateway.
 //
-// We exercise the converter against the chunk API rather than against
-// the higher-level DuckDBEngine so the test does not pull in
-// GoogleSQL: arrow_to_bq is purely a libduckdb-on-top-of-schema
-// helper. The DuckDBEngine integration is covered separately by
-// `duckdb_engine_test.cc` and by the `gateway/e2e/query_duckdb_*`
-// integration suite.
+// We exercise the converter against the chunk API rather than
+// against the higher-level `DuckDbExecutor` so the test does not
+// pull in GoogleSQL: arrow_to_bq is purely a libduckdb-on-top-of-
+// schema helper. The `DuckDbExecutor` integration is covered
+// separately by `duckdb_executor_test.cc`,
+// `//backend/engine/coordinator:local_coordinator_engine_test`,
+// and the `gateway/e2e/query_duckdb_*` integration suite.
 
 #include "backend/engine/duckdb/arrow_to_bq.h"
 

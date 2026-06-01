@@ -115,7 +115,7 @@ absl::StatusOr<std::string> RenderCellLiteral(
 // the gateway performs while still surfacing malformed values as a
 // CAST failure from DuckDB rather than silently storing zero.
 // Render the DuckDB literal for a FLOAT64 cell. Mirrors the
-// counterpart in `duckdb_engine.cc::RenderFloatLiteral`; kept
+// counterpart in `duckdb_executor.cc::RenderFloatLiteral`; kept
 // duplicated for now (see follow-up de-dup task).
 std::string RenderFloatLiteral(const Value& cell) {
   if (cell.kind() == Value::Kind::kString) {
@@ -133,7 +133,7 @@ std::string RenderFloatLiteral(const Value& cell) {
 
 // Render the DuckDB STRUCT literal `{'k1': v1, ...}` for a STRUCT
 // cell. Mirrors the counterpart in
-// `duckdb_engine.cc::RenderStructLiteral` (see follow-up de-dup task).
+// `duckdb_executor.cc::RenderStructLiteral` (see follow-up de-dup task).
 absl::StatusOr<std::string> RenderStructLiteral(
     const Value& cell, const schema::ColumnSchema& column) {
   if (cell.kind() != Value::Kind::kStruct) {

@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -160,8 +161,8 @@ TEST_F(LocalCoordinatorEngineTest, AnalyzeSelectStarReflectsSchema) {
   // `DuckDBEngine` returned for the same query.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = engine_->Analyze(MakeRequest("SELECT id, name FROM ds.people"),
-                                   bundle.catalog.get());
+  auto analyzed = engine_->Analyze(
+      MakeRequest("SELECT id, name FROM ds.people"), bundle.catalog.get());
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
   const schema::TableSchema& s = (*analyzed)->output_schema();
   ASSERT_EQ(s.columns.size(), 2u);
@@ -261,6 +262,121 @@ TEST_F(LocalCoordinatorEngineTest,
   auto schema = storage_->GetSchema({"proj-test", "ds", "new_table"});
   ASSERT_TRUE(schema.ok()) << schema.status();
   EXPECT_EQ(schema->columns.size(), 2u);
+}
+
+// ---------------------------------------------------------------------------
+// MERGE / DDL coverage migrated from the legacy `duckdb_engine_test.cc`.
+//
+// These pin the through-the-coordinator behavior of every shape
+// the legacy `DuckDBEngine` used to own end-to-end. Each one
+// classifies to `kDuckdbNative` (MERGE is not `planned`) or
+// reaches DuckDB through the `planned`-row short-circuit on the
+// `control_op` rows, then dispatches to `DuckDbExecutor`. The
+// gateway/e2e suite leans on the same paths; pinning them at the
+// engine surface lets a regression here surface as a unit-test
+// failure first.
+// ---------------------------------------------------------------------------
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteDmlMergeMatchedAndNotMatchedUpdatesStorage) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto stats = engine_->ExecuteDml(
+      MakeRequest("MERGE INTO ds.people T USING ("
+                  "  SELECT 2 AS id, 'linus-updated' AS name "
+                  "  UNION ALL "
+                  "  SELECT 4 AS id, 'rust' AS name) S "
+                  "ON T.id = S.id "
+                  "WHEN MATCHED THEN UPDATE SET name = S.name "
+                  "WHEN NOT MATCHED THEN INSERT (id, name) "
+                  "VALUES (S.id, S.name)"),
+      bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 1);
+  EXPECT_EQ(stats->updated_row_count, 1);
+  EXPECT_EQ(stats->deleted_row_count, 0);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id.size(), 4u);
+  EXPECT_EQ(by_id[1], "ada");
+  EXPECT_EQ(by_id[2], "linus-updated");
+  EXPECT_EQ(by_id[3], "grace");
+  EXPECT_EQ(by_id[4], "rust");
+}
+
+TEST_F(LocalCoordinatorEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest(
+          "CREATE TABLE ds.people_copy AS SELECT id, name FROM ds.people"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 2u);
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::vector<std::pair<int64_t, std::string>> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
+  }
+  std::sort(seen.begin(), seen.end());
+  std::vector<std::pair<int64_t, std::string>> want = {
+      {1, "ada"}, {2, "linus"}, {3, "grace"}};
+  EXPECT_EQ(seen, want);
+}
+
+TEST_F(LocalCoordinatorEngineTest, ExecuteDdlDropTableRemovesStorage) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(MakeRequest("DROP TABLE ds.people"),
+                                    bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_FALSE(sch.ok());
+  EXPECT_EQ(sch.status().code(), absl::StatusCode::kNotFound) << sch.status();
+}
+
+TEST_F(LocalCoordinatorEngineTest, ExecuteDdlAlterTableAddColumnPadsRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("ALTER TABLE ds.people ADD COLUMN age INT64"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+  auto sch = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_TRUE(sch.ok()) << sch.status();
+  ASSERT_EQ(sch->columns.size(), 3u);
+  EXPECT_EQ(sch->columns[2].name, "age");
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows_seen = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 3u);
+    EXPECT_EQ(row.cells[2].kind(), storage::Value::Kind::kNull);
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 3);
 }
 
 TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsLegacySql) {

@@ -72,7 +72,7 @@ cc_binary(
     deps = [
         ":version",
         "//backend/engine",
-        "//backend/engine/duckdb:duckdb_engine",
+        "//backend/engine/coordinator:local_coordinator_engine",
         "//backend/storage",
         "//backend/storage/duckdb:duckdb_storage",
         "//frontend/server:server",
