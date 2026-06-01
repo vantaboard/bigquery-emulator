@@ -262,6 +262,75 @@ tasks:
           ARTIFACT_VERSION="{{.ARTIFACT_VERSION}}"
         rm -rf "$out_dir"
 
+  preflight:
+    desc: |
+      Pre-bazel safety-gate for GoogleSQL build inputs. Reads the
+      `GOOGLESQL_SOURCE` env var (`prebuilt`/`googlesql-prebuilt`,
+      `local`/`source`/`googlesql-source`; default `prebuilt`) and:
+        - In prebuilt mode: refuses when the cache at
+          .cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64 is
+          empty / wrong-named, then runs validate_artifact.py for the
+          full closed-schema + identity + payload-integrity gates. The
+          escape hatch `BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1`
+          skips the validator (NOT the cache-presence check); see
+          docs/dev/googlesql-prebuilt/rollback.md.
+        - In source mode: no-op (the local_path_override resolves at
+          bazel time; missing sibling checkouts fail there with the
+          expected diagnostic).
+        - Anything else: hard error.
+      Used as the first `cmds` step of every Bazel-launching wrapper
+      (`task bazel:build/test/coverage`, `task emulator:build-engine:bazel`)
+      so the validator runs once, in one place, before any bazel
+      invocation that might depend on the cache. Accepts BOTH the
+      user-facing values (`prebuilt`, `local`, `source`) AND the
+      canonical `--config` names (`googlesql-prebuilt`,
+      `googlesql-source`) so wrappers that have already canonicalised
+      the env var can still call it without de-canonicalising.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        v="${GOOGLESQL_SOURCE:-prebuilt}"
+        case "$v" in
+          local|source|googlesql-source)
+            echo "googlesql:preflight: source mode (no-op; local_path_override resolves at bazel time)"
+            exit 0
+            ;;
+          prebuilt|googlesql-prebuilt) ;;
+          *)
+            echo "googlesql:preflight: GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '$v'" >&2
+            exit 2
+            ;;
+        esac
+        cache="$root/.cache/googlesql-prebuilt/{{.PREBUILT_REPO_NAME}}"
+        if [ ! -f "$cache/MODULE.bazel" ]; then
+          echo "googlesql:preflight: GOOGLESQL_SOURCE=prebuilt but the cache is empty at:" >&2
+          echo "  $cache" >&2
+          echo "Populate it first (one of):" >&2
+          echo "  task googlesql:fetch-prebuilt URL=... SHA256=...   # published artifact" >&2
+          echo "  task googlesql:stage-bazel        # local real artifact (~25-55 min)" >&2
+          echo "  task googlesql:stage-fixture      # stub (smoke only; cannot link emulator_main)" >&2
+          echo "Or fall back to source mode explicitly:" >&2
+          echo "  GOOGLESQL_SOURCE=local task ..." >&2
+          exit 1
+        fi
+        if [ "${BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE:-0}" = "1" ]; then
+          echo "googlesql:preflight: ok (validator skipped via BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1)"
+          exit 0
+        fi
+        if ! python3 "$root/tools/googlesql-prebuilt/validate_artifact.py" \
+            --repo-root "$cache" \
+            --summary-line >&2; then
+          echo "googlesql:preflight: validate_artifact rejected the staged prebuilt cache (see diagnostic above)." >&2
+          echo "Recover with one of:" >&2
+          echo "  task googlesql:clean && task googlesql:fetch-prebuilt URL=... SHA256=..." >&2
+          echo "  task googlesql:clean && task googlesql:stage-bazel" >&2
+          echo "Or fall back to source mode explicitly:" >&2
+          echo "  GOOGLESQL_SOURCE=local task ..." >&2
+          exit 1
+        fi
+
   validate:
     desc: |
       Run the centralized safety-gate validator against the currently staged

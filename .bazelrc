@@ -199,6 +199,37 @@ run   --disk_cache=.cache/bazel-disk
 coverage --disk_cache=.cache/bazel-disk
 
 # ---------------------------------------------------------------------------
+# Output quieting.
+#
+# Bazel's default progress stream emits an action-rate line every ~200ms
+# (`Compiling external/...` x N). A scoped test of a single first-party
+# target can spend 90% of its log surface on that progress chatter, which
+# is wasted bytes everywhere it lands (agent context windows, CI log
+# storage, scroll-back, etc.). Two narrow flags trim that without
+# hiding actionable output:
+#
+#   --show_progress_rate_limit=15
+#     One progress line at most every 15 seconds. Errors, warnings,
+#     `INFO: Build completed` etc. are unaffected — they bypass the rate
+#     limiter. Default is 0.2s. We do NOT use `--noshow_progress` because
+#     that hides ALL progress, including the "still alive at minute 8"
+#     reassurance during a long compile.
+#
+#   --noshow_loading_progress
+#     Mutes the per-package loading-phase chatter (Bazel scans the BUILD
+#     graph at the start of every invocation and emits a `Loading: N
+#     packages loaded` line per increment). Final BUILD/analysis errors
+#     still surface because they ride the regular event stream.
+#
+# Tests and coverage inherit `build` flags by default; `run` does NOT
+# need quieting (it just launches a binary). Curses / colour stay at
+# their defaults: Bazel auto-disables curses when stdout is not a TTY
+# (the case for every agent-shell invocation), so forcing
+# `--curses=no` would only degrade the human-interactive experience.
+build --show_progress_rate_limit=15
+build --noshow_loading_progress
+
+# ---------------------------------------------------------------------------
 # First-party C++ warning profile.
 #
 # `--per_file_copt` lets us turn warnings up only for the trees we own

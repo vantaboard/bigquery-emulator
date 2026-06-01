@@ -67,6 +67,17 @@ vars:
     sh: echo "${BAZEL_CC:-/usr/bin/clang}"
   BAZEL_CXX:
     sh: echo "${BAZEL_CXX:-/usr/bin/clang++}"
+# GoogleSQL build-mode resolution shared by every Bazel-launching
+# wrapper (`build`, `test`, `coverage`) is defined PER-TASK in each
+# wrapper's own `vars:` block (mirroring `emulator:build-engine:bazel`).
+# It lives there — not at the file's top-level `vars:` — so an
+# invalid `GOOGLESQL_SOURCE` in the environment does not surface as
+# a load-time error for unrelated read-only tasks like
+# `bazel:status` / `bazel:cache:status`. The preflight gate
+# (`task googlesql:preflight`) runs as the first `cmds` step of
+# each wrapper to catch a missing / invalid prebuilt cache before
+# any bazel invocation; that gate is the single source of truth and
+# is also called from `emulator:build-engine:bazel`.
 
 tasks:
   default:
@@ -142,11 +153,35 @@ tasks:
   build:
     desc: |
       Throttled `bazel build` wrapper. Set TARGETS="//path/to:target" (required).
-      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Runs
-      `bazel shutdown` on exit (success, failure, or signal).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
+      (default `prebuilt`; consumes the published GoogleSQL artifact from
+      .cache/googlesql-prebuilt/ so this wrapper shares the same disk-cache
+      ABI lane as `task emulator:build-engine:bazel`). Runs `bazel shutdown`
+      on exit (success, failure, or signal).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
+      # Canonicalise GOOGLESQL_SOURCE the same way
+      # `emulator:build-engine:bazel` does. Per-task (not file-level) so an
+      # invalid env-var value can never trip up the read-only helpers
+      # (`bazel:status`, `bazel:cache:status`).
+      GOOGLESQL_SOURCE:
+        sh: |
+          v="${GOOGLESQL_SOURCE:-prebuilt}"
+          case "$v" in
+            local|source) echo "googlesql-source" ;;
+            prebuilt)     echo "googlesql-prebuilt" ;;
+            *)
+              echo "GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '$v'" >&2
+              exit 2
+              ;;
+          esac
     cmds:
+      # Single-source-of-truth gate for "prebuilt cache must exist and
+      # validate" before bazel runs. Reads GOOGLESQL_SOURCE from env; the
+      # `vars:` canonicalisation above feeds the same value through.
+      # Leading colon = absolute task path; without it, Task resolves
+      # within the caller's namespace (`bazel:googlesql:preflight`).
+      - task: :googlesql:preflight
       # Delegated to bash because Task's embedded mvdan/sh shell does
       # not accept `INT`/`TERM` (or numeric `2`/`15`) in `trap`. Bash
       # is the only shell on the path where the exit-trap shutdown
@@ -163,6 +198,7 @@ tasks:
           trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel build \
+              --config={{.GOOGLESQL_SOURCE}} \
               --jobs={{.BAZEL_JOBS}} \
               --local_resources=cpu={{.BAZEL_JOBS}} \
               --local_resources=memory={{.BAZEL_MEM_MB}} \
@@ -174,12 +210,29 @@ tasks:
   test:
     desc: |
       Throttled `bazel test` wrapper. Set TARGETS="//path/to:target" (required).
-      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Runs
-      `bazel shutdown` on exit (success, failure, or signal).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
+      (default `prebuilt`; consumes the published GoogleSQL artifact from
+      .cache/googlesql-prebuilt/ so a scoped test shares the same disk-cache
+      ABI lane as `task emulator:build-engine:bazel` and skips the
+      ~8K-TU GoogleSQL recompile). Runs `bazel shutdown` on exit
+      (success, failure, or signal).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
       TEST_FLAGS: '{{.TEST_FLAGS | default "--test_output=errors"}}'
+      GOOGLESQL_SOURCE:
+        sh: |
+          v="${GOOGLESQL_SOURCE:-prebuilt}"
+          case "$v" in
+            local|source) echo "googlesql-source" ;;
+            prebuilt)     echo "googlesql-prebuilt" ;;
+            *)
+              echo "GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '$v'" >&2
+              exit 2
+              ;;
+          esac
     cmds:
+      # Leading colon = absolute task path (see `bazel:build` for why).
+      - task: :googlesql:preflight
       # See `bazel:build` for why we wrap in bash. Task's mvdan/sh
       # cannot trap non-EXIT signals.
       - |
@@ -194,6 +247,7 @@ tasks:
           trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel test \
+              --config={{.GOOGLESQL_SOURCE}} \
               --jobs={{.BAZEL_JOBS}} \
               --local_resources=cpu={{.BAZEL_JOBS}} \
               --local_resources=memory={{.BAZEL_MEM_MB}} \
@@ -255,15 +309,31 @@ tasks:
     desc: |
       Throttled `bazel coverage` wrapper. Set TARGETS="//path/to:target ..."
       (required; usually the output of `bazel query 'kind(cc_test, //...)'`).
-      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX. Emits a single
-      combined lcov report at `bazel-out/_coverage/_coverage_report.dat`
-      via `--combined_report=lcov`, which the in-repo `tools/coverage`
-      summarizer (run via `task coverage:summarize`) ingests directly.
-      Runs `bazel shutdown` on exit (success, failure, or signal).
+      Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
+      (default `prebuilt`; consumes the published GoogleSQL artifact from
+      .cache/googlesql-prebuilt/ so coverage runs share the same disk-cache
+      ABI lane as the engine build). Emits a single combined lcov report at
+      `bazel-out/_coverage/_coverage_report.dat` via `--combined_report=lcov`,
+      which the in-repo `tools/coverage` summarizer (run via
+      `task coverage:summarize`) ingests directly. Runs `bazel shutdown`
+      on exit (success, failure, or signal).
     vars:
       TARGETS: '{{.TARGETS | default ""}}'
       COVERAGE_FLAGS: '{{.COVERAGE_FLAGS | default "--combined_report=lcov --test_output=errors"}}'
+      GOOGLESQL_SOURCE:
+        sh: |
+          v="${GOOGLESQL_SOURCE:-prebuilt}"
+          case "$v" in
+            local|source) echo "googlesql-source" ;;
+            prebuilt)     echo "googlesql-prebuilt" ;;
+            *)
+              echo "GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '$v'" >&2
+              exit 2
+              ;;
+          esac
     cmds:
+      # Leading colon = absolute task path (see `bazel:build` for why).
+      - task: :googlesql:preflight
       # Same wrap-in-bash trick as `bazel:test`: Task's mvdan/sh shell
       # does not accept symbolic signal names in `trap`, so the daemon
       # shutdown trap has to live inside a real bash invocation.
@@ -279,6 +349,7 @@ tasks:
           trap "bazel shutdown 2>/dev/null || true" EXIT INT TERM
           CC={{.BAZEL_CC}} CXX={{.BAZEL_CXX}} PATH=/usr/bin:$PATH \
             bazel coverage \
+              --config={{.GOOGLESQL_SOURCE}} \
               --jobs={{.BAZEL_JOBS}} \
               --local_resources=cpu={{.BAZEL_JOBS}} \
               --local_resources=memory={{.BAZEL_MEM_MB}} \
