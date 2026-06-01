@@ -67,6 +67,7 @@ tasks:
         go vet ./...
       - task: cpp:format
       - task: cpp:source
+      - task: dispositions
 
   fix:
     desc: Apply auto-fixable lints (gofmt -s -w, golangci-lint --fix, go vet, clang-format -i)
@@ -131,6 +132,7 @@ tasks:
       - task: cpp:source
       - task: cpp:tidy
       - task: cpp:cppcheck
+      - task: dispositions
 
   go:
     desc: Run golangci-lint with the project's .golangci.yml (slow, full check)
@@ -151,6 +153,26 @@ tasks:
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
         golangci-lint run --fix ./...
+
+  dispositions:
+    desc: |
+      Verify backend/engine/duckdb/transpiler/node_dispositions.yaml
+      and backend/engine/duckdb/transpiler/SHAPE_TRACKER.md agree
+      row-for-row. The YAML is the machine-readable source of truth
+      the engine consumes; the markdown is its human-readable
+      mirror. A drift between them means the engine and the docs
+      disagree on what route a given ResolvedAST node kind takes.
+      The companion lint test for this gate lives at
+      tools/check_disposition_parity/parity_test.go
+      (TestRunDetectsDriftedFixture). Exits 0 on parity, 1 on
+      drift, 2 on usage error.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go run ./tools/check_disposition_parity
 
   shell:
     desc: ShellCheck shell scripts under docker/

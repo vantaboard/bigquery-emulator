@@ -79,12 +79,14 @@ jobs:
             clang-tidy \
             cppcheck
 
-      - name: Fast lint gate (gofmt + go vet + first-party C++ format/source)
+      - name: Fast lint gate (gofmt + go vet + first-party C++ format/source + disposition parity)
         # Mirror of `task lint:run`. Fails the job if Go formatting,
-        # `go vet`, clang-format, or the source-only C++ checker
-        # surface any finding. Subsumes the previous standalone
-        # `go vet` step (`task lint:run` invokes `go vet ./...`
-        # internally).
+        # `go vet`, clang-format, the source-only C++ checker, or
+        # the disposition-parity gate
+        # (`task lint:dispositions`, owned by
+        # `execution-disposition-registry.plan.md`) surface any
+        # finding. Subsumes the previous standalone `go vet` step
+        # (`task lint:run` invokes `go vet ./...` internally).
         run: task lint:run
 
       - name: go test (with coverage)
