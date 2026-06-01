@@ -26,14 +26,16 @@ DML, structural errors, DDL, and a schema-only smoke check; see the
 task emulator:build-engine:bazel
 
 # 2. Run every fixture in conformance/fixtures against the active
-#    profile set (DuckDB-only today), spawning a fresh emulator per
-#    fixture x profile.
+#    profile set (the local-execution coordinator's `local` profile
+#    today), spawning a fresh emulator per fixture x profile.
 task conformance:run
 # (equivalent to `go run ./conformance/cmd/runner`)
 
 # 3. Restrict the matrix to one or more profiles. PROFILE is a
 #    comma-separated list; each entry maps to a single --profile flag.
-task conformance:run PROFILE=duckdb
+#    The legacy `duckdb` profile name is accepted as an alias for
+#    `local` while the rename is in flight.
+task conformance:run PROFILE=local
 
 # 4. Run a single fixture file. Honors PROFILE too.
 task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
@@ -45,7 +47,7 @@ task conformance:run OUTPUT=json OUTPUT_FILE=conformance-result.json
 #    emulator_main subprocesses (faster dev loop).
 go run ./conformance/cmd/runner \
   --fixtures conformance/fixtures/select_literal_value.yaml \
-  --profile duckdb \
+  --profile local \
   --connect 127.0.0.1:9060
 ```
 
@@ -54,14 +56,22 @@ go run ./conformance/cmd/runner \
 A fixture's `profiles:` list declares which runtime profile it
 applies to. Only one profile is defined today:
 
-| profile | engine | storage | use for                                |
-|---------|--------|---------|----------------------------------------|
-| duckdb  | duckdb | duckdb  | All conformance assertions (only lane) |
+| profile | engine                      | storage | use for                                |
+|---------|-----------------------------|---------|----------------------------------------|
+| local   | local execution coordinator | duckdb  | All conformance assertions (only lane) |
+
+The runner also accepts the legacy name `duckdb` as an alias for
+`local` while the rename is in flight; new fixtures should write
+`local`. The single profile drives the in-process route classifier
+that dispatches to DuckDB fast path / DuckDB UDF / semantic
+executor / control-op handlers (see
+[`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md)).
 
 A fixture that omits `profiles:` runs on the default profile set
-(currently `[duckdb]`). The runner still tags every result with its
+(currently `[local]`). The runner still tags every result with its
 profile name in both `text` and `json` output modes so a future
-expansion (a second engine, an experimental storage backend, etc.)
+expansion (an experimental storage backend, an additional
+coordinator variant, etc.)
 does not need a CI-format break.
 
 ## Fixture schema
@@ -116,13 +126,14 @@ The `setup` list is dispatched by which field is present in each step:
    `mode`, plus nested `fields` for `STRUCT`).
 3. `rows:` — `POST /bigquery/v2/projects/<projectId>/datasets/<datasetId>/tables/<tableId>/insertAll`
    with `{kind:"bigquery#tableDataInsertAllRequest", rows:[{json:{...}}, ...]}`.
-   This is the canonical seeding path because the DuckDB engine
-   currently returns UNIMPLEMENTED for `INSERT VALUES`. Each row map
+   This is the canonical seeding path today because the coordinator
+   currently routes `INSERT VALUES` to the `unsupported` route (see
+   `dml-local-executor.plan.md` for the landing plan). Each row map
    is wrapped in `{json: ...}` by the runner.
 4. `sql: <query>` — `POST /bigquery/v2/projects/<projectId>/queries`
    with `{query, useLegacySql:false}`. Use this for `MERGE`,
    `CREATE TABLE`, `DROP TABLE`, etc. `INSERT` / `UPDATE` / `DELETE`
-   are UNIMPLEMENTED on the DuckDB engine; use `rows:` for seeding
+   are on the `unsupported` route today; use `rows:` for seeding
    instead. The setup step fails the fixture if the gateway responds
    with a non-2xx status.
 
@@ -204,8 +215,9 @@ may be omitted; the runner only asserts on what the fixture pins.
 
 The fixture below seeds three rows via `tabledata.insertAll` and then
 asserts a filtered SELECT returns the single matching row. `INSERT` /
-`UPDATE` / `DELETE` are UNIMPLEMENTED on the DuckDB engine today, so
-fixtures use `rows:` for seeding rather than DML `sql:` steps.
+`UPDATE` / `DELETE` are on the `unsupported` route today (see
+`dml-local-executor.plan.md`), so fixtures use `rows:` for seeding
+rather than DML `sql:` steps.
 
 ```yaml
 name: select_where_clause
@@ -402,25 +414,31 @@ quick decision tree for picking one:
    list. The runner asserts on the column names + types and
    ignores the cell values.
 
-## DuckDB-only runtime constraints
+## Local execution constraints
 
 The conformance harness drives the emulator's only supported
-runtime: DuckDB engine + DuckDB storage. A few constructs are
-known UNIMPLEMENTED on the DuckDB engine today; fixtures should
-avoid them entirely:
+runtime: the local execution coordinator (DuckDB fast path +
+planned semantic executor + planned control-op handlers) on top of
+DuckDB storage. A few constructs are routed `unsupported` today;
+fixtures should avoid them entirely until their landing plan
+ships:
 
-- **`INSERT VALUES` / `INSERT ... SELECT`** -- the DuckDB engine
-  returns UNIMPLEMENTED. Use a `rows:` setup step to seed table
-  data via `tabledata.insertAll` instead.
-- **`UPDATE` / `DELETE`** -- also UNIMPLEMENTED on the DuckDB
-  engine today. `MERGE` is supported and works as a fixture
-  `sql:` setup step.
-- **`SELECT 1` / scalar-only `SELECT`** -- the DuckDB transpiler
-  does not lower a `SELECT` with no `FROM` yet; use a real table
-  scan even for trivial fixtures.
+- **`INSERT VALUES` / `INSERT ... SELECT`** -- on the `unsupported`
+  route today; lands via `dml-local-executor.plan.md`. Use a
+  `rows:` setup step to seed table data via `tabledata.insertAll`
+  instead.
+- **`UPDATE` / `DELETE`** -- on the `unsupported` route today;
+  lands via `dml-local-executor.plan.md`. `MERGE`'s easy branches
+  lower through the DuckDB fast path and work as a fixture `sql:`
+  setup step.
+- **`SELECT 1` / scalar-only `SELECT`** -- on the `unsupported`
+  route today; lands via `semantic-executor-core.plan.md`. Use a
+  real table scan even for trivial fixtures.
 
 See [`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md) for the
-"DuckDB-only" policy decision and the roadmap for closing each gap.
+local execution policy and the per-shape route catalog, and
+[`.cursor/plans/local-execution-roadmap-index.plan.md`](../.cursor/plans/local-execution-roadmap-index.plan.md)
+for the landing schedule.
 
 ## Adding fixtures (compact recap)
 

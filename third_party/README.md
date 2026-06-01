@@ -32,7 +32,9 @@ The third-party suites all assume:
    (`gateway_main`) with the C++ engine subprocess attached:
 
    ```bash
-   task emulator:build-engine:bazel   # build full GoogleSQL+DuckDB engine
+   task emulator:build-engine:bazel   # build engine (GoogleSQL analyzer
+                                      # + local execution coordinator
+                                      # + DuckDB storage)
    task emulator:run-full              # gateway + engine on :9050 / :9060
    ```
 

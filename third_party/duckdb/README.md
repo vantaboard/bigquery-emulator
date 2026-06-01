@@ -18,5 +18,8 @@ DuckDB powers two parts of the engine:
 
 - **DuckDB-backed `Storage`** — Parquet / Arrow files on disk,
   attached as DuckDB tables at query time.
-- **DuckDB engine** — transpiled fast path for OLAP workloads,
-  sharing the same Arrow result format with the Storage Read API.
+- **DuckDB fast path inside the local execution coordinator** —
+  transpiled fast path for OLAP workloads, one of several routes
+  the coordinator dispatches resolved-AST shapes to (see
+  [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md)).
+  Shares the same Arrow result format with the Storage Read API.
