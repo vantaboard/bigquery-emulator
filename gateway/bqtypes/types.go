@@ -141,6 +141,33 @@ type QueryResponse struct {
 	CreationTime        string         `json:"creationTime,omitempty"`
 	StartTime           string         `json:"startTime,omitempty"`
 	EndTime             string         `json:"endTime,omitempty"`
+	Statistics          *JobStatistics `json:"statistics,omitempty"`
+}
+
+// JobStatistics is the outer BigQuery REST `Job.statistics`
+// envelope. The emulator only populates the per-query subset today;
+// the load / extract / copy variants exist on the wire but the
+// emulator surfaces them empty until the matching handlers ship.
+// Mirrors docs/bigquery/docs/reference/rest/v2/JobStatistics.md.
+type JobStatistics struct {
+	Query *JobStatistics2 `json:"query,omitempty"`
+}
+
+// JobStatistics2 is the per-query statistics block exposed under
+// `Job.statistics.query`. Today the emulator surfaces only
+// `statementType` (see `.cursor/plans/control-op-executor.plan.md`
+// item 5); the other fields land alongside the long-running-jobs
+// follow-up. Mirrors
+// docs/bigquery/docs/reference/rest/v2/JobStatistics2.md.
+type JobStatistics2 struct {
+	// StatementType is the BigQuery REST canonical statement-type
+	// string (`SELECT` / `INSERT` / `CREATE_TABLE` / `DROP_TABLE` /
+	// ...). The frontend's `StatementTypeFor` C++ helper is the
+	// source of truth for which `Resolved*Stmt` maps to which
+	// string; statements with no canonical value (e.g. shapes the
+	// REST surface does not enumerate) leave the field empty so
+	// the encoder omits the JSON property entirely.
+	StatementType string `json:"statementType,omitempty"`
 }
 
 // SessionInfo tracks the session a query is running under, when sessions

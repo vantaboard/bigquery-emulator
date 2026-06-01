@@ -188,7 +188,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if queryGRPCToHTTPError(w, err) {
 		return
 	}
-	schema, dmlStats, rows, ok := streamQueryResults(w, stream)
+	schema, dmlStats, rows, statementType, ok := streamQueryResults(w, stream)
 	if !ok {
 		return
 	}
@@ -209,19 +209,27 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
-	out := assembleQueryResponse(job, restSchema, rows, dmlStats, restDmlStats)
+	out := assembleQueryResponse(
+		job, restSchema, rows, dmlStats, restDmlStats, statementType)
 	writeJSON(w, http.StatusOK, out)
 }
 
 // streamQueryResults drains the engine's query stream into the
-// per-RPC schema, DML stats, and row slice. Returns ok=false after
-// emitting an HTTP error envelope, in which case the caller must
-// stop processing the request.
+// per-RPC schema, DML stats, row slice, and trailing statement type.
+// Returns ok=false after emitting an HTTP error envelope, in which
+// case the caller must stop processing the request.
+//
+// The proto contract (see `proto/emulator.proto::QueryResultRow`)
+// allows up to four message kinds on a single reply: schema, cells,
+// dml_stats, and statement_type. The schema and dml_stats messages
+// pin themselves to the first arrival (later resends are ignored);
+// statement_type is emitted at most once as the trailer.
 func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQueryClient) (
-	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, bool,
+	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, bool,
 ) {
 	var schema *enginepb.TableSchema
 	var dmlStats *enginepb.DmlStats
+	var statementType string
 	rows := make([]bqtypes.Row, 0)
 	for {
 		msg, err := stream.Recv()
@@ -229,7 +237,7 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			break
 		}
 		if queryGRPCToHTTPError(w, err) {
-			return nil, nil, nil, false
+			return nil, nil, nil, "", false
 		}
 		if s := msg.GetSchema(); s != nil {
 			// Per proto contract the first message carries the
@@ -252,9 +260,19 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			}
 			continue
 		}
+		if st := msg.GetStatementType(); st != "" {
+			// Trailing per-reply marker the engine emits to tell
+			// the gateway which BigQuery REST `statementType`
+			// envelope to populate. Keep the first non-empty value
+			// and ignore later resends.
+			if statementType == "" {
+				statementType = st
+			}
+			continue
+		}
 		rows = append(rows, bqtypes.CellsToRow(msg.GetCells()))
 	}
-	return schema, dmlStats, rows, true
+	return schema, dmlStats, rows, statementType, true
 }
 
 // dmlStatsFromProto converts an engine-side DmlStats message into
@@ -274,9 +292,12 @@ func dmlStatsFromProto(d *enginepb.DmlStats) *bqtypes.DmlStats {
 // assembleQueryResponse builds the synchronous jobs.query response
 // envelope: SELECT-shape (schema + rows + totalRows) by default,
 // switching to the DML-shape (numDmlAffectedRows + zeroed selects)
-// when the stream surfaced a DmlStats message.
+// when the stream surfaced a DmlStats message. When the engine
+// trailed a non-empty `statement_type` the gateway folds it into
+// the BigQuery REST `Job.statistics.query.statementType` envelope.
 func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows []bqtypes.Row,
 	dmlStats *enginepb.DmlStats, restDmlStats *bqtypes.DmlStats,
+	statementType string,
 ) bqtypes.QueryResponse {
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
@@ -291,6 +312,13 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 		StartTime:           job.Statistics.StartTime,
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
+	}
+	if statementType != "" {
+		out.Statistics = &bqtypes.JobStatistics{
+			Query: &bqtypes.JobStatistics2{
+				StatementType: statementType,
+			},
+		}
 	}
 	if restDmlStats != nil {
 		// Surface BigQuery's DML statistics envelope. `dmlStats`

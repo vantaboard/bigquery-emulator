@@ -177,7 +177,7 @@ message DryRunResponse {
 }
 
 message QueryResultRow {
-  // The stream carries one of three message kinds:
+  // The stream carries one of four message kinds:
   //   * `schema` only — emitted as the first message of every
   //     `ExecuteQuery` reply for SELECT-shaped queries.
   //   * `cells` only — emitted once per result row.
@@ -186,9 +186,21 @@ message QueryResultRow {
   //     THEN-RETURN rows. Carries the per-statement modification
   //     counts the gateway folds into BigQuery's REST `dmlStats`
   //     and `numDmlAffectedRows` fields.
+  //   * `statement_type` only — emitted as the trailing message of
+  //     every successful reply (SELECT, DML, and DDL alike). The
+  //     value is one of the canonical BigQuery REST statement-type
+  //     strings (`SELECT`, `INSERT`, `CREATE_TABLE`, ...) the
+  //     gateway folds into the
+  //     `QueryResponse.statistics.query.statementType` envelope so
+  //     callers can tell DDL / metadata / catalog operations apart
+  //     from SELECTs and DML at the response layer. Routes that
+  //     produce no recognizable BigQuery shape (today: nothing in
+  //     the supported surface) leave the field empty so the gateway
+  //     omits the envelope entirely.
   TableSchema schema = 1;
   repeated Cell cells = 2;
   DmlStats dml_stats = 3;
+  string statement_type = 4;
 }
 
 // DmlStats is the engine's report of how many rows a DML statement

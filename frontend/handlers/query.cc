@@ -255,6 +255,90 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
   }
 }
 
+// Map a `ResolvedStatement` to the canonical BigQuery REST
+// `Job.statistics.query.statementType` string. Mirrors the
+// `statementType` enum documented at
+// `docs/bigquery/docs/reference/rest/v2/Job.md`. Empty string means
+// "no statementType envelope" (the gateway omits the field
+// altogether for shapes BigQuery itself does not enumerate, e.g.
+// internal or non-BigQuery surfaces).
+//
+// Plan ownership: `.cursor/plans/control-op-executor.plan.md`
+// "Item 5 (statementType)". Each handler in
+// `backend/engine/control/control_op_executor.cc` is the source of
+// truth for what the statement does; this helper is the source of
+// truth for what BigQuery REST calls that statement.
+absl::string_view StatementTypeFor(const ::googlesql::ResolvedStatement& stmt) {
+  switch (stmt.node_kind()) {
+    case ::googlesql::RESOLVED_QUERY_STMT:
+      return "SELECT";
+    case ::googlesql::RESOLVED_INSERT_STMT:
+      return "INSERT";
+    case ::googlesql::RESOLVED_UPDATE_STMT:
+      return "UPDATE";
+    case ::googlesql::RESOLVED_DELETE_STMT:
+      return "DELETE";
+    case ::googlesql::RESOLVED_MERGE_STMT:
+      return "MERGE";
+    case ::googlesql::RESOLVED_TRUNCATE_STMT:
+      return "TRUNCATE_TABLE";
+    case ::googlesql::RESOLVED_CREATE_TABLE_STMT:
+      return "CREATE_TABLE";
+    case ::googlesql::RESOLVED_CREATE_TABLE_AS_SELECT_STMT:
+      return "CREATE_TABLE_AS_SELECT";
+    case ::googlesql::RESOLVED_CREATE_VIEW_STMT:
+      return "CREATE_VIEW";
+    case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
+      return "CREATE_MATERIALIZED_VIEW";
+    case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
+      return "CREATE_FUNCTION";
+    case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT:
+      return "CREATE_TABLE_FUNCTION";
+    case ::googlesql::RESOLVED_CREATE_PROCEDURE_STMT:
+      return "CREATE_PROCEDURE";
+    case ::googlesql::RESOLVED_CREATE_SCHEMA_STMT:
+      return "CREATE_SCHEMA";
+    case ::googlesql::RESOLVED_CREATE_SNAPSHOT_TABLE_STMT:
+      return "CREATE_SNAPSHOT_TABLE";
+    case ::googlesql::RESOLVED_CREATE_ROW_ACCESS_POLICY_STMT:
+      return "CREATE_ROW_ACCESS_POLICY";
+    case ::googlesql::RESOLVED_DROP_STMT:
+      return "DROP_TABLE";
+    case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
+      return "DROP_FUNCTION";
+    case ::googlesql::RESOLVED_DROP_TABLE_FUNCTION_STMT:
+      return "DROP_TABLE_FUNCTION";
+    case ::googlesql::RESOLVED_DROP_MATERIALIZED_VIEW_STMT:
+      return "DROP_MATERIALIZED_VIEW";
+    case ::googlesql::RESOLVED_DROP_ROW_ACCESS_POLICY_STMT:
+      return "DROP_ROW_ACCESS_POLICY";
+    case ::googlesql::RESOLVED_DROP_SNAPSHOT_TABLE_STMT:
+      return "DROP_SNAPSHOT_TABLE";
+    case ::googlesql::RESOLVED_ALTER_TABLE_STMT:
+      return "ALTER_TABLE";
+    case ::googlesql::RESOLVED_ALTER_VIEW_STMT:
+      return "ALTER_VIEW";
+    case ::googlesql::RESOLVED_ALTER_MATERIALIZED_VIEW_STMT:
+      return "ALTER_MATERIALIZED_VIEW";
+    case ::googlesql::RESOLVED_ALTER_SCHEMA_STMT:
+      return "ALTER_SCHEMA";
+    case ::googlesql::RESOLVED_ANALYZE_STMT:
+      return "ANALYZE";
+    case ::googlesql::RESOLVED_ASSERT_STMT:
+      return "ASSERT";
+    case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
+      return "LOAD_DATA";
+    case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
+      return "EXPORT_DATA";
+    case ::googlesql::RESOLVED_GRANT_STMT:
+      return "GRANT";
+    case ::googlesql::RESOLVED_REVOKE_STMT:
+      return "REVOKE";
+    default:
+      return "";
+  }
+}
+
 }  // namespace
 
 QueryService::QueryService(backend::storage::Storage* storage,
@@ -417,20 +501,46 @@ namespace {
   return ::grpc::Status::OK;
 }
 
+// Emit the trailing `statement_type` message every successful
+// `ExecuteQuery` reply now carries (per
+// `.cursor/plans/control-op-executor.plan.md` Item 5). The gateway
+// folds the value into BigQuery's
+// `Job.statistics.query.statementType` envelope. We never emit the
+// trailer when `statement_type` is empty (e.g. shapes BigQuery REST
+// does not enumerate); the gateway then omits the envelope as well.
+::grpc::Status EmitStatementType(
+    absl::string_view statement_type,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+  if (statement_type.empty()) return ::grpc::Status::OK;
+  v1::QueryResultRow trailer;
+  trailer.set_statement_type(std::string(statement_type));
+  if (!write(trailer)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::CANCELLED,
+        "QueryService::ExecuteQuery: client cancelled stream before "
+        "statement_type trailer");
+  }
+  return ::grpc::Status::OK;
+}
+
 // DML path: run `ExecuteDml`, then emit a single `dml_stats` message
-// describing the row counts. The caller is responsible for selecting
-// this path (i.e. having determined `cls == kDml`).
+// describing the row counts, then a `statement_type` trailer. The
+// caller is responsible for selecting this path (i.e. having
+// determined `cls == kDml`).
 ::grpc::Status EmitDmlStats(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,
     ::googlesql::Catalog* catalog,
+    absl::string_view statement_type,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::StatusOr<backend::engine::DmlStats> stats =
       engine->ExecuteDml(request, catalog);
   if (!stats.ok()) return AnalyzeStatusToGrpc(stats.status());
   // DML reply: no schema and no row messages, just a single
   // `dml_stats` summary the gateway folds into BigQuery's
-  // `dmlStats` / `numDmlAffectedRows` envelope.
+  // `dmlStats` / `numDmlAffectedRows` envelope, followed by the
+  // `statement_type` trailer the gateway folds into
+  // `statistics.query.statementType`.
   v1::QueryResultRow stats_message;
   auto* proto_stats = stats_message.mutable_dml_stats();
   proto_stats->set_inserted_row_count(stats->inserted_row_count);
@@ -442,26 +552,32 @@ namespace {
         "QueryService::ExecuteQuery: client cancelled stream before "
         "dml_stats");
   }
-  return ::grpc::Status::OK;
+  return EmitStatementType(statement_type, write);
 }
 
 // DDL path: run `ExecuteDdl` and propagate any failure. Successful
-// DDL emits an empty stream; the gateway's "DDL succeeded" envelope
-// shape relies on the zero-message reply.
-::grpc::Status EmitDdlResult(backend::engine::Engine* engine,
-                             const backend::engine::QueryRequest& request,
-                             ::googlesql::Catalog* catalog) {
+// DDL emits a single `statement_type` trailer (the gateway uses it
+// to populate `Job.statistics.query.statementType`); pre-plan-47 the
+// reply was empty.
+::grpc::Status EmitDdlResult(
+    backend::engine::Engine* engine,
+    const backend::engine::QueryRequest& request,
+    ::googlesql::Catalog* catalog,
+    absl::string_view statement_type,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::Status ddl_status = engine->ExecuteDdl(request, catalog);
   if (!ddl_status.ok()) return AnalyzeStatusToGrpc(ddl_status);
-  return ::grpc::Status::OK;
+  return EmitStatementType(statement_type, write);
 }
 
 // SELECT path: emit the schema message, then one row message per
-// `RowSource::Next` until end-of-stream.
+// `RowSource::Next` until end-of-stream, then a `statement_type`
+// trailer.
 ::grpc::Status StreamRows(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,
     ::googlesql::Catalog* catalog,
+    absl::string_view statement_type,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
       engine->ExecuteQuery(request, catalog);
@@ -506,7 +622,7 @@ namespace {
           "QueryService::ExecuteQuery: client cancelled stream mid-row");
     }
   }
-  return ::grpc::Status::OK;
+  return EmitStatementType(statement_type, write);
 }
 
 }  // namespace
@@ -568,14 +684,18 @@ namespace {
         "QueryService::ExecuteQuery: engine backend is not configured");
   }
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+  const absl::string_view statement_type = StatementTypeFor(*stmt);
 
   switch (cls) {
     case StatementClass::kSelect:
-      return StreamRows(engine, engine_request, &catalog, write);
+      return StreamRows(
+          engine, engine_request, &catalog, statement_type, write);
     case StatementClass::kDml:
-      return EmitDmlStats(engine, engine_request, &catalog, write);
+      return EmitDmlStats(
+          engine, engine_request, &catalog, statement_type, write);
     case StatementClass::kDdl:
-      return EmitDdlResult(engine, engine_request, &catalog);
+      return EmitDdlResult(
+          engine, engine_request, &catalog, statement_type, write);
     case StatementClass::kOther:
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,

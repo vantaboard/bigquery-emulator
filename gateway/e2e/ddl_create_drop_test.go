@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -108,6 +109,19 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 	if len(run.Rows) != 0 {
 		t.Errorf("rows = %d, want 0 for DDL response", len(run.Rows))
 	}
+	// `Job.statistics.query.statementType` must match BigQuery's
+	// REST canonical value for CTAS. The gateway populates the
+	// envelope from the trailing `statement_type` marker the
+	// engine emits per
+	// `.cursor/plans/control-op-executor.plan.md` Item 5.
+	if run.Statistics == nil || run.Statistics.Query == nil {
+		t.Fatalf("statistics.query missing on CTAS response: %+v",
+			run.Statistics)
+	}
+	if got := run.Statistics.Query.StatementType; got != "CREATE_TABLE_AS_SELECT" {
+		t.Errorf("statistics.query.statementType = %q, want %q",
+			got, "CREATE_TABLE_AS_SELECT")
+	}
 
 	// Storage round-trip: tabledata.list against the new table must
 	// surface the three rows we seeded into the source.
@@ -140,4 +154,79 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 			t.Errorf("rows[%d] = %q, want %q", i, pairs[i], want[i])
 		}
 	}
+}
+
+// TestDDLStatementTypeEnvelopeMatchesBigQueryRESTValues exercises
+// the per-statement `Job.statistics.query.statementType` plumbing
+// the control-op executor (`backend/engine/control/control_op_executor.cc`)
+// + frontend (`frontend/handlers/query.cc::StatementTypeFor`) +
+// gateway (`gateway/handlers/queries.go`) ship together. Per
+// `.cursor/plans/control-op-executor.plan.md` Done Criterion #3,
+// every supported DDL / metadata / catalog statement must surface
+// the BigQuery REST canonical statement-type string. This test
+// pins three representative shapes (CREATE_TABLE, DROP_TABLE,
+// SELECT) so a regression in the trailing-message contract or the
+// gateway's `streamQueryResults` decoder breaks the gateway/e2e
+// suite immediately.
+func TestDDLStatementTypeEnvelopeMatchesBigQueryRESTValues(t *testing.T) {
+	env := startEmulatorWithFlags(t, emulatorFlags{
+		dataDir: t.TempDir(),
+	})
+
+	const (
+		projectID = "proj-stmt-type"
+		datasetID = "ds_stmt_type"
+		tableID   = "people"
+	)
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+
+	status, body := doJSON(t, http.MethodPost, base+"/datasets",
+		[]byte(`{"datasetReference":{"projectId":"`+projectID+
+			`","datasetId":"`+datasetID+`"},"location":"US"}`))
+	if status != http.StatusOK {
+		t.Fatalf("datasets.insert -> %d: %s", status, string(body))
+	}
+
+	runQuery := func(t *testing.T, sql string) bqtypes.QueryResponse {
+		t.Helper()
+		status, body := doJSON(t, http.MethodPost, base+"/queries",
+			[]byte(`{"query":`+strconv.Quote(sql)+`,"useLegacySql":false}`))
+		if status != http.StatusOK {
+			t.Fatalf("jobs.query(%q) -> %d: %s", sql, status, string(body))
+		}
+		var resp bqtypes.QueryResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			t.Fatalf("decode QueryResponse for %q: %v (body=%s)",
+				sql, err, string(body))
+		}
+		if !resp.JobComplete {
+			t.Fatalf("jobComplete=false for %q: %s", sql, string(body))
+		}
+		return resp
+	}
+	wantStatementType := func(t *testing.T, label, want string,
+		resp bqtypes.QueryResponse,
+	) {
+		t.Helper()
+		if resp.Statistics == nil || resp.Statistics.Query == nil {
+			t.Fatalf("%s: statistics.query missing on response: %+v",
+				label, resp.Statistics)
+		}
+		if got := resp.Statistics.Query.StatementType; got != want {
+			t.Errorf("%s: statistics.query.statementType = %q, want %q",
+				label, got, want)
+		}
+	}
+
+	createResp := runQuery(t,
+		"CREATE TABLE "+datasetID+"."+tableID+
+			" (id INT64, name STRING)")
+	wantStatementType(t, "CREATE TABLE", "CREATE_TABLE", createResp)
+
+	selectResp := runQuery(t,
+		"SELECT id FROM "+datasetID+"."+tableID)
+	wantStatementType(t, "SELECT", "SELECT", selectResp)
+
+	dropResp := runQuery(t, "DROP TABLE "+datasetID+"."+tableID)
+	wantStatementType(t, "DROP TABLE", "DROP_TABLE", dropResp)
 }
