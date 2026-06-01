@@ -1,0 +1,51 @@
+# regression_null_equality_join: NULL = NULL is NOT TRUE in joins.
+#
+# Fast-path sharp edge: BigQuery's `=` operator returns NULL (not
+# TRUE) when either side is NULL, so a row whose join key is NULL
+# never matches another NULL on the opposite side under a plain
+# `ON a.k = b.k` join. Pin it so a regression to a more-permissive
+# DuckDB-side equality (or a structural rewrite that conflates
+# `NULL = NULL` with `IS NOT DISTINCT FROM`) surfaces.
+name: regression_null_equality_join
+description: |
+  INNER JOIN on a NULLABLE key where one row on each side is NULL.
+  Verifies `NULL = NULL` does not match (NULL is propagated
+  through the equality operator), so the only joined row is the
+  pair that share a non-NULL key.
+project_id: proj-fastpath-regression-null-equality
+dataset_id: ds_fastpath_regression_null_equality
+setup:
+  - dataset: ds_fastpath_regression_null_equality
+  - table:
+      dataset: ds_fastpath_regression_null_equality
+      id: a
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: k, type: INT64, mode: NULLABLE}
+  - table:
+      dataset: ds_fastpath_regression_null_equality
+      id: b
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: k, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_fastpath_regression_null_equality
+      table: a
+      rows:
+        - {id: 1, k: 1}
+        - {id: 2, k: null}
+  - rows:
+      dataset: ds_fastpath_regression_null_equality
+      table: b
+      rows:
+        - {id: 10, k: 1}
+        - {id: 11, k: null}
+query: |
+  SELECT a.id AS a_id, b.id AS b_id
+    FROM ds_fastpath_regression_null_equality.a AS a
+    JOIN ds_fastpath_regression_null_equality.b AS b
+      ON a.k = b.k
+   ORDER BY a.id, b.id
+expected:
+  rows:
+    - {a_id: "1", b_id: "10"}

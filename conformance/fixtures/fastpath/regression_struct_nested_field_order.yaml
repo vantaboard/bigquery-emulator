@@ -1,0 +1,35 @@
+# regression_struct_nested_field_order: nested STRUCT field order.
+#
+# Fast-path sharp edge: BigQuery STRUCT field order is positional
+# and the type carries the names. DuckDB structs are name-keyed
+# but stable in declaration order. The transpiler walks
+# StructType in lockstep with field_list values to match the
+# positional contract; a regression that shuffles field order
+# (e.g. by switching to an unordered map for the keys) would
+# silently change the JSON serialization order on the wire and
+# break clients that parse positionally.
+#
+# Pin it by building a nested STRUCT(STRUCT(...)) and asserting
+# every inner field appears under its declared name on the wire.
+name: regression_struct_nested_field_order
+description: |
+  Build STRUCT<a INT64, b STRING, c STRUCT<d INT64, e STRING>> and
+  read every field by name. Verifies the transpiler preserves
+  declaration order across nested STRUCT depths and that the
+  field-access emit composes against an inner STRUCT result.
+project_id: proj-fastpath-regression-struct-nested-field-order
+query: |
+  SELECT outer.a              AS a,
+         outer.b              AS b,
+         outer.c.d            AS d,
+         outer.c.e            AS e
+    FROM (
+      SELECT STRUCT(
+               1     AS a,
+               'two' AS b,
+               STRUCT(3 AS d, 'four' AS e) AS c
+             ) AS outer
+    )
+expected:
+  rows:
+    - {a: "1", b: "two", d: "3", e: "four"}

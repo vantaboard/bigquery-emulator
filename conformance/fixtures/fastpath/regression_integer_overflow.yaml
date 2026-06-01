@@ -1,0 +1,24 @@
+# regression_integer_overflow: INT64 overflow surfaces an error.
+#
+# Fast-path sharp edge: BigQuery's INT64 arithmetic raises on
+# overflow (rather than wrapping silently like a C-level int64).
+# DuckDB matches that contract today; pin it so a regression to
+# silently-wrapping arithmetic (e.g. via a future structural
+# rewrite or DuckDB upgrade) surfaces as a fixture failure.
+#
+# The expected error matches the "Out of range" / "out of range"
+# substring DuckDB emits for INT64 overflow; the gateway's error
+# diff is substring-based on `error.message` so a more verbose
+# wrapping (e.g. "INT64: ... Out of range ...") still matches.
+name: regression_integer_overflow
+description: |
+  INT64 max + 1 must surface an "out of range" error rather than
+  silently wrapping to a negative value. Verifies the engine
+  preserves BigQuery's overflow-raises contract through the fast
+  path's arithmetic emit.
+project_id: proj-fastpath-regression-integer-overflow
+query: |
+  SELECT 9223372036854775807 + 1 AS overflow
+expected:
+  error:
+    message_contains: "out of range"

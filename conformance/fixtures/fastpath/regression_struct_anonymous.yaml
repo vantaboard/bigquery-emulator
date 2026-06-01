@@ -1,0 +1,29 @@
+# regression_struct_anonymous: anonymous-field STRUCT round-trip.
+#
+# Fast-path sharp edge: BigQuery permits anonymous STRUCT fields
+# (`STRUCT(1, 'a')`); DuckDB's struct shape requires named keys.
+# The transpiler synthesizes positional names (`_0`, `_1`, ...)
+# on both the construction side (EmitMakeStruct /
+# EmitValueLiteral) and the access side (EmitGetStructField), so
+# the round-trip composes byte-for-byte through DuckDB even
+# though no user-spelled field name exists. Pin it so a future
+# refactor that changes the synthesized convention on only one
+# side (or stops synthesizing entirely) surfaces.
+name: regression_struct_anonymous
+description: |
+  Build STRUCT(1, 'ada', TRUE) without field names, then access
+  every field by positional index. Verifies the transpiler's
+  positional-name convention (_0, _1, _2) matches between the
+  build side and the access side and yields the original
+  scalars on the wire.
+project_id: proj-fastpath-regression-struct-anonymous
+query: |
+  SELECT s_outer._0 AS pos0,
+         s_outer._1 AS pos1,
+         s_outer._2 AS pos2
+    FROM (
+      SELECT STRUCT(1, 'ada', TRUE) AS s_outer
+    )
+expected:
+  rows:
+    - {pos0: "1", pos1: "ada", pos2: "true"}

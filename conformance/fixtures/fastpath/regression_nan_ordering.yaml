@@ -1,0 +1,46 @@
+# regression_nan_ordering: NaN sort order.
+#
+# Fast-path sharp edge documented in
+# `.cursor/plans/duckdb-fast-path-stabilization.plan.md`. BigQuery
+# orders NaN as the largest possible FLOAT64 value (so it sorts
+# AFTER +Infinity in ASC, BEFORE -Infinity in DESC). DuckDB
+# matches that contract today; pin it explicitly so any future
+# DuckDB upgrade or transpiler-side rewrite that silently changes
+# the ordering surfaces here as a row-order diff.
+name: regression_nan_ordering
+description: |
+  ORDER BY a FLOAT64 column containing NaN, +Inf, -Inf and a
+  middle value. Verifies NaN sorts last (BQ semantics), +Inf
+  sorts second, then a finite, then -Inf. We use IS_NAN to label
+  the NaN row in the projection so the diff is unambiguous (NaN
+  is not equal to itself by IEEE-754).
+project_id: proj-fastpath-regression-nan-ordering
+dataset_id: ds_fastpath_regression_nan_ordering
+setup:
+  - dataset: ds_fastpath_regression_nan_ordering
+  - table:
+      dataset: ds_fastpath_regression_nan_ordering
+      id: floats
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: v, type: FLOAT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_regression_nan_ordering
+      table: floats
+      rows:
+        - {id: 1, v: 1.5}
+        - {id: 2, v: "Infinity"}
+        - {id: 3, v: "-Infinity"}
+        - {id: 4, v: "NaN"}
+query: |
+  SELECT id,
+         IS_NAN(v) AS is_nan,
+         IS_INF(v) AS is_inf
+    FROM ds_fastpath_regression_nan_ordering.floats
+   ORDER BY v ASC, id ASC
+expected:
+  rows:
+    - {id: "3", is_nan: "false", is_inf: "true"}
+    - {id: "1", is_nan: "false", is_inf: "false"}
+    - {id: "2", is_nan: "false", is_inf: "true"}
+    - {id: "4", is_nan: "true",  is_inf: "false"}
