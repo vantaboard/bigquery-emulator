@@ -652,25 +652,48 @@ PY
         '@com_google_differential_privacy//proto:summary_cc_proto'
     )
 
-    # `--output_groups=+compilation_outputs` is load-bearing for the
-    # raw `.pic.o` harvest below. `cc_library`'s DEFAULT outputs are
-    # the per-target `lib<target>.[pic.]a` archive — the intermediate
-    # `_objs/<target>/<src>.pic.o` objects are NOT declared outputs,
-    # so on a Bazel disk-cache hit they remain in the CAS directory
-    # and never get materialized into `bazel-out/.../_objs/`. The
-    # harvest's `find ... -name '*.pic.o'` then matches zero files
-    # and `extract_to_combined` dies with
+    # Two flags below are load-bearing for the raw `.pic.o` harvest:
+    #
+    # `--disk_cache=` (empty) disables Bazel's disk-cache for THIS
+    # invocation. Background: the producer workflow's
+    # `bazel-contrib/setup-bazel` step injects a `disk-cache:
+    # googlesql-prebuilt` key, which on a second producer run delivers
+    # a 100% action-cache hit
+    # (`INFO: 3151 processes: 1739 disk cache hit, 1412 internal.`).
+    # That's a problem for the harvest: on a cache hit Bazel only
+    # materializes each requested target's DECLARED outputs (the
+    # per-target `lib<target>.[pic.]a` archive) into `bazel-out/`; the
+    # intermediate `_objs/<target>/<src>.pic.o` files of the transitive
+    # `cc_library` closure stay inside the CAS directory and never
+    # surface in `_objs/`, so `find ... -name '*.pic.o'` matches zero
+    # files and `extract_to_combined` dies with
     # `no .pic.o objects matched for main under bazel-bin/googlesql`.
-    # Adding `+compilation_outputs` widens the requested-output set to
-    # include the `.pic.o`s, so Bazel restores them from the disk
-    # cache (or produces them on a cold build) into `_objs/` where the
-    # harvest expects them. Same fix applies to the `umbrella_targets`,
-    # `proto_targets`, and `external_proto_targets` — all `cc_library`
-    # / `cc_proto_library` outputs flow through the same group.
+    # `cc_proto_library` makes this worse — its compile outputs aren't
+    # in the `compilation_outputs` output group at all, so even with
+    # the explicit `--output_groups=+compilation_outputs` below, proto
+    # `.pb.pic.o`s remain unmaterialized on a cache hit.
+    # Disabling the disk-cache for THIS bazel invocation forces every
+    # compile action to actually run and physically write its `.pic.o`
+    # outputs to `_objs/`, restoring the harvest's invariant. Cost:
+    # ~95 min cold compile per producer run — already budgeted
+    # (see this workflow's `timeout-minutes: 180` and the header
+    # comment "Cold-cache GoogleSQL is the same ~95% / 2 hr profile").
+    # The producer is manually-dispatched and infrequent enough that
+    # losing inter-run cache reuse is acceptable; the bazelisk +
+    # repository caches still apply.
+    #
+    # `--output_groups=+compilation_outputs` is defense-in-depth: it
+    # declares each requested `cc_library`'s `.pic.o` outputs as
+    # top-level outputs, so even if the disk-cache override above is
+    # ever reverted (or somehow circumvented), the immediate
+    # umbrella-target compile outputs are still materialized. It does
+    # NOT cover transitive `cc_library` deps or `cc_proto_library`
+    # outputs — those need the disk-cache disable above to materialize.
     (
         cd "$GOOGLESQL_SRC"
         CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
         bazel build \
+            --disk_cache= \
             --jobs="$jobs" \
             --local_resources=cpu="$jobs" \
             --local_resources=memory="$memory_mb" \
