@@ -219,7 +219,10 @@ semantic-executor / control-op code) so the doc stays honest.
     local row/value executor because the BigQuery semantics are
     exact (not close): `SAFE_DIVIDE`, `SAFE_NEGATE`,
     `SQRT_NUMERIC`. Owned by
-    `semantic-functions-compliance.plan.md`.
+    `semantic-functions-compliance.plan.md`. Already ready (the
+    `status=planned` marker has dropped): `BIT_COUNT`,
+    `IEEE_DIVIDE`, `SAFE_DIVIDE`, `SAFE_NEGATE`, `SOUNDEX`,
+    `INSTR`.
   * `unsupported` — deliberately out of scope locally
     (`approx_quantiles`, `ml.*`, `net.*`, `keys.*`, `st_*`,
     `hll_count.*`, `generate_uuid`, `session_user`,
