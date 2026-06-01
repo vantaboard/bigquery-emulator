@@ -93,6 +93,67 @@ cc_test(
     ],
 )
 
+# LocalCoordinatorEngine is the top-level `Engine` implementation
+# the emulator binary constructs. It owns the analyzer plumbing,
+# the route classifier, and one executor per route. Wired into
+# `binaries/emulator_main` by `engine-router-foundation.plan.md`
+# step 6.
+cc_library(
+    name = "local_coordinator_engine",
+    srcs = ["local_coordinator_engine.cc"],
+    hdrs = ["local_coordinator_engine.h"],
+    deps = [
+        ":executor",
+        ":route_classifier",
+        ":stub_executors",
+        "//backend/engine",
+        "//backend/engine:disposition",
+        "//backend/engine/duckdb:duckdb_executor",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+# Integration test for the coordinator: exercises a representative
+# SELECT round-trip end-to-end (analyze -> classify -> DuckDB
+# executor -> Arrow rows) plus a couple of route-dispatch sanity
+# checks (unsupported function surfaces UNIMPLEMENTED via the
+# UnsupportedExecutor stub; CREATE TABLE preserves the existing
+# DDL behavior thanks to the `planned` short-circuit in the
+# classifier). See plan
+# `.cursor/plans/engine-router-foundation.plan.md` "Tests" for the
+# exit criteria.
+cc_test(
+    name = "local_coordinator_engine_test",
+    srcs = ["local_coordinator_engine_test.cc"],
+    deps = [
+        ":local_coordinator_engine",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "route_classifier_test",
     srcs = ["route_classifier_test.cc"],
