@@ -45,6 +45,14 @@ vendor/
 *.swp
 *~
 
+# Python bytecode caches. Project-wide because first-party Python lives
+# under `tools/` (`tools/googlesql-prebuilt/*.py`, `tools/lint/cpp/*.py`)
+# and `scripts/` and is invoked by Task / Bazel preflight checks; each
+# import populates a `__pycache__/` next to the source. The narrower
+# `third_party/**/__pycache__/` rule below is now redundant but kept
+# in place to keep the third-party ignore block self-describing.
+**/__pycache__/
+
 # Third-party client sample test trees (third_party/<lang>-bigquery-tests/).
 # Caches, virtualenvs, vendored sample data, and test runner artifacts that
 # any local run of `task thirdparty:*` regenerates. Patterns are scoped so
