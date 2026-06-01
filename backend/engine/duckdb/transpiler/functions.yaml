@@ -19,11 +19,20 @@
 #                            disposition so a future row can land
 #                            here without YAML schema churn.
 #   * `duckdb_udf`        - emit via a DuckDB UDF/macro registered
-#                            at engine startup. The transpiler does
-#                            not yet have an emit for this path;
-#                            until `duckdb-polyfill-udf-library.plan.md`
-#                            lands, rows on this disposition surface
-#                            UNIMPLEMENTED.
+#                            at executor startup. Ready rows
+#                            (without `status=planned`) MUST carry
+#                            `duckdb_name=<NAME>`, where `<NAME>` is
+#                            the registered BigQuery polyfill UDF /
+#                            macro name installed by
+#                            `backend/engine/duckdb/udf::RegisterAll`
+#                            on every executor-opened DuckDB
+#                            connection. The transpiler emits
+#                            `<NAME>(<args>)` identically to a
+#                            `duckdb_native` call; the UDF body owns
+#                            the BigQuery semantic gap.
+#                            `status=planned` rows do NOT carry
+#                            `duckdb_name=` (the wrapper has not
+#                            landed yet) and surface UNIMPLEMENTED.
 #   * `semantic_executor` - run on the local row/value semantic
 #                            executor. Until
 #                            `semantic-functions-compliance.plan.md`
@@ -87,8 +96,15 @@ log10: duckdb_native duckdb_name=LOG10
 # Two-arg LOG(x, base) needs a polyfill (BQ LOG(x) == LN(x), DuckDB
 # LOG(x) == LOG10(x)); single-arg LOG also diverges.
 log: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-# BQ MOD(x, y) returns y's type; DuckDB MOD diverges on signed.
-mod: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ MOD(x, y) returns the remainder with sign-of-dividend
+# (truncated-division semantics). DuckDB's `%` agrees today; the
+# `bq_mod` macro (registered by
+# `backend/engine/duckdb/udf/numeric/numeric_macros.cc`) pins the
+# contract under our own name so a future DuckDB upgrade that
+# switches `%`'s sign convention surfaces as a unit-test failure
+# (`backend/engine/duckdb/udf/numeric/numeric_macros_test.cc`,
+# `ModSignTracksDividend`) instead of as silent semantic drift.
+mod: duckdb_udf duckdb_name=bq_mod plan=duckdb-polyfill-udf-library.plan.md
 pow: duckdb_native duckdb_name=POW
 power: duckdb_native duckdb_name=POW
 # BQ SQRT over NUMERIC needs an explicit cast.
@@ -99,8 +115,14 @@ is_nan: duckdb_native duckdb_name=ISNAN
 # BQ SAFE_DIVIDE returns NULL on /0; DuckDB raises. SAFE semantics
 # are exact, not close, so the semantic executor owns these.
 safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-# BQ DIV truncates toward zero; DuckDB / coerces to FLOAT.
-div: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ DIV truncates toward zero; DuckDB's `//` operator is FLOOR
+# division, which disagrees on mixed-sign inputs
+# (`DIV(-5, 2) == -2` vs `-5 // 2 == -3`). The `bq_div` macro
+# (registered by `backend/engine/duckdb/udf/numeric/numeric_macros.cc`)
+# bridges with the identity `(x - x % y) // y`, which is exact integer
+# division because `x - x % y` is divisible by y. Unit test
+# `DivTruncatesNotFloors` pins the mixed-sign edge case.
+div: duckdb_udf duckdb_name=bq_div plan=duckdb-polyfill-udf-library.plan.md
 # BQ SAFE_NEGATE returns NULL on INT64 overflow; DuckDB raises.
 safe_negate: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 

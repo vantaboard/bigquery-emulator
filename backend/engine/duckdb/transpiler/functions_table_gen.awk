@@ -56,8 +56,16 @@ BEGIN {
 
     # Dispositions that emit a `<duckdb_name>(<args>)` call. Only
     # these may carry (and MUST carry) `duckdb_name=...`.
+    # `duckdb_udf` rows carry the registered DuckDB UDF / macro name
+    # in the same `duckdb_name=` field when the row is ready
+    # (status != planned); the transpiler emits the call identically
+    # to a `duckdb_native` row, and the UDF body (owned by
+    # `backend/engine/duckdb/udf/`) closes the BigQuery semantic gap.
+    # A `status=planned` `duckdb_udf` row still must NOT carry a
+    # `duckdb_name` (the wrapper is not yet installed).
     needs_duckdb_name["duckdb_native"]  = 1
     needs_duckdb_name["duckdb_rewrite"] = 1
+    udf_emit["duckdb_udf"]              = 1
 }
 
 /^[[:space:]]*$/ { next }
@@ -128,7 +136,18 @@ BEGIN {
         printf("functions_table_gen.awk: %s needs duckdb_name=... for disposition %s\n", key, disposition) > "/dev/stderr"
         exit 1
     }
-    if (!(disposition in needs_duckdb_name) && length(duckdb_name) > 0) {
+    # `duckdb_udf` (ready, status != planned) MUST carry duckdb_name
+    # (the registered macro name). `duckdb_udf` (status=planned) MUST
+    # NOT carry duckdb_name (no wrapper installed yet).
+    if ((disposition in udf_emit) && length(status) == 0 && length(duckdb_name) == 0) {
+        printf("functions_table_gen.awk: %s is ready %s but missing duckdb_name=... (registered UDF / macro name)\n", key, disposition) > "/dev/stderr"
+        exit 1
+    }
+    if ((disposition in udf_emit) && length(status) > 0 && length(duckdb_name) > 0) {
+        printf("functions_table_gen.awk: %s is status=planned %s but carries duckdb_name=%s (the wrapper is not installed yet; drop the duckdb_name= until the UDF lands)\n", key, disposition, duckdb_name) > "/dev/stderr"
+        exit 1
+    }
+    if (!(disposition in needs_duckdb_name) && !(disposition in udf_emit) && length(duckdb_name) > 0) {
         printf("functions_table_gen.awk: %s carries duckdb_name=%s but disposition %s does not emit a DuckDB function call\n", key, duckdb_name, disposition) > "/dev/stderr"
         exit 1
     }

@@ -329,6 +329,23 @@ TEST_F(TranspilerTest, EmitFunctionCallLengthMaps) {
       "LENGTH(\"name\")");
 }
 
+TEST_F(TranspilerTest, EmitFunctionCallReadyDuckdbUdf) {
+  // Ready `duckdb_udf` rows emit identically to `duckdb_native`:
+  // the transpiler renders `<duckdb_name>(<args>)` and DuckDB
+  // resolves the call to the registered polyfill macro. `MOD`
+  // flipped to ready in the numeric-family commit; the row carries
+  // `duckdb_name=bq_mod`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT MOD(id, 3) AS m FROM people");
+  const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
+  TestTranspiler t;
+  EXPECT_EQ(
+      t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
+      "bq_mod(\"id\", 3)");
+}
+
 TEST_F(TranspilerTest, EmitFunctionCallSafeModeReturnsEmpty) {
   // SAFE.<fn>(...) sets `error_mode = SAFE_ERROR_MODE`. DuckDB has no
   // native SAFE analog yet, so the emit short-circuits to "" before
@@ -979,16 +996,34 @@ TEST(FunctionsTableTest, LookupUnsupportedFunction) {
 }
 
 TEST(FunctionsTableTest, LookupPlannedDuckdbUdfFunction) {
-  // Previously-`kFallback` rows now carry their planned route. For
-  // BigQuery's interval-semantics datetime arithmetic the planned
-  // route is `kDuckdbUdf` via the polyfill plan; runtime stays
-  // UNIMPLEMENTED until that plan lands.
+  // Some `duckdb_udf` rows are still `status=planned` because the
+  // polyfill UDF library has not landed their wrapper yet (datetime
+  // arithmetic, regex, JSON path navigators, ...). The transpiler
+  // surfaces UNIMPLEMENTED for these.
   const FnEntry* e = LookupFunction("date_add");
   ASSERT_NE(e, nullptr);
   EXPECT_EQ(e->disposition, Disposition::kDuckdbUdf);
   EXPECT_TRUE(e->duckdb_name.empty());
   EXPECT_EQ(e->plan, "duckdb-polyfill-udf-library.plan.md");
   EXPECT_TRUE(e->planned);
+}
+
+TEST(FunctionsTableTest, LookupReadyDuckdbUdfFunction) {
+  // Ready `duckdb_udf` rows store the registered macro name in
+  // `duckdb_name=`; the transpiler emits the call identically to a
+  // `duckdb_native` row. `mod` and `div` flipped from
+  // `status=planned` to ready in the polyfill UDF library's
+  // numeric-family commit.
+  const FnEntry* mod = LookupFunction("mod");
+  ASSERT_NE(mod, nullptr);
+  EXPECT_EQ(mod->disposition, Disposition::kDuckdbUdf);
+  EXPECT_EQ(mod->duckdb_name, "bq_mod");
+  EXPECT_FALSE(mod->planned);
+  const FnEntry* div = LookupFunction("div");
+  ASSERT_NE(div, nullptr);
+  EXPECT_EQ(div->disposition, Disposition::kDuckdbUdf);
+  EXPECT_EQ(div->duckdb_name, "bq_div");
+  EXPECT_FALSE(div->planned);
 }
 
 TEST(FunctionsTableTest, LookupPlannedSemanticExecutorFunction) {

@@ -1,0 +1,50 @@
+# function_mod: BigQuery MOD via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_mod` macro through the gateway:
+# the transpiler emits `bq_mod(<args>)`, `DuckDbExecutor` registers
+# the macro on every fresh connection, and the result preserves
+# BigQuery's sign-of-dividend convention plus NULL propagation.
+#
+# Route-label assertion: deliberately omitted today; the
+# `conformance-routing-matrix.plan.md` (plan 16) wires the
+# `expected.route` field. Until then this fixture only pins the
+# observable rows; the duckdb_udf route is exercised implicitly via
+# the live macro registration in `DuckDbExecutor`.
+#
+# Edge case pinned: `MOD(-7, 3) == -1` (sign of dividend). A
+# regression that switched the macro body to floor-mod would surface
+# here as `2` instead of `-1`.
+name: function_mod
+description: |
+  BigQuery MOD lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/numeric/numeric_macros.cc`'s `bq_mod`
+  macro). Verifies common-path divisibility, the sign-of-dividend
+  edge case, and the canonical zero-remainder case.
+project_id: proj-functions-mod
+dataset_id: ds_functions_mod
+setup:
+  - dataset: ds_functions_mod
+  - table:
+      dataset: ds_functions_mod
+      id: nums
+      schema:
+        - {name: x, type: INT64, mode: NULLABLE}
+        - {name: y, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_mod
+      table: nums
+      rows:
+        - {x: 7, y: 3}
+        - {x: -7, y: 3}
+        - {x: 7, y: -3}
+        - {x: 0, y: 5}
+query: |
+  SELECT x, y, MOD(x, y) AS r
+    FROM ds_functions_mod.nums
+   ORDER BY x, y
+expected:
+  rows:
+    - {x: "-7", y: "3",  r: "-1"}   # sign-of-dividend edge case
+    - {x: "0",  y: "5",  r: "0"}    # canonical zero remainder
+    - {x: "7",  y: "-3", r: "1"}    # negative divisor, positive result
+    - {x: "7",  y: "3",  r: "1"}    # common path

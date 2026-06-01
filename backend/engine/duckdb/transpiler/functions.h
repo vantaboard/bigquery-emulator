@@ -25,10 +25,18 @@
 //     its usual emit recursion; if any arg lowers to `""` the
 //     whole call falls back through the engine's empty-string
 //     contract.
-//   * `kDuckdbUdf` -- planned via
-//     `duckdb-polyfill-udf-library.plan.md`. Until that plan
-//     lands the transpiler returns `""` so the engine surfaces
-//     UNIMPLEMENTED. `entry->planned` is true.
+//   * `kDuckdbUdf` (ready: `entry->planned == false`,
+//     `entry->duckdb_name` non-empty) -- emits identically to
+//     `kDuckdbNative`: the YAML `duckdb_name=` field carries the
+//     name of the BigQuery polyfill UDF / macro that
+//     `backend/engine/duckdb/udf::RegisterAll(conn)` installs on
+//     every executor-opened DuckDB connection. The wrapper body
+//     owns the BigQuery semantic gap (month-end dates, MOD's sign
+//     on negative inputs, BigQuery regex flag semantics, ...).
+//   * `kDuckdbUdf` (planned: `entry->planned == true`) -- the
+//     wrapper has not yet landed; the transpiler returns `""` so
+//     the engine surfaces UNIMPLEMENTED.
+//     `duckdb-polyfill-udf-library.plan.md` is the owning plan.
 //   * `kSemanticExecutor` -- planned via
 //     `semantic-functions-compliance.plan.md`. Until that plan
 //     lands the transpiler returns `""` so the engine surfaces
@@ -62,9 +70,14 @@ namespace transpiler {
 struct FnEntry {
   Disposition disposition;
   // DuckDB function name emitted verbatim (no quoting) for
-  // `kDuckdbNative` / `kDuckdbRewrite` rows. Empty for the other
-  // dispositions (the YAML generator enforces both halves of that
-  // contract at build time).
+  // `kDuckdbNative` / `kDuckdbRewrite` rows and for ready
+  // `kDuckdbUdf` rows (where the value is the registered BigQuery
+  // polyfill UDF / macro name -- see
+  // `backend/engine/duckdb/udf/registrar.h`). Empty for
+  // `status=planned` `kDuckdbUdf` rows (no wrapper installed yet)
+  // and for `kSemanticExecutor` / `kControlOp` / `kUnsupported`
+  // rows. The YAML generator enforces these invariants at build
+  // time.
   std::string duckdb_name;
   // Owning `.cursor/plans/*.plan.md` file name, or empty when the
   // row has no specific owning plan. Mandatory for

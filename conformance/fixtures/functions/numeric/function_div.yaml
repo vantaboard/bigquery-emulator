@@ -1,0 +1,46 @@
+# function_div: BigQuery DIV via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_div` macro through the
+# gateway. The edge case the macro exists to handle is BigQuery's
+# truncated-division convention: `DIV(-5, 2) == -2`. A naive
+# rewrite to DuckDB's `//` (which has historically been FLOOR
+# division) would surface `DIV(-5, 2) == -3`. The macro uses the
+# `(x - x % y) // y` identity so the result agrees with BigQuery
+# regardless of which convention DuckDB's `//` lands on.
+#
+# Route-label assertion: deferred to plan 16 per the same convention
+# `function_mod.yaml` documents.
+name: function_div
+description: |
+  BigQuery DIV lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/numeric/numeric_macros.cc`'s `bq_div`
+  macro). Verifies common-path division and the mixed-sign
+  truncation edge case the macro exists to pin.
+project_id: proj-functions-div
+dataset_id: ds_functions_div
+setup:
+  - dataset: ds_functions_div
+  - table:
+      dataset: ds_functions_div
+      id: nums
+      schema:
+        - {name: x, type: INT64, mode: NULLABLE}
+        - {name: y, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_div
+      table: nums
+      rows:
+        - {x: 7, y: 3}
+        - {x: -5, y: 2}
+        - {x: 5, y: -2}
+        - {x: -5, y: -2}
+query: |
+  SELECT x, y, DIV(x, y) AS q
+    FROM ds_functions_div.nums
+   ORDER BY x, y
+expected:
+  rows:
+    - {x: "-5", y: "-2", q: "2"}    # both negative -> positive
+    - {x: "-5", y: "2",  q: "-2"}   # truncation edge case
+    - {x: "5",  y: "-2", q: "-2"}   # truncation edge case
+    - {x: "7",  y: "3",  q: "2"}    # common path

@@ -69,3 +69,18 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# Numeric family per-UDF tests. Each test drives the macro directly
+# against an in-process DuckDB connection (mirroring the per-query
+# executor lifecycle) and exercises both the common path and the
+# BigQuery-specific edge case the wrapper exists to pin.
+cc_test(
+    name = "numeric_macros_test",
+    srcs = ["numeric/numeric_macros_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

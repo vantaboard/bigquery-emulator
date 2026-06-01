@@ -1225,6 +1225,24 @@ std::string Transpiler::EmitFunctionCall(
       return absl::StrCat(
           entry->duckdb_name, "(", absl::StrJoin(args, ", "), ")");
     case Disposition::kDuckdbUdf:
+      // Ready `duckdb_udf` rows lower identically to `duckdb_native`:
+      // the YAML row's `duckdb_name=` field carries the registered
+      // BigQuery polyfill UDF / macro name (installed via
+      // `backend/engine/duckdb/udf::RegisterAll(conn)` on every
+      // executor-opened connection), and the UDF body owns the
+      // BigQuery semantic gap. `status=planned` rows still surface
+      // UNIMPLEMENTED (no wrapper installed yet); the YAML
+      // generator enforces "ready row has duckdb_name, planned row
+      // doesn't" at build time.
+      if (!entry->planned && !entry->duckdb_name.empty()) {
+        return absl::StrCat(
+            entry->duckdb_name, "(", absl::StrJoin(args, ", "), ")");
+      }
+      LOG(INFO) << "duckdb transpiler: function '" << name
+                << "' route=duckdb_udf (plan=" << entry->plan
+                << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
       LOG(INFO) << "duckdb transpiler: function '" << name
@@ -1306,6 +1324,21 @@ std::string Transpiler::EmitAggregateFunctionCall(
           entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
     case Disposition::kDuckdbUdf:
+      // Same ready/planned dispatch as scalar `EmitFunctionCall`. A
+      // ready `duckdb_udf` aggregate row is rare (aggregates are
+      // either pure DuckDB or routed to the semantic executor) but
+      // is supported here for symmetry; the YAML generator still
+      // refuses a ready row without `duckdb_name=`.
+      if (!entry->planned && !entry->duckdb_name.empty()) {
+        std::string prefix = node->distinct() ? "DISTINCT " : "";
+        return absl::StrCat(
+            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+      }
+      LOG(INFO) << "duckdb transpiler: aggregate '" << name
+                << "' route=duckdb_udf (plan=" << entry->plan
+                << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
@@ -1382,6 +1415,20 @@ std::string Transpiler::EmitAnalyticFunctionCall(
           entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
     }
     case Disposition::kDuckdbUdf:
+      // Symmetric to `EmitFunctionCall` /
+      // `EmitAggregateFunctionCall`. A ready row's `duckdb_name`
+      // points at the registered UDF / macro; a planned row
+      // surfaces UNIMPLEMENTED until the wrapper lands.
+      if (!entry->planned && !entry->duckdb_name.empty()) {
+        std::string prefix = node->distinct() ? "DISTINCT " : "";
+        return absl::StrCat(
+            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+      }
+      LOG(INFO) << "duckdb transpiler: analytic function '" << name
+                << "' route=duckdb_udf (plan=" << entry->plan
+                << ", planned=" << entry->planned
+                << "); surfacing UNIMPLEMENTED";
+      return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
