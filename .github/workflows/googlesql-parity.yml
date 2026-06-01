@@ -129,7 +129,7 @@ jobs:
       conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -155,7 +155,7 @@ jobs:
             protobuf-compiler-grpc
 
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           # Distinct disk-cache key from ci/conformance/coverage/release so
@@ -241,7 +241,7 @@ jobs:
 
       - name: Upload prebuilt-mode results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: parity-prebuilt-results
           path: |
@@ -267,7 +267,7 @@ jobs:
       conformance_duckdb_status: ${{ steps.conformance_duckdb.outcome }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -293,7 +293,7 @@ jobs:
             protobuf-compiler-grpc
 
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: parity-source
@@ -359,7 +359,7 @@ jobs:
 
       - name: Upload source-mode results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: parity-source-results
           path: |
@@ -381,7 +381,7 @@ jobs:
     if: always()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download prebuilt-mode results
         if: needs.build-prebuilt.result == 'success'

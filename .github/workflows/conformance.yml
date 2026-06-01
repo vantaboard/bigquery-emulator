@@ -46,7 +46,7 @@ jobs:
         profile: [duckdb]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -76,7 +76,7 @@ jobs:
       # group) so the conformance matrix's cold-start budget stays
       # close to ci.yml's warm-cache budget.
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: conformance
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload conformance report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: conformance-${{ matrix.profile }}
           path: conformance-${{ matrix.profile }}.json

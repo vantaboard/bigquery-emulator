@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -98,7 +98,7 @@ jobs:
       # for the consumer side of the pipeline.
       - name: Upload Go coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: go-coverage
           path: coverage.out
@@ -126,7 +126,7 @@ jobs:
       #     the repo vars; once they do, the prebuilt path takes over
       #     automatically.
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
@@ -179,7 +179,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         # `tools/lint/cpp` is a Go binary; `task lint:cpp:cppcheck`

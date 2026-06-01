@@ -130,7 +130,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # workflow_dispatch passes the operator-supplied tag in
           # `inputs.ref`; tag push (`on: push: tags`) leaves it empty
@@ -162,7 +162,7 @@ jobs:
             protobuf-compiler-grpc
 
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           # `release` keeps the cache distinct from ci/conformance so

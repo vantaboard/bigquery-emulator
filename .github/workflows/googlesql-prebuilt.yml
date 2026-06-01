@@ -77,13 +77,13 @@ jobs:
 
     steps:
       - name: Checkout emulator
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: bigquery-emulator
           fetch-depth: 1
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
@@ -101,7 +101,7 @@ jobs:
             protobuf-compiler
 
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           # Keep this cache distinct from ci.yml / conformance.yml /
@@ -111,7 +111,7 @@ jobs:
           repository-cache: true
 
       - name: Checkout sibling googlesql (pinned)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: google/googlesql
           ref: ${{ inputs.googlesql_ref }}
@@ -226,7 +226,7 @@ jobs:
       # ---------------------------------------------------------------
       - name: Upload workflow artifacts (log + sidecar manifest)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: googlesql-prebuilt-${{ steps.package.outputs.googlesql_short_sha }}-v${{ inputs.artifact_version }}
           path: |

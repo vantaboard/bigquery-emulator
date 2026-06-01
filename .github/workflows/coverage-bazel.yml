@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -80,7 +80,7 @@ jobs:
       # group distinct from `ci` / `conformance` / `release` so a
       # coverage rebuild does not invalidate the on-PR build cache.
       - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.13.0
+        uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: coverage-bazel
@@ -149,7 +149,7 @@ jobs:
       # the consumer side of the pipeline.
       - name: Upload C++ (Bazel) coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cpp-bazel-coverage
           path: bazel-out/_coverage/_coverage_report.dat

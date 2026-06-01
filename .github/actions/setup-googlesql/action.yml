@@ -204,7 +204,7 @@ runs:
 
     - name: Checkout sibling googlesql (source fallback)
       if: steps.resolve.outputs.mode == 'source'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: google/googlesql
         ref: ${{ inputs.googlesql-ref }}
