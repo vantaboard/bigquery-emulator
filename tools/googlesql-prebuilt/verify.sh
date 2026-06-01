@@ -237,6 +237,28 @@ run_smoke_bazel() {
     cp "$SMOKE_DIR/smoke_wrappers.cc" "$smoke_workspace/smoke_wrappers.cc"
     cp "$SMOKE_DIR/BUILD.bazel" "$smoke_workspace/BUILD.bazel"
 
+    # Pin the smoke workspace to the artifact's declared Bazel version
+    # so bazelisk doesn't fetch the bleeding-edge Bazel for the smoke
+    # while the artifact was built against an older one. Without this
+    # pin, bazelisk resolves to its default-latest (Bazel 9.x as of
+    # writing), which (a) prints `--check_direct_dependencies` warnings
+    # because it re-resolves rules_cc / protobuf / etc. transitively
+    # past the artifact's MODULE.bazel pins, and (b) fails analysis of
+    # `rules_foreign_cc@0.10.1` (transitively required by ICU under
+    # this artifact's MODULE.bazel) with
+    # `rule() got unexpected keyword argument 'incompatible_use_toolchain_transition'`
+    # because that keyword was removed in Bazel 9 (the transition is
+    # the default now). The smoke is meant to mirror the consumer's
+    # wiring, not invent a fresh Bazel + transitive set; pinning to
+    # `manifest.toolchain.bazel_version` exactly matches what the
+    # producer built with and what real consumers should be using.
+    local bazel_version
+    bazel_version="$(python3 -c "import json; print(json.load(open('$MANIFEST'))['toolchain']['bazel_version'])")"
+    [ -n "$bazel_version" ] \
+        || die "failed to read toolchain.bazel_version from $MANIFEST"
+    printf '%s\n' "$bazel_version" > "$smoke_workspace/.bazelversion"
+    log "smoke (bazel): pinned smoke workspace to Bazel $bazel_version (from manifest.toolchain.bazel_version)"
+
     # Substitute MODULE.bazel template.
     python3 - "$SMOKE_DIR/MODULE.bazel.tmpl" "$smoke_workspace/MODULE.bazel" <<EOF
 import sys
