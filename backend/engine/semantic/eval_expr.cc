@@ -752,6 +752,9 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       // ResolvedLiteral carries the analyzer-validated `Value`
       // directly; copying it is cheap (refcounted backing for
       // STRING / ARRAY / STRUCT).
+      // cpp-lint:allow(statusor-unchecked-value) -- `lit.value()`
+      // is `ResolvedLiteral::value()` returning `googlesql::Value`,
+      // not a `StatusOr<T>::value()` unwrap.
       return lit.value();
     }
     case ::googlesql::RESOLVED_PARAMETER: {
@@ -834,20 +837,38 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                        target->DebugString(),
                        " is not yet implemented"));
     }
-    case ::googlesql::RESOLVED_COLUMN_REF:
-      // Column references appear inside scalar-only SELECTs only
-      // when the analyzer inserts a `ProjectScan` over a
-      // `SingleRowScan` and the projection rewrites a constant
-      // column. We currently never see one because every column
-      // resolves through `expr_list` (the executor copies the
-      // computed column expression directly). If a ref does
-      // appear it points at a column we cannot bind locally;
-      // surface NOT_IMPLEMENTED with a pointer at the downstream
-      // plan that wires column-binding support.
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: column references in scalar-only SELECT are owned by "
-          "array-struct-semantic-path.plan.md");
+    case ::googlesql::RESOLVED_COLUMN_REF: {
+      // A `ResolvedColumnRef` reads a column the surrounding scan
+      // emits row-at-a-time. The FROM-clause executor binds the
+      // current row's `ColumnBindings` onto `ctx.columns` before
+      // calling `EvalExpr`; a missing binding is an analyzer /
+      // executor mismatch and surfaces a structured INVALID_ARGUMENT.
+      // Scalar-only SELECT keeps `ctx.columns == nullptr` and
+      // every column reference there is a bug -- the scalar path
+      // resolves columns through `ResolvedProjectScan::expr_list`,
+      // not through column refs.
+      const auto& ref = *expr.GetAs<::googlesql::ResolvedColumnRef>();
+      if (ctx.columns == nullptr) {
+        return MakeSemanticError(
+            SemanticErrorReason::kNotImplemented,
+            absl::StrCat("semantic: ResolvedColumnRef '",
+                         ref.column().name(),
+                         "' referenced without a row binding; correlated scans "
+                         "are owned by array-struct-semantic-path.plan.md "
+                         "(Family 4 / cte-subquery-routing.plan.md)"));
+      }
+      auto it = ctx.columns->find(ref.column().column_id());
+      if (it == ctx.columns->end()) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            absl::StrCat("semantic: no row binding for column '",
+                         ref.column().name(),
+                         "' (column_id=",
+                         ref.column().column_id(),
+                         ")"));
+      }
+      return it->second;
+    }
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",

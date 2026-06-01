@@ -11,9 +11,11 @@
 # issue tracking the eventual split. Do NOT add a new file here
 # without that issue link in the commit message.
 
+backend/engine/control/control_op_executor.cc
 backend/engine/duckdb/duckdb_executor.cc
 backend/engine/duckdb/transpiler/transpiler.cc
 backend/engine/duckdb/transpiler/transpiler_test.cc
+backend/engine/semantic/eval_expr.cc
 backend/storage/duckdb/duckdb_storage.cc
 backend/storage/duckdb/duckdb_storage_test.cc
 frontend/handlers/query.cc
