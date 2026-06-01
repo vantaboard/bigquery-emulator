@@ -118,29 +118,62 @@ cc_import(
 
 # `:_archive` is the public entry point for `lib/libgooglesql.a`. It
 # wraps the `cc_import` and pins the link-line position of every
-# googleapis cc_proto_library that the bundled `googlesql/...` object
-# code references at link time (`google::type::Date`,
-# `google::type::TimeOfDay`, `google::type::LatLng`,
-# `google::rpc::Status`). Bazel emits a `cc_library`'s own
-# precompiled libraries BEFORE its `deps`, so attaching the
-# googleapis cc_proto_libraries here puts their `.pic.o` files AFTER
-# `libgooglesql.a` in the link line — which is the only order in
-# which `--start-lib`/`--end-lib`-wrapped proto objects can resolve
-# the archive's unresolved externals.
+# third-party `cc_library` / `cc_proto_library` that the bundled
+# `googlesql/...` object code references at link time. Bazel emits a
+# `cc_library`'s own precompiled libraries BEFORE its `deps`, so
+# attaching these here puts their `.pic.o` files AFTER `libgooglesql.a`
+# in the link line — which is the only order in which
+# `--start-lib`/`--end-lib`-wrapped proto objects (and any other
+# lazy-archive members) can resolve the archive's unresolved externals.
 #
 # Source-mode hides this because the upstream
-# `cc_library(:builtin_function...)` etc. transitively dep on the
-# same googleapis cc_proto_libraries, and the producer-side link
-# order is dominated by topology. In prebuilt mode the combined
+# `cc_library(:builtin_function...)` etc. transitively dep on the same
+# third-party libraries, and the producer-side link order is
+# dominated by topology. In prebuilt mode the combined
 # `libgooglesql.a` carries the unresolved externals and we re-
 # establish the dep edge here.
 #
 # DO NOT inline these into `:_all_hdrs` — `:_all_hdrs` is referenced
-# by every wrapper BEFORE `:_archive`, which would put the cc_proto
-# `.pic.o` blocks BEFORE the archive in the link line. The block
+# by every wrapper BEFORE `:_archive`, which would put the deps'
+# `.pic.o` blocks BEFORE the archive in the link line. The blocks
 # would then be processed and skipped (no unresolved symbols yet)
 # before the archive's references are seen, yielding undefined
 # references.
+#
+# The full set:
+#
+#   * googleapis cc_proto_libraries
+#     (`google::type::Date`, `google::type::TimeOfDay`,
+#      `google::type::LatLng`, `google::rpc::Status`) — `bazel_dep`
+#     `googleapis-cc`.
+#
+#   * `@com_google_protobuf//:timestamp_cc_proto`
+#     The bundled archive references `google::protobuf::Timestamp::*`
+#     and `descriptor_table_google_2fprotobuf_2ftimestamp_2eproto`
+#     from `googlesql/public/value.cc` and related generated proto
+#     code. Protobuf 29 ships well-known type Message subclasses in
+#     separate `cc_proto_library` targets, NOT in `:protobuf`; the
+#     runtime in `:protobuf` only carries the descriptor machinery.
+#
+#   * `@com_google_protobuf//:differencer`
+#     The bundled archive references
+#     `google::protobuf::util::MessageDifferencer::*` and
+#     `google::protobuf::util::SimpleFieldComparator::*` from
+#     `googlesql/public/types/proto_type.cc` (used by
+#     `ProtoType::ValueContentEquals`). Protobuf 29 ships this as a
+#     separate `cc_library` outside the `:protobuf` umbrella.
+#
+#   * `@com_google_absl//absl/flags:flag`
+#     The bundled archive references
+#     `absl::flags_internal::FlagImpl::*`,
+#     `absl::flags_internal::RegisterCommandLineFlag(...)`, and the
+#     `FlagImpl` vtable from `googlesql/scripting/parsed_script.cc`,
+#     `googlesql/public/types/type_factory.cc`,
+#     `googlesql/public/functions/input_format_string_max_width.cc`
+#     and others that declare `ABSL_FLAG(...)` globals. The
+#     small absl subsets the per-wrapper deps lists already declare
+#     (`absl/status`, `absl/strings`, `absl/time`, …) do NOT cover
+#     the flag registration machinery.
 cc_library(
     name = "_archive",
     deps = [
@@ -149,6 +182,9 @@ cc_library(
         "@com_google_googleapis//google/type:timeofday_cc_proto",
         "@com_google_googleapis//google/type:latlng_cc_proto",
         "@com_google_googleapis//google/rpc:status_cc_proto",
+        "@com_google_protobuf//:timestamp_cc_proto",
+        "@com_google_protobuf//:differencer",
+        "@com_google_absl//absl/flags:flag",
     ],
 )
 
