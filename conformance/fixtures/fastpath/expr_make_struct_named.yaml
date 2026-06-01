@@ -1,0 +1,26 @@
+# expr_make_struct_named: ResolvedMakeStruct with named fields +
+# ResolvedGetStructField named access.
+#
+# BigQuery STRUCT(<expr> AS <name>, ...) lowers via the analyzer
+# to a ResolvedMakeStruct carrying the resolved StructType (the
+# source of truth for field names) and a parallel field_list of
+# values. The transpiler emits
+# `{'<name>': <value>, '<name>': <value>}` and round-trips field
+# access through `.<name>` on the result.
+name: expr_make_struct_named
+description: |
+  STRUCT(1 AS id, 'ada' AS name) round-tripped through the fast
+  path. Verifies the construction emit (named DuckDB struct
+  literal) and the field-access emit (dotted form) preserve both
+  values, and that nested .id / .name access produces the
+  user-spelled scalars on the wire.
+project_id: proj-fastpath-expr-make-struct-named
+query: |
+  SELECT s.id   AS id,
+         s.name AS name
+    FROM (
+      SELECT STRUCT(1 AS id, 'ada' AS name) AS s
+    )
+expected:
+  rows:
+    - {id: "1", name: "ada"}

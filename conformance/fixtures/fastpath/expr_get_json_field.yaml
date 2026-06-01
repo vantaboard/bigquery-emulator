@@ -1,0 +1,19 @@
+# expr_get_json_field: ResolvedGetJsonField operator selection.
+#
+# The transpiler picks `->` (JSON-typed result) vs `->>` (scalar
+# result) based on the analyzer-resolved return type. We exercise
+# the `->`/->` chained shape (json typed) here; the `JSON_VALUE`
+# / scalar coerce shape lives in the polyfill plan.
+name: expr_get_json_field
+description: |
+  Field access against a JSON literal. Verifies the engine emits
+  `->` for the JSON-typed return path and the chained access
+  composes against the parent JSON expression.
+project_id: proj-fastpath-expr-get-json-field
+query: |
+  SELECT
+    JSON '{"user": {"name": "ada"}}'.user.name AS user_name,
+    JSON '{"items": ["a", "b"]}'.items         AS items
+expected:
+  rows:
+    - {user_name: "\"ada\"", items: "[\"a\",\"b\"]"}

@@ -1,0 +1,24 @@
+# expr_array_literal: ResolvedLiteral ARRAY emit.
+#
+# Pins that the fast path round-trips an ARRAY literal through
+# DuckDB's `[a, b, c]` syntax. The transpiler walks
+# Value::num_elements() in EmitValueLiteral and recurses so
+# nested STRINGs use single-quoted form. We intentionally include
+# a NULL element so a regression that drops NULLs from the array
+# would surface.
+name: expr_array_literal
+description: |
+  Round-trip an INT64 ARRAY literal containing a NULL element.
+  Verifies the array shape, element ordering, and NULL handling.
+project_id: proj-fastpath-expr-array-literal
+query: |
+  SELECT
+    [1, 2, 3]                AS ints,
+    ['ada', 'linus', 'grace'] AS names,
+    [1, NULL, 3]             AS nullable_ints
+expected:
+  match: schema_only
+  schema:
+    - {name: ints, type: INT64}
+    - {name: names, type: STRING}
+    - {name: nullable_ints, type: INT64}

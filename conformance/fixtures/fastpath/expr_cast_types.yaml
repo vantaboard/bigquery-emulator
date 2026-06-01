@@ -1,0 +1,25 @@
+# expr_cast_types: ResolvedCast across the supported type matrix.
+#
+# Pins the fast path's CAST emit for every TypeKind in
+# `IsCastTargetSupported` we can exercise via REST: STRING -> INT64,
+# INT64 -> STRING, INT64 -> FLOAT64, FLOAT64 -> INT64 (truncation),
+# STRING -> BOOL. The transpiler emits `CAST(<expr> AS T)` directly
+# for each. SAFE_CAST + the format/time-zone/extended-cast cases
+# fall through the empty-string contract and stay UNIMPLEMENTED
+# until the matching plan ships.
+name: expr_cast_types
+description: |
+  CAST across STRING / INT64 / FLOAT64 / BOOL. Verifies each cast
+  emits a DuckDB CAST whose semantics match BigQuery for the values
+  exercised: integer round-trip, float truncation, boolean from
+  case-insensitive STRING.
+project_id: proj-fastpath-expr-cast-types
+query: |
+  SELECT CAST('42' AS INT64)        AS s_to_i,
+         CAST(7 AS STRING)          AS i_to_s,
+         CAST(2 AS FLOAT64)         AS i_to_f,
+         CAST(3.7 AS INT64)         AS f_to_i,
+         CAST('TRUE' AS BOOL)       AS s_to_b
+expected:
+  rows:
+    - {s_to_i: "42", i_to_s: "7", i_to_f: "2.0", f_to_i: "3", s_to_b: "true"}
