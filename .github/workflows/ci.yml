@@ -161,6 +161,30 @@ jobs:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: task lint:cpp:test
 
+      - name: Stage emulator_main for the conformance fastpath lane
+        # `task conformance:fastpath` defaults to spawning
+        # `./bin/emulator_main` (one fresh subprocess per fixture x
+        # profile cell, see `conformance/runner/harness.go`). Bazel
+        # already produced the binary above; copy it under
+        # `bin/emulator_main` so the runner picks it up via the
+        # default flag. Using `bazel run` here would re-resolve the
+        # daemon's runfiles tree, which is more expensive than a
+        # plain `cp` for a binary we just built.
+        run: |
+          mkdir -p bin
+          cp -f "$(bazel info bazel-bin)/binaries/emulator_main/emulator_main" bin/emulator_main
+          chmod +x bin/emulator_main
+
+      - name: Conformance fastpath fixtures (DuckDB-native / -rewrite)
+        # Mirror of `task conformance:fastpath`. PR-gating per item
+        # `task conformance:fastpath runs in CI on every PR` of
+        # `.cursor/plans/duckdb-fast-path-stabilization.plan.md`.
+        # Targeted at ~2 minutes wall-time; the heavy compile lives
+        # above in the engine build. The runner spawns one
+        # emulator_main subprocess per fixture; SIGINT is wired so
+        # the workflow's cancellation propagates cleanly.
+        run: task conformance:fastpath
+
       - name: Build Go gateway (gateway_main)
         run: |
           mkdir -p bin

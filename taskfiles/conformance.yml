@@ -69,6 +69,37 @@ tasks:
           $PROFILE_FLAGS \
           $OUTPUT_FILE_FLAG
 
+  fastpath:
+    desc: |
+      Run only the DuckDB fast-path conformance fixtures
+      (`conformance/fixtures/fastpath/`). Targets `~2 minutes` of
+      wall time, scoped to the `duckdb_native` / `duckdb_rewrite`
+      shapes plan-2 (`duckdb-fast-path-stabilization.plan.md`)
+      pins. Wired into the PR-gating CI job; run locally before
+      pushing if you touched the transpiler or its YAML registries.
+      Honors EMULATOR_BIN (default `./bin/emulator_main`).
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        # Always restrict to the DuckDB profile -- this lane is
+        # explicitly the fast-path lane. PROFILE override is
+        # ignored on purpose so a misconfigured local environment
+        # cannot flip the lane to a future profile and silently
+        # skip the fast-path coverage.
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures conformance/fixtures/fastpath \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --profile duckdb \
+          $OUTPUT_FILE_FLAG
+
   run-fixture:
     desc: Run a single fixture (FIXTURE=path/to/fixture.yaml). Honors PROFILE.
     vars:
