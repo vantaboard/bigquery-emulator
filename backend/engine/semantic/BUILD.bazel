@@ -166,6 +166,7 @@ cc_library(
         ":value",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
+        "//backend/engine/semantic/array_struct:array_scan",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/container:flat_hash_map",

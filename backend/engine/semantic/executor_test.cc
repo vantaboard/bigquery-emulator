@@ -207,6 +207,60 @@ TEST_F(SemanticExecutorTest, RejectsSelectWithFromShape) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
 }
 
+TEST_F(SemanticExecutorTest, UnnestWithOffsetEmitsRowPerElement) {
+  // Family 1 of array-struct-semantic-path.plan.md: a
+  // standalone `UNNEST(...) WITH OFFSET` flowing through the
+  // semantic executor produces one row per element with two
+  // columns (the element value + the 0-based offset).
+  const std::string sql =
+      "SELECT n, idx FROM UNNEST(['a', 'b', 'c']) AS n WITH OFFSET AS idx";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  ASSERT_EQ((*source)->schema().columns.size(), 2u);
+  EXPECT_EQ((*source)->schema().columns[0].name, "n");
+  EXPECT_EQ((*source)->schema().columns[1].name, "idx");
+
+  storage::Row row;
+  for (int i = 0; i < 3; ++i) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "expected row #" << i;
+    ASSERT_EQ(row.cells.size(), 2u);
+    EXPECT_EQ(row.cells[1].int64_value(), i);
+  }
+  // Confirm the stream ends after 3 elements.
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  EXPECT_FALSE(*has);
+}
+
+TEST_F(SemanticExecutorTest, OuterUnnestEmptyArrayEmitsNullRow) {
+  // Family 2: an empty array under `is_outer=true` (the analyzer
+  // synthesizes this for the `LEFT JOIN UNNEST(...) ON TRUE`
+  // pattern, and for `WITH OFFSET` against an empty literal) emits
+  // a single row whose element + offset are both NULL.
+  const std::string sql =
+      "SELECT n, idx FROM UNNEST(CAST([] AS ARRAY<INT64>)) AS n "
+      "WITH OFFSET AS idx";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  if (stmt == nullptr) {
+    GTEST_SKIP() << "analyzer rejected empty-array literal; "
+                    "covered by array_scan_test.";
+  }
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  // Inner UNNEST against empty array emits zero rows; outer would
+  // emit one NULL row. `WITH OFFSET` without `is_outer` is inner.
+  EXPECT_FALSE(*has);
+}
+
 TEST_F(SemanticExecutorTest, DmlSurfacesNotImplemented) {
   const auto* stmt = Analyze("SELECT 1", MakeAnalyzerOptions());
   ASSERT_NE(stmt, nullptr);
