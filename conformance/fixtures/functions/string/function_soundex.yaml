@@ -1,0 +1,31 @@
+# function_soundex: BigQuery SOUNDEX via the semantic executor.
+#
+# Pins the classic 4-character SOUNDEX algorithm on the canonical
+# reference inputs documented in BigQuery's standard-SQL
+# `string_functions` page and on Wikipedia.
+#
+# `Robert` and `Rupert` collide on `R163` (the property that
+# makes SOUNDEX useful for fuzzy name lookups); `Ashcraft`
+# returns `A261` because the `H` between `S` and `C` resets the
+# run-length collapse of code `2`. DuckDB v1.5.3 does not ship a
+# `soundex` scalar at all, so the row routes to the semantic
+# executor's native implementation in
+# `backend/engine/semantic/functions/string_funcs.cc::Soundex`.
+#
+# Route-label assertion deferred to plan 16.
+name: function_soundex
+description: |
+  BigQuery SOUNDEX lowered through the semantic executor's
+  `string_funcs::Soundex` helper. Pins the documented reference
+  outputs for classic SOUNDEX inputs.
+project_id: proj-functions-soundex
+query: |
+  SELECT SOUNDEX('Robert') AS robert,
+         SOUNDEX('Rupert') AS rupert,
+         SOUNDEX('Ashcraft') AS ashcraft,
+         SOUNDEX('Tymczak') AS tymczak,
+         SOUNDEX('') AS empty,
+         SOUNDEX(CAST(NULL AS STRING)) AS null_in
+expected:
+  rows:
+    - {robert: "R163", rupert: "R163", ashcraft: "A261", tymczak: "T522", empty: "", null_in: null}

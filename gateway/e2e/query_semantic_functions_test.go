@@ -149,6 +149,91 @@ func TestQuerySemanticFunctionSafeDivideByZeroProducesNull(t *testing.T) {
 	}
 }
 
+// TestQuerySemanticFunctionSoundexReferenceValue exercises the
+// classic SOUNDEX algorithm end-to-end through the gateway.
+// `SOUNDEX('Ashcraft')` returns "A261" -- BigQuery's documented
+// example output -- through the semantic executor (DuckDB v1.5.3
+// does not ship a `soundex` scalar at all, so this surface is
+// only reachable via the semantic-functions route).
+func TestQuerySemanticFunctionSoundexReferenceValue(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-semfn-soundex"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":"SELECT SOUNDEX('Ashcraft')",`+
+			`"useLegacySql":false}`))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query SOUNDEX('Ashcraft') -> %d: %s",
+			status, string(body))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(body))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if v := resp.Rows[0].F[0].V; v != "A261" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", v, "A261")
+	}
+}
+
+// TestQuerySemanticFunctionInstrReversePosition pins the
+// negative-position INSTR surface DuckDB's 2-arg `instr` cannot
+// model. `INSTR('ababab', 'ab', -1)` returns 5 (the rightmost
+// match's 1-based byte index).
+func TestQuerySemanticFunctionInstrReversePosition(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-semfn-instr-reverse"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":"SELECT INSTR('ababab', 'ab', -1)",`+
+			`"useLegacySql":false}`))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query INSTR reverse -> %d: %s",
+			status, string(body))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(body))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if v := resp.Rows[0].F[0].V; v != "5" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", v, "5")
+	}
+}
+
+// TestQuerySemanticFunctionInstrNthOccurrence covers the 4-arg
+// form -- the surface DuckDB's `instr` cannot model at all. The
+// dispatch picks the Nth match starting from `position`.
+func TestQuerySemanticFunctionInstrNthOccurrence(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-semfn-instr-nth"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":"SELECT INSTR('ababab', 'ab', 1, 3)",`+
+			`"useLegacySql":false}`))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query INSTR Nth -> %d: %s",
+			status, string(body))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(body))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if v := resp.Rows[0].F[0].V; v != "5" {
+		t.Errorf("rows[0].f[0].v = %v, want %q", v, "5")
+	}
+}
+
 // TestQuerySemanticFunctionSafeNegateOverflowProducesNull pins the
 // SAFE_NEGATE NULL-swap contract on the `-INT64_MIN` overflow
 // corner. Bare `-` on the same input surfaces a structured

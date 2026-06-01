@@ -49,11 +49,41 @@ cc_test(
 )
 
 cc_library(
+    name = "string_funcs",
+    srcs = ["string_funcs.cc"],
+    hdrs = ["string_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "string_funcs_test",
+    srcs = ["string_funcs_test.cc"],
+    deps = [
+        ":string_funcs",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "dispatch",
     srcs = ["dispatch.cc"],
     hdrs = ["dispatch.h"],
     deps = [
         ":numeric_edges",
+        ":string_funcs",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

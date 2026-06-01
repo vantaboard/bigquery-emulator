@@ -6,6 +6,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/functions/numeric_edges.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 
@@ -23,6 +24,9 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   // Numeric edges.
   if (name == "bit_count") return BitCount(args);
   if (name == "ieee_divide") return IeeeDivide(args);
+  // String family.
+  if (name == "soundex") return Soundex(args);
+  if (name == "instr") return Instr(args);
   return std::nullopt;
 }
 

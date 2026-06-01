@@ -128,6 +128,49 @@ TEST_F(DispatchTest, IeeeDivideFinitePath) {
   EXPECT_DOUBLE_EQ(v->double_value(), 2.5);
 }
 
+TEST_F(DispatchTest, SoundexReferenceValue) {
+  // BigQuery documentation example: `SOUNDEX('Ashcraft') -> A261`.
+  const auto* expr = AnalyzeExpr("SOUNDEX('Ashcraft')");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->string_value(), "A261");
+}
+
+TEST_F(DispatchTest, SoundexEmptyString) {
+  const auto* expr = AnalyzeExpr("SOUNDEX('')");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->string_value(), "");
+}
+
+TEST_F(DispatchTest, InstrTwoArgBasic) {
+  const auto* expr = AnalyzeExpr("INSTR('hello world', 'world')");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 7);
+}
+
+TEST_F(DispatchTest, InstrNegativePosition) {
+  // INSTR('ababab', 'ab', -1) -> 5 (last occurrence, 1-based).
+  const auto* expr = AnalyzeExpr("INSTR('ababab', 'ab', -1)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 5);
+}
+
+TEST_F(DispatchTest, InstrOccurrence) {
+  // INSTR('ababab', 'ab', 1, 2) -> 3 (second occurrence).
+  const auto* expr = AnalyzeExpr("INSTR('ababab', 'ab', 1, 2)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 3);
+}
+
 // The dispatch table returns nullopt for unknown function names;
 // `EvalFunctionCall` is expected to surface a `kNotImplemented`
 // status in that case. The marker here is a sanity check that the

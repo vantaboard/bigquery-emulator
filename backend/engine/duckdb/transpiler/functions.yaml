@@ -289,18 +289,23 @@ strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.m
 # BQ INSTR is variadic: `INSTR(value, subvalue [, position [, occurrence]])`
 # where `position` may be negative (search from the right) and
 # `occurrence` selects the Nth match. DuckDB's `instr` is 2-arg
-# only; the 3- and 4-arg surface needs more than a thin macro
-# (variadic-macro support varies by DuckDB version and even where
-# available the negative-position case needs a separate path). The
-# row re-points at the semantic executor where the variadic surface
-# can be implemented straight-line in Go.
-instr: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# only; the 3- and 4-arg surface needs more than a thin macro.
+# Implementation lives in
+# `backend/engine/semantic/functions/string_funcs.cc::Instr`; pins
+# the 1-based byte-index contract for forward (position > 0) and
+# reverse (position < 0) searches plus the `occurrence` Nth-match
+# selector. Empty subvalue returns the clamped start position;
+# missing match returns 0.
+instr: semantic_executor plan=semantic-functions-compliance.plan.md
 # DuckDB v1.5.3 does NOT ship a `soundex` scalar function (verified
 # directly: `SELECT soundex('Robert')` -> Catalog Error). A thin
-# macro wrapper is therefore impossible; the row re-points at the
-# semantic executor where the algorithm can be implemented in
-# native Go.
-soundex: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# macro wrapper is therefore impossible; the classic 4-character
+# SOUNDEX algorithm lives in
+# `backend/engine/semantic/functions/string_funcs.cc::Soundex`.
+# Reference outputs pinned by `string_funcs_test.cc` cover the
+# Wikipedia / BigQuery documentation examples
+# (`Robert -> R163`, `Ashcraft -> A261`, `Tymczak -> T522`).
+soundex: semantic_executor plan=semantic-functions-compliance.plan.md
 
 # --- Datetime ----------------------------------------------------------
 # Most datetime functions need interval-semantics rewriting before
