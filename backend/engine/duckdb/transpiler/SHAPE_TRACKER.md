@@ -151,6 +151,37 @@ semantic-executor / control-op code) so the doc stays honest.
 
 ## Coverage summary
 
+* **Authoritative sources.** The tables above are a
+  human-readable mirror; the machine-readable source of truth
+  lives in two sibling YAML files in this directory:
+  * `node_dispositions.yaml` — per-`ResolvedAST` node-kind
+    disposition registry. Each row carries
+    `<NodeKind>: <disposition> [plan=<plan>] [status=planned]`
+    using the canonical six-route vocabulary from
+    `backend/engine/disposition.h` (`duckdb_native`,
+    `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
+    `control_op`, `unsupported`). A Bazel `genrule`
+    (`:node_dispositions_table_inc`) emits
+    `node_dispositions_table.inc`, which `node_dispositions.cc`
+    `#include`s inside a static
+    `absl::flat_hash_map<std::string, NodeDispositionEntry>`.
+    `LookupNodeDisposition` is the runtime entry point.
+  * `functions.yaml` — per-BigQuery-function disposition registry.
+    Same grammar plus an optional `duckdb_name=<NAME>` field for
+    the `duckdb_native` / `duckdb_rewrite` rows that lower to a
+    DuckDB function call. The Bazel `genrule`
+    `:functions_table_inc` regenerates `functions_table.inc`;
+    `LookupFunction` returns a `FnEntry` whose `disposition` field
+    is the same `Disposition` enum the node table uses, so the
+    router consumes one type for both halves of the registry.
+
+  The `tools/check_disposition_parity` lint gate (runnable as
+  `task lint:dispositions`; CI wires it into `task lint:run`)
+  asserts that every row in `node_dispositions.yaml` agrees with
+  the matching row in this markdown -- composite cells
+  (`Foo / Bar`) and wildcards (`Foo*Bar`) are expanded both ways
+  before comparison. If you edit either file and forget the other,
+  the gate fails before the change reaches main.
 * **Status today:** the DuckDB fast path is the only route with
   substantial production coverage. Landed wins include
   `ResolvedTableScan` / `ResolvedProjectScan` / `ResolvedFilterScan` /
@@ -168,33 +199,32 @@ semantic-executor / control-op code) so the doc stays honest.
 * **Function disposition table (`functions.yaml`).** The
   source-of-truth file ships ~140 BigQuery functions across math,
   string, datetime, conditional, array, aggregation, window, and
-  BQ-specific categories. The Bazel `genrule`
-  `:functions_table_inc` regenerates `functions_table.inc` from the
-  YAML; `functions.cc` `#include`s it inside a static
-  `absl::flat_hash_map<std::string, FnEntry>`. The `LookupFunction`
-  API today returns one of:
-  * `kMap` — emit `<duckdb_name>(<args>)`. Corresponds to
-    `duckdb_native` (or `duckdb_rewrite` when the entry is a
-    structural rewrite). The entry's value is the DuckDB function
-    name (e.g. `ABS`, `LENGTH`, `SUBSTRING`, `ARRAY_AGG`,
-    `ROW_NUMBER`).
-  * `kFallback` — lowering deferred (e.g. `date_add`, `format`,
-    `if`, `mod`); the emit returns "" and the engine surfaces
-    UNIMPLEMENTED today. Each `kFallback` row has a planned route in
-    the local-execution roadmap (`duckdb_udf` via
-    `duckdb-polyfill-udf-library.plan.md` for close-enough functions,
-    `semantic_executor` via `semantic-functions-compliance.plan.md`
-    for the BigQuery-exact ones).
-  * `kSkiplist` — corresponds to `unsupported`
+  BQ-specific categories. After
+  `execution-disposition-registry.plan.md`, every row carries one
+  of the six `Disposition` values from
+  `backend/engine/disposition.h`:
+  * `duckdb_native` (and the small reserved
+    `duckdb_rewrite` lane) — emit
+    `<entry.duckdb_name>(<args>)` directly. Covers the math /
+    string / array / aggregation / window functions whose DuckDB
+    counterparts already match BigQuery semantics.
+  * `duckdb_udf` (with `status=planned`) — the lowering is a
+    DuckDB UDF/macro registered at engine startup. Covers the
+    interval-semantics datetime arithmetic, regex/format/string
+    polyfills, and the `IF` / `ISNULL` / `COUNTIF` / `MOD` / `DIV`
+    / two-arg `LOG` rewrites. Owned by
+    `duckdb-polyfill-udf-library.plan.md`; until that plan lands
+    these rows return "" and the engine surfaces UNIMPLEMENTED.
+  * `semantic_executor` (with `status=planned`) — runs on the
+    local row/value executor because the BigQuery semantics are
+    exact (not close): `SAFE_DIVIDE`, `SAFE_NEGATE`,
+    `SQRT_NUMERIC`. Owned by
+    `semantic-functions-compliance.plan.md`.
+  * `unsupported` — deliberately out of scope locally
     (`approx_quantiles`, `ml.*`, `net.*`, `keys.*`, `st_*`,
     `hll_count.*`, `bit_count`, `generate_uuid`, `session_user`,
-    ...). The deliberate posture and any planned local
-    implementation live in `specialized-feature-policy.plan.md`.
-
-  The follow-up `execution-disposition-registry.plan.md` plan
-  retires the `kMap` / `kFallback` / `kSkiplist` enum in favor of
-  the same route vocabulary the rest of the tracker uses, so a
-  function's row carries its routing disposition directly.
+    `error`). Every row points at
+    `specialized-feature-policy.plan.md`.
 * **DuckDB STRUCT / ARRAY quirks the fast path honors:**
   * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
     are keyed by name. The transpiler walks the resolved `StructType`
