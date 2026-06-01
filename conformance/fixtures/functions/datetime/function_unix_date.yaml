@@ -1,0 +1,49 @@
+# function_unix_date: BigQuery UNIX_DATE via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_unix_date` macro through
+# the gateway. The macro routes UNIX_DATE through
+# `date_diff('day', '1970-01-01'::DATE, value)` rather than
+# dividing `epoch(date)` by 86400 -- the latter would be
+# ambiguous on DST-shift days when the date happens to be
+# expressed as a TIMESTAMP, while `date_diff` is unambiguously
+# calendar-day-boundary counted.
+#
+# Edge cases pinned:
+#   * Epoch itself is day 0.
+#   * Pre-epoch dates return negative day counts (BigQuery
+#     documents this explicitly).
+#   * Modern future dates return the expected positive day count.
+#
+# Route-label assertion: deferred to plan 16.
+name: function_unix_date
+description: |
+  BigQuery UNIX_DATE lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/datetime/datetime_macros.cc`'s
+  `bq_unix_date`). Verifies the epoch day-0 anchor, the
+  pre-epoch negative-day contract, and a modern future date.
+project_id: proj-functions-unix-date
+dataset_id: ds_functions_unix_date
+setup:
+  - dataset: ds_functions_unix_date
+  - table:
+      dataset: ds_functions_unix_date
+      id: dates
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: d,  type: DATE,  mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_unix_date
+      table: dates
+      rows:
+        - {id: 1, d: '1970-01-01'}
+        - {id: 2, d: '1969-12-31'}
+        - {id: 3, d: '2024-01-01'}
+query: |
+  SELECT id, CAST(UNIX_DATE(d) AS STRING) AS days
+    FROM ds_functions_unix_date.dates
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", days: "0"}        # epoch -> day 0
+    - {id: "2", days: "-1"}       # pre-epoch -> negative
+    - {id: "3", days: "19723"}    # 2024-01-01 -> 19723 days after epoch

@@ -1,0 +1,40 @@
+# function_unix_millis: BigQuery UNIX_MILLIS via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_unix_millis` macro (thin
+# alias around DuckDB's `epoch_ms`) through the gateway. The
+# wrapper pins the contract under our own name so a future
+# DuckDB precision drift would surface as a unit-test failure.
+#
+# Route-label assertion: deferred to plan 16.
+name: function_unix_millis
+description: |
+  BigQuery UNIX_MILLIS lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/datetime/datetime_macros.cc`'s
+  `bq_unix_millis`). Verifies whole-second AND sub-second
+  precision.
+project_id: proj-functions-unix-millis
+dataset_id: ds_functions_unix_millis
+setup:
+  - dataset: ds_functions_unix_millis
+  - table:
+      dataset: ds_functions_unix_millis
+      id: ts
+      schema:
+        - {name: id, type: INT64,     mode: REQUIRED}
+        - {name: t,  type: TIMESTAMP, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_unix_millis
+      table: ts
+      rows:
+        - {id: 1, t: '2024-01-01 00:00:00 UTC'}
+        - {id: 2, t: '2024-01-01 00:00:00.500 UTC'}
+        - {id: 3, t: '1970-01-01 00:00:00 UTC'}
+query: |
+  SELECT id, CAST(UNIX_MILLIS(t) AS STRING) AS ms
+    FROM ds_functions_unix_millis.ts
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", ms: "1704067200000"}
+    - {id: "2", ms: "1704067200500"}
+    - {id: "3", ms: "0"}

@@ -282,10 +282,27 @@ format_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=plan
 parse_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 parse_timestamp: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
 parse_datetime: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-unix_seconds: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-unix_millis: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-unix_micros: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
-unix_date: duckdb_udf plan=duckdb-polyfill-udf-library.plan.md status=planned
+# BQ UNIX_SECONDS(timestamp) returns BIGINT seconds since
+# 1970-01-01 UTC with sub-second precision truncated. DuckDB's
+# `epoch(timestamp)` returns DOUBLE; the `bq_unix_seconds` macro
+# (registered by
+# `backend/engine/duckdb/udf/datetime/datetime_macros.cc`) casts
+# the result to BIGINT (truncates toward zero, matching BQ for
+# positive epoch values). Unit test
+# `datetime_macros_test::UnixSecondsTruncatesSubsecond` pins the
+# truncation contract.
+unix_seconds: duckdb_udf duckdb_name=bq_unix_seconds plan=duckdb-polyfill-udf-library.plan.md
+# BQ UNIX_MILLIS / UNIX_MICROS map cleanly to DuckDB's already-
+# BIGINT `epoch_ms` / `epoch_us`. The macros pin the contract
+# under our own name so a future DuckDB precision drift would
+# surface as a unit-test failure.
+unix_millis: duckdb_udf duckdb_name=bq_unix_millis plan=duckdb-polyfill-udf-library.plan.md
+unix_micros: duckdb_udf duckdb_name=bq_unix_micros plan=duckdb-polyfill-udf-library.plan.md
+# BQ UNIX_DATE(date) returns BIGINT days since 1970-01-01.
+# `date_diff('day', '1970-01-01'::DATE, value)` is calendar-day-
+# boundary counted, matching the BQ contract exactly (including
+# negative values for pre-epoch dates).
+unix_date: duckdb_udf duckdb_name=bq_unix_date plan=duckdb-polyfill-udf-library.plan.md
 
 # --- Conditional / null-handling --------------------------------------
 ifnull: duckdb_native duckdb_name=IFNULL

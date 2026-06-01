@@ -1,0 +1,43 @@
+# function_unix_seconds: BigQuery UNIX_SECONDS via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_unix_seconds` macro through
+# the gateway. DuckDB's `epoch(timestamp)` returns DOUBLE; the
+# macro wraps in `CAST(FLOOR(epoch(...)) AS BIGINT)` so the result
+# matches BigQuery's "round down to the beginning of the second"
+# contract (a regression that swapped to bare `CAST(... AS BIGINT)`
+# would round .999 UP to the next whole second).
+#
+# Edge case pinned: sub-second precision is truncated DOWN.
+#
+# Route-label assertion: deferred to plan 16.
+name: function_unix_seconds
+description: |
+  BigQuery UNIX_SECONDS lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/datetime/datetime_macros.cc`'s
+  `bq_unix_seconds`). Verifies the round-down truncation contract.
+project_id: proj-functions-unix-seconds
+dataset_id: ds_functions_unix_seconds
+setup:
+  - dataset: ds_functions_unix_seconds
+  - table:
+      dataset: ds_functions_unix_seconds
+      id: ts
+      schema:
+        - {name: id, type: INT64,     mode: REQUIRED}
+        - {name: t,  type: TIMESTAMP, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_unix_seconds
+      table: ts
+      rows:
+        - {id: 1, t: '2024-01-01 00:00:00 UTC'}
+        - {id: 2, t: '2024-01-01 00:00:00.999 UTC'}
+        - {id: 3, t: '1970-01-01 00:00:00 UTC'}
+query: |
+  SELECT id, CAST(UNIX_SECONDS(t) AS STRING) AS s
+    FROM ds_functions_unix_seconds.ts
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", s: "1704067200"}   # whole second
+    - {id: "2", s: "1704067200"}   # .999 truncated DOWN, not rounded UP
+    - {id: "3", s: "0"}            # epoch itself

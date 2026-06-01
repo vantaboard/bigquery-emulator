@@ -1,0 +1,38 @@
+# function_unix_micros: BigQuery UNIX_MICROS via `duckdb_udf` route.
+#
+# Pins the polyfill UDF library's `bq_unix_micros` macro (thin
+# alias around DuckDB's `epoch_us`) through the gateway.
+#
+# Route-label assertion: deferred to plan 16.
+name: function_unix_micros
+description: |
+  BigQuery UNIX_MICROS lowered through the polyfill UDF library
+  (`backend/engine/duckdb/udf/datetime/datetime_macros.cc`'s
+  `bq_unix_micros`). Verifies whole-second AND microsecond
+  precision.
+project_id: proj-functions-unix-micros
+dataset_id: ds_functions_unix_micros
+setup:
+  - dataset: ds_functions_unix_micros
+  - table:
+      dataset: ds_functions_unix_micros
+      id: ts
+      schema:
+        - {name: id, type: INT64,     mode: REQUIRED}
+        - {name: t,  type: TIMESTAMP, mode: NULLABLE}
+  - rows:
+      dataset: ds_functions_unix_micros
+      table: ts
+      rows:
+        - {id: 1, t: '2024-01-01 00:00:00 UTC'}
+        - {id: 2, t: '2024-01-01 00:00:00.123456 UTC'}
+        - {id: 3, t: '1970-01-01 00:00:00 UTC'}
+query: |
+  SELECT id, CAST(UNIX_MICROS(t) AS STRING) AS us
+    FROM ds_functions_unix_micros.ts
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", us: "1704067200000000"}
+    - {id: "2", us: "1704067200123456"}
+    - {id: "3", us: "0"}

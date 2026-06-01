@@ -42,6 +42,7 @@ cc_library(
     name = "registrar",
     srcs = [
         "conditional/conditional_macros.cc",
+        "datetime/datetime_macros.cc",
         "numeric/numeric_macros.cc",
         "regex/regex_macros.cc",
         "registrar.cc",
@@ -129,6 +130,28 @@ cc_test(
 cc_test(
     name = "regex_macros_test",
     srcs = ["regex/regex_macros_test.cc"],
+    deps = [
+        ":registrar",
+        "//third_party/duckdb",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# Datetime family per-UDF tests. Covers `bq_unix_seconds`,
+# `bq_unix_millis`, `bq_unix_micros`, `bq_unix_date` (epoch
+# wrappers around DuckDB's `epoch`, `epoch_ms`, `epoch_us`, and
+# `date_diff` with appropriate truncation / day-boundary
+# semantics for the BigQuery contract). The richer date /
+# time / datetime / timestamp arithmetic family (DATE_ADD /
+# DATE_SUB / DATE_DIFF / DATE_TRUNC + DATETIME_* + TIMESTAMP_*)
+# stays at `status=planned` and re-points to
+# `semantic-functions-compliance.plan.md` because the BigQuery
+# month-end snap, ISO-year discrimination, and timezone-aware
+# truncation semantics are too rich for a thin polyfill macro.
+cc_test(
+    name = "datetime_macros_test",
+    srcs = ["datetime/datetime_macros_test.cc"],
     deps = [
         ":registrar",
         "//third_party/duckdb",

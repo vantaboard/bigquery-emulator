@@ -436,6 +436,10 @@ rows flipped from `status=planned duckdb_udf` to ready
 | `regexp_contains` | `regex/regex_macros.cc::bq_regexp_contains` (thin alias around DuckDB `regexp_matches`; both engines vendor RE2) | RE2 dialect compatibility (anchoring, case-sensitive by default, `(?i)` inline flags) -- the macro pins our own name so a future DuckDB upgrade swapping regex engines would surface as a unit-test failure | `regex_macros_test::RegexpContainsAnchoredMatch`, `RegexpContainsCaseSensitiveByDefault`, `RegexpContainsHonorsInlineFlags`, `RegexpContainsNullPropagation` |
 | `regexp_replace` | `regex/regex_macros.cc::bq_regexp_replace` (forwards `'g'` to DuckDB's `regexp_replace`) | BigQuery replaces ALL non-overlapping matches; DuckDB defaults to FIRST-only. The macro hardcodes the global flag so the BQ contract holds at the call site | `regex_macros_test::RegexpReplaceIsGlobal`, `RegexpReplaceHonorsBackreferences`, `RegexpReplaceNullPropagation` |
 | `split`     | `string/string_macros.cc::bq_split` (DEFAULT delimiter `,` via `delimiter := ','`) | BigQuery SPLIT(value) defaults to splitting on `,`; DuckDB's `string_split` requires both arguments | `string_macros_test::SplitDefaultDelimiterIsComma`, `SplitCustomDelimiter`, `SplitEmptyInputReturnsSingleEmpty`, `SplitNullPropagation` |
+| `unix_seconds` | `datetime/datetime_macros.cc::bq_unix_seconds` (`CAST(FLOOR(epoch(t)) AS BIGINT)`) | BigQuery UNIX_SECONDS "rounds down to the beginning of the second"; DuckDB's bare `CAST(epoch(t) AS BIGINT)` ROUNDS (so .999 becomes +1). The explicit FLOOR wrap pins the round-down contract | `datetime_macros_test::UnixSecondsTruncatesSubsecond`, `UnixSecondsWholeSecond`, `UnixSecondsNullPropagation` |
+| `unix_millis` | `datetime/datetime_macros.cc::bq_unix_millis` (thin alias around DuckDB's BIGINT-returning `epoch_ms`) | Pins the BIGINT-millis contract under our own name so a future DuckDB precision drift would surface as a unit-test failure | `datetime_macros_test::UnixMillisWholeSecond`, `UnixMillisSubsecond`, `UnixMillisNullPropagation` |
+| `unix_micros` | `datetime/datetime_macros.cc::bq_unix_micros` (thin alias around DuckDB's `epoch_us`) | Same as `unix_millis` -- thin alias under our name | `datetime_macros_test::UnixMicrosWholeSecond`, `UnixMicrosSubsecond`, `UnixMicrosNullPropagation` |
+| `unix_date` | `datetime/datetime_macros.cc::bq_unix_date` (`date_diff('day', '1970-01-01'::DATE, d)`) | `date_diff` is calendar-day-boundary counted, unambiguous on DST-shift days. Pre-epoch dates return negative day counts (BigQuery documents this explicitly) | `datetime_macros_test::UnixDateEpochIsZero`, `UnixDatePreEpochIsNegative`, `UnixDateFutureDate`, `UnixDateNullPropagation` |
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
@@ -458,9 +462,9 @@ considers a thin-macro path achievable):
   scoped into this polyfill landing).
 * `regexp_extract`, `regexp_extract_all`, `format`, the
   `date_*` / `datetime_*` / `timestamp_*` arithmetic family,
-  `extract`, the `format_*` / `parse_*` / `unix_*` family ---
-  documented per row in `functions.yaml` with the specific
-  BigQuery semantic the wrapper needs to close. Each of these is a
-  candidate for a future polyfill landing in the same plan; none
-  are silent approximations today (every call surfaces
-  UNIMPLEMENTED via the transpiler's empty-string contract).
+  `extract`, and the `format_*` / `parse_*` family --- documented
+  per row in `functions.yaml` with the specific BigQuery semantic
+  the wrapper needs to close. Each of these is a candidate for a
+  future polyfill landing in the same plan; none are silent
+  approximations today (every call surfaces UNIMPLEMENTED via the
+  transpiler's empty-string contract).
