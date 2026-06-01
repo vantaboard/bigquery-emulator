@@ -121,39 +121,57 @@ TEST_F(RouteClassifierTest, PureDuckDbNativeSelectRoutesToDuckDb) {
   EXPECT_TRUE(d.reason.empty()) << d.reason;
 }
 
-TEST_F(RouteClassifierTest, SafeDivideFunctionPromotesToSemanticExecutor) {
-  // `SAFE_DIVIDE` is on the `semantic_executor` route per
-  // `functions.yaml`: the BigQuery NULL-on-zero / NULL-on-overflow
-  // semantics need exact local handling. Any query containing the
-  // function promotes the whole shape to the semantic executor.
+TEST_F(RouteClassifierTest, PlannedSemanticExecutorFunctionDoesNotPromote) {
+  // `SAFE_DIVIDE`'s `functions.yaml` row currently carries
+  // `status=planned`: the disposition is `semantic_executor` but
+  // the executor for that route is not landed yet (owned by
+  // `semantic-functions-compliance.plan.md`). The upstream
+  // execution-disposition-registry contract is that `planned`
+  // rows must NOT be silently promoted -- they stay on the
+  // default `duckdb_native` route until the owning plan lands the
+  // real executor and drops the `planned` marker from the YAML.
+  // The DuckDB transpiler then surfaces UNIMPLEMENTED from inside
+  // its emit (per the empty-string contract), which is "no silent
+  // approximation": a planned shape does not get re-routed onto a
+  // stub executor that would also surface UNIMPLEMENTED but with
+  // a different error envelope.
+  //
+  // When `semantic-functions-compliance.plan.md` lands and drops
+  // `status=planned` from this row, this test will fail on the
+  // disposition expectation; update it to assert
+  // `Disposition::kSemanticExecutor` then.
   const auto* stmt = Analyze("SELECT SAFE_DIVIDE(1, 0)");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
-  // Function names are recorded with a `function:` prefix so the
-  // gateway-side error message can disambiguate from class names.
-  EXPECT_EQ(d.offending_node, "function:safe_divide");
-  EXPECT_NE(d.reason.find("safe_divide"), std::string::npos)
-      << "reason should name the offending function; got: " << d.reason;
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+  EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
 }
 
-TEST_F(RouteClassifierTest, CreateTableStatementRoutesToControlOp) {
-  // `ResolvedCreateTableStmt` has the `control_op` disposition
-  // (with `status=planned`). DDL routes to the control-op executor
-  // directly -- the classifier does not dive into the inner
-  // column-definition tree to look for an inner semantic-executor
-  // promotion, because the statement-level execution model is
-  // owned by the control-op executor.
+TEST_F(RouteClassifierTest, PlannedControlOpStatementDoesNotPromote) {
+  // `ResolvedCreateTableStmt` has `disposition=control_op
+  // status=planned` in `node_dispositions.yaml`. Same contract as
+  // the planned function-row case above: planned rows surface
+  // their target disposition for documentation but the classifier
+  // keeps the actual route at `kDuckdbNative` until the owning
+  // plan (`control-op-executor.plan.md`) lands the real executor
+  // and drops the `planned` marker. The fast path (DuckDB) already
+  // implements DDL via `DuckDbExecutor::ExecuteDdl`; routing CREATE
+  // TABLE through the classifier-aware coordinator must preserve
+  // the existing `gateway/e2e/ddl_create_drop_test.go` behavior,
+  // which this test pins.
+  //
+  // When `control-op-executor.plan.md` lands and drops
+  // `status=planned`, this test will fail on the disposition
+  // expectation; update it to assert `Disposition::kControlOp`
+  // then.
   const auto* stmt =
       Analyze("CREATE TABLE new_table (a INT64, b STRING)");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kControlOp);
-  EXPECT_EQ(d.offending_node, "ResolvedCreateTableStmt");
-  EXPECT_NE(d.reason.find("control-op"), std::string::npos)
-      << "reason should mention control-op; got: " << d.reason;
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+  EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
 }
 
 TEST_F(RouteClassifierTest, ApproxQuantilesFunctionRoutesToUnsupported) {
@@ -173,17 +191,18 @@ TEST_F(RouteClassifierTest, ApproxQuantilesFunctionRoutesToUnsupported) {
       << "reason should name the offending function; got: " << d.reason;
 }
 
-TEST_F(RouteClassifierTest, UnsupportedDominatesSemanticInSameQuery) {
-  // When both an unsupported function and a semantic-executor
-  // function appear in the same query, the unsupported promotion
-  // wins. `kUnsupported` is the highest-priority disposition in the
-  // priority table; this test pins that contract so a future
-  // change to the priority order has to update the test
-  // explicitly.
-  // Both `APPROX_QUANTILES` (unsupported) and `SAFE_DIVIDE`
-  // (semantic_executor) are present. Wrap `SAFE_DIVIDE` in `AVG`
-  // so the outer projection contains only aggregates and the
-  // query type-checks without a `GROUP BY`.
+TEST_F(RouteClassifierTest, UnsupportedDominatesPlannedSemanticInSameQuery) {
+  // When an `unsupported` function and a `planned semantic_executor`
+  // function appear together, the unsupported promotion wins.
+  // `SAFE_DIVIDE` is currently `planned`, so it does not promote;
+  // `APPROX_QUANTILES` is `unsupported` (not planned) and does
+  // promote. This pins the priority order: a non-planned
+  // `unsupported` row always wins over a planned-but-not-promoted
+  // row.
+  //
+  // `AVG(SAFE_DIVIDE(...))` keeps the SELECT's projection
+  // aggregate-only so the analyzer accepts the query without a
+  // `GROUP BY`.
   const auto* stmt = Analyze(
       "SELECT APPROX_QUANTILES(id, 4), AVG(SAFE_DIVIDE(id, 1)) FROM people");
   ASSERT_NE(stmt, nullptr);

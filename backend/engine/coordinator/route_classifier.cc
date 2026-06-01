@@ -98,13 +98,23 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // names (e.g. `"ResolvedTableScan"`); `node_kind_string()`
   // returns the un-prefixed form (`"TableScan"`), so we prepend
   // `"Resolved"` before the lookup.
+  //
+  // Rows with `status=planned` are deliberately NOT promoted (see
+  // the upstream `execution-disposition-registry.plan.md` contract
+  // -- planned rows surface their disposition for documentation /
+  // ownership tracking, but the executor for that route is not
+  // ready yet, so the classifier keeps them on the default
+  // `duckdb_native` route until the owning plan lands the real
+  // executor and removes the `planned` marker. The fast path will
+  // surface UNIMPLEMENTED from the transpiler for shapes it cannot
+  // lower; that is a fast-path bug, not a classifier bug).
   void CheckNodeClass(const ::googlesql::ResolvedNode* node) {
     std::string class_name =
         absl::StrCat("Resolved", node->node_kind_string());
     const auto* entry = transpiler::LookupNodeDisposition(class_name);
-    if (entry != nullptr) {
-      MaybePromote(entry->disposition, std::move(class_name));
-    }
+    if (entry == nullptr) return;
+    if (entry->planned) return;
+    MaybePromote(entry->disposition, std::move(class_name));
     // A node kind absent from the registry is silently treated as
     // `kDuckdbNative` (no promotion). The registry covers every
     // user-visible `ResolvedAST` class; an absent row is by
@@ -136,6 +146,14 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
                    absl::StrCat("function:", name));
       return;
     }
+    // Same `planned`-row contract as `CheckNodeClass`: a function
+    // row whose owning plan has not yet landed the executor must
+    // not promote the route. The transpiler's existing
+    // empty-string contract will surface UNIMPLEMENTED if DuckDB
+    // cannot lower the call. When the owning plan ships its
+    // executor it drops the `planned` marker and this branch
+    // starts promoting again.
+    if (entry->planned) return;
     MaybePromote(entry->disposition, absl::StrCat("function:", name));
   }
 
@@ -194,7 +212,17 @@ RouteDecision RouteClassifier::Classify(
   // whole is still a control-op statement; the control-op
   // executor is the one that owns the statement-level execution
   // model).
-  if (root_entry != nullptr) {
+  //
+  // A `planned` root row is treated identically to a non-existing
+  // row at the route level: the upstream registry uses `planned`
+  // to mean "the executor for this disposition hasn't landed yet",
+  // so the classifier must not route to a stub executor today
+  // (which would break gateway/e2e tests that hit DDL / DML shapes
+  // the registry promises to a future executor). The fast path
+  // (DuckDB) keeps handling them via the visitor's default branch
+  // until the owning plan lands and drops `planned` from the YAML
+  // row.
+  if (root_entry != nullptr && !root_entry->planned) {
     if (root_entry->disposition == Disposition::kControlOp) {
       return RouteDecision{
           Disposition::kControlOp,
@@ -209,7 +237,7 @@ RouteDecision RouteClassifier::Classify(
           root_class,
       };
     }
-  } else {
+  } else if (root_entry == nullptr) {
     // Root not in the registry -- by construction a registry bug
     // (parity checker should catch this), but fold to unsupported
     // so the gateway has a stable error code while the parity
