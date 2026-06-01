@@ -128,6 +128,7 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		DefaultDatasetId: defaultDataset,
 		Sql:              req.Query,
 		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
+		Parameters:       parametersToEngineMap(req.Parameters),
 	}
 
 	resp, err := deps.Query.DryRun(r.Context(), engineReq)
@@ -181,6 +182,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		DefaultDatasetId: defaultDataset,
 		Sql:              req.Query,
 		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
+		Parameters:       parametersToEngineMap(req.Parameters),
 	}
 
 	start := time.Now().UTC()
@@ -212,6 +214,46 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// parametersToEngineMap converts the REST `queryParameters` list
+// into the engine's `map<string, QueryParameter>` proto field
+// (defined in `proto/emulator.proto`). The gateway's wire payload
+// is a list of `QueryParameter` objects, each carrying `name`,
+// `parameterType`, and `parameterValue`; the engine speaks a
+// name-keyed map plus a `type_kind` / `value_json` value pair.
+//
+// Named parameters flow through unchanged. Positional parameters
+// are currently dropped on the floor (the engine proto's map shape
+// cannot represent them; the engine binds them by `request.parameters`
+// list order via the matching positional-parameter slot the
+// analyzer assigned). Wiring positional parameters end-to-end
+// requires either a proto change (move from `map` to `repeated`)
+// or a synthetic key encoding; both are deferred to the
+// gateway-parameters follow-up plan referenced from
+// `semantic-executor-core.plan.md`'s deliberately-deferred list.
+//
+// Values with a missing `parameterType` are skipped because the
+// engine cannot decode them without a type tag.
+func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.QueryParameter {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]*enginepb.QueryParameter, len(in))
+	for _, p := range in {
+		if p.ParameterType == nil {
+			continue
+		}
+		var value string
+		if p.ParameterValue != nil {
+			value = p.ParameterValue.Value
+		}
+		out[p.Name] = &enginepb.QueryParameter{
+			TypeKind:  p.ParameterType.Type,
+			ValueJson: value,
+		}
+	}
+	return out
 }
 
 // streamQueryResults drains the engine's query stream into the

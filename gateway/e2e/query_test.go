@@ -16,18 +16,14 @@ import (
 // `jobs.query` response, and the same row replays on
 // `jobs.getQueryResults` keyed on the freshly-minted jobReference.
 //
-// Exercises the full REST -> gRPC -> Query.ExecuteQuery -> DuckDB
-// engine path plus the gateway's per-process job registry that
-// backs the synchronous query API.
-//
-// Skipped today: `SELECT 1` analyzes to a computed-column
-// ProjectScan the DuckDB transpiler does not yet lower, so the
-// emulator surfaces UNIMPLEMENTED until the transpiler covers that
-// shape.
+// Exercises the full REST -> gRPC -> Query.ExecuteQuery -> semantic
+// executor path plus the gateway's per-process job registry that
+// backs the synchronous query API. After
+// `semantic-executor-core.plan.md` landed the route classifier
+// promotes scalar-only SELECT to the local semantic executor, so
+// `SELECT 1` returns the same wire envelope the DuckDB fast path
+// would have produced for the same query.
 func TestQuerySelectOneRoundTrip(t *testing.T) {
-	t.Skip("SELECT 1 falls outside the DuckDB transpiler today; " +
-		"re-enable once the transpiler lowers computed-column " +
-		"ProjectScans on SingleRowScan")
 	env := startEmulator(t)
 
 	const projectID = "proj-select1"
