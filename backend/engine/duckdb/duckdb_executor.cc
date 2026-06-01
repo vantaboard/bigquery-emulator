@@ -455,45 +455,6 @@ absl::Status AttachStorageTable(::duckdb_connection conn,
   return AttachStorageTableAt(conn, storage, table, QuoteIdent(table.Name()));
 }
 
-// Drop wrapping pass-through ResolvedProjectScans before handing
-// the inner scan to the transpiler. The transpiler's
-// `EmitProjectScan` / `EmitQueryStmt` are still `not_started` (see
-// `SHAPE_TRACKER.md`), so we have to peel the wrapping scan the
-// analyzer adds for `SELECT *` shapes ourselves.
-//
-// "Pass-through" means: no computed columns (`expr_list_size() == 0`)
-// AND the project's `column_list` matches the input's `column_list`
-// element-for-element by `ResolvedColumn::column_id()`. The second
-// check rejects projections that reorder or subset the input scan's
-// columns (`SELECT name, id FROM t`, `SELECT id FROM t`) — those
-// would otherwise have the DuckDB result rows arrive in a different
-// order from the analyzer's `output_column_list` and the per-cell
-// shape would silently disagree with the gateway's BigQuery schema.
-// Non-strippable shapes return the original scan; the engine then
-// returns UNIMPLEMENTED for the wrapping ProjectScan so the gateway
-// can surface BigQuery's `notImplemented` reason.
-const ::googlesql::ResolvedScan* StripPassThroughProjectScans(
-    const ::googlesql::ResolvedScan* scan) {
-  while (scan != nullptr &&
-         scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN) {
-    const auto* p = scan->GetAs<::googlesql::ResolvedProjectScan>();
-    if (p->expr_list_size() != 0) return scan;
-    const ::googlesql::ResolvedScan* input = p->input_scan();
-    if (input == nullptr) return scan;
-    if (p->column_list_size() != input->column_list_size()) return scan;
-    bool same_columns = true;
-    for (int i = 0; i < p->column_list_size(); ++i) {
-      if (p->column_list(i).column_id() != input->column_list(i).column_id()) {
-        same_columns = false;
-        break;
-      }
-    }
-    if (!same_columns) return scan;
-    scan = input;
-  }
-  return scan;
-}
-
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
@@ -513,24 +474,39 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
       ReflectOutputSchema(*query_stmt);
   if (!output_schema.ok()) return output_schema.status();
 
-  // 2. Lower the query. The transpiler's `EmitQueryStmt` /
-  // `EmitProjectScan` are still `not_started`, so we strip wrapping
-  // pass-through `ProjectScan`s (added by the analyzer for
-  // `SELECT *` shapes) before dispatching to the transpiler. If the
-  // resulting scan does not lower we return UNIMPLEMENTED so the
-  // gateway can surface BigQuery's `notImplemented` reason.
-  const ::googlesql::ResolvedScan* inner =
-      StripPassThroughProjectScans(query_stmt->query());
-  if (inner == nullptr) {
+  // 2. Lower the query through the transpiler's `EmitQueryStmt`,
+  // which (a) walks the scan tree under the QueryStmt and (b) wraps
+  // the result in the outermost `output_column_list()` projection so
+  // the DuckDB result columns line up with the analyzer's output
+  // schema 1:1. Handing `EmitQueryStmt` the QueryStmt itself
+  // (instead of the inner scan, like the legacy path did) is what
+  // makes `SELECT id, name FROM ds.t` narrow correctly even when
+  // the analyzer is configured with `prune_unused_columns=false`
+  // and the underlying TableScan keeps all of `ds.t`'s columns
+  // (e.g. an extra `tags` column the SELECT discards): the inner
+  // scan emit reflects the table's full column list, but the
+  // outermost projection brings the cell stream back down to the 2
+  // analyzer-output columns the gateway / `arrow_to_bq` expect.
+  //
+  // If the transpiler cannot lower the shape (a `""` return per the
+  // empty-string contract) we surface UNIMPLEMENTED so the gateway
+  // emits BigQuery's `notImplemented` reason. Once the route
+  // classifier promotes every property-level fast-path gate (see
+  // `route_classifier.cc`'s `Visit*` overrides) the only paths left
+  // returning `""` are the genuinely-defensive ones (null pointers,
+  // analyzer contract violations); reaching this branch is then a
+  // signal of either a missing classifier rule or an analyzer-shape
+  // surprise we should pin a fixture against.
+  if (query_stmt->query() == nullptr) {
     return absl::UnimplementedError("duckdb engine: query has no scan tree");
   }
   transpiler::Transpiler t;
-  std::string sql = t.Transpile(inner);
+  std::string sql = t.Transpile(query_stmt);
   if (sql.empty()) {
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: transpiler does not yet cover this query shape "
         "(node_kind=",
-        inner->node_kind_string(),
+        query_stmt->query()->node_kind_string(),
         ")"));
   }
 

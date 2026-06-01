@@ -218,6 +218,97 @@ TEST_F(DuckDbExecutorTest, ExecuteQuerySelectStarFromTableStreamsAllRows) {
   EXPECT_EQ(seen, want);
 }
 
+TEST_F(DuckDbExecutorTest,
+       ExecuteQueryNarrowsColumnsWhenAnalyzerSchemaIsSubsetOfTable) {
+  // Regression: the legacy executor stripped the wrapping pass-through
+  // ProjectScan and handed the bare TableScan to the transpiler, which
+  // emitted SELECT for *all* of the table's columns. With
+  // `prune_unused_columns=false` (the analyzer setting both
+  // `LocalCoordinatorEngine` and the legacy DuckDBEngine use), the
+  // TableScan retains every storage column even when the user-spelled
+  // SELECT only asks for a subset; the result chunk would then arrive
+  // with one extra Arrow column that `arrow_to_bq::ChunkRowToCells`
+  // refused to render against the analyzer-output schema:
+  //
+  //   arrow_to_bq: chunk has 3 columns but analyzer output schema has 2
+  //
+  // The fix: hand `EmitQueryStmt` the QueryStmt itself; the outermost
+  // SELECT projects only the analyzer-output columns. Pin a 3-column
+  // table source against a 2-column projection here so a regression
+  // (e.g. someone re-introducing the strip-and-bypass shortcut) fails
+  // at the executor unit-test level instead of the
+  // `frontend/handlers/query_test.cc` integration suite.
+  schema::TableSchema bq_schema;
+  schema::ColumnSchema id;
+  id.name = "id";
+  id.type = schema::ColumnType::kInt64;
+  id.mode = schema::ColumnMode::kRequired;
+  bq_schema.columns.push_back(id);
+  schema::ColumnSchema name;
+  name.name = "name";
+  name.type = schema::ColumnType::kString;
+  name.mode = schema::ColumnMode::kNullable;
+  bq_schema.columns.push_back(name);
+  schema::ColumnSchema tags;
+  tags.name = "tags";
+  tags.type = schema::ColumnType::kString;
+  tags.mode = schema::ColumnMode::kRepeated;
+  bq_schema.columns.push_back(tags);
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "wide"}, bq_schema).ok());
+  std::vector<storage::Row> rows;
+  auto append = [&](int64_t v_id, std::string v_name) {
+    storage::Row r;
+    r.cells = {
+        storage::Value::Int64(v_id),
+        storage::Value::String(std::move(v_name)),
+        storage::Value::Array({}),
+    };
+    rows.push_back(std::move(r));
+  };
+  append(1, "ada");
+  append(2, "linus");
+  append(3, "grace");
+  ASSERT_TRUE(
+      storage_
+          ->AppendRows({"proj-test", "ds", "wide"}, absl::MakeConstSpan(rows))
+          .ok());
+
+  CatalogBundle bundle = MakeCatalog();
+  auto analyzed = Analyze("SELECT id, name FROM ds.wide ORDER BY id",
+                          bundle.catalog.get(),
+                          /*all_statements=*/false);
+  ASSERT_TRUE(analyzed.ok()) << analyzed.status();
+  const ::googlesql::ResolvedStatement* stmt =
+      (*analyzed)->resolved_statement();
+  ASSERT_NE(stmt, nullptr);
+
+  absl::StatusOr<std::unique_ptr<RowSource>> source = executor_->ExecuteQuery(
+      MakeRequest("SELECT id, name FROM ds.wide ORDER BY id"),
+      *stmt,
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  const schema::TableSchema& s = (*source)->schema();
+  ASSERT_EQ(s.columns.size(), 2u);
+  EXPECT_EQ(s.columns[0].name, "id");
+  EXPECT_EQ(s.columns[1].name, "name");
+
+  std::vector<std::pair<int64_t, std::string>> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
+  }
+  std::vector<std::pair<int64_t, std::string>> want = {
+      {1, "ada"}, {2, "linus"}, {3, "grace"}};
+  EXPECT_EQ(seen, want);
+}
+
 TEST_F(DuckDbExecutorTest, ExecuteQueryRejectsNonQueryStatement) {
   // The coordinator is supposed to dispatch DDL through the control-op
   // route, not through the DuckDB executor; defensively the executor
