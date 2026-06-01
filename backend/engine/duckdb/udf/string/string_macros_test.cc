@@ -103,8 +103,7 @@ TEST_F(StringMacrosTest, StrposNullPropagation) {
 // stay readable.
 std::string JoinSplit(::duckdb_connection conn, const std::string& macro_call) {
   ::duckdb_result result;
-  const std::string wrapped =
-      "SELECT array_to_string(" + macro_call + ", '|')";
+  const std::string wrapped = "SELECT array_to_string(" + macro_call + ", '|')";
   auto rc = ::duckdb_query(conn, wrapped.c_str(), &result);
   if (rc != ::DuckDBSuccess) {
     ADD_FAILURE() << "DuckDB rejected: "

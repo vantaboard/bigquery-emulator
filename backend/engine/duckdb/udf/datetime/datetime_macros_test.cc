@@ -61,15 +61,15 @@ class DatetimeMacrosTest : public ::testing::Test {
 
 // 2024-01-01 00:00:00 UTC -> 1704067200 seconds since epoch.
 constexpr int64_t kSec2024_01_01 = 1704067200;
-constexpr int64_t kMs2024_01_01  = 1704067200LL * 1000;
-constexpr int64_t kUs2024_01_01  = 1704067200LL * 1000 * 1000;
+constexpr int64_t kMs2024_01_01 = 1704067200LL * 1000;
+constexpr int64_t kUs2024_01_01 = 1704067200LL * 1000 * 1000;
 
 // --- bq_unix_seconds ---------------------------------------------
 
 TEST_F(DatetimeMacrosTest, UnixSecondsWholeSecond) {
-  EXPECT_EQ(RunInt64(
-                "SELECT bq_unix_seconds(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
-            kSec2024_01_01);
+  EXPECT_EQ(
+      RunInt64("SELECT bq_unix_seconds(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
+      kSec2024_01_01);
 }
 
 TEST_F(DatetimeMacrosTest, UnixSecondsTruncatesSubsecond) {
@@ -84,23 +84,21 @@ TEST_F(DatetimeMacrosTest, UnixSecondsTruncatesSubsecond) {
 }
 
 TEST_F(DatetimeMacrosTest, UnixSecondsNullPropagation) {
-  EXPECT_TRUE(
-      RunBool("SELECT bq_unix_seconds(NULL::TIMESTAMPTZ) IS NULL"));
+  EXPECT_TRUE(RunBool("SELECT bq_unix_seconds(NULL::TIMESTAMPTZ) IS NULL"));
 }
 
 // --- bq_unix_millis ----------------------------------------------
 
 TEST_F(DatetimeMacrosTest, UnixMillisWholeSecond) {
-  EXPECT_EQ(RunInt64(
-                "SELECT bq_unix_millis(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
-            kMs2024_01_01);
+  EXPECT_EQ(
+      RunInt64("SELECT bq_unix_millis(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
+      kMs2024_01_01);
 }
 
 TEST_F(DatetimeMacrosTest, UnixMillisSubsecond) {
   // Fractional milliseconds. 2024-01-01 00:00:00.5 -> +500 ms.
   EXPECT_EQ(
-      RunInt64(
-          "SELECT bq_unix_millis(TIMESTAMPTZ '2024-01-01 00:00:00.5+00')"),
+      RunInt64("SELECT bq_unix_millis(TIMESTAMPTZ '2024-01-01 00:00:00.5+00')"),
       kMs2024_01_01 + 500);
 }
 
@@ -111,17 +109,16 @@ TEST_F(DatetimeMacrosTest, UnixMillisNullPropagation) {
 // --- bq_unix_micros ----------------------------------------------
 
 TEST_F(DatetimeMacrosTest, UnixMicrosWholeSecond) {
-  EXPECT_EQ(RunInt64(
-                "SELECT bq_unix_micros(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
-            kUs2024_01_01);
+  EXPECT_EQ(
+      RunInt64("SELECT bq_unix_micros(TIMESTAMPTZ '2024-01-01 00:00:00+00')"),
+      kUs2024_01_01);
 }
 
 TEST_F(DatetimeMacrosTest, UnixMicrosSubsecond) {
   // 2024-01-01 00:00:00.123456 -> +123456 microseconds.
-  EXPECT_EQ(
-      RunInt64("SELECT bq_unix_micros(TIMESTAMPTZ "
-               "'2024-01-01 00:00:00.123456+00')"),
-      kUs2024_01_01 + 123456);
+  EXPECT_EQ(RunInt64("SELECT bq_unix_micros(TIMESTAMPTZ "
+                     "'2024-01-01 00:00:00.123456+00')"),
+            kUs2024_01_01 + 123456);
 }
 
 TEST_F(DatetimeMacrosTest, UnixMicrosNullPropagation) {

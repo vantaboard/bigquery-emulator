@@ -57,10 +57,10 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
   //     `.999 -> +0 seconds`, not `+1`). A regression that
   //     dropped the FLOOR wrap would surface here.
   //   * NULL propagation.
-  if (auto s = internal::RunMacroDdl(
-          conn,
-          "CREATE OR REPLACE MACRO bq_unix_seconds(t) AS "
-          "CAST(FLOOR(epoch(t)) AS BIGINT)");
+  if (auto s =
+          internal::RunMacroDdl(conn,
+                                "CREATE OR REPLACE MACRO bq_unix_seconds(t) AS "
+                                "CAST(FLOOR(epoch(t)) AS BIGINT)");
       !s.ok()) {
     return s;
   }
@@ -75,8 +75,7 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
   // `epoch_ms`'s precision would surface as a unit-test failure
   // rather than as silent semantic drift.
   if (auto s = internal::RunMacroDdl(
-          conn,
-          "CREATE OR REPLACE MACRO bq_unix_millis(t) AS epoch_ms(t)");
+          conn, "CREATE OR REPLACE MACRO bq_unix_millis(t) AS epoch_ms(t)");
       !s.ok()) {
     return s;
   }
@@ -88,8 +87,7 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
   // returns BIGINT with the expected semantics; the macro is a
   // thin alias under our name.
   if (auto s = internal::RunMacroDdl(
-          conn,
-          "CREATE OR REPLACE MACRO bq_unix_micros(t) AS epoch_us(t)");
+          conn, "CREATE OR REPLACE MACRO bq_unix_micros(t) AS epoch_us(t)");
       !s.ok()) {
     return s;
   }
@@ -109,10 +107,10 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
   //   * `bq_unix_date(DATE '1969-12-31') == -1` (pre-epoch is
   //     negative; BQ documents this explicitly).
   //   * NULL propagation.
-  if (auto s = internal::RunMacroDdl(
-          conn,
-          "CREATE OR REPLACE MACRO bq_unix_date(d) AS "
-          "date_diff('day', DATE '1970-01-01', d)");
+  if (auto s =
+          internal::RunMacroDdl(conn,
+                                "CREATE OR REPLACE MACRO bq_unix_date(d) AS "
+                                "date_diff('day', DATE '1970-01-01', d)");
       !s.ok()) {
     return s;
   }

@@ -103,7 +103,8 @@ TEST_F(RegexMacrosTest, RegexpContainsHonorsInlineFlags) {
   // parameter on REGEXP_CONTAINS). Verifying it round-trips
   // through the DuckDB RE2 binding pins the dialect compatibility.
   EXPECT_TRUE(RunBool("SELECT bq_regexp_contains('ABC', '(?i)abc')"));
-  EXPECT_TRUE(RunBool("SELECT bq_regexp_contains('hello\nworld', '(?s)hello.world')"));
+  EXPECT_TRUE(
+      RunBool("SELECT bq_regexp_contains('hello\nworld', '(?s)hello.world')"));
 }
 
 TEST_F(RegexMacrosTest, RegexpContainsNullPropagation) {
@@ -131,19 +132,15 @@ TEST_F(RegexMacrosTest, RegexpReplaceHonorsBackreferences) {
   // BigQuery and DuckDB both support `\1`, `\2`, ... backrefs in
   // the replacement string. Swapping two captures is the
   // canonical pin: `'(\w+) (\w+)'` -> `'\2 \1'`.
-  EXPECT_EQ(RunString(
-                "SELECT bq_regexp_replace('John Doe', '(\\w+) (\\w+)', "
-                "'\\2 \\1')"),
+  EXPECT_EQ(RunString("SELECT bq_regexp_replace('John Doe', '(\\w+) (\\w+)', "
+                      "'\\2 \\1')"),
             "Doe John");
 }
 
 TEST_F(RegexMacrosTest, RegexpReplaceNullPropagation) {
-  EXPECT_TRUE(
-      RunIsNull("SELECT bq_regexp_replace(NULL::VARCHAR, 'a', 'b')"));
-  EXPECT_TRUE(
-      RunIsNull("SELECT bq_regexp_replace('abc', NULL::VARCHAR, 'b')"));
-  EXPECT_TRUE(
-      RunIsNull("SELECT bq_regexp_replace('abc', 'a', NULL::VARCHAR)"));
+  EXPECT_TRUE(RunIsNull("SELECT bq_regexp_replace(NULL::VARCHAR, 'a', 'b')"));
+  EXPECT_TRUE(RunIsNull("SELECT bq_regexp_replace('abc', NULL::VARCHAR, 'b')"));
+  EXPECT_TRUE(RunIsNull("SELECT bq_regexp_replace('abc', 'a', NULL::VARCHAR)"));
 }
 
 }  // namespace

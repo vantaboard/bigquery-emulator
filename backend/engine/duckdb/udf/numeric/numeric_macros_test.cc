@@ -176,8 +176,8 @@ TEST_F(NumericMacrosTest, LogSingleArgIsNaturalLog) {
   // (wait -- log10(10) == 1 and ln(10) == 2.302585...; the literal
   // 10 was deliberately picked because the two diverge there).
   EXPECT_NEAR(RunDouble("SELECT bq_log(1.0::DOUBLE)"), 0.0, 1e-9);
-  EXPECT_NEAR(RunDouble("SELECT bq_log(10.0::DOUBLE)"), 2.302585092994046,
-              1e-9);
+  EXPECT_NEAR(
+      RunDouble("SELECT bq_log(10.0::DOUBLE)"), 2.302585092994046, 1e-9);
 }
 
 TEST_F(NumericMacrosTest, LogTwoArgIdentity) {
@@ -186,8 +186,8 @@ TEST_F(NumericMacrosTest, LogTwoArgIdentity) {
   // base FIRST. The macro re-derives through `ln(x) / ln(base)`
   // so the argument order matches BigQuery regardless of how
   // DuckDB's two-arg log is wired.
-  EXPECT_NEAR(RunDouble("SELECT bq_log(100.0::DOUBLE, 10.0::DOUBLE)"), 2.0,
-              1e-9);
+  EXPECT_NEAR(
+      RunDouble("SELECT bq_log(100.0::DOUBLE, 10.0::DOUBLE)"), 2.0, 1e-9);
   EXPECT_NEAR(RunDouble("SELECT bq_log(8.0::DOUBLE, 2.0::DOUBLE)"), 3.0, 1e-9);
   EXPECT_NEAR(RunDouble("SELECT bq_log(27.0::DOUBLE, 3.0::DOUBLE)"), 3.0, 1e-9);
 }
