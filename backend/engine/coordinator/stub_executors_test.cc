@@ -110,6 +110,59 @@ TEST_F(StubExecutorsTest, UnsupportedReportsStatementKind) {
       << out.status().message();
 }
 
+TEST_F(StubExecutorsTest, UnsupportedMessageLinksEnginePolicyDoc) {
+  // `specialized-feature-policy.plan.md` requires the unsupported
+  // envelope to point a user at `docs/ENGINE_POLICY.md` so they
+  // can find the family-by-family posture table without first
+  // having to locate the plan file. The plan file remains the
+  // source of truth (the policy doc links back); both pointers
+  // are emitted so a grep on either lands the reader in the
+  // right place.
+  const ::googlesql::ResolvedStatement* stmt = AnalyzeSelect1();
+  ASSERT_NE(stmt, nullptr);
+  UnsupportedExecutor exec;
+  auto out = exec.ExecuteQuery(MakeRequest(), *stmt, catalog_.get());
+  ASSERT_FALSE(out.ok());
+  EXPECT_NE(std::string(out.status().message()).find("docs/ENGINE_POLICY.md"),
+            std::string::npos)
+      << out.status().message();
+}
+
+TEST_F(StubExecutorsTest, UnsupportedMessageNamesOffendingFamily) {
+  // When the offending node is a specific function family (e.g.
+  // an `unsupported` row in `functions.yaml` like
+  // `approx_quantiles`), the message includes a `family:
+  // function:approx_quantiles` segment so the operator can map the
+  // failure back to the exact row that owns the posture without
+  // first running the classifier in their head. A SELECT of an
+  // unsupported aggregate is the realistic shape: the classifier
+  // walks the projection list, finds the unsupported row, and
+  // promotes the route to `kUnsupported` with `offending_node ==
+  // function:approx_quantiles`. The re-classify inside the
+  // executor recovers the same string. (We use APPROX_QUANTILES
+  // because it lives in the default `AllReleasedFunctions` builtin
+  // set the test catalog wires up; KEYS.* / ML.* / ST_* require
+  // optional feature toggles that the test catalog does not
+  // currently enable.)
+  last_output_.reset();
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  absl::Status s = ::googlesql::AnalyzeStatement("SELECT SESSION_USER()",
+                                                 options,
+                                                 catalog_.get(),
+                                                 type_factory_.get(),
+                                                 &last_output_);
+  ASSERT_TRUE(s.ok()) << s;
+  const ::googlesql::ResolvedStatement* stmt =
+      last_output_->resolved_statement();
+  ASSERT_NE(stmt, nullptr);
+  UnsupportedExecutor exec;
+  auto out = exec.ExecuteQuery(MakeRequest(), *stmt, catalog_.get());
+  ASSERT_FALSE(out.ok());
+  const std::string msg(out.status().message());
+  EXPECT_NE(msg.find("family:"), std::string::npos) << msg;
+  EXPECT_NE(msg.find("session_user"), std::string::npos) << msg;
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine
