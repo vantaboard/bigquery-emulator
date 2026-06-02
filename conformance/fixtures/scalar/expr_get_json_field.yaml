@@ -1,9 +1,14 @@
 # expr_get_json_field: ResolvedGetJsonField operator selection.
 #
-# The transpiler picks `->` (JSON-typed result) vs `->>` (scalar
-# result) based on the analyzer-resolved return type. We exercise
-# the `->`/->` chained shape (json typed) here; the `JSON_VALUE`
-# / scalar coerce shape lives in the polyfill plan.
+# The query is a scalar-only SELECT (no FROM clause) so the route
+# classifier promotes it to `semantic_executor`. The semantic
+# executor mirrors the transpiler's `->` (JSON-typed result) vs `->>`
+# (scalar result) selection on the analyzer-resolved return type.
+# We exercise the `->` / `->` chained shape (JSON typed) here; the
+# `JSON_VALUE` / scalar-coerce shape lives in the polyfill plan
+# (`.cursor/plans/duckdb-polyfill-udf-library.plan.md`). Rehomed
+# from `fastpath/` to `scalar/` by plan 17 to match the observed
+# route.
 name: expr_get_json_field
 description: |
   Field access against a JSON literal. Verifies the engine emits

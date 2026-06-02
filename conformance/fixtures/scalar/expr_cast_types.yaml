@@ -1,12 +1,15 @@
 # expr_cast_types: ResolvedCast across the supported type matrix.
 #
-# Pins the fast path's CAST emit for every TypeKind in
-# `IsCastTargetSupported` we can exercise via REST: STRING -> INT64,
-# INT64 -> STRING, INT64 -> FLOAT64, FLOAT64 -> INT64 (truncation),
-# STRING -> BOOL. The transpiler emits `CAST(<expr> AS T)` directly
-# for each. SAFE_CAST + the format/time-zone/extended-cast cases
-# fall through the empty-string contract and stay UNIMPLEMENTED
-# until the matching plan ships.
+# The query is a scalar-only SELECT (no FROM clause) so the route
+# classifier promotes it to `semantic_executor`. Pins CAST for every
+# TypeKind in `IsCastTargetSupported` we can exercise via REST:
+# STRING -> INT64, INT64 -> STRING, INT64 -> FLOAT64, FLOAT64 -> INT64
+# (truncation), STRING -> BOOL. The semantic executor evaluates each
+# CAST against `Value`-level coercion. SAFE_CAST + the format /
+# time-zone / extended-cast cases stay deferred under
+# `.cursor/plans/semantic-functions-compliance.plan.md`.
+# Rehomed from `fastpath/` to `scalar/` by plan 17 to match the
+# route the harness actually observes.
 name: expr_cast_types
 description: |
   CAST across STRING / INT64 / FLOAT64 / BOOL. Verifies each cast

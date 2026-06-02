@@ -1,11 +1,13 @@
 # expr_with_expr: ResolvedWithExpr scalar binding.
 #
 # BQ `WITH(<a> AS <e>, ...) <body>` is a once-per-row scalar
-# binding. The transpiler emits a scalar subquery
-# `(SELECT <body> FROM (SELECT <e1> AS "a", ...))` which DuckDB
-# honors as a scalar subquery. Pin the binding-then-body shape
-# here so a regression that double-evaluates `<e1>` (or evaluates
-# `<body>` against an unbound name) surfaces.
+# binding. The query is a scalar-only SELECT (no FROM clause) so
+# the route classifier promotes it to `semantic_executor`; the
+# semantic executor evaluates the bindings once and references
+# them from the body. Pin the binding-then-body shape here so a
+# regression that double-evaluates `<e1>` (or evaluates `<body>`
+# against an unbound name) surfaces. Rehomed from `fastpath/` to
+# `scalar/` by plan 17 to match the observed route.
 name: expr_with_expr
 description: |
   Scalar WITH expression. Verifies the engine evaluates the

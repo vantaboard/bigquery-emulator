@@ -1,0 +1,27 @@
+# expr_array_literal: ResolvedLiteral ARRAY in a scalar-only SELECT.
+#
+# Pins ARRAY literal round-trip through the local semantic executor.
+# The classifier promotes scalar-only SELECTs (no FROM clause) to
+# `semantic_executor` per the route-classifier rule documented in
+# `.cursor/plans/semantic-executor-core.plan.md`, so this fixture's
+# rehome under `scalar/` matches the route the harness actually
+# observes (it previously lived under `fastpath/` -- moved by plan 17).
+# We intentionally include a NULL element so a regression that drops
+# NULLs from the array would surface.
+name: expr_array_literal
+description: |
+  Round-trip an INT64 ARRAY literal containing a NULL element.
+  Verifies the array shape, element ordering, and NULL handling.
+project_id: proj-fastpath-expr-array-literal
+query: |
+  SELECT
+    [1, 2, 3]                AS ints,
+    ['ada', 'linus', 'grace'] AS names,
+    [1, NULL, 3]             AS nullable_ints
+expected:
+  route: semantic_executor
+  match: schema_only
+  schema:
+    - {name: ints, type: INT64}
+    - {name: names, type: STRING}
+    - {name: nullable_ints, type: INT64}
