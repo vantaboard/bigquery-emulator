@@ -1,0 +1,107 @@
+# Local-stub families dispatched through the semantic executor.
+#
+# `specialized-feature-policy.plan.md` defines three postures for
+# the specialized feature families: `local_impl`, `local_stub`, and
+# `unsupported`. `local_stub` is the BigQuery-shaped-placeholder
+# posture: the function is accepted at parse / analyzer time, the
+# coordinator routes it through the semantic executor with the new
+# `kLocalStub` disposition, and the per-family handler in this
+# package returns a deterministic sentinel that matches BigQuery's
+# documented return shape (type, NULL handling, error envelope).
+#
+# Each library here matches one family from the plan table. The
+# `EvalFunctionCall` dispatch in
+# `backend/engine/semantic/eval_expr.cc` forwards to the stub
+# package's `Dispatch(...)` once the per-family Dispatch entries
+# are wired in. Function-level stubs (KEYS.*, ...) live here;
+# statement-level stubs (CREATE MODEL, ...) live under
+# `backend/engine/control/stubs/`.
+#
+# A new stub family follows this checklist:
+#   1. Flip the matching `functions.yaml` row to `local_stub
+#      plan=specialized-feature-policy.plan.md`.
+#   2. Add `<family>.{h,cc}` + a unit test here.
+#   3. Wire the family into `eval_expr.cc`'s
+#      `DispatchFunctionByName` so the semantic executor reaches it.
+#   4. Add a conformance fixture under
+#      `conformance/fixtures/specialized/` that asserts the
+#      BigQuery-shaped placeholder.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# KEYS.* placeholder family (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`).
+# The contract is documented in the header; the runtime behavior is
+# deliberately a fixed-shape sentinel so a client-library startup
+# probe that issues `SELECT KEYS.NEW_KEYSET(...)` succeeds rather
+# than fails the connection handshake. The encryption-bearing
+# entries (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) deliberately stay
+# `unsupported` and do NOT route here.
+cc_library(
+    name = "keys",
+    srcs = ["keys.cc"],
+    hdrs = ["keys.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "keys_test",
+    srcs = ["keys_test.cc"],
+    deps = [
+        ":keys",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+# Stub dispatch table, mirroring the pattern in
+# `backend/engine/semantic/functions:dispatch`. The semantic
+# executor calls into `Dispatch(name, args, return_type)` for any
+# function call routed to `kLocalStub` (`backend/engine/coordinator/
+# route_classifier.cc` promotes the matching rows). Adding a new
+# stub family means (a) a `cc_library` entry above, (b) a Dispatch
+# wiring entry here. Both the route classifier and the unsupported
+# stub executor's error envelope rely on the YAML row pointing at
+# `specialized-feature-policy.plan.md`.
+cc_library(
+    name = "dispatch",
+    srcs = ["dispatch.cc"],
+    hdrs = ["dispatch.h"],
+    deps = [
+        ":keys",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_test(
+    name = "dispatch_test",
+    srcs = ["dispatch_test.cc"],
+    deps = [
+        ":dispatch",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
