@@ -838,6 +838,46 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                        target->DebugString(),
                        " is not yet implemented"));
     }
+    case ::googlesql::RESOLVED_ARGUMENT_REF: {
+      // `ResolvedArgumentRef` reads an argument of the enclosing
+      // SQL UDF / TVF invocation. The caller (UDF / TVF executor
+      // body) pushes a `FrameStack` frame at invocation, declares
+      // each argument by name, and points `ctx.arguments` at the
+      // frame stack. The analyzer canonicalizes argument names to
+      // lower-case at registration, so the frame stack's case-
+      // insensitive `Lookup` returns the right binding even if a
+      // body case-shifts the reference (e.g. `RETURN X` vs. the
+      // signature's `x`).
+      //
+      // Argument references arriving here with no frame stack
+      // (i.e. `ctx.arguments == nullptr`) mean either: (a) the
+      // analyzer emitted a `ResolvedArgumentRef` outside a UDF /
+      // TVF body (engine wiring bug), or (b) the body is being
+      // evaluated without the invocation frame plumbed through
+      // (caller bug). Either way we surface a structured
+      // `kInvalidArgument` so the gateway envelope names the
+      // missing argument rather than silently substituting NULL.
+      const auto& ref = *expr.GetAs<::googlesql::ResolvedArgumentRef>();
+      if (ctx.arguments == nullptr) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            absl::StrCat("semantic: ResolvedArgumentRef '",
+                         ref.name(),
+                         "' evaluated without an invocation frame; UDF / "
+                         "TVF body executors must populate "
+                         "EvalContext::arguments before calling EvalExpr"));
+      }
+      absl::StatusOr<Value> bound = ctx.arguments->Lookup(ref.name());
+      if (!bound.ok()) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            absl::StrCat("semantic: ResolvedArgumentRef '",
+                         ref.name(),
+                         "' has no binding on the invocation frame: ",
+                         bound.status().message()));
+      }
+      return *std::move(bound);
+    }
     case ::googlesql::RESOLVED_CONSTANT: {
       // `ResolvedConstant` carries a non-owning pointer to a
       // `googlesql::Constant` registered on the catalog. The

@@ -29,6 +29,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -73,9 +74,21 @@ using ColumnBindings = absl::flat_hash_map<int, Value>;
 // the current row's bindings; `EvalExpr` sees the row-local
 // bindings without copying the context). Downstream plans extend
 // the context further for correlated-subquery rebinding.
+//
+// `arguments` carries UDF / TVF invocation-frame bindings. The
+// caller pushes one frame per nested invocation (`PushFrame()`),
+// declares each argument by name (`Declare(name, value)`), and
+// pops the frame when the body finishes. `ResolvedArgumentRef`
+// resolves through `arguments->Lookup(name)`; a non-empty
+// `arguments` outside a UDF / TVF body would be a programmer
+// error (the analyzer only emits `ResolvedArgumentRef` inside a
+// resolved UDF / TVF body), but `EvalExpr` surfaces a clean
+// `kInvalidArgument` either way rather than silently substituting
+// NULL.
 struct EvalContext {
   const ParameterBindings* parameters = nullptr;
   const ColumnBindings* columns = nullptr;
+  const FrameStack* arguments = nullptr;
 };
 
 // Evaluate `expr` against `ctx` and return the resulting

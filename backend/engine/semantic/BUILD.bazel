@@ -88,6 +88,7 @@ cc_library(
     hdrs = ["eval_expr.h"],
     deps = [
         ":error",
+        ":frame_stack",
         ":value",
         "//backend/engine/semantic/functions:dispatch",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -116,6 +117,7 @@ cc_test(
     deps = [
         ":error",
         ":eval_expr",
+        ":frame_stack",
         ":value",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

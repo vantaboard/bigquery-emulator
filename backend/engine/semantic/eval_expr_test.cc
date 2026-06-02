@@ -332,6 +332,80 @@ TEST_F(EvalExprTest, IsNotNullForNonNullOperand) {
   EXPECT_TRUE(v->bool_value());
 }
 
+TEST_F(EvalExprTest, ResolvedArgumentRefResolvesAgainstFrameStack) {
+  // `ResolvedArgumentRef` resolves through `EvalContext::arguments`
+  // (a `FrameStack`). The analyzer usually only emits this kind
+  // inside a UDF / TVF body, but the node API supports direct
+  // construction, so we build one with `MakeResolvedArgumentRef`
+  // and verify the executor reads the matching frame binding.
+  FrameStack args;
+  ASSERT_TRUE(args.Declare("x", Value::Int64(7)).ok());
+
+  std::unique_ptr<::googlesql::ResolvedArgumentRef> ref =
+      ::googlesql::MakeResolvedArgumentRef(
+          ::googlesql::types::Int64Type(),
+          "x",
+          ::googlesql::ResolvedArgumentDef::SCALAR);
+  EvalContext ctx;
+  ctx.arguments = &args;
+  auto v = EvalExpr(*ref, ctx);
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 7);
+}
+
+TEST_F(EvalExprTest, ResolvedArgumentRefCaseInsensitiveMatch) {
+  // The script driver / UDF call site lowers identifier names on
+  // declare. The `FrameStack` is case-insensitive on lookup, so a
+  // body reference that case-shifts an argument still resolves.
+  FrameStack args;
+  ASSERT_TRUE(args.Declare("FooBar", Value::Int64(11)).ok());
+
+  std::unique_ptr<::googlesql::ResolvedArgumentRef> ref =
+      ::googlesql::MakeResolvedArgumentRef(
+          ::googlesql::types::Int64Type(),
+          "FOOBAR",
+          ::googlesql::ResolvedArgumentDef::SCALAR);
+  EvalContext ctx;
+  ctx.arguments = &args;
+  auto v = EvalExpr(*ref, ctx);
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 11);
+}
+
+TEST_F(EvalExprTest, ResolvedArgumentRefWithoutFrameStackSurfacesError) {
+  // No frame on the context -- the executor must surface a clean
+  // `kInvalidArgument` naming the missing argument rather than
+  // substituting NULL.
+  std::unique_ptr<::googlesql::ResolvedArgumentRef> ref =
+      ::googlesql::MakeResolvedArgumentRef(
+          ::googlesql::types::Int64Type(),
+          "y",
+          ::googlesql::ResolvedArgumentDef::SCALAR);
+  auto v = EvalExpr(*ref, EvalContext{});
+  ASSERT_FALSE(v.ok());
+  EXPECT_EQ(GetSemanticErrorReason(v.status()),
+            SemanticErrorReason::kInvalidArgument);
+  EXPECT_EQ(v.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST_F(EvalExprTest, ResolvedArgumentRefMissingBindingSurfacesError) {
+  // Frame exists but does not bind the referenced name.
+  FrameStack args;
+  ASSERT_TRUE(args.Declare("x", Value::Int64(1)).ok());
+
+  std::unique_ptr<::googlesql::ResolvedArgumentRef> ref =
+      ::googlesql::MakeResolvedArgumentRef(
+          ::googlesql::types::Int64Type(),
+          "missing",
+          ::googlesql::ResolvedArgumentDef::SCALAR);
+  EvalContext ctx;
+  ctx.arguments = &args;
+  auto v = EvalExpr(*ref, ctx);
+  ASSERT_FALSE(v.ok());
+  EXPECT_EQ(GetSemanticErrorReason(v.status()),
+            SemanticErrorReason::kInvalidArgument);
+}
+
 TEST_F(EvalExprTest, ResolvedConstantResolvesToCatalogValue) {
   // Register a `SimpleConstant` on the test catalog and analyze
   // `SELECT <constant>`. The analyzer emits a `ResolvedConstant`

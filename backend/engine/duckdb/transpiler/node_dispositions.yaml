@@ -145,7 +145,7 @@ ResolvedFilterFieldArg: unsupported plan=specialized-feature-policy.plan.md
 ResolvedConstant: semantic_executor plan=udf-tvf-module-routing.plan.md
 ResolvedSystemVariable: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedSequence: unsupported plan=specialized-feature-policy.plan.md
-ResolvedArgumentRef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
+ResolvedArgumentRef: semantic_executor plan=udf-tvf-module-routing.plan.md
 ResolvedArgumentDef: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
 ResolvedCatalogColumnRef: control_op plan=control-op-executor.plan.md
 ResolvedExpressionColumn: unsupported plan=specialized-feature-policy.plan.md
