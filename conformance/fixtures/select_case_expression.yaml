@@ -1,8 +1,9 @@
 # select_case_expression: CASE WHEN ... THEN ... ELSE ... END.
 #
 # Pins the analyzer / evaluator's CASE branch lowering on DuckDB.
-# Seeds via `tabledata.insertAll` because the DuckDB engine returns
-# UNIMPLEMENTED for INSERT VALUES today.
+# Seeds via `tabledata.insertAll` so the row payload pins the
+# streaming-insert path; INSERT VALUES is also available now via
+# the local DML executor (see plan 9, `dml-local-executor.plan.md`).
 name: select_case_expression
 description: |
   Projection with a CASE WHEN ... THEN ... ELSE expression. Verifies

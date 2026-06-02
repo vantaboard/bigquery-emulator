@@ -1,0 +1,43 @@
+# insert_values_round_trip: INSERT VALUES landed by the local DML executor.
+#
+# Per `.cursor/plans/dml-local-executor.plan.md`, INSERT VALUES
+# leaves the DuckDB fast path entirely and routes through
+# `backend/engine/semantic/dml/dml_executor.cc::ExecuteInsert`,
+# which evaluates each `ResolvedInsertRow::value_list()` element
+# through the semantic `EvalExpr` and calls
+# `Storage::AppendRows`. The follow-up SELECT verifies the rows
+# materialized through the catalog reflection + storage scan
+# without going back through `tabledata.insertAll`.
+#
+# This fixture is the per-statement conformance-side artifact the
+# DML local-executor plan requires alongside the per-handler unit
+# test (`backend/engine/semantic/dml/dml_executor_test.cc`).
+# No hard route-label assertion: plan 16
+# (`conformance-routing-matrix.plan.md`) owns those.
+name: insert_values_round_trip
+description: |
+  CREATE TABLE -> INSERT VALUES (multi-row) -> SELECT round-trip.
+  Pins that the local DML executor's INSERT handler appends the
+  evaluated rows to storage and that a follow-up SELECT sees the
+  same row payload, ordered by the inserted INT64 key.
+project_id: proj-dml-insert-values
+dataset_id: ds_dml_insert_values
+setup:
+  - dataset: ds_dml_insert_values
+  - sql: |
+      CREATE TABLE ds_dml_insert_values.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_insert_values.people (id, name) VALUES
+        (1, 'ada'),
+        (2, 'linus'),
+        (3, 'grace')
+query: |
+  SELECT id, name FROM ds_dml_insert_values.people ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "2", name: "linus"}
+    - {id: "3", name: "grace"}

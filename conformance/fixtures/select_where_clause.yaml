@@ -1,8 +1,10 @@
 # select_where_clause: filter rows by an equality predicate.
 #
 # ORDER BY id makes the row order deterministic for
-# `match: ordered`. Rows are seeded via `tabledata.insertAll` because
-# the DuckDB engine returns UNIMPLEMENTED for INSERT VALUES today.
+# `match: ordered`. Rows are seeded via `tabledata.insertAll` so the
+# row payload pins the streaming-insert path; INSERT VALUES is also
+# available now via the local DML executor (see plan 9,
+# `dml-local-executor.plan.md`).
 name: select_where_clause
 description: |
   SELECT with a WHERE filter on a STRING column. Verifies the engine

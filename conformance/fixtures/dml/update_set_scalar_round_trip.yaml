@@ -1,0 +1,51 @@
+# update_set_scalar_round_trip: UPDATE t SET col = expr WHERE landed by the
+# local DML executor.
+#
+# Routes through
+# `backend/engine/semantic/dml/dml_executor.cc::ExecuteUpdate`:
+# the executor scans every row, evaluates `where_expr`, and for
+# matched rows evaluates each `ResolvedUpdateItem::set_value()`
+# expression and rewrites the cell in place before writing the
+# whole row vector back via `Storage::OverwriteRows`.
+#
+# This fixture exercises the scalar-SET path; the deep-STRUCT
+# subfamily (`SET s.a.b = ...`) is owned by Family 4 of
+# `dml-local-executor.plan.md` and surfaces a structured
+# `kNotImplemented` until that family ships.
+#
+# Per-handler unit coverage:
+# `dml_executor_test.cc::UpdateScalarSetMutatesMatchingRow`,
+# `UpdateSetExprUsesSourceColumnRef`. Route-label assertion
+# deferred to plan 16.
+name: update_set_scalar_round_trip
+description: |
+  Seed -> UPDATE t SET name = 'augusta' WHERE id = 1 -> SELECT
+  round-trip. Pins that the local DML executor mutates only the
+  matching row's `name` cell, leaves the unmatched rows
+  untouched, and that a follow-up SELECT reflects the
+  post-mutation table.
+project_id: proj-dml-update-scalar
+dataset_id: ds_dml_update_scalar
+setup:
+  - dataset: ds_dml_update_scalar
+  - sql: |
+      CREATE TABLE ds_dml_update_scalar.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_update_scalar.people (id, name) VALUES
+        (1, 'ada'),
+        (2, 'linus'),
+        (3, 'grace')
+  - sql: |
+      UPDATE ds_dml_update_scalar.people
+         SET name = 'augusta'
+       WHERE id = 1
+query: |
+  SELECT id, name FROM ds_dml_update_scalar.people ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "augusta"}
+    - {id: "2", name: "linus"}
+    - {id: "3", name: "grace"}

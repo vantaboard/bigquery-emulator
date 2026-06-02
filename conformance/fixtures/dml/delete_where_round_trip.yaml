@@ -1,0 +1,40 @@
+# delete_where_round_trip: DELETE FROM t WHERE landed by the local DML executor.
+#
+# Routes through
+# `backend/engine/semantic/dml/dml_executor.cc::ExecuteDelete`:
+# the executor scans every row of the storage table, evaluates
+# `where_expr` per row through `EvalContext::columns`, drops the
+# rows the predicate marks as TRUE, and writes the rest back via
+# `Storage::OverwriteRows`. NULL / FALSE predicates leave the row
+# alone (BigQuery semantics: the WHERE clause is a "delete-me"
+# filter, not a "keep-me" one).
+#
+# Per-handler unit coverage: `dml_executor_test.cc::DeleteWhere*`.
+# Route-label assertion deferred to plan 16.
+name: delete_where_round_trip
+description: |
+  Seed -> DELETE FROM t WHERE id = 2 -> SELECT round-trip. Pins
+  that the local DML executor removes only the matching row and
+  preserves the remaining rows in their original cell layout.
+project_id: proj-dml-delete-where
+dataset_id: ds_dml_delete_where
+setup:
+  - dataset: ds_dml_delete_where
+  - sql: |
+      CREATE TABLE ds_dml_delete_where.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_delete_where.people (id, name) VALUES
+        (1, 'ada'),
+        (2, 'linus'),
+        (3, 'grace')
+  - sql: |
+      DELETE FROM ds_dml_delete_where.people WHERE id = 2
+query: |
+  SELECT id, name FROM ds_dml_delete_where.people ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "3", name: "grace"}

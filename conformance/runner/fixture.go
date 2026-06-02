@@ -89,16 +89,20 @@ type SetupStep struct {
 	Table *TableSetup `yaml:"table,omitempty"`
 
 	// Rows seeds a previously created table by POSTing
-	// `tabledata.insertAll`. This is the canonical way to populate
-	// rows in fixtures because the DuckDB engine returns
-	// UNIMPLEMENTED for INSERT VALUES today.
+	// `tabledata.insertAll`. The streaming-insert path is the right
+	// tool when the fixture wants to assert the streaming side of
+	// the wire (separate from the DML envelope); INSERT VALUES /
+	// UPDATE / DELETE now land via the local DML executor
+	// (`backend/engine/semantic/dml/`, plan 9), so fixtures that
+	// just want seed data may use either `rows:` or an `sql:` step.
 	Rows *RowsSetup `yaml:"rows,omitempty"`
 
 	// SQL is a query the runner POSTs to /queries. Errors from the
 	// gateway abort the fixture (counted as runner-internal failure,
 	// not a fixture mismatch). Use this for MERGE, CREATE TABLE,
-	// DROP TABLE, etc. INSERT / UPDATE / DELETE are UNIMPLEMENTED
-	// on the DuckDB engine; use `rows:` instead.
+	// DROP TABLE, and the INSERT VALUES / UPDATE / DELETE shapes
+	// now landed on the local DML executor (see `Rows` for the
+	// streaming-insert alternative).
 	SQL string `yaml:"sql,omitempty"`
 }
 
