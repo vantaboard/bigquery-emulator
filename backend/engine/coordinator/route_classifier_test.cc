@@ -355,6 +355,74 @@ TEST_F(RouteClassifierTest, StandaloneUnnestStaysOnFastPath) {
   EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
 }
 
+TEST_F(RouteClassifierTest, UncorrelatedSubqueryExprStaysOnFastPath) {
+  // `WHERE id IN (SELECT n FROM UNNEST([1, 2, 3]) AS n)` is a
+  // non-correlated IN subquery: the inner SELECT does not
+  // reference any column from the outer scan. The analyzer marks
+  // this by leaving `parameter_list()` empty. The transpiler's
+  // `EmitSubqueryExpr` lowers it directly to DuckDB's
+  // `(<lhs> IN (<sub>))` shape, so the classifier MUST keep the
+  // query on `kDuckdbNative` -- a false promotion would force the
+  // semantic executor to run a shape the fast path handles
+  // correctly. See `cte-subquery-routing.plan.md` Family 3.
+  const auto* stmt = Analyze(
+      "SELECT id FROM people "
+      "WHERE id IN (SELECT n FROM UNNEST([1, 2, 3]) AS n)");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+  EXPECT_TRUE(d.offending_node.empty()) << d.offending_node;
+}
+
+TEST_F(RouteClassifierTest,
+       CorrelatedScalarSubqueryExprPromotesToSemanticExecutor) {
+  // `(SELECT COUNT(*) FROM <inner> WHERE <inner>.k = outer.k)` is
+  // a correlated scalar subquery: the inner WHERE clause
+  // references the outer scan's column. The analyzer marks the
+  // referenced outer columns in `ResolvedSubqueryExpr::parameter_list()`,
+  // which the classifier inspects via `VisitResolvedSubqueryExpr`.
+  // Promotion to `kSemanticExecutor` is mandatory: DuckDB's
+  // correlated-subquery decorrelation does not guarantee BigQuery
+  // per-outer-row evaluation order for every shape, and the only
+  // way to avoid silent approximation is to evaluate the inner
+  // subquery once per outer row in the local interpreter.
+  //
+  // The semantic executor's correlated-subquery evaluator is
+  // `cte-subquery-routing.plan.md` Family 4 (deferred to a
+  // follow-up subagent); until it lands the gateway surfaces
+  // UNIMPLEMENTED via the executor stub. That is the same
+  // end-user-visible outcome the fast path's empty-string
+  // contract would produce, but going through the classifier
+  // means the disposition is a deliberate route choice, not a
+  // surprise transpiler bailout.
+  const auto* stmt = Analyze(
+      "SELECT (SELECT COUNT(*) FROM people AS p WHERE p.id = people.id) AS c "
+      "FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedSubqueryExpr(correlated)");
+}
+
+TEST_F(RouteClassifierTest,
+       CorrelatedExistsSubqueryExprPromotesToSemanticExecutor) {
+  // `EXISTS (SELECT 1 FROM <inner> WHERE <inner>.k = outer.k)` is
+  // the most common correlated subquery shape (semi-join
+  // expression). The classifier promotes it for the same reason
+  // as the scalar case: per-outer-row evaluation order is
+  // BigQuery-defined, not DuckDB's call. Self-join the only
+  // available table (`people`) so the test does not depend on a
+  // second catalog table. The semantic executor evaluator is
+  // Family 4.
+  const auto* stmt = Analyze(
+      "SELECT id FROM people "
+      "WHERE EXISTS (SELECT 1 FROM people AS p WHERE p.id = people.id)");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedSubqueryExpr(correlated)");
+}
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records

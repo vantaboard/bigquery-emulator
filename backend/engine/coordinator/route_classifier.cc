@@ -193,6 +193,37 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // in `node_dispositions.yaml` continue to point at
   // `array-struct-semantic-path.plan.md` until a follow-up subagent
   // lands them.
+  // Property-based promotion for `ResolvedSubqueryExpr`. The node
+  // class disposition is `duckdb_native` (the transpiler's
+  // `EmitSubqueryExpr` lowers non-correlated SCALAR / IN / EXISTS /
+  // ARRAY directly to DuckDB), but a non-empty `parameter_list()`
+  // marks a correlated subquery: BigQuery evaluates the inner
+  // subquery once per outer row with the parameter columns
+  // re-bound from the outer scan, and DuckDB's
+  // correlated-subquery decorrelation does not guarantee BigQuery's
+  // per-outer-row evaluation order on every shape. Promoting at
+  // planning time hands the correlated shape to the semantic
+  // executor (today's stub; the executor for correlated subqueries
+  // is `cte-subquery-routing.plan.md` Family 4, deferred to a
+  // follow-up subagent) so we never silently approximate.
+  //
+  // LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE ALL also live on
+  // `ResolvedSubqueryExpr` (with a `subquery_type` outside the
+  // four-type SCALAR/IN/EXISTS/ARRAY set). The transpiler's emit
+  // falls back to "" for those, which surfaces UNIMPLEMENTED on
+  // the fast path. We do NOT promote them here -- their
+  // disposition row already says `duckdb_native`, and the
+  // empty-string contract is the right end-user-visible answer
+  // until a follow-up plan picks them up.
+  absl::Status VisitResolvedSubqueryExpr(
+      const ::googlesql::ResolvedSubqueryExpr* node) override {
+    if (node != nullptr && node->parameter_list_size() > 0) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedSubqueryExpr(correlated)");
+    }
+    return ::googlesql::ResolvedASTVisitor::VisitResolvedSubqueryExpr(node);
+  }
+
   absl::Status VisitResolvedArrayScan(
       const ::googlesql::ResolvedArrayScan* node) override {
     if (node != nullptr) {
