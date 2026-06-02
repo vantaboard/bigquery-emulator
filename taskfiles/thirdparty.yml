@@ -893,6 +893,14 @@ tasks:
         export TMPDIR="${DATAFRAME_SAMPLES_TMPDIR:-$(pwd)/.nox-install-tmp}"
         mkdir -p "${TMPDIR}"
         export INSTALL_LIBRARY_FROM_SOURCE=True
+        # Upstream's noxfile.py::get_pytest_env_vars reads
+        # `os.environ["GOOGLE_CLOUD_PROJECT"]` unconditionally and raises
+        # `KeyError('GOOGLE_CLOUD_PROJECT')` during nox session setup when
+        # the var is missing — fail-fast before any test body runs. Mirror
+        # the python-bigquery-tests / java-bigquery-tests blocks and default
+        # to `dev` so the emulator-pointed bigframes client picks up the same
+        # default project the gateway uses. Only mutates the child nox env.
+        export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
         py="${DATAFRAME_SAMPLES_PYTHON:-}"
         if [ -z "$py" ]; then
           py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"

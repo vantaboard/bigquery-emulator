@@ -4,7 +4,7 @@ overview: "Sequence the remaining unimplemented work uncovered by `task thirdpar
 todos:
   - id: tp01
     content: "thirdparty-01-dataframes-env-var.plan.md — add GOOGLE_CLOUD_PROJECT default to python-bigquery-dataframes-tests task (~5 min)."
-    status: pending
+    status: completed
   - id: tp02
     content: "thirdparty-02-fake-gcs-readiness.plan.md — add wait_for_healthz poll to fake-gcs-up task (~15 min)."
     status: pending
