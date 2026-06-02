@@ -27,11 +27,7 @@ cc_library(
     srcs = ["script_driver.cc"],
     hdrs = ["script_driver.h"],
     deps = [
-        "//backend/engine/semantic:value",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
+        "//backend/engine/semantic:frame_stack",
     ],
 )
 
@@ -41,7 +37,6 @@ cc_test(
     deps = [
         ":script_driver",
         "//backend/engine/semantic:value",
-        "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest_main",
         "@googlesql//googlesql/public:value",
     ],

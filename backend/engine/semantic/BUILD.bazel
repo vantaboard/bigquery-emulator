@@ -129,6 +129,31 @@ cc_test(
 )
 
 cc_library(
+    name = "frame_stack",
+    srcs = ["frame_stack.cc"],
+    hdrs = ["frame_stack.h"],
+    deps = [
+        ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "frame_stack_test",
+    srcs = ["frame_stack_test.cc"],
+    deps = [
+        ":frame_stack",
+        ":value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "row_source",
     srcs = ["row_source.cc"],
     hdrs = ["row_source.h"],
