@@ -18,6 +18,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/dispatch.h"
+#include "backend/engine/semantic/stubs/dispatch.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/constant.h"
 #include "googlesql/public/function.h"
@@ -693,6 +694,18 @@ absl::StatusOr<Value> DispatchFunctionByName(
   if (auto dispatched = functions::Dispatch(name, args, return_type)) {
     return *std::move(dispatched);
   }
+  // Local-stub families (`local_stub` posture, e.g. KEYS.*).
+  // `specialized-feature-policy.plan.md` picks the deterministic
+  // BigQuery-shaped-placeholder posture for a handful of families;
+  // the route classifier promotes the surrounding query to
+  // `kLocalStub`, the coordinator dispatches it onto the semantic
+  // executor, and this Dispatch finally invokes the per-family
+  // handler. `stubs::Dispatch` returns nullopt for any name not
+  // in its table, so the NOT_IMPLEMENTED fall-through below still
+  // applies for genuinely-unsupported functions.
+  if (auto dispatched = stubs::Dispatch(name, args, return_type)) {
+    return *std::move(dispatched);
+  }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,
       absl::StrCat("semantic: function '",
@@ -730,7 +743,17 @@ absl::StatusOr<Value> EvalFunctionCall(
     }
     args.push_back(*std::move(v));
   }
-  const std::string name = absl::AsciiStrToLower(call.function()->Name());
+  // Use `FullName(/*include_group=*/false)` so namespaced families
+  // like `KEYS.NEW_KEYSET` / `NET.HOST` / `HLL_COUNT.MERGE`
+  // resolve to their dotted, lowercased dispatch key
+  // (`keys.new_keyset`, `net.host`, `hll_count.merge`). The route
+  // classifier (`route_classifier.cc::CheckFunction`) uses the
+  // same name shape when promoting `local_stub` / `semantic_executor`
+  // dispositions, so the names line up across the two sides. For
+  // non-namespaced functions (`concat`, `abs`, `safe_divide`)
+  // `FullName(false) == Name()`, so this is a no-op.
+  const std::string name =
+      absl::AsciiStrToLower(call.function()->FullName(/*include_group=*/false));
   auto result = DispatchFunctionByName(name, args, call.type());
   if (!result.ok() &&
       call.error_mode() ==

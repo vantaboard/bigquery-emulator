@@ -8,6 +8,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/control/pipe_create_table.h"
 #include "backend/engine/control/pipe_export_data.h"
+#include "backend/engine/control/stubs/create_model.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
@@ -286,6 +287,17 @@ Executor* LocalCoordinatorEngine::RouteFor(
       return &duckdb_executor_;
     case Disposition::kSemanticExecutor:
       return &semantic_executor_;
+    case Disposition::kLocalStub:
+      // The local-stub disposition is dispatched through the same
+      // semantic executor by default: function-level stubs (KEYS.*)
+      // evaluate inside the semantic executor's `EvalFunctionCall`
+      // dispatch table, which routes the named stub family to its
+      // handler under `backend/engine/semantic/stubs/`. Statement-
+      // level stubs (CREATE MODEL today) are pre-dispatched from
+      // `ExecuteDdl` directly to `backend/engine/control/stubs/`,
+      // not through this executor, so the default mapping here is
+      // safe -- the pre-dispatch fires first for those statements.
+      return &semantic_executor_;
     case Disposition::kControlOp:
       return &control_op_executor_;
     case Disposition::kUnsupported:
@@ -409,6 +421,21 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
       AnalyzeStatementImpl(request, catalog, /*all_statements=*/true);
   if (!output.ok()) return output.status();
   const ::googlesql::ResolvedStatement* stmt = (*output)->resolved_statement();
+  // Statement-level `local_stub` pre-dispatch. The route
+  // classifier marks `ResolvedCreateModelStmt` as `kLocalStub` via
+  // `node_dispositions.yaml`, but no executor in `RouteFor` knows
+  // how to evaluate a CREATE MODEL on its own -- the metadata-only
+  // contract belongs to a dedicated handler under
+  // `backend/engine/control/stubs/`. Intercepting the kind here
+  // keeps the handler tree thin (no need to thread a "stub
+  // executor" through `LocalCoordinatorEngine::RouteFor`) and
+  // keeps the unsupported `ml.*` row in `functions.yaml` honest:
+  // a subsequent `ML.PREDICT(MODEL <id>, ...)` still surfaces
+  // UNIMPLEMENTED through the unsupported stub executor because
+  // the model was never registered in storage.
+  if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_MODEL_STMT) {
+    return control::stubs::RunCreateModel(*stmt);
+  }
   Executor* executor = RouteFor(*stmt);
   if (executor == nullptr) {
     return absl::InternalError(

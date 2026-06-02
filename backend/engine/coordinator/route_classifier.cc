@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/disposition.h"
@@ -39,6 +40,15 @@ namespace transpiler = ::bigquery_emulator::backend::engine::duckdb::transpiler;
 // `kDuckdbUdf` (a fast-path concern) but below `kSemanticExecutor`
 // (the local executor handles metadata expressions today) so the
 // route ends up at the semantic executor when a SELECT mixes both.
+//
+// `kLocalStub` ranks just above `kSemanticExecutor`: a stub function
+// call (e.g. `KEYS.NEW_KEYSET(...)`) inside an otherwise-semantic
+// SELECT promotes the route to local-stub so the coordinator's
+// stub-aware dispatch fires. `kUnsupported` still dominates -- an
+// `unsupported` function inside a SELECT that also contains a stub
+// function lands on `kUnsupported` (the unsupported route's "no
+// silent approximation" rule outranks the stub's "BigQuery-shaped
+// placeholder" contract).
 int Priority(Disposition d) {
   switch (d) {
     case Disposition::kDuckdbNative:
@@ -51,8 +61,10 @@ int Priority(Disposition d) {
       return 3;
     case Disposition::kSemanticExecutor:
       return 4;
-    case Disposition::kUnsupported:
+    case Disposition::kLocalStub:
       return 5;
+    case Disposition::kUnsupported:
+      return 6;
   }
   return 0;
 }
@@ -295,7 +307,16 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       fn = node->GetAs<::googlesql::ResolvedAnalyticFunctionCall>()->function();
     }
     if (fn == nullptr) return;
-    absl::string_view name = fn->Name();
+    // Use `FullName(include_group=false)` so namespaced families
+    // like `KEYS.NEW_KEYSET` / `NET.HOST` / `HLL_COUNT.MERGE`
+    // resolve to their dotted YAML key (`keys.new_keyset`,
+    // `net.host`, `hll_count.merge`). `Function::Name()` only
+    // returns the last path element (`new_keyset`), which would
+    // miss the namespaced rows entirely and silently leave the
+    // route at the surrounding default disposition. For
+    // non-namespaced functions (`concat`, `abs`, `safe_divide`)
+    // `FullName(false) == Name()`, so this is a no-op.
+    const std::string name = fn->FullName(/*include_group=*/false);
     const auto* entry = transpiler::LookupFunction(name);
     if (entry == nullptr) {
       // Unknown function -> default fast path (no promotion). The
@@ -321,7 +342,8 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
     // executor it drops the `planned` marker and this branch
     // starts promoting again.
     if (entry->planned) return;
-    MaybePromote(entry->disposition, absl::StrCat("function:", name));
+    MaybePromote(entry->disposition,
+                 absl::StrCat("function:", absl::AsciiStrToLower(name)));
   }
 
   void MaybePromote(Disposition d, std::string name) {
@@ -357,6 +379,12 @@ std::string ReasonFor(Disposition d,
     case Disposition::kControlOp:
       return absl::StrCat(
           "statement ", root_class, " routes to the control-op executor");
+    case Disposition::kLocalStub:
+      return absl::StrCat(
+          "query routes to the local-stub executor (specialized feature "
+          "family promoted by ",
+          offending_node,
+          "); see specialized-feature-policy.plan.md");
     case Disposition::kUnsupported:
       return absl::StrCat(
           "query is unsupported (offending node: ", offending_node, ")");
@@ -395,6 +423,21 @@ RouteDecision RouteClassifier::Classify(
       return RouteDecision{
           Disposition::kControlOp,
           ReasonFor(Disposition::kControlOp, root_class, root_class),
+          root_class,
+      };
+    }
+    if (root_entry->disposition == Disposition::kLocalStub) {
+      // Statement-level `kLocalStub` (e.g. `ResolvedCreateModelStmt`)
+      // short-circuits the visitor walk for the same reason
+      // `kControlOp` does: the deliberate-stub posture is owned by
+      // the per-statement handler under `backend/engine/control/
+      // stubs/` or `backend/engine/semantic/stubs/`. Inner shapes
+      // don't override it (a CREATE MODEL's transform list might
+      // contain BigQuery-specific functions, but the statement as a
+      // whole is still a metadata-only stub).
+      return RouteDecision{
+          Disposition::kLocalStub,
+          ReasonFor(Disposition::kLocalStub, root_class, root_class),
           root_class,
       };
     }

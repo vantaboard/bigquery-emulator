@@ -91,6 +91,7 @@ cc_library(
         ":frame_stack",
         ":value",
         "//backend/engine/semantic/functions:dispatch",
+        "//backend/engine/semantic/stubs:dispatch",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

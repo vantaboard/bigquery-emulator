@@ -559,6 +559,44 @@ TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
 }
 
+TEST_F(RouteClassifierTest, KeysFunctionRoutesToLocalStub) {
+  // `KEYS.NEW_KEYSET('AEAD_AES_GCM_256')` is a `local_stub` row in
+  // `functions.yaml` per `specialized-feature-policy.plan.md`. A
+  // SELECT referencing it must promote the route to `kLocalStub`
+  // (above `kSemanticExecutor`, below `kUnsupported`) so the
+  // coordinator dispatches into the semantic executor's per-family
+  // stub handler (`backend/engine/semantic/stubs/keys.cc`). The
+  // offending node carries the function name so a future
+  // gateway-side error envelope can attribute the stub to the
+  // right family.
+  const auto* stmt = Analyze("SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256')");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
+  EXPECT_EQ(d.offending_node, "function:keys.new_keyset");
+  EXPECT_NE(d.reason.find("local-stub"), std::string::npos)
+      << "reason should mention the local-stub route; got: " << d.reason;
+}
+
+TEST_F(RouteClassifierTest, UnsupportedOutranksLocalStubInSameQuery) {
+  // When a `local_stub` function (`KEYS.NEW_KEYSET`) and an
+  // `unsupported` function (`APPROX_QUANTILES`) appear together,
+  // the unsupported promotion wins. Priority order pinned: the
+  // no-silent-approximation contract is strictly stronger than the
+  // BigQuery-shaped-placeholder contract, so a query that mixes
+  // both surfaces UNIMPLEMENTED rather than silently producing a
+  // stub answer for the placeholder branch.
+  const auto* stmt = Analyze(
+      "SELECT APPROX_QUANTILES(id, 4) AS q, "
+      "KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS k FROM people");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kUnsupported);
+  EXPECT_EQ(d.offending_node, "function:approx_quantiles");
+}
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records
