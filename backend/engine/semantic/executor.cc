@@ -14,6 +14,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
+#include "backend/engine/semantic/dml/dml_executor.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/row_source.h"
@@ -280,14 +281,7 @@ absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {
-  (void)request;
-  (void)catalog;
-  return MakeSemanticError(
-      SemanticErrorReason::kNotImplemented,
-      absl::StrCat(
-          "semantic: ExecuteDml on route 'semantic_executor' is owned by "
-          "dml-local-executor.plan.md; got statement kind ",
-          stmt.node_kind_string()));
+  return dml::ExecuteDml(request, stmt, catalog, storage_);
 }
 
 absl::Status SemanticExecutor::ExecuteDdl(

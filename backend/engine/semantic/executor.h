@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
 
 namespace googlesql {
 class Catalog;
@@ -34,12 +35,16 @@ namespace semantic {
 
 // `SemanticExecutor` implements `coordinator::Executor` and so
 // installs cleanly into the coordinator's per-route dispatch
-// table. The class is stateless beyond the executor interface; the
-// per-request state (parameter bindings, output schema, ...) lives
-// on the call stack inside `ExecuteQuery`.
+// table. Beyond the SELECT path the executor also owns the
+// storage-aware DML routes (`backend/engine/semantic/dml/`,
+// `.cursor/plans/dml-local-executor.plan.md`); `storage` is a
+// non-owning pointer passed through from the coordinator and used
+// by the DML path to mutate target tables. `storage` may be null
+// in unit tests that exercise only the SELECT path.
 class SemanticExecutor : public coordinator::Executor {
  public:
   SemanticExecutor() = default;
+  explicit SemanticExecutor(storage::Storage* storage) : storage_(storage) {}
   ~SemanticExecutor() override;
 
   SemanticExecutor(const SemanticExecutor&) = delete;
@@ -50,11 +55,13 @@ class SemanticExecutor : public coordinator::Executor {
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;
 
-  // DML / DDL are owned by `dml-local-executor.plan.md` and the
-  // control-op executor respectively. The semantic executor today
-  // surfaces NOT_IMPLEMENTED for both, so the coordinator's
-  // dispatch table doesn't have to special-case the missing
-  // surfaces.
+  // DML routes through the storage-aware local DML executor in
+  // `backend/engine/semantic/dml/`. Statements the DML executor
+  // does not yet handle surface a structured `kNotImplemented`
+  // so the gateway envelope is the same as for any other
+  // "planned but not landed" route. DDL stays on the
+  // control-op executor and the semantic executor surfaces a
+  // clean error if it ever sees one.
   [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
@@ -64,6 +71,9 @@ class SemanticExecutor : public coordinator::Executor {
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;
+
+ private:
+  storage::Storage* storage_ = nullptr;  // not owned; may be null
 };
 
 }  // namespace semantic

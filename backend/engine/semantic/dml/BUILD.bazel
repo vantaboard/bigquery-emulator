@@ -1,0 +1,62 @@
+# Storage-aware local DML executor.
+#
+# Owns the INSERT / UPDATE / DELETE / MERGE families that route to
+# the semantic executor per
+# `.cursor/plans/dml-local-executor.plan.md`. Mutates storage
+# through the abstract `backend::storage::Storage*` the
+# coordinator hands to `SemanticExecutor`; the production
+# coordinator passes a `DuckDBStorage` instance, tests fake the
+# same interface.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "dml_executor",
+    srcs = ["dml_executor.cc"],
+    hdrs = ["dml_executor.h"],
+    deps = [
+        "//backend/catalog:storage_table",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "dml_executor_test",
+    srcs = ["dml_executor_test.cc"],
+    deps = [
+        ":dml_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)

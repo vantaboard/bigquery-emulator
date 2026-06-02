@@ -58,9 +58,9 @@ ResolvedCreateFunctionStmt: control_op plan=control-op-executor.plan.md
 ResolvedCreateTableFunctionStmt: control_op plan=udf-tvf-module-routing.plan.md
 ResolvedDropStmt: control_op plan=control-op-executor.plan.md
 ResolvedDropFunctionStmt: control_op plan=control-op-executor.plan.md
-ResolvedInsertStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
-ResolvedUpdateStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
-ResolvedDeleteStmt: semantic_executor plan=dml-local-executor.plan.md status=planned
+ResolvedInsertStmt: semantic_executor plan=dml-local-executor.plan.md
+ResolvedUpdateStmt: semantic_executor plan=dml-local-executor.plan.md
+ResolvedDeleteStmt: semantic_executor plan=dml-local-executor.plan.md
 ResolvedMergeStmt: duckdb_rewrite plan=dml-local-executor.plan.md
 ResolvedCallStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedAssignmentStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned

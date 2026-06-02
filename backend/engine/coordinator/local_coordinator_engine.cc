@@ -225,7 +225,9 @@ AnalyzeStatementImpl(const QueryRequest& request,
 }  // namespace
 
 LocalCoordinatorEngine::LocalCoordinatorEngine(storage::Storage* storage)
-    : duckdb_executor_(storage), control_op_executor_(storage) {}
+    : duckdb_executor_(storage),
+      semantic_executor_(storage),
+      control_op_executor_(storage) {}
 
 LocalCoordinatorEngine::~LocalCoordinatorEngine() = default;
 
