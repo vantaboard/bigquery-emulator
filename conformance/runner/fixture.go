@@ -171,6 +171,50 @@ type Expectation struct {
 	// Error pins the expected error envelope when the fixture
 	// intends to verify a failure mode (e.g. invalid SQL).
 	Error *ExpectedError `yaml:"error,omitempty"`
+
+	// Route is the canonical lowercase-snake `Disposition` the
+	// coordinator's `RouteClassifier` MUST have chosen for this
+	// fixture (one of `duckdb_native`, `duckdb_rewrite`,
+	// `duckdb_udf`, `semantic_executor`, `control_op`,
+	// `local_stub`, `unsupported`; mirrors
+	// `backend/engine/disposition.cc::DispositionToString`).
+	// Compared against the response's
+	// `Job.statistics.query.emulatorRoute` (loopback-only field
+	// gated by `gateway/middleware/loopback.go`).
+	//
+	// For Storage Read / Write fixtures and other RPC families that
+	// don't go through `LocalCoordinatorEngine`, leave this empty
+	// and use `RouteStrict=false` with an empty `RouteAllowlist`
+	// (the runner then skips the route assertion entirely; see
+	// the package doc above the field set for the rationale).
+	//
+	// Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
+	Route string `yaml:"route,omitempty"`
+
+	// RouteAllowlist enumerates the route names the runner accepts
+	// when `RouteStrict=false`. Useful for shapes that are
+	// deliberately flexible between, say, `duckdb_native` and
+	// `duckdb_rewrite` because the transpiler's choice is an
+	// implementation detail (not a fixture-meaningful behavior).
+	// Empty + `RouteStrict=false` means "skip the route assertion
+	// entirely" -- the escape hatch for RPC families with no
+	// classifier output.
+	//
+	// When `RouteStrict=true` (the default) the runner ignores
+	// `RouteAllowlist` and asserts the route equals `Route`
+	// exactly. Spelling validation: every entry must be one of the
+	// canonical disposition names; unknown entries are a
+	// fixture-load error so a typo can't accidentally widen the
+	// allowlist.
+	RouteAllowlist []string `yaml:"route_allowlist,omitempty"`
+
+	// RouteStrict toggles between exact-match (default) and
+	// `RouteAllowlist`-membership comparison. Defaults to `true`
+	// when omitted via the `*bool` indirection (a missing key is
+	// strict, an explicit `false` opts in to the allowlist mode).
+	// The pointer type mirrors how `Fixture` distinguishes a
+	// missing optional from an explicit zero value.
+	RouteStrict *bool `yaml:"route_strict,omitempty"`
 }
 
 // MatchMode is the row-comparison strategy declared by a fixture.
@@ -378,7 +422,46 @@ func (f *Fixture) validateExpectation() error {
 			return errors.New("expected.error: must set at least one of code or message_contains")
 		}
 	}
+	if err := f.Expected.validateRoute(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validateRoute enforces the spelling rules on the route assertion
+// fields so a typo in `expected.route` or
+// `expected.route_allowlist` fails the load instead of silently
+// allowing a route the fixture writer did not intend.
+func (e *Expectation) validateRoute() error {
+	if e.Route != "" && !isKnownRouteName(e.Route) {
+		return fmt.Errorf(
+			"expected.route=%q is not a known disposition (one of %s)",
+			e.Route, strings.Join(KnownRouteNames(), ", "))
+	}
+	for i, r := range e.RouteAllowlist {
+		if !isKnownRouteName(r) {
+			return fmt.Errorf(
+				"expected.route_allowlist[%d]=%q is not a known disposition (one of %s)",
+				i, r, strings.Join(KnownRouteNames(), ", "))
+		}
+	}
+	if e.RouteStrictDefault() && len(e.RouteAllowlist) > 0 {
+		return errors.New(
+			"expected.route_allowlist must not be set when route_strict=true (use route_strict=false)")
+	}
+	return nil
+}
+
+// RouteStrictDefault reports the runner's interpretation of the
+// optional `route_strict` field: true when the fixture omitted the
+// key (the safe default), the explicit value otherwise. Exposed for
+// the runner comparison and the matrix walker so neither has to
+// duplicate the pointer-vs-default logic.
+func (e *Expectation) RouteStrictDefault() bool {
+	if e.RouteStrict == nil {
+		return true
+	}
+	return *e.RouteStrict
 }
 
 func (s SetupStep) validate() error {

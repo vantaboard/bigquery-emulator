@@ -340,8 +340,64 @@ func runRowPath(fx *Fixture, opts Options, result Result, status int, body []byt
 		result.Diff = diff
 		return result
 	}
+	actualRoute := ""
+	if run.Statistics != nil && run.Statistics.Query != nil {
+		actualRoute = run.Statistics.Query.EmulatorRoute
+	}
+	if diff := routeDiff(fx.Expected, actualRoute); diff != "" {
+		result.Message = "route mismatch"
+		result.Diff = diff
+		return result
+	}
 	result.Status = StatusPass
 	return result
+}
+
+// routeDiff compares the response's `emulatorRoute` value against
+// the fixture's pinned `expected.route` (strict mode) or
+// `expected.route_allowlist` (relaxed mode). Returns an empty
+// string on match. The diagnostic always names both the actual and
+// expected route so a fixture writer who triggered the assertion
+// can see the drift without re-running the engine. When the
+// fixture leaves `route` empty AND opts into relaxed mode with an
+// empty allowlist, the comparison is skipped entirely (the runner
+// exempt-list for shapes that don't go through the coordinator's
+// classifier; today: nothing under `conformance/fixtures/`, but
+// the escape hatch is documented for the deferred Storage Read /
+// Write fixture families).
+func routeDiff(expected Expectation, actual string) string {
+	strict := expected.RouteStrictDefault()
+	if expected.Route == "" && len(expected.RouteAllowlist) == 0 {
+		// No route assertion was declared at all.
+		return ""
+	}
+	if strict {
+		if expected.Route == "" {
+			return ""
+		}
+		if actual == expected.Route {
+			return ""
+		}
+		return fmt.Sprintf(
+			"expected route: %q\nactual route:   %q\n"+
+				"(hint: expected.route_strict defaults to true; set "+
+				"route_strict: false with a route_allowlist if the "+
+				"fixture is genuinely flexible between routes)",
+			expected.Route, actual)
+	}
+	if slices.Contains(expected.RouteAllowlist, actual) {
+		return ""
+	}
+	if expected.Route != "" && actual == expected.Route {
+		return ""
+	}
+	allowed := append([]string{}, expected.RouteAllowlist...)
+	if expected.Route != "" {
+		allowed = append([]string{expected.Route}, allowed...)
+	}
+	return fmt.Sprintf(
+		"expected route in: [%s]\nactual route:     %q",
+		strings.Join(allowed, ", "), actual)
 }
 
 // runSetupStep dispatches one setup step to the matching helper.

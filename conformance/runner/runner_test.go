@@ -17,6 +17,12 @@ const (
 	testNameAda     = "ada"
 	testNameLinus   = "linus"
 	testColumnName  = "name"
+	// testBogus is the shared placeholder for "definitely not a
+	// known {profile, route, ...} entry" across the runner test
+	// suite. Promoted to a const so goconst's
+	// repeated-string-literal gate stays clean as new validation
+	// tests land.
+	testBogus = "bogus"
 )
 
 // TestLoadValidFixture pins the happy-path load for every seed

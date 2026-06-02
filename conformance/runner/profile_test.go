@@ -26,7 +26,7 @@ func TestResolveProfilesFiltersToSubset(t *testing.T) {
 }
 
 func TestResolveProfilesRejectsUnknown(t *testing.T) {
-	_, err := resolveProfiles([]string{"bogus"})
+	_, err := resolveProfiles([]string{testBogus})
 	if err == nil || !strings.Contains(err.Error(), "unknown") {
 		t.Fatalf("want unknown-profile error, got %v", err)
 	}
