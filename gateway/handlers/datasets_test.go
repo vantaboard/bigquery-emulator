@@ -256,6 +256,41 @@ func TestDatasetGetAccessIsEmptyArrayNotNull(t *testing.T) {
 	}
 }
 
+// TestDatasetGetLabelsIsEmptyObjectNotNull pins the live-IT contract:
+// node-bigquery-tests `getDatasetLabels` calls
+// `Object.entries(dataset.metadata.labels)` on the deserialized
+// response, which raises `TypeError: Cannot convert undefined or null
+// to object` when the field is absent or null. Live BigQuery returns
+// `labels: {}` for a newly-created dataset; the emulator must do the
+// same.
+func TestDatasetGetLabelsIsEmptyObjectNotNull(t *testing.T) {
+	req := newDatasetReq(http.MethodGet, testDatasetID, "")
+	rec := httptest.NewRecorder()
+	DatasetGet(Dependencies{})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	got, present := doc["labels"]
+	if !present {
+		t.Fatalf("response missing `labels` field; body=%s", rec.Body.String())
+	}
+	if got == nil {
+		t.Fatalf("`labels` is null; live BigQuery returns {}")
+	}
+	obj, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("`labels` is %T, want map[string]any", got)
+	}
+	if len(obj) != 0 {
+		t.Errorf("`labels` = %v, want {}", obj)
+	}
+}
+
 // TestDatasetListReturnsEmptyPage pins the empty-page shape the handler
 // returns until Storage grows a list RPC.
 func TestDatasetListReturnsEmptyPage(t *testing.T) {

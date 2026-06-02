@@ -38,6 +38,16 @@ type JobReference struct {
 // preserve that shape so AuthorizeDatasetIT-style ACL-mutation flows
 // work end-to-end. See the failing-IT inventory in
 // `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`.
+//
+// Labels is always serialized (no `omitempty`) for the same reason:
+// the Node `getDatasetLabels` sample (and several upstream Python
+// snippets) call `Object.entries(dataset.metadata.labels)` /
+// `dict(dataset.labels)` on the deserialized response, which raises
+// `TypeError: Cannot convert undefined or null to object` /
+// `TypeError: argument of type 'NoneType' is not iterable` when the
+// field is missing. Live BigQuery returns `labels: {}` for a newly
+// created dataset; the resource builder defaults a nil map to `{}` to
+// match. Same for Table.Labels below.
 type Dataset struct {
 	Kind                     string            `json:"kind,omitempty"` // bigquery#dataset
 	ID                       string            `json:"id,omitempty"`
@@ -49,24 +59,30 @@ type Dataset struct {
 	CreationTime             string            `json:"creationTime,omitempty"`
 	LastModifiedTime         string            `json:"lastModifiedTime,omitempty"`
 	Access                   []map[string]any  `json:"access"`
-	Labels                   map[string]string `json:"labels,omitempty"`
+	Labels                   map[string]string `json:"labels"`
 	DefaultTableExpirationMs string            `json:"defaultTableExpirationMs,omitempty"`
 }
 
 // Table is the BigQuery Table resource (subset).
+//
+// Labels is always serialized (no `omitempty`); see the matching note
+// on Dataset.Labels. tableResource defaults a nil map to `{}` so the
+// upstream `getTableLabels` sample's `Object.entries(table.metadata.labels)`
+// returns an empty iterator instead of erroring.
 type Table struct {
-	Kind             string         `json:"kind,omitempty"` // bigquery#table
-	ID               string         `json:"id,omitempty"`
-	TableReference   TableReference `json:"tableReference"`
-	FriendlyName     string         `json:"friendlyName,omitempty"`
-	Description      string         `json:"description,omitempty"`
-	Schema           *TableSchema   `json:"schema,omitempty"`
-	Type             string         `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
-	NumRows          string         `json:"numRows,omitempty"`
-	NumBytes         string         `json:"numBytes,omitempty"`
-	CreationTime     string         `json:"creationTime,omitempty"`
-	LastModifiedTime string         `json:"lastModifiedTime,omitempty"`
-	Etag             string         `json:"etag,omitempty"`
+	Kind             string            `json:"kind,omitempty"` // bigquery#table
+	ID               string            `json:"id,omitempty"`
+	TableReference   TableReference    `json:"tableReference"`
+	FriendlyName     string            `json:"friendlyName,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	Schema           *TableSchema      `json:"schema,omitempty"`
+	Type             string            `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
+	NumRows          string            `json:"numRows,omitempty"`
+	NumBytes         string            `json:"numBytes,omitempty"`
+	CreationTime     string            `json:"creationTime,omitempty"`
+	LastModifiedTime string            `json:"lastModifiedTime,omitempty"`
+	Etag             string            `json:"etag,omitempty"`
+	Labels           map[string]string `json:"labels"`
 }
 
 // TableSchema is the BigQuery TableSchema resource.

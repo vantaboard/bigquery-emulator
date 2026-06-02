@@ -69,6 +69,14 @@ func nowMillis() string {
 // `new ArrayList<>(...)`, which NPEs on a null value; live BigQuery
 // returns `access: []` for newly-created datasets and ACL-mutation
 // flows like AuthorizeDatasetIT depend on that shape.
+//
+// Labels is materialized to an empty map for the same reason: upstream
+// samples call `Object.entries(dataset.metadata.labels)` /
+// `dict(dataset.labels)` on the deserialized response, which raises
+// `TypeError: Cannot convert undefined or null to object` /
+// `TypeError: argument of type 'NoneType' is not iterable` on a nil
+// value. The bqtypes.Dataset.Labels tag omits `omitempty` so the empty
+// map round-trips as `"labels":{}` on the wire.
 func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Dataset {
 	ds.Kind = datasetKind
 	ds.ID = projectID + ":" + datasetID
@@ -82,6 +90,9 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 	ds.LastModifiedTime = nowMillis()
 	if ds.Access == nil {
 		ds.Access = []map[string]any{}
+	}
+	if ds.Labels == nil {
+		ds.Labels = map[string]string{}
 	}
 	return ds
 }

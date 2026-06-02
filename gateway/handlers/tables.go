@@ -58,6 +58,13 @@ func decodeTableBody(w http.ResponseWriter, r *http.Request) (bqtypes.Table, boo
 // Preserves any caller-supplied Schema/FriendlyName/Description that
 // the engine does not need to know about, and stamps the bookkeeping
 // fields (Kind, ID, Type, timestamps) the REST client expects.
+//
+// Labels is materialized to an empty map when nil so the upstream
+// `getTableLabels` sample's `Object.entries(table.metadata.labels)`
+// call returns an empty iterator instead of erroring with
+// `TypeError: Cannot convert undefined or null to object`. The
+// bqtypes.Table.Labels tag omits `omitempty` so the empty map
+// round-trips as `"labels":{}` on the wire. Mirrors datasetResource.
 func tableResource(projectID, datasetID, tableID string, t bqtypes.Table) bqtypes.Table {
 	t.Kind = tableKind
 	t.ID = projectID + ":" + datasetID + "." + tableID
@@ -73,6 +80,9 @@ func tableResource(projectID, datasetID, tableID string, t bqtypes.Table) bqtype
 		t.CreationTime = nowMillis()
 	}
 	t.LastModifiedTime = nowMillis()
+	if t.Labels == nil {
+		t.Labels = map[string]string{}
+	}
 	return t
 }
 

@@ -184,6 +184,46 @@ func TestTableDeleteForwardsTableRef(t *testing.T) {
 	}
 }
 
+// TestTableGetLabelsIsEmptyObjectNotNull pins the live-IT contract:
+// node-bigquery-tests `getTableLabels` calls
+// `Object.entries(table.metadata.labels)` on the deserialized response,
+// which raises `TypeError: Cannot convert undefined or null to object`
+// when the field is absent or null. Live BigQuery returns
+// `labels: {}` for a newly-created table; the emulator must do the
+// same.
+func TestTableGetLabelsIsEmptyObjectNotNull(t *testing.T) {
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{}, nil
+		},
+	}
+	req := newTableReq(http.MethodGet, testTableID, "")
+	rec := httptest.NewRecorder()
+	TableGet(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	got, present := doc["labels"]
+	if !present {
+		t.Fatalf("response missing `labels` field; body=%s", rec.Body.String())
+	}
+	if got == nil {
+		t.Fatalf("`labels` is null; live BigQuery returns {}")
+	}
+	obj, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("`labels` is %T, want map[string]any", got)
+	}
+	if len(obj) != 0 {
+		t.Errorf("`labels` = %v, want {}", obj)
+	}
+}
+
 // TestTableListReturnsEmptyPage pins the empty-page shape.
 func TestTableListReturnsEmptyPage(t *testing.T) {
 	req := newTableReq(http.MethodGet, "", "")
