@@ -400,7 +400,7 @@ handler.
   (`unsupported` per `specialized-feature-policy.plan.md` —
   `APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...). The
   `execution-disposition-registry.plan.md` plan retires
-  `kMap`/`kFallback`/`kSkiplist` in favor of the six-route
+  `kMap`/`kFallback`/`kSkiplist` in favor of the seven-route
   vocabulary used everywhere else. `SAFE.<fn>(...)` is handled
   uniformly regardless of disposition
 - ✅ DuckDB fast-path execution: file-backed `catalog.duckdb`
@@ -421,7 +421,7 @@ handler.
 
 ## Execution strategies
 
-The router maps every `ResolvedAST` shape to one of six route
+The router maps every `ResolvedAST` shape to one of seven route
 dispositions; the same vocabulary lives in
 [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
 on a per-node basis and in
@@ -435,7 +435,8 @@ public-facing policy.
 | `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | `duckdb-polyfill-udf-library.plan.md`             |
 | `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | `semantic-executor-core.plan.md` + per-family plans |
 | `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | `control-op-executor.plan.md`                     |
-| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error.        | `specialized-feature-policy.plan.md`              |
+| `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | `specialized-feature-policy.plan.md`              |
+| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | `specialized-feature-policy.plan.md`              |
 
 - 🟡 Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`

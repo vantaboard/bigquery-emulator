@@ -43,10 +43,10 @@ todos:
     status: completed
   - id: todo-1780309600014-subagent-14
     content: "specialized-feature-policy.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: in_progress
+    status: completed
   - id: todo-1780309600015-subagent-15
     content: "storage-read-write-api-plan.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: pending
+    status: in_progress
   - id: todo-1780309600016-subagent-16
     content: "conformance-routing-matrix.plan.md: launch background subagent per Subagent Dispatch Workflow."
     status: pending
@@ -63,10 +63,10 @@ isProject: false
 Own the execution order, terminology, and done criteria for the
 **local multi-strategy execution coordinator** that lives behind
 `backend/engine/engine.h`. Every user-visible resolved-AST shape must
-end up with one of six routing dispositions
+end up with one of seven routing dispositions
 (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
-`control_op`, `unsupported`) plus conformance coverage that pins the
-chosen route.
+`control_op`, `local_stub`, `unsupported`) plus conformance coverage
+that pins the chosen route.
 
 This index is the single plan ROADMAP.md links to. The 17 sibling
 plans in this directory each own one route or one shape family; this
