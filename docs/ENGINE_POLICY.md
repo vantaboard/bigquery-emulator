@@ -10,11 +10,13 @@ to the strategy that fits, all inside the same process.
 > **TL;DR**: there is no second engine binary, no runtime backend
 > selector, and no fallback to a cloud BigQuery service. There is also
 > no claim that "everything becomes DuckDB SQL." Inside `emulator_main`,
-> a route classifier picks one of five local strategies (DuckDB fast
+> a route classifier picks one of six local strategies (DuckDB fast
 > path, DuckDB rewrite, DuckDB UDF/polyfill, local semantic executor,
-> control-op handler) per query, and shapes that have no planned local
-> route surface a deliberate, BigQuery-shaped `UNIMPLEMENTED`. See
-> "History" below for the runtimes this layout replaces.
+> control-op handler, local-stub) per query, and shapes that have no
+> planned local route surface a deliberate, BigQuery-shaped
+> `UNIMPLEMENTED` whose message names the offending family and links
+> back here. See "History" below for the runtimes this layout
+> replaces.
 
 ## The runtime
 
@@ -22,7 +24,7 @@ to the strategy that fits, all inside the same process.
 |---|---|---|
 | **`Engine` interface** | `backend/engine/engine.h` | Single public interface seen by the gRPC layer. Implementation behind it is the local execution coordinator. |
 | **Local execution coordinator** | `backend/engine/coordinator/` (`LocalCoordinatorEngine`) | Owns the route classifier and dispatches each query to one of the routes documented below. The classifier consumes the `node_dispositions.yaml` / `functions.yaml` registries (built into `backend/engine/duckdb/transpiler/`) at build time and returns a `RouteDecision{disposition; reason; offending_node}` per resolved statement. |
-| **Route classifier** | `backend/engine/coordinator/route_classifier.{h,cc}` | Walks the resolved AST, consults the disposition registries, and picks one of `kDuckdbNative / kDuckdbRewrite / kDuckdbUdf / kSemanticExecutor / kControlOp / kUnsupported`. Compositional fallback at planning time: any leaf with a higher-priority disposition promotes the whole query; planned rows do NOT promote (the fast path handles them via the transpiler's empty-string contract). |
+| **Route classifier** | `backend/engine/coordinator/route_classifier.{h,cc}` | Walks the resolved AST, consults the disposition registries, and picks one of `kDuckdbNative / kDuckdbRewrite / kDuckdbUdf / kSemanticExecutor / kControlOp / kLocalStub / kUnsupported`. Compositional fallback at planning time: any leaf with a higher-priority disposition promotes the whole query; planned rows do NOT promote (the fast path handles them via the transpiler's empty-string contract). Priority order is `unsupported > local_stub > semantic_executor > control_op > duckdb_udf > duckdb_rewrite > duckdb_native`, so a SELECT mixing a local-stub function (e.g. `KEYS.NEW_KEYSET`) and an unsupported function (`APPROX_QUANTILES`) surfaces `UNIMPLEMENTED` rather than a stubbed answer. |
 | **DuckDB fast path** | `backend/engine/duckdb/` (`DuckDbExecutor`) | The transpiler + DuckDB execution surface. Produces DuckDB SQL via a `googlesql::ResolvedASTVisitor` and runs it through DuckDB's C++ client. Implements the `coordinator::Executor` interface (`ExecuteQuery` / `ExecuteDml` / `ExecuteDdl`); the coordinator hands it a pre-analyzed `ResolvedStatement`. |
 | **DuckDB rewrites + UDFs** | (planned, `backend/engine/duckdb/`) | DuckDB SQL expressed via rewrites or DuckDB UDFs/macros to make a BigQuery function correct locally. |
 | **Local semantic executor** | (planned, `backend/engine/semantic/`) | A local row/array/value interpreter for shapes that demand exact BigQuery semantics. |
@@ -53,7 +55,8 @@ on a per-node basis.
 | `duckdb_udf`         | Lowers to DuckDB SQL that calls a DuckDB UDF / macro we register at engine startup.                                  | Same DuckDB connection runs the UDF locally; the UDF body owns the BigQuery-specific semantics.        |
 | `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics.                                            | Uses DuckDB only as a row source; expression evaluation, type coercion, and error surfaces are local.  |
 | `control_op`         | DDL / metadata / catalog op.                                                                                         | Bypasses query execution; the storage layer applies the change and emits the BigQuery-shaped response. |
-| `unsupported`        | Deliberately out of scope locally.                                                                                   | Returns a BigQuery-shaped `UNIMPLEMENTED` (or, when called for, an `INVALID_ARGUMENT`).                |
+| `local_stub`         | Deliberate BigQuery-shaped placeholder for a specialized family the emulator does not model end-to-end.              | Function-level stubs (e.g. `KEYS.NEW_KEYSET`) dispatch through the semantic executor's stub table (`backend/engine/semantic/stubs/`) and return a fixed-shape sentinel of the documented BigQuery return type. Statement-level stubs (e.g. `CREATE MODEL`) are pre-dispatched from the coordinator's `ExecuteDdl` to `backend/engine/control/stubs/` and return OK without persisting anything; the matching evaluator (`ML.PREDICT`, ...) stays on `unsupported` so a downstream call surfaces `UNIMPLEMENTED`. The two halves together preserve client-library startup-probe compatibility without silently approximating any downstream semantics. |
+| `unsupported`        | Deliberately out of scope locally.                                                                                   | Returns a BigQuery-shaped `UNIMPLEMENTED` whose message names the offending family (e.g. `family: function:keys.encrypt`) and links to this document and `specialized-feature-policy.plan.md`. |
 
 A few rules the router obeys:
 
@@ -74,6 +77,52 @@ A few rules the router obeys:
 4. **`unsupported` is intentional.** Promoting a row out of
    `unsupported` requires a planned route, a landing implementation,
    and conformance coverage. We never silently approximate.
+
+## Specialized features
+
+A handful of BigQuery feature families are intentionally NOT modeled
+end-to-end by this emulator. The full posture decision -- per-family
+choice between `local_impl`, `local_stub`, and `unsupported`, plus the
+rationale -- lives in
+[`.cursor/plans/specialized-feature-policy.plan.md`](../.cursor/plans/specialized-feature-policy.plan.md).
+The plan file's "Per-family postures" table is the source of truth; this
+section is the user-facing summary the unsupported error envelope
+points at.
+
+| Family                                                                                                       | Posture     | What happens                                                                                                                                                                                                |
+|---|---|---|
+| BigQuery ML (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`)                                                     | `unsupported` | `UNIMPLEMENTED` with `family: function:ml.<name>` and a link here.                                                                                                                                          |
+| BigQuery ML `CREATE MODEL`                                                                                   | `local_stub`  | Accepted as metadata-only; returns OK without registering a model. A subsequent `ML.PREDICT` over the named model still surfaces `UNIMPLEMENTED` (the family stays unsupported).                            |
+| Geography / GIS (`ST_*`)                                                                                     | `unsupported` | `UNIMPLEMENTED` with `family: function:st_<name>`.                                                                                                                                                          |
+| Differential privacy / anonymized aggregation (`AnonymizedAggregate*`, `DifferentialPrivacyAggregate*`, ...) | `unsupported` | `UNIMPLEMENTED`. The DP guarantee depends on noise calibration the emulator cannot honor.                                                                                                                   |
+| Networking (`NET.*`)                                                                                         | `local_impl`  | Routes to the semantic executor; implementation deferred to `semantic-functions-compliance.plan.md`. Surfaces UNIMPLEMENTED until that plan lands the body.                                                |
+| Key management (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`)                                                     | `local_stub`  | Returns a deterministic BigQuery-shaped sentinel (`KEYS.NEW_KEYSET` -> a fixed `BYTES` envelope; `KEYS.KEYSET_LENGTH` -> `1`). NOT a real Tink keyset.                                                      |
+| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`)                                                        | `unsupported` | Encryption-bearing entries deliberately fail loudly so a downstream consumer cannot round-trip the stub sentinel into an actual AEAD operation.                                                            |
+| HLL (`HLL_COUNT.*`)                                                                                          | `local_impl`  | Routes to the semantic executor; implementation deferred to `semantic-functions-compliance.plan.md`.                                                                                                       |
+| Protobuf shapes (`ResolvedMakeProto`, `ResolvedGetProtoField`, ...)                                          | `unsupported` | The emulator does not model the GoogleSQL proto type surface end-to-end.                                                                                                                                    |
+| MEASURE / measure functions (`AGGREGATE(<measure>)`)                                                         | `unsupported` | Measure types require BigQuery's analytical layer the emulator does not model.                                                                                                                              |
+| Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`)                                                  | `unsupported` | The Spanner-Graph SQL surface is not part of this emulator's scope.                                                                                                                                         |
+| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`)                                                             | `unsupported` | BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on `unsupported` to make the gap explicit.                                                                          |
+| JavaScript UDFs (`CREATE FUNCTION ... LANGUAGE js`)                                                          | `local_stub` (deferred) | Posture is `local_stub` (metadata-only registration; call site returns `UNIMPLEMENTED` naming JavaScript). Implementation is BLOCKED on `udf-tvf-module-routing.plan.md` family 4 (cross-request UDF body storage through `DuckDBStorage`'s catalog -- deferred at the end of plan 13). Until both land, `CREATE FUNCTION ... LANGUAGE js` surfaces `UNIMPLEMENTED` from the control-op executor and the body is NOT persisted (registering a body that does not persist would silently approximate the BigQuery contract). |
+| `LOAD DATA LOCAL <local-uri>`                                                                                | `control_op` (deferred) | Belongs on the control-op route; the local-filesystem reader family is tracked by `control-op-executor.plan.md`'s follow-up "add LOAD DATA reader family." Currently surfaces `UNIMPLEMENTED`.             |
+| `LOAD DATA <gs://...>` (cloud storage)                                                                       | `unsupported` | The emulator does not model BigQuery's cloud-storage ingest surface.                                                                                                                                        |
+
+The two halves of the `local_stub` posture are load-bearing:
+
+1. **BigQuery-shaped placeholder** -- client-library startup probes
+   (e.g. a connector that issues `SELECT KEYS.NEW_KEYSET(...)` to
+   confirm the dialect understands the namespace) succeed against the
+   emulator without forcing the user to disable their probe.
+2. **No silent approximation downstream** -- the call site that would
+   actually consume the stub value (`KEYS.ENCRYPT(...)`, `ML.PREDICT(
+   MODEL <id>, ...)`) stays on `unsupported` so a misuse fails loudly
+   rather than emitting a plausible-looking-but-fake answer.
+
+When the unsupported route surfaces an envelope, the message names the
+offending family (e.g. `family: function:keys.encrypt`, `family:
+function:ml.predict`, `family: ResolvedSequenceStmt`) so a user landing
+on this document can find the matching row in the table above without
+running the route classifier in their head.
 
 ## What this means in practice
 
@@ -176,7 +225,8 @@ it never reintroduces the silent-drift hazard the old
 
 ## Cross-references
 
-- [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `unsupported`).
+- [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).
 - [`.cursor/plans/local-execution-roadmap-index.plan.md`](../.cursor/plans/local-execution-roadmap-index.plan.md) — execution order, terminology, and per-route plans.
+- [`.cursor/plans/specialized-feature-policy.plan.md`](../.cursor/plans/specialized-feature-policy.plan.md) — per-family posture decisions (`local_impl` vs `local_stub` vs `unsupported`); source of truth for the "Specialized features" section above.
 - [`conformance/README.md`](../conformance/README.md) — fixture authoring guide; references this document from its "Contributing a new fixture" section.
 - [`README.md` "Runtime configuration"](../README.md#runtime-configuration) — the user-facing version of the flag surface this document governs.
