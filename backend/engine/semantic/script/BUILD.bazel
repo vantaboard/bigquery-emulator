@@ -1,0 +1,91 @@
+# Bazel build for the script-level interpreter (procedural
+# scripting executor).
+#
+# `procedural-scripting-executor.plan.md` adds a local interpreter
+# for BigQuery scripting (DECLARE / SET, BEGIN..END, IF / WHILE /
+# LOOP / FOR, RAISE / EXCEPTION, ASSERT, EXECUTE IMMEDIATE, CALL,
+# CREATE PROCEDURE, system variables). Each statement family lives
+# in its own translation unit so the package's lint surface stays
+# small and the per-family commits land independently.
+#
+# Today's package contents (Families 1 + 5 of the plan):
+#
+#   * `script_driver` -- the variable-environment + driver scaffold
+#     that the rest of the per-statement files compose against.
+#   * `assert_stmt` -- the `ResolvedAssertStmt` handler.
+#
+# Deferred families remain at `status=planned` in
+# `backend/engine/duckdb/transpiler/node_dispositions.yaml`. See the
+# plan + `script_driver.h` header for the full posture.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "script_driver",
+    srcs = ["script_driver.cc"],
+    hdrs = ["script_driver.h"],
+    deps = [
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "script_driver_test",
+    srcs = ["script_driver_test.cc"],
+    deps = [
+        ":script_driver",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "assert_stmt",
+    srcs = ["assert_stmt.cc"],
+    hdrs = ["assert_stmt.h"],
+    deps = [
+        ":script_driver",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "assert_stmt_test",
+    srcs = ["assert_stmt_test.cc"],
+    deps = [
+        ":assert_stmt",
+        ":script_driver",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
