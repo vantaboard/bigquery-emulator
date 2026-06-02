@@ -452,6 +452,16 @@ tasks:
         if [ -n "$_bqhost" ] && ! printf '%s' "$_bqhost" | grep -qE '^https?://'; then
           export BIGQUERY_EMULATOR_HOST="http://${_bqhost#//}"
         fi
+        # Snippets like `docs/snippets.py::test_create_client_default_credentials`
+        # construct `bigquery.Client()` with no args; the cloud client library
+        # then resolves the project from `GOOGLE_CLOUD_PROJECT` /
+        # `GCLOUD_PROJECT` / ADC, and fails with `OSError: Project was not
+        # passed and could not be determined from the environment.` when none
+        # of those are present. Mirror the java task (see
+        # `GOOGLE_CLOUD_PROJECT` default below the java mvn env block) and
+        # default to `dev` so the emulator-pointed Client picks up the same
+        # default project the gateway uses. Only mutates the child nox env.
+        export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
         # Wall-clock cap so a dead emulator / hung RPC does not block indefinitely (GNU coreutils timeout(1)).
         _py_samples_to="${PYTHON_SAMPLES_CMD_TIMEOUT:-30m}"
         _py_samples_run() {
