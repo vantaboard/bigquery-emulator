@@ -460,6 +460,54 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
+// `advanced-relational-routing.plan.md` Family 6: the pipe-DDL
+// forms (`FROM ... |> EXPORT DATA ...` and `FROM ... |> CREATE
+// TABLE ...`) arrive at the engine as a `ResolvedQueryStmt`
+// whose body is a `ResolvedPipeExportDataScan` /
+// `ResolvedPipeCreateTableScan` scan. The classifier routes
+// them to the control-op surface, but
+// `ControlOpExecutor::ExecuteQuery` rejects every
+// ResolvedStatement (control-op is contractually a no-row-stream
+// surface). The coordinator pre-dispatches these two shapes to
+// `backend/engine/control/pipe_{export_data,create_table}.cc`
+// so the per-shape UNIMPLEMENTED message reaches the gateway
+// without going through the misleading executor error.
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryPipeExportDataRoutesToControlOpHandler) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("FROM ds.people "
+                  "|> EXPORT DATA OPTIONS (uri = 'gs://b/o.csv', "
+                  "format = 'CSV')"),
+      bundle.catalog.get());
+  ASSERT_FALSE(source.ok());
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
+  EXPECT_TRUE(
+      absl::StrContains(source.status().message(), "pipe-form EXPORT DATA"))
+      << source.status();
+  EXPECT_TRUE(
+      absl::StrContains(source.status().message(), "EXPORT DATA writer family"))
+      << source.status();
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryPipeCreateTableRoutesToControlOpHandler) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("FROM ds.people |> CREATE TABLE ds.people_copy"),
+      bundle.catalog.get());
+  ASSERT_FALSE(source.ok());
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
+  EXPECT_TRUE(
+      absl::StrContains(source.status().message(), "pipe-form CREATE TABLE"))
+      << source.status();
+  EXPECT_TRUE(absl::StrContains(source.status().message(),
+                                "pipe-form CREATE TABLE adapter"))
+      << source.status();
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

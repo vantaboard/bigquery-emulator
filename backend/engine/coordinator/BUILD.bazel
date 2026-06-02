@@ -110,6 +110,7 @@ cc_library(
         "//backend/engine",
         "//backend/engine:disposition",
         "//backend/engine/control:control_op_executor",
+        "//backend/engine/control:pipe_ddl_handlers",
         "//backend/engine/duckdb:duckdb_executor",
         "//backend/engine/semantic:executor",
         "//backend/engine/semantic:value",

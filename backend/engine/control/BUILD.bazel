@@ -37,6 +37,31 @@ cc_library(
     ],
 )
 
+# Pipe-DDL handlers. Separate translation units (and thus a
+# separate cc_library) so the lint-cap carve-out on
+# `control_op_executor.cc` does not block extending the
+# control-op surface with the pipe-DDL forms. See file headers
+# for the rationale.
+cc_library(
+    name = "pipe_ddl_handlers",
+    srcs = [
+        "pipe_create_table.cc",
+        "pipe_export_data.cc",
+    ],
+    hdrs = [
+        "pipe_create_table.h",
+        "pipe_export_data.h",
+    ],
+    deps = [
+        "//backend/engine",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
 cc_test(
     name = "control_op_executor_test",
     srcs = ["control_op_executor_test.cc"],

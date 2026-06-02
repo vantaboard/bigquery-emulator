@@ -6,6 +6,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "backend/engine/control/pipe_create_table.h"
+#include "backend/engine/control/pipe_export_data.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
@@ -61,6 +63,28 @@ namespace {
   // output instead.
   options.disable_rewrite(::googlesql::REWRITE_PIVOT);
   options.disable_rewrite(::googlesql::REWRITE_UNPIVOT);
+  // Disable the generalized-query-stmt rewriter so the pipe-DDL
+  // forms (`FROM ... |> EXPORT DATA` and `FROM ... |> CREATE
+  // TABLE`) survive in the resolved tree as
+  // `ResolvedPipeExportDataScan` / `ResolvedPipeCreateTableScan`
+  // nodes the classifier dispatches to the control-op route. With
+  // the default rewriter enabled, those scans would be unwrapped
+  // to a plain `ResolvedExportDataStmt` / `ResolvedCreateTableAs-
+  // SelectStmt` and lose their per-shape disposition row in
+  // `node_dispositions.yaml`. The `advanced-relational-routing`
+  // plan dispositions explicitly target the pipe forms, so the
+  // rewriter is off here.
+  options.disable_rewrite(::googlesql::REWRITE_GENERALIZED_QUERY_STMT);
+  // Permit the analyzer to produce `ResolvedGeneralizedQueryStmt`
+  // alongside the default `ResolvedQueryStmt`. With the rewriter
+  // disabled (above), this is the only statement kind that
+  // carries a `ResolvedPipeExportDataScan` /
+  // `ResolvedPipeCreateTableScan` body. The default supported-
+  // statement set is `{RESOLVED_QUERY_STMT}` (see
+  // `LanguageOptions::supported_statement_kinds_`); we add the
+  // generalized form on top.
+  options.mutable_language()->AddSupportedStatementKind(
+      ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT);
   options.CreateDefaultArenasIfNotSet();
   return options;
 }
@@ -322,6 +346,40 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
     return absl::InternalError(
         "LocalCoordinatorEngine::ExecuteQuery: classifier returned an "
         "unknown disposition");
+  }
+  // Pipe-DDL pre-dispatch. `ResolvedPipeExportDataScan` /
+  // `ResolvedPipeCreateTableScan` arrive as the body of a
+  // `ResolvedGeneralizedQueryStmt` (the analyzer's wrapper for
+  // pipe-flow shapes whose top-level operator is not a plain
+  // SELECT). The classifier already routes them to the control-op
+  // route via `node_dispositions.yaml`, but
+  // `ControlOpExecutor::ExecuteQuery` is contractually a no-row-
+  // stream surface -- it rejects every ResolvedStatement with
+  // "control-op statements never produce a row stream". The
+  // pipe-DDL forms legitimately belong on control_op even though
+  // they reach the engine through `ExecuteQuery`, so the
+  // coordinator intercepts them here and dispatches to the per-
+  // shape handler in `backend/engine/control/pipe_*.cc`. The
+  // `control_op_executor.cc` lint-cap carve-out (see
+  // `.cursor/plans/advanced-relational-routing.plan.md` "don'ts")
+  // is the reason this dispatch lives in the coordinator rather
+  // than in `ControlOpExecutor::ExecuteQuery`.
+  if (executor == &control_op_executor_) {
+    const ::googlesql::ResolvedScan* body = nullptr;
+    if (stmt->node_kind() == ::googlesql::RESOLVED_QUERY_STMT) {
+      body = stmt->GetAs<::googlesql::ResolvedQueryStmt>()->query();
+    } else if (stmt->node_kind() ==
+               ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT) {
+      body = stmt->GetAs<::googlesql::ResolvedGeneralizedQueryStmt>()->query();
+    }
+    if (body != nullptr) {
+      if (body->node_kind() == ::googlesql::RESOLVED_PIPE_EXPORT_DATA_SCAN) {
+        return control::RunPipeExportData(request, *stmt);
+      }
+      if (body->node_kind() == ::googlesql::RESOLVED_PIPE_CREATE_TABLE_SCAN) {
+        return control::RunPipeCreateTable(request, *stmt);
+      }
+    }
   }
   return executor->ExecuteQuery(request, *stmt, catalog);
 }
