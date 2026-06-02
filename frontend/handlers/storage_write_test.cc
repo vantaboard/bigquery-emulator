@@ -113,8 +113,7 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsCommittedStream) {
 
   // Stream id nests under the table path with a server-assigned
   // suffix; the helper mints `s1` for the first call.
-  EXPECT_EQ(resp.name(),
-            "projects/proj-test/datasets/ds/tables/t/streams/s1");
+  EXPECT_EQ(resp.name(), "projects/proj-test/datasets/ds/tables/t/streams/s1");
   EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);
   ASSERT_EQ(resp.schema().fields_size(), 2);
   EXPECT_EQ(resp.schema().fields(0).name(), "id");
@@ -283,8 +282,7 @@ class StorageWriteGrpcTest : public ::testing::Test {
     for (int64_t i = 0; i < count; ++i) {
       auto* row = proto_rows->add_rows();
       row->add_cells()->set_string_value(absl::StrCat(first_id + i));
-      row->add_cells()->set_string_value(
-          absl::StrCat("person-", first_id + i));
+      row->add_cells()->set_string_value(absl::StrCat("person-", first_id + i));
     }
     return req;
   }
@@ -352,8 +350,7 @@ TEST_F(StorageWriteGrpcTest, AppendRowsCommitsToCommittedStream) {
   ASSERT_EQ(rows.size(), 5u);
   for (size_t i = 0; i < rows.size(); ++i) {
     EXPECT_EQ(rows[i].cells[0].int64_value(), static_cast<int64_t>(i));
-    EXPECT_EQ(rows[i].cells[1].string_value(),
-              absl::StrCat("person-", i));
+    EXPECT_EQ(rows[i].cells[1].string_value(), absl::StrCat("person-", i));
   }
 }
 
@@ -402,8 +399,7 @@ TEST_F(StorageWriteGrpcTest, AppendRowsShapeMismatchSurfaceOnEnvelope) {
   ASSERT_TRUE(stream_rw->Write(bad));
   v1::AppendRowsResponse resp_bad;
   ASSERT_TRUE(stream_rw->Read(&resp_bad));
-  ASSERT_EQ(resp_bad.response_case(),
-            v1::AppendRowsResponse::kErrorMessage);
+  ASSERT_EQ(resp_bad.response_case(), v1::AppendRowsResponse::kErrorMessage);
   EXPECT_FALSE(resp_bad.error_message().empty());
 
   // Recoverable: stream still alive; a correct batch lands.
@@ -411,8 +407,7 @@ TEST_F(StorageWriteGrpcTest, AppendRowsShapeMismatchSurfaceOnEnvelope) {
   ASSERT_TRUE(stream_rw->Write(good));
   v1::AppendRowsResponse resp_good;
   ASSERT_TRUE(stream_rw->Read(&resp_good));
-  EXPECT_EQ(resp_good.response_case(),
-            v1::AppendRowsResponse::kAppendResult);
+  EXPECT_EQ(resp_good.response_case(), v1::AppendRowsResponse::kAppendResult);
 
   ASSERT_TRUE(stream_rw->WritesDone());
   ::grpc::Status status = stream_rw->Finish();

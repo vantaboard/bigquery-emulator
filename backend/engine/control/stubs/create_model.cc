@@ -19,8 +19,7 @@ absl::Status RunCreateModel(const ::googlesql::ResolvedStatement& stmt) {
         stmt.node_kind_string(),
         ")"));
   }
-  const auto* model =
-      stmt.GetAs<::googlesql::ResolvedCreateModelStmt>();
+  const auto* model = stmt.GetAs<::googlesql::ResolvedCreateModelStmt>();
   // Mark every field accessed so the analyzer's per-node field-
   // access tracker is satisfied. The stub deliberately does NOT
   // persist any of these to storage -- this is the metadata-only

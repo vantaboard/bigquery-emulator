@@ -203,8 +203,7 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
   EXPECT_EQ(resp.schema().fields(1).name(), "name");
 }
 
-TEST_F(StorageReadServiceTest,
-       CreateReadSessionRejectsUnknownSelectedField) {
+TEST_F(StorageReadServiceTest, CreateReadSessionRejectsUnknownSelectedField) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
   // `phone` is not a column on the people table; plan 15 rejects
@@ -664,8 +663,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsProjectsToSelectedFields) {
   for (size_t i = 0; i < rows.size(); ++i) {
     // Two cells per row, in projected order: name then id.
     ASSERT_EQ(rows[i].cells_size(), 2);
-    EXPECT_EQ(rows[i].cells(0).string_value(),
-              absl::StrCat("person-", i));
+    EXPECT_EQ(rows[i].cells(0).string_value(), absl::StrCat("person-", i));
     EXPECT_EQ(rows[i].cells(1).string_value(), absl::StrCat(i));
   }
 }

@@ -7,10 +7,10 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
+#include "gmock/gmock.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
 #include "googlesql/public/value.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {
@@ -34,10 +34,10 @@ TEST(KeysNewKeysetTest, ReturnsSentinelBytesForStringArg) {
   auto r = KeysNewKeyset({Value::String("AEAD_AES_GCM_256")});
   ASSERT_TRUE(r.ok()) << r.status();
   EXPECT_EQ(r->type_kind(), ::googlesql::TYPE_BYTES);
-  EXPECT_EQ(r->bytes_value(),
-            "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256");
+  EXPECT_EQ(r->bytes_value(), "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256");
 
-  auto other = KeysNewKeyset({Value::String("DETERMINISTIC_AEAD_AES_SIV_CMAC_256")});
+  auto other =
+      KeysNewKeyset({Value::String("DETERMINISTIC_AEAD_AES_SIV_CMAC_256")});
   ASSERT_TRUE(other.ok()) << other.status();
   EXPECT_EQ(other->bytes_value(),
             "bigquery-emulator:keyset:v1:DETERMINISTIC_AEAD_AES_SIV_CMAC_256");

@@ -4,9 +4,9 @@
 #include <string>
 
 #include "absl/status/status.h"
+#include "gmock/gmock.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {
@@ -72,8 +72,7 @@ TEST(RunCreateModelTest, RejectsWrongStatementKind) {
   auto rollback = ::googlesql::MakeResolvedRollbackStmt();
   absl::Status s = RunCreateModel(*rollback);
   EXPECT_EQ(s.code(), absl::StatusCode::kInternal);
-  EXPECT_THAT(std::string(s.message()),
-              HasSubstr("ResolvedCreateModelStmt"));
+  EXPECT_THAT(std::string(s.message()), HasSubstr("ResolvedCreateModelStmt"));
 }
 
 }  // namespace

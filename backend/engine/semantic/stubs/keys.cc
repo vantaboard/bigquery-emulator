@@ -43,7 +43,8 @@ absl::StatusOr<Value> KeysNewKeyset(const std::vector<Value>& args) {
     return MakeSemanticError(
         SemanticErrorReason::kInvalidArgument,
         absl::StrCat("semantic stub: KEYS.NEW_KEYSET expects exactly one ",
-                     "STRING argument; got ", args.size()));
+                     "STRING argument; got ",
+                     args.size()));
   }
   const Value& key_type = args[0];
   if (key_type.is_null()) {
@@ -54,12 +55,13 @@ absl::StatusOr<Value> KeysNewKeyset(const std::vector<Value>& args) {
         SemanticErrorReason::kInvalidArgument,
         absl::StrCat(
             "semantic stub: KEYS.NEW_KEYSET requires a STRING key_type; ",
-            "got ", key_type.type()->DebugString()));
+            "got ",
+            key_type.type()->DebugString()));
   }
   // Compose the sentinel inline -- `Value::Bytes` takes a `std::string`
   // so building it locally avoids a redundant copy.
-  std::string sentinel = absl::StrCat(kKeysetSentinelPrefix,
-                                      key_type.string_value());
+  std::string sentinel =
+      absl::StrCat(kKeysetSentinelPrefix, key_type.string_value());
   return Value::Bytes(std::move(sentinel));
 }
 
@@ -68,7 +70,8 @@ absl::StatusOr<Value> KeysKeysetLength(const std::vector<Value>& args) {
     return MakeSemanticError(
         SemanticErrorReason::kInvalidArgument,
         absl::StrCat("semantic stub: KEYS.KEYSET_LENGTH expects exactly one ",
-                     "BYTES argument; got ", args.size()));
+                     "BYTES argument; got ",
+                     args.size()));
   }
   const Value& keyset = args[0];
   if (keyset.is_null()) {
@@ -79,7 +82,8 @@ absl::StatusOr<Value> KeysKeysetLength(const std::vector<Value>& args) {
         SemanticErrorReason::kInvalidArgument,
         absl::StrCat(
             "semantic stub: KEYS.KEYSET_LENGTH requires a BYTES keyset; ",
-            "got ", keyset.type()->DebugString()));
+            "got ",
+            keyset.type()->DebugString()));
   }
   // The sentinel `KEYS.NEW_KEYSET` returns is a single-key keyset
   // (BigQuery's documented `NEW_KEYSET` shape). We pin the answer

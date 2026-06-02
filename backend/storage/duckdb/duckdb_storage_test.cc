@@ -548,8 +548,7 @@ TEST_F(DuckDBStorageTest, CreateReadStreamProjectsSelectedFields) {
   ASSERT_EQ(scanned.size(), 3u);
   for (size_t i = 0; i < scanned.size(); ++i) {
     ASSERT_EQ(scanned[i].cells.size(), 2u);
-    EXPECT_EQ(scanned[i].cells[0].string_value(),
-              absl::StrCat("person-", i));
+    EXPECT_EQ(scanned[i].cells[0].string_value(), absl::StrCat("person-", i));
     EXPECT_EQ(scanned[i].cells[1].int64_value(), static_cast<int64_t>(i));
   }
 }

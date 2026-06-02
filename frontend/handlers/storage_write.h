@@ -81,8 +81,8 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   // matching gRPC status.
   ::grpc::Status AppendRows(
       ::grpc::ServerContext* context,
-      ::grpc::ServerReaderWriter<v1::AppendRowsResponse,
-                                 v1::AppendRowsRequest>* stream) override;
+      ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+          stream) override;
 
   ::grpc::Status GetWriteStream(::grpc::ServerContext* context,
                                 const v1::GetWriteStreamRequest* request,

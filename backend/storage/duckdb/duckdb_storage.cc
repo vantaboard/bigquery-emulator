@@ -344,10 +344,10 @@ absl::StatusOr<schema::TableSchema> ProjectSchema(
       }
     }
     if (match == nullptr) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "selected_fields: unknown column `",
-          name,
-          "` (table has no top-level column with that name)"));
+      return absl::InvalidArgumentError(
+          absl::StrCat("selected_fields: unknown column `",
+                       name,
+                       "` (table has no top-level column with that name)"));
     }
     out.columns.push_back(*match);
   }

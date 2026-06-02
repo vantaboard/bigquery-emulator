@@ -100,12 +100,11 @@ backend::storage::Value CellToValue(const v1::Cell& cell) {
 // Splits a path like `projects/{p}/datasets/{d}/tables/{t}` into
 // pieces. Returns false on any malformed shape; the caller maps that
 // onto INVALID_ARGUMENT with a stable message.
-bool SplitTablePath(absl::string_view path,
-                    backend::storage::TableId* out) {
+bool SplitTablePath(absl::string_view path, backend::storage::TableId* out) {
   const std::vector<absl::string_view> parts = absl::StrSplit(path, '/');
-  if (parts.size() != 6 || parts[0] != "projects" ||
-      parts[2] != "datasets" || parts[4] != "tables" || parts[1].empty() ||
-      parts[3].empty() || parts[5].empty()) {
+  if (parts.size() != 6 || parts[0] != "projects" || parts[2] != "datasets" ||
+      parts[4] != "tables" || parts[1].empty() || parts[3].empty() ||
+      parts[5].empty()) {
     return false;
   }
   out->project_id = std::string(parts[1]);
@@ -170,7 +169,8 @@ StorageWriteService::StorageWriteService(backend::storage::Storage* storage)
                      "projects/{p}/datasets/{d}/tables/{t}/streams/{id}): ",
                      name));
   }
-  const absl::string_view table_prefix = absl::string_view(name).substr(0, sep_pos);
+  const absl::string_view table_prefix =
+      absl::string_view(name).substr(0, sep_pos);
   if (!SplitTablePath(table_prefix, table)) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
@@ -224,9 +224,9 @@ std::string StorageWriteService::Rfc3339Now() const {
         "StorageWrite.CreateWriteStream: storage backend is not configured");
   }
   if (request == nullptr || response == nullptr) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::INTERNAL,
-        "StorageWrite.CreateWriteStream: request and response must be non-null");
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "StorageWrite.CreateWriteStream: request and "
+                          "response must be non-null");
   }
 
   backend::storage::TableId table_id;
@@ -293,8 +293,7 @@ std::string StorageWriteService::Rfc3339Now() const {
 }
 
 ::grpc::Status StorageWriteService::EnsureDefaultStream(
-    const std::string& stream_name,
-    const backend::storage::TableId& table) {
+    const std::string& stream_name, const backend::storage::TableId& table) {
   absl::StatusOr<backend::schema::TableSchema> schema_or =
       storage_->GetSchema(table);
   if (!schema_or.ok()) {
@@ -314,8 +313,8 @@ std::string StorageWriteService::Rfc3339Now() const {
 
 ::grpc::Status StorageWriteService::AppendRows(
     ::grpc::ServerContext* /*context*/,
-    ::grpc::ServerReaderWriter<v1::AppendRowsResponse,
-                               v1::AppendRowsRequest>* stream) {
+    ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+        stream) {
   if (storage_ == nullptr) {
     return ::grpc::Status(
         ::grpc::StatusCode::INTERNAL,
@@ -413,14 +412,14 @@ std::string StorageWriteService::Rfc3339Now() const {
       const auto& src = rows_in[r];
       if (src.cells_size() != static_cast<int>(schema.columns.size())) {
         shape_error = true;
-        shape_error_detail = absl::StrCat(
-            "AppendRows: row ",
-            r,
-            " has ",
-            src.cells_size(),
-            " cell(s) but the stream's table has ",
-            schema.columns.size(),
-            " top-level column(s)");
+        shape_error_detail =
+            absl::StrCat("AppendRows: row ",
+                         r,
+                         " has ",
+                         src.cells_size(),
+                         " cell(s) but the stream's table has ",
+                         schema.columns.size(),
+                         " top-level column(s)");
         break;
       }
       backend::storage::Row row;

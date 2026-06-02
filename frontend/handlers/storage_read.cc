@@ -130,8 +130,7 @@ bool SchemasEqualByShape(const backend::schema::TableSchema& a,
 // `schema`, or `npos` if no top-level column has that name. Used to
 // validate `selected_fields` at CreateReadSession time so a typo
 // surfaces as INVALID_ARGUMENT before the streaming RPC starts.
-constexpr std::size_t kColumnNotFound =
-    static_cast<std::size_t>(-1);
+constexpr std::size_t kColumnNotFound = static_cast<std::size_t>(-1);
 std::size_t FindColumnByName(const backend::schema::TableSchema& schema,
                              absl::string_view name) {
   for (std::size_t i = 0; i < schema.columns.size(); ++i) {
