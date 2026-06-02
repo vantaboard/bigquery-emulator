@@ -1,0 +1,20 @@
+# unsupported_engine_policy_link: unsupported envelope links to ENGINE_POLICY.md.
+#
+# Sibling of `unsupported_session_user.yaml` that explicitly pins
+# the "links back to docs/ENGINE_POLICY.md" half of the
+# unsupported-route contract. The check is split out into its own
+# fixture so a future regression that drops the link from the
+# message surfaces as a clearly-named test failure rather than
+# being conflated with the "family name in message" check.
+name: specialized_unsupported_engine_policy_link
+description: |
+  SELECT GENERATE_UUID() surfaces HTTP 501 notImplemented whose
+  message links back to docs/ENGINE_POLICY.md. Together with the
+  sibling fixture pinning the family name, this covers both halves
+  of the unsupported-envelope contract.
+project_id: proj-specialized-unsupported-engine-policy-link
+query: SELECT GENERATE_UUID() AS u
+expected:
+  error:
+    code: 501
+    message_contains: "docs/ENGINE_POLICY.md"

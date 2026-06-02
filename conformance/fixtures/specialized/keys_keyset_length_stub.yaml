@@ -1,0 +1,19 @@
+# keys_keyset_length_stub: KEYS.KEYSET_LENGTH local-stub round-trip.
+#
+# Sibling of `keys_new_keyset_stub.yaml`. KEYS.KEYSET_LENGTH is a
+# `local_stub` row in `functions.yaml`; the semantic executor's
+# stub unconditionally returns 1 (the single-key keyset shape that
+# matches KEYS.NEW_KEYSET's contract) for any non-NULL BYTES. NULL
+# input -> NULL INT64. We assert on the typed return value (INT64
+# 1) to pin the column-type tag the projection emits.
+name: specialized_keys_keyset_length_stub
+description: |
+  KEYS.KEYSET_LENGTH on the sentinel BYTES that KEYS.NEW_KEYSET
+  returned routes through the local-stub dispatch and reports
+  `1` (the single-key keyset shape).
+project_id: proj-specialized-keys-keyset-length
+query: |
+  SELECT KEYS.KEYSET_LENGTH(KEYS.NEW_KEYSET('AEAD_AES_GCM_256')) AS n
+expected:
+  rows:
+    - {n: 1}

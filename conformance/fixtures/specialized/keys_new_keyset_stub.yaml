@@ -1,0 +1,25 @@
+# keys_new_keyset_stub: KEYS.NEW_KEYSET local-stub round-trip.
+#
+# `specialized-feature-policy.plan.md` pins KEYS.NEW_KEYSET to the
+# `local_stub` posture: the function is accepted at parse / analyzer
+# time and returns a deterministic BigQuery-shaped sentinel BYTES
+# value so a client-library startup probe that issues
+# `SELECT KEYS.NEW_KEYSET(...)` succeeds rather than fails the
+# connection handshake. The semantic executor's stub
+# (`backend/engine/semantic/stubs/keys.cc`) returns the literal
+# `bigquery-emulator:keyset:v1:<key_type>` envelope encoded as
+# BYTES. The encryption-bearing peers (`KEYS.ENCRYPT`,
+# `KEYS.DECRYPT_BYTES`) stay `unsupported` and are covered by the
+# unsupported-route fixtures below.
+name: specialized_keys_new_keyset_stub
+description: |
+  KEYS.NEW_KEYSET('AEAD_AES_GCM_256') returns the documented
+  BigQuery-shaped sentinel BYTES envelope. Pins the local-stub
+  contract end-to-end (analyzer accepts, coordinator promotes to
+  kLocalStub, semantic executor's stub dispatch fires).
+project_id: proj-specialized-keys-new-keyset
+query: |
+  SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset
+expected:
+  rows:
+    - {keyset: "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256"}

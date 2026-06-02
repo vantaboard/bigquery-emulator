@@ -1,0 +1,29 @@
+# unsupported_session_user: SESSION_USER returns 501 with family-named envelope.
+#
+# `specialized-feature-policy.plan.md` pins SESSION_USER to the
+# `unsupported` posture: the function exists in the analyzer but
+# the emulator does not model authn/authz, so a SELECT calling it
+# surfaces `UNIMPLEMENTED` (HTTP 501 notImplemented). The error
+# envelope MUST name the offending family (so a user finds the
+# matching `functions.yaml` row without re-running the classifier)
+# AND link back to `docs/ENGINE_POLICY.md` (the public policy
+# document). Both pointers are part of the unsupported-route
+# contract.
+#
+# `SESSION_USER()` is used here (rather than `KEYS.ENCRYPT` or
+# `ML.PREDICT`) because it's in the analyzer's default builtin
+# function set without needing `FEATURE_ENCRYPTION` /
+# `FEATURE_REMOTE_MODEL` toggles -- the same property the
+# `stub_executors_test.cc::UnsupportedMessageNamesOffendingFamily`
+# unit test relies on.
+name: specialized_unsupported_session_user
+description: |
+  SELECT SESSION_USER() surfaces HTTP 501 notImplemented whose
+  message names the `session_user` family and links to
+  docs/ENGINE_POLICY.md.
+project_id: proj-specialized-unsupported-session-user
+query: SELECT SESSION_USER() AS u
+expected:
+  error:
+    code: 501
+    message_contains: "session_user"

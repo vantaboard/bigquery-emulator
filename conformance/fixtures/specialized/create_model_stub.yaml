@@ -1,0 +1,36 @@
+# create_model_stub: CREATE MODEL accepted as metadata-only stub.
+#
+# `specialized-feature-policy.plan.md` pins `CREATE MODEL` to the
+# `local_stub` posture: the statement parses, the analyzer
+# accepts it (the coordinator's `ExecuteDdl` is on the
+# `SetSupportsAllStatementKinds` allowlist), the coordinator
+# pre-dispatches it to `backend/engine/control/stubs/create_model.
+# cc::RunCreateModel`, which returns OK without persisting a
+# storage-side model entry. A subsequent `ML.PREDICT(MODEL <id>,
+# ...)` would surface `UNIMPLEMENTED` because the matching
+# `ml.predict` row stays `unsupported` -- that half of the local-
+# stub posture is covered by `unsupported_session_user.yaml`'s
+# pattern; this fixture only pins the accept-and-return-OK half.
+#
+# The follow-up `SELECT 1` (the "query" step) is the gateway-side
+# observable confirming the previous setup step succeeded; no row
+# fields read from the model (the model is metadata-only).
+name: specialized_create_model_stub
+description: |
+  CREATE MODEL is accepted as a metadata-only local-stub: the
+  setup step returns OK without raising and without persisting any
+  storage-side model. The follow-up SELECT confirms the
+  surrounding session still works (the stub did not break the
+  catalog).
+project_id: proj-specialized-create-model
+dataset_id: ds_specialized_model
+setup:
+  - dataset: ds_specialized_model
+  - sql: |
+      CREATE MODEL ds_specialized_model.placeholder_model
+      OPTIONS(model_type='LINEAR_REG', input_label_cols=['label'])
+      AS SELECT 1.0 AS label, 2.0 AS f1
+query: SELECT 1 AS one
+expected:
+  rows:
+    - {one: 1}
