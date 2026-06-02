@@ -815,7 +815,22 @@ absl::Status DuckDBStorage::CreateTable(const TableId& id,
   // file out via a transient DuckDB table because COPY needs a
   // bound logical type list, and the empty-result `SELECT ... WHERE
   // FALSE` trick loses the column-type information.
+  //
+  // Schema-less tables (the view / external-table / legacy DDL
+  // surface registers metadata through CreateTable with an empty
+  // column list) skip the DuckDB scratch entirely: DuckDB rejects
+  // `CREATE TEMP TABLE foo ()` with "Parser Error: Table must have
+  // at least one column!" and an empty parquet schema would not
+  // round-trip through `read_parquet` anyway. ScanRows already
+  // tolerates a missing parquet file (returns an empty iterator),
+  // so leaving the sidecar in place is the conservative behavior;
+  // a subsequent AppendRows / OverwriteRows path on the same table
+  // is the caller's bug and will surface its own RenderColumnList
+  // error.
   const std::string parquet_path = TableParquetPath(id);
+  if (schema.columns.empty()) {
+    return absl::OkStatus();
+  }
   const std::string tmp_table = "main.__bqemu_mkempty";
   const std::string cols = RenderColumnList(schema);
   const auto create_status = RunSql(

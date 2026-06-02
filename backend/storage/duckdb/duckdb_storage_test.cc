@@ -182,6 +182,50 @@ TEST_F(DuckDBStorageTest, CreateTableMaterializesEmptyParquet) {
   EXPECT_FALSE(*has);
 }
 
+// Regression: thirdparty:node-bigquery-tests view/query/delete-table
+// `before all` hooks failed with `CREATE OR REPLACE TEMP TABLE
+// main.__bqemu_mkempty (): Parser Error: Table must have at least
+// one column!` whenever the gateway registered a view or other
+// schema-less table through CreateTable. The fix short-circuits the
+// DuckDB scratch path for empty schemas; this test pins it.
+TEST_F(DuckDBStorageTest, CreateTableWithEmptySchemaSkipsParquet) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "the_view"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  schema::TableSchema empty;
+  ASSERT_TRUE(empty.columns.empty());
+  ASSERT_TRUE(store.CreateTable(table, empty).ok());
+
+  const fs::path sidecar = data_dir_ / "proj-1" / "ds_1" / "the_view.meta.json";
+  const fs::path parquet = data_dir_ / "proj-1" / "ds_1" / "the_view.parquet";
+  EXPECT_TRUE(fs::exists(sidecar));
+  EXPECT_FALSE(fs::exists(parquet));
+
+  auto schema_or = store.GetSchema(table);
+  ASSERT_TRUE(schema_or.ok()) << schema_or.status();
+  EXPECT_TRUE(schema_or->columns.empty());
+
+  // ScanRows tolerates the missing parquet file (per its own
+  // hand-curated --data_dir comment) and returns an empty iterator.
+  auto iter_or = store.ScanRows(table);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  Row r;
+  auto has = (*iter_or)->Next(&r);
+  ASSERT_TRUE(has.ok());
+  EXPECT_FALSE(*has);
+
+  // DropTable still cleans up the sidecar; the parquet path is a
+  // best-effort remove (no error when absent).
+  ASSERT_TRUE(store.DropTable(table).ok());
+  EXPECT_FALSE(fs::exists(sidecar));
+  EXPECT_FALSE(fs::exists(parquet));
+}
+
 TEST_F(DuckDBStorageTest, DropTableRemovesParquetAndSidecar) {
   auto store_or = DuckDBStorage::Open(data_dir_.string());
   ASSERT_TRUE(store_or.ok()) << store_or.status();
