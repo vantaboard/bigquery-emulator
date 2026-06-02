@@ -16,6 +16,7 @@ const (
 	routeDuckdbUDF        = "duckdb_udf"
 	routeSemanticExecutor = "semantic_executor"
 	routeControlOp        = "control_op"
+	routeLocalStub        = "local_stub"
 	routeUnsupported      = "unsupported"
 )
 
@@ -26,6 +27,7 @@ var validDispositions = map[string]struct{}{
 	routeDuckdbUDF:        {},
 	routeSemanticExecutor: {},
 	routeControlOp:        {},
+	routeLocalStub:        {},
 	routeUnsupported:      {},
 }
 

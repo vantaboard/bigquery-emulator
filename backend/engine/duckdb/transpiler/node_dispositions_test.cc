@@ -68,11 +68,20 @@ TEST(NodeDispositionTableTest, EveryNodeApplicableDispositionIsReachable) {
   // `LookupPlannedDuckdbUdfFunction`). No `ResolvedAST` node kind
   // routes through a UDF; UDFs lower individual function calls
   // inside a node, not the node itself.
+  //
+  // `kLocalStub` IS expected at the node level today:
+  // `ResolvedCreateModelStmt` is the statement-level stub that
+  // `specialized-feature-policy.plan.md` introduces (the
+  // coordinator pre-dispatches `RESOLVED_CREATE_MODEL_STMT` to
+  // `backend/engine/control/stubs/create_model.cc`). The function-
+  // level stubs (`KEYS.NEW_KEYSET`, ...) live in
+  // `functions.yaml`, not here.
   const std::set<Disposition> kNodeApplicable = {
       Disposition::kDuckdbNative,
       Disposition::kDuckdbRewrite,
       Disposition::kSemanticExecutor,
       Disposition::kControlOp,
+      Disposition::kLocalStub,
       Disposition::kUnsupported,
   };
   std::set<Disposition> seen;
@@ -107,6 +116,30 @@ TEST(NodeDispositionTableTest, EveryUnsupportedRowPointsAtPolicyPlan) {
   // a buggy generator that silently dropped every row would also
   // make the previous loop trivially pass.
   EXPECT_GT(unsupported_rows, 0);
+}
+
+TEST(NodeDispositionTableTest, EveryLocalStubRowPointsAtPolicyPlan) {
+  // Same posture-row contract as `EveryUnsupportedRowPointsAtPolicy
+  // Plan` above, applied to `kLocalStub`. Every stub row must point
+  // at `specialized-feature-policy.plan.md` so a reader can trace
+  // why the deliberate-stub posture was chosen. The YAML generator
+  // rejects a `local_stub` row without any `plan=` pointer; this
+  // test pins the *value*. Today's only entry is
+  // `ResolvedCreateModelStmt`; future statement-level stubs (e.g.
+  // JS UDF metadata, once plan 13's deferred UDF body storage
+  // lands) join the same row.
+  int local_stub_rows = 0;
+  for (const auto& view : internal::AllNodeDispositions()) {
+    ASSERT_NE(view.entry, nullptr);
+    if (view.entry->disposition != Disposition::kLocalStub) continue;
+    local_stub_rows++;
+    SCOPED_TRACE(std::string(view.name));
+    EXPECT_EQ(view.entry->plan, kSpecializedFeaturePolicy);
+  }
+  // Spot check that `local_stub` rows exist. Setting this to >0
+  // (rather than ==1) so adding the next statement-level stub
+  // family does not require a test update.
+  EXPECT_GT(local_stub_rows, 0);
 }
 
 TEST(NodeDispositionTableTest, RegistryNonTrivial) {

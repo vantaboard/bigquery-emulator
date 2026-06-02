@@ -9,7 +9,7 @@ the source of truth for **every** route, not just the DuckDB fast
 path.
 
 The vocabulary matches `docs/ENGINE_POLICY.md`. Each row picks one
-of six route dispositions; the **planned** route is recorded for
+of seven route dispositions; the **planned** route is recorded for
 rows that have not landed yet so future work has an explicit target
 strategy.
 
@@ -20,6 +20,7 @@ strategy.
 | `duckdb_udf`         | Lowers to DuckDB SQL that calls a DuckDB UDF/macro registered at engine startup. The UDF body owns the BigQuery-specific behavior. |
 | `semantic_executor`  | Runs on the local row/value semantic executor instead of DuckDB SQL evaluation. DuckDB is still used as the row source; the executor owns expression evaluation and error surfaces. |
 | `control_op`         | DDL / metadata / catalog op routed through the storage layer. Bypasses query execution entirely. |
+| `local_stub`         | Specialized feature family the emulator accepts at the analyzer but evaluates against a deterministic BigQuery-shaped placeholder. The handler lives under `backend/engine/semantic/stubs/` (function-level: `KEYS.*`) or `backend/engine/control/stubs/` (statement-level: `CREATE MODEL`). The route exists so client-library startup probes succeed; downstream calls that depend on real semantics (e.g. `ML.PREDICT` over a stub model, AEAD encryption with a stub keyset) still surface `UNIMPLEMENTED`. `specialized-feature-policy.plan.md` owns the per-family stub contract. |
 | `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` (or `INVALID_ARGUMENT` where appropriate). |
 
 Rows that have already landed list their **current** route. Rows that
@@ -45,8 +46,9 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedCreateViewStmt`                      | `control_op`        | (planned) DDL via storage; `control-op-executor.plan.md`.                                                                          |
 | `ResolvedCreateMaterializedViewStmt`          | `control_op`        | (planned) DDL via storage; `control-op-executor.plan.md`.                                                                          |
 | `ResolvedCreateProcedureStmt`                 | `semantic_executor` | (planned) Scripting / procedures land on the local script interpreter; `procedural-scripting-executor.plan.md`. |
-| `ResolvedCreateFunctionStmt`                  | `control_op`        | (planned) UDF registration is metadata; the function body's evaluation route depends on language and is decided in `udf-tvf-module-routing.plan.md`. |
+| `ResolvedCreateFunctionStmt`                  | `control_op`        | (planned) UDF registration is metadata; the function body's evaluation route depends on language and is decided in `udf-tvf-module-routing.plan.md`. `LANGUAGE js` registration is `local_stub` per `specialized-feature-policy.plan.md` but the metadata round-trip blocks on plan 13's deferred UDF body storage (`udf-tvf-module-routing.plan.md` Families 4-8); until that lands, JS UDF `CREATE FUNCTION` continues to surface `UNIMPLEMENTED` via the control-op handler. |
 | `ResolvedCreateTableFunctionStmt`             | `control_op`        | (planned) TVF metadata via storage; `udf-tvf-module-routing.plan.md`.                                                                          |
+| `ResolvedCreateModelStmt`                     | `local_stub`        | `specialized-feature-policy`: `CREATE MODEL` is accepted at parse / analyze time and the coordinator pre-dispatches `RESOLVED_CREATE_MODEL_STMT` to `backend/engine/control/stubs/create_model.cc::RunCreateModel`, which returns OK without materializing a model (no model storage exists). A subsequent `ML.PREDICT(<stub-model>)` surfaces `UNIMPLEMENTED` via the `ml.*` row in `functions.yaml` (`unsupported`). |
 | `ResolvedDropStmt`                            | `control_op`        | (planned) DDL via storage; `control-op-executor.plan.md`.                                                                          |
 | `ResolvedDropFunctionStmt`                    | `control_op`        | (planned) DDL via storage; `control-op-executor.plan.md`.                                                                          |
 | `ResolvedInsertStmt`                          | `semantic_executor` (subset) | `INSERT VALUES` (single + multi-row) lands on `backend/engine/semantic/dml/dml_executor.cc`; `INSERT ... SELECT` is owned by Family 5 of `dml-local-executor.plan.md` and surfaces a clean `notImplemented` until that family lands. |
@@ -155,12 +157,12 @@ semantic-executor / control-op code) so the doc stays honest.
   human-readable mirror; the machine-readable source of truth
   lives in two sibling YAML files in this directory:
   * `node_dispositions.yaml` — per-`ResolvedAST` node-kind
-    disposition registry. Each row carries
+    disposition registry.     Each row carries
     `<NodeKind>: <disposition> [plan=<plan>] [status=planned]`
-    using the canonical six-route vocabulary from
+    using the canonical seven-route vocabulary from
     `backend/engine/disposition.h` (`duckdb_native`,
     `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
-    `control_op`, `unsupported`). A Bazel `genrule`
+    `control_op`, `local_stub`, `unsupported`). A Bazel `genrule`
     (`:node_dispositions_table_inc`) emits
     `node_dispositions_table.inc`, which `node_dispositions.cc`
     `#include`s inside a static
@@ -201,7 +203,7 @@ semantic-executor / control-op code) so the doc stays honest.
   string, datetime, conditional, array, aggregation, window, and
   BQ-specific categories. After
   `execution-disposition-registry.plan.md`, every row carries one
-  of the six `Disposition` values from
+  of the seven `Disposition` values from
   `backend/engine/disposition.h`:
   * `duckdb_native` (and the small reserved
     `duckdb_rewrite` lane) — emit
@@ -223,16 +225,26 @@ semantic-executor / control-op code) so the doc stays honest.
     `status=planned` marker has dropped): `BIT_COUNT`,
     `IEEE_DIVIDE`, `SAFE_DIVIDE`, `SAFE_NEGATE`, `SOUNDEX`,
     `INSTR`.
+  * `local_stub` — `specialized-feature-policy.plan.md`'s
+    deterministic-placeholder posture for client-library startup
+    probes. Today: `KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`. The
+    `CREATE MODEL` statement-level analog lives in
+    `node_dispositions.yaml::ResolvedCreateModelStmt`. Promoting
+    a row off `local_stub` requires the matching real
+    implementation, not a thicker stub.
   * `unsupported` — deliberately out of scope locally
-    (`approx_quantiles`, `ml.*`, `net.*`, `keys.*`, `st_*`,
-    `hll_count.*`, `generate_uuid`, `session_user`,
-    `error`). Every row points at
+    (`approx_quantiles`, `ml.*`, `keys.encrypt`,
+    `keys.decrypt_bytes`, `st_*`, `generate_uuid`,
+    `session_user`, `error`). Every row points at
     `specialized-feature-policy.plan.md`. `BIT_COUNT` was on this
     list before `semantic-functions-compliance.plan.md` shipped a
     two's-complement-correct implementation in the semantic
     executor; `IEEE_DIVIDE` is also owned by the semantic
     executor for the IEEE 754 sentinel contract DuckDB's `/`
-    cannot match.
+    cannot match. `HLL_COUNT.*` and `NET.*` graduated from
+    `unsupported` to `semantic_executor status=planned` by the
+    specialized-feature policy plan; the real implementations
+    land via `semantic-functions-compliance.plan.md`.
 * **DuckDB STRUCT / ARRAY quirks the fast path honors:**
   * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
     are keyed by name. The transpiler walks the resolved `StructType`

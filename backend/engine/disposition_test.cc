@@ -18,9 +18,13 @@ namespace {
 // exercise the new value as well.
 const std::vector<Disposition>& AllDispositions() {
   static const auto* kAll = new std::vector<Disposition>{
-      Disposition::kDuckdbNative,    Disposition::kDuckdbRewrite,
-      Disposition::kDuckdbUdf,       Disposition::kSemanticExecutor,
-      Disposition::kControlOp,       Disposition::kUnsupported,
+      Disposition::kDuckdbNative,
+      Disposition::kDuckdbRewrite,
+      Disposition::kDuckdbUdf,
+      Disposition::kSemanticExecutor,
+      Disposition::kControlOp,
+      Disposition::kLocalStub,
+      Disposition::kUnsupported,
   };
   return *kAll;
 }
@@ -30,14 +34,13 @@ TEST(DispositionTest, ToStringRoundsTripCanonicalSpellings) {
   // the SHAPE_TRACKER.md `status` column verbatim; the parity
   // checker (`tools/check_disposition_parity`) consumes the same
   // strings.
-  EXPECT_EQ(DispositionToString(Disposition::kDuckdbNative),
-            "duckdb_native");
-  EXPECT_EQ(DispositionToString(Disposition::kDuckdbRewrite),
-            "duckdb_rewrite");
+  EXPECT_EQ(DispositionToString(Disposition::kDuckdbNative), "duckdb_native");
+  EXPECT_EQ(DispositionToString(Disposition::kDuckdbRewrite), "duckdb_rewrite");
   EXPECT_EQ(DispositionToString(Disposition::kDuckdbUdf), "duckdb_udf");
   EXPECT_EQ(DispositionToString(Disposition::kSemanticExecutor),
             "semantic_executor");
   EXPECT_EQ(DispositionToString(Disposition::kControlOp), "control_op");
+  EXPECT_EQ(DispositionToString(Disposition::kLocalStub), "local_stub");
   EXPECT_EQ(DispositionToString(Disposition::kUnsupported), "unsupported");
 }
 

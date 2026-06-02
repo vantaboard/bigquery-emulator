@@ -56,6 +56,26 @@
 //                           query execution entirely. Not yet
 //                           emit-able from this plan; see
 //                           `control-op-executor.plan.md`.
+//   * `kLocalStub`        — deterministic BigQuery-shaped stub for a
+//                           specialized feature family that is
+//                           accepted at parse / analyzer time but
+//                           whose real semantics are deliberately
+//                           NOT implemented locally. Engine evaluates
+//                           a small per-family stub that returns a
+//                           placeholder value (functions) or an OK
+//                           metadata-only acknowledgement
+//                           (statements). The route exists so client-
+//                           library startup probes (CREATE MODEL
+//                           registration, `KEYS.NEW_KEYSET(...)`,
+//                           ...) do not fail; downstream calls that
+//                           depend on the real BigQuery semantic
+//                           surface (e.g. `ML.PREDICT` over a
+//                           stub-created model, real AEAD encryption
+//                           with a stub keyset) still surface
+//                           `UNIMPLEMENTED` from the matching
+//                           per-family handler. `specialized-
+//                           feature-policy.plan.md` documents the
+//                           per-family stub contract.
 //   * `kUnsupported`      — deliberately out of scope locally.
 //                           Surfaces a BigQuery-shaped
 //                           `UNIMPLEMENTED` (or
@@ -75,6 +95,7 @@ enum class Disposition {
   kDuckdbUdf,
   kSemanticExecutor,
   kControlOp,
+  kLocalStub,
   kUnsupported,
 };
 
@@ -83,7 +104,7 @@ enum class Disposition {
 // and the `node_dispositions_table_test` consult this so adding a
 // new disposition fails the build everywhere that has to learn
 // about it.
-inline constexpr int kDispositionCount = 6;
+inline constexpr int kDispositionCount = 7;
 
 // Returns the canonical lowercase string spelling used in the YAML
 // disposition tables and in `SHAPE_TRACKER.md` (`"duckdb_native"`,

@@ -1863,6 +1863,17 @@ std::string Transpiler::EmitFunctionCall(
       return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
+    case Disposition::kLocalStub:
+      // `kLocalStub` (e.g. `KEYS.NEW_KEYSET`) is handled by the
+      // semantic executor's per-family stub dispatch (see
+      // `backend/engine/semantic/stubs/`); the DuckDB transpiler
+      // does not lower stub families. The route classifier
+      // promotes the surrounding query to `kLocalStub` (or
+      // `kSemanticExecutor` depending on what else is in the
+      // statement), so this branch is reached only when the
+      // transpiler is asked to lower a stub call inline (which
+      // it cannot do). Surfacing the empty string keeps the
+      // no-silent-approximation contract intact.
       LOG(INFO) << "duckdb transpiler: function '" << name
                 << "' route=" << DispositionToString(entry->disposition)
                 << " (plan=" << entry->plan << ", planned=" << entry->planned
@@ -1959,6 +1970,13 @@ std::string Transpiler::EmitAggregateFunctionCall(
       return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
+    case Disposition::kLocalStub:
+      // Aggregates today have no `kLocalStub` rows in
+      // `functions.yaml`, but the switch must be exhaustive over
+      // the disposition enum. Behave like `kSemanticExecutor` /
+      // `kControlOp`: surface the empty-string contract so the
+      // engine returns UNIMPLEMENTED rather than the transpiler
+      // emitting a guess.
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
                 << "' route=" << DispositionToString(entry->disposition)
                 << " (plan=" << entry->plan << ", planned=" << entry->planned
@@ -2049,6 +2067,11 @@ std::string Transpiler::EmitAnalyticFunctionCall(
       return "";
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
+    case Disposition::kLocalStub:
+      // Analytic functions have no `kLocalStub` rows in
+      // `functions.yaml`, but the switch must be exhaustive over
+      // the disposition enum. Surface UNIMPLEMENTED so the
+      // engine never lowers a stub family through the fast path.
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
                 << "' route=" << DispositionToString(entry->disposition)
                 << " (plan=" << entry->plan << ", planned=" << entry->planned

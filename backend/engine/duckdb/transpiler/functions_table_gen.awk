@@ -46,13 +46,18 @@ BEGIN {
     kind["duckdb_udf"]        = "kDuckdbUdf"
     kind["semantic_executor"] = "kSemanticExecutor"
     kind["control_op"]        = "kControlOp"
+    kind["local_stub"]        = "kLocalStub"
     kind["unsupported"]       = "kUnsupported"
 
     # Dispositions whose runtime emit does not yet exist; only these
-    # may carry `status=planned`.
+    # may carry `status=planned`. `local_stub` rows are eligible too
+    # because the stub handler for some families (notably JS UDF
+    # registration, which depends on plan 13's deferred UDF body
+    # storage) may not be in place yet.
     plannable["duckdb_udf"]        = 1
     plannable["semantic_executor"] = 1
     plannable["control_op"]        = 1
+    plannable["local_stub"]        = 1
 
     # Dispositions that emit a `<duckdb_name>(<args>)` call. Only
     # these may carry (and MUST carry) `duckdb_name=...`.
@@ -99,7 +104,7 @@ BEGIN {
     }
     disposition = parts[1]
     if (!(disposition in kind)) {
-        printf("functions_table_gen.awk: unknown disposition %s for key %s (allowed: duckdb_native, duckdb_rewrite, duckdb_udf, semantic_executor, control_op, unsupported)\n", disposition, key) > "/dev/stderr"
+        printf("functions_table_gen.awk: unknown disposition %s for key %s (allowed: duckdb_native, duckdb_rewrite, duckdb_udf, semantic_executor, control_op, local_stub, unsupported)\n", disposition, key) > "/dev/stderr"
         exit 1
     }
 
@@ -153,6 +158,15 @@ BEGIN {
     }
     if (disposition == "unsupported" && length(plan) == 0) {
         printf("functions_table_gen.awk: %s is unsupported but has no plan= pointer (expected specialized-feature-policy.plan.md)\n", key) > "/dev/stderr"
+        exit 1
+    }
+    # Same posture-row contract for `local_stub`: every stub
+    # function row must point at the owning policy plan so a reader
+    # can trace why the stub was chosen and where the documented
+    # contract lives. `specialized-feature-policy.plan.md` is the
+    # canonical owner.
+    if (disposition == "local_stub" && length(plan) == 0) {
+        printf("functions_table_gen.awk: %s is local_stub but has no plan= pointer (expected specialized-feature-policy.plan.md)\n", key) > "/dev/stderr"
         exit 1
     }
     if (length(status) > 0 && !(disposition in plannable)) {

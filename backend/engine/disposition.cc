@@ -18,6 +18,8 @@ absl::string_view DispositionToString(Disposition d) {
       return "semantic_executor";
     case Disposition::kControlOp:
       return "control_op";
+    case Disposition::kLocalStub:
+      return "local_stub";
     case Disposition::kUnsupported:
       return "unsupported";
   }

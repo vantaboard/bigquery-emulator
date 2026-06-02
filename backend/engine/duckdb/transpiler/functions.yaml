@@ -40,6 +40,16 @@
 #                            UNIMPLEMENTED.
 #   * `control_op`        - DDL/metadata; no function-table use case
 #                            today but accepted by the generator.
+#   * `local_stub`        - accepted at the analyzer and evaluated
+#                            against a deterministic BigQuery-shaped
+#                            placeholder so client-library startup
+#                            probes succeed. The handler lives under
+#                            `backend/engine/semantic/stubs/` (or
+#                            `backend/engine/control/stubs/` for
+#                            statement-level stubs). Routed through
+#                            the semantic executor at runtime.
+#                            `specialized-feature-policy.plan.md`
+#                            owns these rows.
 #   * `unsupported`       - intentionally out of scope today; the
 #                            engine surfaces UNIMPLEMENTED.
 #                            `specialized-feature-policy.plan.md`
@@ -476,34 +486,106 @@ first_value: duckdb_native duckdb_name=FIRST_VALUE
 last_value: duckdb_native duckdb_name=LAST_VALUE
 nth_value: duckdb_native duckdb_name=NTH_VALUE
 
-# --- Unsupported -------------------------------------------------------
-# Deliberately out of scope today; the engine surfaces UNIMPLEMENTED
-# for these. `specialized-feature-policy.plan.md` documents the
-# deliberate posture and any planned local implementation.
+# --- Specialized families: stub-and-defer -----------------------------
+# These rows pick the per-family posture documented by
+# `specialized-feature-policy.plan.md`'s scope table.
+#
+# `unsupported` rows: deliberately out of scope today; the engine
+#   surfaces UNIMPLEMENTED with a family-named, doc-linking error
+#   from `UnsupportedExecutor`. Promoting one of these to a real
+#   route requires the matching plan from
+#   `local-execution-roadmap-index.plan.md` to land alongside its
+#   conformance fixture.
+#
+# `semantic_executor status=planned` rows: graduated from
+#   `unsupported` to `local_impl` by the specialized-feature
+#   policy plan; the actual implementation is deferred to
+#   `semantic-functions-compliance.plan.md`. Until that plan ships
+#   its handler, the engine surfaces UNIMPLEMENTED with the
+#   per-family "planned, waiting for ..." pointer (same surface as
+#   any other `status=planned` semantic-executor function).
+#
+# `local_stub` rows: accepted at the analyzer and evaluated against
+#   a deterministic BigQuery-shaped placeholder so client-library
+#   startup probes can succeed. The handler lives under
+#   `backend/engine/semantic/stubs/`. Promoting one of these to a
+#   real local implementation requires a follow-up plan; the row
+#   stays on `local_stub` until then so the runtime behavior is
+#   "succeeds with placeholder", not "silent approximation".
+
+# Anonymized / differential-privacy / threshold aggregates. No
+# stub: DP semantics are too easy to get wrong by accident, and a
+# placeholder result would mask the missing implementation. The
+# `unsupported` row is the no-silent-approximation choice.
 approx_quantiles: unsupported plan=specialized-feature-policy.plan.md
 approx_count_distinct: unsupported plan=specialized-feature-policy.plan.md
 approx_top_count: unsupported plan=specialized-feature-policy.plan.md
 approx_top_sum: unsupported plan=specialized-feature-policy.plan.md
-hll_count.init: unsupported plan=specialized-feature-policy.plan.md
-hll_count.merge: unsupported plan=specialized-feature-policy.plan.md
-hll_count.merge_partial: unsupported plan=specialized-feature-policy.plan.md
-hll_count.extract: unsupported plan=specialized-feature-policy.plan.md
+
+# HLL_COUNT.* graduates to `local_impl` (semantic executor) per the
+# specialized-feature plan. The HLL algorithm is small, deterministic,
+# and seedable; `semantic-functions-compliance.plan.md` owns the
+# actual implementation. Until that plan ships its handler the
+# engine surfaces a per-function `status=planned` UNIMPLEMENTED.
+hll_count.init: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+hll_count.merge: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+hll_count.merge_partial: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+hll_count.extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+
+# BigQuery ML inference: `unsupported`. There is no local model
+# training / serving surface, and a stub `ML.PREDICT` would lie
+# about producing inference results. `CREATE MODEL` itself routes
+# to `kLocalStub` at the statement level (see
+# `node_dispositions.yaml::ResolvedCreateModelStmt`) so client
+# library registration probes succeed; calling `ML.PREDICT` on the
+# stub-registered model returns the family-named UNIMPLEMENTED.
 ml.predict: unsupported plan=specialized-feature-policy.plan.md
 ml.forecast: unsupported plan=specialized-feature-policy.plan.md
 ml.evaluate: unsupported plan=specialized-feature-policy.plan.md
-net.ip_from_string: unsupported plan=specialized-feature-policy.plan.md
-net.ip_to_string: unsupported plan=specialized-feature-policy.plan.md
-net.host: unsupported plan=specialized-feature-policy.plan.md
-net.public_suffix: unsupported plan=specialized-feature-policy.plan.md
-keys.new_keyset: unsupported plan=specialized-feature-policy.plan.md
+
+# NET.* graduates to `local_impl` (semantic executor) per the
+# specialized-feature plan. The surface is small, deterministic,
+# and a good fit for the semantic executor; the actual
+# implementation lives in `semantic-functions-compliance.plan.md`.
+# Until that plan ships its handler the engine surfaces a per-
+# function `status=planned` UNIMPLEMENTED.
+net.ip_from_string: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+net.ip_to_string: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+net.host: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+net.public_suffix: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+
+# KEYS.* is `local_stub` per the specialized-feature plan: the
+# emulator does not implement real keysets, but accepting the
+# function call with a deterministic placeholder lets client-
+# library bootstrap probes succeed. The handler lives in
+# `backend/engine/semantic/stubs/keys.{h,cc}`. Encryption /
+# decryption calls (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) stay
+# `unsupported` -- a stub there would silently produce
+# unencrypted bytes a caller might mistake for real ciphertext,
+# which violates the no-silent-approximation rule.
+keys.new_keyset: local_stub plan=specialized-feature-policy.plan.md
+keys.keyset_length: local_stub plan=specialized-feature-policy.plan.md
 keys.encrypt: unsupported plan=specialized-feature-policy.plan.md
 keys.decrypt_bytes: unsupported plan=specialized-feature-policy.plan.md
+
+# Geography / GIS: `unsupported` for now. DuckDB's `spatial`
+# extension could close the gap but the integration is a separate
+# initiative; until that lands the deliberate posture is
+# `unsupported` (per the specialized-feature plan).
 st_geogfromtext: unsupported plan=specialized-feature-policy.plan.md
 st_geogfromwkb: unsupported plan=specialized-feature-policy.plan.md
 st_distance: unsupported plan=specialized-feature-policy.plan.md
 st_within: unsupported plan=specialized-feature-policy.plan.md
 st_contains: unsupported plan=specialized-feature-policy.plan.md
 st_intersects: unsupported plan=specialized-feature-policy.plan.md
+
+# Misc BigQuery-specific scalars. `GENERATE_UUID` is non-deterministic
+# (stub would lie about uniqueness across calls); `SESSION_USER` has
+# no analog in the emulator's no-auth posture; `ERROR(msg)` is a
+# control-flow function whose semantics belong to the procedural
+# scripting executor (`procedural-scripting-executor.plan.md`).
+# All three stay `unsupported` until the matching plan lands a
+# real implementation.
 generate_uuid: unsupported plan=specialized-feature-policy.plan.md
 session_user: unsupported plan=specialized-feature-policy.plan.md
 error: unsupported plan=specialized-feature-policy.plan.md

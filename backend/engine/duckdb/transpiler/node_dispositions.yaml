@@ -23,6 +23,14 @@
 #       * `duckdb_udf`        - lowers via a DuckDB UDF/macro.
 #       * `semantic_executor` - runs on the local row/value executor.
 #       * `control_op`        - routed through storage/catalog.
+#       * `local_stub`        - deterministic BigQuery-shaped stub
+#                               for a specialized feature family.
+#                               Handler lives under
+#                               `backend/engine/semantic/stubs/`
+#                               (function-level) or
+#                               `backend/engine/control/stubs/`
+#                               (statement-level). Owned by
+#                               `specialized-feature-policy.plan.md`.
 #       * `unsupported`       - deliberately out of scope locally.
 #   - `plan=<plan-file>` (optional) names the
 #     `.cursor/plans/*.plan.md` file that owns the row. Mandatory for
@@ -56,6 +64,18 @@ ResolvedCreateMaterializedViewStmt: control_op plan=control-op-executor.plan.md
 ResolvedCreateProcedureStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedCreateFunctionStmt: control_op plan=control-op-executor.plan.md
 ResolvedCreateTableFunctionStmt: control_op plan=udf-tvf-module-routing.plan.md
+# `CREATE MODEL` (BigQuery ML) is `local_stub`: the statement
+# parses, analyzes, and the engine returns OK without materializing
+# a model. A subsequent `ML.PREDICT(<stub-model>)` call surfaces
+# `UNIMPLEMENTED` from the `ml.*` function-table rows (`unsupported`).
+# The stub handler lives in
+# `backend/engine/control/stubs/create_model.{h,cc}`; the
+# coordinator pre-dispatches `RESOLVED_CREATE_MODEL_STMT` to it
+# rather than routing through `ControlOpExecutor` (mirrors the
+# pipe-DDL pre-dispatch pattern). The posture exists so client
+# libraries that probe BigQuery ML availability by issuing
+# `CREATE MODEL` do not fail at startup.
+ResolvedCreateModelStmt: local_stub plan=specialized-feature-policy.plan.md
 ResolvedDropStmt: control_op plan=control-op-executor.plan.md
 ResolvedDropFunctionStmt: control_op plan=control-op-executor.plan.md
 ResolvedInsertStmt: semantic_executor plan=dml-local-executor.plan.md
