@@ -8,10 +8,10 @@ import "sort"
 const ProfileDuckDB = "duckdb"
 
 // Profile is one named runtime configuration the runner can drive.
-// Today there is only one (`duckdb`) since the emulator collapsed
-// onto DuckDB-only engine + storage; the type is kept around so the
-// fixture / CLI surface stays generic if a second profile lands
-// later.
+// Today there is only one (`duckdb`) since the emulator ships a
+// single local-execution coordinator with DuckDB storage; the type
+// is kept around so the fixture / CLI surface stays generic if a
+// second profile lands later.
 //
 // `EmulatorMainArgs` is the flag list the harness passes when
 // spawning `emulator_main`; the runner does not include

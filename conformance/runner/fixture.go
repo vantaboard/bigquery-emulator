@@ -38,7 +38,8 @@ type Fixture struct {
 	Description string `yaml:"description,omitempty"`
 
 	// Profiles is the runtime matrix the fixture applies to. Empty
-	// means the default (DuckDB-only) profile set. Unknown profile
+	// means the default profile set (today: a single local-
+	// execution coordinator over DuckDB storage). Unknown profile
 	// names are an error at load time so a typo is caught
 	// immediately rather than masked as "fixture ran on zero
 	// profiles".

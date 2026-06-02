@@ -12,19 +12,22 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-// TestDDLCreateTableAsSelectRoundTrip is the Plan-35 end-to-end story
-// for `CREATE TABLE AS SELECT` on the canonical DuckDB engine + DuckDB
-// storage configuration. The DDL surface is implemented entirely on
-// the DuckDB engine (see
-// `backend/engine/duckdb/duckdb_engine.cc::ExecuteDdl`). Plan 35's
-// engine-policy decision (extending the "DuckDB-only" pattern
-// documented in `docs/ENGINE_POLICY.md`) is what this test pins.
+// TestDDLCreateTableAsSelectRoundTrip is the end-to-end story for
+// `CREATE TABLE AS SELECT` on the local execution coordinator over
+// DuckDB storage. CTAS is dispatched by the route classifier to the
+// `control_op` executor (see
+// `backend/engine/control/control_op_executor.cc`); reads through the
+// inner SELECT continue to lower through the DuckDB transpiler. The
+// engine-policy contract this test pins lives at
+// `docs/ENGINE_POLICY.md` and the route plan in
+// `.cursor/plans/control-op-executor.plan.md`.
 //
 // The test:
 //
 //  1. Creates a `src` table and seeds it with three rows via
-//     `tabledata.insertAll` (INSERT VALUES is UNIMPLEMENTED on the
-//     DuckDB engine today).
+//     `tabledata.insertAll` (the canonical seed path; `INSERT VALUES`
+//     is also supported via `dml-local-executor.plan.md` but
+//     `tabledata.insertAll` keeps the test focused on the DDL story).
 //  2. Runs `CREATE TABLE ds.copy AS SELECT id, name FROM ds.src`
 //     through `jobs.query` and checks the response surfaces
 //     `jobComplete=true` with no schema / rows / dmlStats (the

@@ -6,7 +6,7 @@
 //
 // Every user-visible `ResolvedAST` node kind and every BigQuery
 // function the engine sees ends up labeled with exactly one of these
-// six dispositions. The same vocabulary appears in:
+// seven dispositions. The same vocabulary appears in:
 //
 //   * `backend/engine/duckdb/transpiler/SHAPE_TRACKER.md` (the
 //     human-readable per-node disposition table; the markdown is a
