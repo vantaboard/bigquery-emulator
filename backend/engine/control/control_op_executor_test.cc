@@ -171,9 +171,8 @@ class ControlOpExecutorTest : public ::testing::Test {
           "ControlOpExecutorTest::RunDdl: analyzer produced no resolved "
           "statement");
     }
-    return executor_->ExecuteDdl(MakeRequest(sql),
-                                 *output->resolved_statement(),
-                                 bundle.catalog.get());
+    return executor_->ExecuteDdl(
+        MakeRequest(sql), *output->resolved_statement(), bundle.catalog.get());
   }
 
   fs::path data_dir_{};
@@ -197,8 +196,7 @@ TEST_F(ControlOpExecutorTest, CreateTableWritesSchemaToStorage) {
 }
 
 TEST_F(ControlOpExecutorTest, CreateTableHonoursNotNullAnnotation) {
-  absl::Status s =
-      RunDdl("CREATE TABLE ds.t (id INT64 NOT NULL, name STRING)");
+  absl::Status s = RunDdl("CREATE TABLE ds.t (id INT64 NOT NULL, name STRING)");
   ASSERT_TRUE(s.ok()) << s;
 
   auto schema = storage_->GetSchema({"proj-test", "ds", "t"});
@@ -273,8 +271,8 @@ TEST_F(ControlOpExecutorTest, DropViewNotImplementedYet) {
 
 TEST_F(ControlOpExecutorTest, CreateTableAsSelectMaterializesSourceRows) {
   CreatePeopleTable();
-  absl::Status s = RunDdl(
-      "CREATE TABLE ds.people_copy AS SELECT id, name FROM ds.people");
+  absl::Status s =
+      RunDdl("CREATE TABLE ds.people_copy AS SELECT id, name FROM ds.people");
   ASSERT_TRUE(s.ok()) << s;
 
   auto schema = storage_->GetSchema({"proj-test", "ds", "people_copy"});
@@ -290,8 +288,7 @@ TEST_F(ControlOpExecutorTest, CreateTableAsSelectMaterializesSourceRows) {
     ASSERT_TRUE(has.ok()) << has.status();
     if (!*has) break;
     ASSERT_EQ(row.cells.size(), 2u);
-    seen.emplace_back(row.cells[0].int64_value(),
-                      row.cells[1].string_value());
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
   }
   std::sort(seen.begin(), seen.end());
   std::vector<std::pair<int64_t, std::string>> want = {
@@ -369,10 +366,10 @@ TEST_F(ControlOpExecutorTest, ExecuteQueryRejectsControlOpStatement) {
                                             &output)
                   .ok());
   ASSERT_NE(output, nullptr);
-  auto source = executor_->ExecuteQuery(
-      MakeRequest("CREATE TABLE ds.t (id INT64)"),
-      *output->resolved_statement(),
-      bundle.catalog.get());
+  auto source =
+      executor_->ExecuteQuery(MakeRequest("CREATE TABLE ds.t (id INT64)"),
+                              *output->resolved_statement(),
+                              bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument)
       << source.status();
@@ -390,9 +387,10 @@ TEST_F(ControlOpExecutorTest, ExecuteDmlRejectsControlOpStatement) {
                                             &output)
                   .ok());
   ASSERT_NE(output, nullptr);
-  auto stats = executor_->ExecuteDml(MakeRequest("CREATE TABLE ds.t (id INT64)"),
-                                     *output->resolved_statement(),
-                                     bundle.catalog.get());
+  auto stats =
+      executor_->ExecuteDml(MakeRequest("CREATE TABLE ds.t (id INT64)"),
+                            *output->resolved_statement(),
+                            bundle.catalog.get());
   ASSERT_FALSE(stats.ok());
   EXPECT_EQ(stats.status().code(), absl::StatusCode::kInvalidArgument)
       << stats.status();

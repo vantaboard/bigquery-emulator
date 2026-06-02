@@ -72,18 +72,19 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
 template <typename StmtT>
 absl::StatusOr<const catalog::StorageTable*> StorageTargetFor(
     const StmtT& stmt, absl::string_view kind) {
-  if (stmt.table_scan() == nullptr ||
-      stmt.table_scan()->table() == nullptr) {
+  if (stmt.table_scan() == nullptr || stmt.table_scan()->table() == nullptr) {
     return absl::InternalError(absl::StrCat(
         "semantic/dml: ", kind, " has no resolved target table scan"));
   }
-  const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(
-      stmt.table_scan()->table());
+  const auto* storage_table =
+      dynamic_cast<const catalog::StorageTable*>(stmt.table_scan()->table());
   if (storage_table == nullptr) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "semantic/dml: ", kind, " target '",
-        stmt.table_scan()->table()->FullName(),
-        "' is not backed by a StorageTable; cannot apply DML"));
+    return absl::FailedPreconditionError(
+        absl::StrCat("semantic/dml: ",
+                     kind,
+                     " target '",
+                     stmt.table_scan()->table()->FullName(),
+                     "' is not backed by a StorageTable; cannot apply DML"));
   }
   return storage_table;
 }
@@ -118,9 +119,10 @@ absl::StatusOr<absl::flat_hash_map<int, int>> BuildColumnIndexByColumnId(
     const ::googlesql::ResolvedColumn& col = scan.column_list(i);
     const int idx = IndexOfColumn(schema, col.name());
     if (idx < 0) {
-      return absl::InternalError(absl::StrCat(
-          "semantic/dml: ResolvedTableScan column '", col.name(),
-          "' not found in storage table schema"));
+      return absl::InternalError(
+          absl::StrCat("semantic/dml: ResolvedTableScan column '",
+                       col.name(),
+                       "' not found in storage table schema"));
     }
     by_id[col.column_id()] = idx;
   }
@@ -169,15 +171,18 @@ absl::StatusOr<ColumnBindings> BindRow(
     const ::googlesql::ResolvedColumn& col = scan.column_list(i);
     auto it = by_id.find(col.column_id());
     if (it == by_id.end()) {
-      return absl::InternalError(absl::StrCat(
-          "semantic/dml: column_id=", col.column_id(),
-          " missing from storage column-index map"));
+      return absl::InternalError(
+          absl::StrCat("semantic/dml: column_id=",
+                       col.column_id(),
+                       " missing from storage column-index map"));
     }
     const int idx = it->second;
     if (idx < 0 || static_cast<size_t>(idx) >= row.cells.size()) {
-      return absl::InternalError(absl::StrCat(
-          "semantic/dml: column index ", idx,
-          " out of range for row with ", row.cells.size(), " cells"));
+      return absl::InternalError(absl::StrCat("semantic/dml: column index ",
+                                              idx,
+                                              " out of range for row with ",
+                                              row.cells.size(),
+                                              " cells"));
     }
     auto v = catalog::StorageValueToGoogleSqlValue(row.cells[idx], col.type());
     if (!v.ok()) return v.status();
@@ -198,13 +203,16 @@ absl::StatusOr<ColumnBindings> BindRow(
 absl::StatusOr<storage::Row> BuildInsertRow(
     const ::googlesql::ResolvedInsertRow& row_node,
     const std::vector<int>& column_idx_for_insert_position,
-    const schema::TableSchema& schema, EvalContext& ctx) {
+    const schema::TableSchema& schema,
+    EvalContext& ctx) {
   if (row_node.value_list_size() !=
       static_cast<int>(column_idx_for_insert_position.size())) {
-    return absl::InternalError(absl::StrCat(
-        "semantic/dml: INSERT row has ", row_node.value_list_size(),
-        " values but the column list named ",
-        column_idx_for_insert_position.size(), " columns"));
+    return absl::InternalError(
+        absl::StrCat("semantic/dml: INSERT row has ",
+                     row_node.value_list_size(),
+                     " values but the column list named ",
+                     column_idx_for_insert_position.size(),
+                     " columns"));
   }
   storage::Row out;
   out.cells.assign(schema.columns.size(), storage::Value::Null());
@@ -242,39 +250,41 @@ absl::Status RejectUnsupportedDmlFeatures(
   if (returning != nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        absl::StrCat(
-            "semantic/dml: ", kind,
-            " RETURNING clause is owned by Family 7 of "
-            "dml-local-executor.plan.md"));
+        absl::StrCat("semantic/dml: ",
+                     kind,
+                     " RETURNING clause is owned by Family 7 of "
+                     "dml-local-executor.plan.md"));
   }
   if (assert_rows != nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        absl::StrCat(
-            "semantic/dml: ", kind,
-            " ASSERT_ROWS_MODIFIED modifier is not yet supported"));
+        absl::StrCat("semantic/dml: ",
+                     kind,
+                     " ASSERT_ROWS_MODIFIED modifier is not yet supported"));
   }
   if (has_array_offset_column) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
         absl::StrCat(
-            "semantic/dml: ", kind,
+            "semantic/dml: ",
+            kind,
             " WITH OFFSET requires correlated lateral evaluation owned by "
             "Family 4 of array-struct-semantic-path.plan.md"));
   }
   if (generated_column_count > 0) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        absl::StrCat(
-            "semantic/dml: ", kind,
-            " on tables with GENERATED columns is not yet supported"));
+        absl::StrCat("semantic/dml: ",
+                     kind,
+                     " on tables with GENERATED columns is not yet supported"));
   }
   return absl::OkStatus();
 }
 
 absl::StatusOr<DmlStats> ExecuteInsert(
     const ::googlesql::ResolvedInsertStmt& insert,
-    storage::Storage& storage, EvalContext& ctx) {
+    storage::Storage& storage,
+    EvalContext& ctx) {
   // VALUES vs. INSERT ... SELECT: the analyzer leaves `query()`
   // null and populates `row_list()` for the VALUES form; the
   // SELECT form is the inverse. SELECT streaming is owned by
@@ -296,10 +306,12 @@ absl::StatusOr<DmlStats> ExecuteInsert(
         SemanticErrorReason::kNotImplemented,
         "semantic/dml: INSERT ... ON CONFLICT is not yet supported");
   }
-  absl::Status guard = RejectUnsupportedDmlFeatures(
-      insert.returning(), insert.assert_rows_modified(),
-      /*has_array_offset_column=*/false,
-      insert.generated_column_expr_list_size(), "INSERT");
+  absl::Status guard =
+      RejectUnsupportedDmlFeatures(insert.returning(),
+                                   insert.assert_rows_modified(),
+                                   /*has_array_offset_column=*/false,
+                                   insert.generated_column_expr_list_size(),
+                                   "INSERT");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(insert, "INSERT");
@@ -318,9 +330,10 @@ absl::StatusOr<DmlStats> ExecuteInsert(
     const ::googlesql::ResolvedColumn& col = insert.insert_column_list(i);
     const int idx = IndexOfColumn(schema, col.name());
     if (idx < 0) {
-      return absl::InternalError(absl::StrCat(
-          "semantic/dml: INSERT column '", col.name(),
-          "' not found in storage table schema"));
+      return absl::InternalError(
+          absl::StrCat("semantic/dml: INSERT column '",
+                       col.name(),
+                       "' not found in storage table schema"));
     }
     column_idx_for_insert_position.push_back(idx);
   }
@@ -338,14 +351,13 @@ absl::StatusOr<DmlStats> ExecuteInsert(
       return absl::InternalError(
           "semantic/dml: INSERT row_list contains a null entry");
     }
-    auto built = BuildInsertRow(*row_node, column_idx_for_insert_position,
-                                schema, ctx);
+    auto built =
+        BuildInsertRow(*row_node, column_idx_for_insert_position, schema, ctx);
     if (!built.ok()) return built.status();
     rows.push_back(*std::move(built));
   }
 
-  absl::Status appended =
-      storage.AppendRows(target->storage_table_id(), rows);
+  absl::Status appended = storage.AppendRows(target->storage_table_id(), rows);
   if (!appended.ok()) return appended;
 
   DmlStats stats;
@@ -355,11 +367,14 @@ absl::StatusOr<DmlStats> ExecuteInsert(
 
 absl::StatusOr<DmlStats> ExecuteDelete(
     const ::googlesql::ResolvedDeleteStmt& del,
-    storage::Storage& storage, EvalContext& ctx) {
+    storage::Storage& storage,
+    EvalContext& ctx) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      del.returning(), del.assert_rows_modified(),
+      del.returning(),
+      del.assert_rows_modified(),
       /*has_array_offset_column=*/del.array_offset_column() != nullptr,
-      /*generated_column_count=*/0, "DELETE");
+      /*generated_column_count=*/0,
+      "DELETE");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(del, "DELETE");
@@ -430,11 +445,14 @@ absl::StatusOr<DmlStats> ExecuteDelete(
 // `kNotImplemented`.
 absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedUpdateStmt& upd,
-    storage::Storage& storage, EvalContext& ctx) {
+    storage::Storage& storage,
+    EvalContext& ctx) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      upd.returning(), upd.assert_rows_modified(),
+      upd.returning(),
+      upd.assert_rows_modified(),
       /*has_array_offset_column=*/upd.array_offset_column() != nullptr,
-      upd.generated_column_expr_list_size(), "UPDATE");
+      upd.generated_column_expr_list_size(),
+      "UPDATE");
   if (!guard.ok()) return guard;
   if (upd.from_scan() != nullptr) {
     return MakeSemanticError(
@@ -464,10 +482,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
           "semantic/dml: UPDATE update_item_list contains a null entry");
     }
     if (!item->update_item_element_list().empty() ||
-        !item->delete_list().empty() ||
-        !item->update_list().empty() ||
-        !item->insert_list().empty() ||
-        item->element_column() != nullptr) {
+        !item->delete_list().empty() || !item->update_list().empty() ||
+        !item->insert_list().empty() || item->element_column() != nullptr) {
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: nested UPDATE (array element / sub-record) is "
@@ -480,14 +496,12 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     if (item->target()->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
-          absl::StrCat(
-              "semantic/dml: UPDATE SET target kind ",
-              item->target()->node_kind_string(),
-              " (deep STRUCT mutation) is owned by Family 4 of "
-              "dml-local-executor.plan.md"));
+          absl::StrCat("semantic/dml: UPDATE SET target kind ",
+                       item->target()->node_kind_string(),
+                       " (deep STRUCT mutation) is owned by Family 4 of "
+                       "dml-local-executor.plan.md"));
     }
-    if (item->set_value() == nullptr ||
-        item->set_value()->value() == nullptr) {
+    if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
       return absl::InternalError(
           "semantic/dml: scalar UPDATE item has null set_value");
     }
@@ -495,10 +509,10 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
         item->target()->GetAs<::googlesql::ResolvedColumnRef>();
     const int idx = IndexOfColumn(schema, col_ref->column().name());
     if (idx < 0) {
-      return absl::InternalError(absl::StrCat(
-          "semantic/dml: UPDATE target column '",
-          col_ref->column().name(),
-          "' not found in storage table schema"));
+      return absl::InternalError(
+          absl::StrCat("semantic/dml: UPDATE target column '",
+                       col_ref->column().name(),
+                       "' not found in storage table schema"));
     }
     sets.push_back({idx, item->set_value()->value()});
   }
@@ -568,9 +582,10 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
 
 }  // namespace
 
-absl::StatusOr<DmlStats> ExecuteDml(
-    const QueryRequest& request, const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog, storage::Storage* storage) {
+absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
+                                    const ::googlesql::ResolvedStatement& stmt,
+                                    ::googlesql::Catalog* catalog,
+                                    storage::Storage* storage) {
   (void)catalog;  // analysis is owned by the coordinator above us.
 
   // Storage is only required for the kinds the executor actually
@@ -580,10 +595,9 @@ absl::StatusOr<DmlStats> ExecuteDml(
   // get the same `kNotImplemented` envelope they would get with a
   // configured storage backend.
   const auto kind = stmt.node_kind();
-  const bool is_writer_kind =
-      kind == ::googlesql::RESOLVED_INSERT_STMT ||
-      kind == ::googlesql::RESOLVED_UPDATE_STMT ||
-      kind == ::googlesql::RESOLVED_DELETE_STMT;
+  const bool is_writer_kind = kind == ::googlesql::RESOLVED_INSERT_STMT ||
+                              kind == ::googlesql::RESOLVED_UPDATE_STMT ||
+                              kind == ::googlesql::RESOLVED_DELETE_STMT;
   if (is_writer_kind && storage == nullptr) {
     return absl::FailedPreconditionError(
         "semantic/dml: ExecuteDml called with null storage");
@@ -600,14 +614,14 @@ absl::StatusOr<DmlStats> ExecuteDml(
 
   switch (kind) {
     case ::googlesql::RESOLVED_INSERT_STMT:
-      return ExecuteInsert(*stmt.GetAs<::googlesql::ResolvedInsertStmt>(),
-                           *storage, ctx);
+      return ExecuteInsert(
+          *stmt.GetAs<::googlesql::ResolvedInsertStmt>(), *storage, ctx);
     case ::googlesql::RESOLVED_DELETE_STMT:
-      return ExecuteDelete(*stmt.GetAs<::googlesql::ResolvedDeleteStmt>(),
-                           *storage, ctx);
+      return ExecuteDelete(
+          *stmt.GetAs<::googlesql::ResolvedDeleteStmt>(), *storage, ctx);
     case ::googlesql::RESOLVED_UPDATE_STMT:
-      return ExecuteUpdate(*stmt.GetAs<::googlesql::ResolvedUpdateStmt>(),
-                           *storage, ctx);
+      return ExecuteUpdate(
+          *stmt.GetAs<::googlesql::ResolvedUpdateStmt>(), *storage, ctx);
     case ::googlesql::RESOLVED_MERGE_STMT:
       // Simple MERGE branches stay on the DuckDB fast path
       // (`duckdb_rewrite`); the harder matrix

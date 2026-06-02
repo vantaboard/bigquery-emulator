@@ -54,8 +54,7 @@ class FakeStorage : public storage::Storage {
   // Pre-register a table at `id` with `schema`. Subsequent
   // append/overwrite/scan calls operate against the buffer keyed
   // by the canonical "<project>/<dataset>/<table>" string.
-  void RegisterTable(const storage::TableId& id,
-                     schema::TableSchema schema) {
+  void RegisterTable(const storage::TableId& id, schema::TableSchema schema) {
     schemas_[Key(id)] = std::move(schema);
     rows_[Key(id)] = {};
   }
@@ -96,7 +95,8 @@ class FakeStorage : public storage::Storage {
       return absl::NotFoundError(
           "FakeStorage::AppendRows: table not registered");
     }
-    for (const storage::Row& r : rows) it->second.push_back(r);
+    for (const storage::Row& r : rows)
+      it->second.push_back(r);
     return absl::OkStatus();
   }
   absl::Status OverwriteRows(const storage::TableId& id,
@@ -129,8 +129,7 @@ class FakeStorage : public storage::Storage {
       const storage::TableId& id) const override {
     auto it = rows_.find(Key(id));
     if (it == rows_.end()) {
-      return absl::NotFoundError(
-          "FakeStorage::ScanRows: table not registered");
+      return absl::NotFoundError("FakeStorage::ScanRows: table not registered");
     }
     return std::unique_ptr<storage::RowIterator>(
         new VectorIterator(it->second));
@@ -201,8 +200,7 @@ class DmlExecutorTest : public ::testing::Test {
   const ::googlesql::ResolvedStatement* Analyze(absl::string_view sql) {
     last_output_.reset();
     absl::Status s = ::googlesql::AnalyzeStatement(
-        sql, MakeOptions(), catalog_.get(), type_factory_.get(),
-        &last_output_);
+        sql, MakeOptions(), catalog_.get(), type_factory_.get(), &last_output_);
     EXPECT_TRUE(s.ok()) << s;
     if (!s.ok() || last_output_ == nullptr) return nullptr;
     return last_output_->resolved_statement();
@@ -218,9 +216,9 @@ class DmlExecutorTest : public ::testing::Test {
 // --- INSERT VALUES ---------------------------------------------------------
 
 TEST_F(DmlExecutorTest, InsertValuesAppendsRowsAndCountsThem) {
-  const auto* stmt =
-      Analyze("INSERT INTO test_ds.people (id, name) VALUES "
-              "(1, 'ada'), (2, 'linus'), (3, 'grace')");
+  const auto* stmt = Analyze(
+      "INSERT INTO test_ds.people (id, name) VALUES "
+      "(1, 'ada'), (2, 'linus'), (3, 'grace')");
   ASSERT_NE(stmt, nullptr);
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_INSERT_STMT);
 
@@ -244,8 +242,7 @@ TEST_F(DmlExecutorTest, InsertValuesAppendsRowsAndCountsThem) {
 TEST_F(DmlExecutorTest, InsertValuesOmittedColumnDefaultsNull) {
   // `INSERT (id) VALUES (1)` leaves `name` unbound; the executor
   // pads with NULL so the storage row matches the table schema.
-  const auto* stmt =
-      Analyze("INSERT INTO test_ds.people (id) VALUES (42)");
+  const auto* stmt = Analyze("INSERT INTO test_ds.people (id) VALUES (42)");
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
@@ -260,9 +257,9 @@ TEST_F(DmlExecutorTest, InsertValuesOmittedColumnDefaultsNull) {
 }
 
 TEST_F(DmlExecutorTest, InsertSelectIsDeferredKindToFamily5) {
-  const auto* stmt =
-      Analyze("INSERT INTO test_ds.people (id, name) "
-              "SELECT 1, 'a'");
+  const auto* stmt = Analyze(
+      "INSERT INTO test_ds.people (id, name) "
+      "SELECT 1, 'a'");
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
@@ -287,8 +284,7 @@ TEST_F(DmlExecutorTest, DeleteWherePredicateRemovesMatchingRows) {
   }
   ASSERT_EQ(storage_->Rows(table_id_).size(), 3u);
 
-  const auto* stmt =
-      Analyze("DELETE FROM test_ds.people WHERE id = 2");
+  const auto* stmt = Analyze("DELETE FROM test_ds.people WHERE id = 2");
   ASSERT_NE(stmt, nullptr);
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_DELETE_STMT);
 
@@ -311,8 +307,7 @@ TEST_F(DmlExecutorTest, DeleteWhereTrueClearsTable) {
     QueryRequest req;
     ASSERT_TRUE(ExecuteDml(req, *seed, catalog_.get(), storage_.get()).ok());
   }
-  const auto* stmt =
-      Analyze("DELETE FROM test_ds.people WHERE TRUE");
+  const auto* stmt = Analyze("DELETE FROM test_ds.people WHERE TRUE");
   ASSERT_NE(stmt, nullptr);
   QueryRequest request;
   auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
@@ -331,8 +326,8 @@ TEST_F(DmlExecutorTest, UpdateScalarSetMutatesMatchingRow) {
     QueryRequest req;
     ASSERT_TRUE(ExecuteDml(req, *seed, catalog_.get(), storage_.get()).ok());
   }
-  const auto* stmt = Analyze(
-      "UPDATE test_ds.people SET name = 'augusta' WHERE id = 1");
+  const auto* stmt =
+      Analyze("UPDATE test_ds.people SET name = 'augusta' WHERE id = 1");
   ASSERT_NE(stmt, nullptr);
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_UPDATE_STMT);
 
