@@ -212,6 +212,13 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   virtual std::string EmitWithScan(const ::googlesql::ResolvedWithScan* node);
   virtual std::string EmitWithRefScan(
       const ::googlesql::ResolvedWithRefScan* node);
+  // PIVOT / UNPIVOT lower through conditional-aggregation / UNION ALL
+  // rewrites the BigQuery analyzer hands us as `ResolvedPivotScan`
+  // and `ResolvedUnpivotScan`. See the per-shape comments on
+  // `EmitPivotScan` and `EmitUnpivotScan` for the lowering rules.
+  virtual std::string EmitPivotScan(const ::googlesql::ResolvedPivotScan* node);
+  virtual std::string EmitUnpivotScan(
+      const ::googlesql::ResolvedUnpivotScan* node);
 
   // Expressions ----------------------------------------------------
   virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);

@@ -204,6 +204,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_SAMPLE_SCAN:
     case ::googlesql::RESOLVED_WITH_SCAN:
     case ::googlesql::RESOLVED_WITH_REF_SCAN:
+    case ::googlesql::RESOLVED_PIVOT_SCAN:
+    case ::googlesql::RESOLVED_UNPIVOT_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_PARAMETER:
@@ -285,6 +287,10 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
       return EmitWithScan(scan->GetAs<::googlesql::ResolvedWithScan>());
     case ::googlesql::RESOLVED_WITH_REF_SCAN:
       return EmitWithRefScan(scan->GetAs<::googlesql::ResolvedWithRefScan>());
+    case ::googlesql::RESOLVED_PIVOT_SCAN:
+      return EmitPivotScan(scan->GetAs<::googlesql::ResolvedPivotScan>());
+    case ::googlesql::RESOLVED_UNPIVOT_SCAN:
+      return EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
     default:
       return "";
   }
@@ -800,6 +806,221 @@ std::string Transpiler::EmitAggregateScan(
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
   return sql;
+}
+
+std::string Transpiler::EmitPivotScan(
+    const ::googlesql::ResolvedPivotScan* node) {
+  // BigQuery PIVOT lowers to DuckDB conditional aggregation. Each
+  // `ResolvedPivotColumn` pins one (pivot_expr_index, pivot_value_index)
+  // pair plus the output column name the analyzer chose; the lowering
+  // emits `<agg> FILTER (WHERE <for_expr> = <pivot_value>)` for that
+  // pair and aliases the result to the analyzer-chosen column name.
+  // `group_by_list` columns pass through and become the GROUP BY of
+  // the wrapping SELECT.
+  //
+  // Why FILTER rather than DuckDB's native PIVOT keyword: the native
+  // syntax produces DuckDB-named output columns derived from the
+  // pivot value(s) (`<val>` or `<val>_<agg>`), which forces an
+  // additional column-rename pass on top to land on the
+  // analyzer-chosen names in `pivot_column_list`. The FILTER form
+  // emits the analyzer's exact output names in one pass, which keeps
+  // the downstream `EmitQueryStmt` alias step honest, and matches
+  // BigQuery's documented semantics ("the pivot expression is
+  // evaluated over the subset of input rows where FOR matches the
+  // pivot value") line-for-line.
+  //
+  // BigQuery PIVOT forbids NULL pivot values; the analyzer rejects
+  // them upstream. Using `=` (rather than `IS NOT DISTINCT FROM`)
+  // therefore matches the BigQuery semantic that NULL `for_expr`
+  // rows match no pivot column.
+  //
+  // Pivot expressions must be aggregate function calls. Anything
+  // else (a scalar, a sub-query, a malformed AST) trips the
+  // empty-string fallback so the engine surfaces UNIMPLEMENTED.
+  if (node == nullptr) return "";
+  std::string inner = EmitScan(node->input_scan());
+  if (inner.empty()) return "";
+
+  std::string for_sql = EmitExpr(node->for_expr());
+  if (for_sql.empty()) return "";
+
+  std::vector<std::string> pivot_values_sql;
+  pivot_values_sql.reserve(node->pivot_value_list_size());
+  for (int i = 0; i < node->pivot_value_list_size(); ++i) {
+    std::string v = EmitExpr(node->pivot_value_list(i));
+    if (v.empty()) return "";
+    pivot_values_sql.push_back(std::move(v));
+  }
+
+  std::vector<std::string> pivot_exprs_sql;
+  pivot_exprs_sql.reserve(node->pivot_expr_list_size());
+  for (int i = 0; i < node->pivot_expr_list_size(); ++i) {
+    const ::googlesql::ResolvedExpr* expr = node->pivot_expr_list(i);
+    if (expr == nullptr ||
+        expr->node_kind() != ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL) {
+      return "";
+    }
+    std::string e = EmitAggregateFunctionCall(
+        expr->GetAs<::googlesql::ResolvedAggregateFunctionCall>());
+    if (e.empty()) return "";
+    pivot_exprs_sql.push_back(std::move(e));
+  }
+
+  std::vector<std::string> projections;
+  projections.reserve(node->group_by_list_size() +
+                      node->pivot_column_list_size());
+  std::vector<std::string> group_by_sql;
+  group_by_sql.reserve(node->group_by_list_size());
+  for (int i = 0; i < node->group_by_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* gc = node->group_by_list(i);
+    if (gc == nullptr) return "";
+    std::string e = EmitExpr(gc->expr());
+    if (e.empty()) return "";
+    std::string quoted_out = QuoteIdent(gc->column().name());
+    projections.push_back(
+        e == quoted_out ? e : absl::StrCat(e, " AS ", quoted_out));
+    group_by_sql.push_back(e);
+  }
+
+  for (int i = 0; i < node->pivot_column_list_size(); ++i) {
+    const ::googlesql::ResolvedPivotColumn* pc = node->pivot_column_list(i);
+    if (pc == nullptr) return "";
+    int ei = pc->pivot_expr_index();
+    int vi = pc->pivot_value_index();
+    if (ei < 0 || ei >= node->pivot_expr_list_size()) return "";
+    if (vi < 0 || vi >= node->pivot_value_list_size()) return "";
+    std::string filtered = absl::StrCat(pivot_exprs_sql[ei],
+                                        " FILTER (WHERE ",
+                                        for_sql,
+                                        " = ",
+                                        pivot_values_sql[vi],
+                                        ")");
+    projections.push_back(
+        absl::StrCat(filtered, " AS ", QuoteIdent(pc->column().name())));
+  }
+
+  // Touch column_list for `CheckFieldsAccessed`; the lowering is
+  // driven by group_by_list + pivot_column_list rather than by
+  // `column_list` directly.
+  (void)node->column_list_size();
+
+  std::string select_list =
+      projections.empty() ? "*" : absl::StrJoin(projections, ", ");
+  std::string sql = absl::StrCat("SELECT ", select_list, " FROM (", inner, ")");
+  if (!group_by_sql.empty()) {
+    absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_sql, ", "));
+  }
+  return sql;
+}
+
+std::string Transpiler::EmitUnpivotScan(
+    const ::googlesql::ResolvedUnpivotScan* node) {
+  // BigQuery UNPIVOT lowers to a UNION ALL of per-arg SELECTs over
+  // the input scan. For each `unpivot_arg_list[i]`:
+  //
+  //   SELECT <projected_input_cols>,
+  //          arg[i].column_list[0] AS value_column_list[0],
+  //          ...,
+  //          arg[i].column_list[N-1] AS value_column_list[N-1],
+  //          <label_list[i]> AS label_column
+  //   FROM (<input_scan>)
+  //   [WHERE NOT (value_0 IS NULL AND ... AND value_{N-1} IS NULL)]
+  //
+  // The WHERE-NOT-all-NULL filter fires when `include_nulls()` is
+  // false (the BigQuery default for `UNPIVOT EXCLUDE NULLS`).
+  //
+  // We use the per-arg UNION ALL pattern rather than DuckDB's native
+  // UNPIVOT for the same reason `EmitPivotScan` avoids DuckDB's
+  // native PIVOT: the analyzer assigns specific output column names
+  // through `value_column_list` and `label_column` (and projected
+  // input columns retain their input names), and the UNION ALL
+  // pattern emits those names in one pass without needing a rename
+  // pass over DuckDB's UNPIVOT-generated column names.
+  //
+  // `projected_input_column_list` holds the columns from the input
+  // that are *not* unpivoted; each is a `ResolvedComputedColumn`
+  // whose `expr()` is a `ResolvedColumnRef` referencing the input
+  // scan, so we project the analyzer-chosen output column name as
+  // an alias for the underlying input column.
+  if (node == nullptr) return "";
+  if (node->unpivot_arg_list_size() == 0) return "";
+  if (node->unpivot_arg_list_size() != node->label_list_size()) return "";
+
+  std::string inner = EmitScan(node->input_scan());
+  if (inner.empty()) return "";
+
+  // Build the projected-input-column prefix (input columns that pass
+  // through to every output row).
+  std::vector<std::string> projected_input_sql;
+  projected_input_sql.reserve(node->projected_input_column_list_size());
+  for (int i = 0; i < node->projected_input_column_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* cc =
+        node->projected_input_column_list(i);
+    if (cc == nullptr) return "";
+    std::string e = EmitExpr(cc->expr());
+    if (e.empty()) return "";
+    std::string quoted_out = QuoteIdent(cc->column().name());
+    projected_input_sql.push_back(
+        e == quoted_out ? e : absl::StrCat(e, " AS ", quoted_out));
+  }
+
+  // Build one branch per `unpivot_arg_list` entry.
+  std::vector<std::string> branches;
+  branches.reserve(node->unpivot_arg_list_size());
+  for (int i = 0; i < node->unpivot_arg_list_size(); ++i) {
+    const ::googlesql::ResolvedUnpivotArg* arg = node->unpivot_arg_list(i);
+    if (arg == nullptr) return "";
+    if (arg->column_list_size() != node->value_column_list_size()) return "";
+
+    std::vector<std::string> projections = projected_input_sql;
+    projections.reserve(projections.size() + node->value_column_list_size() +
+                        1);
+
+    // Value-column projections: rename arg's input column refs to the
+    // analyzer's value_column_list names.
+    std::vector<std::string> value_col_names;
+    value_col_names.reserve(node->value_column_list_size());
+    for (int j = 0; j < node->value_column_list_size(); ++j) {
+      const ::googlesql::ResolvedColumnRef* ref = arg->column_list(j);
+      if (ref == nullptr) return "";
+      std::string src = EmitColumnRef(ref);
+      if (src.empty()) return "";
+      std::string out_name = node->value_column_list(j).name();
+      std::string quoted_out = QuoteIdent(out_name);
+      projections.push_back(
+          src == quoted_out ? src : absl::StrCat(src, " AS ", quoted_out));
+      value_col_names.push_back(std::move(quoted_out));
+    }
+
+    // Label-column projection: `<label_list[i]> AS label_column`.
+    std::string label_sql = EmitLiteral(node->label_list(i));
+    if (label_sql.empty()) return "";
+    projections.push_back(absl::StrCat(
+        label_sql, " AS ", QuoteIdent(node->label_column().name())));
+
+    std::string select_list = absl::StrJoin(projections, ", ");
+    std::string branch =
+        absl::StrCat("SELECT ", select_list, " FROM (", inner, ")");
+    if (!node->include_nulls() && !value_col_names.empty()) {
+      // NOT (col0 IS NULL AND col1 IS NULL AND ... AND colN IS NULL).
+      std::vector<std::string> null_checks;
+      null_checks.reserve(value_col_names.size());
+      for (const std::string& v : value_col_names) {
+        null_checks.push_back(absl::StrCat(v, " IS NULL"));
+      }
+      absl::StrAppend(
+          &branch, " WHERE NOT (", absl::StrJoin(null_checks, " AND "), ")");
+    }
+    branches.push_back(std::move(branch));
+  }
+
+  // Touch column_list so `CheckFieldsAccessed` does not flag a miss;
+  // the lowering is fully driven by the projected / value / label /
+  // arg lists.
+  (void)node->column_list_size();
+
+  if (branches.size() == 1) return branches[0];
+  return absl::StrJoin(branches, " UNION ALL ");
 }
 
 std::string Transpiler::EmitSetOperationItem(

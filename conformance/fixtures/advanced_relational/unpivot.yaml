@@ -1,0 +1,49 @@
+# unpivot: BigQuery UNPIVOT lowers to a UNION ALL of per-arg SELECTs.
+#
+# Pins `advanced-relational-routing.plan.md` Family 3. The engine
+# disables `REWRITE_UNPIVOT` so the analyzer hands the route
+# classifier a raw `ResolvedUnpivotScan`; the disposition table
+# routes it through `duckdb_rewrite`; the transpiler's
+# `EmitUnpivotScan` lowers it to one UNION ALL branch per
+# `unpivot_arg_list` entry. The default `EXCLUDE NULLS` semantic
+# adds a `WHERE NOT (val IS NULL AND ...)` filter per branch so
+# rows with all-NULL value columns don't survive.
+#
+# Route: `duckdb_rewrite` via `EmitUnpivotScan` (UNION ALL). Route-
+# label assertion deferred to plan 16.
+#
+# Fixture shape: a wide quarterly table fanned out to a long
+# (region, quarter, value) shape.
+name: unpivot
+description: |
+  UNPIVOT(value FOR quarter IN (q1, q2)) fans a wide quarterly
+  table into one row per (region, quarter). Verifies the analyzer
+  hands the engine a raw ResolvedUnpivotScan (REWRITE_UNPIVOT is
+  disabled) and the transpiler lowers it through UNION ALL.
+project_id: proj-advanced-unpivot
+dataset_id: ds_unpivot
+setup:
+  - dataset: ds_unpivot
+  - table:
+      dataset: ds_unpivot
+      id: wide
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: q1, type: INT64, mode: NULLABLE}
+        - {name: q2, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_unpivot
+      table: wide
+      rows:
+        - {region: us, q1: 10, q2: 20}
+        - {region: eu, q1: 30, q2: 40}
+query: |
+  SELECT * FROM ds_unpivot.wide
+  UNPIVOT(value FOR quarter IN (q1, q2))
+   ORDER BY region, quarter
+expected:
+  rows:
+    - {region: "eu", value: "30", quarter: "q1"}
+    - {region: "eu", value: "40", quarter: "q2"}
+    - {region: "us", value: "10", quarter: "q1"}
+    - {region: "us", value: "20", quarter: "q2"}

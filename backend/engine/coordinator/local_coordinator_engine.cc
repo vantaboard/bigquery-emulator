@@ -49,6 +49,18 @@ namespace {
   // We do NOT flip `prune_unused_columns` on: doing so changes the
   // resolved column lifetime, which has historically broken the
   // engine's downstream uses of the resolved AST.
+  // We disable the analyzer's PIVOT / UNPIVOT rewriters so the
+  // route classifier sees the raw `ResolvedPivotScan` /
+  // `ResolvedUnpivotScan` nodes, which the
+  // `advanced-relational-routing` plan dispositions as
+  // `duckdb_rewrite`. The transpiler's `EmitPivotScan` /
+  // `EmitUnpivotScan` lower these directly to DuckDB SQL (FILTER
+  // aggregates / UNION ALL); letting the analyzer rewrite them
+  // upstream would bypass the disposition decision and route the
+  // (rewritten) shape on whatever path matches the rewriter's
+  // output instead.
+  options.disable_rewrite(::googlesql::REWRITE_PIVOT);
+  options.disable_rewrite(::googlesql::REWRITE_UNPIVOT);
   options.CreateDefaultArenasIfNotSet();
   return options;
 }

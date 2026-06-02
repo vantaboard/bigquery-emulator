@@ -62,6 +62,12 @@ namespace {
   language.SetSupportsAllStatementKinds();
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
+  // Match the engine: the route classifier sees raw
+  // `ResolvedPivotScan` / `ResolvedUnpivotScan` nodes (the
+  // `advanced-relational-routing` plan dispositions them as
+  // `duckdb_rewrite`), not the analyzer's rewritten output.
+  options.disable_rewrite(::googlesql::REWRITE_PIVOT);
+  options.disable_rewrite(::googlesql::REWRITE_UNPIVOT);
   options.CreateDefaultArenasIfNotSet();
   return options;
 }
@@ -459,6 +465,31 @@ TEST_F(RouteClassifierTest, BarrierScanPromotesToSemanticExecutor) {
   RouteDecision d = classifier_.Classify(*query_stmt);
   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
   EXPECT_EQ(d.offending_node, "ResolvedBarrierScan");
+}
+
+TEST_F(RouteClassifierTest, PivotScanRoutesToDuckdbRewrite) {
+  // `advanced-relational-routing.plan.md` Family 3. The engine
+  // disables `REWRITE_PIVOT` so the analyzer hands us a raw
+  // `ResolvedPivotScan`; the disposition table routes it through
+  // `kDuckdbRewrite`, and the transpiler's `EmitPivotScan` lowers
+  // it to DuckDB conditional aggregation (FILTER).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT * FROM people PIVOT(COUNT(*) FOR name IN ('a', 'b'))");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
+}
+
+TEST_F(RouteClassifierTest, UnpivotScanRoutesToDuckdbRewrite) {
+  // Same as the PIVOT test above but for `ResolvedUnpivotScan`.
+  // The engine disables `REWRITE_UNPIVOT`; the disposition table
+  // routes it through `kDuckdbRewrite`; the transpiler's
+  // `EmitUnpivotScan` lowers it to UNION ALL.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT * FROM people UNPIVOT(value FOR label IN (id))");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
 }
 
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {

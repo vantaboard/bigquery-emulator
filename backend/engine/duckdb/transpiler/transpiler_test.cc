@@ -61,6 +61,14 @@ namespace {
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
+  // Match the engine: keep PIVOT / UNPIVOT in their raw resolved-AST
+  // forms so the transpiler `EmitPivotScan` / `EmitUnpivotScan`
+  // emit paths are exercised. The engine itself disables these
+  // rewriters (see `local_coordinator_engine.cc::MakeAnalyzerOptions`)
+  // because the disposition table routes the raw nodes through
+  // `duckdb_rewrite`.
+  options.disable_rewrite(::googlesql::REWRITE_PIVOT);
+  options.disable_rewrite(::googlesql::REWRITE_UNPIVOT);
   options.CreateDefaultArenasIfNotSet();
   return options;
 }
@@ -101,6 +109,31 @@ class TranspilerTest : public ::testing::Test {
             {"amount", type_factory_->get_int64()},
         });
     catalog_->AddOwnedTable(std::move(orders));
+
+    // A table with a string discriminator + numeric value column so the
+    // PIVOT / UNPIVOT tests have something the analyzer accepts for
+    // `FOR <expr> IN (<literals>)` (PIVOT) and
+    // `UNPIVOT(<value_cols> FOR <label_col> IN (<col_groups>))`
+    // (UNPIVOT).
+    auto sales = std::make_unique<::googlesql::SimpleTable>(
+        "sales",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"region", type_factory_->get_string()},
+            {"kind", type_factory_->get_string()},
+            {"amount", type_factory_->get_int64()},
+        });
+    catalog_->AddOwnedTable(std::move(sales));
+
+    // Wide table for UNPIVOT: each column is one of the unpivot
+    // arguments the analyzer threads through `unpivot_arg_list`.
+    auto wide = std::make_unique<::googlesql::SimpleTable>(
+        "wide",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"region", type_factory_->get_string()},
+            {"q1", type_factory_->get_int64()},
+            {"q2", type_factory_->get_int64()},
+        });
+    catalog_->AddOwnedTable(std::move(wide));
 
     transpiler_ = std::make_unique<Transpiler>();
   }
@@ -195,6 +228,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitOrderByScan;
   using Transpiler::EmitOutputColumn;
   using Transpiler::EmitParameter;
+  using Transpiler::EmitPivotScan;
   using Transpiler::EmitProjectScan;
   using Transpiler::EmitQueryStmt;
   using Transpiler::EmitSampleScan;
@@ -202,6 +236,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitSingleRowScan;
   using Transpiler::EmitSubqueryExpr;
   using Transpiler::EmitTableScan;
+  using Transpiler::EmitUnpivotScan;
   using Transpiler::EmitWithExpr;
   using Transpiler::EmitWithRefScan;
   using Transpiler::EmitWithScan;
@@ -664,6 +699,116 @@ TEST_F(TranspilerTest, EmitAggregateScanCubeAnalyzerExpandsToSets) {
   EXPECT_NE(sql.find("(\"id\")"), std::string::npos) << sql;
   EXPECT_NE(sql.find("(\"name\")"), std::string::npos) << sql;
   EXPECT_NE(sql.find("()"), std::string::npos) << sql;
+}
+
+// --- PIVOT / UNPIVOT -----------------------------------------------------
+//
+// `EmitPivotScan` lowers a BigQuery `PIVOT(<agg>(...) FOR <expr> IN
+// (<vals>))` to DuckDB conditional aggregation using `FILTER`. Each
+// `ResolvedPivotColumn` carries the (pivot_expr_index,
+// pivot_value_index) tuple plus the analyzer-chosen output column
+// name, which the emit aliases onto a `<agg> FILTER (WHERE
+// <for_expr> = <pivot_value>)` projection.
+//
+// `EmitUnpivotScan` lowers `UNPIVOT(<value_cols> FOR <label_col> IN
+// (<arg_groups>))` to a UNION ALL of per-arg SELECTs. Each branch
+// projects the input columns that pass through unchanged, renames
+// the arg's column refs to the value-column names, and adds the
+// arg's label literal under `label_column`. When `include_nulls()`
+// is false (the BigQuery default), each branch adds a
+// `WHERE NOT (val0 IS NULL AND ... AND valN IS NULL)` filter so the
+// EXCLUDE NULLS semantics match BigQuery.
+
+TEST_F(TranspilerTest, EmitPivotScanBuildsFilterAggregates) {
+  // `SUM(amount) FOR kind IN ('A', 'B')` yields one `ResolvedPivotColumn`
+  // per (pivot_expr_index=0, pivot_value_index=v) pair. The emit
+  // projects each as `SUM("amount") FILTER (WHERE "kind" = '<v>')`
+  // aliased to the analyzer-chosen output column name.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT * FROM sales PIVOT(SUM(amount) FOR kind IN ('A', 'B'))");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PIVOT_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitPivotScan(scan->GetAs<::googlesql::ResolvedPivotScan>());
+  EXPECT_NE(sql.find("SUM(\"amount\") FILTER (WHERE \"kind\" = 'A')"),
+            std::string::npos)
+      << "expected SUM FILTER for 'A'; got: " << sql;
+  EXPECT_NE(sql.find("SUM(\"amount\") FILTER (WHERE \"kind\" = 'B')"),
+            std::string::npos)
+      << "expected SUM FILTER for 'B'; got: " << sql;
+  EXPECT_NE(sql.find(" GROUP BY \"region\""), std::string::npos)
+      << "expected GROUP BY on the pass-through grouping column; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitPivotScanMultipleAggregates) {
+  // Two pivot expressions x two pivot values = four output columns.
+  // The analyzer reuses one pivot_expr_list / pivot_value_list and
+  // tags each output column with (expr_index, value_index); the emit
+  // pulls the cached aggregate SQL for each index and pairs it with
+  // the matching value's filter clause.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT * FROM sales "
+      "PIVOT(SUM(amount) AS s, COUNT(*) AS c FOR kind IN ('A', 'B'))");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_PIVOT_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitPivotScan(scan->GetAs<::googlesql::ResolvedPivotScan>());
+  EXPECT_NE(sql.find("SUM(\"amount\") FILTER (WHERE \"kind\" = 'A')"),
+            std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("SUM(\"amount\") FILTER (WHERE \"kind\" = 'B')"),
+            std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("COUNT(*) FILTER (WHERE \"kind\" = 'A')"),
+            std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("COUNT(*) FILTER (WHERE \"kind\" = 'B')"),
+            std::string::npos)
+      << sql;
+}
+
+TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
+  // BigQuery's default UNPIVOT semantic (EXCLUDE NULLS). The emit
+  // produces one UNION ALL branch per arg in unpivot_arg_list; each
+  // branch's WHERE filters out rows where every value column is
+  // NULL. The label column is the analyzer's string label_list[i].
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT * FROM wide UNPIVOT(value FOR quarter IN (q1, q2))");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_UNPIVOT_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos)
+      << "expected UNION ALL between unpivot branches; got: " << sql;
+  EXPECT_NE(sql.find("'q1' AS \"quarter\""), std::string::npos)
+      << "expected q1 label projection; got: " << sql;
+  EXPECT_NE(sql.find("'q2' AS \"quarter\""), std::string::npos)
+      << "expected q2 label projection; got: " << sql;
+  EXPECT_NE(sql.find("WHERE NOT (\"value\" IS NULL)"), std::string::npos)
+      << "expected EXCLUDE NULLS filter; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitUnpivotScanIncludeNullsSkipsFilter) {
+  // `INCLUDE NULLS` flips `include_nulls()` true; the per-arg branch
+  // should not carry the WHERE filter.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT * FROM wide "
+      "UNPIVOT INCLUDE NULLS (value FOR quarter IN (q1, q2))");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_UNPIVOT_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
+  EXPECT_EQ(sql.find("WHERE NOT"), std::string::npos)
+      << "INCLUDE NULLS should omit the WHERE filter; got: " << sql;
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitAggregateScanGroupingCallProjectsBitMask) {

@@ -1,0 +1,51 @@
+# pivot: BigQuery PIVOT lowers to DuckDB conditional aggregation.
+#
+# Pins `advanced-relational-routing.plan.md` Family 3. The engine
+# disables `REWRITE_PIVOT` so the analyzer hands the route classifier
+# a raw `ResolvedPivotScan`; the disposition table routes it through
+# `duckdb_rewrite`; the transpiler's `EmitPivotScan` lowers each
+# `ResolvedPivotColumn` to a `<agg> FILTER (WHERE <for_expr> =
+# <pivot_value>)` projection with the `group_by_list` columns
+# passing through as `GROUP BY`.
+#
+# Route: `duckdb_rewrite` via `EmitPivotScan` (FILTER aggregates).
+# Route-label assertion deferred to plan 16.
+#
+# Fixture shape: a tiny sales table pivoted on `kind` aggregates the
+# per-region totals into one row per region with one column per
+# pivot value.
+name: pivot
+description: |
+  PIVOT(SUM(amount) FOR kind IN ('retail', 'wholesale')) collapses
+  the rows-per-kind shape into one row per region with one column
+  per kind. Verifies the analyzer hands the engine a raw
+  ResolvedPivotScan (REWRITE_PIVOT is disabled) and the transpiler
+  lowers it through FILTER aggregates.
+project_id: proj-advanced-pivot
+dataset_id: ds_pivot
+setup:
+  - dataset: ds_pivot
+  - table:
+      dataset: ds_pivot
+      id: sales
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_pivot
+      table: sales
+      rows:
+        - {region: us, kind: retail,    amount: 10}
+        - {region: us, kind: retail,    amount: 20}
+        - {region: us, kind: wholesale, amount: 30}
+        - {region: eu, kind: retail,    amount: 40}
+        - {region: eu, kind: wholesale, amount: 50}
+query: |
+  SELECT * FROM ds_pivot.sales
+  PIVOT(SUM(amount) FOR kind IN ('retail' AS retail, 'wholesale' AS wholesale))
+   ORDER BY region
+expected:
+  rows:
+    - {region: "eu", retail: "40",  wholesale: "50"}
+    - {region: "us", retail: "30",  wholesale: "30"}
