@@ -21,4 +21,7 @@ backend/engine/semantic/eval_expr.cc
 backend/storage/duckdb/duckdb_storage.cc
 backend/storage/duckdb/duckdb_storage_test.cc
 frontend/handlers/query.cc
+frontend/handlers/storage_read.cc
 frontend/handlers/storage_read_test.cc
+frontend/handlers/storage_write.cc
+frontend/handlers/storage_write_test.cc

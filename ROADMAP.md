@@ -535,14 +535,53 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
   scan as a `WHERE` clause. Range / inequality ops, connectives,
   `IN`, `NULL`, and array/struct columns reject at `CreateReadSession`
   with `INVALID_ARGUMENT` (see "Supported `ReadOptions`" in
-  [`docs/REST_API.md`](./docs/REST_API.md))
-- ⏳ `ReadOptions.selected_fields` accepted + echoed on the
-  `ReadSession` reply but **not enforced** — every column is
-  returned regardless. Pushing projection into the storage layer
-  is deferred
+  [`docs/REST_API.md`](./docs/REST_API.md)). Multi-clause expansion
+  is deferred to a follow-up subagent of
+  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  because doing it half-right (parser-only, no analyzer-resolved
+  boolean expression) is exactly the silent-approximation hazard
+  the plan forbids
+- ✅ `ReadOptions.selected_fields` enforced. CreateReadSession
+  validates each name against the table's top-level columns
+  (unknowns surface as `INVALID_ARGUMENT` before any streaming RPC
+  starts) and the DuckDB backend emits a projected SELECT so the
+  `ReadRows` stream yields rows in caller-pinned column order. The
+  `ReadSession.schema` reply reflects the projection too
 - ⏳ Single-stream sessions only — `max_stream_count > 1` is rejected.
   DuckDB's parallel scan + Arrow output makes multi-stream a
-  tractable follow-up
+  tractable follow-up. Deferred to a follow-up subagent of
+  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  pending a deterministic parquet-row-boundary partition design
+
+## Storage Write API (gRPC)
+
+Goal: support BigQuery client libraries that prefer the Storage
+Write API (`google.cloud.bigquery.storage.v1.BigQueryWrite`) for
+append-only writes that ride the same gRPC surface the read path
+already uses.
+
+- 🟡 `BigQueryWrite` gRPC service implemented
+  ([`frontend/handlers/storage_write.{h,cc}`](./frontend/handlers/));
+  `CreateWriteStream`, bidi-streaming `AppendRows`, and
+  `GetWriteStream` are wired for the `COMMITTED` and reserved
+  `_default` stream types. Append batches commit immediately
+  through plan 9's `DuckDBStorage::AppendRows`, the same primitive
+  the local DML executor uses
+- 🟡 Schema-shape mismatches and recoverable storage errors land
+  on the `AppendRowsResponse.error_message` envelope so a producer
+  can fix the batch and retry without tearing the bidi stream down,
+  matching the public Storage Write API's recoverable-error
+  contract
+- ⏳ `BUFFERED` and `PENDING` stream types not implemented;
+  `CreateWriteStream` returns `UNIMPLEMENTED` for them.
+  `FinalizeWriteStream` / `BatchCommitWriteStreams` / `FlushRows`
+  reserve their proto slots but return `UNIMPLEMENTED` until the
+  deferred follow-up subagent of
+  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  lands the buffer / two-phase commit semantics. Silent
+  approximation here is especially bad because `PENDING`'s
+  transactional contract is exactly what distinguishes the Storage
+  Write API from `tabledata.insertAll`
 
 ## Conformance harness
 
@@ -649,9 +688,10 @@ The C++ engine is built with Bazel. The
 GoogleSQL's analyzer, the local execution coordinator (DuckDB fast
 path today; the semantic executor / control-op executor / DuckDB UDF
 polyfills link into the same binary as they land), the DuckDB storage
-backend, the catalog/query/storage-read gRPC handlers, and grpc++ in
-one binary that serves `Query.DryRun`, `Query.ExecuteQuery`, and
-`bigquery_emulator.v1.StorageRead` end-to-end.
+backend, the catalog / query / storage-read / storage-write gRPC
+handlers, and grpc++ in one binary that serves `Query.DryRun`,
+`Query.ExecuteQuery`, `bigquery_emulator.v1.StorageRead`, and
+`bigquery_emulator.v1.StorageWrite` end-to-end.
 
 GoogleSQL is consumed in one of two modes selected by
 `GOOGLESQL_SOURCE` (defaults to `prebuilt`):
@@ -695,10 +735,16 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   crash isolation, no cgo build complexity. We start there. Cgo could be
   revisited if subprocess overhead matters in CI runs.
 - **Streaming inserts vs. Write API.** `tabledata.insertAll` is the
-  implemented path today; `Storage Write API`
-  (`google.cloud.bigquery.storage.v1.BigQueryWrite`) is not yet
-  wired. The Storage Read API surface lands first; Write API is
-  scheduled behind the DML INSERT plan.
+  REST-side append path; the Storage Write API
+  (`google.cloud.bigquery.storage.v1.BigQueryWrite`) lands the
+  `_default` + `COMMITTED` stream types on the same gRPC surface
+  (`bigquery_emulator.v1.StorageWrite`) and routes appends through
+  the same `DuckDBStorage::AppendRows` primitive the local DML
+  executor owns. `BUFFERED` and `PENDING` (and the matching
+  `FlushRows` / `FinalizeWriteStream` / `BatchCommitWriteStreams`
+  RPCs) are deferred to a follow-up subagent of
+  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md);
+  they reserve their proto slots and return `UNIMPLEMENTED` today.
 - **Dialect translation friction (GoogleSQL <-> DuckDB).** The DuckDB
   fast path is no longer the project's whole story, but the friction
   it surfaces is exactly why the local coordinator exists: shapes
