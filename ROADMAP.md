@@ -35,6 +35,8 @@ order, terminology, done criteria, and per-route plans live under
 
 - [`.cursor/plans/local-execution-roadmap-index.plan.md`](.cursor/plans/local-execution-roadmap-index.plan.md) — execution order across the local-execution plan set, with route vocabulary, done criteria, and the rule that every user-visible shape gets a routing disposition plus conformance coverage.
 
+#### History
+
 The earlier DuckDB-only transpiler plan set (one plan per AST family,
 all targeting DuckDB SQL lowering) has been retired. Its landed
 accomplishments — scans, filters, projections, joins, aggregates,
@@ -90,6 +92,8 @@ routes resolved-AST shapes to the right local executor.
   the engine reads and writes through DuckDB's C++ client. Survives
   restarts and gives users a real local data warehouse.
 
+### History
+
 An earlier iteration carried a second `Engine` implementation
 (ReferenceImpl, on top of `googlesql::reference_impl::Evaluator`)
 bridged to DuckDB by a `FallbackEngine` wrapper, plus an in-memory
@@ -97,8 +101,8 @@ storage backend for hermetic tests. Both were removed once DuckDB
 covered the supported surface; the new multi-strategy coordinator
 is the deliberate replacement for that pattern, with route
 selection happening at AST-classification time rather than at
-runtime error catch time. See `docs/ENGINE_POLICY.md` for the
-current execution policy and the deprecation rationale.
+runtime error catch time. See [`docs/ENGINE_POLICY.md` § History](./docs/ENGINE_POLICY.md#history)
+for the deprecation rationale.
 
 The point of this roadmap is to keep the work bite-sized, ordered by
 dependency, and honest about what is "in" vs. "vendored from upstream."
@@ -318,7 +322,7 @@ behind each, and the multi-strategy coordinator is the only
   [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
   using the route-aware status vocabulary
   (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
-  `semantic_executor`, `control_op`, `unsupported`)
+  `semantic_executor`, `control_op`, `local_stub`, `unsupported`)
 - 🟡 Local execution router behind `backend/engine/engine.h`: dispatches
   each query to the strategy that fits its resolved-AST shape. The
   scaffolding plan is `engine-router-foundation.plan.md`; today the
@@ -365,7 +369,7 @@ handler.
   emits DuckDB SQL strings, implemented one node kind at a time;
   per-shape route disposition (`duckdb_native` /
   `duckdb_rewrite` / `duckdb_udf` / `semantic_executor` /
-  `control_op` / `unsupported`) lives in
+  `control_op` / `local_stub` / `unsupported`) lives in
   [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md).
   Shapes routed to the other strategies are scheduled by the
   local-execution roadmap index linked at the top of this document
@@ -391,18 +395,19 @@ handler.
   conditional, array, aggregation, window, and BQ-specific
   categories). A Bazel `genrule` materializes it into
   `functions_table.inc`, which `functions.cc` includes inside an
-  `absl::flat_hash_map`. The current per-function disposition is
-  `kMap` (emit a DuckDB function call — i.e. `duckdb_native` /
-  `duckdb_rewrite`), `kFallback` (deferred lowering, surfaces
-  UNIMPLEMENTED today; each entry has a planned route in either
+  `absl::flat_hash_map`. Each entry now records one of the
+  seven canonical route dispositions (`duckdb_native`,
+  `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
+  `control_op`, `local_stub`, `unsupported`); deferred-lowering
+  rows carry a planned route in either
   `duckdb-polyfill-udf-library.plan.md` or
-  `semantic-functions-compliance.plan.md`), or `kSkiplist`
-  (`unsupported` per `specialized-feature-policy.plan.md` —
-  `APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...). The
-  `execution-disposition-registry.plan.md` plan retires
-  `kMap`/`kFallback`/`kSkiplist` in favor of the seven-route
-  vocabulary used everywhere else. `SAFE.<fn>(...)` is handled
-  uniformly regardless of disposition
+  `semantic-functions-compliance.plan.md`, and the unsupported
+  families (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`,
+  `ST_*`, ...) are documented in
+  `specialized-feature-policy.plan.md`. The legacy
+  `kMap`/`kFallback`/`kSkiplist` vocabulary was retired by
+  `execution-disposition-registry.plan.md`. `SAFE.<fn>(...)` is
+  handled uniformly regardless of disposition
 - ✅ DuckDB fast-path execution: file-backed `catalog.duckdb`
   connection, the transpiled SQL is bound and executed via the DuckDB
   C++ client, DuckDB errors are translated back to the BigQuery error

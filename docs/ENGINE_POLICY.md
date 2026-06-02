@@ -9,14 +9,14 @@ to the strategy that fits, all inside the same process.
 
 > **TL;DR**: there is no second engine binary, no runtime backend
 > selector, and no fallback to a cloud BigQuery service. There is also
-> no claim that "everything becomes DuckDB SQL." Inside `emulator_main`,
-> a route classifier picks one of six local strategies (DuckDB fast
-> path, DuckDB rewrite, DuckDB UDF/polyfill, local semantic executor,
-> control-op handler, local-stub) per query, and shapes that have no
-> planned local route surface a deliberate, BigQuery-shaped
-> `UNIMPLEMENTED` whose message names the offending family and links
-> back here. See "History" below for the runtimes this layout
-> replaces.
+> no claim that every shape lowers to DuckDB SQL. Inside
+> `emulator_main`, a route classifier picks one of seven local
+> dispositions (DuckDB fast path, DuckDB rewrite, DuckDB UDF/polyfill,
+> local semantic executor, control-op handler, local-stub, or the
+> deliberate `unsupported` envelope) per query, and shapes that have
+> no planned local route surface a `BigQuery`-shaped `UNIMPLEMENTED`
+> whose message names the offending family and links back here. See
+> "History" below for the runtimes this layout replaces.
 
 ## The runtime
 
