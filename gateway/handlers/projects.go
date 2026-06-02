@@ -80,7 +80,7 @@ func ProjectList(_ Dependencies) http.HandlerFunc {
 					ProjectID: projectID,
 				},
 			}},
-			"totalItems": 1,
+			resourceKeyTotalItems: 1,
 		})
 	}
 }

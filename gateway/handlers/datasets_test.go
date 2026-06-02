@@ -291,8 +291,10 @@ func TestDatasetGetLabelsIsEmptyObjectNotNull(t *testing.T) {
 	}
 }
 
-// TestDatasetListReturnsEmptyPage pins the empty-page shape the handler
-// returns until Storage grows a list RPC.
+// TestDatasetListReturnsEmptyPage pins the empty-page shape (no
+// Catalog client wired) the handler returns when the engine is
+// missing. The catalog stub still returns a 200 with the
+// datasetList envelope so client iterators don't error.
 func TestDatasetListReturnsEmptyPage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/bigquery/v2/projects/proj/datasets", nil)
 	req.SetPathValue("projectId", testProjectID)
@@ -311,5 +313,58 @@ func TestDatasetListReturnsEmptyPage(t *testing.T) {
 	}
 	if _, ok := doc["datasets"]; !ok {
 		t.Error("response missing `datasets` field")
+	}
+}
+
+// TestDatasetListSurfacesEngineEntries asserts the handler forwards
+// the project_id, calls the engine, and folds the response into the
+// REST envelope. Each entry must carry the required tableList-like
+// shape so the node sample's `dataset.metadata.labels` access
+// doesn't NPE (mirrors TestDatasetGetLabelsIsEmptyObjectNotNull).
+func TestDatasetListSurfacesEngineEntries(t *testing.T) {
+	fake := &fakeCatalogClient{
+		listDatasetsFn: func(_ context.Context, _ *enginepb.ListDatasetsRequest) (*enginepb.ListDatasetsResponse, error) {
+			return &enginepb.ListDatasetsResponse{
+				Datasets: []*enginepb.DatasetRef{
+					{ProjectId: testProjectID, DatasetId: "ds_alpha"},
+					{ProjectId: testProjectID, DatasetId: "ds_bravo"},
+				},
+			}, nil
+		},
+	}
+	req := newDatasetReq(http.MethodGet, "", "")
+	rec := httptest.NewRecorder()
+	DatasetList(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastListDatasets == nil {
+		t.Fatal("Catalog.ListDatasets was not called")
+	}
+	if got := fake.lastListDatasets.GetProjectId(); got != testProjectID {
+		t.Errorf("project_id forwarded = %q, want %q", got, testProjectID)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if doc["kind"] != "bigquery#datasetList" {
+		t.Errorf("kind = %v", doc["kind"])
+	}
+	items, _ := doc["datasets"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("datasets entries = %d, want 2; body=%s", len(items), rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	if first["id"] != testProjectID+":ds_alpha" {
+		t.Errorf("first entry id = %v, want %q", first["id"], testProjectID+":ds_alpha")
+	}
+	ref, _ := first["datasetReference"].(map[string]any)
+	if ref["datasetId"] != "ds_alpha" || ref["projectId"] != testProjectID {
+		t.Errorf("first entry datasetReference = %+v", ref)
+	}
+	if labels, ok := first["labels"].(map[string]any); !ok || len(labels) != 0 {
+		t.Errorf("first entry labels = %v, want {}", first["labels"])
 	}
 }

@@ -1,5 +1,6 @@
 #include "backend/storage/duckdb/duckdb_storage.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
@@ -775,6 +776,52 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
           "DROP SCHEMA IF EXISTS ", QuoteIdent(schema_name), " CASCADE"));
 }
 
+absl::StatusOr<std::vector<DatasetId>> DuckDBStorage::ListDatasets(
+    absl::string_view project_id) const {
+  if (project_id.empty()) {
+    return absl::InvalidArgumentError(
+        "ListDatasets: project_id must be non-empty");
+  }
+  absl::MutexLock lock(&mu_);
+  // The DuckDB catalog mirrors the on-disk layout but the filesystem
+  // is the canonical source of truth here (CreateDataset writes the
+  // dir + sidecar BEFORE the DuckDB CREATE SCHEMA, and DropDataset
+  // does the reverse), so we enumerate by directory walk to avoid any
+  // race between the two. Same posture DropDataset uses to decide
+  // whether the dataset is empty.
+  const fs::path project_dir = fs::path(data_dir_) / std::string(project_id);
+  std::vector<DatasetId> out;
+  std::error_code ec;
+  if (!fs::exists(project_dir, ec)) {
+    return out;
+  }
+  for (const auto& entry : fs::directory_iterator(project_dir, ec)) {
+    if (ec) break;
+    if (!entry.is_directory(ec)) continue;
+    const fs::path meta = entry.path() / std::string(kDatasetMetaFile);
+    // Require the sidecar so partially-mkdir'd directories left behind
+    // by an interrupted CreateDataset do not surface as listable
+    // datasets; CreateDataset writes the sidecar before any catalog
+    // mutation, so its presence is the canonical "this is a dataset"
+    // marker.
+    if (!fs::exists(meta, ec)) continue;
+    out.push_back(
+        DatasetId{std::string(project_id), entry.path().filename().string()});
+  }
+  if (ec) {
+    return FilesystemStatus(
+        absl::StrCat("failed to enumerate project dir: ", project_dir.string()),
+        ec);
+  }
+  // Deterministic ordering (lexicographic) for stable pagination /
+  // diff-against-prior-listing behaviour the Storage contract
+  // documents.
+  std::sort(out.begin(), out.end(), [](const DatasetId& a, const DatasetId& b) {
+    return a.dataset_id < b.dataset_id;
+  });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Table CRUD
 // ---------------------------------------------------------------------------
@@ -856,6 +903,48 @@ absl::Status DuckDBStorage::CreateTable(const TableId& id,
   }
   if (!drop_status.ok()) return drop_status;
   return absl::OkStatus();
+}
+
+absl::StatusOr<std::vector<TableId>> DuckDBStorage::ListTables(
+    const DatasetId& dataset_id) const {
+  if (dataset_id.project_id.empty() || dataset_id.dataset_id.empty()) {
+    return absl::InvalidArgumentError(
+        "ListTables: project_id and dataset_id must be non-empty");
+  }
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(dataset_id);
+  std::vector<TableId> out;
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return absl::NotFoundError(absl::StrCat("dataset not found: ",
+                                            dataset_id.project_id,
+                                            ".",
+                                            dataset_id.dataset_id));
+  }
+  // Tables on disk are the `<table_id>.meta.json` sidecars next to the
+  // dataset's `_dataset.meta.json`. The parquet file may or may not
+  // exist (view / external / empty-schema tables skip the parquet
+  // materialization; see CreateTable comments), so the sidecar is the
+  // canonical existence marker the same way DropTable uses it.
+  for (const auto& entry : fs::directory_iterator(ds_dir, ec)) {
+    if (ec) break;
+    const std::string name = entry.path().filename().string();
+    if (name == kDatasetMetaFile) continue;
+    if (name.size() <= kTableMetaSuffix.size()) continue;
+    if (!absl::EndsWith(name, kTableMetaSuffix)) continue;
+    std::string table_id =
+        name.substr(0, name.size() - kTableMetaSuffix.size());
+    out.push_back(TableId{
+        dataset_id.project_id, dataset_id.dataset_id, std::move(table_id)});
+  }
+  if (ec) {
+    return FilesystemStatus(
+        absl::StrCat("failed to enumerate dataset dir: ", ds_dir.string()), ec);
+  }
+  std::sort(out.begin(), out.end(), [](const TableId& a, const TableId& b) {
+    return a.table_id < b.table_id;
+  });
+  return out;
 }
 
 absl::Status DuckDBStorage::DropTable(const TableId& id) {

@@ -31,4 +31,9 @@ const (
 	resourceKeyDatasets = "datasets"
 	resourceKeyTables   = "tables"
 	resourceKeyProjects = "projects"
+	// resourceKeyTotalItems is the (legacy, non-paginated) item-count
+	// field upstream returns on tableList / projectList responses. The
+	// emulator's lists never paginate today (see DatasetList / TableList
+	// comments) so totalItems mirrors the response array length.
+	resourceKeyTotalItems = "totalItems"
 )

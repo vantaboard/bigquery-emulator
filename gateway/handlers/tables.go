@@ -146,14 +146,56 @@ func fieldFromProto(f *enginepb.FieldSchema) bqtypes.TableFieldSchema {
 //
 //	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables
 //
-// Same caveat as DatasetList: the engine catalog does not yet expose
-// a list RPC, so the handler returns the BigQuery-shaped empty page.
-func TableList(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+// Calls the Catalog.ListTables RPC and folds the (deterministically
+// ordered, ascending table_id) result into a BigQuery tableList
+// envelope. Mirrors DatasetList's pagination posture: no
+// `nextPageToken` today, every entry in one page.
+//
+// Per-entry shape matches upstream's tableList item: kind, id
+// (projectId:datasetId.tableId), tableReference, type (defaulting to
+// "TABLE"), and an empty labels object so node samples that call
+// `Object.entries(item.metadata.labels)` on each iteration item do
+// not raise.
+func TableList(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID := r.PathValue("projectId")
+		datasetID := r.PathValue("datasetId")
+		if deps.Catalog == nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				resourceKeyKind:       tableListKind,
+				resourceKeyTables:     []bqtypes.Table{},
+				resourceKeyTotalItems: 0,
+			})
+			return
+		}
+		resp, err := deps.Catalog.ListTables(r.Context(), &enginepb.ListTablesRequest{
+			Dataset: &enginepb.DatasetRef{
+				ProjectId: projectID,
+				DatasetId: datasetID,
+			},
+		})
+		if grpcToHTTPError(w, err) {
+			return
+		}
+		items := make([]map[string]any, 0, len(resp.GetTables()))
+		for _, ref := range resp.GetTables() {
+			items = append(items, map[string]any{
+				"kind": tableKind,
+				"id": ref.GetProjectId() + ":" + ref.GetDatasetId() +
+					"." + ref.GetTableId(),
+				"tableReference": bqtypes.TableReference{
+					ProjectID: ref.GetProjectId(),
+					DatasetID: ref.GetDatasetId(),
+					TableID:   ref.GetTableId(),
+				},
+				"type":   defaultTableType,
+				"labels": map[string]string{},
+			})
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			resourceKeyKind:   tableListKind,
-			resourceKeyTables: []bqtypes.Table{},
-			"totalItems":      0,
+			resourceKeyKind:       tableListKind,
+			resourceKeyTables:     items,
+			resourceKeyTotalItems: len(items),
 		})
 	}
 }

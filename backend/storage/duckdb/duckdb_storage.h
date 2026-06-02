@@ -33,6 +33,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
@@ -80,10 +81,14 @@ class DuckDBStorage : public Storage {
   absl::Status CreateDataset(const DatasetId& id,
                              absl::string_view location) override;
   absl::Status DropDataset(const DatasetId& id, bool delete_contents) override;
+  absl::StatusOr<std::vector<DatasetId>> ListDatasets(
+      absl::string_view project_id) const override;
 
   absl::Status CreateTable(const TableId& id,
                            const schema::TableSchema& schema) override;
   absl::Status DropTable(const TableId& id) override;
+  absl::StatusOr<std::vector<TableId>> ListTables(
+      const DatasetId& dataset_id) const override;
 
   absl::StatusOr<schema::TableSchema> GetSchema(
       const TableId& id) const override;

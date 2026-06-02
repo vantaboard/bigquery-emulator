@@ -34,9 +34,18 @@ option cc_enable_arenas = true;
 service Catalog {
   rpc RegisterDataset(RegisterDatasetRequest) returns (RegisterDatasetResponse);
   rpc DropDataset(DropDatasetRequest) returns (DropDatasetResponse);
+  // Lists every dataset registered under `project_id`. The gateway's
+  // `datasets.list` REST handler delegates here; the response is
+  // shaped as a single page (no continuation cursor today, the
+  // emulator never has enough datasets to need one).
+  rpc ListDatasets(ListDatasetsRequest) returns (ListDatasetsResponse);
 
   rpc RegisterTable(RegisterTableRequest) returns (RegisterTableResponse);
   rpc DropTable(DropTableRequest) returns (DropTableResponse);
+  // Lists every table registered under `dataset`. The gateway's
+  // `tables.list` REST handler delegates here; pagination contract
+  // matches ListDatasets.
+  rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
 
   rpc DescribeTable(DescribeTableRequest) returns (DescribeTableResponse);
 
@@ -88,6 +97,16 @@ message DropDatasetRequest {
 }
 message DropDatasetResponse {}
 
+message ListDatasetsRequest {
+  string project_id = 1;
+}
+message ListDatasetsResponse {
+  // Refs are returned in deterministic (lexicographic by dataset_id)
+  // order so the gateway's listing is stable across calls. See
+  // backend/storage/storage.h::Storage::ListDatasets.
+  repeated DatasetRef datasets = 1;
+}
+
 message RegisterTableRequest {
   TableRef table = 1;
   TableSchema schema = 2;
@@ -98,6 +117,15 @@ message DropTableRequest {
   TableRef table = 1;
 }
 message DropTableResponse {}
+
+message ListTablesRequest {
+  DatasetRef dataset = 1;
+}
+message ListTablesResponse {
+  // Refs are returned in deterministic (lexicographic by table_id)
+  // order. See backend/storage/storage.h::Storage::ListTables.
+  repeated TableRef tables = 1;
+}
 
 message DescribeTableRequest {
   TableRef table = 1;

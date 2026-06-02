@@ -101,16 +101,54 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 //
 //	GET /bigquery/v2/projects/{projectId}/datasets
 //
-// The internal Catalog gRPC service has no list method (catalog state
-// is owned by Storage; cf. proto/emulator.proto), so the handler
-// returns the BigQuery-shaped empty page until Storage gains a list
-// API. The shape matches docs/bigquery/docs/reference/rest/v2/datasets/list.md
-// so client libraries can iterate without special-casing the emulator.
-func DatasetList(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+// Calls the Catalog.ListDatasets RPC and folds the (deterministically
+// ordered, ascending dataset_id) result into a BigQuery datasetList
+// envelope. The shape matches
+// docs/bigquery/docs/reference/rest/v2/datasets/list.md.
+//
+// Each returned entry is the minimal dataset-list shape upstream
+// emits: kind, id (projectId:datasetId), datasetReference, and an
+// empty labels object so client samples that call
+// `Object.entries(item.metadata.labels)` on each iteration item do
+// not raise (mirrors TestDatasetGetLabelsIsEmptyObjectNotNull).
+//
+// Pagination: no `nextPageToken` today. The emulator is single-host
+// and the catalog never exceeds a handful of datasets in practice;
+// the engine helper returns every entry in one shot. When that
+// changes (large-catalog stress lane / horizontal sharding) the
+// gateway can grow a token by re-keying on dataset_id and slicing
+// the response here.
+func DatasetList(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID := r.PathValue("projectId")
+		if deps.Catalog == nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				resourceKeyKind:     datasetListKind,
+				resourceKeyDatasets: []bqtypes.Dataset{},
+			})
+			return
+		}
+		resp, err := deps.Catalog.ListDatasets(r.Context(), &enginepb.ListDatasetsRequest{
+			ProjectId: projectID,
+		})
+		if grpcToHTTPError(w, err) {
+			return
+		}
+		items := make([]map[string]any, 0, len(resp.GetDatasets()))
+		for _, ref := range resp.GetDatasets() {
+			items = append(items, map[string]any{
+				"kind": datasetKind,
+				"id":   ref.GetProjectId() + ":" + ref.GetDatasetId(),
+				"datasetReference": bqtypes.DatasetReference{
+					ProjectID: ref.GetProjectId(),
+					DatasetID: ref.GetDatasetId(),
+				},
+				"labels": map[string]string{},
+			})
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			resourceKeyKind:     datasetListKind,
-			resourceKeyDatasets: []bqtypes.Dataset{},
+			resourceKeyDatasets: items,
 		})
 	}
 }

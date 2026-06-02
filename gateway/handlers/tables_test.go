@@ -224,7 +224,8 @@ func TestTableGetLabelsIsEmptyObjectNotNull(t *testing.T) {
 	}
 }
 
-// TestTableListReturnsEmptyPage pins the empty-page shape.
+// TestTableListReturnsEmptyPage pins the empty-page shape (no Catalog
+// client wired) the handler returns when the engine is missing.
 func TestTableListReturnsEmptyPage(t *testing.T) {
 	req := newTableReq(http.MethodGet, "", "")
 	rec := httptest.NewRecorder()
@@ -239,5 +240,62 @@ func TestTableListReturnsEmptyPage(t *testing.T) {
 	}
 	if doc["kind"] != "bigquery#tableList" {
 		t.Errorf("kind = %v, want %q", doc["kind"], "bigquery#tableList")
+	}
+}
+
+// TestTableListSurfacesEngineEntries asserts the handler forwards
+// the (project_id, dataset_id) pair, calls the engine, and folds the
+// response into the REST envelope. Each entry must carry the
+// required shape (kind, id, tableReference, labels) so the
+// node-bigquery-tests sample's iteration works.
+func TestTableListSurfacesEngineEntries(t *testing.T) {
+	fake := &fakeCatalogClient{
+		listTablesFn: func(_ context.Context, _ *enginepb.ListTablesRequest) (*enginepb.ListTablesResponse, error) {
+			return &enginepb.ListTablesResponse{
+				Tables: []*enginepb.TableRef{
+					{ProjectId: testProjectID, DatasetId: testDatasetID, TableId: "alpha"},
+					{ProjectId: testProjectID, DatasetId: testDatasetID, TableId: "bravo"},
+				},
+			}, nil
+		},
+	}
+	req := newTableReq(http.MethodGet, "", "")
+	rec := httptest.NewRecorder()
+	TableList(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastListTables == nil {
+		t.Fatal("Catalog.ListTables was not called")
+	}
+	ds := fake.lastListTables.GetDataset()
+	if ds.GetProjectId() != testProjectID || ds.GetDatasetId() != testDatasetID {
+		t.Errorf("dataset ref forwarded = %+v, want {proj, ds1}", ds)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if doc["kind"] != "bigquery#tableList" {
+		t.Errorf("kind = %v", doc["kind"])
+	}
+	items, _ := doc["tables"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("tables entries = %d, want 2; body=%s", len(items), rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	if first["id"] != testProjectID+":"+testDatasetID+".alpha" {
+		t.Errorf("first entry id = %v", first["id"])
+	}
+	ref, _ := first["tableReference"].(map[string]any)
+	if ref["tableId"] != "alpha" {
+		t.Errorf("first entry tableReference.tableId = %v", ref["tableId"])
+	}
+	if first["type"] != defaultTableType {
+		t.Errorf("first entry type = %v, want %q", first["type"], defaultTableType)
+	}
+	if labels, ok := first["labels"].(map[string]any); !ok || len(labels) != 0 {
+		t.Errorf("first entry labels = %v, want {}", first["labels"])
 	}
 }

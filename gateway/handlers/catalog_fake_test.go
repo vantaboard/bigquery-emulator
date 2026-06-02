@@ -18,8 +18,10 @@ import (
 type fakeCatalogClient struct {
 	registerDatasetFn func(context.Context, *enginepb.RegisterDatasetRequest) (*enginepb.RegisterDatasetResponse, error)
 	dropDatasetFn     func(context.Context, *enginepb.DropDatasetRequest) (*enginepb.DropDatasetResponse, error)
+	listDatasetsFn    func(context.Context, *enginepb.ListDatasetsRequest) (*enginepb.ListDatasetsResponse, error)
 	registerTableFn   func(context.Context, *enginepb.RegisterTableRequest) (*enginepb.RegisterTableResponse, error)
 	dropTableFn       func(context.Context, *enginepb.DropTableRequest) (*enginepb.DropTableResponse, error)
+	listTablesFn      func(context.Context, *enginepb.ListTablesRequest) (*enginepb.ListTablesResponse, error)
 	describeTableFn   func(context.Context, *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error)
 	insertRowsFn      func(context.Context, *enginepb.InsertRowsRequest) (*enginepb.InsertRowsResponse, error)
 	listRowsFn        func(context.Context, *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error)
@@ -29,8 +31,10 @@ type fakeCatalogClient struct {
 	// to set a callback on every test.
 	lastRegisterDataset *enginepb.RegisterDatasetRequest
 	lastDropDataset     *enginepb.DropDatasetRequest
+	lastListDatasets    *enginepb.ListDatasetsRequest
 	lastRegisterTable   *enginepb.RegisterTableRequest
 	lastDropTable       *enginepb.DropTableRequest
+	lastListTables      *enginepb.ListTablesRequest
 	lastDescribeTable   *enginepb.DescribeTableRequest
 	lastInsertRows      *enginepb.InsertRowsRequest
 	lastListRows        *enginepb.ListRowsRequest
@@ -118,4 +122,28 @@ func (f *fakeCatalogClient) ListRows(
 		return f.listRowsFn(ctx, in)
 	}
 	return &enginepb.ListRowsResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListDatasets(
+	ctx context.Context,
+	in *enginepb.ListDatasetsRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListDatasetsResponse, error) {
+	f.lastListDatasets = in
+	if f.listDatasetsFn != nil {
+		return f.listDatasetsFn(ctx, in)
+	}
+	return &enginepb.ListDatasetsResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListTables(
+	ctx context.Context,
+	in *enginepb.ListTablesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListTablesResponse, error) {
+	f.lastListTables = in
+	if f.listTablesFn != nil {
+		return f.listTablesFn(ctx, in)
+	}
+	return &enginepb.ListTablesResponse{}, nil
 }

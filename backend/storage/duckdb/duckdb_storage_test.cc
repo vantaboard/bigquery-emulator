@@ -226,6 +226,102 @@ TEST_F(DuckDBStorageTest, CreateTableWithEmptySchemaSkipsParquet) {
   EXPECT_FALSE(fs::exists(parquet));
 }
 
+TEST_F(DuckDBStorageTest, ListDatasetsReturnsSortedIdsForProject) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  ASSERT_TRUE(store.CreateDataset({"proj-a", "ds_charlie"}, "US").ok());
+  ASSERT_TRUE(store.CreateDataset({"proj-a", "ds_alpha"}, "US").ok());
+  ASSERT_TRUE(store.CreateDataset({"proj-a", "ds_bravo"}, "US").ok());
+  ASSERT_TRUE(store.CreateDataset({"proj-other", "ds_zulu"}, "US").ok());
+
+  auto list_a_or = store.ListDatasets("proj-a");
+  ASSERT_TRUE(list_a_or.ok()) << list_a_or.status();
+  ASSERT_EQ(list_a_or->size(), 3u);
+  EXPECT_EQ((*list_a_or)[0].dataset_id, "ds_alpha");
+  EXPECT_EQ((*list_a_or)[1].dataset_id, "ds_bravo");
+  EXPECT_EQ((*list_a_or)[2].dataset_id, "ds_charlie");
+  for (const auto& id : *list_a_or) {
+    EXPECT_EQ(id.project_id, "proj-a");
+  }
+
+  auto list_other_or = store.ListDatasets("proj-other");
+  ASSERT_TRUE(list_other_or.ok());
+  ASSERT_EQ(list_other_or->size(), 1u);
+  EXPECT_EQ((*list_other_or)[0].dataset_id, "ds_zulu");
+
+  // Unknown project: empty vector, not NOT_FOUND. The gateway treats
+  // "no datasets in this project" and "this project has nothing yet"
+  // the same way (live BigQuery returns 200 with an empty `datasets`
+  // array for both).
+  auto list_unknown_or = store.ListDatasets("proj-missing");
+  ASSERT_TRUE(list_unknown_or.ok()) << list_unknown_or.status();
+  EXPECT_TRUE(list_unknown_or->empty());
+}
+
+TEST_F(DuckDBStorageTest, ListDatasetsRejectsEmptyProjectID) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  auto list_or = store.ListDatasets("");
+  ASSERT_FALSE(list_or.ok());
+  EXPECT_EQ(list_or.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
+TEST_F(DuckDBStorageTest, ListTablesReturnsSortedIdsForDataset) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(
+      store.CreateTable({"proj-1", "ds_1", "charlie"}, PeopleSchema()).ok());
+  ASSERT_TRUE(
+      store.CreateTable({"proj-1", "ds_1", "alpha"}, PeopleSchema()).ok());
+  // Empty-schema entries (views; see the empty-schema regression test)
+  // must still surface in ListTables. The sidecar is the canonical
+  // existence marker.
+  schema::TableSchema empty;
+  ASSERT_TRUE(store.CreateTable({"proj-1", "ds_1", "bravo_view"}, empty).ok());
+
+  auto list_or = store.ListTables(ds);
+  ASSERT_TRUE(list_or.ok()) << list_or.status();
+  ASSERT_EQ(list_or->size(), 3u);
+  EXPECT_EQ((*list_or)[0].table_id, "alpha");
+  EXPECT_EQ((*list_or)[1].table_id, "bravo_view");
+  EXPECT_EQ((*list_or)[2].table_id, "charlie");
+  for (const auto& id : *list_or) {
+    EXPECT_EQ(id.project_id, "proj-1");
+    EXPECT_EQ(id.dataset_id, "ds_1");
+  }
+}
+
+TEST_F(DuckDBStorageTest, ListTablesOnMissingDatasetIsNotFound) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  auto list_or = store.ListTables({"proj-x", "ds_missing"});
+  ASSERT_FALSE(list_or.ok());
+  EXPECT_EQ(list_or.status().code(), absl::StatusCode::kNotFound);
+}
+
+TEST_F(DuckDBStorageTest, ListTablesOnEmptyDatasetIsEmpty) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_empty"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  auto list_or = store.ListTables(ds);
+  ASSERT_TRUE(list_or.ok()) << list_or.status();
+  EXPECT_TRUE(list_or->empty());
+}
+
 TEST_F(DuckDBStorageTest, DropTableRemovesParquetAndSidecar) {
   auto store_or = DuckDBStorage::Open(data_dir_.string());
   ASSERT_TRUE(store_or.ok()) << store_or.status();

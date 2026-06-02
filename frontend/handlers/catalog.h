@@ -43,6 +43,10 @@ class CatalogService final : public v1::Catalog::Service {
                              const v1::DropDatasetRequest* request,
                              v1::DropDatasetResponse* response) override;
 
+  ::grpc::Status ListDatasets(::grpc::ServerContext* context,
+                              const v1::ListDatasetsRequest* request,
+                              v1::ListDatasetsResponse* response) override;
+
   ::grpc::Status RegisterTable(::grpc::ServerContext* context,
                                const v1::RegisterTableRequest* request,
                                v1::RegisterTableResponse* response) override;
@@ -50,6 +54,10 @@ class CatalogService final : public v1::Catalog::Service {
   ::grpc::Status DropTable(::grpc::ServerContext* context,
                            const v1::DropTableRequest* request,
                            v1::DropTableResponse* response) override;
+
+  ::grpc::Status ListTables(::grpc::ServerContext* context,
+                            const v1::ListTablesRequest* request,
+                            v1::ListTablesResponse* response) override;
 
   ::grpc::Status DescribeTable(::grpc::ServerContext* context,
                                const v1::DescribeTableRequest* request,

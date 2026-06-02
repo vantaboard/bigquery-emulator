@@ -217,6 +217,30 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
       storage_->DropDataset(id, request->delete_contents()));
 }
 
+::grpc::Status CatalogService::ListDatasets(
+    ::grpc::ServerContext* /*context*/,
+    const v1::ListDatasetsRequest* request,
+    v1::ListDatasetsResponse* response) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "CatalogService: storage backend is not configured");
+  }
+  if (request->project_id().empty()) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "ListDatasets: project_id must be non-empty");
+  }
+  auto datasets_or = storage_->ListDatasets(request->project_id());
+  if (!datasets_or.ok()) {
+    return AbslToGrpcStatus(datasets_or.status());
+  }
+  for (const auto& id : *datasets_or) {
+    auto* ref = response->add_datasets();
+    ref->set_project_id(id.project_id);
+    ref->set_dataset_id(id.dataset_id);
+  }
+  return ::grpc::Status::OK;
+}
+
 ::grpc::Status CatalogService::RegisterTable(
     ::grpc::ServerContext* /*context*/,
     const v1::RegisterTableRequest* request,
@@ -248,6 +272,30 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   }
   const auto id = TableIdFromProto(request->table());
   return AbslToGrpcStatus(storage_->DropTable(id));
+}
+
+::grpc::Status CatalogService::ListTables(::grpc::ServerContext* /*context*/,
+                                          const v1::ListTablesRequest* request,
+                                          v1::ListTablesResponse* response) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "CatalogService: storage backend is not configured");
+  }
+  if (auto v = ValidateDatasetRef(request->dataset(), "ListTables"); !v.ok()) {
+    return v;
+  }
+  const auto id = DatasetIdFromProto(request->dataset());
+  auto tables_or = storage_->ListTables(id);
+  if (!tables_or.ok()) {
+    return AbslToGrpcStatus(tables_or.status());
+  }
+  for (const auto& tid : *tables_or) {
+    auto* ref = response->add_tables();
+    ref->set_project_id(tid.project_id);
+    ref->set_dataset_id(tid.dataset_id);
+    ref->set_table_id(tid.table_id);
+  }
+  return ::grpc::Status::OK;
 }
 
 ::grpc::Status CatalogService::DescribeTable(

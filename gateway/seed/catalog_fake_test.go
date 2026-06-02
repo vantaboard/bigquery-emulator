@@ -90,3 +90,19 @@ func (f *fakeCatalogClient) ListRows(
 ) (*enginepb.ListRowsResponse, error) {
 	return &enginepb.ListRowsResponse{}, nil
 }
+
+func (f *fakeCatalogClient) ListDatasets(
+	_ context.Context,
+	_ *enginepb.ListDatasetsRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListDatasetsResponse, error) {
+	return &enginepb.ListDatasetsResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListTables(
+	_ context.Context,
+	_ *enginepb.ListTablesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListTablesResponse, error) {
+	return &enginepb.ListTablesResponse{}, nil
+}

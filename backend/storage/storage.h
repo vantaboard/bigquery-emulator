@@ -237,6 +237,21 @@ class Storage {
   [[nodiscard]] virtual absl::Status DropDataset(const DatasetId& id,
                                                  bool delete_contents) = 0;
 
+  // Lists the datasets registered under `project_id`. Returns an empty
+  // vector when the project has no datasets (i.e. never registered any
+  // or all have been dropped). Implementations MUST return ids in
+  // deterministic order so list pagination / callers that diff against
+  // a prior listing are stable; the DuckDB backend orders
+  // lexicographically by `dataset_id`. INVALID_ARGUMENT when
+  // `project_id` is empty.
+  //
+  // Used by the gateway's `datasets.list` REST handler to enumerate
+  // the catalog after `RegisterDataset` calls; the
+  // `frontend/handlers/catalog.cc` gRPC wrapper exposes this through
+  // the `Catalog.ListDatasets` RPC.
+  [[nodiscard]] virtual absl::StatusOr<std::vector<DatasetId>> ListDatasets(
+      absl::string_view project_id) const = 0;
+
   // ------------------------------------------------------------------
   // Table CRUD. `CreateTable` is idempotent at the dataset level only:
   // creating a table that already exists is an error
@@ -247,6 +262,15 @@ class Storage {
   [[nodiscard]] virtual absl::Status CreateTable(
       const TableId& id, const schema::TableSchema& schema) = 0;
   [[nodiscard]] virtual absl::Status DropTable(const TableId& id) = 0;
+
+  // Lists the tables registered under `dataset_id`. Returns an empty
+  // vector when the dataset is empty. NOT_FOUND when the dataset does
+  // not exist; INVALID_ARGUMENT when `project_id` / `dataset_id` is
+  // empty. Like ListDatasets, implementations MUST return ids in
+  // deterministic (lexicographic) order. Used by the gateway's
+  // `tables.list` REST handler.
+  [[nodiscard]] virtual absl::StatusOr<std::vector<TableId>> ListTables(
+      const DatasetId& dataset_id) const = 0;
 
   // Returns the schema the table was created with. NOT_FOUND if the
   // dataset or table does not exist.
