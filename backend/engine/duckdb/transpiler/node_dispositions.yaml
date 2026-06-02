@@ -93,13 +93,13 @@ ResolvedRecursiveRefScan: duckdb_rewrite plan=advanced-relational-routing.plan.m
 ResolvedPivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedUnpivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedMatchRecognizeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
-ResolvedGroupRowsScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedGroupRowsScan: semantic_executor plan=advanced-relational-routing.plan.md
 ResolvedTVFScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
 ResolvedRelationArgumentScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
 ResolvedBarrierScan: semantic_executor plan=advanced-relational-routing.plan.md
-ResolvedPipeIfScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
-ResolvedPipeForkScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
-ResolvedPipeTeeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedPipeIfScan: semantic_executor plan=advanced-relational-routing.plan.md
+ResolvedPipeForkScan: semantic_executor plan=advanced-relational-routing.plan.md
+ResolvedPipeTeeScan: semantic_executor plan=advanced-relational-routing.plan.md
 ResolvedPipeExportDataScan: control_op plan=control-op-executor.plan.md
 ResolvedPipeCreateTableScan: control_op plan=control-op-executor.plan.md
 ResolvedPipeInsertScan: semantic_executor plan=dml-local-executor.plan.md status=planned
