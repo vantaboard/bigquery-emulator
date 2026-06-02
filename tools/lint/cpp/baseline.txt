@@ -17,6 +17,7 @@ backend/engine/coordinator/route_classifier_test.cc
 backend/engine/duckdb/duckdb_executor.cc
 backend/engine/duckdb/transpiler/transpiler.cc
 backend/engine/duckdb/transpiler/transpiler_test.cc
+backend/engine/semantic/dml/dml_executor.cc
 backend/engine/semantic/eval_expr.cc
 backend/storage/duckdb/duckdb_storage.cc
 backend/storage/duckdb/duckdb_storage_test.cc
