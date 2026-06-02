@@ -68,6 +68,7 @@ tasks:
       - task: cpp:format
       - task: cpp:source
       - task: dispositions
+      - task: stale-terms
 
   fix:
     desc: Apply auto-fixable lints (gofmt -s -w, golangci-lint --fix, go vet, clang-format -i)
@@ -173,6 +174,23 @@ tasks:
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
         go run ./tools/check_disposition_parity
+
+  stale-terms:
+    desc: |
+      Scan the worktree for retired DuckDB-only / transpiler-shape-
+      roadmap terminology (DuckDB-only, FallbackEngine, ReferenceImpl,
+      skiplist, not_started, ...) and fail the build if any hit lands
+      outside the allowlist (.github/lint/stale-terms-allowlist.txt).
+      Owned by .cursor/plans/migration-cleanup-docs.plan.md (plan 17);
+      the canonical seven-route disposition vocabulary lives at
+      backend/engine/disposition.h.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go run ./tools/check_stale_terms
 
   shell:
     desc: ShellCheck shell scripts under docker/

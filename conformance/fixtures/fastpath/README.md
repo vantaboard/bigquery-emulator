@@ -1,11 +1,13 @@
 # conformance/fixtures/fastpath/
 
-Fast-path fixtures for the DuckDB-native / DuckDB-rewrite routes.
+Fast-path fixtures for the `duckdb_native` / `duckdb_rewrite` routes.
 
 Every YAML in this directory exercises a `ResolvedAST` shape that the
 DuckDB fast path is supposed to lower (per
-`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`). The split from
-the seed set in `conformance/fixtures/` is two-fold:
+`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`); fixtures whose
+queries route to `semantic_executor` (e.g. scalar-only SELECTs with no
+FROM clause) live under `conformance/fixtures/scalar/` instead. The
+split from the seed set in `conformance/fixtures/` is two-fold:
 
 * **Per-shape coverage.** Each supported node kind on the
   `duckdb_native` / `duckdb_rewrite` route gets at least one fixture
@@ -27,16 +29,16 @@ PR-gating). The full conformance run (`task conformance:run`) picks
 up everything under `conformance/fixtures/` so these fixtures also
 participate in the slower full-suite gate.
 
-## Route-label assertion (planned)
+## Route-label assertion
 
-Once `conformance-routing-matrix.plan.md` (plan 16) lands, the
-fixture loader / runner will gain a `route_label:` field on
-`Expectation` and a hard assertion that fixtures here all resolve to
-either `duckdb_native` or `duckdb_rewrite`. Until then we keep the
-fixtures as-is and rely on the directory split to keep the fast-path
-filter precise. Adding a manual `route_label:` field today would
-churn unnecessarily on every fixture when plan 16 wires the real
-assertion; the comment block here is the placeholder.
+`conformance-routing-matrix.plan.md` (plan 16) shipped the route
+assertion: every fixture in this directory carries an
+`expected.route` of either `duckdb_native` or `duckdb_rewrite` and
+the runner fails if the engine reports a different route. New
+fixtures here MUST set `expected.route` to the matching value;
+fixtures whose query routes elsewhere belong under
+`conformance/fixtures/scalar/`, `conformance/fixtures/dml/`, or the
+matching family directory.
 
 ## Adding a fixture
 
