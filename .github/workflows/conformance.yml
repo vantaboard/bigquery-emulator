@@ -4,9 +4,9 @@
 # `conformance/fixtures/` for each runtime profile in parallel.
 # Each profile produces its own JSON report which is uploaded as a
 # workflow artifact (`conformance-<profile>.json`). Today there is
-# only one profile (`duckdb`) since the emulator is DuckDB-only;
-# the matrix shape stays in place so a future profile addition
-# does not require a workflow rewrite.
+# only one profile (`duckdb`) -- the local execution coordinator
+# over DuckDB storage; the matrix shape stays in place so a future
+# profile addition does not require a workflow rewrite.
 #
 # Triggers mirror `.github/workflows/ci.yml`: pull requests against
 # any branch and pushes to `main`. The workflow stays in its own
