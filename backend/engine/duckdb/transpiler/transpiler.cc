@@ -206,6 +206,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_WITH_REF_SCAN:
     case ::googlesql::RESOLVED_PIVOT_SCAN:
     case ::googlesql::RESOLVED_UNPIVOT_SCAN:
+    case ::googlesql::RESOLVED_RECURSIVE_SCAN:
+    case ::googlesql::RESOLVED_RECURSIVE_REF_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_PARAMETER:
@@ -291,6 +293,12 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
       return EmitPivotScan(scan->GetAs<::googlesql::ResolvedPivotScan>());
     case ::googlesql::RESOLVED_UNPIVOT_SCAN:
       return EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
+    case ::googlesql::RESOLVED_RECURSIVE_SCAN:
+      return EmitRecursiveScan(
+          scan->GetAs<::googlesql::ResolvedRecursiveScan>());
+    case ::googlesql::RESOLVED_RECURSIVE_REF_SCAN:
+      return EmitRecursiveRefScan(
+          scan->GetAs<::googlesql::ResolvedRecursiveRefScan>());
     default:
       return "";
   }
@@ -1499,44 +1507,180 @@ std::string Transpiler::EmitWithScan(
   // names. The anchor name lives in `WithScanColumnAnchor` so the
   // two emit hooks share the convention.
   //
-  // Recursive CTEs (`WITH RECURSIVE`) are owned by
-  // `advanced-relational-routing.plan.md`; the analyzer sets
-  // `recursive()` for them. The route classifier does not yet
-  // promote recursive shapes to a dedicated route, so defend
-  // against accidentally emitting a non-recursive CTE for them:
-  // bail to "" and the engine surfaces UNIMPLEMENTED.
+  // Recursive CTEs (`WITH RECURSIVE`) lower through DuckDB's
+  // `WITH RECURSIVE` keyword. Each recursive entry's
+  // `with_subquery()` is a `ResolvedRecursiveScan`; the lowering
+  // routes through `EmitRecursiveScan` which sets up the per-CTE
+  // anchor names and emits the anchor + UNION + recursive term
+  // body. Non-recursive entries inside a recursive WithScan still
+  // emit through the standard CTE rewriter.
   if (node == nullptr || node->query() == nullptr) return "";
-  if (node->recursive()) return "";
   if (node->with_entry_list_size() == 0) {
     return EmitScan(node->query());
   }
+  const bool recursive = node->recursive();
   std::vector<std::string> ctes;
   ctes.reserve(node->with_entry_list_size());
   for (int i = 0; i < node->with_entry_list_size(); ++i) {
     const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
     if (entry == nullptr || entry->with_subquery() == nullptr) return "";
     if (entry->with_query_name().empty()) return "";
-    std::string sub = EmitScan(entry->with_subquery());
-    if (sub.empty()) return "";
     const ::googlesql::ResolvedScan* sub_scan = entry->with_subquery();
-    std::vector<std::string> cols;
-    cols.reserve(sub_scan->column_list_size());
-    for (int j = 0; j < sub_scan->column_list_size(); ++j) {
-      cols.push_back(absl::StrCat(QuoteIdent(sub_scan->column_list(j).name()),
-                                  " AS ",
-                                  QuoteIdent(WithScanColumnAnchor(j))));
+    const bool entry_is_recursive =
+        sub_scan->node_kind() == ::googlesql::RESOLVED_RECURSIVE_SCAN;
+    if (entry_is_recursive) {
+      // Stage the per-CTE context (name + anchor column names) so
+      // any `ResolvedRecursiveRefScan` reached from the recursive
+      // term's scan walks emits with the right CTE name and
+      // anchor-to-ref rename.
+      const auto* rec_scan =
+          sub_scan->GetAs<::googlesql::ResolvedRecursiveScan>();
+      std::vector<std::string> anchor_names;
+      anchor_names.reserve(rec_scan->column_list_size());
+      for (int j = 0; j < rec_scan->column_list_size(); ++j) {
+        anchor_names.push_back(WithScanColumnAnchor(j));
+      }
+      recursive_cte_stack_.push_back({entry->with_query_name(), anchor_names});
+      std::string body_sql = EmitRecursiveScan(rec_scan);
+      recursive_cte_stack_.pop_back();
+      if (body_sql.empty()) return "";
+      // DuckDB's WITH RECURSIVE column list lives between the CTE
+      // name and the `AS (...)`; emit it explicitly so the DuckDB
+      // planner does not have to infer names from the anchor's
+      // first SELECT (which could differ from the analyzer's
+      // expected names).
+      std::vector<std::string> quoted_cols;
+      quoted_cols.reserve(anchor_names.size());
+      for (const std::string& name : anchor_names) {
+        quoted_cols.push_back(QuoteIdent(name));
+      }
+      std::string cols_clause =
+          quoted_cols.empty()
+              ? std::string()
+              : absl::StrCat("(", absl::StrJoin(quoted_cols, ", "), ")");
+      ctes.push_back(absl::StrCat(QuoteIdent(entry->with_query_name()),
+                                  cols_clause,
+                                  " AS (",
+                                  body_sql,
+                                  ")"));
+    } else {
+      std::string sub = EmitScan(sub_scan);
+      if (sub.empty()) return "";
+      std::vector<std::string> cols;
+      cols.reserve(sub_scan->column_list_size());
+      for (int j = 0; j < sub_scan->column_list_size(); ++j) {
+        cols.push_back(absl::StrCat(QuoteIdent(sub_scan->column_list(j).name()),
+                                    " AS ",
+                                    QuoteIdent(WithScanColumnAnchor(j))));
+      }
+      std::string projected =
+          cols.empty()
+              ? absl::StrCat("SELECT * FROM (", sub, ")")
+              : absl::StrCat(
+                    "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
+      ctes.push_back(absl::StrCat(
+          QuoteIdent(entry->with_query_name()), " AS (", projected, ")"));
     }
-    std::string projected =
-        cols.empty()
-            ? absl::StrCat("SELECT * FROM (", sub, ")")
-            : absl::StrCat(
-                  "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
-    ctes.push_back(absl::StrCat(
-        QuoteIdent(entry->with_query_name()), " AS (", projected, ")"));
   }
   std::string body = EmitScan(node->query());
   if (body.empty()) return "";
-  return absl::StrCat("WITH ", absl::StrJoin(ctes, ", "), " ", body);
+  const char* keyword = recursive ? "WITH RECURSIVE " : "WITH ";
+  return absl::StrCat(keyword, absl::StrJoin(ctes, ", "), " ", body);
+}
+
+std::string Transpiler::EmitRecursiveScan(
+    const ::googlesql::ResolvedRecursiveScan* node) {
+  // `EmitWithScan` is the only caller; it has already staged the
+  // `recursive_cte_stack_` entry. The anchor names live there too
+  // -- we re-read them rather than recomputing so the contract that
+  // `EmitRecursiveRefScan` and the anchor projection use the same
+  // names is single-sourced.
+  if (node == nullptr) return "";
+  if (node->non_recursive_term() == nullptr ||
+      node->recursive_term() == nullptr) {
+    return "";
+  }
+  if (recursive_cte_stack_.empty()) return "";
+  const RecursiveCteContext& ctx = recursive_cte_stack_.back();
+  if (static_cast<int>(ctx.column_names.size()) != node->column_list_size()) {
+    return "";
+  }
+  // The recursion depth modifier is a BigQuery-specific extension
+  // (`WITH DEPTH ...`) that DuckDB does not have a clean analog
+  // for; bail to "" and let the engine surface UNIMPLEMENTED so
+  // downstream code can pick up the shape later.
+  if (node->recursion_depth_modifier() != nullptr) return "";
+
+  // Build the anchor (non-recursive) arm. Each item's
+  // `output_column_list[j]` is the source-column ResolvedColumn the
+  // analyzer produces; we rename it to the per-CTE anchor name so
+  // the recursive term + body can reference the CTE by a stable
+  // column name regardless of the per-arm ResolvedColumn ids.
+  auto build_arm =
+      [&](const ::googlesql::ResolvedSetOperationItem* item) -> std::string {
+    if (item == nullptr || item->scan() == nullptr) return "";
+    if (item->output_column_list_size() != node->column_list_size()) {
+      return "";
+    }
+    std::string inner = EmitScan(item->scan());
+    if (inner.empty()) return "";
+    std::vector<std::string> projs;
+    projs.reserve(node->column_list_size());
+    for (int j = 0; j < node->column_list_size(); ++j) {
+      const ::googlesql::ResolvedColumn& src = item->output_column_list(j);
+      std::string src_q = QuoteIdent(src.name());
+      std::string dst_q = QuoteIdent(ctx.column_names[j]);
+      projs.push_back(src_q == dst_q ? src_q
+                                     : absl::StrCat(src_q, " AS ", dst_q));
+    }
+    return absl::StrCat(
+        "SELECT ", absl::StrJoin(projs, ", "), " FROM (", inner, ")");
+  };
+
+  std::string anchor = build_arm(node->non_recursive_term());
+  if (anchor.empty()) return "";
+  std::string recursive_arm = build_arm(node->recursive_term());
+  if (recursive_arm.empty()) return "";
+
+  absl::string_view op;
+  switch (node->op_type()) {
+    case ::googlesql::ResolvedRecursiveScan::UNION_ALL:
+      op = " UNION ALL ";
+      break;
+    case ::googlesql::ResolvedRecursiveScan::UNION_DISTINCT:
+      op = " UNION ";
+      break;
+    default:
+      return "";
+  }
+  return absl::StrCat(anchor, op, recursive_arm);
+}
+
+std::string Transpiler::EmitRecursiveRefScan(
+    const ::googlesql::ResolvedRecursiveRefScan* node) {
+  // The recursive ref scan references its enclosing recursive CTE
+  // by position (the analyzer does not carry the CTE name on the
+  // ref). `EmitWithScan` pushed the CTE name + anchor column names
+  // onto `recursive_cte_stack_` before emitting the recursive
+  // term, so the back of the stack is the right context.
+  if (node == nullptr) return "";
+  if (recursive_cte_stack_.empty()) return "";
+  const RecursiveCteContext& ctx = recursive_cte_stack_.back();
+  if (static_cast<int>(ctx.column_names.size()) != node->column_list_size()) {
+    return "";
+  }
+  std::vector<std::string> projs;
+  projs.reserve(node->column_list_size());
+  for (int i = 0; i < node->column_list_size(); ++i) {
+    std::string src_q = QuoteIdent(ctx.column_names[i]);
+    std::string dst_q = QuoteIdent(node->column_list(i).name());
+    projs.push_back(src_q == dst_q ? src_q
+                                   : absl::StrCat(src_q, " AS ", dst_q));
+  }
+  return absl::StrCat("SELECT ",
+                      absl::StrJoin(projs, ", "),
+                      " FROM ",
+                      QuoteIdent(ctx.cte_name));
 }
 
 std::string Transpiler::EmitWithRefScan(

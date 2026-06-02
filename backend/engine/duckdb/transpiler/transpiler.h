@@ -219,6 +219,17 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   virtual std::string EmitPivotScan(const ::googlesql::ResolvedPivotScan* node);
   virtual std::string EmitUnpivotScan(
       const ::googlesql::ResolvedUnpivotScan* node);
+  // Recursive CTE lowering. `EmitRecursiveScan` lowers the anchor +
+  // recursive terms inside a `ResolvedWithEntry` whose
+  // `with_subquery()` is a `ResolvedRecursiveScan` (i.e. the entry
+  // is the recursive side of a `WITH RECURSIVE` block);
+  // `EmitRecursiveRefScan` renames the per-CTE anchor names back to
+  // the per-ref column names so the recursive arm's scans compose
+  // like every other scan emit.
+  virtual std::string EmitRecursiveScan(
+      const ::googlesql::ResolvedRecursiveScan* node);
+  virtual std::string EmitRecursiveRefScan(
+      const ::googlesql::ResolvedRecursiveRefScan* node);
 
   // Expressions ----------------------------------------------------
   virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);
@@ -337,6 +348,20 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // `name_to_slot_` for dedup; positional ones always append.
   std::vector<ParameterRef> parameter_order_;
   absl::flat_hash_map<std::string, int> name_to_slot_;
+
+  // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes
+  // one entry per recursive CTE before lowering its body; the
+  // matching `EmitRecursiveRefScan` reads the back of the stack to
+  // discover the DuckDB-side CTE name and the analyzer-stable
+  // anchor column names the recursive arm references. Non-recursive
+  // entries do not touch the stack so a non-recursive CTE nested
+  // inside a recursive arm still sees the outer recursive context
+  // through the stack.
+  struct RecursiveCteContext {
+    std::string cte_name;
+    std::vector<std::string> column_names;
+  };
+  std::vector<RecursiveCteContext> recursive_cte_stack_;
 };
 
 }  // namespace transpiler

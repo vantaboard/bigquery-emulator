@@ -88,8 +88,8 @@ ResolvedAnalyticScan: duckdb_native
 ResolvedSampleScan: duckdb_native
 ResolvedWithScan: duckdb_native plan=cte-subquery-routing.plan.md
 ResolvedWithRefScan: duckdb_native plan=cte-subquery-routing.plan.md
-ResolvedRecursiveScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
-ResolvedRecursiveRefScan: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedRecursiveScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
+ResolvedRecursiveRefScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedPivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedUnpivotScan: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedMatchRecognizeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned

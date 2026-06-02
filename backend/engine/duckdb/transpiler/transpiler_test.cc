@@ -231,6 +231,8 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitPivotScan;
   using Transpiler::EmitProjectScan;
   using Transpiler::EmitQueryStmt;
+  using Transpiler::EmitRecursiveRefScan;
+  using Transpiler::EmitRecursiveScan;
   using Transpiler::EmitSampleScan;
   using Transpiler::EmitSetOperationScan;
   using Transpiler::EmitSingleRowScan;
@@ -792,6 +794,40 @@ TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
       << "expected q2 label projection; got: " << sql;
   EXPECT_NE(sql.find("WHERE NOT (\"value\" IS NULL)"), std::string::npos)
       << "expected EXCLUDE NULLS filter; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitWithScanRecursiveLowersToWithRecursive) {
+  // `advanced-relational-routing.plan.md` Family 4. A `WITH
+  // RECURSIVE t AS (SELECT 1 AS n UNION ALL SELECT n FROM t) ...`
+  // lowers to DuckDB's `WITH RECURSIVE`. The transpiler stages a
+  // per-CTE context with stable anchor column names (`_cte_0`),
+  // renames each arm's output columns onto those anchors, and
+  // unions them; the recursive-arm `ResolvedRecursiveRefScan`
+  // projects from the anchor names back to the analyzer's per-ref
+  // column names.
+  //
+  // The recursive arm here is just `SELECT n FROM t` (no
+  // `WHERE ... < ...`) so the test does not depend on the `$less`
+  // operator's disposition entry, which is owned by a later
+  // function-dispatch plan.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH RECURSIVE t AS ("
+      "  SELECT 1 AS n"
+      "  UNION ALL"
+      "  SELECT n FROM t"
+      ")"
+      "SELECT n FROM t");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  EXPECT_NE(sql.find("WITH RECURSIVE \"t\""), std::string::npos)
+      << "expected WITH RECURSIVE keyword; got: " << sql;
+  EXPECT_NE(sql.find("\"_cte_0\""), std::string::npos)
+      << "expected anchor column name; got: " << sql;
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos)
+      << "expected UNION ALL between anchor and recursive arm; got: " << sql;
+  EXPECT_NE(sql.find("FROM \"t\""), std::string::npos)
+      << "expected recursive ref to read FROM the CTE; got: " << sql;
 }
 
 TEST_F(TranspilerTest, EmitUnpivotScanIncludeNullsSkipsFilter) {
@@ -2901,20 +2937,58 @@ TEST_F(TranspilerTest, EmitWithScanCteReferencedTwice) {
       << sql;
 }
 
-TEST_F(TranspilerTest, EmitWithScanRecursiveBailsToEmpty) {
-  // `WITH RECURSIVE` lands on `advanced-relational-routing.plan.md`,
-  // not this plan. Defense-in-depth: a `ResolvedWithScan` whose
-  // `recursive()` flag is set MUST bail to "" so an upstream
-  // analyzer change that synthesizes a non-`ResolvedRecursiveScan`
-  // recursive form does not silently emit a non-recursive DuckDB
-  // CTE.
+TEST_F(TranspilerTest, EmitWithScanRecursivePropagatesKeyword) {
+  // `WITH RECURSIVE` now lowers through `EmitRecursiveScan`
+  // (advanced-relational-routing Family 4), so the prior
+  // "bails-to-empty" defense-in-depth has been promoted to a
+  // real emit. This hand-built shape mirrors what the analyzer
+  // produces for a trivial `WITH RECURSIVE r AS (SELECT 1 UNION
+  // ALL SELECT 1) SELECT 1` -- bypassing the analyzer keeps the
+  // test independent of the (currently-unmapped) `$less` /
+  // `$greater` disposition entries that a non-trivial recursive
+  // CTE relies on.
   //
-  // The recursive check in `EmitWithScan` fires before walking
-  // children, so we can use a trivially-valid SingleRowScan for
-  // the body and a single entry with the same -- the test does
-  // not depend on those being meaningful.
-  auto entry = ::googlesql::MakeResolvedWithEntry(
-      "r", ::googlesql::MakeResolvedSingleRowScan());
+  // The check confirms `WITH RECURSIVE` makes it into the emitted
+  // SQL whenever the WithScan's `recursive()` flag is set.
+  ::googlesql::ResolvedColumn anchor_col(
+      /*column_id=*/200,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("n"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
+      anchor_exprs;
+  anchor_exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      anchor_col,
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1))));
+  auto anchor_project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{anchor_col},
+      std::move(anchor_exprs),
+      ::googlesql::MakeResolvedSingleRowScan());
+  auto anchor_item = ::googlesql::MakeResolvedSetOperationItem(
+      std::move(anchor_project), /*output_column_list=*/{anchor_col});
+  ::googlesql::ResolvedColumn rec_col(
+      /*column_id=*/201,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("n"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
+      rec_exprs;
+  rec_exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      rec_col, ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(2))));
+  auto rec_project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{rec_col},
+      std::move(rec_exprs),
+      ::googlesql::MakeResolvedSingleRowScan());
+  auto rec_item = ::googlesql::MakeResolvedSetOperationItem(
+      std::move(rec_project), /*output_column_list=*/{rec_col});
+  auto recursive_scan = ::googlesql::MakeResolvedRecursiveScan(
+      /*column_list=*/{anchor_col},
+      ::googlesql::ResolvedRecursiveScan::UNION_ALL,
+      std::move(anchor_item),
+      std::move(rec_item),
+      /*recursion_depth_modifier=*/nullptr);
+  auto entry =
+      ::googlesql::MakeResolvedWithEntry("r", std::move(recursive_scan));
   std::vector<std::unique_ptr<const ::googlesql::ResolvedWithEntry>> entries;
   entries.push_back(std::move(entry));
   auto with_scan = ::googlesql::MakeResolvedWithScan(
@@ -2923,7 +2997,11 @@ TEST_F(TranspilerTest, EmitWithScanRecursiveBailsToEmpty) {
       ::googlesql::MakeResolvedSingleRowScan(),
       /*recursive=*/true);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitWithScan(with_scan.get()), "");
+  std::string sql = t.EmitWithScan(with_scan.get());
+  EXPECT_NE(sql.find("WITH RECURSIVE \"r\""), std::string::npos)
+      << "expected WITH RECURSIVE keyword; got: " << sql;
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos)
+      << "expected UNION ALL between anchor and recursive arm; got: " << sql;
 }
 
 TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {

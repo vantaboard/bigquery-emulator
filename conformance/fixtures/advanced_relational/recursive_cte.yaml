@@ -1,0 +1,64 @@
+# recursive_cte: BigQuery `WITH RECURSIVE` lowers to DuckDB
+#                `WITH RECURSIVE` natively.
+#
+# Pins `advanced-relational-routing.plan.md` Family 4. The
+# transpiler's `EmitWithScan` recognizes the analyzer's
+# `recursive()` flag on `ResolvedWithScan`, stages a per-CTE
+# context with stable anchor column names (`_cte_0`), and
+# delegates to `EmitRecursiveScan`. The recursive arm's
+# `ResolvedRecursiveRefScan` projects from the anchor names back
+# to the per-ref column names so the surrounding scans compose
+# like every other scan emit.
+#
+# Route: `duckdb_rewrite` via `EmitWithScan` + `EmitRecursiveScan`
+# (`WITH RECURSIVE` is DuckDB-native). Route-label assertion
+# deferred to plan 16.
+#
+# Fixture shape: a hierarchical-traversal table (manager / employee
+# pairs) is walked recursively to compute every employee's depth
+# below the root. This is the "hierarchical traversal" e2e
+# motivating the recursive-CTE row in the plan's per-shape table.
+name: recursive_cte
+description: |
+  WITH RECURSIVE descents(employee, depth) AS (
+    -- anchor: top-of-tree rows
+    SELECT employee, 0 FROM org WHERE manager IS NULL
+    UNION ALL
+    -- recursive arm: join the CTE with the org table to climb the tree
+    SELECT org.employee, depth + 1
+      FROM descents JOIN org ON org.manager = descents.employee
+  )
+  SELECT employee, depth FROM descents ORDER BY depth, employee;
+project_id: proj-advanced-recursive
+dataset_id: ds_recursive
+setup:
+  - dataset: ds_recursive
+  - table:
+      dataset: ds_recursive
+      id: org
+      schema:
+        - {name: employee, type: STRING, mode: REQUIRED}
+        - {name: manager, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_recursive
+      table: org
+      rows:
+        - {employee: alice, manager: null}
+        - {employee: bob, manager: alice}
+        - {employee: carol, manager: alice}
+        - {employee: dave, manager: bob}
+query: |
+  WITH RECURSIVE descents AS (
+    SELECT employee, 0 AS depth FROM ds_recursive.org WHERE manager IS NULL
+    UNION ALL
+    SELECT org.employee, depth + 1
+      FROM descents JOIN ds_recursive.org AS org
+        ON org.manager = descents.employee
+  )
+  SELECT employee, depth FROM descents ORDER BY depth, employee
+expected:
+  rows:
+    - {employee: "alice", depth: "0"}
+    - {employee: "bob", depth: "1"}
+    - {employee: "carol", depth: "1"}
+    - {employee: "dave", depth: "2"}

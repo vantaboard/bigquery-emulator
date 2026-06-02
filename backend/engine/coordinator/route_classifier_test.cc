@@ -492,6 +492,24 @@ TEST_F(RouteClassifierTest, UnpivotScanRoutesToDuckdbRewrite) {
   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
 }
 
+TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
+  // `advanced-relational-routing.plan.md` Family 4. The disposition
+  // table routes `ResolvedRecursiveScan` (and its
+  // `ResolvedRecursiveRefScan` reference) through `kDuckdbRewrite`;
+  // the transpiler's `EmitRecursiveScan` lowers it to DuckDB's
+  // `WITH RECURSIVE`.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH RECURSIVE r AS ("
+      "  SELECT 1 AS n"
+      "  UNION ALL"
+      "  SELECT n FROM r"
+      ")"
+      "SELECT n FROM r");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
+}
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records
