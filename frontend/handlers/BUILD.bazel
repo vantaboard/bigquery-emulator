@@ -126,3 +126,49 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# StorageWrite handler (plan 15 — storage-read-write-api-plan).
+# Mirrors the storage_read_handler shape: header + .cc + the
+# storage_write proto stubs. Plan 15 lights up the _default +
+# COMMITTED stream types end-to-end; BUFFERED / PENDING return
+# UNIMPLEMENTED until the deferred follow-up subagent lands.
+cc_library(
+    name = "storage_write_handler",
+    srcs = ["storage_write.cc"],
+    hdrs = ["storage_write.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        # The handler decodes `bigquery_emulator.v1.Cell` shapes onto
+        # `backend::storage::Value`s using the same conversion as the
+        # catalog handler; the Cell oneof lives in the emulator
+        # proto, so we depend on it explicitly.
+        "//proto:emulator_cc_proto",
+        "//proto:storage_write_cc_grpc",
+        "//proto:storage_write_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_test(
+    name = "storage_write_handler_test",
+    srcs = ["storage_write_test.cc"],
+    deps = [
+        ":storage_write_handler",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "//proto:emulator_cc_proto",
+        "//proto:storage_write_cc_grpc",
+        "//proto:storage_write_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

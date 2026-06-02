@@ -1,0 +1,237 @@
+// storage_write.proto is the internal contract for the BigQuery Storage
+// Write API surface (BQ public name: `google.cloud.bigquery.storage.v1`).
+// The Go gateway translates REST `tabledata.insertAll` calls (and the
+// gRPC AppendRows path used directly by the Storage Write client
+// libraries) into RPCs against this service so the C++ engine can
+// commit rows through the same `DuckDBStorage::AppendRows` primitive
+// the local DML executor already uses.
+//
+// Plan 15 (`storage-read-write-api-plan.plan.md`) ships the proto +
+// the `CreateWriteStream` / `AppendRows` / `GetWriteStream` handlers
+// for the `_default` and `COMMITTED` stream types. The other two
+// stream types (`BUFFERED`, `PENDING`) plus `FlushRows` /
+// `FinalizeWriteStream` / `BatchCommitWriteStreams` reserve their
+// proto slots here so the wire shape stays stable when the deferred
+// follow-up subagent lights them up; the matching handler methods
+// return UNIMPLEMENTED today and document the rationale on the
+// `bigquery_emulator.v1.StorageWrite` service comment.
+//
+// Code generation:
+//   - Go:  `task proto:gen` writes
+//          `gateway/enginepb/storage_write.{pb,grpc.pb}.go`. Same
+//          plugin pipeline as `emulator.proto`.
+//   - C++: Bazel's `cc_proto_library` + `cc_grpc_library` rules in
+//          `proto/BUILD.bazel` emit
+//          `storage_write.{pb,grpc.pb}.{h,cc}` into bazel-bin.
+
+syntax = "proto3";
+
+package bigquery_emulator.v1;
+
+import "proto/emulator.proto";
+
+option go_package = "github.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb";
+
+option cc_enable_arenas = true;
+
+// ---------------------------------------------------------------------------
+// StorageWrite service
+//
+// Mirrors the shape of BigQuery's public `BigQueryWrite` service. Plan
+// 15 lights up the `_default` / `COMMITTED` stream types end-to-end;
+// `BUFFERED` and `PENDING` reserve their proto slots but the matching
+// handler methods return UNIMPLEMENTED until the follow-up subagent
+// wires the buffer / two-phase commit semantics.
+// ---------------------------------------------------------------------------
+
+service StorageWrite {
+  // CreateWriteStream returns a stream handle the caller binds to
+  // `AppendRows`. Plan 15 supports `_default` and `COMMITTED` streams
+  // (every flushed batch becomes immediately visible to readers);
+  // `BUFFERED` / `PENDING` requests fail with UNIMPLEMENTED until
+  // the deferred follow-up lands.
+  rpc CreateWriteStream(CreateWriteStreamRequest) returns (WriteStream);
+
+  // AppendRows is bidirectional-streaming. The first message on a
+  // stream MUST set `write_stream`; subsequent messages may leave it
+  // empty (the handler keeps the binding from the first message) or
+  // re-assert the same name. Plan 15 commits each `proto_rows` batch
+  // through `Storage::AppendRows` synchronously and replies with one
+  // `AppendRowsResponse` per request before reading the next.
+  rpc AppendRows(stream AppendRowsRequest) returns (stream AppendRowsResponse);
+
+  // GetWriteStream returns the stream metadata the engine recorded at
+  // CreateWriteStream time. Used by clients to verify the stream
+  // type / schema before opening an AppendRows session.
+  rpc GetWriteStream(GetWriteStreamRequest) returns (WriteStream);
+
+  // FinalizeWriteStream marks a stream as closed. Plan 15 returns
+  // UNIMPLEMENTED today; the surface is reserved for the deferred
+  // BUFFERED / PENDING follow-up where finalize is the producer's
+  // signal to the BatchCommitWriteStreams pass.
+  rpc FinalizeWriteStream(FinalizeWriteStreamRequest)
+      returns (FinalizeWriteStreamResponse);
+
+  // BatchCommitWriteStreams atomically commits a set of `PENDING`
+  // streams. Plan 15 returns UNIMPLEMENTED today; reserved for the
+  // deferred follow-up.
+  rpc BatchCommitWriteStreams(BatchCommitWriteStreamsRequest)
+      returns (BatchCommitWriteStreamsResponse);
+
+  // FlushRows advances the visibility offset on a `BUFFERED` stream.
+  // Plan 15 returns UNIMPLEMENTED today; reserved for the deferred
+  // follow-up.
+  rpc FlushRows(FlushRowsRequest) returns (FlushRowsResponse);
+}
+
+// WriteStream describes a write stream by name + type + pinned schema.
+// `name` is the server-assigned id of the form
+// `{table}/streams/{id}` (or the canonical `_default` reserved name);
+// the caller passes it back to `AppendRows`.
+message WriteStream {
+  // Server-assigned stream id. Format:
+  //   `projects/{p}/datasets/{d}/tables/{t}/streams/{id}`
+  // The `_default` stream uses the reserved id `_default`; the
+  // engine also accepts that the caller did not call
+  // CreateWriteStream first and routes appends to the table's
+  // implicit default stream.
+  string name = 1;
+
+  // BigQuery's stream lifecycle vocabulary.
+  enum Type {
+    // Reserved zero-value for proto3. Server treats this as
+    // COMMITTED (matching BigQuery's documented default).
+    TYPE_UNSPECIFIED = 0;
+
+    // `_default` and explicit COMMITTED both commit on every
+    // AppendRows batch (rows immediately visible to readers).
+    // Plan 15 lights both up.
+    COMMITTED = 1;
+
+    // PENDING streams buffer rows server-side until
+    // `BatchCommitWriteStreams` makes them visible. Reserved for
+    // the deferred follow-up; CreateWriteStream returns
+    // UNIMPLEMENTED today.
+    PENDING = 2;
+
+    // BUFFERED streams buffer rows server-side until `FlushRows`
+    // advances the visibility offset. Reserved for the deferred
+    // follow-up; CreateWriteStream returns UNIMPLEMENTED today.
+    BUFFERED = 3;
+  }
+  Type type = 2;
+
+  // Schema the stream pins at creation time. Engine populates this
+  // from the source table's `Storage::GetSchema` reply so the
+  // caller can sanity-check writer alignment without a follow-up
+  // DescribeTable round-trip.
+  TableSchema schema = 3;
+
+  // RFC3339 timestamp the stream was minted. The handler stamps
+  // this so a follow-up `GetWriteStream` can surface stream
+  // age (BigQuery uses it for retention windows).
+  string create_time = 4;
+}
+
+message CreateWriteStreamRequest {
+  // BigQuery resource path the stream belongs to:
+  // `projects/{p}/datasets/{d}/tables/{t}`.
+  string parent = 1;
+
+  // Stream shape the caller wants. Only `type` is read today;
+  // `name` and `schema` are server-populated.
+  WriteStream write_stream = 2;
+}
+
+message AppendRowsRequest {
+  // The full stream name (matching `WriteStream.name`). Required on
+  // the first message; subsequent messages on the same stream may
+  // leave this empty (the handler keeps the first message's
+  // binding) or re-assert the same value.
+  string write_stream = 1;
+
+  // Optional offset for ordered append. Plan 15 ignores the value
+  // for `_default` / `COMMITTED` (every append is immediately
+  // committed in arrival order); the field is here so the wire
+  // shape is forward-compatible with BUFFERED / PENDING flows.
+  int64 offset = 2;
+
+  // ProtoData carries the rows + the writer's schema. The writer
+  // schema is informational today (we trust the table's schema for
+  // shape validation); the rows ride on `DataRow` cells, the same
+  // shape `Catalog.InsertRows` uses.
+  message ProtoData {
+    TableSchema writer_schema = 1;
+    repeated DataRow rows = 2;
+  }
+  ProtoData proto_rows = 4;
+
+  // Caller-supplied trace id, mirrored back on the response so
+  // the producer can correlate appends with replies. Optional.
+  string trace_id = 6;
+}
+
+message AppendRowsResponse {
+  // AppendResult is the success envelope; carries the offset of
+  // the first row in the batch on a `_default` / `COMMITTED`
+  // stream that's just `prior_offset + 0` (every append commits
+  // in arrival order).
+  message AppendResult {
+    int64 offset = 1;
+  }
+
+  // Either AppendResult or error is set, never both.
+  oneof response {
+    AppendResult append_result = 1;
+    // Error message from the storage layer (`DuckDBStorage::AppendRows`
+    // failures, schema mismatches, ...). The handler maps absl
+    // statuses onto a free-form message here; the public BigQuery
+    // surface uses `google.rpc.Status` but plan 15 keeps the
+    // simpler shape so we don't pull `google.rpc.status` in.
+    string error_message = 2;
+  }
+
+  // Trace id echoed from the request (when set). Empty if the
+  // request did not pin one.
+  string trace_id = 3;
+
+  // Number of rows the engine committed for this request. The
+  // public surface does not advertise this on success; we surface
+  // it explicitly so the in-process gRPC test can assert per-batch
+  // commit counts without re-querying the table.
+  int64 row_count = 4;
+}
+
+message GetWriteStreamRequest {
+  string name = 1;
+}
+
+message FinalizeWriteStreamRequest {
+  string name = 1;
+}
+message FinalizeWriteStreamResponse {
+  // Total rows committed on the stream. Reserved for the deferred
+  // follow-up; plan 15 returns UNIMPLEMENTED.
+  int64 row_count = 1;
+}
+
+message BatchCommitWriteStreamsRequest {
+  // Parent table that owns the streams.
+  string parent = 1;
+  // Stream names to commit atomically. Reserved for the deferred
+  // follow-up; plan 15 returns UNIMPLEMENTED.
+  repeated string write_streams = 2;
+}
+message BatchCommitWriteStreamsResponse {
+  // RFC3339 timestamp the commit landed. Reserved for the deferred
+  // follow-up.
+  string commit_time = 1;
+}
+
+message FlushRowsRequest {
+  string write_stream = 1;
+  int64 offset = 2;
+}
+message FlushRowsResponse {
+  int64 offset = 1;
+}

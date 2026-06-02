@@ -20,6 +20,7 @@ cc_library(
         "//frontend/handlers:catalog_handler",
         "//frontend/handlers:query_handler",
         "//frontend/handlers:storage_read_handler",
+        "//frontend/handlers:storage_write_handler",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",
     ],

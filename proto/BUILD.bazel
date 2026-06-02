@@ -47,3 +47,21 @@ cc_grpc_library(
     grpc_only = True,
     deps = [":storage_read_cc_proto"],
 )
+
+proto_library(
+    name = "storage_write_proto",
+    srcs = ["storage_write.proto"],
+    deps = [":emulator_proto"],
+)
+
+cc_proto_library(
+    name = "storage_write_cc_proto",
+    deps = [":storage_write_proto"],
+)
+
+cc_grpc_library(
+    name = "storage_write_cc_grpc",
+    srcs = [":storage_write_proto"],
+    grpc_only = True,
+    deps = [":storage_write_cc_proto"],
+)
