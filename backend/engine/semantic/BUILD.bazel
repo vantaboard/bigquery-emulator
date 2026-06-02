@@ -94,6 +94,12 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        # `googlesql/public/constant.h` is bundled into the prebuilt
+        # artifact's catch-all header set; the public wrapper API
+        # exposes it transitively through `:simple_catalog` (which
+        # `#include`s `constant.h` for `SimpleConstant`). There is no
+        # standalone `:constant` wrapper today.
+        "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:type",

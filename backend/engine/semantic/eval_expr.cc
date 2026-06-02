@@ -19,6 +19,7 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/dispatch.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/constant.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
@@ -836,6 +837,42 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                        " to ",
                        target->DebugString(),
                        " is not yet implemented"));
+    }
+    case ::googlesql::RESOLVED_CONSTANT: {
+      // `ResolvedConstant` carries a non-owning pointer to a
+      // `googlesql::Constant` registered on the catalog. The
+      // BigQuery emulator's catalog adapter (today only the
+      // analyzer's built-in constants, future module-defined
+      // constants once `CREATE CONSTANT` lands) stores
+      // `SimpleConstant` instances whose `HasValue()` is true and
+      // `GetValue()` returns the bound `Value` verbatim. Constants
+      // whose value is not available yet (e.g. an unresolved
+      // `SQLConstant`) surface as a structured `kInvalidArgument`
+      // so the gateway envelope names the constant rather than
+      // silently substituting NULL.
+      const auto& node = *expr.GetAs<::googlesql::ResolvedConstant>();
+      const ::googlesql::Constant* constant = node.constant();
+      if (constant == nullptr) {
+        return absl::InternalError(
+            "semantic: ResolvedConstant has null constant pointer");
+      }
+      if (!constant->HasValue()) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            absl::StrCat("semantic: constant '",
+                         constant->FullName(),
+                         "' has no bound value (catalog returned "
+                         "HasValue=false)"));
+      }
+      absl::StatusOr<Value> value = constant->GetValue();
+      if (!value.ok()) {
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 absl::StrCat("semantic: constant '",
+                                              constant->FullName(),
+                                              "' failed to provide its value: ",
+                                              value.status().message()));
+      }
+      return *std::move(value);
     }
     case ::googlesql::RESOLVED_COLUMN_REF: {
       // A `ResolvedColumnRef` reads a column the surrounding scan

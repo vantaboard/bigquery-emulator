@@ -332,6 +332,28 @@ TEST_F(EvalExprTest, IsNotNullForNonNullOperand) {
   EXPECT_TRUE(v->bool_value());
 }
 
+TEST_F(EvalExprTest, ResolvedConstantResolvesToCatalogValue) {
+  // Register a `SimpleConstant` on the test catalog and analyze
+  // `SELECT <constant>`. The analyzer emits a `ResolvedConstant`
+  // whose `constant()` points at the registered entry; `EvalExpr`
+  // must return the bound value verbatim (no NULL substitution).
+  std::unique_ptr<::googlesql::SimpleConstant> meaning;
+  ASSERT_TRUE(::googlesql::SimpleConstant::Create(
+                  {"meaning_of_life"}, ::googlesql::Value::Int64(42), &meaning)
+                  .ok());
+  catalog_->AddOwnedConstant(meaning.release());
+
+  const auto* expr = AnalyzeExpr("meaning_of_life");
+  ASSERT_NE(expr, nullptr);
+  ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CONSTANT)
+      << "analyzer should have resolved bare identifier to ResolvedConstant; "
+         "got "
+      << expr->node_kind_string();
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 42);
+}
+
 TEST_F(EvalExprTest, FloatNanArithmeticProducesNan) {
   const auto* expr = AnalyzeExpr("CAST('NaN' AS FLOAT64) + 1");
   ASSERT_NE(expr, nullptr);
