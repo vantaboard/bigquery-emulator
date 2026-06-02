@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: tp03
     content: "thirdparty-03-python-fake-gcs.plan.md — route python-bigquery-tests through fake-gcs-server (~2 h)."
-    status: pending
+    status: completed
   - id: tp04
     content: "thirdparty-04-jobs-registry-surface.plan.md — wire JobList / JobGet / JobCancel / JobDelete against jobs.Registry (~1 d)."
     status: pending

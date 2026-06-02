@@ -4,19 +4,19 @@ overview: "Mirror the node-bigquery-tests fake-gcs pattern in the python-bigquer
 todos:
   - id: tp03_dep
     content: "Add `- task: fake-gcs-up` to python-bigquery-tests deps right after `- task: emulator-up`."
-    status: pending
+    status: completed
   - id: tp03_env
     content: "Export STORAGE_EMULATOR_HOST with the same http:// normalization used in the node task."
-    status: pending
+    status: completed
   - id: tp03_preflight
     content: "Reuse scripts/preflight_node_samples_gcs.sh (or add a python-side preflight) before the nox invocation."
-    status: pending
+    status: completed
   - id: tp03_verify
     content: "Confirm test_extract_table / test_extract_table_json / test_extract_table_compressed no longer get 403 against real GCS."
-    status: pending
+    status: completed
   - id: tp03_index
     content: "Flip thirdparty-00-completion-index.plan.md todo `tp03` to `completed`."
-    status: pending
+    status: completed
 isProject: false
 ---
 

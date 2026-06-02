@@ -25,7 +25,9 @@
 # after its own vendor-tree existence check, so a fresh clone gets a
 # running emulator (via docker-compose.yml) before any client wiring
 # runs. Suites that require fake-gcs also call `task fake-gcs-up`:
-# `node-bigquery-tests` unconditionally (its preflight is unconditional),
+# `node-bigquery-tests` and `python-bigquery-tests` unconditionally
+# (their preflights are unconditional and the python `snippets` /
+# `system` sessions exercise `test_extract_table*` against fake-gcs),
 # and `python-bigquery-dataframes-tests` only when STORAGE_EMULATOR_HOST
 # is set (the GCS fixtures short-circuit otherwise). Both `emulator-up`
 # and `fake-gcs-up` are `run: once`, so Task dedupes the call within a
@@ -398,18 +400,46 @@ tasks:
           exit 1
         fi
       - task: emulator-up
+      - task: fake-gcs-up
       - |
         set -e
         root="$(git rev-parse --show-toplevel)"
         nox_session="{{.PYTHON_SAMPLES_NOX_SESSION}}"
         # Sessions that hit the emulator: preflight verifies the
         # gateway is reachable so a dead/half-up emulator fails fast
-        # instead of producing 500-page pytest stack traces.
+        # instead of producing 500-page pytest stack traces. The
+        # `snippets` session also exercises GCS-touching extract
+        # snippets (`test_extract_table`, `test_extract_table_json`,
+        # `test_extract_table_compressed`), so we additionally
+        # default STORAGE_EMULATOR_HOST + run the GCS preflight here
+        # — without it `google-cloud-storage` falls through to real
+        # `storage.googleapis.com` and 403s on the bucket-list call
+        # the extract snippets issue (matching the failure shape in
+        # `.logs/thirdparty-20260602-134739.log:1753,1910,2068`).
+        # Mirrors the node-bigquery-tests block below.
         case "$nox_session" in
           snippets|system)
             if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
               bash "${root}/scripts/preflight_python_samples_emulator.sh"
             fi
+            # Default STORAGE_EMULATOR_HOST so the
+            # `google-cloud-storage` client used by the extract
+            # snippets targets fake-gcs instead of falling through to
+            # real storage.googleapis.com (where it 403s with
+            # `403 POST .../storage/v1/b?project=dev`). The default
+            # mirrors the contract in third_party/README.md and the
+            # fallback in scripts/preflight_python_samples_gcs.sh.
+            # Operators can still override by exporting their own
+            # value before invoking the task. We always export the
+            # var (not just when normalization is needed) so the nox
+            # child process inherits it.
+            _st="${STORAGE_EMULATOR_HOST:-127.0.0.1:4443}"
+            case "$_st" in
+              http://*|https://*) ;;
+              *) _st="http://${_st#//}" ;;
+            esac
+            export STORAGE_EMULATOR_HOST="$_st"
+            bash "${root}/scripts/preflight_python_samples_gcs.sh"
             ;;
         esac
         cd "${root}/third_party/python-bigquery-tests"
