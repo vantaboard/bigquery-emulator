@@ -27,7 +27,9 @@
 package jobs
 
 import (
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,15 +53,61 @@ const (
 	JobStateDone    = "DONE"
 )
 
+// stateFilterAliases maps the lowercase wire spelling BigQuery
+// accepts on `?stateFilter=` query parameters to the canonical
+// upper-case `Status.State` value stored in the registry. The
+// upstream API documents the parameter values as `pending`,
+// `running`, and `done`; the response stamps the uppercase variant.
+// Centralized here so `ListByProject` and tests share one source.
+var stateFilterAliases = map[string]string{
+	"pending": JobStatePending,
+	"running": JobStateRunning,
+	"done":    JobStateDone,
+}
+
 // Status mirrors the upstream `JobStatus` resource. ErrorResult is
 // populated only when the job terminated with an error; Errors is
 // a (potentially empty) list of warnings/errors collected during
 // execution. Both are kept omitempty so a successful `jobs.query`
 // reply doesn't carry empty arrays / null sentinel objects.
+//
+// CancelRequested mirrors the upstream `JobStatus.cancelRequested`
+// flag the `JobCancel` handler stamps on the response. The gateway
+// runs every job synchronously today so the flag flips to true at
+// the same instant the entry's state moves to DONE; the field is
+// omitempty so jobs that were never cancelled keep the same compact
+// wire shape `jobs.query` emits.
 type Status struct {
-	State       string               `json:"state"`
-	ErrorResult *bqtypes.ErrorProto  `json:"errorResult,omitempty"`
-	Errors      []bqtypes.ErrorProto `json:"errors,omitempty"`
+	State           string               `json:"state"`
+	ErrorResult     *bqtypes.ErrorProto  `json:"errorResult,omitempty"`
+	Errors          []bqtypes.ErrorProto `json:"errors,omitempty"`
+	CancelRequested bool                 `json:"cancelRequested,omitempty"`
+}
+
+// JobConfiguration mirrors the subset of the upstream
+// `JobConfiguration` resource the gateway round-trips through the
+// registry today. Only the type discriminator (`Query`) is
+// interpreted; everything else round-trips opaquely so a subsequent
+// `jobs.get` can echo back the same shape the caller sent at
+// `jobs.insert` time. Load / copy / extract job variants land
+// alongside plan tp08.
+type JobConfiguration struct {
+	JobType string                 `json:"jobType,omitempty"` // QUERY | LOAD | COPY | EXTRACT
+	Query   *JobConfigurationQuery `json:"query,omitempty"`
+	Labels  map[string]string      `json:"labels,omitempty"`
+	DryRun  bool                   `json:"dryRun,omitempty"`
+}
+
+// JobConfigurationQuery is the per-query slice of a JobConfiguration.
+// Only fields the gateway currently echoes back on `jobs.get` are
+// modelled; the long tail (destination table, scheduling, encryption,
+// ...) is deferred until a handler reads them.
+type JobConfigurationQuery struct {
+	Query           string                    `json:"query"`
+	DefaultDataset  *bqtypes.DatasetReference `json:"defaultDataset,omitempty"`
+	UseLegacySQL    *bool                     `json:"useLegacySql,omitempty"`
+	ParameterMode   string                    `json:"parameterMode,omitempty"`
+	QueryParameters []bqtypes.QueryParameter  `json:"queryParameters,omitempty"`
 }
 
 // Statistics mirrors the subset of `JobStatistics` the emulator
@@ -115,10 +163,9 @@ type QueryResult struct {
 }
 
 // Job is the gateway's view of a single BigQuery job. Today it's
-// populated from the sync `jobs.query` path and is mostly metadata
-// -- `configuration`, `selfLink`, `etag`, `user_email`, and the
-// per-type `*Statistics` sub-objects are deferred until a handler
-// actually needs them.
+// populated from the sync `jobs.query` path and the sync-query slice
+// of `jobs.insert`; the per-type `*Statistics` sub-objects are
+// deferred until a handler actually needs them.
 //
 // Result is the cached query result, populated by
 // `CompleteQueryWithResult` and consumed by `jobs.getQueryResults`.
@@ -126,33 +173,74 @@ type QueryResult struct {
 // resource has no rows/schema field; result data is only emitted
 // through the dedicated `QueryResponse`/`GetQueryResultsResponse`
 // shapes.
+//
+// ParentJobID is non-empty for script statement-level jobs spawned
+// under a scripting parent, mirroring upstream's
+// `Job.statistics.parentJobId`. `JobDelete` cascades by removing
+// every entry whose ParentJobID matches the requested jobId so a
+// scripting parent's children disappear in one call.
+//
+// CancelRequested mirrors the upstream `Job.status.cancelRequested`
+// flag the `JobCancel` handler stamps on the response envelope. The
+// gateway runs every job synchronously today so the flag flips to
+// true at the same instant the entry's state moves to CANCELLED;
+// once a long-running execution lane lands the flag's pre-flip
+// observation window will widen.
+//
+// Configuration is the round-trip copy of the inbound
+// `configuration` body so `jobs.get` / `jobs.list` echo back the
+// same fields the caller posted at `jobs.insert` time. Sync
+// `jobs.query` calls (which do not go through `jobs.insert`) leave
+// it nil; clients reading those entries see no `configuration`
+// field, matching the upstream behavior.
 type Job struct {
-	Kind         string               `json:"kind,omitempty"`
-	ID           string               `json:"id,omitempty"`
-	JobReference bqtypes.JobReference `json:"jobReference"`
-	Status       Status               `json:"status"`
-	Statistics   Statistics           `json:"statistics"`
-	Result       *QueryResult         `json:"-"`
+	Kind          string               `json:"kind,omitempty"`
+	ID            string               `json:"id,omitempty"`
+	JobReference  bqtypes.JobReference `json:"jobReference"`
+	Status        Status               `json:"status"`
+	Statistics    Statistics           `json:"statistics"`
+	Configuration *JobConfiguration    `json:"configuration,omitempty"`
+	// ParentJobID is the registry's link to a scripting parent. It
+	// is round-tripped under `Statistics.parentJobId` once the per-
+	// type statistics envelope ships; today it stays an internal
+	// link so `JobDelete` can cascade by parent-id without growing
+	// a separate scripting index. JSON tag is `-` so the field does
+	// not yet appear on the wire.
+	ParentJobID string       `json:"-"`
+	Result      *QueryResult `json:"-"`
 }
 
 // Registry is a process-local jobs table keyed by jobId. Reads /
-// writes are concurrency-safe via sync.Map; the monotonic counter
-// is bumped atomically so even within a single nanosecond two
-// requests still see distinct ids.
+// writes are concurrency-safe via a single sync.RWMutex over an
+// ordered slice + map index. We track insertion order on the side
+// (the `order` slice) so `ListByProject` can hand back a deterministic
+// reverse-chronological page without the caller having to sort an
+// arbitrary `sync.Map` walk. The monotonic counter is bumped
+// atomically so even within a single nanosecond two requests still
+// see distinct ids.
 //
-// The map only holds successful or terminally-failed jobs because
-// the emulator does not (yet) maintain a pending queue; see the
-// package-level doc for why DONE-on-arrival is fine today.
+// The map only holds successful or terminally-failed jobs today;
+// the emulator does not yet maintain a pending queue (see the
+// package-level doc for why DONE-on-arrival is fine).
 type Registry struct {
 	counter atomic.Uint64
-	jobs    sync.Map
+	mu      sync.RWMutex
+	jobs    map[string]*Job
+	// order is the insertion-ordered list of jobIds. `ListByProject`
+	// iterates this in reverse to produce a newest-first page, which
+	// matches what the BigQuery client libraries (and the upstream
+	// `jobs.list` default sort) display. The slice grows on
+	// Register / CompleteQuery and shrinks on Delete (linear scan;
+	// fine for the per-process volumes the emulator handles, ~10s
+	// of jobs in any test run).
+	order []string
 }
 
 // NewRegistry returns a fresh, empty registry. Each gateway process
 // gets one; tests can mint their own per-test for isolation without
 // polluting a global.
 func NewRegistry() *Registry {
-	return &Registry{}
+	return &Registry{jobs: map[string]*Job{}}
 }
 
 // NewJobID generates a jobId of the form `job_<unix_nanos>_<seq>`.
@@ -220,19 +308,215 @@ func (r *Registry) CompleteQueryWithResult(
 		},
 		Result: result,
 	}
-	r.jobs.Store(jobID, j)
+	r.Register(j)
 	return j
+}
+
+// Register inserts j into the registry under its JobReference.JobID.
+// If a job with the same id is already present the call is a no-op
+// (the existing pointer is preserved). `CompleteQueryWithResult`
+// flows through here so the sync-query and async-insert paths share
+// one writer. Tests that need a hand-built Job (e.g. to seed a
+// non-DONE entry the cancel/delete handlers will read back) can also
+// call this directly.
+func (r *Registry) Register(j *Job) {
+	if j == nil {
+		return
+	}
+	id := j.JobReference.JobID
+	if id == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.jobs[id]; exists {
+		return
+	}
+	r.jobs[id] = j
+	r.order = append(r.order, id)
 }
 
 // Get returns the Job recorded under jobID, or (nil, false) if no
 // such job is in the registry. Used by `jobs.get` /
-// `jobs.getQueryResults` once those handlers land.
+// `jobs.getQueryResults`.
 func (r *Registry) Get(jobID string) (*Job, bool) {
-	v, ok := r.jobs.Load(jobID)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	j, ok := r.jobs[jobID]
+	return j, ok
+}
+
+// ListOptions captures the documented `jobs.list` query parameters
+// the handler exposes today. Empty / zero-valued fields are treated
+// as "no filter". PageToken is the opaque cursor `ListByProject`
+// hands back; the handler does not need to interpret it.
+type ListOptions struct {
+	MaxResults      int
+	PageToken       string
+	ParentJobID     string
+	MinCreationTime int64 // millis since epoch; 0 = unbounded
+	MaxCreationTime int64 // millis since epoch; 0 = unbounded
+	StateFilter     []string
+}
+
+// ListByProject returns the page of jobs belonging to projectID that
+// match the supplied options. Results are ordered newest-first
+// (mirroring `bigquery.jobs.list`'s default sort) and pagination is
+// cursor-based: the returned nextPageToken is opaque to the caller
+// and feeds straight back into `ListOptions.PageToken` for the next
+// page. When no more pages remain the token is empty.
+//
+// `MaxResults <= 0` means "the documented default cap" (50 today;
+// upstream picks the same number when callers omit the field).
+func (r *Registry) ListByProject(projectID string, opts ListOptions) (
+	jobs []*Job, nextPageToken string,
+) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	maxResults := opts.MaxResults
+	if maxResults <= 0 {
+		maxResults = defaultListMaxResults
+	}
+	stateFilters := normalizeStateFilters(opts.StateFilter)
+	startIdx, _ := strconv.Atoi(opts.PageToken)
+	skipped := 0
+	jobs = make([]*Job, 0, maxResults)
+	// Walk newest-first by iterating `order` in reverse; this matches
+	// `bigquery.jobs.list`'s default sort. The cursor token is the
+	// count of newest-first jobs the caller has already consumed so
+	// resuming a page just means continuing past them.
+	for _, v := range slices.Backward(r.order) {
+		j := r.jobs[v]
+		if !jobMatchesProject(j, projectID, opts, stateFilters) {
+			continue
+		}
+		if skipped < startIdx {
+			skipped++
+			continue
+		}
+		if len(jobs) >= maxResults {
+			nextPageToken = strconv.Itoa(startIdx + len(jobs))
+			return jobs, nextPageToken
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, ""
+}
+
+// defaultListMaxResults bounds the per-page result count when the
+// caller leaves `MaxResults` zero. Upstream's documented default is
+// 50; matching it avoids surprises for clients that probe the
+// emulator before passing an explicit cap.
+const defaultListMaxResults = 50
+
+// jobMatchesProject is the per-entry filter `ListByProject` runs
+// against the iteration. Hoisted out so the page loop stays a
+// straight cursor without nested ifs (cyclop / nestif caps).
+func jobMatchesProject(j *Job, projectID string, opts ListOptions, stateFilters map[string]bool) bool {
+	if j.JobReference.ProjectID != projectID {
+		return false
+	}
+	if opts.ParentJobID != "" && j.ParentJobID != opts.ParentJobID {
+		return false
+	}
+	if len(stateFilters) != 0 && !stateFilters[j.Status.State] {
+		return false
+	}
+	creation, _ := strconv.ParseInt(j.Statistics.CreationTime, 10, 64)
+	if opts.MinCreationTime != 0 && creation < opts.MinCreationTime {
+		return false
+	}
+	if opts.MaxCreationTime != 0 && creation > opts.MaxCreationTime {
+		return false
+	}
+	return true
+}
+
+// normalizeStateFilters folds the caller-provided wire spellings
+// (`pending` / `running` / `done`) into a set keyed by the canonical
+// `Status.State` value the registry stores. Unknown spellings are
+// dropped on the floor (the upstream API documents the parameter
+// values explicitly and a typo should not silently broaden a query).
+// Returns nil for the no-filter case so the per-entry filter knows
+// to skip the state check entirely.
+func normalizeStateFilters(in []string) map[string]bool {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]bool, len(in))
+	for _, raw := range in {
+		if canon, ok := stateFilterAliases[strings.ToLower(strings.TrimSpace(raw))]; ok {
+			out[canon] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// Cancel flips the named job from PENDING/RUNNING to DONE +
+// CancelRequested=true and reports the updated entry. Idempotent on
+// terminal states (DONE jobs come back with their existing status
+// untouched, only CancelRequested set). The bool is false when the
+// jobId is unknown so the handler can return a 404 with a
+// BigQuery-shaped envelope; the error message is BigQuery's
+// canonical "Not found: Job" wording so the caller can forward it
+// verbatim.
+func (r *Registry) Cancel(jobID string) (*Job, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	j, ok := r.jobs[jobID]
 	if !ok {
 		return nil, false
 	}
-	return v.(*Job), true
+	j.Status.CancelRequested = true
+	if j.Status.State != JobStateDone {
+		j.Status.State = JobStateDone
+		if j.Statistics.EndTime == "" {
+			j.Statistics.EndTime = millisString(time.Now().UTC())
+		}
+	}
+	return j, true
+}
+
+// Delete removes jobID from the registry. When the job is a script
+// parent every entry whose ParentJobID matches cascades out in the
+// same call so the upstream contract -- "deleting a parent removes
+// its children" -- holds without an extra round-trip. Returns false
+// when the jobId is unknown.
+func (r *Registry) Delete(jobID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.jobs[jobID]; !ok {
+		return false
+	}
+	r.removeLocked(jobID)
+	// Cascade children. Walk a snapshot of the order slice so we
+	// don't iterate the underlying storage while mutating it.
+	for _, id := range append([]string(nil), r.order...) {
+		if child, ok := r.jobs[id]; ok && child.ParentJobID == jobID {
+			r.removeLocked(id)
+		}
+	}
+	return true
+}
+
+// removeLocked drops id from both `jobs` and `order`. Must be called
+// with `mu` already held write-locked. The slice splice is a linear
+// scan + copy; fine for the per-process volumes the emulator
+// handles. If a future load lane pushes registry size into the
+// thousands this can be replaced with a doubly-linked list, but the
+// extra book-keeping is not warranted today.
+func (r *Registry) removeLocked(id string) {
+	delete(r.jobs, id)
+	for i, entry := range r.order {
+		if entry == id {
+			r.order = append(r.order[:i], r.order[i+1:]...)
+			return
+		}
+	}
 }
 
 // millisString converts t to BigQuery's wire timestamp format:

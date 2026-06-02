@@ -35,3 +35,8 @@ const (
 const (
 	contentTypeJSON = "application/json; charset=utf-8"
 )
+
+// testSQLSelectOne is the most common trivial SQL fixture across the
+// query / jobs handler regression tests. Promoted to a constant so
+// goconst stops counting the repeated literal across files.
+const testSQLSelectOne = "SELECT 1"

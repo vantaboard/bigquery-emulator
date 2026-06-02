@@ -279,7 +279,7 @@ func DatasetDelete(deps Dependencies) http.HandlerFunc {
 			NotImplemented(w, r)
 			return
 		}
-		deleteContents := r.URL.Query().Get("deleteContents") == "true"
+		deleteContents := r.URL.Query().Get("deleteContents") == queryParamTrue
 		_, err := deps.Catalog.DropDataset(r.Context(), &enginepb.DropDatasetRequest{
 			Dataset: &enginepb.DatasetRef{
 				ProjectId: projectID,

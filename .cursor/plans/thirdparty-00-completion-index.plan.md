@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: tp04
     content: "thirdparty-04-jobs-registry-surface.plan.md — wire JobList / JobGet / JobCancel / JobDelete against jobs.Registry (~1 d)."
-    status: pending
+    status: completed
   - id: tp05
     content: "thirdparty-05-http-method-override-middleware.plan.md — honor X-HTTP-Method-Override so Java client PATCH/PUT/DELETE-via-POST flows land on the right handler (~1 d)."
     status: pending

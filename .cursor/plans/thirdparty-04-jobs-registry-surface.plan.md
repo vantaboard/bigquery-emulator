@@ -4,25 +4,25 @@ overview: "Wire JobList, JobGet, JobCancel, and JobDelete in `gateway/handlers/j
 todos:
   - id: tp04_list
     content: "Implement JobList — page over Registry by project, respect maxResults / pageToken / parentJobId."
-    status: pending
+    status: completed
   - id: tp04_get
     content: "Implement JobGet — return registry entry by JobReference; 404 with bigquery-shaped JSON error envelope when missing."
-    status: pending
+    status: completed
   - id: tp04_cancel
     content: "Implement JobCancel — flip state to RUNNING-with-cancel-requested then DONE/CANCELLED; idempotent on terminal jobs."
-    status: pending
+    status: completed
   - id: tp04_delete
     content: "Implement JobDelete — remove from registry; cascade child jobs (script statements)."
-    status: pending
+    status: completed
   - id: tp04_insert_register
     content: "Confirm JobInsert (sync path) records the minted job in the registry; if it does not, add the registration call before returning."
-    status: pending
+    status: completed
   - id: tp04_tests
     content: "Add Go unit tests under gateway/handlers/jobs_test.go covering list/get/cancel/delete; rerun task thirdparty:node-bigquery-tests to confirm the Jobs > should ... block goes green."
-    status: pending
+    status: completed
   - id: tp04_index
     content: "Flip thirdparty-00-completion-index.plan.md todo `tp04` to `completed`."
-    status: pending
+    status: completed
 isProject: false
 ---
 
