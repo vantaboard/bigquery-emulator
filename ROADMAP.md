@@ -491,12 +491,19 @@ public-facing policy.
   `udf-tvf-module-routing.plan.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
   surfaces BigQuery's documented `Assertion failed` envelope; the
-  variable-environment scaffolding is in place for the deferred
-  scripting families. CALL / EXECUTE IMMEDIATE / DECLARE / SET /
-  BEGIN..END / IF / WHILE / LOOP / FOR / RAISE / EXCEPTION /
-  CREATE PROCEDURE / `@@error.message` remain `status=planned`
-  in `node_dispositions.yaml` until follow-up subagents pick them
-  up
+  scripting variable environment has been generalized into the
+  shared `semantic::FrameStack` primitive so the UDF / TVF call-
+  side reuses the same stack-of-frames type. `ResolvedConstant`
+  and `ResolvedArgumentRef` resolve on the semantic executor
+  (case-insensitive identifier matching for arg refs). CALL /
+  EXECUTE IMMEDIATE / DECLARE / SET / BEGIN..END / IF / WHILE /
+  LOOP / FOR / RAISE / EXCEPTION / CREATE PROCEDURE /
+  `@@error.message` remain `status=planned` in
+  `node_dispositions.yaml` until follow-up subagents pick them up;
+  SQL UDF / TVF body storage + invocation + JS UDF
+  registration-time rejection stay deferred until the per-engine
+  UDF / TVF registry round-trip through `DuckDBStorage` lands
+  (the prerequisite for cross-request function persistence)
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
   `dml-local-executor.plan.md` Family 1-3 plus the existing DuckDB
