@@ -12,6 +12,8 @@
 # without that issue link in the commit message.
 
 backend/engine/control/control_op_executor.cc
+backend/engine/coordinator/local_coordinator_engine_test.cc
+backend/engine/coordinator/route_classifier_test.cc
 backend/engine/duckdb/duckdb_executor.cc
 backend/engine/duckdb/transpiler/transpiler.cc
 backend/engine/duckdb/transpiler/transpiler_test.cc
