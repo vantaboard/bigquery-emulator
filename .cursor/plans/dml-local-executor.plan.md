@@ -111,3 +111,96 @@ Statements that route here:
   workaround for seeding; they may still use it as a deliberate
   test of the streaming-insert path.
 - ROADMAP.md "DML / DDL" section's DML row flips to `✅`.
+
+## Status (post-subagent-9)
+
+Landed (subagent 9, commits `628269d`/`e76b939`/`5651943`):
+
+- **Family 1 — `INSERT INTO t (...) VALUES (...)`**: single +
+  multi-row, NULL-pads omitted columns, populates
+  `DmlStats.inserted_row_count`.
+- **Family 2 — `DELETE FROM t WHERE ...`**: full row scan +
+  per-row predicate eval, writes survivors back via
+  `Storage::OverwriteRows`. Honors BigQuery's
+  "WHERE NULL deletes nothing" semantics.
+- **Family 3 — `UPDATE t SET col = expr WHERE ...`**: scalar SET
+  only. Multi-target SET works (`SET a = 1, b = 2`); the SET expr
+  may reference any source column from the table scan.
+
+Deferred (each row stays `status=planned` in
+`backend/engine/duckdb/transpiler/node_dispositions.yaml` and
+surfaces a structured `kNotImplemented` so the gateway envelope
+matches every other "planned but not landed" route):
+
+- **Family 4 — deep-STRUCT `SET s.a.b = ...` /
+  `ResolvedUpdateConstructor` / nested array DML.** The update
+  executor explicitly rejects `update_item->target()` shapes that
+  are not `RESOLVED_COLUMN_REF`, and rejects any
+  `update_item_element_list` / `delete_list` / `update_list` /
+  `insert_list` / `element_column` content with a re-point at this
+  family. Blocker per plan: depends on a `Value::WithField(path,
+  new_value)` immutable-update primitive on
+  `backend/engine/semantic/value.{h,cc}`. **No silent
+  approximation reason**: writing `SET s.a.b = X` as
+  `SET s = STRUCT(X AS b, ...)` would require the executor to
+  reconstruct the rest of the struct from the catalog schema,
+  which is fundamentally different from BigQuery's "update only
+  field b, leave the rest of s alone" contract for
+  REPEATED-mode parents and would silently rewrite NULLs in
+  unrelated fields.
+- **Family 5 — `INSERT ... SELECT`.** The insert executor
+  rejects `insert.query() != nullptr` with a re-point at this
+  family. The implementation needs to stream rows from the
+  SELECT (whichever route the coordinator picks) into
+  `Storage::AppendRows` while propagating
+  `DmlStats.inserted_row_count` from the streamed row count;
+  none of that infrastructure ships with subagent 9. **No silent
+  approximation reason**: surfacing `0 inserted` when the SELECT
+  does have rows (or `len(SELECT)` without actually appending)
+  would corrupt downstream replay (`gateway/handlers/queries.go`
+  uses the count for `numDmlAffectedRows` AND the storage state
+  must match).
+- **Family 6 — MERGE harder matrix.** Simple MERGE branches
+  continue to route via `duckdb_rewrite`; the executor returns
+  `kNotImplemented` for `RESOLVED_MERGE_STMT` so the harder
+  matrix (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences)
+  stays explicitly unsupported. **No silent approximation
+  reason**: a partial implementation that runs the join in C++
+  but only handles a subset of the WHEN branches would mismatch
+  BigQuery's per-branch counts in `dmlStats`.
+- **Family 7 — DML `RETURNING` clause.** `RejectUnsupportedDmlFeatures`
+  in `dml_executor.cc` surfaces a structured `kNotImplemented`
+  for every `returning != nullptr` shape across INSERT / UPDATE /
+  DELETE. **No silent approximation reason**: dropping the
+  RETURNING projection silently would change the response shape
+  from "rows" to "stats" and break clients that read RETURNING
+  output.
+- **Family 8 — `ResolvedPipeInsertScan`.** Untouched; the
+  classifier still routes pipe inserts to whatever the existing
+  registry says. **No silent approximation reason**: the audit
+  needed to confirm whether `duckdb_rewrite` covers it cleanly
+  did not happen this subagent.
+- **`ASSERT_ROWS_MODIFIED`** and **`array_offset_column`** on
+  UPDATE / DELETE (correlated lateral / `WITH OFFSET` shapes,
+  cross-cuts plan 8 Family 4) and **GENERATED columns**: each
+  surfaces `kNotImplemented` with a structured reason, gated by
+  `RejectUnsupportedDmlFeatures` in `dml_executor.cc`.
+
+`numDmlAffectedRows` plumbing is correct end-to-end for the
+landed families: `dml_executor.cc` populates `DmlStats` ->
+`SemanticExecutor::ExecuteDml` returns it ->
+`LocalCoordinatorEngine::ExecuteDml` propagates it ->
+`frontend/handlers/query.cc::EmitDmlStats` writes a `dml_stats`
+proto message -> `gateway/handlers/queries.go::assembleQueryResponse`
+emits the legacy `numDmlAffectedRows` aggregate plus the
+structured `dmlStats` envelope (and replay path).
+
+Conformance fixtures pinning the round-trip wire shape live
+under `conformance/fixtures/dml/`. The runner doc + the two
+existing select-fixture references to "INSERT VALUES is
+UNIMPLEMENTED" have been retargeted at this plan.
+
+Subagent-10's `cte-subquery-routing.plan.md` does NOT need to
+touch any DML routing — the CTE work is SELECT-only. The DML
+families left planned above re-point at this plan and remain
+the responsibility of follow-up subagents of this plan.

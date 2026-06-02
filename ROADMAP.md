@@ -446,14 +446,18 @@ public-facing policy.
 
 ## DML / DDL
 
-- 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast path
-  today; `INSERT VALUES` / `INSERT ... SELECT`, `UPDATE`, and
-  `DELETE` still return `UNIMPLEMENTED`. The completion plan
-  (`dml-local-executor.plan.md`) routes the harder shapes through a
-  storage-aware local executor instead of forcing them through
-  DuckDB SQL, and owns `numDmlAffectedRows` correctness. Until
-  INSERT lands, conformance fixtures and tests seed rows with
-  `tabledata.insertAll` instead. See
+- 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast
+  path today; `INSERT VALUES`, scalar-`SET` `UPDATE`, and `DELETE`
+  now route through the storage-aware local DML executor
+  (`backend/engine/semantic/dml/`) and populate
+  `numDmlAffectedRows` correctly. `INSERT ... SELECT`,
+  deep-STRUCT `SET` (`SET s.a.b = ...`), the harder MERGE matrix
+  (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
+  `RETURNING`, and `ResolvedPipeInsertScan` continue to surface
+  `UNIMPLEMENTED` and stay tracked under
+  `dml-local-executor.plan.md`. Conformance fixtures may now seed
+  rows via either `tabledata.insertAll` or `INSERT VALUES` `sql:`
+  steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
@@ -474,7 +478,14 @@ public-facing policy.
   procedure bodies, statement sequencing) routed to a local
   scripting executor — `procedural-scripting-executor.plan.md` and
   `udf-tvf-module-routing.plan.md`
-- ⏳ Job stats: `numDmlAffectedRows`
+- 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
+  scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
+  `dml-local-executor.plan.md` Family 1-3 plus the existing DuckDB
+  MERGE path). Deferred shapes (INSERT ... SELECT, deep-STRUCT
+  UPDATE, MERGE harder branches, RETURNING, PipeInsertScan) keep
+  the field absent until they land; the row count is otherwise
+  the legacy aggregate (inserted + updated + deleted) per the
+  BigQuery REST contract.
 
 ## Storage Read API (gRPC)
 
