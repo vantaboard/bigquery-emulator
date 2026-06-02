@@ -752,13 +752,34 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "specialized-feature-policy.plan.md per "
           "control-op-executor.plan.md (better-than-silently-wrong).");
     case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
+      // CREATE FUNCTION splits by `LANGUAGE` at implementation
+      // time. SQL UDFs (`LANGUAGE SQL`) belong on
+      // `udf-tvf-module-routing.plan.md` Family 4 (deferred at the
+      // end of plan 13 -- needs cross-request UDF body storage
+      // through `DuckDBStorage`'s catalog). JavaScript UDFs
+      // (`LANGUAGE js`) are `local_stub`-posture metadata-only per
+      // `specialized-feature-policy.plan.md`: the registration
+      // succeeds (BigQuery-shaped placeholder for client tools
+      // that issue CREATE FUNCTION as a setup step) and the call
+      // site surfaces UNIMPLEMENTED with the JavaScript-named
+      // family envelope. The JS UDF stub IS DEFERRED until the
+      // UDF body storage round-trip lands per plan 13's family-4
+      // deferral -- a registration that does not persist the body
+      // is silent approximation in the "did the catalog accept the
+      // create" sense. Today both flavors share this UNIMPLEMENTED
+      // envelope; the splits land alongside the storage work. See
+      // docs/ENGINE_POLICY.md.
       return absl::UnimplementedError(
           "control op executor: CREATE FUNCTION registration is not "
           "implemented yet; needs a per-engine functions registry. "
-          "Tracked by udf-tvf-module-routing.plan.md (the function "
-          "body's execution route lives there) and "
-          "control-op-executor.plan.md (the registration metadata "
-          "side).");
+          "SQL UDFs tracked by udf-tvf-module-routing.plan.md "
+          "(family 4, deferred -- needs UDF body storage). JavaScript "
+          "UDFs (LANGUAGE js) are local-stub metadata-only per "
+          "specialized-feature-policy.plan.md but their stub is "
+          "BLOCKED on the same UDF body storage round-trip; "
+          "registering a body that does not persist would silently "
+          "approximate the BigQuery contract. See "
+          "docs/ENGINE_POLICY.md.");
     case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT:
       return absl::UnimplementedError(
           "control op executor: CREATE TABLE FUNCTION registration is "
@@ -771,12 +792,29 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "Tracked by udf-tvf-module-routing.plan.md (and "
           "control-op-executor.plan.md for the metadata side).");
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
+      // LOAD DATA splits by URI scheme at implementation time:
+      // `LOAD DATA LOCAL ...` belongs on the control-op route
+      // (local filesystem reader; deferred to the follow-up below).
+      // `LOAD DATA <gs://...>` (cloud-storage) is `unsupported`
+      // per `specialized-feature-policy.plan.md` -- the emulator
+      // deliberately does NOT model the BigQuery cloud-storage
+      // ingest surface. `ResolvedAuxLoadDataStmt` carries no
+      // `is_local` flag; the differentiation happens when the
+      // reader inspects the URI. Today both shapes share this
+      // UNIMPLEMENTED envelope; when the LOCAL reader family
+      // lands, the cloud-storage URIs will surface the
+      // unsupported-family envelope from the unsupported stub
+      // executor instead. See docs/ENGINE_POLICY.md.
       return absl::UnimplementedError(
           "control op executor: LOAD DATA is not implemented yet; "
           "needs source-file readers (CSV / JSON / Avro / Parquet / "
-          "ORC) that land alongside the EXPORT writer family. "
+          "ORC) for `LOAD DATA LOCAL <local-uri>` plus URI-scheme "
+          "differentiation so cloud-storage `LOAD DATA <gs://...>` "
+          "falls through to the unsupported route. "
           "Tracked by control-op-executor.plan.md follow-up: 'add "
-          "LOAD DATA reader family'.");
+          "LOAD DATA reader family'. Cloud-storage LOAD DATA stays "
+          "unsupported per specialized-feature-policy.plan.md; see "
+          "docs/ENGINE_POLICY.md.");
     case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
       return absl::UnimplementedError(
           "control op executor: EXPORT DATA is not implemented yet; "
@@ -785,12 +823,12 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "Tracked by control-op-executor.plan.md follow-up: 'add "
           "EXPORT DATA writer family'.");
     default:
-      return absl::UnimplementedError(absl::StrCat(
-          "control op executor: ExecuteDdl does not implement ",
-          stmt.node_kind_string(),
-          " yet; the row carries disposition=control_op in "
-          "node_dispositions.yaml but no handler in "
-          "control_op_executor.cc dispatches it"));
+      return absl::UnimplementedError(
+          absl::StrCat("control op executor: ExecuteDdl does not implement ",
+                       stmt.node_kind_string(),
+                       " yet; the row carries disposition=control_op in "
+                       "node_dispositions.yaml but no handler in "
+                       "control_op_executor.cc dispatches it"));
   }
 }
 
