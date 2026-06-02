@@ -106,3 +106,9 @@ third_party/**/.flattened-pom.xml
 # Regenerated from `bazel aquery`; the file path list embeds absolute
 # repo paths and changes whenever the engine's dep graph does.
 /compile_commands.json
+
+# Ad-hoc local log dump (tee'd output from long-running `task thirdparty:*`
+# / aggregator / smoke runs, timestamped `<scope>-YYYYMMDD-HHMMSS.log`).
+# Regenerated on demand by the operator; useful for post-mortem of a
+# specific session but never reproducible across runs, so do not check in.
+/.logs/
