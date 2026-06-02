@@ -506,9 +506,10 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   if (sql.empty()) {
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: transpiler does not yet cover this query shape "
-        "(node_kind=",
+        "(family: node:",
         query_stmt->query()->node_kind_string(),
-        ")"));
+        ", route: duckdb_native); see docs/ENGINE_POLICY.md and plan "
+        "duckdb-fast-path-stabilization.plan.md for the missing emit"));
   }
 
   // 3. Collect every referenced table so we can materialize them
@@ -789,11 +790,17 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
 
   if (stmt.node_kind() != ::googlesql::RESOLVED_MERGE_STMT) {
     // DML ENGINE POLICY (see `docs/ENGINE_POLICY.md`): the DuckDB
-    // engine only implements MERGE today; INSERT / UPDATE / DELETE
-    // surface UNIMPLEMENTED for now.
+    // engine only implements MERGE today. INSERT / UPDATE / DELETE
+    // route to the local DML executor in
+    // `backend/engine/semantic/dml/`; reaching this branch means the
+    // route classifier dispatched the wrong executor (an internal bug,
+    // not a user-facing UNIMPLEMENTED).
     return absl::UnimplementedError(absl::StrCat(
-        "duckdb engine: ExecuteDml only implements MERGE today; got ",
-        stmt.node_kind_string()));
+        "duckdb engine: ExecuteDml only implements MERGE today (family: "
+        "node:",
+        stmt.node_kind_string(),
+        ", route: semantic_executor); see docs/ENGINE_POLICY.md and plan "
+        "dml-local-executor.plan.md"));
   }
   const auto* merge_stmt = stmt.GetAs<::googlesql::ResolvedMergeStmt>();
   if (merge_stmt->table_scan() == nullptr ||
@@ -1043,10 +1050,13 @@ absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
     const storage::TableId& target) {
   if (action == nullptr) return std::optional<schema::ColumnSchema>{};
   if (action->node_kind() != ::googlesql::RESOLVED_ADD_COLUMN_ACTION) {
-    return absl::UnimplementedError(
-        absl::StrCat("duckdb engine: ALTER TABLE action ",
-                     action->node_kind_string(),
-                     " is not implemented (only ADD COLUMN is supported)"));
+    return absl::UnimplementedError(absl::StrCat(
+        "duckdb engine: ALTER TABLE action ",
+        action->node_kind_string(),
+        " is not implemented (only ADD COLUMN is supported); ALTER TABLE "
+        "is on the control_op route per docs/ENGINE_POLICY.md and plan "
+        "control-op-executor.plan.md, but the per-action handlers still "
+        "live here pending the migration"));
   }
   const auto* add = action->GetAs<::googlesql::ResolvedAddColumnAction>();
   const ::googlesql::ResolvedColumnDefinition* def = add->column_definition();
