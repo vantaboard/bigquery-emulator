@@ -123,6 +123,19 @@ tasks:
         set -uo pipefail
         suites="golang-bigquery-tests python-bigquery-tests node-bigquery-tests java-bigquery-tests python-bigquery-dataframes-tests"
         failed=""
+        # Default each suite to a fresh emulator data volume so per-run
+        # UUID collisions ("dataset already exists", "table already
+        # exists") and stale list responses from a previous aggregator
+        # run cannot bleed into the next run. The named docker volume
+        # `bq-emulator-data` (see docker-compose.yml) is preserved
+        # across plain `docker compose up --force-recreate`, so without
+        # this opt-in the aggregator inherited the prior run's catalog.
+        # Direct `task thirdparty:<suite>` invocations stay sticky
+        # (default off) so an interactive dev iterating against the
+        # same suite keeps state between runs; the aggregator only
+        # exports this when callers have not explicitly disabled it
+        # via `THIRDPARTY_FRESH_VOLUME=0` (or any non-1 value).
+        export THIRDPARTY_FRESH_VOLUME="${THIRDPARTY_FRESH_VOLUME:-1}"
         for suite in $suites; do
           echo ""
           echo "==> task thirdparty:${suite}"
@@ -194,6 +207,24 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         port="${EMULATOR_HTTP_PORT:-9050}"
+        # Opt-in fresh-data bringup. `bq-emulator-data` is a named
+        # docker volume (see docker-compose.yml) that survives plain
+        # `docker compose up --force-recreate`, so per-run UUIDs from
+        # a previous suite stay in the catalog and surface as
+        # "dataset already exists" / "table already exists" / empty
+        # list responses on the next run. When THIRDPARTY_FRESH_VOLUME=1
+        # we tear the container down WITH its named volume before the
+        # bringup so each suite starts from a clean slate. The
+        # `default` aggregator sets this by default; direct
+        # `task thirdparty:<suite>` invocations leave it unset so an
+        # interactive dev keeps state between iterations. `down -v`
+        # only removes anonymous + named volumes attached to this
+        # compose project, so /testdata/fake-gcs-data (bind mount)
+        # and the bazel disk cache are unaffected.
+        if [ "${THIRDPARTY_FRESH_VOLUME:-0}" = "1" ]; then
+          echo "thirdparty:emulator-up: THIRDPARTY_FRESH_VOLUME=1; wiping bq-emulator-data before bringup"
+          docker compose down -v bigquery-emulator >/dev/null 2>&1 || true
+        fi
         # Throttle the in-container Bazel build (engine-builder-bazel
         # stage) AND the running container against the live host's
         # MemAvailable / nproc so neither stage can OOM-kill the IDE.
@@ -225,7 +256,7 @@ tasks:
         bash "${root}/scripts/wait_for_healthz.sh" "http://localhost:${port}/healthz" 120 bigquery-emulator
 
   emulator-down:
-    desc: Stop the bigquery-emulator docker compose service (named volume preserved)
+    desc: Stop the bigquery-emulator docker compose service (named volume preserved; use emulator-down:fresh to also wipe data)
     cmds:
       - |
         set -eo pipefail
@@ -233,6 +264,21 @@ tasks:
         cd "$root"
         docker compose stop bigquery-emulator || true
         docker compose rm -f bigquery-emulator || true
+
+  # Explicit wipe of the bigquery-emulator data volume. Same effect as
+  # `THIRDPARTY_FRESH_VOLUME=1 task thirdparty:emulator-up` would have
+  # at next bringup, but expressed as an idempotent standalone step
+  # for cases where the developer wants a clean catalog without
+  # re-spawning the container (e.g. before manually starting it via
+  # `docker compose up`). Equivalent to the emulator-up wipe block.
+  emulator-down:fresh:
+    desc: Stop bigquery-emulator AND remove its named data volume (bq-emulator-data)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        docker compose down -v bigquery-emulator || true
 
   fake-gcs-up:
     aliases: [fake-gcs]
