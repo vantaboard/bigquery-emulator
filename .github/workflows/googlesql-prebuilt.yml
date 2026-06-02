@@ -144,17 +144,44 @@ jobs:
         if: ${{ inputs.publish }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `gh release view` calls `git remote` to discover the repo
+          # when --repo is omitted; the runner-level cwd is
+          # $GITHUB_WORKSPACE (NOT inside the emulator checkout, which
+          # we placed at $GITHUB_WORKSPACE/bigquery-emulator via the
+          # checkout step's `path:` input), so without --repo `gh`
+          # would fail with `not a git repository`. The original gate
+          # silently swallowed that error via `2>/dev/null` and let
+          # every publish through.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="googlesql-prebuilt/v${{ inputs.artifact_version }}+gs-${{ steps.googlesql.outputs.short_sha }}"
           asset="googlesql-prebuilt-linux-amd64-clang18-${{ steps.googlesql.outputs.short_sha }}-v${{ inputs.artifact_version }}.tar.gz"
-          if gh release view "$tag" --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$asset"; then
-            echo "::error::Refusing to overwrite existing release asset $tag/$asset" >&2
-            echo "If this is intentional, delete the existing asset via 'gh release delete-asset $tag $asset' and re-run." >&2
-            exit 1
-          fi
-          if gh release view "$tag" >/dev/null 2>&1; then
+          # Distinguish "release doesn't exist" (exit 1, expected, gate
+          # passes) from "gh broke for some other reason" (still exit 1
+          # but with a real error on stderr) by capturing stdout+stderr
+          # separately. The original gate sent stderr to /dev/null,
+          # which silently swallowed both the "not a git repository"
+          # bug AND any auth/network failure — letting every publish
+          # through regardless of the release's actual state.
+          gh_stdout="$(mktemp)"
+          gh_stderr="$(mktemp)"
+          if gh release view "$tag" --json assets --jq '.assets[].name' \
+              >"$gh_stdout" 2>"$gh_stderr"; then
+            if grep -Fxq "$asset" "$gh_stdout"; then
+              echo "::error::Refusing to overwrite existing release asset $tag/$asset" >&2
+              echo "If this is intentional, delete the existing asset via 'gh release delete-asset --repo $GH_REPO $tag $asset' and re-run." >&2
+              exit 1
+            fi
             echo "Release $tag exists but does not yet have $asset — will upload alongside existing assets."
+          else
+            if grep -qi 'release not found\|not found' "$gh_stderr"; then
+              echo "Release $tag does not yet exist — publish step will create it."
+            else
+              echo "::error::Pre-publish gate could not query release $tag:" >&2
+              cat "$gh_stderr" >&2
+              exit 1
+            fi
           fi
 
       - name: Package the prebuilt artifact
@@ -244,6 +271,15 @@ jobs:
         if: ${{ inputs.publish }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `gh release` calls `git remote` to resolve the repo when
+          # --repo is omitted; the runner-level cwd is $GITHUB_WORKSPACE
+          # (the emulator was checked out into bigquery-emulator/ via
+          # actions/checkout's `path:` input), so without GH_REPO the
+          # very first `gh release create` fails with
+          # `fatal: not a git repository`. This bit us in producer run
+          # 26786449551 — the artifact built+smoked+uploaded cleanly,
+          # but the publish step never reached GitHub.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="googlesql-prebuilt/v${{ inputs.artifact_version }}+gs-${{ steps.package.outputs.googlesql_short_sha }}"
