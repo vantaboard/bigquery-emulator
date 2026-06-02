@@ -14,6 +14,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
@@ -138,6 +139,12 @@ func writeError(w http.ResponseWriter, status int, reason, msg string) {
 // notImplemented, UNAVAILABLE → 503 backendError. Anything else
 // (INTERNAL, plain Go errors) is reported as 500 internalError so a
 // misbehaving engine cannot be mistaken for a 404 on the wire.
+//
+// The error message itself is rewritten into BigQuery's canonical
+// shape via bqStyleMessage so client-side assertions like
+// `expect(err.message).to.include('Not found')` and
+// `expect(err.message).to.include('Already Exists')` match the live
+// surface.
 func grpcToHTTPError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
@@ -175,6 +182,68 @@ func grpcToHTTPError(w http.ResponseWriter, err error) bool {
 	case codes.ResourceExhausted:
 		httpStatus, reason = http.StatusTooManyRequests, reasonQuotaExceeded
 	}
-	writeError(w, httpStatus, reason, st.Message())
+	writeError(w, httpStatus, reason, bqStyleMessage(st.Message()))
 	return true
+}
+
+// notFoundResourceRE / alreadyExistsResourceRE match the engine's
+// canonical storage-layer error strings produced by DuckDBStorage
+// (see backend/storage/duckdb/duckdb_storage.cc): "<noun> not found:
+// <project>.<dataset>[.<table>]" and "<noun> already exists:
+// <project>.<dataset>[.<table>]" where <noun> is "table" or
+// "dataset". The resource path uses `.` between every segment on the
+// engine side; BigQuery REST uses `:` between project and dataset and
+// `.` between dataset and table. The captured suffix is rewritten to
+// the REST shape and the noun is capitalised so client assertions for
+// "Not found" / "Already Exists" prefixes (live BigQuery's canonical
+// shape) match.
+var (
+	notFoundResourceRE = regexp.MustCompile(
+		`^(table|dataset) not found: ([^.]+)\.([^.]+)(?:\.([^.]+))?$`)
+	alreadyExistsResourceRE = regexp.MustCompile(
+		`^(table|dataset) already exists: ([^.]+)\.([^.]+)(?:\.([^.]+))?$`)
+)
+
+// bqStyleMessage rewrites the small set of engine-side storage errors
+// the gateway forwards into BigQuery's canonical wire shape. Examples:
+//
+//	"table not found: dev.foo.bar"      -> "Not found: Table dev:foo.bar"
+//	"dataset not found: dev.foo"        -> "Not found: Dataset dev:foo"
+//	"table already exists: dev.foo.bar" -> "Already Exists: Table dev:foo.bar"
+//	"dataset already exists: dev.foo"   -> "Already Exists: Dataset dev:foo"
+//
+// Any message that does not match a known pattern passes through
+// verbatim so non-storage errors (analysis failures, etc.) keep their
+// engine-side wording. The regexes anchor on `^...$` to avoid matching
+// embedded substrings and accept only the two storage nouns the engine
+// emits today; future additions go here as the catalog grows.
+func bqStyleMessage(msg string) string {
+	if m := notFoundResourceRE.FindStringSubmatch(msg); m != nil {
+		return bqStyleResourceMessage("Not found", m[1], m[2], m[3], m[4])
+	}
+	if m := alreadyExistsResourceRE.FindStringSubmatch(msg); m != nil {
+		return bqStyleResourceMessage("Already Exists", m[1], m[2], m[3], m[4])
+	}
+	return msg
+}
+
+// bqStyleResourceMessage assembles "<verb>: <Noun> <project>:<dataset>[.<table>]".
+// `table` is empty when the engine matched the dataset variant.
+func bqStyleResourceMessage(verb, noun, project, dataset, table string) string {
+	resource := project + ":" + dataset
+	if table != "" {
+		resource += "." + table
+	}
+	switch noun {
+	case "table":
+		return verb + ": Table " + resource
+	case "dataset":
+		return verb + ": Dataset " + resource
+	default:
+		// Unreachable given the regex character class, but keep a
+		// defensive fall-through so a future regex tweak that adds a
+		// new noun without a switch arm cannot silently lose the
+		// rewrite.
+		return verb + ": " + noun + " " + resource
+	}
 }

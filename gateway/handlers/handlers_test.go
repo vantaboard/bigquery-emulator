@@ -49,3 +49,53 @@ func TestNotImplementedShape(t *testing.T) {
 		t.Fatal("error.errors[0].reason is empty")
 	}
 }
+
+// TestBQStyleMessageRewritesStorageErrors pins the verbatim shape the
+// node samples assert on (`expect(err.message).to.include('Not found')`,
+// `expect(err.message).to.include('Already Exists')`). Anything that
+// does not match a known storage-noun pattern passes through verbatim
+// so analysis-time / dml-time errors keep their engine wording.
+func TestBQStyleMessageRewritesStorageErrors(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{
+			name: "table not found",
+			in:   "table not found: dev.foo.bar",
+			want: "Not found: Table dev:foo.bar",
+		},
+		{
+			name: "dataset not found",
+			in:   "dataset not found: dev.foo",
+			want: "Not found: Dataset dev:foo",
+		},
+		{
+			name: "table already exists",
+			in:   "table already exists: dev.foo.bar",
+			want: "Already Exists: Table dev:foo.bar",
+		},
+		{
+			name: "dataset already exists",
+			in:   "dataset already exists: dev.foo",
+			want: "Already Exists: Dataset dev:foo",
+		},
+		{
+			name: "passthrough preserves analysis error",
+			in:   "Unrecognized name: doesnotexist [at 1:8]",
+			want: "Unrecognized name: doesnotexist [at 1:8]",
+		},
+		{
+			name: "passthrough preserves embedded substring",
+			in:   "Engine internal: contains table not found: dev.x.y substring",
+			want: "Engine internal: contains table not found: dev.x.y substring",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := bqStyleMessage(tc.in)
+			if got != tc.want {
+				t.Errorf("bqStyleMessage(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

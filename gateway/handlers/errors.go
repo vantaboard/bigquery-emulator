@@ -71,6 +71,6 @@ func queryGRPCToHTTPError(w http.ResponseWriter, err error) bool {
 	case codes.ResourceExhausted:
 		httpStatus, reason = http.StatusTooManyRequests, reasonQuotaExceeded
 	}
-	writeError(w, httpStatus, reason, st.Message())
+	writeError(w, httpStatus, reason, bqStyleMessage(st.Message()))
 	return true
 }
