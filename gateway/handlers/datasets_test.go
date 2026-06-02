@@ -368,3 +368,92 @@ func TestDatasetListSurfacesEngineEntries(t *testing.T) {
 		t.Errorf("first entry labels = %v, want {}", first["labels"])
 	}
 }
+
+// runDatasetMetadataRoundTrip drives the Insert -> Patch -> Get cycle
+// a node `dataset.setMetadata` + `dataset.getMetadata` sample
+// exercises, asserting the cached REST-only field comes back on the
+// wire. Without the MetadataStore the Get handler would return the
+// synthesized empty dataset and lose the prior PATCH payload.
+func runDatasetMetadataRoundTrip(t *testing.T, patch string, assertion func(*testing.T, bqtypes.Dataset)) {
+	t.Helper()
+	store := NewMetadataStore()
+	fake := &fakeCatalogClient{}
+	deps := Dependencies{Catalog: fake, Metadata: store}
+
+	insert := newDatasetReq(http.MethodPost, "",
+		`{"datasetReference":{"datasetId":"`+testDatasetID+`"}}`)
+	rec := httptest.NewRecorder()
+	DatasetInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	patchReq := newDatasetReq(http.MethodPatch, testDatasetID, patch)
+	rec = httptest.NewRecorder()
+	DatasetPatch(deps)(rec, patchReq)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	get := newDatasetReq(http.MethodGet, testDatasetID, "")
+	rec = httptest.NewRecorder()
+	DatasetGet(deps)(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Dataset
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	assertion(t, got)
+}
+
+// TestDatasetMetadataLabelsRoundTrip mirrors the upstream
+// `labelDataset` + `getDatasetLabels` sample sequence.
+func TestDatasetMetadataLabelsRoundTrip(t *testing.T) {
+	runDatasetMetadataRoundTrip(t, `{"labels":{"color":"green"}}`, func(t *testing.T, got bqtypes.Dataset) {
+		if got.Labels["color"] != "green" {
+			t.Errorf("labels = %v, want {color:\"green\"}", got.Labels)
+		}
+	})
+}
+
+// TestDatasetMetadataDefaultCollationRoundTrip pins the `und:ci`
+// dataset-level collation the `should create a dataset with collation`
+// node test asserts on GET.
+func TestDatasetMetadataDefaultCollationRoundTrip(t *testing.T) {
+	runDatasetMetadataRoundTrip(t, `{"defaultCollation":"und:ci"}`, func(t *testing.T, got bqtypes.Dataset) {
+		if got.DefaultCollation != "und:ci" {
+			t.Errorf("defaultCollation = %q, want %q", got.DefaultCollation, "und:ci")
+		}
+	})
+}
+
+// TestDatasetDeleteEvictsMetadata asserts DELETE clears the
+// MetadataStore so a subsequent Insert against the same ID does not
+// surface stale labels. With deleteContents=true the dataset's table
+// entries should also be flushed.
+func TestDatasetDeleteEvictsMetadata(t *testing.T) {
+	store := NewMetadataStore()
+	fake := &fakeCatalogClient{}
+	deps := Dependencies{Catalog: fake, Metadata: store}
+
+	store.PutDataset(testProjectID, testDatasetID, bqtypes.Dataset{Labels: map[string]string{"k": "v"}})
+	store.PutTable(testProjectID, testDatasetID, testTableID, bqtypes.Table{Labels: map[string]string{"k": "v"}})
+
+	req := newDatasetReq(http.MethodDelete, testDatasetID, "")
+	q := req.URL.Query()
+	q.Set("deleteContents", "true")
+	req.URL.RawQuery = q.Encode()
+	rec := httptest.NewRecorder()
+	DatasetDelete(deps)(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := store.GetDataset(testProjectID, testDatasetID); ok {
+		t.Error("MetadataStore dataset entry survived DatasetDelete")
+	}
+	if _, ok := store.GetTable(testProjectID, testDatasetID, testTableID); ok {
+		t.Error("MetadataStore table entry survived DatasetDelete(deleteContents=true)")
+	}
+}

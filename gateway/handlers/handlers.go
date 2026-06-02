@@ -45,6 +45,14 @@ type Dependencies struct {
 	// tests that predate the registry), QueryRun lazily mints a
 	// per-handler fallback so behavior stays compatible.
 	Jobs *jobs.Registry
+
+	// Metadata caches REST-only Dataset/Table fields the engine
+	// does not yet persist (labels, defaultCollation, expirationTime,
+	// rangePartitioning, clustering, ...). Insert/Patch/Update
+	// populate it; Get reads it back and merges with the engine
+	// response. Nil is treated as a no-op store so legacy unit
+	// tests that do not opt in keep their echo posture.
+	Metadata *MetadataStore
 }
 
 // Health is a trivial liveness endpoint useful for `docker-compose`

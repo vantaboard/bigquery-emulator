@@ -179,6 +179,12 @@ func TableList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetTables()))
 		for _, ref := range resp.GetTables() {
+			labels := map[string]string{}
+			if overlay, ok := deps.Metadata.GetTable(
+				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
+			); ok && overlay.Labels != nil {
+				labels = overlay.Labels
+			}
 			items = append(items, map[string]any{
 				"kind": tableKind,
 				"id": ref.GetProjectId() + ":" + ref.GetDatasetId() +
@@ -189,7 +195,7 @@ func TableList(deps Dependencies) http.HandlerFunc {
 					TableID:   ref.GetTableId(),
 				},
 				"type":   defaultTableType,
-				"labels": map[string]string{},
+				"labels": labels,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -236,6 +242,7 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if grpcToHTTPError(w, err) {
 			return
 		}
+		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -266,6 +273,9 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		t := bqtypes.Table{Schema: schemaFromProto(resp.GetSchema())}
+		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
+			t = applyTableMetadataOverlay(t, overlay)
+		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -276,14 +286,18 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 //
 // Full replacement of the Table metadata. The engine has no update RPC
 // yet, so the handler echoes the request body back as the canonical
-// resource (stamping kind/id/timestamps).
-func TableUpdate(_ Dependencies) http.HandlerFunc {
+// resource (stamping kind/id/timestamps). The REST-only metadata
+// fields (labels, expirationTime, rangePartitioning, ...) are also
+// stashed in the in-memory MetadataStore so a follow-up GET returns
+// the updated values instead of the engine-only schema view.
+func TableUpdate(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, tableID := tableIDFromPath(r)
 		t, ok := decodeTableBody(w, r)
 		if !ok {
 			return
 		}
+		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -292,14 +306,17 @@ func TableUpdate(_ Dependencies) http.HandlerFunc {
 //
 //	PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}
 //
-// Sparse update; same echo behavior as TableUpdate.
-func TablePatch(_ Dependencies) http.HandlerFunc {
+// Sparse update; mirrors TableUpdate's metadata-stash posture so
+// upstream `setMetadata` + `getMetadata` sequences roundtrip the
+// REST-only fields. The engine has no true patch RPC yet.
+func TablePatch(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, tableID := tableIDFromPath(r)
 		t, ok := decodeTableBody(w, r)
 		if !ok {
 			return
 		}
+		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -324,6 +341,7 @@ func TableDelete(deps Dependencies) http.HandlerFunc {
 		if grpcToHTTPError(w, err) {
 			return
 		}
+		deps.Metadata.DeleteTable(projectID, datasetID, tableID)
 		writeJSON(w, http.StatusOK, struct{}{})
 	}
 }

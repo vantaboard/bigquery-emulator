@@ -37,7 +37,10 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	// One Registry per gateway process: shared across the jobs.query,
 	// jobs.get, and jobs.list handlers so a job minted by the sync
 	// query API is discoverable by subsequent reads.
-	deps := handlers.Dependencies{Jobs: jobs.NewRegistry()}
+	deps := handlers.Dependencies{
+		Jobs:     jobs.NewRegistry(),
+		Metadata: handlers.NewMetadataStore(),
+	}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to
 		// handlers. When eng is nil (gateway-only mode / unit tests /

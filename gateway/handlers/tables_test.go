@@ -299,3 +299,146 @@ func TestTableListSurfacesEngineEntries(t *testing.T) {
 		t.Errorf("first entry labels = %v, want {}", first["labels"])
 	}
 }
+
+// runTableMetadataRoundTrip drives the Insert -> Patch -> Get cycle a
+// node `setMetadata` + `getMetadata` sample exercises, asserting the
+// cached REST-only field comes back on the wire after the engine
+// DescribeTable response (which carries only the schema) is merged
+// with the in-memory MetadataStore overlay.
+//
+// `patch` is the JSON delta sent to the PATCH endpoint; `assertion`
+// inspects the decoded Table on the GET response and reports any
+// roundtrip failures via t.Errorf.
+func runTableMetadataRoundTrip(t *testing.T, patch string, assertion func(*testing.T, bqtypes.Table)) {
+	t.Helper()
+	store := NewMetadataStore()
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{}, nil
+		},
+	}
+	deps := Dependencies{Catalog: fake, Metadata: store}
+
+	insert := newTableReq(http.MethodPost, "", `{"tableReference":{"tableId":"`+testTableID+`"}}`)
+	rec := httptest.NewRecorder()
+	TableInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	patchReq := newTableReq(http.MethodPatch, testTableID, patch)
+	rec = httptest.NewRecorder()
+	TablePatch(deps)(rec, patchReq)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch: status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	get := newTableReq(http.MethodGet, testTableID, "")
+	rec = httptest.NewRecorder()
+	TableGet(deps)(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	assertion(t, got)
+}
+
+// TestTableMetadataLabelsRoundTrip mirrors the upstream
+// `labelTable` + `getTableLabels` sample sequence: setMetadata writes
+// `{color:"green"}` then getMetadata reads it back. Without the
+// MetadataStore overlay the get would lose the labels.
+func TestTableMetadataLabelsRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t, `{"labels":{"color":"green"}}`, func(t *testing.T, got bqtypes.Table) {
+		if got.Labels["color"] != "green" {
+			t.Errorf("labels = %v, want {color:\"green\"}", got.Labels)
+		}
+	})
+}
+
+// TestTableMetadataExpirationTimeRoundTrip mirrors the
+// `updateTableExpiration` sample's setMetadata + getMetadata flow.
+func TestTableMetadataExpirationTimeRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t, `{"expirationTime":"1234567890"}`, func(t *testing.T, got bqtypes.Table) {
+		if got.ExpirationTime != "1234567890" {
+			t.Errorf("expirationTime = %q, want %q", got.ExpirationTime, "1234567890")
+		}
+	})
+}
+
+// TestTableMetadataDefaultCollationRoundTrip pins the `und:ci` flow
+// the `should create a table with collation` node test exercises.
+func TestTableMetadataDefaultCollationRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t, `{"defaultCollation":"und:ci"}`, func(t *testing.T, got bqtypes.Table) {
+		if got.DefaultCollation != "und:ci" {
+			t.Errorf("defaultCollation = %q, want %q", got.DefaultCollation, "und:ci")
+		}
+	})
+}
+
+// TestTableMetadataRangePartitioningRoundTrip pins the integer-range
+// partitioning spec the `createTableRangePartitioned` sample writes.
+func TestTableMetadataRangePartitioningRoundTrip(t *testing.T) {
+	patch := `{"rangePartitioning":{"field":"x","range":{"start":"0","end":"100","interval":"10"}}}`
+	runTableMetadataRoundTrip(t, patch, func(t *testing.T, got bqtypes.Table) {
+		if got.RangePartitioning == nil {
+			t.Fatal("rangePartitioning missing")
+		}
+		if got.RangePartitioning.Field != "x" {
+			t.Errorf("rangePartitioning.field = %q, want %q", got.RangePartitioning.Field, "x")
+		}
+		if got.RangePartitioning.Range == nil ||
+			got.RangePartitioning.Range.Start != "0" ||
+			got.RangePartitioning.Range.End != "100" ||
+			got.RangePartitioning.Range.Interval != "10" {
+			t.Errorf("rangePartitioning.range = %+v", got.RangePartitioning.Range)
+		}
+	})
+}
+
+// TestTableMetadataClusteringRoundTrip pins the clustering spec the
+// `createTableClustered` sample writes.
+func TestTableMetadataClusteringRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t, `{"clustering":{"fields":["city","zipcode"]}}`, func(t *testing.T, got bqtypes.Table) {
+		if got.Clustering == nil {
+			t.Fatal("clustering missing")
+		}
+		if len(got.Clustering.Fields) != 2 ||
+			got.Clustering.Fields[0] != "city" ||
+			got.Clustering.Fields[1] != "zipcode" {
+			t.Errorf("clustering.fields = %v, want [city zipcode]", got.Clustering.Fields)
+		}
+	})
+}
+
+// TestTableDeleteEvictsMetadata asserts that DELETE clears the
+// MetadataStore so a subsequent Insert against the same ID does not
+// surface stale labels.
+func TestTableDeleteEvictsMetadata(t *testing.T) {
+	store := NewMetadataStore()
+	fake := &fakeCatalogClient{}
+	deps := Dependencies{Catalog: fake, Metadata: store}
+
+	insert := newTableReq(http.MethodPost, "",
+		`{"tableReference":{"tableId":"`+testTableID+`"},"labels":{"k":"v"}}`)
+	rec := httptest.NewRecorder()
+	TableInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if entry, ok := store.GetTable(testProjectID, testDatasetID, testTableID); !ok || entry.Labels["k"] != "v" {
+		t.Fatalf("metadata not stored after insert: %+v ok=%v", entry, ok)
+	}
+
+	del := newTableReq(http.MethodDelete, testTableID, "")
+	rec = httptest.NewRecorder()
+	TableDelete(deps)(rec, del)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, ok := store.GetTable(testProjectID, testDatasetID, testTableID); ok {
+		t.Errorf("MetadataStore entry survived TableDelete")
+	}
+}

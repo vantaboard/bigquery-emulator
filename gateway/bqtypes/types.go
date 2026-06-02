@@ -61,6 +61,14 @@ type Dataset struct {
 	Access                   []map[string]any  `json:"access"`
 	Labels                   map[string]string `json:"labels"`
 	DefaultTableExpirationMs string            `json:"defaultTableExpirationMs,omitempty"`
+	// DefaultCollation is BigQuery's per-dataset default text
+	// collation (typically `und:ci` for the case-insensitive lane
+	// the upstream node sample exercises). The emulator does not
+	// honor it at query time today, but the value still has to
+	// round-trip through GET/PATCH so client libraries observe the
+	// shape they expect. See
+	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
+	DefaultCollation string `json:"defaultCollation,omitempty"`
 }
 
 // Table is the BigQuery Table resource (subset).
@@ -83,6 +91,62 @@ type Table struct {
 	LastModifiedTime string            `json:"lastModifiedTime,omitempty"`
 	Etag             string            `json:"etag,omitempty"`
 	Labels           map[string]string `json:"labels"`
+	// ExpirationTime is the wall-clock time at which the table
+	// expires, encoded as a decimal string of milliseconds since
+	// epoch -- BigQuery REST always serializes int64 timestamps
+	// as strings to dodge JavaScript's 53-bit integer ceiling.
+	// `omitempty` is intentional: live BigQuery omits the field
+	// when the table has no expiration.
+	ExpirationTime string `json:"expirationTime,omitempty"`
+	// RangePartitioning is the integer-range partitioning spec
+	// (`{field, range:{start,end,interval}}`) the upstream node
+	// `createTableRangePartitioned` sample sets and the matching
+	// test asserts on the GET response.
+	RangePartitioning *RangePartitioning `json:"rangePartitioning,omitempty"`
+	// TimePartitioning is the (TIME / DAY / HOUR / MONTH / YEAR)
+	// time-based partitioning spec. Not exercised by every test
+	// but parallel to RangePartitioning so the roundtrip helper
+	// can carry it without dropping the field on the floor.
+	TimePartitioning *TimePartitioning `json:"timePartitioning,omitempty"`
+	// Clustering is the per-table clustering spec the upstream
+	// node `createTableClustered` sample sets via
+	// `{ fields: ['city', 'zipcode'] }`.
+	Clustering *Clustering `json:"clustering,omitempty"`
+	// DefaultCollation is the table-level default text collation
+	// (typically `und:ci`). Mirrors Dataset.DefaultCollation;
+	// see that field's comment for the round-trip rationale.
+	DefaultCollation string `json:"defaultCollation,omitempty"`
+}
+
+// RangePartitioning describes BigQuery integer-range partitioning. The
+// only currently-supported `Range.Interval` granularity is integer
+// buckets (`start`, `end`, `interval`); the field is just round-tripped
+// for now.
+type RangePartitioning struct {
+	Field string         `json:"field,omitempty"`
+	Range *RangePartSpec `json:"range,omitempty"`
+}
+
+// RangePartSpec is the `range` sub-object of RangePartitioning. All
+// three integer fields are wire-serialized as decimal strings to mirror
+// BigQuery REST. See docs/bigquery/docs/reference/rest/v2/tables/get.md.
+type RangePartSpec struct {
+	Start    string `json:"start,omitempty"`
+	End      string `json:"end,omitempty"`
+	Interval string `json:"interval,omitempty"`
+}
+
+// TimePartitioning describes time-based partitioning. Carried for
+// roundtrip only; the emulator does not enforce partition expiration.
+type TimePartitioning struct {
+	Type         string `json:"type,omitempty"`
+	Field        string `json:"field,omitempty"`
+	ExpirationMs string `json:"expirationMs,omitempty"`
+}
+
+// Clustering is the per-table clustering spec.
+type Clustering struct {
+	Fields []string `json:"fields,omitempty"`
 }
 
 // TableSchema is the BigQuery TableSchema resource.

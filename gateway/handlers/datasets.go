@@ -136,6 +136,12 @@ func DatasetList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetDatasets()))
 		for _, ref := range resp.GetDatasets() {
+			labels := map[string]string{}
+			if overlay, ok := deps.Metadata.GetDataset(
+				ref.GetProjectId(), ref.GetDatasetId(),
+			); ok && overlay.Labels != nil {
+				labels = overlay.Labels
+			}
 			items = append(items, map[string]any{
 				"kind": datasetKind,
 				"id":   ref.GetProjectId() + ":" + ref.GetDatasetId(),
@@ -143,7 +149,7 @@ func DatasetList(deps Dependencies) http.HandlerFunc {
 					ProjectID: ref.GetProjectId(),
 					DatasetID: ref.GetDatasetId(),
 				},
-				"labels": map[string]string{},
+				"labels": labels,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -189,6 +195,7 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 		if grpcToHTTPError(w, err) {
 			return
 		}
+		deps.Metadata.PutDataset(projectID, datasetID, ds)
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }
@@ -199,14 +206,22 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 //
 // The Catalog gRPC service does not yet expose a Get RPC (only
 // Register/Drop), so this handler returns a synthesized Dataset
-// resource derived from the path parameters. It is a catalog stub
-// that satisfies clients which only need the reference + kind to
-// proceed; a true existence check lands when Storage grows a
-// DescribeDataset method.
-func DatasetGet(_ Dependencies) http.HandlerFunc {
+// resource derived from the path parameters. A true existence check
+// lands when Storage grows a DescribeDataset method.
+//
+// REST-only metadata (labels, defaultCollation, friendlyName, ...) is
+// surfaced from the in-memory MetadataStore so a prior
+// Insert/Patch/Update round-trips through GET — required by the node
+// `getDatasetLabels` sample's `Object.entries(dataset.metadata.labels)`
+// loop.
+func DatasetGet(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
-		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, bqtypes.Dataset{}))
+		ds := bqtypes.Dataset{}
+		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok {
+			ds = applyDatasetMetadataOverlay(ds, overlay)
+		}
+		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }
 
@@ -214,17 +229,19 @@ func DatasetGet(_ Dependencies) http.HandlerFunc {
 //
 //	PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}
 //
-// Update is a full replacement of the Dataset metadata. The engine
-// catalog does not yet have an update RPC, so this handler echoes the
-// caller-supplied body back as the canonical resource, stamping the
-// kind/id/timestamps that the client expects in the response.
-func DatasetUpdate(_ Dependencies) http.HandlerFunc {
+// Full replacement of the Dataset metadata. The engine catalog does
+// not yet have an update RPC, so the handler echoes the request body
+// back as the canonical resource (stamping kind/id/timestamps) and
+// records the REST-only metadata fields in the in-memory store so a
+// subsequent GET returns the updated values.
+func DatasetUpdate(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
 		ds, ok := decodeDatasetBody(w, r)
 		if !ok {
 			return
 		}
+		deps.Metadata.PutDataset(projectID, datasetID, ds)
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }
@@ -233,17 +250,17 @@ func DatasetUpdate(_ Dependencies) http.HandlerFunc {
 //
 //	PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}
 //
-// Patch is a sparse update; the body contains only the fields to
-// change. Until the engine grows a true patch RPC this handler simply
-// echoes the request back as the resource, which is enough for client
-// libraries that immediately read the response value.
-func DatasetPatch(_ Dependencies) http.HandlerFunc {
+// Sparse update; mirrors DatasetUpdate's metadata-stash posture so
+// upstream `setMetadata` + `getMetadata` sequences roundtrip the
+// REST-only fields.
+func DatasetPatch(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
 		ds, ok := decodeDatasetBody(w, r)
 		if !ok {
 			return
 		}
+		deps.Metadata.PutDataset(projectID, datasetID, ds)
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }
@@ -262,15 +279,20 @@ func DatasetDelete(deps Dependencies) http.HandlerFunc {
 			NotImplemented(w, r)
 			return
 		}
+		deleteContents := r.URL.Query().Get("deleteContents") == "true"
 		_, err := deps.Catalog.DropDataset(r.Context(), &enginepb.DropDatasetRequest{
 			Dataset: &enginepb.DatasetRef{
 				ProjectId: projectID,
 				DatasetId: datasetID,
 			},
-			DeleteContents: r.URL.Query().Get("deleteContents") == "true",
+			DeleteContents: deleteContents,
 		})
 		if grpcToHTTPError(w, err) {
 			return
+		}
+		deps.Metadata.DeleteDataset(projectID, datasetID)
+		if deleteContents {
+			deps.Metadata.DeleteTablesInDataset(projectID, datasetID)
 		}
 		writeJSON(w, http.StatusOK, struct{}{})
 	}
