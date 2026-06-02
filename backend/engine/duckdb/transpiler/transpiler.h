@@ -15,11 +15,14 @@
 // plans can either override `VisitResolved*` directly (for nodes
 // that need to recurse into children with non-default ordering) or
 // route through the per-shape `Emit*` helpers declared here. The
-// SHAPE_TRACKER row marked `done` for a given node corresponds to
-// an `Emit*` that returns DuckDB-flavored SQL; rows marked
-// `not_started` still bottom out at the empty string and the engine
-// reads that as "not yet supported" and surfaces UNIMPLEMENTED to
-// the gateway.
+// SHAPE_TRACKER rows whose disposition lowers through DuckDB
+// (`duckdb_native` / `duckdb_rewrite` / `duckdb_udf`) correspond to
+// an `Emit*` that returns DuckDB-flavored SQL; rows on the other
+// dispositions (`semantic_executor` / `control_op` / `local_stub` /
+// `unsupported`) bottom out at the empty string and the route
+// classifier in `backend/engine/coordinator/` dispatches them to
+// the matching executor (or surfaces a BigQuery-shaped
+// `UNIMPLEMENTED` for `unsupported`).
 //
 // Implemented baseline (top-level SELECT, the `transpiler-select-core`
 // plan):
@@ -169,19 +172,22 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Per-shape Emit hooks.
   //
   // Each hook returns the DuckDB SQL fragment for one ResolvedAST
-  // node kind. Hooks for `done` rows in `SHAPE_TRACKER.md` emit
-  // DuckDB SQL; hooks for `not_started` rows still return the empty
-  // string and trip the engine fallback. Group them roughly by node
+  // node kind. Hooks for `duckdb_native` / `duckdb_rewrite` /
+  // `duckdb_udf` rows in `SHAPE_TRACKER.md` emit DuckDB SQL; hooks
+  // for the other dispositions (`semantic_executor` / `control_op`
+  // / `local_stub` / `unsupported`) still return the empty string
+  // and the route classifier dispatches the surrounding query to
+  // the matching executor instead. Group them roughly by node
   // category so the file diff for "add scan emit" / "add expr emit"
   // stays focused.
   //
-  // The list below is *not* exhaustive — it tracks the node
-  // kinds the SHAPE_TRACKER classifies as `not_started` and the
-  // ones DuckDB has a sensible analog for. Skiplist nodes
-  // (graph / ML / pivot / DML / DDL / ...) get their dispositions
-  // in the tracker without an `Emit*` here; the visitor's
-  // `DefaultVisit` falls through to "not supported" and the
-  // engine fallback fires.
+  // The list below is *not* exhaustive — it tracks the node kinds
+  // for which DuckDB has a sensible analog. Node kinds whose
+  // SHAPE_TRACKER disposition is owned by another executor (graph /
+  // ML / pivot / DML / DDL / ...) get their disposition in the
+  // tracker without an `Emit*` here; the visitor's `DefaultVisit`
+  // falls through to "no DuckDB lowering" and the route classifier
+  // routes the query elsewhere.
   // ---------------------------------------------------------------
 
   // Statements -----------------------------------------------------

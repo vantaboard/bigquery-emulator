@@ -323,11 +323,13 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
       "IFNULL(\"name\", 'unknown')");
 }
 
-TEST_F(TranspilerTest, EmitFunctionCallSkiplistReturnsEmpty) {
-  // `BIT_COUNT` is on the skiplist in `functions.yaml` (BQ flavor
-  // differs from DuckDB's `bit_count` and the conformance harness
-  // does not exercise it today). The emit returns "" so the engine
-  // surfaces UNIMPLEMENTED for the whole query.
+TEST_F(TranspilerTest, EmitFunctionCallNonLoweringDispositionReturnsEmpty) {
+  // `BIT_COUNT` is on the `semantic_executor` route in
+  // `functions.yaml` (BQ flavor differs from DuckDB's `bit_count`)
+  // with the body deferred to `semantic-functions-compliance.plan.md`.
+  // The transpiler has no DuckDB lowering for this disposition, so
+  // the emit returns "" and the engine surfaces UNIMPLEMENTED for
+  // the whole query.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT BIT_COUNT(id) AS n FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
@@ -600,10 +602,11 @@ TEST_F(TranspilerTest, EmitAggregateScanArrayAggMapsThroughTable) {
       "\"name\" FROM \"people\") GROUP BY \"id\"");
 }
 
-TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnSkiplistedAggregate) {
-  // `APPROX_QUANTILES` is on the skiplist; the aggregate emit
-  // returns "" and the AggregateScan emit propagates the empty
-  // string. The engine surfaces UNIMPLEMENTED for the whole query.
+TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnsupportedAggregate) {
+  // `APPROX_QUANTILES` is on the `unsupported` route per
+  // `specialized-feature-policy.plan.md`; the aggregate emit returns
+  // "" and the AggregateScan emit propagates the empty string. The
+  // engine surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id, APPROX_QUANTILES(id, 2) FROM people GROUP BY id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -1339,11 +1342,11 @@ TEST(FunctionsTableTest, LookupUnknownReturnsNull) {
 TEST(FunctionsTableTest, CoverageMeetsPlanThreshold) {
   // The plan requires the disposition table to cover at least 50
   // BigQuery functions across the math / string / datetime /
-  // conditional / array / aggregation / skiplist categories. We
-  // spot-check a few entries from each category here rather than
-  // hard-counting the size of the underlying map (which is private
-  // to `functions.cc`) -- a regression in the YAML would surface as
-  // one of these sentinel lookups returning nullptr.
+  // conditional / array / aggregation / window / unsupported-family
+  // categories. We spot-check a few entries from each category here
+  // rather than hard-counting the size of the underlying map (which
+  // is private to `functions.cc`) -- a regression in the YAML would
+  // surface as one of these sentinel lookups returning nullptr.
   const std::vector<std::string> required = {
       // math
       "abs",
@@ -1396,7 +1399,7 @@ TEST(FunctionsTableTest, CoverageMeetsPlanThreshold) {
       "any_value",
       "array_agg",
       "string_agg",
-      // skiplist
+      // unsupported families (specialized-feature-policy)
       "approx_quantiles",
       "ml.predict",
       "net.ip_from_string",
@@ -1569,12 +1572,12 @@ TEST_F(TranspilerTest, EmitComputedColumnLiteral) {
 }
 
 TEST_F(TranspilerTest, EmitComputedColumnFallsBackOnUnloweredExpr) {
-  // Pick a function that's not on the disposition table so its
-  // `EmitFunctionCall` returns "" -- the wrapping
+  // Pick a function whose disposition has no DuckDB lowering so
+  // its `EmitFunctionCall` returns "" -- the wrapping
   // EmitComputedColumn must propagate the empty-string fallback
   // contract rather than emit `<unset> AS "<col>"`.
-  // `BIT_COUNT` is on the YAML skiplist (BQ flavor differs from
-  // DuckDB's `bit_count`).
+  // `BIT_COUNT` is on the `semantic_executor` route in the YAML
+  // disposition table (BQ flavor differs from DuckDB's `bit_count`).
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT BIT_COUNT(id) FROM people");
   ASSERT_NE(stmt, nullptr);
@@ -1763,10 +1766,11 @@ TEST_F(TranspilerTest, EmitQueryStmtAliasedColumnSurfacesAlias) {
 }
 
 TEST_F(TranspilerTest, EmitQueryStmtFallsBackOnUnloweredProjection) {
-  // `BIT_COUNT(id)` is on the YAML skiplist; the inner ProjectScan
-  // emit returns "" and EmitQueryStmt propagates the empty-string
-  // fallback contract instead of stitching an outer SELECT around a
-  // missing inner relation.
+  // `BIT_COUNT(id)` is on the `semantic_executor` route in the YAML
+  // disposition table; the inner ProjectScan emit returns "" and
+  // EmitQueryStmt propagates the empty-string fallback contract
+  // instead of stitching an outer SELECT around a missing inner
+  // relation.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT BIT_COUNT(id) FROM people");
   ASSERT_NE(stmt, nullptr);
@@ -2467,10 +2471,11 @@ TEST_F(TranspilerTest, EmitSetOperationScanNestedDifferentOps) {
 
 TEST_F(TranspilerTest, EmitSetOperationScanFallsBackOnUnloweredChild) {
   // If any child scan returns "" the whole set-op emit must
-  // propagate the empty string. `BIT_COUNT` is on the YAML
-  // skiplist so the right-hand ProjectScan's computed column emit
-  // returns "" -> ProjectScan returns "" -> set-op item returns
-  // "" -> set-op scan returns "".
+  // propagate the empty string. `BIT_COUNT` is on the
+  // `semantic_executor` route in the YAML disposition table so the
+  // right-hand ProjectScan's computed column emit returns "" ->
+  // ProjectScan returns "" -> set-op item returns "" -> set-op
+  // scan returns "".
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT id FROM people UNION ALL SELECT BIT_COUNT(amount) FROM orders");
   ASSERT_NE(stmt, nullptr);

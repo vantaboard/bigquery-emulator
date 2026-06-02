@@ -1,12 +1,14 @@
-# Bazel build for the DuckDB transpiler skeleton.
+# Bazel build for the DuckDB transpiler.
 #
-# The transpiler walks a GoogleSQL `ResolvedAST` and lowers it to a
-# DuckDB-flavored SQL string the DuckDB C++ client can execute. This
-# package only ships the skeleton today: every `Emit*` returns the
-# empty string and the SHAPE_TRACKER.md tracks the per-node
-# disposition (`done | skiplist | not_started`). Subsequent plans
-# (`transpiler-emit-scans_d5a6b7c8`, ...) fill the bodies in one
-# node kind at a time.
+# The transpiler walks a GoogleSQL `ResolvedAST` and lowers DuckDB-
+# routed shapes to a DuckDB-flavored SQL string the DuckDB C++ client
+# can execute. SHAPE_TRACKER.md tracks the per-node disposition using
+# the canonical seven-route vocabulary documented in
+# `backend/engine/disposition.h` (`duckdb_native` / `duckdb_rewrite` /
+# `duckdb_udf` / `semantic_executor` / `control_op` / `local_stub` /
+# `unsupported`); only the first three lower through this package's
+# `Emit*` hooks and the rest are dispatched by the route classifier
+# in `backend/engine/coordinator/` to the matching executor.
 #
 # GoogleSQL provides the resolved-AST headers this visitor walks; see
 # `ROADMAP.md` ("Build systems") for how `@googlesql//` is wired.
