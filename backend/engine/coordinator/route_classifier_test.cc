@@ -33,11 +33,14 @@
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/id_string.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {
@@ -421,6 +424,41 @@ TEST_F(RouteClassifierTest,
   RouteDecision d = classifier_.Classify(*stmt);
   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
   EXPECT_EQ(d.offending_node, "ResolvedSubqueryExpr(correlated)");
+}
+
+TEST_F(RouteClassifierTest, BarrierScanPromotesToSemanticExecutor) {
+  // `advanced-relational-routing.plan.md` Family 2. A
+  // `ResolvedBarrierScan` is a pipe-operator optimizer marker that
+  // blocks fusion across its boundary. DuckDB has no analog
+  // contract, so the classifier MUST promote any query containing
+  // one to `kSemanticExecutor` (the row's YAML disposition).
+  //
+  // We exercise the YAML row directly via a hand-built statement
+  // because the analyzer does not emit `ResolvedBarrierScan` for
+  // surface SQL today (pipe operators are an analyzer feature flag).
+  // The hand-built shape mirrors what the analyzer emits for
+  // `<expr> |> BARRIER` once the flag flips.
+  auto single = ::googlesql::MakeResolvedSingleRowScan();
+  auto barrier = ::googlesql::MakeResolvedBarrierScan(
+      /*column_list=*/{}, std::move(single));
+  ::googlesql::ResolvedColumn out_col(
+      /*column_id=*/200,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),
+      /*name=*/::googlesql::IdString::MakeGlobal("c"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>> exprs;
+  exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      out_col, ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(7))));
+  auto project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{out_col}, std::move(exprs), std::move(barrier));
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>> outputs;
+  outputs.push_back(::googlesql::MakeResolvedOutputColumn("c", out_col));
+  auto query_stmt = ::googlesql::MakeResolvedQueryStmt(
+      std::move(outputs), /*is_value_table=*/false, std::move(project));
+
+  RouteDecision d = classifier_.Classify(*query_stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedBarrierScan");
 }
 
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {

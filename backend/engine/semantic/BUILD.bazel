@@ -201,6 +201,7 @@ cc_test(
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",
     ],
 )

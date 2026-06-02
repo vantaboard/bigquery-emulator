@@ -96,7 +96,7 @@ ResolvedMatchRecognizeScan: semantic_executor plan=advanced-relational-routing.p
 ResolvedGroupRowsScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedTVFScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
 ResolvedRelationArgumentScan: semantic_executor plan=udf-tvf-module-routing.plan.md status=planned
-ResolvedBarrierScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedBarrierScan: semantic_executor plan=advanced-relational-routing.plan.md
 ResolvedPipeIfScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedPipeForkScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned
 ResolvedPipeTeeScan: semantic_executor plan=advanced-relational-routing.plan.md status=planned

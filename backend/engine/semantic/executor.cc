@@ -63,6 +63,24 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
   return bindings;
 }
 
+// Look through `ResolvedBarrierScan` wrappers, returning the
+// underlying input scan. Barriers are optimizer-only markers (the
+// analyzer inserts them around pipe-operator boundaries to block
+// fusion across the barrier); the row stream itself is unchanged.
+// The semantic executor passes them through transparently, so a
+// barrier-wrapped SingleRowScan / ArrayScan still routes through
+// the scalar-only / UNNEST-rooted handlers. Nested barriers are
+// stripped recursively. See `advanced-relational-routing.plan.md`
+// Family 2.
+const ::googlesql::ResolvedScan* StripBarrierScans(
+    const ::googlesql::ResolvedScan* scan) {
+  while (scan != nullptr &&
+         scan->node_kind() == ::googlesql::RESOLVED_BARRIER_SCAN) {
+    scan = scan->GetAs<::googlesql::ResolvedBarrierScan>()->input_scan();
+  }
+  return scan;
+}
+
 // Check that `query_stmt` matches a shape the executor handles
 // today and return the inner `ResolvedProjectScan*`.
 //
@@ -74,6 +92,11 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
 //   * UNNEST-rooted SELECT: `ResolvedProjectScan(input_scan=
 //     ResolvedArrayScan)`. Owned by Families 1-3 of
 //     `.cursor/plans/array-struct-semantic-path.plan.md`.
+//   * Barrier-wrapped variant of either of the above:
+//     `ResolvedProjectScan(input_scan=ResolvedBarrierScan(...))`.
+//     The barrier is a planner-only marker for pipe-operator
+//     fusion; rows pass through unchanged. Owned by
+//     `advanced-relational-routing.plan.md` Family 2.
 //
 // Anything else (FROM <table>, JOIN, AGGREGATE, ...) surfaces a
 // structured `kNotImplemented` so the gateway envelope is the
@@ -98,7 +121,8 @@ absl::StatusOr<const ::googlesql::ResolvedProjectScan*> AcceptKnownShape(
                      query->node_kind_string()));
   }
   const auto* project = query->GetAs<::googlesql::ResolvedProjectScan>();
-  const ::googlesql::ResolvedScan* input = project->input_scan();
+  const ::googlesql::ResolvedScan* input =
+      StripBarrierScans(project->input_scan());
   if (input == nullptr) {
     return absl::InvalidArgumentError(
         "semantic: ResolvedProjectScan has no input_scan");
@@ -251,9 +275,17 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
   //     1-3). Walk the array-scan evaluator to materialize the
   //     row bindings, then evaluate each output column per row.
   //
+  // `ResolvedBarrierScan` wrappers are stripped here too -- the
+  // barrier is a planner-only optimizer marker (pipe-operator
+  // fusion blocker). Rows pass through unchanged, so the inner
+  // SingleRowScan / ArrayScan handler is what we actually need to
+  // dispatch on. Owned by `advanced-relational-routing.plan.md`
+  // Family 2.
+  //
   // `AcceptKnownShape` already rejected every other input kind.
   std::vector<storage::Row> rows;
-  const ::googlesql::ResolvedScan* input = project.input_scan();
+  const ::googlesql::ResolvedScan* input =
+      StripBarrierScans(project.input_scan());
   if (input->node_kind() == ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
     auto row = ProjectOneRow(query_stmt, project, expr_by_column_id, ctx);
     if (!row.ok()) return row.status();

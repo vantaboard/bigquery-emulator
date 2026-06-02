@@ -25,11 +25,14 @@
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/id_string.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_column.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {
@@ -205,6 +208,51 @@ TEST_F(SemanticExecutorTest, RejectsSelectWithFromShape) {
       exec.ExecuteQuery(MakeRequest("SELECT x FROM t"), *stmt, catalog_.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
+}
+
+// `advanced-relational-routing.plan.md` Family 2. A
+// `ResolvedBarrierScan` wrapping a SingleRowScan is the
+// pipe-operator analog of `SELECT 1 + 2`; the barrier is the
+// analyzer's pipe-boundary marker and rows pass through
+// unchanged. `StripBarrierScans` peels the wrapper before
+// dispatch so the scalar-only evaluator handles the projection.
+TEST_F(SemanticExecutorTest, BarrierScanOverSingleRowPassesThrough) {
+  // Direct construction: the surface SQL `SELECT 1 + 2 |> SELECT ...`
+  // is not yet enabled in this fixture's analyzer, but the
+  // `ResolvedQueryStmt(query=ResolvedProjectScan(input_scan=
+  // ResolvedBarrierScan(input_scan=ResolvedSingleRowScan)))`
+  // shape is what the analyzer would emit, so we build it
+  // directly and feed it to the executor.
+  auto single = ::googlesql::MakeResolvedSingleRowScan();
+  auto barrier = ::googlesql::MakeResolvedBarrierScan(
+      /*column_list=*/{}, std::move(single));
+  // Project a literal 7 onto a fresh output column.
+  ::googlesql::ResolvedColumn out_col(
+      /*column_id=*/100,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),
+      /*name=*/::googlesql::IdString::MakeGlobal("c"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>> exprs;
+  exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      out_col, ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(7))));
+  auto project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{out_col}, std::move(exprs), std::move(barrier));
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>> outputs;
+  outputs.push_back(
+      ::googlesql::MakeResolvedOutputColumn(/*name=*/"c", out_col));
+  auto query_stmt = ::googlesql::MakeResolvedQueryStmt(
+      std::move(outputs), /*is_value_table=*/false, std::move(project));
+
+  SemanticExecutor exec;
+  QueryRequest req = MakeRequest("/* barrier shape; built directly */");
+  auto source = exec.ExecuteQuery(req, *query_stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  EXPECT_EQ(row.cells[0].int64_value(), 7);
 }
 
 TEST_F(SemanticExecutorTest, UnnestWithOffsetEmitsRowPerElement) {
