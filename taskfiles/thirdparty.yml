@@ -313,6 +313,20 @@ tasks:
           mkdir -p testdata/fake-gcs-data
         fi
         docker compose --profile thirdparty up -d fake-gcs-server
+        # Wait for the docker-proxy + fake-gcs-server bind to be live.
+        # `docker compose up -d` returns once the proxy on :4443 is bound,
+        # but the in-container HTTP listener may not yet accept; the very
+        # first preflight curl from node-bigquery-tests / dataframes then
+        # sees `(56) Recv failure: Connection reset by peer`. Poll an
+        # always-2xx URL via the shared helper to absorb that race. The
+        # `cloud-samples-data` bucket is preloaded from
+        # `testdata/fake-gcs-data/` (see `task testdata:fake-gcs-sync`)
+        # so its metadata endpoint stays a stable readiness probe; if
+        # the seed dir layout changes, swap to any other 2xx URL on the
+        # configured port.
+        port="${FAKE_GCS_PORT:-4443}"
+        bash "${root}/scripts/wait_for_healthz.sh" \
+          "http://localhost:${port}/storage/v1/b/cloud-samples-data" 60 fake-gcs-server
 
   fake-gcs-down:
     desc: Stop fake-gcs-server (other compose services keep running)

@@ -7,7 +7,7 @@ todos:
     status: completed
   - id: tp02
     content: "thirdparty-02-fake-gcs-readiness.plan.md — add wait_for_healthz poll to fake-gcs-up task (~15 min)."
-    status: pending
+    status: completed
   - id: tp03
     content: "thirdparty-03-python-fake-gcs.plan.md — route python-bigquery-tests through fake-gcs-server (~2 h)."
     status: pending
