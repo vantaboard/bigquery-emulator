@@ -32,5 +32,6 @@ setup:
       AS SELECT 1.0 AS label, 2.0 AS f1
 query: SELECT 1 AS one
 expected:
+  route: semantic_executor
   rows:
     - {one: 1}

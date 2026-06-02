@@ -31,5 +31,6 @@ query: |
              ) AS outer
     )
 expected:
+  route: duckdb_rewrite
   rows:
     - {a: "1", b: "two", d: "3", e: "four"}

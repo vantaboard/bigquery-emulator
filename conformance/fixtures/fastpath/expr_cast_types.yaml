@@ -21,5 +21,6 @@ query: |
          CAST(3.7 AS INT64)         AS f_to_i,
          CAST('TRUE' AS BOOL)       AS s_to_b
 expected:
+  route: semantic_executor
   rows:
     - {s_to_i: "42", i_to_s: "7", i_to_f: "2.0", f_to_i: "3", s_to_b: "true"}

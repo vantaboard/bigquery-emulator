@@ -27,5 +27,6 @@ query: |
          SOUNDEX('') AS empty,
          SOUNDEX(CAST(NULL AS STRING)) AS null_in
 expected:
+  route: semantic_executor
   rows:
     - {robert: "R163", rupert: "R163", ashcraft: "A261", tymczak: "T522", empty: "", null_in: null}

@@ -31,5 +31,6 @@ query: |
   SELECT id, name FROM ds_select_where.people
   WHERE name = 'linus' ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "2", name: "linus"}

@@ -17,6 +17,7 @@ query: |
     ['ada', 'linus', 'grace'] AS names,
     [1, NULL, 3]             AS nullable_ints
 expected:
+  route: semantic_executor
   match: schema_only
   schema:
     - {name: ints, type: INT64}

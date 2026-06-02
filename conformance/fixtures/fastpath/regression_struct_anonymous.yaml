@@ -25,5 +25,6 @@ query: |
       SELECT STRUCT(1, 'ada', TRUE) AS s_outer
     )
 expected:
+  route: duckdb_rewrite
   rows:
     - {pos0: "1", pos1: "ada", pos2: "true"}

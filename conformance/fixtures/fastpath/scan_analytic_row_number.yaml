@@ -38,6 +38,7 @@ query: |
     FROM ds_fastpath_analytic_row_number.events
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", kind: "login", rn: "1"}
     - {id: "2", kind: "click", rn: "1"}

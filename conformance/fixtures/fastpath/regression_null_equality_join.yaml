@@ -47,5 +47,6 @@ query: |
       ON a.k = b.k
    ORDER BY a.id, b.id
 expected:
+  route: duckdb_native
   rows:
     - {a_id: "1", b_id: "10"}

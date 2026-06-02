@@ -39,6 +39,7 @@ query: |
     FROM ds_fastpath_project_subset.wide
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "ada"}
     - {id: "2", name: "linus"}

@@ -30,5 +30,6 @@ query: |
          INSTR('hello', 'xyz') AS missing,
          INSTR('hello', '') AS empty_sub
 expected:
+  route: semantic_executor
   rows:
     - {two_arg: "7", three_arg: "3", four_arg: "5", reverse: "5", missing: "0", empty_sub: "1"}

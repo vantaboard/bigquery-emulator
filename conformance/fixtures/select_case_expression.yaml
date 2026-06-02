@@ -32,6 +32,7 @@ query: |
     FROM ds_select_case.people
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", label: "first"}
     - {id: "2", label: "rest"}

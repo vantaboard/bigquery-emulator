@@ -44,6 +44,7 @@ query: |
     FROM ds_functions_split.strings
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", default_delim: "a|b|c",         dash_delim: "a,b,c"}
     - {id: "2", default_delim: "foo-bar-baz",   dash_delim: "foo|bar|baz"}

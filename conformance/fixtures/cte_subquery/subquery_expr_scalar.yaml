@@ -19,5 +19,6 @@ project_id: proj-cte-subquery-scalar
 query: |
   SELECT (SELECT MAX(n) FROM UNNEST([3, 1, 7, 2]) AS n) AS m
 expected:
+  route: semantic_executor
   rows:
     - {m: "7"}

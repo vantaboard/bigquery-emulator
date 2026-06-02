@@ -43,6 +43,7 @@ query: |
     FROM ds_functions_mod.nums
    ORDER BY x, y
 expected:
+  route: duckdb_udf
   rows:
     - {x: "-7", y: "3",  r: "-1"}   # sign-of-dividend edge case
     - {x: "0",  y: "5",  r: "0"}    # canonical zero remainder

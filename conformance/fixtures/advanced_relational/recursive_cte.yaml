@@ -57,6 +57,7 @@ query: |
   )
   SELECT employee, depth FROM descents ORDER BY depth, employee
 expected:
+  route: duckdb_rewrite
   rows:
     - {employee: "alice", depth: "0"}
     - {employee: "bob", depth: "1"}

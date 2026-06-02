@@ -200,6 +200,44 @@ func TestRouteDiffEmptyExpectationSkips(t *testing.T) {
 	}
 }
 
+// TestRouteDiffRelaxedSkipsEmptyActual covers the
+// document-the-intent pattern used by error-path fixtures: the
+// engine returns before `EmitTrailers` fires, so the runner sees
+// an empty `emulatorRoute`; we still want the fixture YAML to
+// record the planning-time route for the matrix walker. Relaxed
+// mode treats an empty actual as a skip so the YAML can be
+// honest about intent without failing the runner.
+func TestRouteDiffRelaxedSkipsEmptyActual(t *testing.T) {
+	strict := false
+	exp := Expectation{
+		Route:       RouteUnsupported,
+		RouteStrict: &strict,
+	}
+	if got := routeDiff(exp, ""); got != "" {
+		t.Fatalf("routeDiff=%q, want empty (relaxed mode + empty actual = skip)", got)
+	}
+}
+
+// TestRouteDiffRelaxedRouteOnlyPassesOnMatch covers the
+// document-the-intent pattern's positive branch: if the engine
+// DOES emit a route trailer in some future hardening pass, the
+// fixture writer pinning `route: unsupported` would expect that
+// route. Make sure relaxed mode treats `Route` as a one-element
+// allowlist (i.e. `route_allowlist` is the union with `Route`).
+func TestRouteDiffRelaxedRouteOnlyPassesOnMatch(t *testing.T) {
+	strict := false
+	exp := Expectation{
+		Route:       RouteUnsupported,
+		RouteStrict: &strict,
+	}
+	if got := routeDiff(exp, RouteUnsupported); got != "" {
+		t.Fatalf("routeDiff=%q, want empty (relaxed + matching actual)", got)
+	}
+	if got := routeDiff(exp, RouteDuckDBNative); got == "" {
+		t.Fatal("want mismatch diagnostic when relaxed actual differs from documented route")
+	}
+}
+
 // TestRouteDiffStrictMissingActual catches the case where the
 // engine returned an empty `emulatorRoute` despite a strict
 // fixture: this happens when the gateway hits the non-loopback

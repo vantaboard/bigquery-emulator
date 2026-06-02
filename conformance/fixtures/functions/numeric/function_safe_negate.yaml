@@ -19,5 +19,6 @@ query: |
          SAFE_NEGATE(-9223372036854775808) AS overflow,
          SAFE_NEGATE(CAST(NULL AS INT64)) AS null_in
 expected:
+  route: semantic_executor
   rows:
     - {finite: "-1", overflow: null, null_in: null}

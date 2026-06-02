@@ -20,5 +20,7 @@ project_id: proj-fastpath-regression-integer-overflow
 query: |
   SELECT 9223372036854775807 + 1 AS overflow
 expected:
+  route: semantic_executor
+  route_strict: false
   error:
     message_contains: "out of range"

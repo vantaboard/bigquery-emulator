@@ -13,5 +13,6 @@ description: |
 project_id: proj-select-literal
 query: SELECT 1 AS n
 expected:
+  route: semantic_executor
   rows:
     - {n: "1"}

@@ -11,5 +11,6 @@ description: |
 project_id: proj-scalar-safe-add
 query: SELECT SAFE_ADD(9223372036854775807, 1) AS sum
 expected:
+  route: semantic_executor
   rows:
     - {sum: null}

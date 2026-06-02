@@ -22,5 +22,6 @@ query: |
     SELECT n FROM UNNEST([3, 1, 7, 2]) AS n ORDER BY n
   ) AS sorted
 expected:
+  route: semantic_executor
   rows:
     - {sorted: ["1", "2", "3", "7"]}

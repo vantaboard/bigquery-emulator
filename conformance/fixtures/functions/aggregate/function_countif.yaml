@@ -40,5 +40,6 @@ query: |
          COUNT(*)      AS total_rows
     FROM ds_functions_countif.flags
 expected:
+  route: duckdb_native
   rows:
     - {true_count: "2", total_rows: "4"}

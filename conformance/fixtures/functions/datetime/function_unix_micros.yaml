@@ -32,6 +32,7 @@ query: |
     FROM ds_functions_unix_micros.ts
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", us: "1704067200000000"}
     - {id: "2", us: "1704067200123456"}

@@ -37,6 +37,7 @@ query: |
     FROM ds_functions_if.flags
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", label: "then"}
     - {id: "2", label: "else"}

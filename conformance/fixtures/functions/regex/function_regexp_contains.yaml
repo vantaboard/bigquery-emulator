@@ -46,6 +46,7 @@ query: |
     FROM ds_functions_regexp_contains.strings
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", starts_with_a: "true",  contains_abc_cs: "true",  contains_abc_ci: "true"}
     - {id: "2", starts_with_a: "false", contains_abc_cs: "false", contains_abc_ci: "true"}

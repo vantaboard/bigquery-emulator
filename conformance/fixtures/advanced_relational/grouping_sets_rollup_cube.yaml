@@ -54,6 +54,7 @@ query: |
    GROUP BY ROLLUP(region, kind)
    ORDER BY g_region, g_kind, region NULLS LAST, kind NULLS LAST
 expected:
+  route: duckdb_rewrite
   rows:
     - {region: "eu", kind: "retail",    total: "40",  g_region: "0", g_kind: "0"}
     - {region: "us", kind: "retail",    total: "30",  g_region: "0", g_kind: "0"}

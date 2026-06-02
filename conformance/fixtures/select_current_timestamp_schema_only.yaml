@@ -12,6 +12,7 @@ description: |
 project_id: proj-select-current-ts
 query: SELECT CURRENT_TIMESTAMP() AS ts
 expected:
+  route: semantic_executor
   match: schema_only
   schema:
     - {name: ts, type: TIMESTAMP}

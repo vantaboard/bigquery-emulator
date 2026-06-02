@@ -20,5 +20,6 @@ query: |
          SAFE_DIVIDE(1.0, 0.0) AS by_zero,
          SAFE_DIVIDE(CAST(NULL AS FLOAT64), 2.0) AS null_left
 expected:
+  route: semantic_executor
   rows:
     - {finite: "2.5", by_zero: null, null_left: null}

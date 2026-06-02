@@ -29,5 +29,6 @@ query: |
          BIT_COUNT(-1) AS neg_one,
          BIT_COUNT(-9223372036854775808) AS int64_min
 expected:
+  route: semantic_executor
   rows:
     - {zero: "0", seven: "3", neg_one: "64", int64_min: "1"}

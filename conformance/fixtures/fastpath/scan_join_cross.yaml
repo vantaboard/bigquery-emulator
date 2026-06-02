@@ -45,6 +45,7 @@ query: |
    CROSS JOIN ds_fastpath_join_cross.shapes AS s
    ORDER BY color, shape
 expected:
+  route: duckdb_native
   rows:
     - {color: "blue",  shape: "circle"}
     - {color: "blue",  shape: "square"}

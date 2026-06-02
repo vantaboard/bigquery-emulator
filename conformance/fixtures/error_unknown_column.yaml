@@ -19,6 +19,8 @@ setup:
         - {name: name, type: STRING, mode: NULLABLE}
 query: SELECT bad_column FROM ds_error_unknown_column.people
 expected:
+  route: duckdb_native
+  route_strict: false
   error:
     code: 400
     message_contains: "bad_column"

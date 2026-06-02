@@ -36,6 +36,7 @@ query: |
     FROM ds_fastpath_order_by_directions.scored
    ORDER BY score DESC NULLS LAST, id ASC
 expected:
+  route: duckdb_native
   rows:
     - {id: "3", score: "80"}
     - {id: "5", score: "65"}

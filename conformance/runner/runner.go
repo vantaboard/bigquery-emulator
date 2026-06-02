@@ -358,19 +358,32 @@ func runRowPath(fx *Fixture, opts Options, result Result, status int, body []byt
 // `expected.route_allowlist` (relaxed mode). Returns an empty
 // string on match. The diagnostic always names both the actual and
 // expected route so a fixture writer who triggered the assertion
-// can see the drift without re-running the engine. When the
-// fixture leaves `route` empty AND opts into relaxed mode with an
-// empty allowlist, the comparison is skipped entirely (the runner
-// exempt-list for shapes that don't go through the coordinator's
-// classifier; today: nothing under `conformance/fixtures/`, but
-// the escape hatch is documented for the deferred Storage Read /
-// Write fixture families).
+// can see the drift without re-running the engine.
+//
+// Three comparison modes, all driven off the same Expectation:
+//
+//  1. No assertion: `route` AND `route_allowlist` both empty. Used
+//     by fixtures that pre-date plan 16 and by the deferred Storage
+//     Read / Write fixture families that don't go through the
+//     coordinator's classifier. Always passes.
+//
+//  2. Strict: `route_strict=true` (the default) with `route` set.
+//     Actual MUST equal `route` exactly. An empty actual is a
+//     hard fail because the runner always talks to a loopback
+//     emulator (the loopback middleware always populates the
+//     field on success-path responses).
+//
+//  3. Relaxed: `route_strict=false`. Actual MUST be in
+//     (`route` ∪ `route_allowlist`). An empty actual is treated as
+//     a skip rather than a fail so error-path fixtures (whose
+//     trailer is not emitted because the engine returns before
+//     `EmitTrailers` fires) can still pin `route: unsupported`
+//     for matrix documentation without breaking the runner.
 func routeDiff(expected Expectation, actual string) string {
-	strict := expected.RouteStrictDefault()
 	if expected.Route == "" && len(expected.RouteAllowlist) == 0 {
-		// No route assertion was declared at all.
 		return ""
 	}
+	strict := expected.RouteStrictDefault()
 	if strict {
 		if expected.Route == "" {
 			return ""
@@ -384,6 +397,14 @@ func routeDiff(expected Expectation, actual string) string {
 				"route_strict: false with a route_allowlist if the "+
 				"fixture is genuinely flexible between routes)",
 			expected.Route, actual)
+	}
+	// Relaxed mode. Empty actual on relaxed mode is "the trailer
+	// did not fire" (typically an error-path fixture) and is
+	// treated as a skip; pinning `route: unsupported` on those is
+	// documentation for the matrix walker, not a hard runner
+	// assertion.
+	if actual == "" {
+		return ""
 	}
 	if slices.Contains(expected.RouteAllowlist, actual) {
 		return ""

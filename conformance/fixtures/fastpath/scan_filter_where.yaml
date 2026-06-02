@@ -39,6 +39,7 @@ query: |
    WHERE kind = 'retail' AND total >= 10
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", kind: "retail", total: "10"}
     - {id: "3", kind: "retail", total: "75"}

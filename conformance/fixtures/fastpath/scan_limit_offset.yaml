@@ -36,6 +36,7 @@ query: |
    ORDER BY id
    LIMIT 2 OFFSET 1
 expected:
+  route: duckdb_native
   rows:
     - {id: "2", label: "bravo"}
     - {id: "3", label: "charlie"}

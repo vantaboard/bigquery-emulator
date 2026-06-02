@@ -23,6 +23,7 @@ query: |
    WHERE n IN (SELECT k FROM UNNEST([2, 4]) AS k)
    ORDER BY n
 expected:
+  route: duckdb_native
   rows:
     - {n: "2"}
     - {n: "4"}

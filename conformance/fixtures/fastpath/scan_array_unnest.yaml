@@ -19,6 +19,7 @@ query: |
     FROM UNNEST(['ada', 'linus', 'grace']) AS n
    ORDER BY n
 expected:
+  route: duckdb_native
   rows:
     - {n: "ada"}
     - {n: "grace"}

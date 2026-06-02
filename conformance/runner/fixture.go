@@ -196,9 +196,13 @@ type Expectation struct {
 	// deliberately flexible between, say, `duckdb_native` and
 	// `duckdb_rewrite` because the transpiler's choice is an
 	// implementation detail (not a fixture-meaningful behavior).
-	// Empty + `RouteStrict=false` means "skip the route assertion
-	// entirely" -- the escape hatch for RPC families with no
-	// classifier output.
+	//
+	// Empty + `RouteStrict=false` AND a non-empty `Route` is the
+	// "document-the-intent" pattern used by error-path fixtures:
+	// the engine returns before `EmitTrailers` fires so an actual
+	// route never reaches the runner, but the fixture writer can
+	// still pin `route: unsupported` for the matrix walker. The
+	// runner treats actual=="" as a skip in relaxed mode.
 	//
 	// When `RouteStrict=true` (the default) the runner ignores
 	// `RouteAllowlist` and asserts the route equals `Route`

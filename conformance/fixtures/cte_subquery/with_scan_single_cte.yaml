@@ -33,6 +33,7 @@ query: |
   )
   SELECT id, name FROM p ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "ada"}
     - {id: "2", name: "linus"}

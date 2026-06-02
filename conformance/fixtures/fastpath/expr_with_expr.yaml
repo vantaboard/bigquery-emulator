@@ -16,5 +16,6 @@ query: |
   SELECT WITH(half AS 21, name AS 'ada') half * 2 AS doubled,
          WITH(half AS 21, name AS 'ada') name     AS who
 expected:
+  route: semantic_executor
   rows:
     - {doubled: "42", who: "ada"}

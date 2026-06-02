@@ -28,5 +28,6 @@ setup:
 query: |
   SELECT COUNT(*) AS c FROM ds_aggregate_count.people
 expected:
+  route: duckdb_native
   rows:
     - {c: "3"}

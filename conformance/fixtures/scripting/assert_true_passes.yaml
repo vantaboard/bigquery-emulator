@@ -21,5 +21,6 @@ setup:
   - sql: "ASSERT 1 = 1"
 query: SELECT 1 AS x
 expected:
+  route: semantic_executor
   rows:
     - {x: 1}

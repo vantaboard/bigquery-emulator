@@ -22,5 +22,6 @@ query: |
       SELECT STRUCT(1 AS id, 'ada' AS name) AS s
     )
 expected:
+  route: duckdb_rewrite
   rows:
     - {id: "1", name: "ada"}

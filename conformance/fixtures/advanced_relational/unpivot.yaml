@@ -42,6 +42,7 @@ query: |
   UNPIVOT(value FOR quarter IN (q1, q2))
    ORDER BY region, quarter
 expected:
+  route: duckdb_rewrite
   rows:
     - {region: "eu", value: "30", quarter: "q1"}
     - {region: "eu", value: "40", quarter: "q2"}

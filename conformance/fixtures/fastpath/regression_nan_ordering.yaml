@@ -39,6 +39,7 @@ query: |
     FROM ds_fastpath_regression_nan_ordering.floats
    ORDER BY v ASC, id ASC
 expected:
+  route: duckdb_native
   rows:
     - {id: "3", is_nan: "false", is_inf: "true"}
     - {id: "1", is_nan: "false", is_inf: "false"}

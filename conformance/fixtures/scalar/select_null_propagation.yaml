@@ -11,5 +11,6 @@ description: |
 project_id: proj-scalar-null-propagation
 query: SELECT CAST(NULL AS INT64) + 1 AS n
 expected:
+  route: semantic_executor
   rows:
     - {n: null}

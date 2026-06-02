@@ -36,6 +36,7 @@ query: |
   HAVING COUNT(*) >= 2
    ORDER BY kind
 expected:
+  route: duckdb_native
   rows:
     - {kind: "click", c: "2"}
     - {kind: "login", c: "3"}

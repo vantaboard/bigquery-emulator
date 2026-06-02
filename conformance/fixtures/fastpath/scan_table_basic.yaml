@@ -36,6 +36,7 @@ query: |
     FROM ds_fastpath_table_basic.people
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "ada",   age: "36"}
     - {id: "2", name: "linus", age: "56"}

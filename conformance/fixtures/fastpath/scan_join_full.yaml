@@ -48,6 +48,7 @@ query: |
       ON u.id = e.user_id
    ORDER BY user_id, event_id
 expected:
+  route: duckdb_native
   match: unordered
   rows:
     - {user_id: "1", event_id: "10", name: "ada", kind: "login"}

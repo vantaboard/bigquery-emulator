@@ -15,5 +15,6 @@ query: |
     JSON '{"user": {"name": "ada"}}'.user.name AS user_name,
     JSON '{"items": ["a", "b"]}'.items         AS items
 expected:
+  route: semantic_executor
   rows:
     - {user_name: "\"ada\"", items: "[\"a\",\"b\"]"}

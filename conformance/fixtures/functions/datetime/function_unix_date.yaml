@@ -43,6 +43,7 @@ query: |
     FROM ds_functions_unix_date.dates
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", days: "0"}        # epoch -> day 0
     - {id: "2", days: "-1"}       # pre-epoch -> negative

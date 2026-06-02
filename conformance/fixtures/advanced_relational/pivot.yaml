@@ -46,6 +46,7 @@ query: |
   PIVOT(SUM(amount) FOR kind IN ('retail' AS retail, 'wholesale' AS wholesale))
    ORDER BY region
 expected:
+  route: duckdb_rewrite
   rows:
     - {region: "eu", retail: "40",  wholesale: "50"}
     - {region: "us", retail: "30",  wholesale: "30"}

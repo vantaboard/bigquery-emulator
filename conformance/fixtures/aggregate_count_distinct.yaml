@@ -31,5 +31,6 @@ query: |
   SELECT COUNT(DISTINCT kind) AS distinct_kinds
     FROM ds_count_distinct.events
 expected:
+  route: duckdb_native
   rows:
     - {distinct_kinds: "3"}

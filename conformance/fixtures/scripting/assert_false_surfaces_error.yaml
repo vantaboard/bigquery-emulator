@@ -18,6 +18,8 @@ description: |
 project_id: proj-scripting-assert-false
 query: "ASSERT FALSE AS 'must hold'"
 expected:
+  route: semantic_executor
+  route_strict: false
   error:
     code: 400
     message_contains: "Assertion failed"

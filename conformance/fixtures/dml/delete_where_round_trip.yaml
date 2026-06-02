@@ -35,6 +35,7 @@ setup:
 query: |
   SELECT id, name FROM ds_dml_delete_where.people ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "ada"}
     - {id: "3", name: "grace"}

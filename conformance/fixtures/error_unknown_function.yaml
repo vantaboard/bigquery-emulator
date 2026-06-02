@@ -10,6 +10,8 @@ description: |
 project_id: proj-error-unknown-function
 query: SELECT NOT_A_FUNCTION(1)
 expected:
+  route: unsupported
+  route_strict: false
   error:
     code: 400
     message_contains: "NOT_A_FUNCTION"

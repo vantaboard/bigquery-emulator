@@ -11,6 +11,8 @@ description: |
 project_id: proj-scalar-divzero
 query: SELECT 1.0 / 0 AS n
 expected:
+  route: semantic_executor
+  route_strict: false
   error:
     code: 400
     message_contains: "division by zero"

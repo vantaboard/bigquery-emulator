@@ -12,5 +12,6 @@ description: |
 project_id: proj-scalar-select-arith
 query: SELECT 1 + 2 AS n
 expected:
+  route: semantic_executor
   rows:
     - {n: "3"}

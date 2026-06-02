@@ -13,6 +13,8 @@ description: |
 project_id: proj-error-invalid-sql
 query: SELECT * FRO bad
 expected:
+  route: unsupported
+  route_strict: false
   error:
     code: 400
     message_contains: "Syntax error"

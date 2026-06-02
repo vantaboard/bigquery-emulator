@@ -15,5 +15,6 @@ project_id: proj-specialized-keys-keyset-length
 query: |
   SELECT KEYS.KEYSET_LENGTH(KEYS.NEW_KEYSET('AEAD_AES_GCM_256')) AS n
 expected:
+  route: local_stub
   rows:
     - {n: 1}

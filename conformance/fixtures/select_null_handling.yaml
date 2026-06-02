@@ -37,6 +37,7 @@ query: |
     FROM ds_select_null.people
    ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", is_null: "false", display_name: "ada"}
     - {id: "2", is_null: "true",  display_name: "unknown"}

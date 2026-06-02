@@ -34,6 +34,7 @@ query: |
     FROM ds_functions_unix_millis.ts
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", ms: "1704067200000"}
     - {id: "2", ms: "1704067200500"}

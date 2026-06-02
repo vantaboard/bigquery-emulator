@@ -24,6 +24,8 @@ description: |
 project_id: proj-specialized-unsupported-session-user
 query: SELECT SESSION_USER() AS u
 expected:
+  route: unsupported
+  route_strict: false
   error:
     code: 501
     message_contains: "session_user"

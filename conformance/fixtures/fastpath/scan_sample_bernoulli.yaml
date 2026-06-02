@@ -36,6 +36,7 @@ query: |
   SELECT id, kind
     FROM ds_fastpath_sample_bernoulli.items TABLESAMPLE BERNOULLI(50 PERCENT)
 expected:
+  route: duckdb_native
   match: schema_only
   schema:
     - {name: id, type: INT64}

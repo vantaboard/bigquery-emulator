@@ -23,5 +23,6 @@ query: |
     b AS (SELECT 20 AS y)
   SELECT a.x, b.y FROM a, b
 expected:
+  route: duckdb_native
   rows:
     - {x: "10", y: "20"}

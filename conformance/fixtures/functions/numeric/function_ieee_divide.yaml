@@ -25,5 +25,6 @@ query: |
          IEEE_DIVIDE(-1.0, 0.0) AS neg_inf,
          IEEE_DIVIDE(0.0, 0.0) AS nan
 expected:
+  route: semantic_executor
   rows:
     - {finite: "2.5", pos_inf: "+Inf", neg_inf: "-Inf", nan: "NaN"}

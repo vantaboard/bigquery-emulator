@@ -30,4 +30,5 @@ setup:
   - sql: CREATE TABLE ds_ddl_create.people (id INT64, name STRING)
 query: SELECT id, name FROM ds_ddl_create.people
 expected:
+  route: duckdb_native
   rows: []

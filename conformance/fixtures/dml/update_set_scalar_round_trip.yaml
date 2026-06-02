@@ -45,6 +45,7 @@ setup:
 query: |
   SELECT id, name FROM ds_dml_update_scalar.people ORDER BY id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "augusta"}
     - {id: "2", name: "linus"}

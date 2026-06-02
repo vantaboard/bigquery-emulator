@@ -29,6 +29,7 @@ query: |
     FROM UNNEST(['ada', 'linus', 'grace']) AS n WITH OFFSET AS idx
    ORDER BY idx
 expected:
+  route: semantic_executor
   rows:
     - {n: "ada", idx: "0"}
     - {n: "linus", idx: "1"}

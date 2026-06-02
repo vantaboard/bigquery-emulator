@@ -39,6 +39,7 @@ query: |
     FROM ds_functions_div.nums
    ORDER BY x, y
 expected:
+  route: duckdb_udf
   rows:
     - {x: "-5", y: "-2", q: "2"}    # both negative -> positive
     - {x: "-5", y: "2",  q: "-2"}   # truncation edge case

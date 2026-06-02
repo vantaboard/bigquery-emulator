@@ -16,5 +16,6 @@ query: |
               WHEN 1 = 1 THEN 'b'
               ELSE 'c' END AS label
 expected:
+  route: semantic_executor
   rows:
     - {label: "b"}

@@ -47,6 +47,7 @@ query: |
   )
    ORDER BY id, kind
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", kind: "alpha"}
     - {id: "2", kind: "bravo"}

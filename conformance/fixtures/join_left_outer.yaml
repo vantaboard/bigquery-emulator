@@ -47,6 +47,7 @@ query: |
       ON u.id = e.user_id
    ORDER BY u.id
 expected:
+  route: duckdb_native
   rows:
     - {id: "1", name: "ada",   kind: "login"}
     - {id: "2", name: "linus", kind: "click"}

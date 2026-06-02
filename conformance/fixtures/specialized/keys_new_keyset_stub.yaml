@@ -21,5 +21,6 @@ project_id: proj-specialized-keys-new-keyset
 query: |
   SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset
 expected:
+  route: local_stub
   rows:
     - {keyset: "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256"}

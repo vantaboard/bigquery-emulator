@@ -34,6 +34,7 @@ query: |
     FROM ds_functions_isnull.words
    ORDER BY id
 expected:
+  route: duckdb_udf
   rows:
     - {id: "1", is_null_flag: "false"}
     - {id: "2", is_null_flag: "false"}   # empty string -> FALSE
