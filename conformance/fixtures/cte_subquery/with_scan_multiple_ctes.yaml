@@ -1,0 +1,27 @@
+# with_scan_multiple_ctes: multi-binding WITH on the DuckDB fast
+#                          path.
+#
+# Pins that a WITH clause with two non-recursive bindings emits
+# both CTE headers in declaration order and that each ref scan
+# resolves to the right CTE name. Companion to
+# `with_scan_single_cte.yaml`; both fixtures pin the same emit
+# path with different shapes so a regression that mishandles
+# multi-CTE composition cannot silently squeak through.
+#
+# Route: `duckdb_native` via
+# `cte-subquery-routing.plan.md::EmitWithScan` /
+# `EmitWithRefScan`. Route-label assertion deferred to plan 16.
+name: with_scan_multiple_ctes
+description: |
+  Two non-recursive CTEs joined across a cross-product so both
+  refs are in scope at once. Verifies independent CTE bodies
+  preserve their per-column anchor renames across the join.
+project_id: proj-cte-subquery-with-scan-multi
+query: |
+  WITH
+    a AS (SELECT 10 AS x),
+    b AS (SELECT 20 AS y)
+  SELECT a.x, b.y FROM a, b
+expected:
+  rows:
+    - {x: "10", y: "20"}

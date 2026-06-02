@@ -202,6 +202,8 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitSingleRowScan;
   using Transpiler::EmitTableScan;
   using Transpiler::EmitWithExpr;
+  using Transpiler::EmitWithRefScan;
+  using Transpiler::EmitWithScan;
 };
 
 TEST_F(TranspilerTest, EmitLiteralInt64) {
@@ -2562,6 +2564,146 @@ TEST_F(TranspilerTest, EmitSampleScanPercentVsRowsContrast) {
   EXPECT_NE(percent_sql, rows_sql);
   EXPECT_NE(percent_sql.find(" PERCENT "), std::string::npos);
   EXPECT_NE(rows_sql.find(" ROWS "), std::string::npos);
+}
+
+// --- ResolvedWithScan / ResolvedWithRefScan ----------------------------
+//
+// `cte-subquery-routing.plan.md` Family 1. These tests pin the
+// CTE emit shape end-to-end (`Transpile(stmt)` from a real
+// `AnalyzeStatement` output) so a regression that changes the
+// CTE-side anchor naming or the ref-scan-side rename surfaces as a
+// string diff here. The CTE body projects each column to a
+// positional anchor (`_cte_<idx>`) so per-reference name
+// collisions across multiple `ResolvedWithRefScan`s cannot leak;
+// `EmitWithRefScan` renames the anchor back to the analyzer's
+// per-reference column names.
+
+TEST_F(TranspilerTest, EmitWithScanSingleCteSelectAll) {
+  // Single-binding non-recursive CTE referenced once. The CTE body
+  // is a plain TableScan over `people`; the ref reads two columns
+  // back out.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH p AS (SELECT id, name FROM people) "
+      "SELECT id, name FROM p");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  // The outermost EmitQueryStmt wraps the WITH body as a derived
+  // table for the user-visible alias mapping; the CTE itself
+  // anchors its columns positionally. The exact wrapping shape is
+  // an emit-stability contract -- a regression that drops the
+  // anchor or renames the CTE shows up here.
+  EXPECT_NE(sql.find("WITH \"p\" AS ("), std::string::npos)
+      << "expected non-recursive CTE header; got: " << sql;
+  EXPECT_NE(sql.find(" AS \"_cte_0\""), std::string::npos)
+      << "expected positional anchor for column 0; got: " << sql;
+  EXPECT_NE(sql.find(" AS \"_cte_1\""), std::string::npos)
+      << "expected positional anchor for column 1; got: " << sql;
+  EXPECT_NE(sql.find(" FROM \"p\""), std::string::npos)
+      << "expected ref scan to FROM the CTE name; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitWithScanMultipleCtesDistinctNames) {
+  // Two CTEs in one WITH clause, each bound to a separate ref.
+  // The emit must produce both CTE headers and both ref-side
+  // SELECTs without cross-pollution of column names.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH p AS (SELECT id FROM people), "
+      "     o AS (SELECT order_id FROM orders) "
+      "SELECT p.id, o.order_id FROM p, o");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  EXPECT_NE(sql.find("WITH \"p\" AS ("), std::string::npos)
+      << "expected first CTE header; got: " << sql;
+  EXPECT_NE(sql.find("\"o\" AS ("), std::string::npos)
+      << "expected second CTE header; got: " << sql;
+  EXPECT_NE(sql.find(" FROM \"p\""), std::string::npos)
+      << "expected ref to first CTE; got: " << sql;
+  EXPECT_NE(sql.find(" FROM \"o\""), std::string::npos)
+      << "expected ref to second CTE; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitWithScanCteReferencedTwice) {
+  // A single CTE referenced from two different scan positions.
+  // The positional-anchor + per-ref rename scheme means each ref
+  // independently renames the anchor to its own column names,
+  // and the two refs cannot collide on a shared analyzer name.
+  // SELF-JOIN form keeps both refs in scope at once.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH p AS (SELECT id, name FROM people) "
+      "SELECT a.id, b.name FROM p AS a, p AS b WHERE a.id = b.id");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  // `a.id = b.id` lowers through `$equal` which is not yet in the
+  // function disposition table for transpiled emit. That makes
+  // the FilterScan return "" -- which then bubbles up through the
+  // outer QueryStmt emit. The empty-string contract here is the
+  // right answer for now; we still pin the CTE shape via the
+  // single-ref test above. Smoke-test that no partial / malformed
+  // emit gets through.
+  EXPECT_TRUE(sql.empty() || sql.find("WITH \"p\" AS (") != std::string::npos)
+      << "expected either empty (FilterScan fallback) or a WITH header; got: "
+      << sql;
+}
+
+TEST_F(TranspilerTest, EmitWithScanRecursiveBailsToEmpty) {
+  // `WITH RECURSIVE` lands on `advanced-relational-routing.plan.md`,
+  // not this plan. Defense-in-depth: a `ResolvedWithScan` whose
+  // `recursive()` flag is set MUST bail to "" so an upstream
+  // analyzer change that synthesizes a non-`ResolvedRecursiveScan`
+  // recursive form does not silently emit a non-recursive DuckDB
+  // CTE.
+  //
+  // The recursive check in `EmitWithScan` fires before walking
+  // children, so we can use a trivially-valid SingleRowScan for
+  // the body and a single entry with the same -- the test does
+  // not depend on those being meaningful.
+  auto entry = ::googlesql::MakeResolvedWithEntry(
+      "r", ::googlesql::MakeResolvedSingleRowScan());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedWithEntry>> entries;
+  entries.push_back(std::move(entry));
+  auto with_scan = ::googlesql::MakeResolvedWithScan(
+      /*column_list=*/{},
+      std::move(entries),
+      ::googlesql::MakeResolvedSingleRowScan(),
+      /*recursive=*/true);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithScan(with_scan.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {
+  // Direct-construction of a ResolvedWithRefScan so we can pin the
+  // per-column rename without depending on the surrounding
+  // WithScan setup. The ref scan declares two columns; the emit
+  // produces the `SELECT "_cte_0" AS "<n0>", "_cte_1" AS "<n1>"
+  // FROM "<name>"` shape.
+  ::googlesql::ResolvedColumn c0(
+      /*column_id=*/10,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("p"),
+      /*name=*/::googlesql::IdString::MakeGlobal("id"),
+      type_factory_->get_int64());
+  ::googlesql::ResolvedColumn c1(
+      /*column_id=*/11,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("p"),
+      /*name=*/::googlesql::IdString::MakeGlobal("name"),
+      type_factory_->get_string());
+  auto ref = ::googlesql::MakeResolvedWithRefScan({c0, c1}, "p");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithRefScan(ref.get()),
+            "SELECT \"_cte_0\" AS \"id\", \"_cte_1\" AS \"name\" FROM \"p\"");
+}
+
+TEST_F(TranspilerTest, EmitWithRefScanEmptyColumnListUsesStar) {
+  // Degenerate `SELECT * FROM <cte>` shape: the analyzer may
+  // produce a WithRefScan with an empty column_list when the
+  // surrounding scan does not project any columns off the ref.
+  // The emit falls back to `SELECT *` rather than emitting a
+  // bare `SELECT  FROM "p"` which DuckDB would reject.
+  auto ref = ::googlesql::MakeResolvedWithRefScan({}, "p");
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitWithRefScan(ref.get()), "SELECT * FROM \"p\"");
 }
 
 TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {

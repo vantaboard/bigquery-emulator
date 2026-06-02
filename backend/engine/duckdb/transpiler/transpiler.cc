@@ -201,6 +201,8 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
     case ::googlesql::RESOLVED_SET_OPERATION_SCAN:
     case ::googlesql::RESOLVED_SAMPLE_SCAN:
+    case ::googlesql::RESOLVED_WITH_SCAN:
+    case ::googlesql::RESOLVED_WITH_REF_SCAN:
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_PARAMETER:
@@ -211,6 +213,7 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
     case ::googlesql::RESOLVED_GET_JSON_FIELD:
     case ::googlesql::RESOLVED_WITH_EXPR:
+    case ::googlesql::RESOLVED_SUBQUERY_EXPR:
       return EmitExpr(node->GetAs<::googlesql::ResolvedExpr>());
     default:
       return "";
@@ -239,6 +242,8 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
       return EmitGetJsonField(expr->GetAs<::googlesql::ResolvedGetJsonField>());
     case ::googlesql::RESOLVED_WITH_EXPR:
       return EmitWithExpr(expr->GetAs<::googlesql::ResolvedWithExpr>());
+    case ::googlesql::RESOLVED_SUBQUERY_EXPR:
+      return EmitSubqueryExpr(expr->GetAs<::googlesql::ResolvedSubqueryExpr>());
     default:
       return "";
   }
@@ -275,6 +280,10 @@ std::string Transpiler::EmitScan(const ::googlesql::ResolvedScan* scan) {
           scan->GetAs<::googlesql::ResolvedSetOperationScan>());
     case ::googlesql::RESOLVED_SAMPLE_SCAN:
       return EmitSampleScan(scan->GetAs<::googlesql::ResolvedSampleScan>());
+    case ::googlesql::RESOLVED_WITH_SCAN:
+      return EmitWithScan(scan->GetAs<::googlesql::ResolvedWithScan>());
+    case ::googlesql::RESOLVED_WITH_REF_SCAN:
+      return EmitWithRefScan(scan->GetAs<::googlesql::ResolvedWithRefScan>());
     default:
       return "";
   }
@@ -1092,9 +1101,120 @@ std::string Transpiler::EmitSampleScan(
                       ")");
 }
 
+// Synthesize a stable positional column name for the i-th column
+// of a `ResolvedWithScan` CTE entry. The two-sided contract:
+//
+//   * `EmitWithScan` projects each CTE entry's inner SELECT to
+//     `<inner_name> AS "_cte_<idx>"`.
+//   * `EmitWithRefScan` reads those positional names back out and
+//     aliases each to its own `column_list(i).name()`.
+//
+// Going through a fixed positional alias decouples the analyzer's
+// per-CTE column-name choice (which may dedupe to e.g. `id#3`)
+// from the per-reference column names (which the analyzer assigns
+// fresh on each `ResolvedWithRefScan`). Both sides agree on the
+// `_cte_<idx>` names regardless of what the analyzer chose, so a
+// CTE referenced multiple times resolves cleanly without a
+// name-collision rewrite.
+//
+// The leading underscore + `cte_` prefix keeps the synthesized
+// name out of the BigQuery user-name namespace (BQ column names
+// cannot start with `_cte_`-style internal prefixes in user SQL,
+// and even if they did, the analyzer's name dedup would not pick
+// the same form).
+static std::string WithScanColumnAnchor(int idx) {
+  return absl::StrCat("_cte_", idx);
+}
+
+std::string Transpiler::EmitWithScan(
+    const ::googlesql::ResolvedWithScan* node) {
+  // BigQuery `WITH a AS (<sub_a>), b AS (<sub_b>) <query>` lowers to
+  // DuckDB `WITH "a" AS (<sub_a_sql>), "b" AS (<sub_b_sql>) <query_sql>`.
+  // Both engines share the standard non-recursive CTE form, so the
+  // emit is mostly bookkeeping: lower each `with_entry_list` entry's
+  // subquery and the body, splice them into the CTE syntax.
+  //
+  // Column-name remapping: the analyzer assigns fresh
+  // `ResolvedColumn` ids on each `ResolvedWithRefScan` whose
+  // `name()`s do NOT necessarily match the CTE entry's own
+  // `column_list()` names (the analyzer dedupes names across the
+  // tree). To keep the two sides aligned without a per-ref-scan
+  // name-collision rewrite, we project each CTE body to a stable
+  // positional anchor name (`_cte_<idx>`) and let
+  // `EmitWithRefScan` rename the anchor back to its own per-ref
+  // names. The anchor name lives in `WithScanColumnAnchor` so the
+  // two emit hooks share the convention.
+  //
+  // Recursive CTEs (`WITH RECURSIVE`) are owned by
+  // `advanced-relational-routing.plan.md`; the analyzer sets
+  // `recursive()` for them. The route classifier does not yet
+  // promote recursive shapes to a dedicated route, so defend
+  // against accidentally emitting a non-recursive CTE for them:
+  // bail to "" and the engine surfaces UNIMPLEMENTED.
+  if (node == nullptr || node->query() == nullptr) return "";
+  if (node->recursive()) return "";
+  if (node->with_entry_list_size() == 0) {
+    return EmitScan(node->query());
+  }
+  std::vector<std::string> ctes;
+  ctes.reserve(node->with_entry_list_size());
+  for (int i = 0; i < node->with_entry_list_size(); ++i) {
+    const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
+    if (entry == nullptr || entry->with_subquery() == nullptr) return "";
+    if (entry->with_query_name().empty()) return "";
+    std::string sub = EmitScan(entry->with_subquery());
+    if (sub.empty()) return "";
+    const ::googlesql::ResolvedScan* sub_scan = entry->with_subquery();
+    std::vector<std::string> cols;
+    cols.reserve(sub_scan->column_list_size());
+    for (int j = 0; j < sub_scan->column_list_size(); ++j) {
+      cols.push_back(absl::StrCat(QuoteIdent(sub_scan->column_list(j).name()),
+                                  " AS ",
+                                  QuoteIdent(WithScanColumnAnchor(j))));
+    }
+    std::string projected =
+        cols.empty()
+            ? absl::StrCat("SELECT * FROM (", sub, ")")
+            : absl::StrCat(
+                  "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
+    ctes.push_back(absl::StrCat(
+        QuoteIdent(entry->with_query_name()), " AS (", projected, ")"));
+  }
+  std::string body = EmitScan(node->query());
+  if (body.empty()) return "";
+  return absl::StrCat("WITH ", absl::StrJoin(ctes, ", "), " ", body);
+}
+
 std::string Transpiler::EmitWithRefScan(
-    const ::googlesql::ResolvedWithRefScan* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedWithRefScan* node) {
+  // A `ResolvedWithRefScan` references a CTE bound earlier in the
+  // surrounding `ResolvedWithScan`. The analyzer exposes the CTE
+  // name through `with_query_name()` and the per-reference column
+  // names through the ref scan's own `column_list()`. We rename
+  // the CTE-side positional anchors (`_cte_<idx>`, see
+  // `WithScanColumnAnchor`) back to the ref's per-column names so
+  // any wrapping `ResolvedProjectScan` / `ResolvedFilterScan` /
+  // ... resolves its `ResolvedColumnRef`s by the names the
+  // analyzer expects.
+  //
+  // The result is a self-contained SELECT, matching every other
+  // scan emit's compose-as-derived-table contract.
+  if (node == nullptr) return "";
+  if (node->with_query_name().empty()) return "";
+  if (node->column_list_size() == 0) {
+    return absl::StrCat("SELECT * FROM ", QuoteIdent(node->with_query_name()));
+  }
+  std::vector<std::string> cols;
+  cols.reserve(node->column_list_size());
+  for (int i = 0; i < node->column_list_size(); ++i) {
+    cols.push_back(absl::StrCat(QuoteIdent(WithScanColumnAnchor(i)),
+                                " AS ",
+                                QuoteIdent(node->column_list(i).name())));
+  }
+  return absl::StrCat("SELECT ",
+                      absl::StrJoin(cols, ", "),
+                      " FROM ",
+                      QuoteIdent(node->with_query_name()));
 }
 
 // Expressions ---------------------------------------------------------------

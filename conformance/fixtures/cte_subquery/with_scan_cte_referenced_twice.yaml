@@ -1,0 +1,28 @@
+# with_scan_cte_referenced_twice: CTE referenced from two ref scans
+#                                   on the DuckDB fast path.
+#
+# A SELF-JOIN over a single CTE puts two `ResolvedWithRefScan`s in
+# scope at once. Each ref renames the WithScan-side positional
+# anchors (`_cte_<idx>`) back to its own per-reference column
+# names, so the two refs cannot collide on shared analyzer names.
+# Pins that contract end-to-end.
+#
+# Route: `duckdb_native` via
+# `cte-subquery-routing.plan.md::EmitWithScan` /
+# `EmitWithRefScan`. Route-label assertion deferred to plan 16.
+name: with_scan_cte_referenced_twice
+description: |
+  Single CTE referenced from two ref scans via a self-join.
+  Verifies the per-ref positional-anchor rename keeps the two
+  refs' column namespaces independent.
+project_id: proj-cte-subquery-with-scan-self-join
+query: |
+  WITH p AS (
+    SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id
+  )
+  SELECT a.id AS x, b.id AS y
+    FROM p AS a, p AS b
+   WHERE a.id = 1 AND b.id = 3
+expected:
+  rows:
+    - {x: "1", y: "3"}

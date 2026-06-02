@@ -209,6 +209,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedAnalyticScan* node);
   virtual std::string EmitSampleScan(
       const ::googlesql::ResolvedSampleScan* node);
+  virtual std::string EmitWithScan(const ::googlesql::ResolvedWithScan* node);
   virtual std::string EmitWithRefScan(
       const ::googlesql::ResolvedWithRefScan* node);
 
