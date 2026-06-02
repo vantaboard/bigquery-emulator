@@ -168,6 +168,8 @@ cc_library(
         "//backend/engine/coordinator:executor",
         "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/dml:dml_executor",
+        "//backend/engine/semantic/script:assert_stmt",
+        "//backend/engine/semantic/script:script_driver",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/container:flat_hash_map",

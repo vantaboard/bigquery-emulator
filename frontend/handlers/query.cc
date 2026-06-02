@@ -250,6 +250,15 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     case ::googlesql::RESOLVED_REVOKE_STMT:
     case ::googlesql::RESOLVED_UNDROP_STMT:
       return StatementClass::kDdl;
+    // `procedural-scripting-executor.plan.md` Family 5: ASSERT is
+    // a no-row-stream statement that surfaces a structured
+    // `invalidQuery` envelope on failure (BigQuery's documented
+    // behavior) and produces no observable output on success. The
+    // gateway routes it through the same `ExecuteDdl` plumbing
+    // every other no-row-stream statement uses; the semantic
+    // executor owns the predicate evaluation.
+    case ::googlesql::RESOLVED_ASSERT_STMT:
+      return StatementClass::kDdl;
     default:
       return StatementClass::kOther;
   }

@@ -58,7 +58,7 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedExecuteImmediateStmt`                | `semantic_executor` | (planned) Scripting; `procedural-scripting-executor.plan.md`.                                            |
 | `ResolvedAnalyzeStmt`                         | `control_op`        | (planned) BigQuery `ANALYZE` is a metadata op; `control-op-executor.plan.md`.                       |
 | `ResolvedAuxLoadDataStmt`                     | `control_op`        | (planned) LOAD DATA routes through the storage layer; `control-op-executor.plan.md`.                                               |
-| `ResolvedAssertStmt`                          | `semantic_executor` | (planned) BigQuery `ASSERT` runtime semantics differ; `procedural-scripting-executor.plan.md`.                               |
+| `ResolvedAssertStmt`                          | `semantic_executor` | `ASSERT <expr> [AS '<msg>']` runs on `backend/engine/semantic/script/assert_stmt.cc`. Surfaces BigQuery's `invalidQuery` 400 with `Assertion failed: <msg>` when the predicate is FALSE / NULL; OK when TRUE. `procedural-scripting-executor.plan.md`. |
 | `ResolvedExportDataStmt`                      | `control_op`        | (planned) EXPORT routes through the gateway / storage layer; `control-op-executor.plan.md`.                                    |
 
 ## Relational scans

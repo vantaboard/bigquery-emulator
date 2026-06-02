@@ -67,7 +67,7 @@ ResolvedAssignmentStmt: semantic_executor plan=procedural-scripting-executor.pla
 ResolvedExecuteImmediateStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
 ResolvedAnalyzeStmt: control_op plan=control-op-executor.plan.md
 ResolvedAuxLoadDataStmt: control_op plan=control-op-executor.plan.md
-ResolvedAssertStmt: semantic_executor plan=procedural-scripting-executor.plan.md status=planned
+ResolvedAssertStmt: semantic_executor plan=procedural-scripting-executor.plan.md
 ResolvedExportDataStmt: control_op plan=control-op-executor.plan.md
 
 # --- Relational scans --------------------------------------------------

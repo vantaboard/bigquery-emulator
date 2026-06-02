@@ -18,6 +18,8 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/row_source.h"
+#include "backend/engine/semantic/script/assert_stmt.h"
+#include "backend/engine/semantic/script/script_driver.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -320,8 +322,18 @@ absl::Status SemanticExecutor::ExecuteDdl(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {
-  (void)request;
   (void)catalog;
+  // `procedural-scripting-executor.plan.md` Family 5: `ASSERT
+  // <expr> [AS '<msg>']` runs locally on the script-statement
+  // executor. The gateway routes it through `ExecuteDdl` because
+  // ASSERT is a no-row-stream statement; the semantic executor
+  // owns the predicate evaluation + the BigQuery-shaped
+  // `Assertion failed` envelope.
+  if (stmt.node_kind() == ::googlesql::RESOLVED_ASSERT_STMT) {
+    script::ScriptDriver driver;
+    return script::ExecuteAssert(
+        request, *stmt.GetAs<::googlesql::ResolvedAssertStmt>(), driver);
+  }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,
       absl::StrCat("semantic: ExecuteDdl is not a semantic-executor route; "

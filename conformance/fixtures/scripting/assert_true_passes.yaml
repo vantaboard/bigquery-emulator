@@ -1,0 +1,25 @@
+# assert_true_passes: ASSERT on a TRUE predicate is a successful no-op.
+#
+# `procedural-scripting-executor.plan.md` Family 5. The local
+# script-statement executor (`backend/engine/semantic/script/`)
+# evaluates `ASSERT <expr>` against the same expression evaluator
+# the semantic executor uses for `SELECT <expr>`, so SAFE-mode and
+# NULL propagation behave identically. A TRUE predicate (here:
+# `1 = 1`) succeeds without error; the gateway emits no rows
+# (ASSERT is a no-row-stream statement).
+#
+# We run the ASSERT in `setup:` so the fixture's `query:` /
+# `expected:` block can pin the post-assert behavior with a
+# normal SELECT (the runner requires either rows or error in
+# expected:).
+name: scripting_assert_true_passes
+description: |
+  ASSERT TRUE succeeds; the follow-up SELECT lands the literal 1
+  (which proves the ASSERT did not abort the session).
+project_id: proj-scripting-assert-true
+setup:
+  - sql: "ASSERT 1 = 1"
+query: SELECT 1 AS x
+expected:
+  rows:
+    - {x: 1}
