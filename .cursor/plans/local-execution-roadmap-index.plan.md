@@ -52,7 +52,7 @@ todos:
     status: completed
   - id: todo-1780309600017-subagent-17
     content: "migration-cleanup-docs.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
