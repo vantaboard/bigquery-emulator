@@ -5,10 +5,10 @@
 # `.cursor/plans/semantic-executor-core.plan.md`). The output row
 # is shaped identically to what the DuckDB fast path would have
 # produced for the same query, so the conformance differ does not
-# branch on route. Once
-# `.cursor/plans/route-label-conformance.plan.md` (plan 16) lands,
-# this fixture's expected envelope will gain a hard route-label
-# assertion pinning `semantic_executor`.
+# branch on route. Plan 16
+# (`.cursor/plans/conformance-routing-matrix.plan.md`) landed the
+# hard route-label assertion this fixture pins below
+# (`expected.route: semantic_executor`).
 name: scalar_select_one
 description: |
   Trivial constant SELECT with no FROM. Routes through the local
