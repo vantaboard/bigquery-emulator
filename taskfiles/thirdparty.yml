@@ -703,7 +703,20 @@ tasks:
         # Prefer the user's JAVA_HOME, fall back to mise (`mise install` activates
         # Temurin 17 from mise.toml when present). Match CI's setup-java@v4 by
         # requiring 17+.
-        _java_home_ok() { [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; }
+        # Also require `mvn` on PATH so the direct-invocation fast path isn't
+        # taken when only `java` is reachable. mise activates JAVA_HOME in the
+        # parent shell via direnv but the maven binary (under
+        # ~/.local/share/mise/installs/maven/<ver>/.../bin) is NOT on PATH in
+        # the Task subshell unless the user explicitly re-exports it. Without
+        # this guard the fast path runs `mvn` directly, hits ENOENT, and the
+        # whole java suite reports "mvn: executable file not found in $PATH"
+        # while a `mise x -- mvn -v` would work. The fallback below already
+        # handles this correctly via `mise x -- sh -ec ...`.
+        _java_home_ok() {
+          [ -n "${JAVA_HOME:-}" ] \
+            && [ -x "${JAVA_HOME}/bin/java" ] \
+            && command -v mvn >/dev/null 2>&1
+        }
         if ! _java_home_ok && ! command -v mise >/dev/null 2>&1; then
           echo "java-bigquery-tests: JAVA_HOME must point to a JDK 17+ (Temurin 17 to match CI)." >&2
           echo "  Fix: export JAVA_HOME, or install https://mise.jdx.dev and run: mise install" >&2
