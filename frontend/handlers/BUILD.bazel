@@ -37,6 +37,12 @@ cc_library(
         # `binaries/emulator_main/main.cc` threads in a
         # `LocalCoordinatorEngine`.
         "//backend/engine",
+        # The `RouteClassifier` + `Disposition` pair surfaces the
+        # canonical lowercase-snake route string the handler emits on
+        # every reply's trailing `emulator_route` message (see
+        # `.cursor/plans/conformance-routing-matrix.plan.md`).
+        "//backend/engine:disposition",
+        "//backend/engine/coordinator:route_classifier",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",

@@ -177,7 +177,7 @@ message DryRunResponse {
 }
 
 message QueryResultRow {
-  // The stream carries one of four message kinds:
+  // The stream carries one of five message kinds:
   //   * `schema` only — emitted as the first message of every
   //     `ExecuteQuery` reply for SELECT-shaped queries.
   //   * `cells` only — emitted once per result row.
@@ -197,10 +197,26 @@ message QueryResultRow {
   //     produce no recognizable BigQuery shape (today: nothing in
   //     the supported surface) leave the field empty so the gateway
   //     omits the envelope entirely.
+  //   * `emulator_route` only — emitted alongside `statement_type`
+  //     as the trailing pair of every successful reply. The value
+  //     is the canonical lowercase-snake spelling of the
+  //     `Disposition` the coordinator's `RouteClassifier` chose
+  //     (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
+  //     `semantic_executor`, `control_op`, `local_stub`,
+  //     `unsupported`; mirrors `backend/engine/disposition.cc`'s
+  //     `DispositionToString`). The gateway surfaces this on the
+  //     `Job.statistics.query.emulatorRoute` field only to
+  //     loopback callers (see
+  //     `gateway/middleware/emulator_route.go`) so it stays an
+  //     emulator-internal debug signal the conformance harness
+  //     reads back to assert per-query routing decisions, never a
+  //     stable wire field for BigQuery client libraries.
+  //     Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
   TableSchema schema = 1;
   repeated Cell cells = 2;
   DmlStats dml_stats = 3;
   string statement_type = 4;
+  string emulator_route = 5;
 }
 
 // DmlStats is the engine's report of how many rows a DML statement

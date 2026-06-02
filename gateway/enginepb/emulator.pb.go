@@ -1151,7 +1151,7 @@ func (x *DryRunResponse) GetEstimatedBytesProcessed() int64 {
 
 type QueryResultRow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The stream carries one of four message kinds:
+	// The stream carries one of five message kinds:
 	//   - `schema` only — emitted as the first message of every
 	//     `ExecuteQuery` reply for SELECT-shaped queries.
 	//   - `cells` only — emitted once per result row.
@@ -1171,10 +1171,26 @@ type QueryResultRow struct {
 	//     produce no recognizable BigQuery shape (today: nothing in
 	//     the supported surface) leave the field empty so the gateway
 	//     omits the envelope entirely.
+	//   - `emulator_route` only — emitted alongside `statement_type`
+	//     as the trailing pair of every successful reply. The value
+	//     is the canonical lowercase-snake spelling of the
+	//     `Disposition` the coordinator's `RouteClassifier` chose
+	//     (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
+	//     `semantic_executor`, `control_op`, `local_stub`,
+	//     `unsupported`; mirrors `backend/engine/disposition.cc`'s
+	//     `DispositionToString`). The gateway surfaces this on the
+	//     `Job.statistics.query.emulatorRoute` field only to
+	//     loopback callers (see
+	//     `gateway/middleware/emulator_route.go`) so it stays an
+	//     emulator-internal debug signal the conformance harness
+	//     reads back to assert per-query routing decisions, never a
+	//     stable wire field for BigQuery client libraries.
+	//     Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
 	Schema        *TableSchema `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	Cells         []*Cell      `protobuf:"bytes,2,rep,name=cells,proto3" json:"cells,omitempty"`
 	DmlStats      *DmlStats    `protobuf:"bytes,3,opt,name=dml_stats,json=dmlStats,proto3" json:"dml_stats,omitempty"`
 	StatementType string       `protobuf:"bytes,4,opt,name=statement_type,json=statementType,proto3" json:"statement_type,omitempty"`
+	EmulatorRoute string       `protobuf:"bytes,5,opt,name=emulator_route,json=emulatorRoute,proto3" json:"emulator_route,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1233,6 +1249,13 @@ func (x *QueryResultRow) GetDmlStats() *DmlStats {
 func (x *QueryResultRow) GetStatementType() string {
 	if x != nil {
 		return x.StatementType
+	}
+	return ""
+}
+
+func (x *QueryResultRow) GetEmulatorRoute() string {
+	if x != nil {
+		return x.EmulatorRoute
 	}
 	return ""
 }
@@ -1591,12 +1614,13 @@ const file_emulator_proto_rawDesc = "" +
 	"value_json\x18\x02 \x01(\tR\tvalueJson\"\x87\x01\n" +
 	"\x0eDryRunResponse\x129\n" +
 	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x12:\n" +
-	"\x19estimated_bytes_processed\x18\x02 \x01(\x03R\x17estimatedBytesProcessed\"\xe1\x01\n" +
+	"\x19estimated_bytes_processed\x18\x02 \x01(\x03R\x17estimatedBytesProcessed\"\x88\x02\n" +
 	"\x0eQueryResultRow\x129\n" +
 	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x120\n" +
 	"\x05cells\x18\x02 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\x12;\n" +
 	"\tdml_stats\x18\x03 \x01(\v2\x1e.bigquery_emulator.v1.DmlStatsR\bdmlStats\x12%\n" +
-	"\x0estatement_type\x18\x04 \x01(\tR\rstatementType\"\x90\x01\n" +
+	"\x0estatement_type\x18\x04 \x01(\tR\rstatementType\x12%\n" +
+	"\x0eemulator_route\x18\x05 \x01(\tR\remulatorRoute\"\x90\x01\n" +
 	"\bDmlStats\x12,\n" +
 	"\x12inserted_row_count\x18\x01 \x01(\x03R\x10insertedRowCount\x12*\n" +
 	"\x11updated_row_count\x18\x02 \x01(\x03R\x0fupdatedRowCount\x12*\n" +

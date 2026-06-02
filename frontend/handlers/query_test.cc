@@ -255,11 +255,12 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
-  // Three messages: schema, one row, then the trailing
-  // `statement_type` marker the gateway folds into
-  // `Job.statistics.query.statementType`. See
-  // `.cursor/plans/control-op-executor.plan.md` Item 5.
-  ASSERT_EQ(messages.size(), 3u);
+  // Four messages: schema, one row, then the trailing
+  // `statement_type` + `emulator_route` pair the gateway folds into
+  // `Job.statistics.query.{statementType,emulatorRoute}`. See
+  // `.cursor/plans/control-op-executor.plan.md` Item 5 and
+  // `.cursor/plans/conformance-routing-matrix.plan.md`.
+  ASSERT_EQ(messages.size(), 4u);
 
   EXPECT_TRUE(messages[0].has_schema());
   EXPECT_EQ(messages[0].cells_size(), 0);
@@ -274,6 +275,9 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   EXPECT_FALSE(messages[2].has_schema());
   EXPECT_EQ(messages[2].cells_size(), 0);
   EXPECT_EQ(messages[2].statement_type(), "SELECT");
+  // `SELECT 1` has no FROM clause -> semantic executor (see
+  // `.cursor/plans/semantic-executor-core.plan.md`).
+  EXPECT_EQ(messages[3].emulator_route(), "semantic_executor");
 }
 
 TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
@@ -302,9 +306,9 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
-  // Five messages: schema, three rows, plus the trailing
-  // `statement_type` marker.
-  ASSERT_EQ(messages.size(), 5u);
+  // Six messages: schema, three rows, plus the trailing
+  // `statement_type` + `emulator_route` pair.
+  ASSERT_EQ(messages.size(), 6u);
 
   ASSERT_TRUE(messages[0].has_schema());
   ASSERT_EQ(messages[0].schema().fields_size(), 2);
@@ -324,6 +328,7 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   EXPECT_EQ(messages[3].cells(1).string_value(), "grace");
 
   EXPECT_EQ(messages[4].statement_type(), "SELECT");
+  EXPECT_EQ(messages[5].emulator_route(), "duckdb_native");
 }
 
 TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaThenStatementType) {
@@ -333,11 +338,13 @@ TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaThenStatementType) {
   ::grpc::Status status = StreamQueryResults(
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
-  // Two messages: the schema (always emitted, even for zero-row
-  // results) and the trailing `statement_type` marker.
-  ASSERT_EQ(collector.messages().size(), 2u);
+  // Three messages: the schema (always emitted, even for zero-row
+  // results) and the trailing `statement_type` + `emulator_route`
+  // pair.
+  ASSERT_EQ(collector.messages().size(), 3u);
   EXPECT_TRUE(collector.messages()[0].has_schema());
   EXPECT_EQ(collector.messages()[1].statement_type(), "SELECT");
+  EXPECT_EQ(collector.messages()[2].emulator_route(), "duckdb_native");
 }
 
 TEST_F(QueryServiceTest, ExecuteQuerySyntaxErrorIsInvalidArgument) {
@@ -427,9 +434,9 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   // DML response shape: dml_stats followed by the trailing
-  // statement_type marker.
+  // statement_type + emulator_route pair.
   const auto& messages = collector.messages();
-  ASSERT_EQ(messages.size(), 2u);
+  ASSERT_EQ(messages.size(), 3u);
   EXPECT_FALSE(messages[0].has_schema());
   EXPECT_EQ(messages[0].cells_size(), 0);
   ASSERT_TRUE(messages[0].has_dml_stats());
@@ -437,6 +444,9 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   EXPECT_EQ(messages[0].dml_stats().updated_row_count(), 0);
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
   EXPECT_EQ(messages[1].statement_type(), "INSERT");
+  // INSERT against a user table routes through the semantic
+  // executor's DML path (plan 9 / `dml-local-executor.plan.md`).
+  EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
 
   // Storage round-trip: the rows actually landed.
   auto scan = storage_->ScanRows({"proj-test", "ds", "t"});
@@ -455,10 +465,13 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
 TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   // CREATE TABLE routes through the coordinator's `kControlOp`
   // route to `backend/engine/control/control_op_executor`. The
-  // reply stream carries exactly one message: the
+  // reply stream carries exactly two messages: the
   // `statement_type` trailer the gateway folds into
-  // `Job.statistics.query.statementType`. See
-  // `.cursor/plans/control-op-executor.plan.md` Item 5.
+  // `Job.statistics.query.statementType` and the `emulator_route`
+  // trailer the gateway folds into
+  // `Job.statistics.query.emulatorRoute` (loopback-only). See
+  // `.cursor/plans/control-op-executor.plan.md` Item 5 and
+  // `.cursor/plans/conformance-routing-matrix.plan.md`.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   v1::QueryRequest req =
       MakeRequest("CREATE TABLE ds.new_table (id INT64, name STRING)");
@@ -466,8 +479,9 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   ::grpc::Status status = StreamQueryResults(
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
-  ASSERT_EQ(collector.messages().size(), 1u);
+  ASSERT_EQ(collector.messages().size(), 2u);
   EXPECT_EQ(collector.messages()[0].statement_type(), "CREATE_TABLE");
+  EXPECT_EQ(collector.messages()[1].emulator_route(), "control_op");
 
   auto sch = storage_->GetSchema({"proj-test", "ds", "new_table"});
   ASSERT_TRUE(sch.ok()) << sch.status();
@@ -487,11 +501,13 @@ TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
   const auto& messages = collector.messages();
-  // dml_stats followed by the trailing statement_type marker.
-  ASSERT_EQ(messages.size(), 2u);
+  // dml_stats followed by the trailing statement_type +
+  // emulator_route pair.
+  ASSERT_EQ(messages.size(), 3u);
   ASSERT_TRUE(messages[0].has_dml_stats());
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
   EXPECT_EQ(messages[1].statement_type(), "DELETE");
+  EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
 }
 
 }  // namespace

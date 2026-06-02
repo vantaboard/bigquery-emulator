@@ -11,6 +11,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/coordinator/route_classifier.h"
+#include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -532,15 +534,59 @@ namespace {
   return ::grpc::Status::OK;
 }
 
+// Emit the trailing `emulator_route` message that pairs with the
+// `statement_type` trailer (per
+// `.cursor/plans/conformance-routing-matrix.plan.md`). The value is
+// the canonical lowercase-snake spelling of the `Disposition` the
+// coordinator's `RouteClassifier` chose (see
+// `backend/engine/disposition.cc::DispositionToString`). Empty
+// `emulator_route` strings are skipped just like `statement_type`
+// so unrecognized routes don't pollute the gateway's
+// `Job.statistics.query.emulatorRoute` envelope. The trailer is
+// emitted unconditionally for every successful reply (SELECT, DML,
+// DDL) so the conformance runner has a stable read-back surface
+// independent of whether the query produced rows.
+::grpc::Status EmitEmulatorRoute(
+    absl::string_view emulator_route,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+  if (emulator_route.empty()) return ::grpc::Status::OK;
+  v1::QueryResultRow trailer;
+  trailer.set_emulator_route(std::string(emulator_route));
+  if (!write(trailer)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::CANCELLED,
+        "QueryService::ExecuteQuery: client cancelled stream before "
+        "emulator_route trailer");
+  }
+  return ::grpc::Status::OK;
+}
+
+// Combined helper for the two end-of-stream trailers every
+// successful reply emits. Order matches the proto contract
+// documented on `QueryResultRow`: `statement_type` then
+// `emulator_route`. Either trailer may legitimately be empty (an
+// unrecognized statement kind or an unmapped disposition) and is
+// then skipped, leaving the gateway free to omit the corresponding
+// JSON envelope.
+::grpc::Status EmitTrailers(
+    absl::string_view statement_type,
+    absl::string_view emulator_route,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+  ::grpc::Status st = EmitStatementType(statement_type, write);
+  if (!st.ok()) return st;
+  return EmitEmulatorRoute(emulator_route, write);
+}
+
 // DML path: run `ExecuteDml`, then emit a single `dml_stats` message
-// describing the row counts, then a `statement_type` trailer. The
-// caller is responsible for selecting this path (i.e. having
-// determined `cls == kDml`).
+// describing the row counts, then the trailing `statement_type` +
+// `emulator_route` pair. The caller is responsible for selecting
+// this path (i.e. having determined `cls == kDml`).
 ::grpc::Status EmitDmlStats(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,
     ::googlesql::Catalog* catalog,
     absl::string_view statement_type,
+    absl::string_view emulator_route,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::StatusOr<backend::engine::DmlStats> stats =
       engine->ExecuteDml(request, catalog);
@@ -548,8 +594,8 @@ namespace {
   // DML reply: no schema and no row messages, just a single
   // `dml_stats` summary the gateway folds into BigQuery's
   // `dmlStats` / `numDmlAffectedRows` envelope, followed by the
-  // `statement_type` trailer the gateway folds into
-  // `statistics.query.statementType`.
+  // `statement_type` + `emulator_route` trailer pair the gateway
+  // folds into `statistics.query.{statementType,emulatorRoute}`.
   v1::QueryResultRow stats_message;
   auto* proto_stats = stats_message.mutable_dml_stats();
   proto_stats->set_inserted_row_count(stats->inserted_row_count);
@@ -561,32 +607,35 @@ namespace {
         "QueryService::ExecuteQuery: client cancelled stream before "
         "dml_stats");
   }
-  return EmitStatementType(statement_type, write);
+  return EmitTrailers(statement_type, emulator_route, write);
 }
 
 // DDL path: run `ExecuteDdl` and propagate any failure. Successful
-// DDL emits a single `statement_type` trailer (the gateway uses it
-// to populate `Job.statistics.query.statementType`); pre-plan-47 the
-// reply was empty.
+// DDL emits the trailing `statement_type` + `emulator_route` pair
+// (the gateway uses them to populate
+// `Job.statistics.query.{statementType,emulatorRoute}`); pre-plan-47
+// the reply was empty.
 ::grpc::Status EmitDdlResult(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,
     ::googlesql::Catalog* catalog,
     absl::string_view statement_type,
+    absl::string_view emulator_route,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::Status ddl_status = engine->ExecuteDdl(request, catalog);
   if (!ddl_status.ok()) return AnalyzeStatusToGrpc(ddl_status);
-  return EmitStatementType(statement_type, write);
+  return EmitTrailers(statement_type, emulator_route, write);
 }
 
 // SELECT path: emit the schema message, then one row message per
-// `RowSource::Next` until end-of-stream, then a `statement_type`
-// trailer.
+// `RowSource::Next` until end-of-stream, then the trailing
+// `statement_type` + `emulator_route` pair.
 ::grpc::Status StreamRows(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,
     ::googlesql::Catalog* catalog,
     absl::string_view statement_type,
+    absl::string_view emulator_route,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::StatusOr<std::unique_ptr<backend::engine::RowSource>> source_or =
       engine->ExecuteQuery(request, catalog);
@@ -631,7 +680,7 @@ namespace {
           "QueryService::ExecuteQuery: client cancelled stream mid-row");
     }
   }
-  return EmitStatementType(statement_type, write);
+  return EmitTrailers(statement_type, emulator_route, write);
 }
 
 }  // namespace
@@ -694,17 +743,34 @@ namespace {
   }
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
   const absl::string_view statement_type = StatementTypeFor(*stmt);
+  // Classify the route here, alongside the statement-type lookup, so
+  // every successful reply carries the canonical disposition string
+  // on the trailing `emulator_route` field. The classifier is
+  // stateless and re-walks the resolved AST; the cost is a single
+  // tree walk paid once per query (the engine internally re-walks
+  // when it dispatches, but that's the same redundant work
+  // `StatementTypeFor` accepted for the same conservative reason --
+  // keep the frontend's per-query bookkeeping independent of any
+  // future engine-side metadata channel).
+  const backend::engine::coordinator::RouteClassifier route_classifier;
+  const backend::engine::coordinator::RouteDecision decision =
+      route_classifier.Classify(*stmt);
+  const absl::string_view emulator_route =
+      backend::engine::DispositionToString(decision.disposition);
 
   switch (cls) {
     case StatementClass::kSelect:
       return StreamRows(
-          engine, engine_request, &catalog, statement_type, write);
+          engine, engine_request, &catalog, statement_type, emulator_route,
+          write);
     case StatementClass::kDml:
       return EmitDmlStats(
-          engine, engine_request, &catalog, statement_type, write);
+          engine, engine_request, &catalog, statement_type, emulator_route,
+          write);
     case StatementClass::kDdl:
       return EmitDdlResult(
-          engine, engine_request, &catalog, statement_type, write);
+          engine, engine_request, &catalog, statement_type, emulator_route,
+          write);
     case StatementClass::kOther:
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,
