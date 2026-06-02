@@ -211,6 +211,50 @@ substring against the BigQuery error envelope's `error.message` field
 (and, as a fallback, the first `error.errors[].message`). Either field
 may be omitted; the runner only asserts on what the fixture pins.
 
+### `expected.route` matching
+
+Plan 16 (`.cursor/plans/conformance-routing-matrix.plan.md`) wired
+the coordinator's `RouteClassifier` decision through to the REST
+response as the `emulatorRoute` debug field on
+`Job.statistics.query`. The field is loopback-only -- the
+`gateway/middleware/loopback.go` middleware drops it for non-loopback
+callers so the public REST shape stays byte-identical to BigQuery --
+and the conformance runner always sees it because it talks to a
+local emulator subprocess.
+
+`expected.route` pins the canonical lowercase-snake disposition
+the fixture's `query:` step MUST route through. One of:
+
+- `duckdb_native` -- lowers to DuckDB SQL whose semantics already
+  match BigQuery exactly.
+- `duckdb_rewrite` -- lowers to DuckDB SQL via a structural rewrite.
+- `duckdb_udf` -- lowers via a DuckDB UDF / macro polyfill.
+- `semantic_executor` -- runs on the local row/value semantic
+  executor.
+- `control_op` -- DDL / metadata / catalog op.
+- `local_stub` -- deterministic BigQuery-shaped stub.
+- `unsupported` -- deliberately out-of-scope locally.
+
+`expected.route_strict` (default `true`) toggles between
+exact-match and `expected.route_allowlist`-membership. Strict mode
+is the right default for every shape whose route is a
+fixture-meaningful behavior (which is almost everything).
+`route_strict: false` opts into the allowlist mode, where the
+runner accepts any route in `route_allowlist` (and treats an empty
+actual as a skip -- the documentation-only pattern used by
+error-path fixtures whose engine response never carries a trailer).
+
+Vocabulary spelling is validated at load time; an unknown
+`expected.route` value fails the load with a hint listing the
+canonical names.
+
+The `task conformance:routing-matrix` Task walks every fixture
+and emits a Markdown table of `Shape | Route | Strict` so a
+reviewer can spot when a fixture family's actual route drifts
+from its directory's aspirational label. The
+[`conformance.yml` CI workflow](../.github/workflows/conformance.yml)
+uploads the matrix as a non-blocking artifact.
+
 ### Worked example
 
 The fixture below seeds three rows via `tabledata.insertAll` and then

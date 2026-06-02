@@ -441,9 +441,19 @@ public-facing policy.
 - 🟡 Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`
 - 🟡 Per-shape dispositions recorded in the shape tracker
-- ⏳ Route labels surfaced on conformance fixture output so passing
-  rows can't hide accidental drift between strategies
-  (`conformance-routing-matrix.plan.md`)
+- 🟢 Route labels surfaced on conformance fixture output so
+  passing rows can't hide accidental drift between strategies.
+  Plan 16 (`conformance-routing-matrix.plan.md`) added the
+  `emulatorRoute` debug field on `Job.statistics.query`
+  (loopback-only, gated by `gateway/middleware/loopback.go`
+  so only local-loopback callers see it), extended the
+  conformance fixture schema with `expected.route` /
+  `route_strict` / `route_allowlist`, backfilled every
+  fixture under `conformance/fixtures/` (91/91), and added
+  `task conformance:routing-matrix` for a reviewable
+  Markdown snapshot of every shape's route. The
+  `conformance.yml` CI workflow uploads the matrix as a
+  non-blocking artifact.
 - 🟡 CTE / subquery routing. Non-recursive CTEs
   (`ResolvedWithScan` / `ResolvedWithRefScan`) lower to DuckDB
   `WITH "a" AS (...)` natively. Non-correlated scalar / IN /

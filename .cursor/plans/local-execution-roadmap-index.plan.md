@@ -49,10 +49,10 @@ todos:
     status: completed
   - id: todo-1780309600016-subagent-16
     content: "conformance-routing-matrix.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: in_progress
+    status: completed
   - id: todo-1780309600017-subagent-17
     content: "migration-cleanup-docs.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: pending
+    status: in_progress
 isProject: false
 ---
 
