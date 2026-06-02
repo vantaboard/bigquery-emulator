@@ -1,0 +1,42 @@
+# _route_drift_example/select_one_claims_duckdb_native:
+# safety-net fixture for the routing matrix.
+#
+# Plan 16 (`conformance-routing-matrix.plan.md`) commits this
+# fixture under the leading-`_` `_route_drift_example/` directory
+# so the normal `task conformance:run` walker SKIPS it (see
+# `conformance/runner/fixture.go::LoadDir`). The fixture exists
+# to prove the runner's `route mismatch` diagnostic actually
+# fires when an `expected.route` value disagrees with the
+# coordinator's actual decision.
+#
+# The query is `SELECT 1 AS n` -- a no-FROM scalar-only SELECT
+# the `RouteClassifier`'s scalar-only-SELECT promotion routes to
+# `semantic_executor` (see
+# `backend/engine/coordinator/route_classifier.cc::IsScalarOnlySelect`
+# and the `ScalarOnlySelectPromotesToSemanticExecutor` test).
+# The fixture pins the WRONG route on purpose
+# (`duckdb_native`); a runner pointed at this file MUST fail
+# with the `route mismatch` diagnostic that names both the
+# expected and actual route.
+#
+# Unit-tested by
+# `conformance/runner/route_drift_test.go::TestDriftFixtureFiresRouteMismatch`.
+# Do NOT "fix" the expected.route in this file -- the whole point
+# is that it is wrong. If the runner stops failing on this
+# fixture the safety net is broken; investigate the runner, not
+# this YAML.
+name: route_drift_select_one_claims_duckdb_native
+description: |
+  Quarantined safety-net fixture proving the runner's route
+  assertion fires on disagreement. Lives under
+  `_route_drift_example/` so the normal walker skips it; loaded
+  directly by `route_drift_test.go`.
+project_id: proj-route-drift-select-one
+query: SELECT 1 AS n
+expected:
+  # WRONG ON PURPOSE: scalar-only SELECT promotes to
+  # `semantic_executor`. Pinning `duckdb_native` here forces the
+  # runner's `routeDiff` to fire its mismatch diagnostic.
+  route: duckdb_native
+  rows:
+    - {n: "1"}

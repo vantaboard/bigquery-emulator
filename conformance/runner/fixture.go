@@ -327,7 +327,19 @@ func LoadDir(pathOrDir string) ([]*Fixture, error) {
 		if walkErr != nil {
 			return walkErr
 		}
+		// Skip directories whose basename starts with `_`. Used
+		// for `conformance/fixtures/_route_drift_example/` and
+		// future quarantine families that should NOT run in
+		// `task conformance:run`. The leading-underscore
+		// convention mirrors Bazel's `_*_test.cc` quarantine
+		// pattern. Explicitly loading the fixture file with
+		// `Load(...)` still works (the runner / matrix walker
+		// can opt in by passing the file path directly).
 		if fi.IsDir() {
+			base := filepath.Base(p)
+			if base != filepath.Base(pathOrDir) && strings.HasPrefix(base, "_") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(p))
