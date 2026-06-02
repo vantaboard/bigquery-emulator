@@ -1,0 +1,62 @@
+# Local-stub families dispatched as statement-level (DDL) handlers.
+#
+# Companion package to `backend/engine/semantic/stubs/`. That
+# package owns the function-level local stubs (KEYS.*); this one
+# owns the statement-level local stubs (CREATE MODEL today).
+# Statement-level stubs are pre-dispatched from
+# `LocalCoordinatorEngine::ExecuteDdl` directly (the route
+# classifier still promotes the surrounding statement to
+# `kLocalStub`, but the coordinator picks off the
+# `ResolvedCreateModelStmt` shape before handing it to a generic
+# executor so the per-statement metadata-only contract has a
+# dedicated translation unit).
+#
+# A new statement-level stub family follows:
+#   1. Flip the matching `node_dispositions.yaml` row to `local_stub
+#      plan=specialized-feature-policy.plan.md`.
+#   2. Add `<family>.{h,cc}` + a unit test here.
+#   3. Extend the pre-dispatch in
+#      `local_coordinator_engine.cc::ExecuteDdl` to route the new
+#      `ResolvedXxxStmt` kind here.
+#   4. Confirm the statement kind is in the analyzer's
+#      `SetSupportsAllStatementKinds()` allowlist (the DDL path
+#      already enables it).
+#   5. Add a conformance fixture under
+#      `conformance/fixtures/specialized/`.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# CREATE MODEL metadata-only stub. Accepts the DDL, returns OK,
+# does NOT register a model entry in storage. A subsequent
+# `ML.PREDICT(...)` over the named model surfaces UNIMPLEMENTED
+# from the unsupported stub executor because `ml.*` rows stay
+# `unsupported` in `functions.yaml`. The combination preserves
+# both halves of the local-stub posture: client tools that issue
+# `CREATE MODEL` as a setup step succeed (BigQuery-shaped
+# placeholder), and downstream call sites that try to evaluate the
+# model fail loudly (no silent approximation).
+cc_library(
+    name = "create_model",
+    srcs = ["create_model.cc"],
+    hdrs = ["create_model.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "create_model_test",
+    srcs = ["create_model_test.cc"],
+    deps = [
+        ":create_model",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
