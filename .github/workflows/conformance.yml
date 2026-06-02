@@ -121,3 +121,49 @@ jobs:
       - name: Release Bazel daemon
         if: always()
         run: bazel shutdown || true
+
+  # Plan 16 routing-matrix artifact. Pure Go (reads YAML only;
+  # no engine binary, no Bazel) so we keep it as a tiny standalone
+  # job. `continue-on-error: true` because the matrix is a
+  # documentation artifact -- a runner regression here should not
+  # block the conformance gate above (which DOES enforce
+  # `expected.route` per-fixture).
+  routing-matrix:
+    name: routing-matrix
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Emit routing matrix
+        run: |
+          task conformance:routing-matrix \
+            OUTPUT_FILE=conformance-routing-matrix.md
+
+      - name: Verify matrix is reproducible
+        run: |
+          task conformance:routing-matrix \
+            OUTPUT_FILE=conformance-routing-matrix.repeat.md
+          diff -u conformance-routing-matrix.md \
+                  conformance-routing-matrix.repeat.md
+
+      - name: Upload routing matrix
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: conformance-routing-matrix
+          path: conformance-routing-matrix.md
+          if-no-files-found: warn

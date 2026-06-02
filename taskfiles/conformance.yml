@@ -160,6 +160,28 @@ tasks:
           $PROFILE_FLAGS \
           $OUTPUT_FILE_FLAG
 
+  routing-matrix:
+    desc: |
+      Walk every fixture under FIXTURES and emit a Markdown table
+      of shape x route. Reads YAML only (no live emulator). The
+      table is a deterministic function of the fixture YAMLs;
+      committed to CI as a non-blocking artifact per plan 16
+      (`.cursor/plans/conformance-routing-matrix.plan.md`). Honors
+      OUTPUT_FILE; defaults to stdout.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/routing-matrix \
+          --fixtures "{{.FIXTURES}}" \
+          $OUTPUT_FILE_FLAG
+
   update-baselines:
     desc: |
       Rewrite the expected: block of one or more fixtures with the engine's actual output. Pass FIXTURE=path or default to FIXTURES (the whole directory). Honors PROFILE. Read the diff before committing.
