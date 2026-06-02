@@ -16,7 +16,6 @@ package middleware
 
 import (
 	"compress/gzip"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -80,24 +79,11 @@ func (b *gzipRequestBody) Close() error {
 	return b.underlying.Close()
 }
 
-// writeGunzipError emits a BigQuery-shaped 400 envelope. Kept local to
-// the middleware package so we don't pull a circular import on
-// gateway/handlers (which itself imports middleware indirectly through
-// its own auth-context lookups).
+// writeGunzipError emits a BigQuery-shaped 400 envelope. Delegates to
+// the shared [writeJSONError] helper so the envelope shape stays in
+// sync with the method-override middleware's 400 path and so the
+// "invalid" / "message" string literals are referenced from exactly
+// one place (goconst-clean).
 func writeGunzipError(w http.ResponseWriter, msg string) {
-	body := map[string]any{
-		"error": map[string]any{
-			"code":    http.StatusBadRequest,
-			"message": msg,
-			"status":  "invalid",
-			"errors": []map[string]any{{
-				"reason":  "invalid",
-				"message": msg,
-				"domain":  "global",
-			}},
-		},
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(body)
+	writeJSONError(w, http.StatusBadRequest, errReasonInvalid, msg)
 }

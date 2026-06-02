@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: tp05
     content: "thirdparty-05-http-method-override-middleware.plan.md — honor X-HTTP-Method-Override so Java client PATCH/PUT/DELETE-via-POST flows land on the right handler (~1 d)."
-    status: pending
+    status: completed
   - id: tp06
     content: "thirdparty-06-tabledata-list-pagination.plan.md — finish TableDataList against DuckDBStorage::ScanRows with a pageToken paginator (~1 d)."
     status: pending

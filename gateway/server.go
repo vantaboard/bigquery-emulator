@@ -268,6 +268,19 @@ func wrapMiddleware(opts Options, mux http.Handler) http.Handler {
 	// canonical route disposition string) only to loopback callers
 	// per `.cursor/plans/conformance-routing-matrix.plan.md`.
 	handler = middleware.WithLoopbackTag(handler)
+	// X-HTTP-Method-Override translation runs OUTSIDE every other
+	// middleware that inspects `r.Method` (auth/loopback/gunzip all
+	// ignore the verb, the mux dispatches on it) but INSIDE the
+	// access-log layer below so the log line reflects the original
+	// `POST` the client put on the wire. The Java google-http-client
+	// `MethodOverride` interceptor that ships enabled in every Google
+	// Cloud Java SDK uses this header to tunnel PATCH/PUT/DELETE
+	// through POST (Java `URLConnection` historically rejected
+	// `setRequestMethod("PATCH")`), which is why the BigQuery Java
+	// sample `AuthorizeDatasetIT` was 405-ing on
+	// `POST /projects/{p}/datasets/{d}` until tp05. See
+	// `gateway/middleware/method_override.go` for the contract.
+	handler = middleware.WithMethodOverride(handler)
 	if opts.LogRequests {
 		logger := opts.Logger
 		if logger == nil {
@@ -288,10 +301,19 @@ func wrapMiddleware(opts Options, mux http.Handler) http.Handler {
 func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		// Snapshot the method as it arrived on the wire BEFORE any
+		// downstream middleware rewrites it. WithMethodOverride (see
+		// wrapMiddleware) replaces `r.Method` in place when a POST
+		// tunnels a PATCH/PUT/DELETE via X-HTTP-Method-Override, so
+		// reading `r.Method` after next.ServeHTTP would log the
+		// rewritten verb and lose the literal POST the operator
+		// actually needs to see in the access log when debugging a
+		// 405 / route-mismatch.
+		method := r.Method
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
 		logger.InfoContext(r.Context(), "request",
-			slog.String("method", r.Method),
+			slog.String("method", method),
 			slog.String("uri", r.URL.RequestURI()),
 			slog.Int("status", rw.status),
 			slog.Duration("dur", time.Since(start)),
