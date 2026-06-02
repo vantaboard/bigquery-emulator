@@ -443,6 +443,18 @@ public-facing policy.
 - ⏳ Route labels surfaced on conformance fixture output so passing
   rows can't hide accidental drift between strategies
   (`conformance-routing-matrix.plan.md`)
+- 🟡 CTE / subquery routing. Non-recursive CTEs
+  (`ResolvedWithScan` / `ResolvedWithRefScan`) lower to DuckDB
+  `WITH "a" AS (...)` natively. Non-correlated scalar / IN /
+  EXISTS / ARRAY `ResolvedSubqueryExpr` forms lower directly to
+  DuckDB. Correlated subqueries are promoted to the semantic
+  executor at planning time (via
+  `ResolvedSubqueryExpr::parameter_list()`) but the executor
+  itself stays a structured `kNotImplemented` until the
+  outer-row iteration primitive lands -- tracked under
+  `cte-subquery-routing.plan.md`. Recursive CTEs and the LIKE
+  ANY / ALL subquery family remain out of plan-10 scope and
+  surface UNIMPLEMENTED; see `advanced-relational-routing.plan.md`
 
 ## DML / DDL
 

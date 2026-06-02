@@ -93,3 +93,58 @@ Shapes this plan covers:
 - Conformance fixtures pin the expected route per shape so a future
   classifier change cannot silently demote a correlated subquery
   back to the fast path.
+
+## Status (post-subagent-10)
+
+Landed (subagent 10, commits `1e04a1c` / `9863802` / `e0b5de9`):
+
+- **Family 1 — `ResolvedWithScan` + `ResolvedWithRefScan`** on
+  `duckdb_native`. `EmitWithScan` emits the non-recursive CTE
+  shape, projecting each CTE entry's columns onto positional
+  anchor names (`_cte_<idx>`). `EmitWithRefScan` renames the
+  anchors back to the analyzer's per-reference column names so a
+  CTE referenced multiple times resolves cleanly. Recursive CTEs
+  (`recursive==true`) bail to "" -- owned by plan 11
+  (`advanced-relational-routing.plan.md`).
+- **Family 2 — non-correlated `ResolvedSubqueryExpr`** on
+  `duckdb_native`. `EmitSubqueryExpr` lowers SCALAR / IN / EXISTS
+  / ARRAY directly to DuckDB's native subquery surface
+  (`(<sub>)`, `(<lhs> IN (<sub>))`, `EXISTS (<sub>)`,
+  `ARRAY(<sub>)`). LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE
+  ALL stay on the empty-string fallback (out of plan-10 scope).
+- **Family 3 — classifier correlation detection.**
+  `ClassifierVisitor::VisitResolvedSubqueryExpr` inspects
+  `ResolvedSubqueryExpr::parameter_list_size() > 0` and promotes
+  the surrounding statement to `kSemanticExecutor`. The
+  non-correlated forms stay on `kDuckdbNative` and lower via
+  Family 2.
+
+Deferred (stays planned in the semantic executor; the gateway
+surfaces a clean `kNotImplemented` envelope via the executor
+stub until the follow-up lands):
+
+- **Family 4 — correlated `ResolvedSubqueryExpr` semantic
+  executor.** The classifier promotion in Family 3 already
+  routes correlated forms to `kSemanticExecutor`, but the
+  executor itself does not yet evaluate a correlated subquery
+  (the SCALAR `>1 row` raise, IN membership, EXISTS truth, ARRAY
+  collection). **Blocker**: the executor needs an outer-row
+  iteration primitive -- a row-by-row driver that re-binds
+  `EvalContext::columns` per outer row (the foundation plan 8
+  added in commit `9b2bde1` for the per-row column-ref binding
+  side, but the driver loop itself does not yet exist) and
+  invokes the inner subquery against the re-bound context. This
+  same primitive is the missing piece for plan 8's deferred
+  correlated `ResolvedJoinScan` lateral (Family 4 of
+  `array-struct-semantic-path.plan.md` -- see commit `0ef7569`
+  for the deferral note); landing the loop once will unblock
+  both. **No silent approximation reason**: DuckDB's correlated-
+  subquery decorrelation does not guarantee BigQuery's
+  per-outer-row evaluation order or row-count error semantics for
+  every shape (the SCALAR ">1 row" raise is on the inner scan's
+  per-outer-row materialization, not the decorrelated join). A
+  partial implementation that approximated via DuckDB would
+  silently return the wrong answer on shapes the local
+  interpreter exists to be authoritative on. Until the loop
+  lands, the correlated route is a structured UNIMPLEMENTED, not
+  a partial answer.
