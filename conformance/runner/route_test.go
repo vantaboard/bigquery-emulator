@@ -1,6 +1,9 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -34,6 +37,163 @@ func TestKnownRouteNamesMatchesDispositionEnum(t *testing.T) {
 		}
 	}
 }
+
+// TestKnownRouteNamesMatchesDispositionHeader is the build-time
+// parity check the plan-16 handoff suggested as a follow-up: parse
+// `backend/engine/disposition.h` and assert the resulting set of
+// `kFoo` enum entries (lowercased + snake-cased) matches the Go-side
+// `KnownRouteNames()` letter-for-letter.
+//
+// This catches the "C++ enum gained a new entry but the Go-side
+// const list was never updated" regression. The cheaper sibling test
+// `TestKnownRouteNamesMatchesDispositionEnum` pins the explicit list
+// against itself, but does NOT detect that scenario because the C++
+// header is not in its inputs.
+//
+// The C++ side has its own parity gate
+// (`tools/check_disposition_parity` covers YAML <-> SHAPE_TRACKER);
+// this test closes the third edge of the triangle (Go <-> C++).
+func TestKnownRouteNamesMatchesDispositionHeader(t *testing.T) {
+	root, err := repoRootForRouteTest()
+	if err != nil {
+		t.Fatalf("repoRoot: %v", err)
+	}
+	hdrPath := filepath.Join(root, "backend", "engine", "disposition.h")
+	hdr, err := os.ReadFile(hdrPath) //nolint:gosec // test input fixed by repoRoot()
+	if err != nil {
+		t.Fatalf("read %s: %v", hdrPath, err)
+	}
+	parsed, err := parseDispositionEnumValues(string(hdr))
+	if err != nil {
+		t.Fatalf("parse disposition.h: %v", err)
+	}
+	got := KnownRouteNames()
+	if len(parsed) != len(got) {
+		t.Fatalf("parsed %d enum entries from disposition.h (%v) but "+
+			"KnownRouteNames returned %d (%v)",
+			len(parsed), parsed, len(got), got)
+	}
+	// Compare as ordered lists: the C++ enum declaration order is
+	// the priority order (see `route_classifier.cc`'s priority
+	// table) and `knownRoutes` declares the same order, so any
+	// disagreement at index i is a real ordering bug.
+	for i, w := range parsed {
+		if got[i] != w {
+			t.Fatalf("disposition.h index %d => %q but KnownRouteNames[%d] = %q "+
+				"(parsed=%v, knownRoutes=%v)",
+				i, w, i, got[i], parsed, got)
+		}
+	}
+}
+
+// dispositionEnumRe extracts the body of `enum class Disposition {
+// ... };` from `disposition.h`. The matcher tolerates the canonical
+// `enum class Disposition {` form (the upstream header) but stops at
+// the closing brace before `;` so trailing `inline constexpr int
+// kDispositionCount = 7;` lines do not contaminate the match.
+var dispositionEnumRe = regexp.MustCompile(
+	`(?s)enum\s+class\s+Disposition\s*\{([^}]*)\}`)
+
+// kEntryRe matches a single `kFoo` enum entry, optionally followed
+// by `,`. The leading `^` is line-anchored against the multiline
+// block so a stray `kFoo` inside a comment does not match.
+var kEntryRe = regexp.MustCompile(`(?m)^\s*(k[A-Za-z0-9]+)\s*(?:,|$)`)
+
+// parseDispositionEnumValues returns the enum entries (in source
+// order, lowercased + snake-cased) declared inside `enum class
+// Disposition` in `src`. Comment lines starting with `//` are
+// skipped before the entry-matcher runs.
+func parseDispositionEnumValues(src string) ([]string, error) {
+	body := dispositionEnumRe.FindStringSubmatch(src)
+	if body == nil {
+		return nil, errMissingDispositionEnum
+	}
+	// Strip per-line `//` comments so a doc-comment that re-says
+	// `kFoo` inside the enum body cannot fool the matcher.
+	lines := strings.Split(body[1], "\n")
+	for i, line := range lines {
+		if before, _, ok := strings.Cut(line, "//"); ok {
+			lines[i] = before
+		}
+	}
+	cleaned := strings.Join(lines, "\n")
+	matches := kEntryRe.FindAllStringSubmatch(cleaned, -1)
+	if len(matches) == 0 {
+		return nil, errEmptyDispositionEnum
+	}
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, dispositionKToSnake(m[1]))
+	}
+	return out, nil
+}
+
+// dispositionKToSnake converts `kDuckdbNative` -> `duckdb_native`.
+// The C++ side uses CamelCase entries with a leading `k`; the
+// canonical lowercase-snake-case spelling lives in
+// `disposition.cc::DispositionToString` and Mirror it here so a
+// drift between the enum names and the canonical strings fails
+// this test.
+func dispositionKToSnake(name string) string {
+	if !strings.HasPrefix(name, "k") {
+		return name
+	}
+	body := name[1:]
+	var b strings.Builder
+	for i, r := range body {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			b.WriteByte('_')
+		}
+		if r >= 'A' && r <= 'Z' {
+			b.WriteRune(r - 'A' + 'a')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	// Special case: the C++ entries follow `kDuckdbXxx` (single
+	// hump) so the naive split lands on `duckdb_xxx` which is
+	// already correct. `kSemanticExecutor` -> `semantic_executor`,
+	// `kControlOp` -> `control_op`, `kLocalStub` -> `local_stub`,
+	// `kUnsupported` -> `unsupported`. Re-flatten any
+	// `duckdb_native` accidentally split into `duck_db_native`.
+	out := b.String()
+	out = strings.ReplaceAll(out, "duck_db_", "duckdb_")
+	return out
+}
+
+// repoRootForRouteTest walks upward from the test binary's CWD until
+// it finds a `go.mod` file (the repo root). Used by
+// `TestKnownRouteNamesMatchesDispositionHeader` to resolve the
+// canonical worktree.
+func repoRootForRouteTest() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", os.ErrNotExist
+		}
+		dir = parent
+	}
+}
+
+// Sentinels for `parseDispositionEnumValues` failure modes; pulled
+// out so the parser stays a pure-Go single-output function.
+var (
+	errMissingDispositionEnum = staticErr(
+		"`enum class Disposition { ... }` not found in disposition.h")
+	errEmptyDispositionEnum = staticErr(
+		"`enum class Disposition { ... }` matched but contained no `kFoo` entries")
+)
+
+type staticErr string
+
+func (e staticErr) Error() string { return string(e) }
 
 func TestKnownRouteNamesReturnsCopy(t *testing.T) {
 	a := KnownRouteNames()
