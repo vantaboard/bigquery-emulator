@@ -154,7 +154,7 @@ ResolvedUpdateConstructor: semantic_executor plan=dml-local-executor.plan.md sta
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
-ResolvedDeferredComputedColumn: semantic_executor plan=advanced-relational-routing.plan.md status=planned
+ResolvedDeferredComputedColumn: semantic_executor plan=advanced-relational-routing.plan.md
 ResolvedOrderByItem: duckdb_native
 ResolvedColumnHolder: semantic_executor plan=array-struct-semantic-path.plan.md
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row

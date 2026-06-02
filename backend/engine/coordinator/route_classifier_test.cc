@@ -510,6 +510,55 @@ TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
 }
 
+TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
+  // `advanced-relational-routing.plan.md` Family 5. A
+  // `ResolvedDeferredComputedColumn` is the side-effect-aware
+  // form of a computed column the analyzer emits when conditional
+  // / pipe-evaluation features capture errors in a companion
+  // BYTES `side_effect_column`. DuckDB has no native model for the
+  // deferred-error semantic; the disposition table routes any
+  // query containing one to the semantic executor.
+  //
+  // The analyzer only emits this shape under specific feature
+  // flags that the engine does not enable today, so we exercise
+  // the YAML row by hand-building a `ResolvedAggregateScan` whose
+  // `aggregate_list` (typed as `ResolvedComputedColumnBase`) holds
+  // a `ResolvedDeferredComputedColumn`. The classifier walks the
+  // statement tree and promotes the route via the YAML lookup the
+  // moment it sees the deferred node.
+  ::googlesql::ResolvedColumn out_col(
+      /*column_id=*/300,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),
+      /*name=*/::googlesql::IdString::MakeGlobal("v"),
+      type_factory_->get_int64());
+  ::googlesql::ResolvedColumn side_col(
+      /*column_id=*/301,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),
+      /*name=*/::googlesql::IdString::MakeGlobal("_se"),
+      type_factory_->get_bytes());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumnBase>>
+      aggregate_list;
+  aggregate_list.push_back(::googlesql::MakeResolvedDeferredComputedColumn(
+      out_col,
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(0)),
+      side_col));
+  auto agg_scan = ::googlesql::MakeResolvedAggregateScan(
+      /*column_list=*/{out_col},
+      ::googlesql::MakeResolvedSingleRowScan(),
+      /*group_by_list=*/{},
+      std::move(aggregate_list),
+      /*grouping_set_list=*/{},
+      /*rollup_column_list=*/{});
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>> outputs;
+  outputs.push_back(::googlesql::MakeResolvedOutputColumn("v", out_col));
+  auto query_stmt = ::googlesql::MakeResolvedQueryStmt(
+      std::move(outputs), /*is_value_table=*/false, std::move(agg_scan));
+
+  RouteDecision d = classifier_.Classify(*query_stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
+}
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records
