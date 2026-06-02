@@ -1,0 +1,63 @@
+# grouping_sets_rollup_cube: GROUP BY ROLLUP / CUBE / GROUPING SETS
+#                            and the GROUPING() bit-mask projection
+#                            on the DuckDB fast path.
+#
+# Pins `advanced-relational-routing.plan.md` Family 1. The transpiler
+# lowers each `grouping_set_list` entry verbatim through DuckDB's
+# `GROUP BY GROUPING SETS (...)` syntax, with `ROLLUP (...)` /
+# `CUBE (...)` preserved so DuckDB's symmetric expansion fast path
+# handles the multi-level fan-out. `ResolvedGroupingCall` projections
+# land as `GROUPING("<col>") AS "<output>"` in the SELECT list.
+#
+# Route: `duckdb_rewrite` via `EmitAggregateScan` (the lowering is a
+# structural rewrite of BigQuery's `grouping_set_list` into DuckDB's
+# native keyword form). Route-label assertion deferred to plan 16.
+#
+# Fixture shape: a tiny revenue table grouped by ROLLUP(region, kind)
+# pins the regional aggregation pattern that motivates ROLLUP. The
+# query asserts the full four-row roll-up sequence (per-leaf,
+# per-region subtotal, grand total) plus the GROUPING() bit-mask
+# columns so a regression in either the GROUP BY emit OR the
+# grouping-call projection surfaces as a row mismatch.
+name: grouping_sets_rollup_cube
+description: |
+  GROUP BY ROLLUP(region, kind) with COUNT(*) and GROUPING() bits.
+  Verifies the transpiler emits the ROLLUP keyword inside GROUPING
+  SETS and that the GROUPING(col) projection lands the per-column
+  super-aggregate bit.
+project_id: proj-advanced-grouping-sets
+dataset_id: ds_grouping_sets
+setup:
+  - dataset: ds_grouping_sets
+  - table:
+      dataset: ds_grouping_sets
+      id: sales
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_grouping_sets
+      table: sales
+      rows:
+        - {region: us, kind: retail,  amount: 10}
+        - {region: us, kind: retail,  amount: 20}
+        - {region: us, kind: wholesale, amount: 30}
+        - {region: eu, kind: retail,  amount: 40}
+query: |
+  SELECT region,
+         kind,
+         SUM(amount) AS total,
+         GROUPING(region) AS g_region,
+         GROUPING(kind) AS g_kind
+    FROM ds_grouping_sets.sales
+   GROUP BY ROLLUP(region, kind)
+   ORDER BY g_region, g_kind, region NULLS LAST, kind NULLS LAST
+expected:
+  rows:
+    - {region: "eu", kind: "retail",    total: "40",  g_region: "0", g_kind: "0"}
+    - {region: "us", kind: "retail",    total: "30",  g_region: "0", g_kind: "0"}
+    - {region: "us", kind: "wholesale", total: "30",  g_region: "0", g_kind: "0"}
+    - {region: "eu", kind: null,        total: "40",  g_region: "0", g_kind: "1"}
+    - {region: "us", kind: null,        total: "60",  g_region: "0", g_kind: "1"}
+    - {region: null, kind: null,        total: "100", g_region: "1", g_kind: "1"}

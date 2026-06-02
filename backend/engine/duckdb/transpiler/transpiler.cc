@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
@@ -607,6 +608,89 @@ std::string Transpiler::EmitArrayScan(
                       QuoteIdent(node->element_column_list(0).name()));
 }
 
+// Emit one `ResolvedGroupingSetMultiColumn` (a single grouping set
+// item used INSIDE a ROLLUP / CUBE list). The single-column case
+// emits the bare column name (DuckDB accepts both `ROLLUP(a, b)` and
+// `ROLLUP((a), (b))`); the multi-column case wraps in parentheses
+// so DuckDB sees one tuple per ROLLUP step. The lookup walks
+// `group_by_id_to_name` because the `ResolvedColumnRef`s inside a
+// grouping set point back to the `group_by_list` columns by id, not
+// by name -- the analyzer rewrites the column ids when GROUPING SETS
+// is in play, so reading `ref->column().name()` directly produces
+// stale names DuckDB cannot resolve against the SELECT-list aliases.
+static std::string EmitGroupingSetMultiColumn(
+    const ::googlesql::ResolvedGroupingSetMultiColumn* mc,
+    const absl::flat_hash_map<int, std::string>& group_by_id_to_name) {
+  if (mc == nullptr) return "";
+  std::vector<std::string> cols;
+  cols.reserve(mc->column_list_size());
+  for (int i = 0; i < mc->column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumnRef* ref = mc->column_list(i);
+    if (ref == nullptr) return "";
+    auto it = group_by_id_to_name.find(ref->column().column_id());
+    if (it == group_by_id_to_name.end()) return "";
+    cols.push_back(QuoteIdent(it->second));
+  }
+  if (cols.empty()) return "()";
+  if (cols.size() == 1) return cols[0];
+  return absl::StrCat("(", absl::StrJoin(cols, ", "), ")");
+}
+
+// Render one `grouping_set_list` entry. The list is heterogeneous:
+// each entry is a `ResolvedGroupingSet` (an explicit tuple),
+// `ResolvedRollup` (a list of multi-columns), or `ResolvedCube`
+// (same shape as Rollup). DuckDB's `GROUP BY GROUPING SETS (...)`
+// accepts the three forms verbatim, so we lower each entry directly
+// rather than expanding ROLLUP / CUBE on our side: keeping the
+// keyword preserves DuckDB's faster code path for the symmetric
+// rollup/cube hash tables.
+static std::string EmitGroupingSetEntry(
+    const ::googlesql::ResolvedGroupingSetBase* entry,
+    const absl::flat_hash_map<int, std::string>& group_by_id_to_name) {
+  if (entry == nullptr) return "";
+  switch (entry->node_kind()) {
+    case ::googlesql::RESOLVED_GROUPING_SET: {
+      const auto* gs = entry->GetAs<::googlesql::ResolvedGroupingSet>();
+      std::vector<std::string> cols;
+      cols.reserve(gs->group_by_column_list_size());
+      for (int i = 0; i < gs->group_by_column_list_size(); ++i) {
+        const ::googlesql::ResolvedColumnRef* ref = gs->group_by_column_list(i);
+        if (ref == nullptr) return "";
+        auto it = group_by_id_to_name.find(ref->column().column_id());
+        if (it == group_by_id_to_name.end()) return "";
+        cols.push_back(QuoteIdent(it->second));
+      }
+      return absl::StrCat("(", absl::StrJoin(cols, ", "), ")");
+    }
+    case ::googlesql::RESOLVED_ROLLUP: {
+      const auto* r = entry->GetAs<::googlesql::ResolvedRollup>();
+      std::vector<std::string> items;
+      items.reserve(r->rollup_column_list_size());
+      for (int i = 0; i < r->rollup_column_list_size(); ++i) {
+        std::string item = EmitGroupingSetMultiColumn(r->rollup_column_list(i),
+                                                      group_by_id_to_name);
+        if (item.empty()) return "";
+        items.push_back(std::move(item));
+      }
+      return absl::StrCat("ROLLUP (", absl::StrJoin(items, ", "), ")");
+    }
+    case ::googlesql::RESOLVED_CUBE: {
+      const auto* c = entry->GetAs<::googlesql::ResolvedCube>();
+      std::vector<std::string> items;
+      items.reserve(c->cube_column_list_size());
+      for (int i = 0; i < c->cube_column_list_size(); ++i) {
+        std::string item = EmitGroupingSetMultiColumn(c->cube_column_list(i),
+                                                      group_by_id_to_name);
+        if (item.empty()) return "";
+        items.push_back(std::move(item));
+      }
+      return absl::StrCat("CUBE (", absl::StrJoin(items, ", "), ")");
+    }
+    default:
+      return "";
+  }
+}
+
 std::string Transpiler::EmitAggregateScan(
     const ::googlesql::ResolvedAggregateScan* node) {
   // Emit `SELECT <grouping-cols>, <aggregates> FROM (<input>) GROUP BY ...`
@@ -615,33 +699,51 @@ std::string Transpiler::EmitAggregateScan(
   // emitted SQL composes safely no matter how DuckDB resolves alias
   // visibility in the future.
   //
-  // ROLLUP / CUBE / GROUPING SETS / GROUPING() function calls all set
-  // one of the grouping-set / rollup / grouping_call lists on the
-  // node; we leave those shapes UNIMPLEMENTED until a dedicated
-  // lower pass lands.
+  // GROUPING SETS / ROLLUP / CUBE: when `grouping_set_list` is
+  // non-empty, the GROUP BY clause becomes
+  // `GROUP BY GROUPING SETS (<entry>, ...)`. Each entry is one of
+  //   * a bare tuple `(a, b)` (`ResolvedGroupingSet`)
+  //   * `ROLLUP (a, b)` (`ResolvedRollup`)
+  //   * `CUBE (a, b)` (`ResolvedCube`)
+  // The grouping-set tuples reference the GROUP BY columns by NAME
+  // (DuckDB resolves the SELECT-list alias inside GROUP BY), so we
+  // collect a `column_id -> name` map from `group_by_list` first
+  // and pass it through to the per-entry emitter.
+  //
+  // `rollup_column_list` is the analyzer's legacy mirror of the
+  // ROLLUP shape. We rely on `grouping_set_list` exclusively for the
+  // emit (the modern form), but still touch the accessor below so
+  // `CheckFieldsAccessed` does not flag the legacy field.
+  //
+  // GROUPING(<col>) function calls land in `grouping_call_list`
+  // separately from the aggregate list. Each
+  // `ResolvedGroupingCall` carries the source group-by column ref
+  // plus the output column the GROUPING bit lands on. We project
+  // each as `GROUPING("<col>") AS "<output>"` so the SELECT list
+  // exposes the bit at the analyzer-chosen output name.
   if (node == nullptr) return "";
-  if (node->grouping_set_list_size() > 0 ||
-      node->rollup_column_list_size() > 0 ||
-      node->grouping_call_list_size() > 0) {
-    return "";
-  }
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
 
   std::vector<std::string> projections;
   std::vector<std::string> group_by_exprs;
-  projections.reserve(node->group_by_list_size() + node->aggregate_list_size());
+  projections.reserve(node->group_by_list_size() + node->aggregate_list_size() +
+                      node->grouping_call_list_size());
   group_by_exprs.reserve(node->group_by_list_size());
+  absl::flat_hash_map<int, std::string> group_by_id_to_name;
+  group_by_id_to_name.reserve(node->group_by_list_size());
 
   for (int i = 0; i < node->group_by_list_size(); ++i) {
     const ::googlesql::ResolvedComputedColumn* gc = node->group_by_list(i);
     if (gc == nullptr) return "";
     std::string expr = EmitExpr(gc->expr());
     if (expr.empty()) return "";
-    std::string quoted_out = QuoteIdent(gc->column().name());
+    std::string col_name(gc->column().name());
+    std::string quoted_out = QuoteIdent(col_name);
     projections.push_back(
         expr == quoted_out ? expr : absl::StrCat(expr, " AS ", quoted_out));
     group_by_exprs.push_back(expr);
+    group_by_id_to_name[gc->column().column_id()] = std::move(col_name);
   }
 
   for (int i = 0; i < node->aggregate_list_size(); ++i) {
@@ -660,10 +762,41 @@ std::string Transpiler::EmitAggregateScan(
         absl::StrCat(fn, " AS ", QuoteIdent(ac->column().name())));
   }
 
+  // GROUPING() calls. Each entry pins one bit-mask column.
+  for (int i = 0; i < node->grouping_call_list_size(); ++i) {
+    const ::googlesql::ResolvedGroupingCall* gc = node->grouping_call_list(i);
+    if (gc == nullptr || gc->group_by_column() == nullptr) return "";
+    auto it =
+        group_by_id_to_name.find(gc->group_by_column()->column().column_id());
+    if (it == group_by_id_to_name.end()) return "";
+    projections.push_back(absl::StrCat("GROUPING(",
+                                       QuoteIdent(it->second),
+                                       ") AS ",
+                                       QuoteIdent(gc->output_column().name())));
+  }
+
   std::string select_list =
       projections.empty() ? "*" : absl::StrJoin(projections, ", ");
   std::string sql = absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
-  if (!group_by_exprs.empty()) {
+
+  // GROUP BY clause: GROUPING SETS form when grouping_set_list is
+  // non-empty, otherwise the bare `GROUP BY <expr>, ...` list.
+  if (node->grouping_set_list_size() > 0) {
+    // Touch the legacy `rollup_column_list` accessor so the analyzer's
+    // CheckFieldsAccessed does not flag a missed read when ROLLUP is
+    // used and the analyzer still populates both fields.
+    (void)node->rollup_column_list_size();
+    std::vector<std::string> entries;
+    entries.reserve(node->grouping_set_list_size());
+    for (int i = 0; i < node->grouping_set_list_size(); ++i) {
+      std::string entry =
+          EmitGroupingSetEntry(node->grouping_set_list(i), group_by_id_to_name);
+      if (entry.empty()) return "";
+      entries.push_back(std::move(entry));
+    }
+    absl::StrAppend(
+        &sql, " GROUP BY GROUPING SETS (", absl::StrJoin(entries, ", "), ")");
+  } else if (!group_by_exprs.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
   return sql;

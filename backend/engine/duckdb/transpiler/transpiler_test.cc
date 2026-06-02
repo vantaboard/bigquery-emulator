@@ -578,6 +578,113 @@ TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnSkiplistedAggregate) {
       "");
 }
 
+// --- GROUPING SETS / ROLLUP / CUBE / GROUPING() ------------------------
+//
+// `advanced-relational-routing.plan.md` Family 1. Each shape exercises
+// the `grouping_set_list` path in `EmitAggregateScan`:
+//
+//   * Explicit GROUPING SETS  -> `(a, b)`, `(a)`, `()` entries.
+//   * ROLLUP                  -> single ROLLUP entry expands to N+1
+//                                grouping sets via `ResolvedRollup`.
+//   * CUBE                    -> single CUBE entry expands to 2^N
+//                                grouping sets via `ResolvedCube`.
+//   * GROUPING(<col>)         -> `ResolvedGroupingCall` in
+//                                `grouping_call_list`; projects as
+//                                `GROUPING(<col>) AS "<output>"`.
+
+TEST_F(TranspilerTest, EmitAggregateScanGroupingSetsExplicit) {
+  // `GROUP BY GROUPING SETS ((id, name), (id), ())` analyzes with
+  // three `ResolvedGroupingSet` entries in `grouping_set_list`.
+  // The emit lands as `GROUP BY GROUPING SETS ((<a>, <b>), (<a>),
+  // ())`, with each grouping-set tuple referencing the SELECT-list
+  // aliases for `group_by_list` columns. DuckDB resolves the alias
+  // inside GROUP BY GROUPING SETS, so the emitted SQL is
+  // self-contained.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, name, COUNT(*) FROM people "
+      "GROUP BY GROUPING SETS ((id, name), (id), ())");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find(" GROUP BY GROUPING SETS ("), std::string::npos)
+      << "expected GROUP BY GROUPING SETS keyword; got: " << sql;
+  EXPECT_NE(sql.find("(\"id\", \"name\")"), std::string::npos)
+      << "expected (id, name) tuple; got: " << sql;
+  EXPECT_NE(sql.find("(\"id\")"), std::string::npos)
+      << "expected (id) tuple; got: " << sql;
+  EXPECT_NE(sql.find("()"), std::string::npos)
+      << "expected empty () tuple; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanRollupAnalyzerExpandsToSets) {
+  // The analyzer canonicalizes `GROUP BY ROLLUP(id, name)` into
+  // three `ResolvedGroupingSet` entries -- `(id, name), (id), ()`
+  // -- in `grouping_set_list`, not a single `ResolvedRollup`. Pin
+  // the expanded form here so the user-visible BigQuery semantics
+  // (one row per ROLLUP step) are exercised end-to-end on the
+  // DuckDB fast path. The `ResolvedRollup` direct-construction
+  // test below pins the keyword emit code path for shapes that
+  // upstream builders could produce.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, name, COUNT(*) FROM people GROUP BY ROLLUP(id, name)");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("GROUP BY GROUPING SETS ("), std::string::npos)
+      << "expected GROUP BY GROUPING SETS keyword; got: " << sql;
+  EXPECT_NE(sql.find("(\"id\", \"name\")"), std::string::npos)
+      << "expected (id, name) leaf; got: " << sql;
+  EXPECT_NE(sql.find("(\"id\")"), std::string::npos)
+      << "expected (id) subtotal; got: " << sql;
+  EXPECT_NE(sql.find("()"), std::string::npos)
+      << "expected () grand-total tuple; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanCubeAnalyzerExpandsToSets) {
+  // CUBE(id, name) canonicalizes to 2^2 = 4 grouping sets:
+  // `(id, name), (id), (name), ()`. Same shape as the ROLLUP test
+  // above; here we pin the full fan-out so a partial-emit
+  // regression in `EmitGroupingSetEntry` shows up as a missing
+  // tuple.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id, name, COUNT(*) FROM people GROUP BY CUBE(id, name)");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("(\"id\", \"name\")"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("(\"id\")"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("(\"name\")"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("()"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanGroupingCallProjectsBitMask) {
+  // `SELECT GROUPING(id), ... FROM ... GROUP BY ROLLUP(id, name)`
+  // creates a `ResolvedGroupingCall` in `grouping_call_list`. The
+  // emit projects it as `GROUPING("id") AS "<output>"` so the
+  // SELECT list exposes the bit at the analyzer-chosen output
+  // column name.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id, name, GROUPING(id), COUNT(*) FROM people "
+      "GROUP BY ROLLUP(id, name)");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_AGGREGATE_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("GROUPING(\"id\") AS "), std::string::npos)
+      << "expected GROUPING projection; got: " << sql;
+}
+
 // --- Order By -----------------------------------------------------------
 
 TEST_F(TranspilerTest, EmitOrderByScanAscDefault) {

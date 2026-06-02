@@ -160,9 +160,9 @@ ResolvedColumnHolder: semantic_executor plan=array-struct-semantic-path.plan.md
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row
 # from SHAPE_TRACKER.md, expanded to per-class rows for the parity
 # checker.
-ResolvedGroupingSet: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
-ResolvedRollup: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
-ResolvedCube: duckdb_rewrite plan=advanced-relational-routing.plan.md status=planned
+ResolvedGroupingSet: duckdb_rewrite plan=advanced-relational-routing.plan.md
+ResolvedRollup: duckdb_rewrite plan=advanced-relational-routing.plan.md
+ResolvedCube: duckdb_rewrite plan=advanced-relational-routing.plan.md
 ResolvedAggregateHavingModifier: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 # `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` row from
 # SHAPE_TRACKER.md, expanded to per-class rows.
