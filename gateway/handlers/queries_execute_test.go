@@ -276,6 +276,75 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 	}
 }
 
+// TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback pins the
+// loopback-only contract `gateway/middleware/loopback.go` enforces
+// for `Job.statistics.query.emulatorRoute`. The C++ engine emits an
+// `emulator_route` trailer on every reply; the gateway forwards it
+// onto the JSON `statistics.query.emulatorRoute` field for loopback
+// callers (the conformance harness in
+// `.cursor/plans/conformance-routing-matrix.plan.md`) and OMITS the
+// field for non-loopback callers so external BigQuery client
+// libraries see the same JSON shape they would against the public
+// REST surface.
+func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
+	const stmtSelect = "SELECT"
+	makeStream := func() *fakeQueryResultStream {
+		return &fakeQueryResultStream{
+			msgs: []*enginepb.QueryResultRow{
+				{Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{
+						{Name: "v", Type: sqlTypeINT64, Mode: sqlModeRequired},
+					},
+				}},
+				{Cells: []*enginepb.Cell{
+					{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
+				}},
+				{StatementType: stmtSelect},
+				{EmulatorRoute: "semantic_executor"},
+			},
+		}
+	}
+	makeDeps := func() Dependencies {
+		s := makeStream()
+		fake := &fakeQueryClient{
+			executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+				return s, nil
+			},
+		}
+		return Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	}
+
+	loopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
+		`{"query":"SELECT 1","useLegacySql":false}`, true)
+	if loopbackResp.Statistics == nil || loopbackResp.Statistics.Query == nil {
+		t.Fatalf("loopback caller: statistics.query missing; resp=%+v", loopbackResp)
+	}
+	if got := loopbackResp.Statistics.Query.EmulatorRoute; got != "semantic_executor" {
+		t.Errorf("loopback caller: statistics.query.emulatorRoute = %q, want %q",
+			got, "semantic_executor")
+	}
+	if got := loopbackResp.Statistics.Query.StatementType; got != stmtSelect {
+		t.Errorf("loopback caller: statistics.query.statementType = %q, want %q",
+			got, stmtSelect)
+	}
+
+	nonLoopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
+		`{"query":"SELECT 1","useLegacySql":false}`, false)
+	if nonLoopbackResp.Statistics == nil || nonLoopbackResp.Statistics.Query == nil {
+		t.Fatalf("non-loopback caller: statistics.query missing; resp=%+v", nonLoopbackResp)
+	}
+	if got := nonLoopbackResp.Statistics.Query.EmulatorRoute; got != "" {
+		t.Errorf("non-loopback caller: statistics.query.emulatorRoute = %q, want empty",
+			got)
+	}
+	// statementType is a public BigQuery REST field; it stays
+	// visible to every caller, loopback or not.
+	if got := nonLoopbackResp.Statistics.Query.StatementType; got != stmtSelect {
+		t.Errorf("non-loopback caller: statistics.query.statementType = %q, want %q",
+			got, stmtSelect)
+	}
+}
+
 // TestQueryRunExecuteUnimplementedFromEngine asserts UNIMPLEMENTED
 // from the engine (`--googlesql=off` build, etc.) surfaces as HTTP
 // 501 notImplemented rather than the generic 400 invalidQuery

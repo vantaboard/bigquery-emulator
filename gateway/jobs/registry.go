@@ -96,6 +96,22 @@ type QueryResult struct {
 	// BigQuery clients (e.g. the Go SDK's `JobIterator`) see the
 	// row counts on the replay too.
 	DmlStats *bqtypes.DmlStats
+	// StatementType is the canonical BigQuery REST statement-type
+	// string the engine trailed on the `jobs.query` response (e.g.
+	// `SELECT`, `INSERT`, `CREATE_TABLE`). Stashed on the cached
+	// result so `jobs.getQueryResults` can re-surface the same
+	// `Job.statistics.query.statementType` envelope on the replay
+	// without re-running the SQL.
+	StatementType string
+	// EmulatorRoute is the canonical lowercase-snake disposition
+	// string the C++ coordinator's `RouteClassifier` chose for the
+	// original query (`duckdb_native`, `semantic_executor`,
+	// `control_op`, ...). It is an emulator-internal debug field;
+	// `jobs.getQueryResults` only surfaces it to loopback callers
+	// (the call site enforces the gating via
+	// `middleware.IsLoopback`) so the public REST shape stays the
+	// same.
+	EmulatorRoute string
 }
 
 // Job is the gateway's view of a single BigQuery job. Today it's

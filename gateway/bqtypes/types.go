@@ -156,8 +156,9 @@ type JobStatistics struct {
 // JobStatistics2 is the per-query statistics block exposed under
 // `Job.statistics.query`. Today the emulator surfaces only
 // `statementType` (see `.cursor/plans/control-op-executor.plan.md`
-// item 5); the other fields land alongside the long-running-jobs
-// follow-up. Mirrors
+// item 5) and the loopback-only `emulatorRoute` debug field (see
+// `.cursor/plans/conformance-routing-matrix.plan.md`); the other
+// fields land alongside the long-running-jobs follow-up. Mirrors
 // docs/bigquery/docs/reference/rest/v2/JobStatistics2.md.
 type JobStatistics2 struct {
 	// StatementType is the BigQuery REST canonical statement-type
@@ -168,6 +169,22 @@ type JobStatistics2 struct {
 	// REST surface does not enumerate) leave the field empty so
 	// the encoder omits the JSON property entirely.
 	StatementType string `json:"statementType,omitempty"`
+
+	// EmulatorRoute is the canonical lowercase-snake spelling of
+	// the `Disposition` the C++ coordinator's `RouteClassifier`
+	// chose for the query (`duckdb_native`, `duckdb_rewrite`,
+	// `duckdb_udf`, `semantic_executor`, `control_op`,
+	// `local_stub`, `unsupported`). It is an emulator-internal
+	// debug field NOT present on the public BigQuery REST surface;
+	// `gateway/middleware/loopback.go`'s `WithLoopbackTag`
+	// middleware tags loopback callers, and only the handlers
+	// running for those callers surface the field. The
+	// conformance harness in
+	// `conformance/cmd/runner` reads it back to assert per-query
+	// routing decisions (`expected.route`); BigQuery client
+	// libraries running against a non-loopback emulator see the
+	// field omitted entirely.
+	EmulatorRoute string `json:"emulatorRoute,omitempty"`
 }
 
 // SessionInfo tracks the session a query is running under, when sessions

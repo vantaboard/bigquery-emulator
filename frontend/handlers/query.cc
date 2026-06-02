@@ -760,17 +760,26 @@ namespace {
 
   switch (cls) {
     case StatementClass::kSelect:
-      return StreamRows(
-          engine, engine_request, &catalog, statement_type, emulator_route,
-          write);
+      return StreamRows(engine,
+                        engine_request,
+                        &catalog,
+                        statement_type,
+                        emulator_route,
+                        write);
     case StatementClass::kDml:
-      return EmitDmlStats(
-          engine, engine_request, &catalog, statement_type, emulator_route,
-          write);
+      return EmitDmlStats(engine,
+                          engine_request,
+                          &catalog,
+                          statement_type,
+                          emulator_route,
+                          write);
     case StatementClass::kDdl:
-      return EmitDdlResult(
-          engine, engine_request, &catalog, statement_type, emulator_route,
-          write);
+      return EmitDdlResult(engine,
+                           engine_request,
+                           &catalog,
+                           statement_type,
+                           emulator_route,
+                           write);
     case StatementClass::kOther:
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,

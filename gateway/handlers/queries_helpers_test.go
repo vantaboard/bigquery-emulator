@@ -9,6 +9,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
 
 // runQuery posts the given JSON body to QueryRun and returns the
@@ -29,6 +30,42 @@ func runQueryWithDeps(t *testing.T, projectID string, deps Dependencies, body st
 	req.SetPathValue("projectId", projectID)
 	QueryRun(deps)(rec, req)
 	return rec
+}
+
+// runQueryWithLoopback runs QueryRun the same way `runQueryWithDeps`
+// does but rewrites `RemoteAddr` to the loopback / non-loopback
+// shape the caller asks for, and wraps the handler in the loopback
+// middleware. Used by tests that exercise the loopback-only
+// `Job.statistics.query.emulatorRoute` gating from
+// `gateway/middleware/loopback.go`.
+func runQueryWithLoopback(
+	t *testing.T,
+	projectID string,
+	deps Dependencies,
+	body string,
+	loopback bool,
+) bqtypes.QueryResponse {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost,
+		"/bigquery/v2/projects/"+projectID+"/queries", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("projectId", projectID)
+	if loopback {
+		req.RemoteAddr = "127.0.0.1:12345"
+	} else {
+		req.RemoteAddr = "203.0.113.7:54321"
+	}
+	wrapped := middleware.WithLoopbackTag(QueryRun(deps))
+	wrapped.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	return resp
 }
 
 // runQueryAndGetResults issues a `jobs.query` POST and the subsequent

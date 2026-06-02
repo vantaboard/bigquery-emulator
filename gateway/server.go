@@ -257,6 +257,14 @@ func wrapMiddleware(opts Options, mux http.Handler) http.Handler {
 	// gateway-HTTP-surface section of ROADMAP.md, the emulator must
 	// never 401, so this is permissive by design.
 	handler = middleware.WithAuth(handler)
+	// Loopback tag middleware always runs: it records whether the
+	// request arrived from a loopback caller so handlers can gate
+	// emulator-internal debug fields on it. The single user today is
+	// the synchronous query handler, which surfaces
+	// `Job.statistics.query.emulatorRoute` (the C++ coordinator's
+	// canonical route disposition string) only to loopback callers
+	// per `.cursor/plans/conformance-routing-matrix.plan.md`.
+	handler = middleware.WithLoopbackTag(handler)
 	if opts.LogRequests {
 		logger := opts.Logger
 		if logger == nil {

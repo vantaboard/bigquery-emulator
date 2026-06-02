@@ -12,6 +12,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
 
 // queryResponseKind is the value the BigQuery REST API returns for the
@@ -190,7 +191,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if queryGRPCToHTTPError(w, err) {
 		return
 	}
-	schema, dmlStats, rows, statementType, ok := streamQueryResults(w, stream)
+	schema, dmlStats, rows, statementType, emulatorRoute, ok := streamQueryResults(w, stream)
 	if !ok {
 		return
 	}
@@ -205,14 +206,29 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	restSchema := schemaFromProto(schema)
 	restDmlStats := dmlStatsFromProto(dmlStats)
 	result := &jobs.QueryResult{
-		Schema:   restSchema,
-		Rows:     rows,
-		DmlStats: restDmlStats,
+		Schema:        restSchema,
+		Rows:          rows,
+		DmlStats:      restDmlStats,
+		StatementType: statementType,
+		EmulatorRoute: emulatorRoute,
 	}
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
+	// Surface the `emulatorRoute` debug field only to loopback
+	// callers so external BigQuery client libraries pointed at the
+	// emulator see the same JSON shape they would against the
+	// public REST surface. Non-loopback callers get an empty
+	// string, which `assembleQueryResponse` translates into "no
+	// emulatorRoute property" because the JSON struct tag is
+	// `omitempty`. See
+	// `.cursor/plans/conformance-routing-matrix.plan.md`.
+	visibleRoute := ""
+	if middleware.IsLoopback(r.Context()) {
+		visibleRoute = emulatorRoute
+	}
 	out := assembleQueryResponse(
-		job, restSchema, rows, dmlStats, restDmlStats, statementType)
+		job, restSchema, rows, dmlStats, restDmlStats, statementType,
+		visibleRoute)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -257,21 +273,24 @@ func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.Que
 }
 
 // streamQueryResults drains the engine's query stream into the
-// per-RPC schema, DML stats, row slice, and trailing statement type.
-// Returns ok=false after emitting an HTTP error envelope, in which
-// case the caller must stop processing the request.
+// per-RPC schema, DML stats, row slice, trailing statement type, and
+// trailing emulator route. Returns ok=false after emitting an HTTP
+// error envelope, in which case the caller must stop processing the
+// request.
 //
 // The proto contract (see `proto/emulator.proto::QueryResultRow`)
-// allows up to four message kinds on a single reply: schema, cells,
-// dml_stats, and statement_type. The schema and dml_stats messages
-// pin themselves to the first arrival (later resends are ignored);
-// statement_type is emitted at most once as the trailer.
+// allows up to five message kinds on a single reply: schema, cells,
+// dml_stats, statement_type, and emulator_route. The schema and
+// dml_stats messages pin themselves to the first arrival (later
+// resends are ignored); the two trailers are each emitted at most
+// once at end-of-stream.
 func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQueryClient) (
-	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, bool,
+	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, string, bool,
 ) {
 	var schema *enginepb.TableSchema
 	var dmlStats *enginepb.DmlStats
 	var statementType string
+	var emulatorRoute string
 	rows := make([]bqtypes.Row, 0)
 	for {
 		msg, err := stream.Recv()
@@ -279,7 +298,7 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			break
 		}
 		if queryGRPCToHTTPError(w, err) {
-			return nil, nil, nil, "", false
+			return nil, nil, nil, "", "", false
 		}
 		if s := msg.GetSchema(); s != nil {
 			// Per proto contract the first message carries the
@@ -312,9 +331,23 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			}
 			continue
 		}
+		if er := msg.GetEmulatorRoute(); er != "" {
+			// Trailing per-reply marker the engine emits with the
+			// canonical lowercase-snake disposition string. The
+			// gateway forwards it onto
+			// `Job.statistics.query.emulatorRoute` for loopback
+			// callers only (see
+			// `gateway/middleware/loopback.go`); the gating lives
+			// at the call site, not here, so the streaming pass
+			// stays a straight collector.
+			if emulatorRoute == "" {
+				emulatorRoute = er
+			}
+			continue
+		}
 		rows = append(rows, bqtypes.CellsToRow(msg.GetCells()))
 	}
-	return schema, dmlStats, rows, statementType, true
+	return schema, dmlStats, rows, statementType, emulatorRoute, true
 }
 
 // dmlStatsFromProto converts an engine-side DmlStats message into
@@ -336,10 +369,14 @@ func dmlStatsFromProto(d *enginepb.DmlStats) *bqtypes.DmlStats {
 // switching to the DML-shape (numDmlAffectedRows + zeroed selects)
 // when the stream surfaced a DmlStats message. When the engine
 // trailed a non-empty `statement_type` the gateway folds it into
-// the BigQuery REST `Job.statistics.query.statementType` envelope.
+// the BigQuery REST `Job.statistics.query.statementType` envelope;
+// when `emulatorRoute` is non-empty (the caller already gated this
+// on `middleware.IsLoopback`), it lands on the loopback-only
+// `Job.statistics.query.emulatorRoute` debug field.
 func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows []bqtypes.Row,
 	dmlStats *enginepb.DmlStats, restDmlStats *bqtypes.DmlStats,
 	statementType string,
+	emulatorRoute string,
 ) bqtypes.QueryResponse {
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
@@ -355,10 +392,11 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
 	}
-	if statementType != "" {
+	if statementType != "" || emulatorRoute != "" {
 		out.Statistics = &bqtypes.JobStatistics{
 			Query: &bqtypes.JobStatistics2{
 				StatementType: statementType,
+				EmulatorRoute: emulatorRoute,
 			},
 		}
 	}
@@ -445,47 +483,77 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		var (
-			schema   *bqtypes.TableSchema
-			allRows  []bqtypes.Row
-			dmlStats *bqtypes.DmlStats
-		)
-		if result := job.Result; result != nil {
-			schema = result.Schema
-			allRows = result.Rows
-			dmlStats = result.DmlStats
-		}
-
-		pageRows := paginateResults(allRows, r.URL.Query())
-		jobRef := job.JobReference
-		out := bqtypes.QueryResponse{
-			Kind:                getQueryResultsKind,
-			Schema:              schema,
-			JobReference:        &jobRef,
-			JobComplete:         true,
-			TotalRows:           strconv.FormatUint(uint64(len(allRows)), 10),
-			Rows:                pageRows,
-			TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
-			Location:            jobRef.Location,
-		}
-		if dmlStats != nil {
-			// DML replay: re-emit the same `dmlStats` /
-			// `numDmlAffectedRows` envelope `jobs.query` sent
-			// at submit time, and strip the SELECT-shape fields
-			// (schema, rows, totalRows) the same way the
-			// synchronous response does.
-			out.DmlStats = dmlStats
-			inserted, _ := strconv.ParseInt(dmlStats.InsertedRowCount, 10, 64)
-			updated, _ := strconv.ParseInt(dmlStats.UpdatedRowCount, 10, 64)
-			deleted, _ := strconv.ParseInt(dmlStats.DeletedRowCount, 10, 64)
-			out.NumDmlAffectedRows = strconv.FormatInt(
-				inserted+updated+deleted, 10)
-			out.Schema = nil
-			out.Rows = nil
-			out.TotalRows = "0"
-		}
-		writeJSON(w, http.StatusOK, out)
+		writeJSON(w, http.StatusOK, assembleGetQueryResultsResponse(r, job))
 	}
+}
+
+// assembleGetQueryResultsResponse builds the JSON envelope
+// `QueryGetResults` returns. Pulled out of the handler to keep its
+// cyclomatic budget below the funlen cap once the
+// loopback-gated `emulatorRoute` replay landed.
+func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.QueryResponse {
+	var (
+		schema        *bqtypes.TableSchema
+		allRows       []bqtypes.Row
+		dmlStats      *bqtypes.DmlStats
+		statementType string
+		emulatorRoute string
+	)
+	if result := job.Result; result != nil {
+		schema = result.Schema
+		allRows = result.Rows
+		dmlStats = result.DmlStats
+		statementType = result.StatementType
+		emulatorRoute = result.EmulatorRoute
+	}
+
+	pageRows := paginateResults(allRows, r.URL.Query())
+	jobRef := job.JobReference
+	out := bqtypes.QueryResponse{
+		Kind:                getQueryResultsKind,
+		Schema:              schema,
+		JobReference:        &jobRef,
+		JobComplete:         true,
+		TotalRows:           strconv.FormatUint(uint64(len(allRows)), 10),
+		Rows:                pageRows,
+		TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
+		Location:            jobRef.Location,
+	}
+	// Replay the loopback-only `emulatorRoute` debug field on
+	// `Job.statistics.query` the same way `QueryRun` surfaced it
+	// on the original `jobs.query` response: only when the
+	// follow-up `getQueryResults` caller is also loopback. The
+	// `statementType` field stays unconditional (it's a public
+	// BigQuery REST field).
+	visibleRoute := ""
+	if middleware.IsLoopback(r.Context()) {
+		visibleRoute = emulatorRoute
+	}
+	if statementType != "" || visibleRoute != "" {
+		out.Statistics = &bqtypes.JobStatistics{
+			Query: &bqtypes.JobStatistics2{
+				StatementType: statementType,
+				EmulatorRoute: visibleRoute,
+			},
+		}
+	}
+	if dmlStats != nil {
+		// DML replay: re-emit the same `dmlStats` /
+		// `numDmlAffectedRows` envelope `jobs.query` sent
+		// at submit time, and strip the SELECT-shape fields
+		// (schema, rows, totalRows) the same way the
+		// synchronous response does.
+		out.DmlStats = dmlStats
+		inserted, _ := strconv.ParseInt(dmlStats.InsertedRowCount, 10, 64)
+		updated, _ := strconv.ParseInt(dmlStats.UpdatedRowCount, 10, 64)
+		deleted, _ := strconv.ParseInt(dmlStats.DeletedRowCount, 10, 64)
+		out.NumDmlAffectedRows = strconv.FormatInt(
+			inserted+updated+deleted, 10)
+		out.Schema = nil
+		out.Rows = nil
+		out.TotalRows = "0"
+	}
+	return out
 }
 
 // paginateResults applies the registry's single-page pagination
