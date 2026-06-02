@@ -426,6 +426,7 @@ absl::StatusOr<DmlStats> ExecuteDelete(
 
   if (deleted > 0) {
     absl::Status overwrote =
+        // cpp-lint:allow(status-discarded) -- captured into overwrote
         storage.OverwriteRows(target->storage_table_id(), kept);
     if (!overwrote.ok()) return overwrote;
   }
@@ -571,6 +572,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
 
   if (updated > 0) {
     absl::Status overwrote =
+        // cpp-lint:allow(status-discarded) -- captured into overwrote
         storage.OverwriteRows(target->storage_table_id(), rewritten);
     if (!overwrote.ok()) return overwrote;
   }

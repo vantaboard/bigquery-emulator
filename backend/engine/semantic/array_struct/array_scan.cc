@@ -55,6 +55,7 @@ absl::StatusOr<ZipMode> ResolveZipMode(
                      mode_expr->node_kind_string()));
   }
   const auto& lit = *mode_expr->GetAs<::googlesql::ResolvedLiteral>();
+  // cpp-lint:allow(statusor-unchecked-value) -- ResolvedLiteral, not StatusOr
   const Value& v = lit.value();
   if (v.is_null() || v.type_kind() != ::googlesql::TYPE_ENUM) {
     return MakeSemanticError(
