@@ -37,10 +37,10 @@ todos:
     status: completed
   - id: todo-1780309600012-subagent-12
     content: "procedural-scripting-executor.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: in_progress
+    status: completed
   - id: todo-1780309600013-subagent-13
     content: "udf-tvf-module-routing.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: pending
+    status: in_progress
   - id: todo-1780309600014-subagent-14
     content: "specialized-feature-policy.plan.md: launch background subagent per Subagent Dispatch Workflow."
     status: pending

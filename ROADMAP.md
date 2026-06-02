@@ -486,10 +486,17 @@ public-facing policy.
   via `control-op-executor.plan.md` for the deferred handlers and
   `specialized-feature-policy.plan.md` for materialized-view refresh
   semantics
-- ⏳ Scripting / UDFs / TVFs (CALL, ASSERT, EXECUTE IMMEDIATE,
-  procedure bodies, statement sequencing) routed to a local
-  scripting executor — `procedural-scripting-executor.plan.md` and
-  `udf-tvf-module-routing.plan.md`
+- 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
+  — `procedural-scripting-executor.plan.md` and
+  `udf-tvf-module-routing.plan.md`. `ASSERT <expr> [AS '<msg>']`
+  lands on the new `backend/engine/semantic/script/` package and
+  surfaces BigQuery's documented `Assertion failed` envelope; the
+  variable-environment scaffolding is in place for the deferred
+  scripting families. CALL / EXECUTE IMMEDIATE / DECLARE / SET /
+  BEGIN..END / IF / WHILE / LOOP / FOR / RAISE / EXCEPTION /
+  CREATE PROCEDURE / `@@error.message` remain `status=planned`
+  in `node_dispositions.yaml` until follow-up subagents pick them
+  up
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
   `dml-local-executor.plan.md` Family 1-3 plus the existing DuckDB
