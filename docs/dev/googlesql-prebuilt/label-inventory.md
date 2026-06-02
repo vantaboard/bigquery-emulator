@@ -14,8 +14,10 @@ rg '@googlesql//' \
   --glob '*.bazel' --glob 'BUILD' --glob 'BUILD.bazel'
 ```
 
-Run from a clean checkout, that query yields **18 distinct labels** spanning
-5 emulator BUILD files:
+Run from a clean checkout, that query yields **23 distinct labels** spanning
+the C++ engine BUILD files (5 historical owners plus the
+`backend/engine/semantic/...` packages added by the local-execution
+roadmap):
 
 | Owning emulator BUILD file                                          | Targets that reference `@googlesql//` |
 |---------------------------------------------------------------------|---------------------------------------|
@@ -23,6 +25,11 @@ Run from a clean checkout, that query yields **18 distinct labels** spanning
 | `backend/schema/BUILD.bazel`                                        | `googlesql_to_bq`, `googlesql_to_bq_test` |
 | `backend/engine/duckdb/BUILD.bazel`                                 | `duckdb_engine`, `duckdb_engine_test` |
 | `backend/engine/duckdb/transpiler/BUILD.bazel`                      | `types`, `transpiler`, `transpiler_test` |
+| `backend/engine/semantic/BUILD.bazel`                               | `value`, `value_test`, `eval_expr`, `eval_expr_test`, `executor`, `executor_test` |
+| `backend/engine/semantic/array_struct/BUILD.bazel`                  | `array_scan`                          |
+| `backend/engine/semantic/dml/BUILD.bazel`                           | `dml_executor`                        |
+| `backend/engine/semantic/functions/BUILD.bazel`                     | `dispatch`, `dispatch_test`           |
+| `backend/engine/coordinator/BUILD.bazel`                            | `route_classifier`, `route_classifier_test` |
 | `frontend/handlers/BUILD.bazel`                                     | `query_handler`                       |
 
 If a future commit lands a new direct label not in [§ Direct labels](#direct-labels),
@@ -47,14 +54,19 @@ archive but skip the wrapper), and **why** the emulator needs the label today.
 | `@googlesql//googlesql/public:analyzer_output`        | `analyzer_output.h`, `analyzer_output_properties.h`                       | Expose | Carries the resolved-AST + per-statement output back from the analyzer; consumed by both engines and the query handler. |
 | `@googlesql//googlesql/public:builtin_function_options` | `builtin_function_options.h`                                            | Expose | `googlesql_catalog` registers the BigQuery-enabled builtin-function set; `transpiler_test` constructs its own options for the test harness. |
 | `@googlesql//googlesql/public:catalog`                | `catalog.h`, `catalog_helper.h`, `property_graph.h`                       | Expose | Interface the `googlesql_catalog` adapter implements; transpiler resolves `Table`/`Column` references against it. |
+| `@googlesql//googlesql/public:civil_time`             | `civil_time.h`                                                            | Expose | `semantic/value` translates BigQuery `DATE` / `TIMESTAMP` / `DATETIME` cells through GoogleSQL's `CivilDay` / `CivilSecond` constructors. |
 | `@googlesql//googlesql/public:error_helpers`          | `error_helpers.h`                                                         | Expose | Query handler maps GoogleSQL `absl::Status` errors into gRPC codes. |
 | `@googlesql//googlesql/public:error_location_cc_proto` | `error_location.pb.h` (generated)                                        | Expose | Query handler reads `ErrorLocation` payloads to render `position` in the BigQuery error responses. |
 | `@googlesql//googlesql/public:evaluator_table_iterator` | `evaluator_table_iterator.h`                                            | Expose | `storage_table` returns one of these from `CreateEvaluatorTableIterator`. |
 | `@googlesql//googlesql/public:function`               | `function.h`, `function_signature.h`, `input_argument_type.h`, `procedure.h`, `table_valued_function.h` | Expose | Transpiler walks `Function::Name()` on `ResolvedFunctionCall` nodes. |
+| `@googlesql//googlesql/public:interval_value`         | `interval_value.h`                                                        | Expose | `semantic/value` round-trips BigQuery `INTERVAL` literals through GoogleSQL's `IntervalValue`. |
 | `@googlesql//googlesql/public:language_options`       | `language_options.h`                                                      | Expose | All engines + handler + transpiler tests snapshot the same `LanguageOptions` between analyzer and evaluator. |
+| `@googlesql//googlesql/public:numeric_value`          | `numeric_value.h`                                                         | Expose | `semantic/value` and the semantic dispatch tables route BigQuery `NUMERIC` / `BIGNUMERIC` arithmetic through GoogleSQL's `NumericValue`. |
 | `@googlesql//googlesql/public:options_cc_proto`       | `options.pb.h` (generated)                                                | Expose | Carries `ProductMode::PRODUCT_EXTERNAL` and `LanguageFeature` enums into every engine + the transpiler. |
 | `@googlesql//googlesql/public:simple_catalog`         | `simple_catalog.h`, `simple_property_graph.h`, `table_from_proto.h`       | Expose | Concrete catalog the adapter subclasses. Also (intentionally) transitively re-exports `type_factory.h` / `struct_type.h` because `@googlesql//googlesql/public/types:types` is package-visibility-restricted. |
 | `@googlesql//googlesql/public:type`                   | `type.h`, `convert_type_to_proto.h`                                       | Expose | Type identity referenced everywhere the schema, catalog, engines, or transpiler must reason about a `googlesql::Type*`. |
+| `@googlesql//googlesql/public:type_cc_proto`          | `type.pb.h` (generated)                                                   | Expose | The semantic executor consumes `TypeKind` directly when classifying values without owning a `googlesql::Type*` — keep the cc_proto wrapper visible so callers do not transitively pull `:type`'s heavy header closure just to name the enum. |
+| `@googlesql//googlesql/public:uuid_value`             | `uuid_value.h`                                                            | Expose | `semantic/value` translates BigQuery `UUID` literals through GoogleSQL's `UuidValue`. |
 | `@googlesql//googlesql/public:value`                  | `value.h`, `proto_util.h`                                                 | Expose | `storage_table` materialises `googlesql::Value` cells; transpiler emits SQL literals via `Value::GetSQLLiteral`. |
 
 ### Package `@googlesql//googlesql/resolved_ast`
@@ -96,10 +108,10 @@ purposes of this inventory, are:
 
 ## Counts (must match `rg` output)
 
-- 5 emulator BUILD files reference GoogleSQL directly.
-- 16 unique direct `@googlesql//` labels (14 in `googlesql/public`, 2 in
+- 10 emulator BUILD files reference GoogleSQL directly.
+- 21 unique direct `@googlesql//` labels (19 in `googlesql/public`, 2 in
   `googlesql/resolved_ast`).
-- All 18 are classified **Expose** in this inventory (no Alias / Defer).
+- All 21 are classified **Expose** in this inventory (no Alias / Defer).
 
 The "all Expose" decision is deliberate: the emulator BUILDs already name these
 labels, the surface is small, and the consumer-wiring track must not silently

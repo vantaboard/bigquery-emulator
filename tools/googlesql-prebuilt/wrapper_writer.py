@@ -96,6 +96,16 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         ],
     ),
     (
+        "civil_time",
+        ["civil_time.h"],
+        None,
+        [
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+            "@com_google_absl//absl/time",
+        ],
+    ),
+    (
         "error_helpers",
         ["error_helpers.h"],
         None,
@@ -136,10 +146,29 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         ],
     ),
     (
+        "interval_value",
+        ["interval_value.h"],
+        None,
+        [
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+            "@com_google_absl//absl/time",
+        ],
+    ),
+    (
         "language_options",
         ["language_options.h"],
         None,
         ["@com_google_absl//absl/container:flat_hash_set"],
+    ),
+    (
+        "numeric_value",
+        ["numeric_value.h"],
+        None,
+        [
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+        ],
     ),
     (
         "options_cc_proto",
@@ -168,6 +197,21 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         [
             "@com_google_absl//absl/status:statusor",
             "@com_google_protobuf//:protobuf",
+        ],
+    ),
+    (
+        "type_cc_proto",
+        ["type.pb.h"],
+        None,
+        ["@com_google_protobuf//:protobuf"],
+    ),
+    (
+        "uuid_value",
+        ["uuid_value.h"],
+        None,
+        [
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
         ],
     ),
     (
