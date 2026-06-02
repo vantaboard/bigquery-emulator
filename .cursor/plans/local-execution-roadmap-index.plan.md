@@ -25,10 +25,10 @@ todos:
     status: completed
   - id: todo-1780309600008-subagent-08
     content: "array-struct-semantic-path.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: in_progress
+    status: completed
   - id: todo-1780309600009-subagent-09
     content: "dml-local-executor.plan.md: launch background subagent per Subagent Dispatch Workflow."
-    status: pending
+    status: in_progress
   - id: todo-1780309600010-subagent-10
     content: "cte-subquery-routing.plan.md: launch background subagent per Subagent Dispatch Workflow."
     status: pending
