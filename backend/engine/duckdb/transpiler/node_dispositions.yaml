@@ -137,7 +137,7 @@ ResolvedGetJsonField: duckdb_rewrite
 ResolvedGetRowField: unsupported plan=specialized-feature-policy.plan.md
 ResolvedFlatten: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
 ResolvedFlattenedArg: semantic_executor plan=array-struct-semantic-path.plan.md status=planned
-ResolvedSubqueryExpr: duckdb_native plan=cte-subquery-routing.plan.md status=planned
+ResolvedSubqueryExpr: duckdb_native plan=cte-subquery-routing.plan.md
 ResolvedWithExpr: duckdb_native
 ResolvedInlineLambda: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
 ResolvedFilterField: unsupported plan=specialized-feature-policy.plan.md

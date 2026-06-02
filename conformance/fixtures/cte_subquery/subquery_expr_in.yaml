@@ -1,0 +1,28 @@
+# subquery_expr_in: non-correlated IN SubqueryExpr on the DuckDB
+#                   fast path.
+#
+# Pins BigQuery's `<lhs> IN (<subquery>)` contract: the LHS
+# membership-tests against the rows returned by the subquery. The
+# emit is `(<lhs> IN (<inner>))`. Route: `duckdb_native`
+# (`cte-subquery-routing.plan.md` Family 2).
+#
+# Edge case pinned: the LHS appears in both matching and
+# non-matching rows so the boolean result is exercised on both
+# sides without depending on DuckDB short-circuiting.
+#
+# Route-label assertion: deferred to plan 16.
+name: subquery_expr_in
+description: |
+  Non-correlated IN subquery against an inline UNNEST relation.
+  Verifies the transpiler emits the IN form and DuckDB returns
+  the expected truthy / falsy rows.
+project_id: proj-cte-subquery-in
+query: |
+  SELECT n
+    FROM UNNEST([1, 2, 3, 4]) AS n
+   WHERE n IN (SELECT k FROM UNNEST([2, 4]) AS k)
+   ORDER BY n
+expected:
+  rows:
+    - {n: "2"}
+    - {n: "4"}

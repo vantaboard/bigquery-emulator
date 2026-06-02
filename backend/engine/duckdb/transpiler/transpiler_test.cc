@@ -200,6 +200,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitSampleScan;
   using Transpiler::EmitSetOperationScan;
   using Transpiler::EmitSingleRowScan;
+  using Transpiler::EmitSubqueryExpr;
   using Transpiler::EmitTableScan;
   using Transpiler::EmitWithExpr;
   using Transpiler::EmitWithRefScan;
@@ -2693,6 +2694,124 @@ TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitWithRefScan(ref.get()),
             "SELECT \"_cte_0\" AS \"id\", \"_cte_1\" AS \"name\" FROM \"p\"");
+}
+
+// --- ResolvedSubqueryExpr (non-correlated) -----------------------------
+//
+// `cte-subquery-routing.plan.md` Family 2. Non-correlated SCALAR /
+// IN / EXISTS / ARRAY subqueries lower to DuckDB's native subquery
+// surface. Correlated forms (non-empty `parameter_list()`) are
+// the classifier's responsibility (Family 3 promotes them to
+// `kSemanticExecutor`); on the transpiler side we defend in
+// depth by bailing to "" if we somehow see one.
+
+TEST_F(TranspilerTest, EmitSubqueryExprScalarFromAnalyzer) {
+  // `SELECT (SELECT MAX(id) FROM people) AS m FROM people`
+  // wraps a scalar subquery in the outer SELECT's expr_list. The
+  // inner subquery has no `parameter_list` (uncorrelated), so the
+  // emit lowers to `(<inner_sql>)`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT (SELECT MAX(id) FROM people) AS m FROM people");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  // The exact wrap shape changes with the outermost emit, but the
+  // scalar-subquery emit MUST appear as a parenthesized SELECT
+  // somewhere in the body. The empty-string contract would mean
+  // the SubqueryExpr emit silently failed.
+  EXPECT_FALSE(sql.empty()) << "expected non-empty SQL; SubqueryExpr emit "
+                               "should not silently fail";
+  EXPECT_NE(sql.find("(SELECT"), std::string::npos)
+      << "expected a parenthesized scalar subquery; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitSubqueryExprExistsFromAnalyzer) {
+  // `WHERE EXISTS (<sub>)` resolves to a FilterScan whose
+  // `filter_expr` is a SubqueryExpr of type EXISTS. The emit
+  // wraps the inner SELECT in `EXISTS (...)`.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT id FROM people WHERE EXISTS (SELECT 1 FROM orders)");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "expected non-empty SQL";
+  EXPECT_NE(sql.find("EXISTS ("), std::string::npos)
+      << "expected EXISTS-prefixed subquery; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitSubqueryExprInFromAnalyzer) {
+  // `WHERE <lhs> IN (<sub>)` resolves to a FilterScan whose
+  // `filter_expr` is a SubqueryExpr of type IN with the LHS
+  // captured in `in_expr`. The emit wraps as `(<lhs> IN (<sub>))`.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT id FROM people WHERE id IN (SELECT order_id FROM orders)");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "expected non-empty SQL";
+  EXPECT_NE(sql.find(" IN ("), std::string::npos)
+      << "expected IN-style emit; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitSubqueryExprArrayFromAnalyzer) {
+  // `SELECT ARRAY(<sub>)` resolves to a SubqueryExpr of type
+  // ARRAY. DuckDB's `ARRAY(SELECT ...)` builds a LIST whose
+  // element order matches the subquery's row order, matching
+  // BigQuery's contract.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT ARRAY(SELECT id FROM people) AS ids FROM people");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "expected non-empty SQL";
+  EXPECT_NE(sql.find("ARRAY("), std::string::npos)
+      << "expected ARRAY-prefixed subquery; got: " << sql;
+}
+
+TEST_F(TranspilerTest, EmitSubqueryExprCorrelatedBailsToEmpty) {
+  // Direct construction so we can build a SubqueryExpr with a
+  // non-empty `parameter_list` -- the analyzer-side path for
+  // correlated subqueries gets caught by the route classifier
+  // upstream (Family 3), so we never reach the transpiler with
+  // one. The bailout here is defense-in-depth: a future change
+  // that routes a correlated form through this emit MUST NOT
+  // silently lower it (the inner ColumnRefs would resolve against
+  // DuckDB's own evaluation context, not the BigQuery outer-row
+  // context, producing wrong answers).
+  ::googlesql::ResolvedColumn outer_col(
+      /*column_id=*/1,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("outer"),
+      /*name=*/::googlesql::IdString::MakeGlobal("k"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedColumnRef>> params;
+  params.push_back(::googlesql::MakeResolvedColumnRef(
+      type_factory_->get_int64(), outer_col, /*is_correlated=*/true));
+  auto inner = ::googlesql::MakeResolvedSingleRowScan();
+  auto sub = ::googlesql::MakeResolvedSubqueryExpr(
+      type_factory_->get_int64(),
+      ::googlesql::ResolvedSubqueryExpr::SCALAR,
+      std::move(params),
+      /*in_expr=*/nullptr,
+      std::move(inner));
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSubqueryExpr(sub.get()), "");
+}
+
+TEST_F(TranspilerTest, EmitSubqueryExprUnsupportedTypeBailsToEmpty) {
+  // LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE ALL stay on the
+  // empty-string fallback today (out of plan-10 scope). Pin that
+  // the default branch returns "" rather than emitting partial
+  // SQL when a non-{SCALAR, IN, EXISTS, ARRAY} type slips through.
+  auto inner = ::googlesql::MakeResolvedSingleRowScan();
+  auto sub = ::googlesql::MakeResolvedSubqueryExpr(
+      type_factory_->get_bool(),
+      ::googlesql::ResolvedSubqueryExpr::LIKE_ANY,
+      /*parameter_list=*/{},
+      /*in_expr=*/
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::String("a")),
+      std::move(inner));
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitSubqueryExpr(sub.get()), "");
 }
 
 TEST_F(TranspilerTest, EmitWithRefScanEmptyColumnListUsesStar) {

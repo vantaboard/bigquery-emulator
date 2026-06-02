@@ -1,0 +1,23 @@
+# subquery_expr_scalar: non-correlated scalar SubqueryExpr on the
+#                       DuckDB fast path.
+#
+# Pins BigQuery's scalar-subquery contract end-to-end: a SELECT
+# whose expression list contains `(SELECT <single_row>)` returns
+# the single inner value. The route is `duckdb_native` (DuckDB's
+# scalar subquery raises on >1 row, matching BigQuery's runtime
+# error contract; both engines also return NULL for a zero-row
+# subquery). See `cte-subquery-routing.plan.md` Family 2 and
+# `backend/engine/duckdb/transpiler/transpiler.cc::EmitSubqueryExpr`.
+#
+# Route-label assertion: deferred to plan 16.
+name: subquery_expr_scalar
+description: |
+  Non-correlated scalar subquery returning the maximum value of a
+  one-column inline relation. Verifies the transpiler emits
+  `(<inner>)` and DuckDB hands back the scalar.
+project_id: proj-cte-subquery-scalar
+query: |
+  SELECT (SELECT MAX(n) FROM UNNEST([3, 1, 7, 2]) AS n) AS m
+expected:
+  rows:
+    - {m: "7"}

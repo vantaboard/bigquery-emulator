@@ -1755,8 +1755,69 @@ std::string Transpiler::EmitGetJsonField(
 }
 
 std::string Transpiler::EmitSubqueryExpr(
-    const ::googlesql::ResolvedSubqueryExpr* /*node*/) {
-  return "";
+    const ::googlesql::ResolvedSubqueryExpr* node) {
+  // Non-correlated expression subqueries lower directly to DuckDB's
+  // native subquery surface; each `ResolvedSubqueryExpr::SubqueryType`
+  // has a one-line DuckDB analog whose semantics already match
+  // BigQuery for the uncorrelated case:
+  //
+  //   * SCALAR  -> `(<sql>)`         (DuckDB raises on >1 row,
+  //                                   matching BigQuery's runtime
+  //                                   error for scalar subqueries
+  //                                   that overflow).
+  //   * IN      -> `<lhs> IN (<sql>)`
+  //   * EXISTS  -> `EXISTS (<sql>)`
+  //   * ARRAY   -> `ARRAY(<sql>)`    (DuckDB's `ARRAY(subquery)`
+  //                                   builds a LIST whose element
+  //                                   order matches the subquery's
+  //                                   row order; BigQuery's ARRAY
+  //                                   subquery preserves order when
+  //                                   the subquery has an ORDER BY
+  //                                   and is otherwise unordered --
+  //                                   both engines agree on this).
+  //
+  // LIKE ANY / ALL / NOT LIKE ANY / ALL (BigQuery's
+  // `<expr> LIKE ANY (<subquery>)`) are out of plan-10 scope;
+  // they fall through to the empty-string contract today.
+  //
+  // Correlated subqueries (non-empty `parameter_list()`) belong to
+  // the semantic executor (`cte-subquery-routing.plan.md` Family 4,
+  // deferred). The route classifier promotes any query containing a
+  // correlated `ResolvedSubqueryExpr` to `kSemanticExecutor` before
+  // the transpiler is ever asked to lower it -- but we defend in
+  // depth and bail to "" if we somehow see a correlated form here.
+  // Returning "" lets the engine's empty-string contract surface
+  // UNIMPLEMENTED rather than emitting SQL that DuckDB would
+  // evaluate against the wrong outer-row context.
+  //
+  // Hint lists (`hint_list_size > 0`) are user-supplied optimizer
+  // hints with no DuckDB analog; we touch the accessor below so
+  // `ResolvedAST::CheckFieldsAccessed` does not flag the read, but
+  // we ignore the hints' content.
+  if (node == nullptr || node->subquery() == nullptr) return "";
+  if (node->parameter_list_size() > 0) return "";
+  (void)node->hint_list_size();
+  (void)node->in_collation();
+  std::string inner = EmitScan(node->subquery());
+  if (inner.empty()) return "";
+  switch (node->subquery_type()) {
+    case ::googlesql::ResolvedSubqueryExpr::SCALAR:
+      return absl::StrCat("(", inner, ")");
+    case ::googlesql::ResolvedSubqueryExpr::EXISTS:
+      return absl::StrCat("EXISTS (", inner, ")");
+    case ::googlesql::ResolvedSubqueryExpr::ARRAY:
+      return absl::StrCat("ARRAY(", inner, ")");
+    case ::googlesql::ResolvedSubqueryExpr::IN: {
+      if (node->in_expr() == nullptr) return "";
+      std::string lhs = EmitExpr(node->in_expr());
+      if (lhs.empty()) return "";
+      return absl::StrCat("(", lhs, " IN (", inner, "))");
+    }
+    default:
+      // LIKE_ANY / LIKE_ALL / NOT_LIKE_ANY / NOT_LIKE_ALL: out of
+      // plan-10 scope; empty-string contract surfaces UNIMPLEMENTED.
+      return "";
+  }
 }
 
 std::string Transpiler::EmitWithExpr(

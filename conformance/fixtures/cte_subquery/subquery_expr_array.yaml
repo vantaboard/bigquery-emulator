@@ -1,0 +1,26 @@
+# subquery_expr_array: non-correlated ARRAY SubqueryExpr on the
+#                       DuckDB fast path.
+#
+# Pins BigQuery's `ARRAY(<subquery>)` contract: the result is an
+# array whose elements are the subquery's rows, in row order. The
+# emit is `ARRAY(<inner>)`. DuckDB's `ARRAY(SELECT ...)` builds a
+# LIST whose element order matches the subquery's row order; an
+# explicit `ORDER BY` inside the subquery makes the order
+# observable on both engines. Route: `duckdb_native`
+# (`cte-subquery-routing.plan.md` Family 2).
+#
+# Route-label assertion: deferred to plan 16.
+name: subquery_expr_array
+description: |
+  Non-correlated ARRAY subquery returning the rows of an inline
+  UNNEST relation, ordered ascending. Verifies the transpiler
+  emits ARRAY-style syntax and the gateway materializes the LIST
+  as a BQ ARRAY in row order.
+project_id: proj-cte-subquery-array
+query: |
+  SELECT ARRAY(
+    SELECT n FROM UNNEST([3, 1, 7, 2]) AS n ORDER BY n
+  ) AS sorted
+expected:
+  rows:
+    - {sorted: ["1", "2", "3", "7"]}
