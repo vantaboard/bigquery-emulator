@@ -10,6 +10,8 @@
 #include <optional>
 #include <string>
 
+#include <vector>
+
 #include "absl/synchronization/mutex.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/row_restriction.h"
@@ -106,8 +108,12 @@ class StorageReadService final : public v1::StorageRead::Service {
     // compares the schema we recorded at create time against the
     // live `Storage::GetSchema` reply to catch drift.
     backend::storage::TableId table;
-    // Schema we returned in `ReadSession.schema` so plan 38 can
-    // confirm the live schema still matches before streaming.
+    // Full schema captured at CreateReadSession time (the schema we
+    // surfaced via `Storage::GetSchema`). Plan 38 compared this to
+    // the live schema before streaming so a column rename / drop
+    // during the session surfaces as FAILED_PRECONDITION; plan 15
+    // (storage-read-write) keeps that contract but pins the drift
+    // check to the projected subset when `selected_fields` is set.
     backend::schema::TableSchema schema;
     // Typed parse of `read_session.read_options.row_restriction`
     // captured at CreateReadSession time. Plan 39: the parser runs at
@@ -116,6 +122,14 @@ class StorageReadService final : public v1::StorageRead::Service {
     // already started; the typed form is then handed verbatim to
     // `Storage::CreateReadStream` from ReadRows.
     std::optional<backend::storage::EqualityPredicate> equality_predicate;
+    // Plan 15 (storage-read-write): per-session list of column names
+    // pinned by `read_session.read_options.selected_fields`. Empty
+    // when the caller asked for "all columns". The list is validated
+    // against the schema at CreateReadSession time so unknown names
+    // surface as INVALID_ARGUMENT before the stream opens; ReadRows
+    // hands the list verbatim to `Storage::CreateReadStream` and the
+    // backend projects rows down to that subset.
+    std::vector<std::string> selected_fields;
   };
 
   // ParseParent enforces the

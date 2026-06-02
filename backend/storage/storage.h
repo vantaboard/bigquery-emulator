@@ -182,10 +182,15 @@ struct ReadFilter {
   std::int64_t offset = 0;
 
   // Subset of column names the caller wants returned. Empty means
-  // "all columns". Plan 38 accepts this list to keep the interface
-  // forward-compatible with `ReadOptions.selected_fields`; the
-  // backends do not yet project rows down to the subset (the engine
-  // wiring lands in a follow-up plan).
+  // "all columns". Plan 15 (storage-read-write) wires this on the
+  // DuckDB backend: the backend builds a projected schema from the
+  // listed names and the `RowIterator` yields rows in that order.
+  // The handler validates the names exist at session-create time, so
+  // an unknown column surfaces as INVALID_ARGUMENT before the stream
+  // opens; the backend does the same defensive check (re-validating
+  // here would be redundant, but the helper is shared with the
+  // CreateReadSession parse path so an unknown column never reaches
+  // a real SELECT).
   std::vector<std::string> selected_fields;
 
   // Raw SQL-shaped predicate the caller supplied. Retained on the
@@ -285,10 +290,11 @@ class Storage {
   // `RowIterator` so the `StorageReadService` handler does not
   // branch on backend type.
   //
-  // Plan 38 enforces `row_limit` and `offset`; `selected_fields`
-  // and `row_restriction` are accepted but not honored (see the
-  // field comments on `ReadFilter`). NOT_FOUND if the table does
-  // not exist.
+  // Plan 38 enforces `row_limit` and `offset`; `row_restriction`
+  // is honored as of plan 39 and `selected_fields` as of plan 15
+  // (storage-read-write). See the field comments on `ReadFilter`
+  // for the per-knob contract. NOT_FOUND if the table does not
+  // exist.
   [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>>
   CreateReadStream(const TableId& id, const ReadFilter& filter) const = 0;
 };

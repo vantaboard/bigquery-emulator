@@ -126,6 +126,39 @@ bool SchemasEqualByShape(const backend::schema::TableSchema& a,
   return true;
 }
 
+// FindColumnByName returns the index of the column named `name` in
+// `schema`, or `npos` if no top-level column has that name. Used to
+// validate `selected_fields` at CreateReadSession time so a typo
+// surfaces as INVALID_ARGUMENT before the streaming RPC starts.
+constexpr std::size_t kColumnNotFound =
+    static_cast<std::size_t>(-1);
+std::size_t FindColumnByName(const backend::schema::TableSchema& schema,
+                             absl::string_view name) {
+  for (std::size_t i = 0; i < schema.columns.size(); ++i) {
+    if (schema.columns[i].name == name) return i;
+  }
+  return kColumnNotFound;
+}
+
+// Builds a projected TableSchema from `schema` containing only the
+// columns named by `field_names`, in the order they appear in
+// `field_names`. The caller must have already validated each name
+// against `schema` (CreateReadSession does this); a still-unknown
+// name here is a programming error.
+backend::schema::TableSchema ProjectSchemaForResponse(
+    const backend::schema::TableSchema& schema,
+    const std::vector<std::string>& field_names) {
+  backend::schema::TableSchema out;
+  out.columns.reserve(field_names.size());
+  for (const std::string& name : field_names) {
+    const std::size_t idx = FindColumnByName(schema, name);
+    if (idx != kColumnNotFound) {
+      out.columns.push_back(schema.columns[idx]);
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 StorageReadService::StorageReadService(backend::storage::Storage* storage)
@@ -258,6 +291,41 @@ std::string StorageReadService::StreamIdForSession(
     predicate = std::move(parsed);
   }
 
+  // Plan 15 (storage-read-write): validate `selected_fields` at
+  // session-mint time. Each entry must name a top-level column of
+  // the source table; an unknown name surfaces as INVALID_ARGUMENT
+  // before any streaming starts. We deliberately reject an empty
+  // string entry too — the caller's protobuf `repeated string`
+  // would normally only contain non-empty values, but a wire-level
+  // bug that smuggled `""` would silently match nothing on the
+  // backend, which is the exact "silent approximation" plan 15
+  // forbids.
+  std::vector<std::string> selected_fields;
+  if (request->read_session().has_read_options() &&
+      request->read_session().read_options().selected_fields_size() > 0) {
+    selected_fields.reserve(
+        request->read_session().read_options().selected_fields_size());
+    for (const auto& name :
+         request->read_session().read_options().selected_fields()) {
+      if (name.empty()) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::INVALID_ARGUMENT,
+            "StorageRead.CreateReadSession: read_options.selected_fields "
+            "entries must be non-empty");
+      }
+      if (FindColumnByName(*schema_or, name) == kColumnNotFound) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::INVALID_ARGUMENT,
+            absl::StrCat(
+                "StorageRead.CreateReadSession: read_options.selected_fields "
+                "names unknown column `",
+                name,
+                "` (table has no top-level column with that name)"));
+      }
+      selected_fields.emplace_back(name);
+    }
+  }
+
   std::string session_name;
   std::string stream_name;
   {
@@ -268,15 +336,27 @@ std::string StorageReadService::StreamIdForSession(
     state.table = table_id;
     state.schema = *schema_or;
     state.equality_predicate = predicate;
+    state.selected_fields = selected_fields;
     sessions_.emplace(session_name, std::move(state));
   }
 
   // Build the response. Plan 37: one session, one stream, schema
-  // attached, read_options echoed back (we accept selected_fields /
-  // row_restriction but do not enforce them until plan 38).
+  // attached, read_options echoed back. Plan 15 (storage-read-write):
+  // when the caller pinned `selected_fields`, the response schema
+  // reflects the projection — both the ordering and the column list
+  // — so a downstream Avro / Arrow decoder reads cells against the
+  // same shape ReadRows will emit. The full schema is still stashed
+  // on the SessionState so the drift check in ReadRows runs against
+  // the source table.
   response->set_name(session_name);
   response->set_table(request->read_session().table());
-  backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+  if (selected_fields.empty()) {
+    backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+  } else {
+    const backend::schema::TableSchema projected =
+        ProjectSchemaForResponse(*schema_or, selected_fields);
+    backend::schema::TableSchemaToProto(projected, response->mutable_schema());
+  }
   if (request->read_session().has_read_options()) {
     *response->mutable_read_options() = request->read_session().read_options();
   }
@@ -325,6 +405,7 @@ std::string StorageReadService::StreamIdForSession(
   backend::storage::TableId table;
   backend::schema::TableSchema session_schema;
   std::optional<backend::storage::EqualityPredicate> predicate;
+  std::vector<std::string> selected_fields;
   {
     absl::MutexLock lock(&mu_);
     auto it = sessions_.find(session_name);
@@ -338,6 +419,7 @@ std::string StorageReadService::StreamIdForSession(
     table = it->second.table;
     session_schema = it->second.schema;
     predicate = it->second.equality_predicate;
+    selected_fields = it->second.selected_fields;
   }
 
   // 3. Schema drift check. If the table schema changed between
@@ -380,11 +462,15 @@ std::string StorageReadService::StreamIdForSession(
   // Plan 39: the parsed row_restriction (if any) lives on the
   // session — both backends apply the predicate before offset/limit
   // so the wire shape matches BigQuery's documented semantics
-  // (offset is over the post-filter row stream).
+  // (offset is over the post-filter row stream). Plan 15
+  // (storage-read-write): the projected `selected_fields` list (if
+  // any) is also session-resident so the same projection applies
+  // verbatim across resumptions.
   backend::storage::ReadFilter filter;
   filter.offset = request->offset();
   filter.row_limit = 0;
   filter.equality_predicate = predicate;
+  filter.selected_fields = selected_fields;
   absl::StatusOr<std::unique_ptr<backend::storage::RowIterator>> iter_or =
       storage_->CreateReadStream(table, filter);
   if (!iter_or.ok()) {

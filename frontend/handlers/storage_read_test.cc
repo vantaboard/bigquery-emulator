@@ -187,12 +187,49 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
 
   // The proto contract says read_options round-trips on the reply so
   // the gateway can show the caller what shape the session was minted
-  // with. `selected_fields` is still informational (plan 39 defers
-  // projection); `row_restriction` is honored by ReadRows below.
+  // with. Plan 15 (storage-read-write) honors selected_fields, so the
+  // response *schema* now reflects the projection (id, name only)
+  // while the read_options round-trip still echoes the request.
   ASSERT_EQ(resp.read_options().selected_fields_size(), 2);
   EXPECT_EQ(resp.read_options().selected_fields(0), "id");
   EXPECT_EQ(resp.read_options().selected_fields(1), "name");
   EXPECT_EQ(resp.read_options().row_restriction(), "id = 0");
+
+  // Plan 15: the response schema is now projected to the caller's
+  // selected_fields list, in caller-supplied order. The full table
+  // has three columns; pinning "id" + "name" must drop "tags".
+  ASSERT_EQ(resp.schema().fields_size(), 2);
+  EXPECT_EQ(resp.schema().fields(0).name(), "id");
+  EXPECT_EQ(resp.schema().fields(1).name(), "name");
+}
+
+TEST_F(StorageReadServiceTest,
+       CreateReadSessionRejectsUnknownSelectedField) {
+  CreatePeopleTable();
+  v1::CreateReadSessionRequest req = MakePeopleRequest();
+  // `phone` is not a column on the people table; plan 15 rejects
+  // this at session-mint time so the streaming RPC never starts
+  // against an invalid projection.
+  req.mutable_read_session()->mutable_read_options()->add_selected_fields(
+      "phone");
+  v1::ReadSession resp;
+  ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
+  EXPECT_EQ(service_->SessionsForTesting(), 0u);
+}
+
+TEST_F(StorageReadServiceTest, CreateReadSessionRejectsEmptySelectedField) {
+  CreatePeopleTable();
+  v1::CreateReadSessionRequest req = MakePeopleRequest();
+  // An empty entry is a wire-level oddity but the handler refuses
+  // it explicitly so a buggy client cannot smuggle a no-match
+  // projection that would silently approximate "all columns".
+  req.mutable_read_session()->mutable_read_options()->add_selected_fields("");
+  v1::ReadSession resp;
+  ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
+      << status.error_message();
 }
 
 TEST_F(StorageReadServiceTest, CreateReadSessionRejectsRangeRestriction) {
@@ -578,6 +615,59 @@ TEST_F(StorageReadGrpcTest, ReadRowsUnknownStreamIsNotFound) {
   ::grpc::Status status = reader->Finish();
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND)
       << status.error_message();
+}
+
+// Plan 15 (storage-read-write): selected_fields projection
+// end-to-end. The session is minted with `selected_fields = [id]`,
+// so the response schema lists only `id` and ReadRows yields one
+// cell per row instead of three. The projection survives a
+// round-trip through the in-process gRPC server, which is the same
+// codec path the production engine uses.
+TEST_F(StorageReadGrpcTest, ReadRowsProjectsToSelectedFields) {
+  CreatePeopleTable();
+  AppendPeople(/*n=*/4);
+
+  ::grpc::ClientContext create_ctx;
+  v1::CreateReadSessionRequest create_req;
+  create_req.set_parent("projects/proj-test");
+  create_req.mutable_read_session()->set_table(
+      "projects/proj-test/datasets/ds/tables/t");
+  create_req.mutable_read_session()
+      ->mutable_read_options()
+      ->add_selected_fields("name");
+  create_req.mutable_read_session()
+      ->mutable_read_options()
+      ->add_selected_fields("id");
+  v1::ReadSession session;
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+
+  // Schema reflects the caller-supplied projection order, not the
+  // table's declared column order.
+  ASSERT_EQ(session.schema().fields_size(), 2);
+  EXPECT_EQ(session.schema().fields(0).name(), "name");
+  EXPECT_EQ(session.schema().fields(1).name(), "id");
+
+  ::grpc::ClientContext read_ctx;
+  v1::ReadRowsRequest read_req;
+  read_req.set_read_stream(session.streams(0).name());
+  auto reader = stub_->ReadRows(&read_ctx, read_req);
+  ASSERT_NE(reader, nullptr);
+  std::vector<v1::DataRow> rows;
+  v1::ReadRowsResponse page;
+  while (reader->Read(&page)) {
+    for (const auto& row : page.rows())
+      rows.push_back(row);
+  }
+  ::grpc::Status status = reader->Finish();
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  ASSERT_EQ(rows.size(), 4u);
+  for (size_t i = 0; i < rows.size(); ++i) {
+    // Two cells per row, in projected order: name then id.
+    ASSERT_EQ(rows[i].cells_size(), 2);
+    EXPECT_EQ(rows[i].cells(0).string_value(),
+              absl::StrCat("person-", i));
+    EXPECT_EQ(rows[i].cells(1).string_value(), absl::StrCat(i));
+  }
 }
 
 // Plan 39: row_restriction pushdown end-to-end. CreateReadSession

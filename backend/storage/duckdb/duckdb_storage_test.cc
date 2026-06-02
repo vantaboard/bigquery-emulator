@@ -518,6 +518,62 @@ TEST_F(DuckDBStorageTest, CreateReadStreamPredicateNoMatchYieldsEmpty) {
   EXPECT_TRUE(scanned.empty());
 }
 
+// Plan 15 (storage-read-write): selected_fields projection pushdown.
+// The DuckDB backend filters the SELECT projection list down to the
+// caller-supplied subset and the row decoder reads cells back in the
+// projected order. Verifies both the cell count and the projected
+// order: passing `[name, id]` returns rows where cells[0] is name
+// and cells[1] is id, even though the table declared `[id, name]`.
+TEST_F(DuckDBStorageTest, CreateReadStreamProjectsSelectedFields) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+
+  std::vector<Row> rows;
+  for (int64_t i = 0; i < 3; ++i) {
+    rows.push_back(MakePerson(i, absl::StrCat("person-", i)));
+  }
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan(rows)).ok());
+
+  ReadFilter filter;
+  filter.selected_fields = {"name", "id"};
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 3u);
+  for (size_t i = 0; i < scanned.size(); ++i) {
+    ASSERT_EQ(scanned[i].cells.size(), 2u);
+    EXPECT_EQ(scanned[i].cells[0].string_value(),
+              absl::StrCat("person-", i));
+    EXPECT_EQ(scanned[i].cells[1].int64_value(), static_cast<int64_t>(i));
+  }
+}
+
+TEST_F(DuckDBStorageTest, CreateReadStreamRejectsUnknownSelectedField) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok());
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+  ASSERT_TRUE(store.CreateTable(table, PeopleSchema()).ok());
+  ASSERT_TRUE(
+      store.AppendRows(table, absl::MakeConstSpan({MakePerson(1, "ada")}))
+          .ok());
+
+  ReadFilter filter;
+  filter.selected_fields = {"phone"};  // not on the people schema
+  auto iter_or = store.CreateReadStream(table, filter);
+  ASSERT_FALSE(iter_or.ok());
+  EXPECT_EQ(iter_or.status().code(), absl::StatusCode::kInvalidArgument);
+}
+
 TEST_F(DuckDBStorageTest, CreateReadStreamPredicateBeforeOffsetLimit) {
   auto store_or = DuckDBStorage::Open(data_dir_.string());
   ASSERT_TRUE(store_or.ok());

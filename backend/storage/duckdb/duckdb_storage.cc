@@ -307,6 +307,53 @@ std::string RenderColumnIdentList(const schema::TableSchema& schema) {
   return out;
 }
 
+// Renders an explicit comma-separated identifier list for the
+// requested `names`. The caller must have already validated that
+// every name exists in `schema`; we look up each one and emit
+// `QuoteIdent(name)` so the resulting SELECT projects in the
+// caller-supplied order. Empty `names` returns an empty string;
+// callers must fall back to `RenderColumnIdentList(schema)` in that
+// case (the SQL parser does not accept an empty SELECT list).
+std::string RenderSelectedColumnIdentList(absl::Span<const std::string> names) {
+  std::string out;
+  for (size_t i = 0; i < names.size(); ++i) {
+    if (i > 0) absl::StrAppend(&out, ", ");
+    absl::StrAppend(&out, QuoteIdent(names[i]));
+  }
+  return out;
+}
+
+// Returns a projected `TableSchema` whose `columns` are the entries
+// from `schema` named by `names`, in the order `names` lists them.
+// Returns INVALID_ARGUMENT (with the offending name) on the first
+// unknown column. This is the helper that gives the
+// `selected_fields` Storage Read API knob a real projection: the
+// `ExecuteSelect` row decoder reads cells back into the projected
+// schema's column order so the `Row` shape downstream matches
+// exactly what the SELECT projected.
+absl::StatusOr<schema::TableSchema> ProjectSchema(
+    const schema::TableSchema& schema, absl::Span<const std::string> names) {
+  schema::TableSchema out;
+  out.columns.reserve(names.size());
+  for (const std::string& name : names) {
+    const schema::ColumnSchema* match = nullptr;
+    for (const auto& col : schema.columns) {
+      if (col.name == name) {
+        match = &col;
+        break;
+      }
+    }
+    if (match == nullptr) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "selected_fields: unknown column `",
+          name,
+          "` (table has no top-level column with that name)"));
+    }
+    out.columns.push_back(*match);
+  }
+  return out;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -1345,6 +1392,22 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
   }
 
+  // Plan 15 (storage-read-write): when the caller pins a
+  // `selected_fields` list we project rows down to that subset. The
+  // projected schema is what `ExecuteSelect` decodes against, so the
+  // `Row.cells` vector matches the projected column order exactly.
+  // An empty list means "all columns" (the legacy plan-38 contract).
+  schema::TableSchema effective_schema = schema;
+  std::string select_cols;
+  if (!filter.selected_fields.empty()) {
+    auto projected_or = ProjectSchema(schema, filter.selected_fields);
+    if (!projected_or.ok()) return projected_or.status();
+    effective_schema = std::move(*projected_or);
+    select_cols = RenderSelectedColumnIdentList(filter.selected_fields);
+  } else {
+    select_cols = RenderColumnIdentList(schema);
+  }
+
   // ORDER BY a stable row identifier so OFFSET / LIMIT yield
   // deterministic windows across calls. The plan-31 Arrow pipeline
   // uses `read_parquet`'s `file_row_number` extra column for the
@@ -1353,7 +1416,6 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   // have received if it had stayed connected. The column is
   // synthesized by DuckDB at scan time and never selected into the
   // result.
-  const std::string select_cols = RenderColumnIdentList(schema);
   std::string sql = absl::StrCat("SELECT ",
                                  select_cols,
                                  " FROM read_parquet('",
@@ -1380,8 +1442,13 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     }
     absl::StrAppend(&sql, " OFFSET ", filter.offset);
   }
-  auto status = ExecuteSelect(
-      impl_.get(), sql, schema, "CreateReadStream", id, parquet_path, &rows);
+  auto status = ExecuteSelect(impl_.get(),
+                              sql,
+                              effective_schema,
+                              "CreateReadStream",
+                              id,
+                              parquet_path,
+                              &rows);
   if (!status.ok()) return status;
   return std::unique_ptr<RowIterator>(new VectorRowIterator(std::move(rows)));
 }
