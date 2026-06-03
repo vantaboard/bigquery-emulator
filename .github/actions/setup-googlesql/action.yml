@@ -171,17 +171,24 @@ runs:
       working-directory: ${{ github.workspace }}
       run: |
         set -euo pipefail
-        # `task googlesql:fetch-prebuilt` runs the same SHA + module-name
-        # + manifest-schema gates the local helper enforces, so a
-        # tampered or stale tarball cannot land in the cache. Requires
-        # `go-task/setup-task` to have run earlier in the calling job.
-        # The task also invokes the centralized safety-gate validator
-        # (`tools/googlesql-prebuilt/validate_artifact.py`) before
-        # committing to the cache, so an artifact that passes this step
-        # has already cleared the full identity + payload integrity gates.
-        task googlesql:fetch-prebuilt \
-          URL='${{ inputs.prebuilt-url }}' \
-          SHA256='${{ inputs.prebuilt-sha256 }}'
+        cache=".cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64"
+        if [ -f "$cache/MODULE.bazel" ] \
+          && python3 tools/googlesql-prebuilt/validate_artifact.py \
+            --repo-root "$cache" --summary-line >/dev/null 2>&1; then
+          echo "::notice::GoogleSQL prebuilt cache present and valid; skipping tarball download"
+        else
+          # `task googlesql:fetch-prebuilt` runs the same SHA + module-name
+          # + manifest-schema gates the local helper enforces, so a
+          # tampered or stale tarball cannot land in the cache. Requires
+          # `go-task/setup-task` to have run earlier in the calling job.
+          # The task also invokes the centralized safety-gate validator
+          # (`tools/googlesql-prebuilt/validate_artifact.py`) before
+          # committing to the cache, so an artifact that passes this step
+          # has already cleared the full identity + payload integrity gates.
+          task googlesql:fetch-prebuilt \
+            URL='${{ inputs.prebuilt-url }}' \
+            SHA256='${{ inputs.prebuilt-sha256 }}'
+        fi
 
     - name: Validate prebuilt artifact identity (safety-gate pins)
       if: steps.resolve.outputs.mode == 'prebuilt'

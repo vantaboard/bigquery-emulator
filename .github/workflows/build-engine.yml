@@ -6,6 +6,7 @@
 #
 # Caching layers:
 #   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin
+#   * `actions/cache` on `.cache/googlesql-prebuilt/` keyed by prebuilt SHA256
 #   * Unified Bazel `disk-cache: engine` (shared with cc_test consumers)
 #
 # Local equivalent: `task emulator:build-engine:bazel` (see taskfiles/ci.yml).
@@ -80,6 +81,12 @@ jobs:
           key: engine-binaries-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'backend/**', 'binaries/emulator_main/**', 'frontend/**', 'proto/**', 'third_party/**') }}-gsq-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
           restore-keys: |
             engine-binaries-
+
+      - name: Restore GoogleSQL prebuilt cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/googlesql-prebuilt
+          key: googlesql-prebuilt-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
 
       - name: Set up Bazel (bazelisk)
         uses: bazel-contrib/setup-bazel@0.19.0

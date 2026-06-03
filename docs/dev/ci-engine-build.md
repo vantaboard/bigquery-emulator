@@ -13,14 +13,14 @@ push / pull_request
         ├─► build-engine / build          ──► engine-binaries artifact
         ├─► ci-cpp-analysis / cpp-analysis (parallel, no engine)
         ├─► conformance-routing-matrix / routing-matrix (parallel)
-        ├─► thirdparty-golang-compile / golang compile (parallel)
-        └─► coverage-bazel / bazel-coverage (parallel)
+        └─► thirdparty-golang-compile / golang compile (parallel)
                 │
                 │ workflow_run (build-engine success)
                 ├─► ci / build-and-test (amd64) ──► go-coverage artifact
                 ├─► conformance / conformance (duckdb)
                 ├─► docker-smoke / quickstart-smoke
-                └─► thirdparty-samples / java live
+                ├─► thirdparty-samples / java live
+                └─► coverage-bazel / bazel-coverage (main push only)
                         │
                         └─► coverage-publish (after ci or coverage-bazel)
 ```
@@ -29,6 +29,11 @@ Consumer workflows (`ci`, `conformance`, `docker-smoke`, `thirdparty-samples`)
 are **`workflow_run` only**. They never run on push, so they cannot show green
 with skipped gate jobs. If `build-engine` fails, each consumer runs an
 `engine-build-failed` job that exits non-zero.
+
+[`coverage-bazel`](../../.github/workflows/coverage-bazel.yml) is also
+**`workflow_run` only** and runs **only on push to `main`** (not on PRs). PR
+coverage gates use Go coverage from `ci` only; C++ Bazel coverage is
+informational and runs post-merge.
 
 Cheap push/PR workflows (no engine):
 
@@ -41,7 +46,8 @@ Cheap push/PR workflows (no engine):
 | Layer | Where | Purpose |
 |-------|--------|---------|
 | `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged across commits |
-| Bazel `disk-cache: engine` | `build-engine`, `ci` cc_test | Shared incremental compile cache |
+| `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine`, `coverage-bazel` | Skip tarball download when prebuilt SHA256 pin unchanged |
+| Bazel `disk-cache: engine` | `build-engine`, `coverage-bazel`, `ci` cc_test | Shared incremental compile cache |
 | `engine-binaries` artifact | per successful `build-engine` run | Consumers + re-runs download without rebuilding |
 
 Re-running a failed consumer (e.g. conformance) on the same commit reuses the

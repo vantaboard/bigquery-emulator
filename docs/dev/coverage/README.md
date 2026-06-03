@@ -25,13 +25,20 @@ The implementation lives in:
 
 ```mermaid
 flowchart LR
-  go[ci.yml: go test -coverprofile] -->|go-coverage artifact| pub[coverage-publish.yml]
-  cpp[coverage-bazel.yml: bazel coverage] -->|cpp-bazel-coverage artifact| pub
+  buildEngine[build-engine push/PR] --> ci[ci.yml: go test -coverprofile]
+  buildEngine -->|"main push only"| cpp[coverage-bazel.yml: bazel coverage]
+  ci -->|go-coverage artifact| pub[coverage-publish.yml]
+  cpp -->|cpp-bazel-coverage artifact| pub
   pub -->|"push to main"| gh[gh-pages branch]
-  pub -->|"pull_request"| gate[regression gate against gh-pages baseline.json]
+  pub -->|"pull_request Go-only gate"| gate[regression gate against gh-pages baseline.json]
   gh -->|shields.io endpoint| readme["README badges"]
   gh -->|GitHub Pages| browse["browsable reports"]
 ```
+
+On **pull requests**, `coverage-bazel` does not run; `coverage-publish` gates
+on Go coverage only (the C++ row shows `skipped (missing data)`). On **push to
+`main`**, `coverage-bazel` runs after `build-engine` succeeds and reuses the
+warm `engine` Bazel disk cache.
 
 ## Operator runbook
 
@@ -90,19 +97,25 @@ publish creates it. Merge a no-op PR to `main`, wait for
 
 ### 3. Verify the pipeline end-to-end
 
+**On a pull request:**
+
 1. Open a no-op PR (whitespace edit is fine).
-2. Wait for `ci` and `coverage-bazel` to complete.
-3. `coverage-publish` should fire twice (once per producer) and
-   report a `Coverage gate` table in its run summary. The PR's
-   "Checks" tab should show `coverage-publish / publish (...)` as
-   a passing check.
+2. Wait for `ci` to complete (`coverage-bazel` does not run on PRs).
+3. `coverage-publish` should fire from the `ci` producer and report a
+   `Coverage gate` table in its run summary (Go rows gated; C++ row
+   `skipped (missing data)`). The PR's "Checks" tab should show
+   `coverage-publish / publish (ci)` as a passing check.
 4. Merge to `main`.
-5. After the post-merge `coverage-publish` finishes, the
-   `gh-pages` branch should have:
+
+**After merge to `main`:**
+
+5. Wait for `build-engine`, then `coverage-bazel`, then `ci` to complete.
+6. After the post-merge `coverage-publish` finishes (triggered by `ci`
+   and/or `coverage-bazel`), the `gh-pages` branch should have:
    - `summary.json`, `baseline.json` (identical for this commit),
      `badge.json`, `badge-go.json`, `badge-cpp.json`
    - `go.html`, `cpp/index.html`, `index.html`
-6. Refresh the README on the main branch: the three new
+7. Refresh the README on the main branch: the three new
    `coverage*` badges should resolve to real percentages (allow
    ~5 minutes for shields.io's cache).
 
