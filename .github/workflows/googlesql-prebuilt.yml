@@ -327,5 +327,5 @@ jobs:
         # shutdown is defensive — covers the case where the script
         # was interrupted mid-flight.
         run: |
-          (cd ../googlesql && bazel shutdown 2>/dev/null) || true
-          (cd bigquery-emulator && bazel shutdown 2>/dev/null) || true
+          (cd ../googlesql && timeout 60 bazel shutdown 2>/dev/null) || true
+          (cd bigquery-emulator && timeout 60 bazel shutdown 2>/dev/null) || true
