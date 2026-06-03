@@ -75,7 +75,7 @@ dist/CHANGELOG.md
 # ---  intentionally enumerates the banned phrases it polices. Cover
 # ---  the matching `desc:` block so a future addition to the linter
 # ---  vocabulary doesn't have to fight this allowlist.
-taskfiles/lint.yml:178-186
+taskfiles/lint.yml:197-205
 
 # --- Coordinator + classifier headers reference `FallbackEngine` to
 # ---  explain what hazard the route classifier replaces. The active

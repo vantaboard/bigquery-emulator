@@ -29,6 +29,25 @@
 # first if it is missing.
 version: "3"
 
+vars:
+  # Shared by `lint:cpp:test` and `lint:cpp:compile-commands` (same
+  # expression as `coverage-bazel.yml` Enumerate step and `task lint:cpp:test`).
+  CC_TEST_BAZEL_QUERY: >-
+    kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)
+  # Map GOOGLESQL_SOURCE to the `--config=` group Bazel needs for
+  # `bazel query` / analysis. CI prebuilt lanes have no ../googlesql
+  # sibling; query must use googlesql-prebuilt or module resolution fails.
+  GOOGLESQL_BAZEL_CONFIG:
+    sh: |
+      case "${GOOGLESQL_SOURCE:-prebuilt}" in
+        prebuilt) echo googlesql-prebuilt ;;
+        local|source) echo googlesql-source ;;
+        *)
+          echo "lint: GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '${GOOGLESQL_SOURCE:-}'" >&2
+          exit 2
+          ;;
+      esac
+
 tasks:
   default:
     desc: Run the fast pre-commit gate (same as lint:run)
@@ -357,10 +376,10 @@ tasks:
         # alongside the production binary. Without this, clang-tidy
         # sees `*_test.cc` with no entry and falls back to the
         # default include chain (no `gtest/gtest.h`, no
-        # `gmock/gmock.h`).
-        test_targets=$(bazel query \
-          'kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)' \
-          2>/dev/null | tr '\n' ' ')
+        # `gmock/gmock.h`). Use the same `--config` as `task bazel:*`
+        # so prebuilt CI (no ../googlesql) resolves @googlesql.
+        test_targets=$(bazel query --config={{.GOOGLESQL_BAZEL_CONFIG}} \
+          '{{.CC_TEST_BAZEL_QUERY}}' | tr '\n' ' ')
         target_args=( --target //binaries/emulator_main:emulator_main )
         for t in $test_targets; do
           target_args+=( --target "$t" )
@@ -373,10 +392,11 @@ tasks:
     desc: |
       Run every first-party `cc_test` via the throttled
       `task bazel:test` wrapper. Discovers targets via
-      `bazel query 'kind(cc_test, //backend/... + //binaries/... +
-      //frontend/...)'` so a new test does not need a manual
-      Taskfile edit. Emits the standard `--test_output=errors` shape
-      so failing tests print their stderr inline.
+      `bazel query` over the first-party trees (honors
+      `GOOGLESQL_SOURCE` for `--config=googlesql-prebuilt|source`)
+      so a new test does not need a manual Taskfile edit. Emits the
+      standard `--test_output=errors` shape so failing tests print
+      their stderr inline.
     cmds:
       - |
         set -eo pipefail
@@ -389,10 +409,10 @@ tasks:
         # Use `bazel query` rather than a hand-maintained list. The
         # query lives under each of the first-party include roots so a
         # new cc_test under any of them is picked up automatically.
-        targets=$(bazel query \
-          'kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)' \
-          2>/dev/null | tr '\n' ' ')
-        if [ -z "$targets" ]; then
+        # `--config` must match `task bazel:test` (see GOOGLESQL_BAZEL_CONFIG).
+        targets=$(bazel query --config={{.GOOGLESQL_BAZEL_CONFIG}} \
+          '{{.CC_TEST_BAZEL_QUERY}}' | tr '\n' ' ')
+        if [ -z "${targets// }" ]; then
           echo 'lint:cpp:test: no cc_test targets discovered' >&2
           exit 0
         fi

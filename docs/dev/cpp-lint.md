@@ -50,9 +50,9 @@ ownership boundary is pinned by
 | Source-only C++ checks | `task lint:cpp:source` | File length, banned logging, status anti-patterns. |
 | Regenerate baseline | `task lint:cpp:baseline` | Use after a refactor that splits an oversized file. |
 | clang-tidy (slow) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
-| Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel aquery`; takes minutes on a cold tree. |
+| Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
 | cppcheck (slow) | `task lint:cpp:cppcheck` | Secondary-analysis lane. |
-| First-party `cc_test` | `task lint:cpp:test` | Discovers via `bazel query`; reuses `task bazel:test`. |
+| First-party `cc_test` | `task lint:cpp:test` | Discovers via `bazel query` (`--config` aligned with `task bazel:test`); reuses `task bazel:test`. |
 | Match CI locally | `task ci:run` / `task ci:cpp-analysis` | Both lanes — fast (blocking) and slow (warning-only). |
 
 ## What each tool covers
