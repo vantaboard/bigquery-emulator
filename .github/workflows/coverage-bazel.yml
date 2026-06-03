@@ -2,8 +2,9 @@
 #
 # Mirrors `.github/workflows/conformance.yml`'s setup posture (sibling
 # googlesql checkout, setup-bazel with a dedicated disk-cache key) and
-# runs `bazel coverage` over every `cc_test` target discovered via
-# `bazel query 'kind(cc_test, //...)'`. The aggregated lcov report at
+# runs `bazel coverage` over every first-party `cc_test` target discovered
+# via a scoped `bazel query` (see the Enumerate step). The aggregated lcov
+# report at
 # `bazel-out/_coverage/_coverage_report.dat` is uploaded as the
 # `cpp-bazel-coverage` workflow artifact, which
 # `.github/workflows/coverage-publish.yml` aggregates with the
@@ -116,9 +117,13 @@ jobs:
             local|source) gsq_cfg=googlesql-source ;;
             *) echo "Unexpected GOOGLESQL_SOURCE='${GOOGLESQL_SOURCE}'" >&2; exit 2 ;;
           esac
-          targets="$(bazel query --config="$gsq_cfg" 'kind(cc_test, //...)' | tr '\n' ' ')"
+          # Scoped to first-party trees (same expression as `task lint:cpp:test`).
+          # `//...` would load `tools/googlesql-prebuilt/templates`, whose
+          # BUILD.bazel is an artifact template (no `include/**/*.h` here).
+          query='kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)'
+          targets="$(bazel query --config="$gsq_cfg" "$query" | tr '\n' ' ')"
           if [ -z "${targets// }" ]; then
-            echo "no cc_test targets found via 'bazel query kind(cc_test, //...)'" >&2
+            echo "no cc_test targets found via bazel query: $query" >&2
             exit 1
           fi
           echo "targets=${targets}" >> "$GITHUB_OUTPUT"

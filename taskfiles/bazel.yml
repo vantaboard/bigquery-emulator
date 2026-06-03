@@ -329,7 +329,9 @@ tasks:
   coverage:
     desc: |
       Throttled `bazel coverage` wrapper. Set TARGETS="//path/to:target ..."
-      (required; usually the output of `bazel query 'kind(cc_test, //...)'`).
+      (required; usually the output of a scoped `bazel query` over
+      `//backend/...`, `//binaries/...`, `//frontend/...`, and
+      `//tools/googlesql-prebuilt/smoke/...` — see `task lint:cpp:test`).
       Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
       (default `prebuilt`; consumes the published GoogleSQL artifact from
       .cache/googlesql-prebuilt/ so coverage runs share the same disk-cache
