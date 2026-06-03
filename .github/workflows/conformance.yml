@@ -1,26 +1,13 @@
 # Conformance matrix CI for the BigQuery emulator.
 #
-# Runs `task conformance:run` against every seed fixture under
-# `conformance/fixtures/` for each runtime profile in parallel.
-# Each profile produces its own JSON report which is uploaded as a
-# workflow artifact (`conformance-<profile>.json`). Today there is
-# only one profile (`duckdb`) -- the local execution coordinator
-# over DuckDB storage; the matrix shape stays in place so a future
-# profile addition does not require a workflow rewrite.
+# Triggered only after `.github/workflows/build-engine.yml` succeeds.
+# Runs `task conformance:run` for each profile and uploads JSON reports.
 #
-# The C++ engine binary is built once by `.github/workflows/build-engine.yml`
-# and consumed here via `workflow_run` + `setup-engine-from-artifact`.
-# The workflow stays in its own file so conformance regressions do
-# not block the build/test gate — and vice versa.
-#
-# `routing-matrix` runs on the direct push/PR trigger (no engine).
+# Routing-matrix docs live in conformance-routing-matrix.yml (push/PR).
 
 name: conformance
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_run:
     workflows: [build-engine]
     types: [completed]
@@ -29,16 +16,25 @@ permissions:
   contents: read
 
 concurrency:
-  group: conformance-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: conformance-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 jobs:
+  engine-build-failed:
+    if: github.event.workflow_run.conclusion != 'success'
+    name: engine-build-failed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report build-engine failure
+        run: |
+          echo "::error::build-engine concluded with '${{ github.event.workflow_run.conclusion }}'; gate jobs cannot run."
+          exit 1
+
   conformance:
-    name: conformance (${{ matrix.profile }})
     if: >-
-      github.event_name == 'workflow_run'
-      && github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event != 'workflow_dispatch'
+    name: conformance (${{ matrix.profile }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,45 +80,4 @@ jobs:
         with:
           name: conformance-${{ matrix.profile }}
           path: conformance-${{ matrix.profile }}.json
-          if-no-files-found: warn
-
-  routing-matrix:
-    if: github.event_name != 'workflow_run'
-    name: routing-matrix
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-
-      - name: Install Task
-        uses: go-task/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Emit routing matrix
-        run: |
-          task conformance:routing-matrix \
-            OUTPUT_FILE=conformance-routing-matrix.md
-
-      - name: Verify matrix is reproducible
-        run: |
-          task conformance:routing-matrix \
-            OUTPUT_FILE=conformance-routing-matrix.repeat.md
-          diff -u conformance-routing-matrix.md \
-                  conformance-routing-matrix.repeat.md
-
-      - name: Upload routing matrix
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: conformance-routing-matrix
-          path: conformance-routing-matrix.md
           if-no-files-found: warn

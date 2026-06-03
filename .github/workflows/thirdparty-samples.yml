@@ -1,28 +1,14 @@
-# Third-party BigQuery client sample suites.
+# Third-party BigQuery client live integration lanes.
 #
-# Conservative first cut: the goal here is a stable signal that the
-# imported go-googlesql client trees still *compile* and produce
-# meaningful skip output against this emulator's REST + gRPC surface,
-# without paying for a full Bazel + GoogleSQL rebuild on every push.
+# Java live ITs consume the shared engine artifact from build-engine
+# via workflow_run. Golang compile lives in thirdparty-golang-compile.yml.
 #
-# The java live lane consumes the shared engine artifact from
-# `.github/workflows/build-engine.yml` via `workflow_run`.
-# The golang compile lane does not touch the emulator at all.
-#
-# Stays in its own workflow (not folded into ci.yml or
-# conformance.yml) so an upstream sample regression — or a missing
-# emulator surface — does not block the build/test or fixture-
-# conformance gates, and vice versa.
-#
-# Local task equivalent: `task thirdparty:golang-bigquery-tests`.
-# See third_party/README.md for the env-var matrix and skip rules.
+# workflow_dispatch can enable the manual golang live lane (builds its
+# own engine). See third_party/README.md for env-var matrix.
 
 name: thirdparty-samples
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_run:
     workflows: [build-engine]
     types: [completed]
@@ -42,43 +28,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  golang-bigquery-tests-compile:
-    if: github.event_name != 'workflow_run'
-    name: golang-bigquery-tests (compile + skip)
+  engine-build-failed:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion != 'success'
+    name: engine-build-failed
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-          cache-dependency-path: third_party/golang-bigquery-tests/go.sum
-
-      - name: Install Task
-        uses: go-task/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run thirdparty:golang-bigquery-tests (no emulator)
-        run: task thirdparty:golang-bigquery-tests
-        env:
-          BIGQUERY_EMULATOR_HOST: ""
-          BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
-          STORAGE_EMULATOR_HOST: ""
+      - name: Report build-engine failure
+        run: |
+          echo "::error::build-engine concluded with '${{ github.event.workflow_run.conclusion }}'; gate jobs cannot run."
+          exit 1
 
   java-bigquery-tests-live:
-    name: java-bigquery-tests (live emulator)
     if: >-
-      (
-        github.event_name == 'workflow_run'
-        && github.event.workflow_run.conclusion == 'success'
-        && github.event.workflow_run.event != 'workflow_dispatch'
-      )
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: java-bigquery-tests (live emulator)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

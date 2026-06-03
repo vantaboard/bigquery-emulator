@@ -1,0 +1,47 @@
+# Slow C++ analysis lane (cppcheck). Runs on push/PR in parallel with
+# build-engine and does not wait for the engine artifact.
+#
+# Mirror of `task lint:cpp:cppcheck` and the former `cpp-analysis` job
+# in ci.yml. The build/test gate lives in ci.yml (workflow_run only).
+
+name: ci-cpp-analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cpp-analysis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpp-analysis:
+    name: cpp-analysis (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+
+      - name: cppcheck on first-party C++ tree
+        run: task lint:cpp:cppcheck

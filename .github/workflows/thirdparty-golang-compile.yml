@@ -1,0 +1,50 @@
+# Vendored Go BigQuery client compile + default-skip lane.
+#
+# Runs `task thirdparty:golang-bigquery-tests` with BIGQUERY_EMULATOR_HOST
+# unset so system tests skip but every package still compiles. Does not
+# touch the emulator or build-engine artifact.
+#
+# Local equivalent: `task thirdparty:golang-bigquery-tests` with no host set.
+
+name: thirdparty-golang-compile
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: thirdparty-golang-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golang-bigquery-tests-compile:
+    name: golang-bigquery-tests (compile + skip)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+          cache-dependency-path: third_party/golang-bigquery-tests/go.sum
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run thirdparty:golang-bigquery-tests (no emulator)
+        run: task thirdparty:golang-bigquery-tests
+        env:
+          BIGQUERY_EMULATOR_HOST: ""
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
+          STORAGE_EMULATOR_HOST: ""

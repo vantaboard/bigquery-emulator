@@ -1,9 +1,9 @@
 # Coverage publish/gate workflow for the BigQuery emulator.
 #
 # This is the self-hosted Codecov replacement: when the upstream
-# `ci.yml` (Go test coverage) or `coverage-bazel.yml` (C++ Bazel
-# coverage) workflows finish, this workflow looks for both partner
-# runs on the same head SHA, aggregates the artifacts via the
+# `ci.yml` (Go test coverage from the workflow_run build-and-test job)
+# or `coverage-bazel.yml` (C++ Bazel coverage) workflows finish, this
+# workflow looks for both partner runs on the same head SHA, aggregates the artifacts via the
 # in-repo `tools/coverage` binary, and either:
 #
 #   * publishes the resulting summary, badge JSONs, HTML reports, and
@@ -69,8 +69,14 @@ jobs:
     # Bail out cleanly when the producer workflow itself failed: a
     # red CI run does not produce trustworthy coverage data, and we
     # do not want a stale-by-accident publish to overwrite the
-    # baseline.
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # baseline. Only react to the real coverage producers (ci after
+    # build-engine workflow_run, or coverage-bazel on push/PR).
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && (
+        github.event.workflow_run.name == 'ci'
+        || github.event.workflow_run.name == 'coverage-bazel'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,9 +113,12 @@ jobs:
                 per_page: 100,
               },
             );
-            function latestSuccess(name) {
+            function latestSuccess(name, opts = {}) {
+              const requireWorkflowRun = opts.requireWorkflowRun === true;
               const matches = runs.filter(
-                r => r.name === name && r.conclusion === 'success',
+                r => r.name === name
+                  && r.conclusion === 'success'
+                  && (!requireWorkflowRun || r.event === 'workflow_run'),
               );
               if (matches.length === 0) return '';
               matches.sort(
@@ -117,7 +126,7 @@ jobs:
               );
               return String(matches[0].id);
             }
-            const ciId = latestSuccess('ci');
+            const ciId = latestSuccess('ci', { requireWorkflowRun: true });
             const covId = latestSuccess('coverage-bazel');
             core.info(`ci_run_id=${ciId} coverage_bazel_run_id=${covId}`);
             core.setOutput('ci_run_id', ciId);
@@ -145,6 +154,8 @@ jobs:
 
       - name: Detect inputs
         id: inputs
+        env:
+          TRIGGER_NAME: ${{ github.event.workflow_run.name }}
         run: |
           set -eo pipefail
           has_go=false
@@ -155,6 +166,10 @@ jobs:
             echo "has_go=$has_go"
             echo "has_cpp=$has_cpp"
           } >> "$GITHUB_OUTPUT"
+          if [ "$TRIGGER_NAME" = "ci" ] && [ "$has_go" = false ]; then
+            echo "::error::ci workflow_run completed but go-coverage artifact is missing from run ${{ steps.locate.outputs.ci_run_id }}"
+            exit 1
+          fi
           if [ "$has_go" = false ] && [ "$has_cpp" = false ]; then
             echo "::warning::No coverage artifacts found for ${{ github.event.workflow_run.head_sha }}; skipping publish."
             echo "skip=true" >> "$GITHUB_OUTPUT"

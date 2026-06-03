@@ -1,25 +1,17 @@
-# CI for the BigQuery emulator.
+# CI build-and-test gate for the BigQuery emulator.
 #
-# Mirrors `task ci:run` (see taskfiles/ci.yml): `go vet`, `go test`,
-# cc_test, conformance fastpath, and gateway build. The C++ engine
-# compile lives in `.github/workflows/build-engine.yml`; this workflow's
-# `build-and-test` job consumes that artifact via `workflow_run`.
+# Triggered only after `.github/workflows/build-engine.yml` succeeds
+# (`workflow_run`). Downloads the shared engine artifact and runs lint,
+# Go tests (with coverage), cc_test, conformance fastpath, and gateway
+# build.
 #
-# linux/amd64 only: the canonical Bazel-built engine
-# `//binaries/emulator_main:emulator_main` links GoogleSQL, whose
-# hermetic LLVM toolchain only ships amd64 binaries today. arm64
-# support is tracked against upstream GoogleSQL toolchain notes.
+# Cheap cppcheck lives in ci-cpp-analysis.yml (push/PR parallel).
 #
-# Keep this file and the `ci:run` task in sync for test coverage;
-# locally `task ci:run` still builds the engine sequentially on one
-# machine (see taskfiles/ci.yml header).
+# Keep in sync with `task ci:run` (see taskfiles/ci.yml).
 
 name: ci
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_run:
     workflows: [build-engine]
     types: [completed]
@@ -28,16 +20,25 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: ci-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 jobs:
+  engine-build-failed:
+    if: github.event.workflow_run.conclusion != 'success'
+    name: engine-build-failed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report build-engine failure
+        run: |
+          echo "::error::build-engine concluded with '${{ github.event.workflow_run.conclusion }}'; gate jobs cannot run."
+          exit 1
+
   build-and-test:
-    name: build-and-test (amd64)
     if: >-
-      github.event_name == 'workflow_run'
-      && github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event != 'workflow_dispatch'
+    name: build-and-test (amd64)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,33 +130,3 @@ jobs:
       - name: Release Bazel daemon
         if: always()
         run: bazel shutdown || true
-
-  cpp-analysis:
-    if: github.event_name != 'workflow_run'
-    name: cpp-analysis (cppcheck)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.26'
-          cache: true
-
-      - name: Install Task
-        uses: go-task/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install cppcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cppcheck
-
-      - name: cppcheck on first-party C++ tree
-        run: task lint:cpp:cppcheck
