@@ -835,7 +835,7 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
             "semantic: ResolvedCast has null type");
       }
       const ::googlesql::Type* source = cast.expr()->type();
-      if (source != nullptr && target != nullptr && source->Equals(target)) {
+      if (source != nullptr && source->Equals(target)) {
         return inner;
       }
       // The semantic executor's CAST surface is intentionally

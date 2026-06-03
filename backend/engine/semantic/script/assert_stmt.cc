@@ -59,7 +59,7 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
 
 absl::Status ExecuteAssert(const QueryRequest& request,
                            const ::googlesql::ResolvedAssertStmt& stmt,
-                           ScriptDriver& driver) {
+                           const ScriptDriver& driver) {
   (void)driver;  // ASSERT does not mutate the variable environment.
   const ::googlesql::ResolvedExpr* predicate = stmt.expression();
   if (predicate == nullptr) {

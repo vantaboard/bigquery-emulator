@@ -174,7 +174,7 @@ runs:
         # `task googlesql:fetch-prebuilt` runs the same SHA + module-name
         # + manifest-schema gates the local helper enforces, so a
         # tampered or stale tarball cannot land in the cache. Requires
-        # `arduino/setup-task` to have run earlier in the calling job.
+        # `go-task/setup-task` to have run earlier in the calling job.
         # The task also invokes the centralized safety-gate validator
         # (`tools/googlesql-prebuilt/validate_artifact.py`) before
         # committing to the cache, so an artifact that passes this step

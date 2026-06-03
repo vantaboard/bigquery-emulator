@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache: true
@@ -44,7 +44,7 @@ jobs:
         # The prebuilt-GoogleSQL setup action shells out to
         # `task googlesql:fetch-prebuilt`; install Task on the runner
         # so that path is available regardless of the resolved mode.
-        uses: arduino/setup-task@v2
+        uses: go-task/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -212,13 +212,13 @@ jobs:
         # `tools/lint/cpp` is a Go binary; `task lint:cpp:cppcheck`
         # invokes `go run ./tools/lint/cpp list` to compute the
         # first-party file list before handing off to cppcheck.
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache: true
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: go-task/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}

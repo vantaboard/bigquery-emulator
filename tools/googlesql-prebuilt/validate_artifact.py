@@ -77,6 +77,39 @@ WRAPPER_REQUIRED_FILES = (
     "googlesql/resolved_ast/BUILD.bazel",
 )
 
+# Frozen by docs/dev/googlesql-prebuilt/label-inventory.md § Direct labels.
+# Each entry must appear as `name = "<target>"` in the BUILD file so
+# consumer `@googlesql//...` labels resolve under prebuilt mode.
+WRAPPER_REQUIRED_TARGETS: dict[str, tuple[str, ...]] = {
+    "googlesql/public/BUILD.bazel": (
+        "analyzer",
+        "analyzer_options",
+        "analyzer_output",
+        "builtin_function_options",
+        "catalog",
+        "civil_time",
+        "error_helpers",
+        "error_location_cc_proto",
+        "evaluator_table_iterator",
+        "function",
+        "interval_value",
+        "language_options",
+        "numeric_value",
+        "options_cc_proto",
+        "simple_catalog",
+        "type",
+        "type_cc_proto",
+        "uuid_value",
+        "value",
+    ),
+    "googlesql/resolved_ast/BUILD.bazel": (
+        "resolved_ast",
+        "resolved_node_kind_cc_proto",
+    ),
+}
+
+TARGET_NAME_RE = re.compile(r'^\s*name\s*=\s*"([^"]+)"', re.MULTILINE)
+
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -95,6 +128,7 @@ FAIL_SCHEMA = "FAIL_SCHEMA"  # closed-schema validator rejected
 FAIL_IDENTITY_PIN = "FAIL_IDENTITY_PIN"  # commit/version pin mismatch
 FAIL_PLATFORM = "FAIL_PLATFORM"  # os/arch/libc/compiler mismatch
 FAIL_WRAPPER_MISSING = "FAIL_WRAPPER_MISSING"  # required BUILD/MODULE file absent
+FAIL_WRAPPER_TARGET = "FAIL_WRAPPER_TARGET"  # required cc_library name absent
 FAIL_PAYLOAD_MISSING = "FAIL_PAYLOAD_MISSING"  # manifest entry has no file
 FAIL_PAYLOAD_SHA = "FAIL_PAYLOAD_SHA"  # SHA-256 mismatch on payload
 FAIL_PAYLOAD_SIZE = "FAIL_PAYLOAD_SIZE"  # size_bytes mismatch on library
@@ -349,6 +383,22 @@ def _check_wrappers(repo_root: pathlib.Path) -> None:
             ) from exc
 
 
+def _check_wrapper_targets(repo_root: pathlib.Path) -> None:
+    """Every direct label from label-inventory.md is declared in BUILD.bazel."""
+    for rel, required in WRAPPER_REQUIRED_TARGETS.items():
+        path = repo_root / rel
+        text = path.read_text(encoding="utf-8")
+        declared = set(TARGET_NAME_RE.findall(text))
+        missing = [name for name in required if name not in declared]
+        if missing:
+            raise ValidationError(
+                kind=FAIL_WRAPPER_TARGET,
+                field=f"wrapper:{rel}",
+                expected=", ".join(required),
+                actual=f"missing targets: {', '.join(missing)}",
+            )
+
+
 def _check_payload(repo_root: pathlib.Path, manifest: dict) -> None:
     """Existence + SHA-256 + size + path-escape gates for every payload entry.
 
@@ -483,6 +533,7 @@ def validate(repo_root: pathlib.Path, pin: ExpectedPin) -> ValidationSummary:
     _check_identity(manifest, pin)
     _check_platform(manifest, pin)
     _check_wrappers(repo_root)
+    _check_wrapper_targets(repo_root)
     _check_payload(repo_root, manifest)
 
     payload = manifest["payload"]

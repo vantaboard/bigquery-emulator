@@ -130,8 +130,10 @@ build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 # those helpers verify the artifact's SHA-256 BEFORE writing into
 # the cache, so a build under `--config=googlesql-prebuilt` can
 # trust the cache contents.
-build:googlesql-prebuilt --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
-build:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
+# Shared across build / query / coverage / test when
+# `--config=googlesql-prebuilt` is set (build-only flags below).
+common:googlesql-prebuilt --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
+common:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
 # ABI parity with the prebuilt artifact. The compatibility-surface manifest commits
 # the producer to `-DNDEBUG` (see
 # `docs/dev/googlesql-prebuilt/manifest.md`'s `cflags` field), which

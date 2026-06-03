@@ -70,7 +70,7 @@ namespace script {
 //     would have seen for `SELECT <expr>`.
 absl::Status ExecuteAssert(const QueryRequest& request,
                            const ::googlesql::ResolvedAssertStmt& stmt,
-                           ScriptDriver& driver);
+                           const ScriptDriver& driver);
 
 }  // namespace script
 }  // namespace semantic
