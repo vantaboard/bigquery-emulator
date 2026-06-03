@@ -47,7 +47,7 @@ namespace {
 
 // Minimal in-memory `Storage` impl. The DML executor only needs
 // `GetSchema`, `AppendRows`, `OverwriteRows`, and `ScanRows`; the
-// dataset/table CRUD and Storage Read API methods stay
+// dataset/table CRUD, list, and Storage Read API methods stay
 // `kUnimplemented` so the test stays focused.
 class FakeStorage : public storage::Storage {
  public:
@@ -78,6 +78,14 @@ class FakeStorage : public storage::Storage {
   }
   absl::Status DropTable(const storage::TableId& /*id*/) override {
     return absl::UnimplementedError("FakeStorage::DropTable");
+  }
+  absl::StatusOr<std::vector<storage::DatasetId>> ListDatasets(
+      absl::string_view /*project_id*/) const override {
+    return absl::UnimplementedError("FakeStorage::ListDatasets");
+  }
+  absl::StatusOr<std::vector<storage::TableId>> ListTables(
+      const storage::DatasetId& /*dataset_id*/) const override {
+    return absl::UnimplementedError("FakeStorage::ListTables");
   }
   absl::StatusOr<schema::TableSchema> GetSchema(
       const storage::TableId& id) const override {
