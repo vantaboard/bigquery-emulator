@@ -5,21 +5,38 @@ alwaysApply: true
 
 # Pre-commit lint gate (before auto-commits)
 
-When following **Auto-Commit Workflow** (`.cursor/rules/auto-commit.mdc`), **before** `git commit` on a change set that includes **Go source** (`*.go`) or **Go lint config** (e.g. `.golangci.yml`, `go.mod` when it affects builds), run from the repo root:
+When following **Auto-Commit Workflow** (`.cursor/rules/auto-commit.mdc`), **before** `git commit` on a change set that touches **lint-relevant paths** (see below), run from the repo root:
 
 ```bash
 task lint:fix
 task lint:run
 ```
 
+`task lint:run` is the **fast pre-commit gate** for the whole repo, not a Go-only check. It runs (see `taskfiles/lint.yml`):
+
+- **Go:** `gofmt` + `go vet ./...`
+- **First-party C++:** `clang-format` dry-run + the source-only checker (`tools/lint/cpp`)
+- **Repo policy:** disposition-parity (`tools/check_disposition_parity`) + stale-term sweep (`tools/check_stale_terms`)
+
+`task lint:fix` applies auto-fixes for Go (`gofmt`, `golangci-lint --fix`) and first-party C++ (`clang-format -i`).
+
 Treat a **clean** final `task lint:run` as the default bar before that commit. If `task lint:fix` changes files, **stage those changes** (or re-stage affected paths) so the commit includes formatter/linter autofixes. Use the **lint-resolve-issues** skill (`.cursor/skills/lint-resolve-issues/SKILL.md`) for how to clear findings without blanket `//nolint`.
+
+**Lint-relevant paths** (run the gate when the change set includes any of these):
+
+- Go source (`*.go`) or Go lint config (`.golangci.yml`, `go.mod` when it affects builds)
+- First-party C++ sources/headers covered by `go run ./tools/lint/cpp list` (typically `backend/`, `binaries/`, `frontend/`, `tools/googlesql-prebuilt/smoke/`, etc.)
+- Disposition / conformance fixtures checked by `tools/check_disposition_parity`
+- Any file that can trip `tools/check_stale_terms` (most tracked sources under the repo root)
+
+For the **deep** local pass (golangci-lint + clang-tidy + cppcheck), use `task lint:check` — CI's slow `cpp-analysis` job runs `lint:cpp:cppcheck` separately.
 
 ## When to skip this gate (do not block the commit on lint)
 
 Skip running **or** stop iterating on lint and commit **without** insisting on a clean `task lint:run` when **any** of these apply:
 
 1. **Intentional incomplete / broken / checkpoint work** — The user or session clearly wants a WIP, checkpoint, revert-in-progress, bisect marker, or to **leave** known-broken state documented for the next step (e.g. explicit “commit as-is”, “WIP”, “broken on purpose”, “do not fix lint yet”).
-2. **No Go/lint-relevant surface** — The commit is limited to paths lint does not meaningfully cover (e.g. docs-only, images, unrelated config) and adding a lint run would not validate the change.
+2. **No lint-relevant surface** — The commit is limited to paths `task lint:run` does not cover (e.g. docs-only, images, GitHub workflow YAML-only with no Go/C++/disposition/stale-term impact) and adding a lint run would not validate the change.
 3. **Lint cannot run or is the wrong lever** — `task lint:fix` / `task lint:run` is missing, the environment lacks the toolchain, or **non-lint failures** dominate (e.g. widespread compile errors, broken `go test` in touched packages, generator or migration steps failing). After a **brief** check, do not spend the session “fixing lint” while the tree cannot build or test; summarize blockers and align with the user.
 4. **Too many unrelated findings** — `task lint:run` reports a **large** volume of issues clearly **outside** the current logical change (pre-existing debt). Do not silently rewrite unrelated packages to green the linter for a small commit; either narrow scope (commit only what belongs with lint for touched files) or ask the user before broad cleanup.
 
