@@ -1,0 +1,163 @@
+# Canonical C++ engine build for CI.
+#
+# Runs once per push/PR, uploads `engine-binaries` for downstream
+# workflows (ci, conformance, docker-smoke, thirdparty java live)
+# to consume via `workflow_run` + `setup-engine-from-artifact`.
+#
+# Caching layers:
+#   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin
+#   * Unified Bazel `disk-cache: engine` (shared with cc_test consumers)
+#
+# Local equivalent: `task emulator:build-engine:bazel` (see taskfiles/ci.yml).
+
+name: build-engine
+
+on:
+  workflow_call:
+    outputs:
+      googlesql-mode:
+        description: '"prebuilt" or "source".'
+        value: ${{ jobs.build.outputs.googlesql-mode }}
+      artifact-version:
+        description: Prebuilt manifest artifact_version (empty in source mode).
+        value: ${{ jobs.build.outputs.artifact-version }}
+      googlesql-commit:
+        description: 12-char GoogleSQL commit surfaced by setup-googlesql.
+        value: ${{ jobs.build.outputs.googlesql-commit }}
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      googlesql-mode: ${{ steps.googlesql.outputs.mode }}
+      artifact-version: ${{ steps.googlesql.outputs.artifact-version }}
+      googlesql-commit: ${{ steps.googlesql.outputs.googlesql-commit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Restore staged engine binaries cache
+        id: bin-cache
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: engine-binaries-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'backend/**', 'binaries/emulator_main/**', 'frontend/**', 'proto/**', 'third_party/**') }}-gsq-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
+          restore-keys: |
+            engine-binaries-
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: engine
+          repository-cache: true
+
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+
+      - name: Build C++ engine via Bazel (cache miss or stale restore)
+        id: engine-build
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          set -euo pipefail
+          if [ -x bin/emulator_main ] && [ -f bin/libduckdb.so ] && ./bin/emulator_main --version >/dev/null 2>&1; then
+            echo "cache_hit=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Restored engine binaries cache hit; skipping Bazel compile"
+          else
+            echo "cache_hit=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+            task emulator:build-engine:bazel
+          fi
+
+      - name: Build Go gateway (gateway_main)
+        run: |
+          mkdir -p bin
+          go build -o bin/gateway_main ./binaries/gateway_main
+
+      - name: Write engine provenance manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          data = {
+              "googlesql_mode": os.environ["GOOGLESQL_MODE"],
+              "googlesql_source": os.environ["GOOGLESQL_SOURCE"],
+              "artifact_version": os.environ.get("ARTIFACT_VERSION") or "",
+              "googlesql_commit": os.environ.get("GOOGLESQL_COMMIT") or "",
+              "googlesql_commit_full": os.environ.get("GOOGLESQL_COMMIT_FULL") or "",
+              "tarball_sha256": os.environ.get("TARBALL_SHA256") or "",
+              "head_sha": os.environ.get("HEAD_SHA") or "",
+              "cache_hit": os.environ.get("CACHE_HIT") == "true",
+          }
+          with open("engine-provenance.json", "w", encoding="utf-8") as fh:
+              json.dump(data, fh, indent=2)
+              fh.write("\n")
+          PY
+        env:
+          GOOGLESQL_MODE: ${{ steps.googlesql.outputs.mode }}
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+          ARTIFACT_VERSION: ${{ steps.googlesql.outputs.artifact-version }}
+          GOOGLESQL_COMMIT: ${{ steps.googlesql.outputs.googlesql-commit }}
+          GOOGLESQL_COMMIT_FULL: ${{ steps.googlesql.outputs.googlesql-commit-full }}
+          TARBALL_SHA256: ${{ steps.googlesql.outputs.tarball-sha256 }}
+          HEAD_SHA: ${{ github.sha }}
+          CACHE_HIT: ${{ steps.engine-build.outputs.cache_hit }}
+
+      - name: Upload engine-binaries artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: engine-binaries
+          path: |
+            bin/emulator_main
+            bin/libduckdb.so
+            bin/gateway_main
+            engine-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: bazel shutdown || true

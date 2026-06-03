@@ -4,21 +4,18 @@
 # imported go-googlesql client trees still *compile* and produce
 # meaningful skip output against this emulator's REST + gRPC surface,
 # without paying for a full Bazel + GoogleSQL rebuild on every push.
-# We start with a single fast lane (golang-bigquery-tests, compile +
-# default-skip behavior) and leave hooks for the heavier lanes that
-# need a live emulator + fake-gcs.
+#
+# The java live lane consumes the shared engine artifact from
+# `.github/workflows/build-engine.yml` via `workflow_run`.
+# The golang compile lane does not touch the emulator at all.
 #
 # Stays in its own workflow (not folded into ci.yml or
 # conformance.yml) so an upstream sample regression — or a missing
 # emulator surface — does not block the build/test or fixture-
-# conformance gates, and vice versa. Mirrors how
-# `.github/workflows/conformance.yml` is split off from
-# `.github/workflows/ci.yml`.
+# conformance gates, and vice versa.
 #
 # Local task equivalent: `task thirdparty:golang-bigquery-tests`.
-# Add new lanes (node, bigframes, ...) as the wiring + emulator
-# surfaces stabilize; see third_party/README.md for the env-var
-# matrix and skip rules each suite expects.
+# See third_party/README.md for the env-var matrix and skip rules.
 
 name: thirdparty-samples
 
@@ -26,6 +23,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
   workflow_dispatch:
     inputs:
       run_live:
@@ -38,18 +38,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: thirdparty-samples-${{ github.workflow }}-${{ github.ref }}
+  group: thirdparty-samples-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  # Compile + run the vendored Go suite without exporting
-  # BIGQUERY_EMULATOR_HOST or any gRPC endpoint. The suite's system
-  # tests skip in that mode but the build path (and bqopts unit
-  # tests) still exercises every package, which catches upstream
-  # API drift or missing transitive dependencies long before we pay
-  # to spin up a live emulator. This mirrors go-googlesql's
-  # `.github/workflows/go.yml` posture for the same tree.
   golang-bigquery-tests-compile:
+    if: github.event_name != 'workflow_run'
     name: golang-bigquery-tests (compile + skip)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -73,37 +67,30 @@ jobs:
       - name: Run thirdparty:golang-bigquery-tests (no emulator)
         run: task thirdparty:golang-bigquery-tests
         env:
-          # Explicitly unset so any default in the runner image does
-          # not turn this from a compile/skip job into a live
-          # integration job that would 404 against nothing.
           BIGQUERY_EMULATOR_HOST: ""
           BIGQUERY_STORAGE_GRPC_ENDPOINT: ""
           STORAGE_EMULATOR_HOST: ""
-          # Forward prebuilt pins into docker compose build args so
-          # emulator-up does not fall back to a multi-hour source
-          # GoogleSQL compile inside the Dockerfile.
-          GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-          GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
-  # Java live-IT lane: `mvn -B verify` on each snippets POM, running
-  # the curated 15-IT Failsafe set against a freshly built emulator
-  # (gateway + engine on :9050 / :9060). Mirrors the live golang job
-  # below but on the Java side. Until the shallow-emulator port lands
-  # the shallow bigqueryconnection / bigquerydatatransfer / bigquerystorage
-  # backends, 9 of the 15 ITs are expected to fail with
-  # NOT_IMPLEMENTED-shaped errors; `JAVA_BQ_ALLOW_FAILING_ITS` (or
-  # `continue-on-error` below) keeps the lane green while still
-  # surfacing the structured diagnostic. See
-  # third_party/README.md (Java section) and
-  # .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md for the
-  # per-IT verdict baseline.
   java-bigquery-tests-live:
     name: java-bigquery-tests (live emulator)
+    if: >-
+      (
+        github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event != 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -119,35 +106,46 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Build runtime image (ENGINE_SOURCE=prebuilt)
+        run: |
+          set -euo pipefail
+          gsq_args=()
+          if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then
+            gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
+            gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+          fi
+          docker build \
+            --build-arg ENGINE_SOURCE=prebuilt \
+            "${gsq_args[@]}" \
+            -t bigquery-emulator:local \
+            .
+        env:
+          GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+
       - name: Bring up emulator via docker compose
         run: |
           set -euo pipefail
-          docker compose up -d --build bigquery-emulator
+          docker compose up -d bigquery-emulator
           for _ in $(seq 1 120); do
             if curl -fsS -o /dev/null http://localhost:9050/healthz 2>/dev/null; then
               echo "emulator ready"; break
             fi
             sleep 2
           done
-        env:
-          GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-          GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Run thirdparty:java-bigquery-tests (live ITs)
-        # 9 of the 15 curated ITs are known-fail until the shallow
-        # gRPC backends land. Tolerate the failure at the workflow
-        # level; the per-IT diagnostic is what gates promotion (see
-        # the plan above for the allowlist).
         continue-on-error: true
         run: task thirdparty:java-bigquery-tests
         env:
           BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
           BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
-          # Failing-IT allowlist: until the shallow-emulator port
-          # (`java-its-shallow-emulators`) implements the shallow
-          # Connection / DataTransfer / Storage Write backends,
-          # expect the 9 non-java-bigquery ITs to fail. Shallow-emulator
-          # consumers can read this list to know which surfaces to grow.
           JAVA_BQ_ALLOW_FAILING_ITS: >-
             CreateAwsConnectionIT,DeleteConnectionIT,GetConnectionIT,
             ShareConnectionIT,UpdateConnectionIT,
@@ -158,11 +156,6 @@ jobs:
         if: always()
         run: docker compose down -v --remove-orphans 2>/dev/null || true
 
-  # Live integration lane against a built gateway + engine. Disabled
-  # by default because it pays the full Bazel + GoogleSQL build budget
-  # (~30-50min cold, see ci.yml for the cache contract). Trigger
-  # manually via the workflow_dispatch input below until we are
-  # confident in the fake-gcs + seeded-data wiring on this emulator.
   golang-bigquery-tests-live:
     name: golang-bigquery-tests (live emulator)
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_live == 'true' }}
@@ -199,13 +192,9 @@ jobs:
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: thirdparty
+          disk-cache: engine
           repository-cache: true
 
-      # CI/Docker/release prebuilt-mode wiring: prefer the published
-      # prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL` /
-      # `_SHA256` at the repository level) and fall back to a sibling
-      # source checkout when the repo vars are unset.
       - name: Resolve GoogleSQL build mode
         id: googlesql
         uses: ./.github/actions/setup-googlesql
@@ -263,6 +252,7 @@ jobs:
           GCLOUD_PROJECT: "dev"
           EMULATOR_PROJECT_ID: "dev"
           FAKE_GCS_PORT: "4443"
+          THIRDPARTY_SKIP_EMULATOR_UP: "1"
         run: task thirdparty:golang-bigquery-tests
 
       - name: Stop gateway
@@ -284,10 +274,3 @@ jobs:
       - name: Release Bazel daemon
         if: always()
         run: bazel shutdown || true
-
-# Manual triggers can flip the live lane on per-run; the default push
-# / pull_request triggers only run the cheap compile lane above. As
-# more lanes (node, python-dataframes) stabilize, follow this pattern:
-# add a job, gate it on a workflow_dispatch input until proven, then
-# promote it to push/pull_request once warm-cache wall clock and
-# expected skip set are well understood.

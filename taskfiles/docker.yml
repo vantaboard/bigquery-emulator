@@ -104,8 +104,13 @@ tasks:
           # `scripts/compute_docker_throttle.sh` for the derivation.
           eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
 
-          echo "[docker:smoke] docker compose up --build -d"
-          docker compose up --build -d
+          if [ "${DOCKER_SMOKE_SKIP_BUILD:-0}" = "1" ]; then
+            echo "[docker:smoke] docker compose up -d (DOCKER_SMOKE_SKIP_BUILD=1; image pre-loaded)"
+            docker compose up -d
+          else
+            echo "[docker:smoke] docker compose up --build -d"
+            docker compose up --build -d
+          fi
 
           echo "[docker:smoke] waiting for /healthz to return 200"
           # Poll the gateway directly rather than the Docker daemons

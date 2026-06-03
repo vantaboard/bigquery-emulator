@@ -1,6 +1,10 @@
 # Local mirror of .github/workflows/ci.yml. Keep these in sync: anything
 # that runs in CI should also run via `task ci:run`, and vice versa.
 #
+# CI splits the C++ engine compile into `.github/workflows/build-engine.yml`
+# (producer) and consumes the artifact in `ci / build-and-test` via
+# `workflow_run`. Locally this task still runs build + test sequentially.
+#
 # Usage: task ci (or task ci:run)
 #        task ci:cpp-analysis (the slow C++ lane on its own)
 version: "3"

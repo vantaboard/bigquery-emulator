@@ -1,16 +1,18 @@
 # CI for the BigQuery emulator.
 #
-# Mirrors `task ci:run` (see Taskfile.yml): `go vet`, `go test`, a
-# Bazel build of the canonical engine binary (GoogleSQL + DuckDB +
-# gRPC), and a Go build of the gateway.
+# Mirrors `task ci:run` (see taskfiles/ci.yml): `go vet`, `go test`,
+# cc_test, conformance fastpath, and gateway build. The C++ engine
+# compile lives in `.github/workflows/build-engine.yml`; this workflow's
+# `build-and-test` job consumes that artifact via `workflow_run`.
 #
 # linux/amd64 only: the canonical Bazel-built engine
 # `//binaries/emulator_main:emulator_main` links GoogleSQL, whose
 # hermetic LLVM toolchain only ships amd64 binaries today. arm64
 # support is tracked against upstream GoogleSQL toolchain notes.
 #
-# Keep this file and the `ci:run` task in sync: anything that runs here
-# should also run via `task ci:run` locally, and vice versa.
+# Keep this file and the `ci:run` task in sync for test coverage;
+# locally `task ci:run` still builds the engine sequentially on one
+# machine (see taskfiles/ci.yml header).
 
 name: ci
 
@@ -18,21 +20,33 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   build-and-test:
     name: build-and-test (amd64)
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -41,9 +55,6 @@ jobs:
           cache: true
 
       - name: Install Task
-        # The prebuilt-GoogleSQL setup action shells out to
-        # `task googlesql:fetch-prebuilt`; install Task on the runner
-        # so that path is available regardless of the resolved mode.
         uses: go-task/setup-task@v2
         with:
           version: 3.x
@@ -61,18 +72,6 @@ jobs:
             protobuf-compiler-grpc
 
       - name: Install C++ lint tooling (clang-format, clang-tidy, cppcheck)
-        # The fast `task lint:run` gate calls `task lint:cpp:format` and
-        # `task lint:cpp:source`, both of which need clang-format on the
-        # PATH. clang-tidy / cppcheck come along for the slower opt-in
-        # lanes (`task lint:cpp:tidy`, `task lint:cpp:cppcheck`); we
-        # install them in this same step so the runner is also able to
-        # execute the secondary-analysis job below.
-        #
-        # We pin to the apt-shipped clang-format-18 so the formatter
-        # version matches the clang-18 toolchain Bazel pins via
-        # `task emulator:build-engine:bazel`. Mismatched clang-format
-        # versions produce different output for the same input file,
-        # which would surface as flapping CI.
         run: |
           sudo apt-get install -y --no-install-recommends \
             clang-format \
@@ -80,25 +79,11 @@ jobs:
             cppcheck
 
       - name: Fast lint gate (gofmt + go vet + first-party C++ format/source + disposition parity + stale-term sweep)
-        # Mirror of `task lint:run`. Fails the job if Go formatting,
-        # `go vet`, clang-format, the source-only C++ checker, the
-        # disposition-parity gate (`task lint:dispositions`, owned
-        # by `execution-disposition-registry.plan.md`), or the
-        # stale-term linter (`task lint:stale-terms`, owned by
-        # `migration-cleanup-docs.plan.md`) surface any finding.
-        # Subsumes the previous standalone `go vet` step
-        # (`task lint:run` invokes `go vet ./...` internally).
         run: task lint:run
 
       - name: go test (with coverage)
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
 
-      # Hand off coverage.out to coverage-publish.yml. That workflow's
-      # workflow_run trigger fires after this run completes, downloads
-      # the artifact via the REST API, and either publishes to
-      # gh-pages (push to main) or gates the PR against the last
-      # published baseline. See .github/workflows/coverage-publish.yml
-      # for the consumer side of the pipeline.
       - name: Upload Go coverage artifact
         if: always()
         uses: actions/upload-artifact@v6
@@ -108,31 +93,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # ---------------------------------------------------------------
-      # Bazel build of emulator_main (canonical, full GoogleSQL)
-      # ---------------------------------------------------------------
-      #
-      # The CI/Docker/release track of the `googlesql-prebuilt`
-      # rollout (see `docs/dev/googlesql-prebuilt/README.md`) consumes
-      # a pinned prebuilt artifact instead of recompiling GoogleSQL
-      # from source.
-      # The composite action below resolves the mode:
-      #
-      #   * If `vars.GOOGLESQL_PREBUILT_URL` and
-      #     `vars.GOOGLESQL_PREBUILT_SHA256` are set at the repository
-      #     level, it downloads + verifies + unpacks the artifact and
-      #     the build runs with `GOOGLESQL_SOURCE=prebuilt`.
-      #   * Otherwise it emits a workflow-level warning and falls back
-      #     to a sibling `../googlesql/` checkout (the legacy source
-      #     path), with `GOOGLESQL_SOURCE=local`. This keeps CI green
-      #     during the transition window before maintainers configure
-      #     the repo vars; once they do, the prebuilt path takes over
-      #     automatically.
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
       - name: Set up Bazel (bazelisk)
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
+          disk-cache: engine
           repository-cache: true
 
       - name: Resolve GoogleSQL build mode
@@ -142,48 +113,12 @@ jobs:
           prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
           prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
-      - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
-        env:
-          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: |
-          echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
-          task emulator:build-engine:bazel
-
       - name: Run first-party cc_test targets via Bazel
-        # Runs every `cc_test` target under the first-party include
-        # roots (backend/, binaries/, frontend/,
-        # tools/googlesql-prebuilt/smoke/). Reuses the same throttled
-        # `task bazel:test` wrapper the engine build sits behind so
-        # the daemon shutdown / process-hygiene rules from
-        # `.cursor/rules/bazel-process-hygiene.mdc` apply uniformly.
-        # The cache is already warm from the engine build above, so
-        # this step is dominated by test-runtime, not compile-time.
         env:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: task lint:cpp:test
 
-      - name: Stage emulator_main for the conformance fastpath lane
-        # `task conformance:fastpath` defaults to spawning
-        # `./bin/emulator_main` (one fresh subprocess per fixture x
-        # profile cell, see `conformance/runner/harness.go`). Bazel
-        # already produced the binary above; copy it under
-        # `bin/emulator_main` so the runner picks it up via the
-        # default flag. Using `bazel run` here would re-resolve the
-        # daemon's runfiles tree, which is more expensive than a
-        # plain `cp` for a binary we just built.
-        run: |
-          mkdir -p bin
-          cp -f "$(bazel info bazel-bin)/binaries/emulator_main/emulator_main" bin/emulator_main
-          chmod +x bin/emulator_main
-
       - name: Conformance fastpath fixtures (DuckDB-native / -rewrite)
-        # Mirror of `task conformance:fastpath`. PR-gating per item
-        # `task conformance:fastpath runs in CI on every PR` of
-        # `.cursor/plans/duckdb-fast-path-stabilization.plan.md`.
-        # Targeted at ~2 minutes wall-time; the heavy compile lives
-        # above in the engine build. The runner spawns one
-        # emulator_main subprocess per fixture; SIGINT is wired so
-        # the workflow's cancellation propagates cleanly.
         run: task conformance:fastpath
 
       - name: Build Go gateway (gateway_main)
@@ -196,10 +131,7 @@ jobs:
         run: bazel shutdown || true
 
   cpp-analysis:
-    # Slow C++ analysis lane. Runs in parallel with `build-and-test`
-    # and is REQUIRED — a finding fails the workflow. The user
-    # plans to clear remaining findings before each release and
-    # would rather have the gate enforced than read advisory output.
+    if: github.event_name != 'workflow_run'
     name: cpp-analysis (cppcheck)
     runs-on: ubuntu-latest
     permissions:
@@ -209,9 +141,6 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Go
-        # `tools/lint/cpp` is a Go binary; `task lint:cpp:cppcheck`
-        # invokes `go run ./tools/lint/cpp list` to compute the
-        # first-party file list before handing off to cppcheck.
         uses: actions/setup-go@v6
         with:
           go-version: '1.26'
@@ -229,7 +158,4 @@ jobs:
           sudo apt-get install -y --no-install-recommends cppcheck
 
       - name: cppcheck on first-party C++ tree
-        # Mirror of `task lint:cpp:cppcheck`. Surfaces warnings,
-        # style, performance, and portability findings against the
-        # canonical first-party file list.
         run: task lint:cpp:cppcheck

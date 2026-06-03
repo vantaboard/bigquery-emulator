@@ -1,49 +1,48 @@
 # Docker quickstart smoke for the BigQuery emulator.
 #
-# Builds the multi-stage Dockerfile, brings the docker-compose stack up,
-# polls /healthz until the gateway is alive, fires the documented
-# `SELECT 1` quickstart query, asserts both the HTTP status and the
-# response shape, then tears the stack down (volume and all).
+# Consumes the pre-built engine from `.github/workflows/build-engine.yml`
+# (ENGINE_SOURCE=prebuilt Docker path), assembles the runtime image,
+# brings the docker-compose stack up, polls /healthz, fires the
+# documented `SELECT 1` quickstart query, asserts both the HTTP status
+# and the response shape, then tears the stack down.
 #
-# This is the same recipe `task docker:smoke` runs locally; the
-# workflow shells out to that task so the CI + local paths cannot
-# drift. See `taskfiles/docker.yml`.
+# Triggered via `workflow_run` after build-engine succeeds so the
+# in-container Bazel compile is not duplicated. BuildKit cache on
+# gateway/runtime layers still applies via actions/cache.
 #
-# Time budget: the canonical Bazel `//binaries/emulator_main:emulator_main`
-# build links the full GoogleSQL + DuckDB + gRPC stack, which is a
-# long pole on a cold cache (~25-55 min depending on the runner). The Docker-internal Bazel cache is held in a BuildKit cache
-# mount (`docker/dockerfile:1.7` syntax). actions/cache wires that
-# cache to GitHub's cache backend so warm-cache rebuilds drop into
-# minutes. A first-of-the-day cold run on a fresh `main` will exceed
-# 10 min; subsequent runs and PR pushes hitting the warm cache should
-# land within the gate.
-#
-# Triggers + concurrency mirror conformance.yml so a stale push gets
-# cancelled when a newer push lands on the same ref.
+# Local equivalent: `task docker:smoke` (builds inline).
 
 name: docker-smoke
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: docker-smoke-${{ github.ref }}
+  group: docker-smoke-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 jobs:
   quickstart-smoke:
     name: quickstart-smoke
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install Task
         uses: go-task/setup-task@v2
@@ -51,89 +50,47 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # BuildKit cache mount writes under /var/lib/docker/buildkit by
-      # default; bind-mount-cache requires the gha cache backend. The
-      # docker/build-push-action's `cache-from`/`cache-to` flags wire
-      # that automatically. Here we drive `docker compose build`
-      # explicitly so the cache config is on the docker compose CLI.
       - name: Restore Docker layer cache
         uses: actions/cache@v5
         with:
           path: /tmp/.buildx-cache
-          key: docker-smoke-buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'binaries/emulator_main/**', 'backend/**', 'frontend/**', 'proto/**', 'third_party/**') }}
+          key: docker-smoke-buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'binaries/emulator_main/**', 'backend/**', 'frontend/**', 'proto/**', 'third_party/**', 'gateway/**', 'binaries/gateway_main/**') }}
           restore-keys: |
             docker-smoke-buildx-${{ runner.os }}-
 
-      - name: Build and smoke-test via task docker:smoke
+      - name: Build runtime image and smoke-test
         env:
-          # Drive `docker compose build` through Buildx with the cache
-          # bound to actions/cache. `docker:smoke` only invokes
-          # `docker compose up --build`, so we pre-build with cache
-          # flags first to populate /tmp/.buildx-cache, then let the
-          # task run hits the pre-built image.
           DOCKER_BUILDKIT: "1"
           COMPOSE_DOCKER_CLI_BUILD: "1"
-          # When these repo vars are set, the Dockerfile's
-          # `engine-builder-bazel` stage consumes the published
-          # GoogleSQL prebuilt artifact instead of cloning the source
-          # tree. Empty values leave the source fallback in place.
+          DOCKER_SMOKE_SKIP_BUILD: "1"
           GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
           GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
         run: |
           set -euo pipefail
-          # Forward the GoogleSQL prebuilt args only when both are set
-          # (matches the Dockerfile gate: an empty URL or SHA falls back
-          # to source). bash arrays keep the empty / partial-set cases
-          # honest — `--build-arg KEY=` is treated as "set to empty
-          # string", which trips the Dockerfile's path-traversal-style
-          # arg validation if only one is set.
           gsq_args=()
-          gsq_mode=source
           if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
-            gsq_mode=prebuilt
-            echo "::notice::docker-smoke: GoogleSQL prebuilt artifact ($GOOGLESQL_PREBUILT_URL)"
-          else
-            echo "::warning::docker-smoke: vars.GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build (slower)"
           fi
-          # Safety-gate step-summary surface: the Dockerfile's
-          # `engine-builder-bazel` stage already echoes
-          # `artifact_version` + `googlesql commit` to its build log
-          # (and runs `validate_artifact.py --summary-line` for the
-          # full identity), but build logs are not as easy to find as
-          # the workflow summary. Stamp the consumer-side knobs here so
-          # the run page surfaces the mode + pin even before the build
-          # completes.
-          {
-            printf '### docker-smoke GoogleSQL provenance\n\n'
-            printf '| Field | Value |\n|---|---|\n'
-            printf '| mode | %s |\n' "$gsq_mode"
-            if [ "$gsq_mode" = "prebuilt" ]; then
-              printf '| prebuilt URL | %s |\n' "${GOOGLESQL_PREBUILT_URL}"
-              printf '| prebuilt SHA-256 | `%s` |\n' "${GOOGLESQL_PREBUILT_SHA256}"
-            else
-              printf '| fallback | source-mode clone of google/googlesql in-container |\n'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          # Pre-build with explicit cache backends so layers persist
-          # across runs. compose's `--build` invocation in the task
-          # then no-ops if the image is already up to date.
           docker buildx build \
             --tag bigquery-emulator:local \
             --load \
+            --build-arg ENGINE_SOURCE=prebuilt \
             --cache-from "type=local,src=/tmp/.buildx-cache" \
             --cache-to "type=local,dest=/tmp/.buildx-cache-new,mode=max" \
             "${gsq_args[@]}" \
             .
-          # Atomic swap so a partial cache from a failed run does not
-          # poison the next run.
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
           task docker:smoke
 
       - name: Dump container logs on failure

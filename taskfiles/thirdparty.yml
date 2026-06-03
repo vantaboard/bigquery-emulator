@@ -356,10 +356,14 @@ tasks:
           echo "third_party/golang-bigquery-tests missing" >&2
           exit 1
         fi
-      - task: emulator-up
-      - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
+        # Compile/skip lane: when BIGQUERY_EMULATOR_HOST is unset the
+        # suite's system tests skip and no emulator process is needed.
+        # Live docker lanes export the host and call emulator-up.
+        # Host-gateway lanes (workflow_dispatch live job) set
+        # THIRDPARTY_SKIP_EMULATOR_UP=1 so compose is not started.
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ] && [ "${THIRDPARTY_SKIP_EMULATOR_UP:-0}" != "1" ]; then
+          task thirdparty:emulator-up
+        fi
         cd "$root/third_party/golang-bigquery-tests"
         go test ./... -count=1 {{.GO_TEST_FLAGS}}
 

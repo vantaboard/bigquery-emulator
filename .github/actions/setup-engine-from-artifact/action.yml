@@ -1,0 +1,114 @@
+# Download and stage `engine-binaries` from a successful build-engine run.
+#
+# Callers pass `run-id` when triggered by `workflow_run` (the producer
+# run id). When empty (e.g. re-run failed consumer jobs on the same
+# SHA), the action locates the latest successful `build-engine` run
+# for `head-sha` via the REST API — same pattern as coverage-publish.
+
+name: Set up engine from artifact
+description: |
+  Download engine-binaries from build-engine and install under bin/.
+
+inputs:
+  run-id:
+    description: |
+      build-engine workflow run id. When empty, locate the latest
+      successful build-engine run for head-sha.
+    required: false
+    default: ""
+  head-sha:
+    description: |
+      Commit SHA to match when locating the producer run. Defaults to
+      github.sha; workflow_run consumers should pass
+      github.event.workflow_run.head_sha.
+    required: false
+    default: ""
+  github-token:
+    description: Token with actions:read for cross-run artifact download.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve build-engine run id
+      id: locate
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const explicit = '${{ inputs.run-id }}'.trim();
+          if (explicit) {
+            core.info(`Using explicit build-engine run id ${explicit}`);
+            core.setOutput('run_id', explicit);
+            return;
+          }
+          const sha = ('${{ inputs.head-sha }}'.trim() || context.sha).trim();
+          core.info(`Locating successful build-engine run for head_sha=${sha}`);
+          const runs = await github.paginate(
+            github.rest.actions.listWorkflowRunsForRepo,
+            {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: sha,
+              status: 'completed',
+              per_page: 100,
+            },
+          );
+          const matches = runs.filter(
+            r => r.name === 'build-engine' && r.conclusion === 'success',
+          );
+          if (matches.length === 0) {
+            core.setFailed(
+              `No successful build-engine run found for head_sha=${sha}`,
+            );
+            return;
+          }
+          matches.sort(
+            (a, b) => new Date(b.updated_at) - new Date(a.updated_at),
+          );
+          const runId = String(matches[0].id);
+          core.info(`Resolved build-engine run id ${runId}`);
+          core.setOutput('run_id', runId);
+
+    - name: Download engine-binaries artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: engine-binaries
+        path: artifacts/engine
+        run-id: ${{ steps.locate.outputs.run_id }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Stage binaries under bin/
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p bin
+        install -m755 artifacts/engine/bin/emulator_main bin/emulator_main
+        install -m644 artifacts/engine/bin/libduckdb.so bin/libduckdb.so
+        if [ -f artifacts/engine/bin/gateway_main ]; then
+          install -m755 artifacts/engine/bin/gateway_main bin/gateway_main
+        fi
+        ./bin/emulator_main --version
+
+    - name: Surface engine provenance
+      shell: bash
+      run: |
+        set -euo pipefail
+        prov="artifacts/engine/engine-provenance.json"
+        if [ ! -f "$prov" ]; then
+          echo "::warning::engine-provenance.json missing from artifact"
+          exit 0
+        fi
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            printf '### Engine artifact provenance\n\n'
+            printf 'Producer run [`%s`](https://github.com/%s/actions/runs/%s)\n\n' \
+              "${{ steps.locate.outputs.run_id }}" \
+              "${{ github.repository }}" \
+              "${{ steps.locate.outputs.run_id }}"
+            printf '```json\n'
+            cat "$prov"
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi

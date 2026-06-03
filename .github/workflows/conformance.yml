@@ -8,19 +8,12 @@
 # over DuckDB storage; the matrix shape stays in place so a future
 # profile addition does not require a workflow rewrite.
 #
-# Triggers mirror `.github/workflows/ci.yml`: pull requests against
-# any branch and pushes to `main`. The workflow stays in its own
-# file (rather than folding into ci.yml) so the conformance lane
-# does not block the build/test gate when an engine bug surfaces
-# only through the fixture diff -- and vice versa: a build break
-# does not mask a conformance regression.
+# The C++ engine binary is built once by `.github/workflows/build-engine.yml`
+# and consumed here via `workflow_run` + `setup-engine-from-artifact`.
+# The workflow stays in its own file so conformance regressions do
+# not block the build/test gate — and vice versa.
 #
-# The C++ engine binary is built fresh via
-# `task emulator:build-engine:bazel`, which links the full GoogleSQL
-# + DuckDB + gRPC stack. We piggy-back on the same Bazel + repository
-# caches the `ci.yml` workflow uses (via `bazel-contrib/setup-bazel`)
-# so a cold start lands somewhere near the build-and-test job's
-# wall-clock budget; subsequent runs hit the warm cache.
+# `routing-matrix` runs on the direct push/PR trigger (no engine).
 
 name: conformance
 
@@ -28,18 +21,28 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: conformance-${{ github.ref }}
+  group: conformance-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   conformance:
     name: conformance (${{ matrix.profile }})
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +50,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -60,48 +65,11 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install C++ build deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            clang \
-            libprotobuf-dev \
-            protobuf-compiler \
-            libgrpc++-dev \
-            libgrpc-dev \
-            protobuf-compiler-grpc
-
-      # The full GoogleSQL build keys a multi-GB Bazel cache. Share
-      # it across runs (per-branch via setup-bazel's disk-cache
-      # group) so the conformance matrix's cold-start budget stays
-      # close to ci.yml's warm-cache budget.
-      - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.19.0
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
         with:
-          bazelisk-cache: true
-          disk-cache: conformance
-          repository-cache: true
-
-      # CI/Docker/release prebuilt-mode wiring: prefer the
-      # published prebuilt artifact (set `vars.GOOGLESQL_PREBUILT_URL`
-      # and `vars.GOOGLESQL_PREBUILT_SHA256` at the repository level)
-      # and fall back to a sibling source checkout otherwise. The
-      # composite action surfaces the resolved mode and artifact
-      # identity so a failed conformance run can be tied back to a
-      # concrete artifact / commit.
-      - name: Resolve GoogleSQL build mode
-        id: googlesql
-        uses: ./.github/actions/setup-googlesql
-        with:
-          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
-
-      - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
-        env:
-          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: |
-          echo "::notice::Conformance ${{ matrix.profile }} build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
-          task emulator:build-engine:bazel
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
 
       - name: Run conformance fixtures
         run: |
@@ -118,17 +86,8 @@ jobs:
           path: conformance-${{ matrix.profile }}.json
           if-no-files-found: warn
 
-      - name: Release Bazel daemon
-        if: always()
-        run: bazel shutdown || true
-
-  # Plan 16 routing-matrix artifact. Pure Go (reads YAML only;
-  # no engine binary, no Bazel) so we keep it as a tiny standalone
-  # job. `continue-on-error: true` because the matrix is a
-  # documentation artifact -- a runner regression here should not
-  # block the conformance gate above (which DOES enforce
-  # `expected.route` per-fixture).
   routing-matrix:
+    if: github.event_name != 'workflow_run'
     name: routing-matrix
     runs-on: ubuntu-latest
     continue-on-error: true
