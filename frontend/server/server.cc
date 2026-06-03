@@ -6,10 +6,12 @@
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 
 #include "frontend/handlers/catalog.h"
@@ -21,6 +23,14 @@ namespace bigquery_emulator {
 namespace frontend {
 
 namespace {
+
+// Async-signal-safe: only written from HandleSignal, read from the
+// shutdown watcher thread in WaitForShutdown.
+volatile sig_atomic_t g_shutdown_requested = 0;
+
+void HandleSignal(int /*signo*/) {
+  g_shutdown_requested = 1;
+}
 
 // GrpcServer hosts the real `grpc::Server` for the emulator engine.
 //
@@ -58,7 +68,20 @@ class GrpcServer final : public Server {
         port_(port) {}
 
   void WaitForShutdown() override {
+    // gRPC's `Server::Wait()` holds an internal absl::Mutex for the
+    // server's lifetime. Calling `Shutdown()` from a POSIX signal
+    // handler (which conformance / the gateway trigger via SIGINT)
+    // re-enters that mutex on the same thread and Abseil fatals with
+    // "illegal recursion into Mutex code". Only set a flag here;
+    // a helper thread calls `Stop()` so `Wait()` can unwind cleanly.
+    std::thread shutdown_watcher([this]() {
+      while (g_shutdown_requested == 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
+      Stop();
+    });
     server_->Wait();
+    shutdown_watcher.join();
   }
 
   std::string host() const override {
@@ -83,12 +106,6 @@ class GrpcServer final : public Server {
   std::string host_{};
   int port_ = 0;
 };
-
-GrpcServer* g_server = nullptr;
-
-void HandleSignal(int /*signo*/) {
-  if (g_server != nullptr) g_server->Stop();
-}
 
 // Splits "host:port" into (host, port). Returns an empty host string on
 // malformed input; the caller treats that as "bind to all interfaces".
@@ -180,7 +197,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
                                              std::move(host),
                                              port);
 
-  g_server = server.get();
+  g_shutdown_requested = 0;
   std::signal(SIGINT, HandleSignal);
   std::signal(SIGTERM, HandleSignal);
   return server;
