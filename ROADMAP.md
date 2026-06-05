@@ -576,16 +576,17 @@ already uses.
   can fix the batch and retry without tearing the bidi stream down,
   matching the public Storage Write API's recoverable-error
   contract
-- ⏳ `BUFFERED` and `PENDING` stream types not implemented;
-  `CreateWriteStream` returns `UNIMPLEMENTED` for them.
-  `FinalizeWriteStream` / `BatchCommitWriteStreams` / `FlushRows`
-  reserve their proto slots but return `UNIMPLEMENTED` until the
-  deferred follow-up subagent of
-  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
-  lands the buffer / two-phase commit semantics. Silent
-  approximation here is especially bad because `PENDING`'s
-  transactional contract is exactly what distinguishes the Storage
-  Write API from `tabledata.insertAll`
+- 🟡 `BUFFERED` stream type (engine, plan 10 partial):
+  `CreateWriteStream`, buffered `AppendRows`, `FlushRows`, and
+  `FinalizeWriteStream` commit through `DuckDBStorage::AppendRows`
+  on flush. Java `WriteBufferedStreamIT` still fails until the
+  public `BigQueryWrite` gRPC shim registers on `:9060` (see
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) Storage gRPC
+  section).
+- ⏳ `PENDING` + `BatchCommitWriteStreams` not implemented.
+  ⏳ Storage Read Arrow/Avro pages (`StorageArrowSampleIT`) —
+  engine `ReadRows` emits `DataRow` cells only; Arrow IPC encoding
+  and the public `BigQueryRead` adapter remain deferred.
 
 ## Conformance harness
 

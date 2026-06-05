@@ -214,7 +214,10 @@ cc_library(
 
 cc_library(
     name = "storage_write_handler",
-    srcs = ["storage_write.cc"],
+    srcs = [
+        "storage_write.cc",
+        "storage_write_buffered.cc",
+    ],
     hdrs = ["storage_write.h"],
     deps = [
         ":storage_write_internal",
@@ -238,7 +241,10 @@ cc_library(
 
 cc_test(
     name = "storage_write_handler_test",
-    srcs = ["storage_write_test.cc"],
+    srcs = [
+        "storage_write_grpc_test.cc",
+        "storage_write_test.cc",
+    ],
     deps = [
         ":storage_write_handler",
         "//backend/schema",

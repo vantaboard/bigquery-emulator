@@ -212,6 +212,32 @@ AST-classification time rather than at runtime error-catch time, so
 it never reintroduces the silent-drift hazard the old
 `FallbackEngine` had.
 
+## BigQuery Storage gRPC (engine `bigquery_emulator.v1.*`)
+
+The C++ engine on `:9060` implements an **internal** Storage Read/Write
+contract (`proto/storage_read.proto`, `proto/storage_write.proto`).
+Official client libraries dial the **public** service names
+(`google.cloud.bigquery.storage.v1.BigQueryRead` /
+`BigQueryWrite`) and wire formats (Arrow/Avro read pages, proto-descriptor
+row encoding for `JsonStreamWriter`). A Go gateway shim that registers the
+public services and adapts to the engine contract is **not yet wired**
+(`gateway/handlers/bqstorage/` remains a skeleton). Until that shim lands,
+Java `WriteBufferedStreamIT` / `StorageArrowSampleIT` and other third-party
+Storage ITs stay on `JAVA_BQ_ALLOW_FAILING_ITS` even when the engine handler
+progresses.
+
+| Surface | Engine posture (plan 10 partial) | Blocker for public client ITs |
+|---|---|---|
+| Storage Write `COMMITTED` / `_default` | `CreateWriteStream`, bidi `AppendRows`, `GetWriteStream` commit through `DuckDBStorage::AppendRows` | Public `BigQueryWrite` gRPC registration + proto-descriptor decode |
+| Storage Write `BUFFERED` | `CreateWriteStream`, buffered `AppendRows`, `FlushRows`, `FinalizeWriteStream` (happy path) | Same shim; `JsonStreamWriter` uses public protos |
+| Storage Write `PENDING` | `UNIMPLEMENTED` (`BatchCommitWriteStreams` deferred) | — |
+| Storage Read `DataRow` pages | `CreateReadSession`, streaming `ReadRows` with projection + `row_restriction` | Public `BigQueryRead` registration |
+| Storage Read Arrow/Avro | `UNIMPLEMENTED` on internal proto (no `ArrowRecordBatch` field) | Arrow schema + IPC record batches for `StorageArrowSampleIT` |
+
+Set `BIGQUERY_STORAGE_GRPC_ENDPOINT` (default `localhost:9060` in
+`task thirdparty:*`) to reach the engine listener. ManagedWriter /
+Storage Read subtests skip when it is unset.
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).

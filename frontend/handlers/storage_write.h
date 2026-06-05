@@ -23,16 +23,12 @@ namespace frontend {
 // `docs/ENGINE_POLICY.md`).
 //
 // Plan-15 scope: `_default` + `COMMITTED` stream types end-to-end.
-// Both commit on every flushed AppendRows batch through the same
-// `DuckDBStorage::AppendRows` primitive the local DML executor uses
-// (plan 9, `docs/ENGINE_POLICY.md`). The four other RPCs
-// (`FinalizeWriteStream`, `BatchCommitWriteStreams`, `FlushRows`,
-// plus `BUFFERED` / `PENDING` stream creation) reserve their proto
-// slots but return UNIMPLEMENTED until the deferred follow-up subagent
-// lights them up — silent approximation here would be especially bad
-// because the public Storage Write API's transactional contract
-// (PENDING streams committing through BatchCommit) is exactly what
-// distinguishes it from `tabledata.insertAll`.
+// Plan-10 (partial): `BUFFERED` streams buffer rows server-side until
+// `FlushRows` advances the visibility offset, then `FinalizeWriteStream`
+// closes the stream. `COMMITTED` / `_default` still commit on every
+// `AppendRows` batch through `DuckDBStorage::AppendRows` (plan 9).
+// `PENDING` + `BatchCommitWriteStreams` remain UNIMPLEMENTED — silent
+// approximation would violate the public two-phase commit contract.
 //
 // Stream lifecycle is in-process:
 //   * `CreateWriteStream` mints a `StreamState` keyed by stream name
@@ -120,12 +116,18 @@ class StorageWriteService final : public v1::StorageWrite::Service {
     backend::schema::TableSchema schema;
     v1::WriteStream::Type type = v1::WriteStream::COMMITTED;
     std::string create_time;
-    // Per-stream commit offset. Plan 15 increments this by
-    // `rows.size()` on every successful append; the value rides on
-    // `AppendRowsResponse.AppendResult.offset` so a producer that
-    // pinned an offset on its first message can sanity-check the
-    // engine's running count.
+    // Per-stream append offset. Incremented by `rows.size()` on every
+    // successful append; rides on `AppendRowsResponse.AppendResult.offset`.
+    // For `COMMITTED` / `_default` this equals rows visible in storage;
+    // for `BUFFERED` it is the logical stream cursor while
+    // `flushed_rows` tracks how many buffered rows landed in storage.
     std::int64_t committed_rows = 0;
+    // Rows buffered server-side until `FlushRows` advances visibility.
+    // Only populated for `BUFFERED` streams.
+    std::vector<backend::storage::Row> buffered_rows;
+    // Number of leading `buffered_rows` entries committed to storage.
+    std::int64_t flushed_rows = 0;
+    bool finalized = false;
   };
 
   // ParseTableParent enforces
@@ -162,6 +164,12 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   ::grpc::Status EnsureDefaultStream(const std::string& stream_name,
                                      const backend::storage::TableId& table)
       ABSL_LOCKS_EXCLUDED(mu_);
+
+  // CommitBufferedPrefix flushes `buffered_rows[flushed_rows:offset+1]`
+  // through `Storage::AppendRows`. Caller must hold `mu_` and `offset`
+  // must be in `[flushed_rows-1, buffered_rows.size()-1]`.
+  ::grpc::Status CommitBufferedPrefix(StreamState* state, std::int64_t offset)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   backend::storage::Storage* storage_;  // not owned
   mutable absl::Mutex mu_;

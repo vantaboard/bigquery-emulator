@@ -148,17 +148,17 @@ std::string StorageWriteService::Rfc3339Now() const {
       requested = v1::WriteStream::COMMITTED;
     }
   }
-  if (requested == v1::WriteStream::PENDING ||
-      requested == v1::WriteStream::BUFFERED) {
+  if (requested == v1::WriteStream::PENDING) {
     return ::grpc::Status(
         ::grpc::StatusCode::UNIMPLEMENTED,
         absl::StrCat("StorageWrite.CreateWriteStream: stream type ",
                      v1::WriteStream::Type_Name(requested),
-                     " is not implemented in this emulator profile (plan 15 "
-                     "lights up _default + COMMITTED only); see the deferred "
-                     "follow-up to docs/ENGINE_POLICY.md"));
+                     " is not implemented in this emulator profile "
+                     "(PENDING + BatchCommitWriteStreams deferred); see "
+                     "docs/ENGINE_POLICY.md"));
   }
-  if (requested != v1::WriteStream::COMMITTED) {
+  if (requested != v1::WriteStream::COMMITTED &&
+      requested != v1::WriteStream::BUFFERED) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageWrite.CreateWriteStream: unknown stream type ",
@@ -182,13 +182,13 @@ std::string StorageWriteService::Rfc3339Now() const {
     StreamState state;
     state.table = table_id;
     state.schema = *schema_or;
-    state.type = v1::WriteStream::COMMITTED;
+    state.type = requested;
     state.create_time = create_time;
     streams_.emplace(stream_name, std::move(state));
   }
 
   response->set_name(stream_name);
-  response->set_type(v1::WriteStream::COMMITTED);
+  response->set_type(requested);
   backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
   response->set_create_time(create_time);
   return ::grpc::Status::OK;
@@ -278,11 +278,13 @@ std::string StorageWriteService::Rfc3339Now() const {
     }
 
     // Lookup the SessionState under the lock and snapshot the
-    // schema; release before calling AppendRows so the storage
-    // backend does not contend with subsequent CreateWriteStream
-    // requests while it writes the parquet file.
+    // schema + stream type; release before calling AppendRows so the
+    // storage backend does not contend with subsequent
+    // CreateWriteStream requests while it writes the parquet file.
     backend::storage::TableId table;
     backend::schema::TableSchema schema;
+    v1::WriteStream::Type stream_type = v1::WriteStream::COMMITTED;
+    bool stream_finalized = false;
     {
       absl::MutexLock lock(&mu_);
       auto it = streams_.find(bound_stream_name);
@@ -294,9 +296,18 @@ std::string StorageWriteService::Rfc3339Now() const {
                          "_default suffix): ",
                          bound_stream_name));
       }
+      if (it->second.finalized) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::FAILED_PRECONDITION,
+            absl::StrCat("StorageWrite.AppendRows: stream is finalized: ",
+                         bound_stream_name));
+      }
       table = it->second.table;
       schema = it->second.schema;
+      stream_type = it->second.type;
+      stream_finalized = it->second.finalized;
     }
+    (void)stream_finalized;
 
     // Decode the rows. The wire shape is identical to
     // `Catalog.InsertRows` so we lower one cell at a time through
@@ -342,35 +353,51 @@ std::string StorageWriteService::Rfc3339Now() const {
       continue;
     }
 
-    // Forward to the storage append primitive (plan 9). The
-    // DuckDB backend writes a fresh parquet snapshot per call,
-    // committing the rows immediately — that is the
-    // `_default` / `COMMITTED` semantic plan 15 promises.
-    const absl::Status append_status =
-        rows.empty() ? absl::OkStatus()
-                     : storage_->AppendRows(table, absl::MakeConstSpan(rows));
-    if (!append_status.ok()) {
-      // Recoverable storage errors land on the response envelope so
-      // the producer can retry without tearing the stream down.
-      // Hard `INTERNAL` failures (the storage layer's "anything
-      // else" bucket) close the stream so the producer's caller
-      // sees the matching gRPC status.
-      if (append_status.code() == absl::StatusCode::kInvalidArgument ||
-          append_status.code() == absl::StatusCode::kFailedPrecondition) {
-        resp.set_error_message(std::string(append_status.message()));
-        if (!stream->Write(resp)) {
-          return ::grpc::Status(::grpc::StatusCode::ABORTED,
-                                "StorageWrite.AppendRows: client cancelled "
-                                "mid-stream");
-        }
-        continue;
-      }
-      return AbslToGrpcStatus(append_status);
-    }
-
-    // Successful append: bump the per-stream offset and reply.
     std::int64_t prior_offset = 0;
-    {
+    if (stream_type == v1::WriteStream::BUFFERED) {
+      // BUFFERED streams hold rows server-side until FlushRows advances
+      // the visibility offset; no storage write on append.
+      absl::MutexLock lock(&mu_);
+      auto it = streams_.find(bound_stream_name);
+      if (it == streams_.end()) {
+        return ::grpc::Status(::grpc::StatusCode::NOT_FOUND,
+                              absl::StrCat("StorageWrite.AppendRows: no such "
+                                           "stream: ",
+                                           bound_stream_name));
+      }
+      prior_offset = it->second.committed_rows;
+      it->second.committed_rows += static_cast<std::int64_t>(rows.size());
+      for (auto& row : rows) {
+        it->second.buffered_rows.push_back(std::move(row));
+      }
+    } else {
+      // Forward to the storage append primitive (plan 9). The
+      // DuckDB backend writes a fresh parquet snapshot per call,
+      // committing the rows immediately — that is the
+      // `_default` / `COMMITTED` semantic plan 15 promises.
+      const absl::Status append_status =
+          rows.empty() ? absl::OkStatus()
+                       : storage_->AppendRows(table, absl::MakeConstSpan(rows));
+      if (!append_status.ok()) {
+        // Recoverable storage errors land on the response envelope so
+        // the producer can retry without tearing the stream down.
+        // Hard `INTERNAL` failures (the storage layer's "anything
+        // else" bucket) close the stream so the producer's caller
+        // sees the matching gRPC status.
+        if (append_status.code() == absl::StatusCode::kInvalidArgument ||
+            append_status.code() == absl::StatusCode::kFailedPrecondition) {
+          resp.set_error_message(std::string(append_status.message()));
+          if (!stream->Write(resp)) {
+            return ::grpc::Status(::grpc::StatusCode::ABORTED,
+                                  "StorageWrite.AppendRows: client cancelled "
+                                  "mid-stream");
+          }
+          continue;
+        }
+        return AbslToGrpcStatus(append_status);
+      }
+
+      // Successful append: bump the per-stream offset and reply.
       absl::MutexLock lock(&mu_);
       auto it = streams_.find(bound_stream_name);
       if (it != streams_.end()) {
@@ -418,18 +445,6 @@ std::string StorageWriteService::Rfc3339Now() const {
   return ::grpc::Status::OK;
 }
 
-::grpc::Status StorageWriteService::FinalizeWriteStream(
-    ::grpc::ServerContext* /*context*/,
-    const v1::FinalizeWriteStreamRequest* /*request*/,
-    v1::FinalizeWriteStreamResponse* /*response*/) {
-  return ::grpc::Status(
-      ::grpc::StatusCode::UNIMPLEMENTED,
-      "StorageWrite.FinalizeWriteStream: not implemented in this emulator "
-      "profile (plan 15 lights up _default + COMMITTED only; FinalizeWrite "
-      "lands with the deferred BUFFERED / PENDING follow-up subagent of "
-      "docs/ENGINE_POLICY.md)");
-}
-
 ::grpc::Status StorageWriteService::BatchCommitWriteStreams(
     ::grpc::ServerContext* /*context*/,
     const v1::BatchCommitWriteStreamsRequest* /*request*/,
@@ -439,18 +454,6 @@ std::string StorageWriteService::Rfc3339Now() const {
       "StorageWrite.BatchCommitWriteStreams: not implemented in this emulator "
       "profile (plan 15 lights up _default + COMMITTED only; BatchCommit "
       "lands with the deferred PENDING follow-up subagent of "
-      "docs/ENGINE_POLICY.md)");
-}
-
-::grpc::Status StorageWriteService::FlushRows(
-    ::grpc::ServerContext* /*context*/,
-    const v1::FlushRowsRequest* /*request*/,
-    v1::FlushRowsResponse* /*response*/) {
-  return ::grpc::Status(
-      ::grpc::StatusCode::UNIMPLEMENTED,
-      "StorageWrite.FlushRows: not implemented in this emulator "
-      "profile (plan 15 lights up _default + COMMITTED only; FlushRows "
-      "lands with the deferred BUFFERED follow-up subagent of "
       "docs/ENGINE_POLICY.md)");
 }
 
