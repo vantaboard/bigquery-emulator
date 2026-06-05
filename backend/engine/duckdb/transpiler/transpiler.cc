@@ -682,7 +682,7 @@ std::string Transpiler::EmitQueryStmt(
   // is set to `kSemanticExecutor` via its
   // `VisitResolvedQueryStmt` override, so the local coordinator
   // hands the statement off to the semantic executor (stub today;
-  // owned by `local-exec-07-semantic-core-expr.plan.md`) before the
+  // owned by `docs/ENGINE_POLICY.md`) before the
   // transpiler is ever asked to lower it. We touch the accessor
   // below so `ResolvedAST::CheckFieldsAccessed` still sees the
   // field read in case the transpiler is invoked through a path
@@ -963,7 +963,7 @@ std::string Transpiler::EmitFilterScan(
 // refs. DuckDB shares the native `USING (...)` syntax, so we peel
 // the column names back out of that tree and emit `USING` directly
 // rather than lowering through `$equal` (which is owned by
-// `local-exec-03-operator-disposition.plan.md`).
+// `docs/ENGINE_POLICY.md`).
 static bool TryAppendUsingColumnFromEqualCall(
     const ::googlesql::ResolvedFunctionCall* call,
     std::vector<std::string>* cols) {
@@ -1125,10 +1125,10 @@ std::string Transpiler::EmitJoinScan(
   // in case the transpiler is invoked through a path that bypasses
   // the classifier (legacy tests, debugging). Lateral correlated
   // `parameter_list` slots stay on the empty-string gate today
-  // (`local-exec-12-arrays-generators.plan.md`). `JOIN ... USING(...)`
+  // (`docs/ENGINE_POLICY.md`). `JOIN ... USING(...)`
   // lowers to DuckDB's native `USING (...)` by peeling column names
   // out of the analyzer's `$equal` / `$and` `join_expr` tree
-  // (`local-exec-02-withscan-cte.plan.md`).
+  // (`docs/ENGINE_POLICY.md`).
   if (node == nullptr) return "";
   (void)node->is_lateral();
   if (node->parameter_list_size() > 0) {
@@ -3057,7 +3057,7 @@ std::string Transpiler::EmitFunctionCall(
     return EmitCaseNoValue(args);
   }
   // FORMAT('%T', expr) smoke for ARRAY literal checks in
-  // local-exec-06 aggregate verify; full FORMAT lives in plan 09.
+  // Aggregate verify; full FORMAT lowering is deferred.
   if (name == "format" && args.size() == 2 && args[0] == "'%T'") {
     return absl::StrCat("CAST(", args[1], " AS VARCHAR)");
   }
@@ -3277,8 +3277,7 @@ std::string Transpiler::EmitFunctionCall(
             entry->duckdb_name, "(", absl::StrJoin(args, ", "), ")");
       }
       LOG(INFO) << "duckdb transpiler: function '" << name
-                << "' route=duckdb_udf (plan=" << entry->plan
-                << ", planned=" << entry->planned
+                << "' route=duckdb_udf (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kSemanticExecutor:
@@ -3296,13 +3295,12 @@ std::string Transpiler::EmitFunctionCall(
       // no-silent-approximation contract intact.
       LOG(INFO) << "duckdb transpiler: function '" << name
                 << "' route=" << DispositionToString(entry->disposition)
-                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << " (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kUnsupported:
       LOG(INFO) << "duckdb transpiler: function '" << name
-                << "' unsupported (plan=" << entry->plan
-                << "); surfacing UNIMPLEMENTED";
+                << "' unsupported; surfacing UNIMPLEMENTED";
       return "";
   }
   return "";
@@ -3320,10 +3318,9 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // apply.
   //
   // ORDER BY / LIMIT inside `array_agg`, `string_agg`, and
-  // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax
-  // (`local-exec-04-scan-emits.plan.md` / `local-exec-06-aggregate-
-  // modifiers.plan.md`). HAVING MAX/MIN, multi-level GROUP BY, and
-  // aggregate filtering still surface UNIMPLEMENTED.
+  // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax.
+  // HAVING MAX/MIN, multi-level GROUP BY, and aggregate filtering
+  // still surface UNIMPLEMENTED.
   // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) lowers `SAFE.SUM` via TRY().
   if (node == nullptr || node->function() == nullptr) return "";
   const std::string name = ResolveFunctionName(node->function());
@@ -3506,8 +3503,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
             entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
       }
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' route=duckdb_udf (plan=" << entry->plan
-                << ", planned=" << entry->planned
+                << "' route=duckdb_udf (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kSemanticExecutor:
@@ -3521,13 +3517,12 @@ std::string Transpiler::EmitAggregateFunctionCall(
       // emitting a guess.
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
                 << "' route=" << DispositionToString(entry->disposition)
-                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << " (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kUnsupported:
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
-                << "' unsupported (plan=" << entry->plan
-                << "); surfacing UNIMPLEMENTED";
+                << "' unsupported; surfacing UNIMPLEMENTED";
       return "";
   }
   return "";
@@ -3607,8 +3602,7 @@ std::string Transpiler::EmitAnalyticFunctionCall(
             entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
       }
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' route=duckdb_udf (plan=" << entry->plan
-                << ", planned=" << entry->planned
+                << "' route=duckdb_udf (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kSemanticExecutor:
@@ -3620,13 +3614,12 @@ std::string Transpiler::EmitAnalyticFunctionCall(
       // engine never lowers a stub family through the fast path.
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
                 << "' route=" << DispositionToString(entry->disposition)
-                << " (plan=" << entry->plan << ", planned=" << entry->planned
+                << " (planned=" << entry->planned
                 << "); surfacing UNIMPLEMENTED";
       return "";
     case Disposition::kUnsupported:
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
-                << "' unsupported (plan=" << entry->plan
-                << "); surfacing UNIMPLEMENTED";
+                << "' unsupported; surfacing UNIMPLEMENTED";
       return "";
   }
   return "";
@@ -3860,7 +3853,7 @@ std::string Transpiler::EmitSubqueryExpr(
   // they fall through to the empty-string contract today.
   //
   // Correlated subqueries (non-empty `parameter_list()`) belong to
-  // the semantic executor (`local-exec-02-withscan-cte.plan.md` Family 4,
+  // the semantic executor (`docs/ENGINE_POLICY.md` Family 4,
   // deferred). The route classifier promotes any query containing a
   // correlated `ResolvedSubqueryExpr` to `kSemanticExecutor` before
   // the transpiler is ever asked to lower it -- but we defend in

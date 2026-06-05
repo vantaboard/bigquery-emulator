@@ -17,8 +17,8 @@
 //   * `backend/engine/duckdb/transpiler/functions.yaml`
 //     (machine-readable per-BigQuery-function disposition table;
 //     generated into `functions_table.inc` at Bazel build time).
-//   * `docs/ENGINE_POLICY.md` and
-//     `.cursor/plans/local-execution-roadmap-index.plan.md`.
+//   * `docs/ENGINE_POLICY.md` (route vocabulary and specialized-
+//     feature posture).
 //
 // The values match the route names used in those documents
 // one-for-one. Anything outside this enum is by construction a doc /
@@ -41,21 +41,15 @@
 //   * `kDuckdbUdf`        — lowers to DuckDB SQL that calls a DuckDB
 //                           UDF/macro registered at engine startup.
 //                           The UDF body owns the BigQuery-specific
-//                           behavior. Not yet emit-able from this
-//                           plan; see
-//                           `local-exec-03-operator-disposition.plan.md`.
+//                           behavior.
 //   * `kSemanticExecutor` — runs on the local row/value semantic
 //                           executor instead of DuckDB SQL
 //                           evaluation. DuckDB is still used as the
 //                           row source; the executor owns expression
-//                           evaluation and error surfaces. Not yet
-//                           emit-able from this plan; see
-//                           `local-exec-07-semantic-core-expr.plan.md`.
+//                           evaluation and error surfaces.
 //   * `kControlOp`        — DDL / metadata / catalog op routed
 //                           through the storage layer. Bypasses
-//                           query execution entirely. Not yet
-//                           emit-able from this plan; see
-//                           `local-exec-01-ddl-catalog.plan.md`.
+//                           query execution entirely.
 //   * `kLocalStub`        — deterministic BigQuery-shaped stub for a
 //                           specialized feature family that is
 //                           accepted at parse / analyzer time but
@@ -73,15 +67,15 @@
 //                           stub-created model, real AEAD encryption
 //                           with a stub keyset) still surface
 //                           `UNIMPLEMENTED` from the matching
-//                           per-family handler. `specialized-
-//                           feature-policy.plan.md` documents the
-//                           per-family stub contract.
+//                           per-family handler. See
+//                           `docs/ENGINE_POLICY.md` for the stub
+//                           contract.
 //   * `kUnsupported`      — deliberately out of scope locally.
 //                           Surfaces a BigQuery-shaped
 //                           `UNIMPLEMENTED` (or
 //                           `INVALID_ARGUMENT` where appropriate).
-//                           `local-exec-15-specialized-stubs.plan.md`
-//                           documents the unsupported families.
+//                           See `docs/ENGINE_POLICY.md` for the
+//                           unsupported families.
 
 #include "absl/strings/string_view.h"
 

@@ -326,7 +326,7 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
 TEST_F(TranspilerTest, EmitFunctionCallNonLoweringDispositionReturnsEmpty) {
   // `BIT_COUNT` is on the `semantic_executor` route in
   // `functions.yaml` (BQ flavor differs from DuckDB's `bit_count`)
-  // with the body deferred to `local-exec-09-date-time.plan.md`.
+  // with the body deferred to `docs/ENGINE_POLICY.md`.
   // The transpiler has no DuckDB lowering for this disposition, so
   // the emit returns "" and the engine surfaces UNIMPLEMENTED for
   // the whole query.
@@ -656,7 +656,7 @@ TEST_F(TranspilerTest, EmitAggregateScanStringAggOrderByLimit) {
 
 TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnsupportedAggregate) {
   // `APPROX_QUANTILES` is on the `unsupported` route per
-  // `local-exec-15-specialized-stubs.plan.md`; the aggregate emit returns
+  // `docs/ENGINE_POLICY.md`; the aggregate emit returns
   // "" and the AggregateScan emit propagates the empty string. The
   // engine surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
@@ -672,7 +672,7 @@ TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnsupportedAggregate) {
 
 // --- GROUPING SETS / ROLLUP / CUBE / GROUPING() ------------------------
 //
-// `local-exec-13-advanced-relational.plan.md` Family 1. Each shape exercises
+// `docs/ENGINE_POLICY.md` Family 1. Each shape exercises
 // the `grouping_set_list` path in `EmitAggregateScan`:
 //
 //   * Explicit GROUPING SETS  -> `(a, b)`, `(a)`, `()` entries.
@@ -852,7 +852,7 @@ TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
 }
 
 TEST_F(TranspilerTest, EmitWithScanRecursiveLowersToWithRecursive) {
-  // `local-exec-13-advanced-relational.plan.md` Family 4. A `WITH
+  // `docs/ENGINE_POLICY.md` Family 4. A `WITH
   // RECURSIVE t AS (SELECT 1 AS n UNION ALL SELECT n FROM t) ...`
   // lowers to DuckDB's `WITH RECURSIVE`. The transpiler stages a
   // per-CTE context with stable anchor column names (`_cte_0`),
@@ -1343,7 +1343,6 @@ TEST(FunctionsTableTest, LookupUnsupportedFunction) {
   ASSERT_NE(e, nullptr);
   EXPECT_EQ(e->disposition, Disposition::kSemanticExecutor);
   EXPECT_TRUE(e->duckdb_name.empty());
-  EXPECT_EQ(e->plan, "local-exec-15-specialized-stubs.plan.md");
   EXPECT_FALSE(e->planned);
 }
 
@@ -1379,13 +1378,12 @@ TEST(FunctionsTableTest, LookupReadyDuckdbUdfFunction) {
 TEST(FunctionsTableTest, LookupPlannedSemanticExecutorFunction) {
   // SAFE-family rows route to the semantic executor (BigQuery-exact
   // semantics differ from DuckDB's raise-on-overflow). Runtime
-  // stays UNIMPLEMENTED until `local-exec-09-date-time.plan.md`
+  // stays UNIMPLEMENTED until `docs/ENGINE_POLICY.md`
   // lands.
   const FnEntry* e = LookupFunction("safe_divide");
   ASSERT_NE(e, nullptr);
   EXPECT_EQ(e->disposition, Disposition::kSemanticExecutor);
   EXPECT_TRUE(e->duckdb_name.empty());
-  EXPECT_EQ(e->plan, "local-exec-09-date-time.plan.md");
   EXPECT_FALSE(e->planned);
 }
 
@@ -2942,7 +2940,7 @@ TEST_F(TranspilerTest, EmitSampleScanPercentVsRowsContrast) {
 
 // --- ResolvedWithScan / ResolvedWithRefScan ----------------------------
 //
-// `local-exec-02-withscan-cte.plan.md` Family 1. These tests pin the
+// `docs/ENGINE_POLICY.md` Family 1. These tests pin the
 // CTE emit shape end-to-end (`Transpile(stmt)` from a real
 // `AnalyzeStatement` output) so a regression that changes the
 // CTE-side anchor naming or the ref-scan-side rename surfaces as a
@@ -3113,7 +3111,7 @@ TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {
 
 // --- ResolvedSubqueryExpr (non-correlated) -----------------------------
 //
-// `local-exec-02-withscan-cte.plan.md` Family 2. Non-correlated SCALAR /
+// `docs/ENGINE_POLICY.md` Family 2. Non-correlated SCALAR /
 // IN / EXISTS / ARRAY subqueries lower to DuckDB's native subquery
 // surface. Correlated forms (non-empty `parameter_list()`) are
 // the classifier's responsibility (Family 3 promotes them to
@@ -3252,7 +3250,7 @@ TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {
   // DuckDB) is left to a follow-up plan once the DuckDBEngine
   // integration is updated to dispatch on QueryStmt directly rather
   // than the StripPassThroughProjectScans subset; see
-  // duckdb-transpiler-select-core.plan.md for the engine wiring
+  // docs/ENGINE_POLICY.md for the engine wiring
   // that lands separately.
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT id, COUNT(*) AS c FROM people WHERE id > 0 GROUP BY id "

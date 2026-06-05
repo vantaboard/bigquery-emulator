@@ -12,16 +12,11 @@
 // initializer. The runtime API is one lookup function -- callers
 // stay decoupled from the YAML shape.
 //
-// The `engine-router-foundation.plan.md` follow-up is the first
-// caller; this plan ships the registry, not the router itself.
-//
 // See `backend/engine/disposition.h` for the canonical
 // `Disposition` enum and the route semantics. Every YAML row maps
-// to one enum value, plus optional `plan=` and `status=planned`
-// metadata so the engine can log "row owned by <plan>, planned
-// implementation not landed yet" when it surfaces `UNIMPLEMENTED`
-// for a node kind whose disposition is a not-yet-implementable
-// route.
+// to one enum value, plus optional `status=planned` metadata so the
+// engine can surface `UNIMPLEMENTED` for a node kind whose runtime
+// emit is not yet implemented.
 
 #include <vector>
 
@@ -36,18 +31,9 @@ namespace transpiler {
 
 struct NodeDispositionEntry {
   Disposition disposition;
-  // Owning `.cursor/plans/*.plan.md` file name, or empty when this
-  // row is documentation-only with no specific owning plan. For
-  // `Disposition::kUnsupported` rows this is always non-empty (the
-  // YAML generator rejects an unsupported row without a plan
-  // pointer at build time); the convention is to point at
-  // `local-exec-15-specialized-stubs.plan.md`.
-  absl::string_view plan;
-  // True when the owning plan has not yet landed an implementation
-  // (the YAML row carried `status=planned`). The engine surfaces
-  // `UNIMPLEMENTED` for these rows; the flag exists so the log
-  // message can distinguish "planned, waiting for plan X" from "no
-  // disposition row".
+  // True when the YAML row carried `status=planned`. The engine
+  // surfaces `UNIMPLEMENTED` for these rows until the transpiler or
+  // executor implements the route for this node kind.
   bool planned;
 };
 

@@ -12,14 +12,12 @@
 #
 #   * blank lines are ignored
 #   * `#`-comment lines are ignored
-#   * `<NodeKind>: <disposition> [plan=<plan>] [status=<status>]`
+#   * `<NodeKind>: <disposition> [status=planned]`
 #     lines map a single GoogleSQL `ResolvedAST` class name to its
-#     six-route disposition plus optional `plan=` and `status=`
-#     metadata. Order of `key=value` tokens does not matter; unknown
-#     keys abort the build.
+#     six-route disposition plus optional `status=planned` metadata.
+#     Order of `key=value` tokens does not matter; unknown keys abort
+#     the build.
 #   * trailing `# ...` inline comments are stripped.
-#
-# Anything else aborts the build with a non-zero exit so a malformed
 # YAML edit lands as a Bazel error rather than a silent skip at run
 # time.
 #
@@ -76,7 +74,6 @@ BEGIN {
         exit 1
     }
 
-    plan = ""
     status = ""
     for (i = 2; i <= n; i++) {
         tok = parts[i]
@@ -88,9 +85,7 @@ BEGIN {
         }
         meta_key = substr(tok, 1, eq - 1)
         meta_val = substr(tok, eq + 1)
-        if (meta_key == "plan") {
-            plan = meta_val
-        } else if (meta_key == "status") {
+        if (meta_key == "status") {
             if (meta_val != "planned") {
                 printf("node_dispositions_table_gen.awk: unknown status %s for key %s (allowed: planned)\n", meta_val, key) > "/dev/stderr"
                 exit 1
@@ -102,25 +97,7 @@ BEGIN {
         }
     }
 
-    # Enforce: every `unsupported` row must carry a `plan=` pointer
-    # so a reader can trace the deliberate posture. This matches the
-    # plan's done-criteria: every kUnsupported row points at
-    # `local-exec-15-specialized-stubs.plan.md`.
-    if (disposition == "unsupported" && length(plan) == 0) {
-        printf("node_dispositions_table_gen.awk: %s is unsupported but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
-        exit 1
-    }
-    # Same contract for `local_stub`: every stub row points at the
-    # owning policy plan so a reader can trace the deliberate-stub
-    # posture. `local-exec-15-specialized-stubs.plan.md` is the canonical
-    # owner; the YAML loader does not pin the value, it only
-    # requires that one is set.
-    if (disposition == "local_stub" && length(plan) == 0) {
-        printf("node_dispositions_table_gen.awk: %s is local_stub but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
-        exit 1
-    }
-
     is_planned = (length(status) > 0) ? "true" : "false"
-    printf("    {\"%s\", NodeDispositionEntry{Disposition::%s, \"%s\", %s}},\n",
-           key, kind[disposition], plan, is_planned)
+    printf("    {\"%s\", NodeDispositionEntry{Disposition::%s, %s}},\n",
+           key, kind[disposition], is_planned)
 }

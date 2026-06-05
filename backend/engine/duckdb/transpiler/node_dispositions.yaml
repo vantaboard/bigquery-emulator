@@ -8,7 +8,7 @@
 #
 # Line format:
 #
-#   <NodeKind>: <disposition> [plan=<plan-file>] [status=<status>]
+#   <NodeKind>: <disposition> [status=planned]
 #
 # Where:
 #   - `<NodeKind>` is the (exact, case-sensitive) GoogleSQL resolved
@@ -16,7 +16,7 @@
 #     (e.g. `ResolvedQueryStmt`). One node class per line. Composite
 #     SHAPE_TRACKER rows (`Foo / Bar`) expand to one line per class
 #     here.
-#   - `<disposition>` is one of the six route names from
+#   - `<disposition>` is one of the route names from
 #     `backend/engine/disposition.h`:
 #       * `duckdb_native`     - lowers to DuckDB SQL directly.
 #       * `duckdb_rewrite`    - lowers via a structural rewrite.
@@ -29,16 +29,12 @@
 #                               `backend/engine/semantic/stubs/`
 #                               (function-level) or
 #                               `backend/engine/control/stubs/`
-#                               (statement-level). Owned by
-#                               `local-exec-15-specialized-stubs.plan.md`.
+#                               (statement-level). See
+#                               `docs/ENGINE_POLICY.md`.
 #       * `unsupported`       - deliberately out of scope locally.
-#   - `plan=<plan-file>` (optional) names the
-#     `.cursor/plans/*.plan.md` file that owns the row. Mandatory for
-#     `unsupported` rows so a reader can trace why a route is closed
-#     (those rows all point at `local-exec-15-specialized-stubs.plan.md`).
-#   - `status=planned` (optional) marks rows whose owning plan has
-#     not yet landed an implementation. The engine surfaces
-#     `UNIMPLEMENTED` for these until their owning plan ships.
+#   - `status=planned` (optional) marks rows whose implementation has
+#     not yet landed. The engine surfaces `UNIMPLEMENTED` for these
+#     until the handler ships.
 #
 # Blank lines and `#`-only lines are ignored; trailing `# ...`
 # inline comments are stripped.
@@ -50,20 +46,18 @@
 #    parity checker stays green.
 #  * Do NOT promote a row off `unsupported` (or off `status=planned`)
 #    without landing the implementation + conformance fixture(s) in
-#    the same commit. See
-#    `.cursor/plans/local-execution-roadmap-index.plan.md`'s
-#    "Disposition + emit + conformance land together" rule.
+#    the same commit. See `docs/ENGINE_POLICY.md`.
 
 # --- Statements --------------------------------------------------------
 ResolvedQueryStmt: duckdb_native
-ResolvedExplainStmt: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedCreateTableStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedCreateTableAsSelectStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedCreateViewStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedCreateMaterializedViewStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedCreateProcedureStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
-ResolvedCreateFunctionStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedCreateTableFunctionStmt: control_op plan=local-exec-15-specialized-stubs.plan.md
+ResolvedExplainStmt: unsupported
+ResolvedCreateTableStmt: control_op
+ResolvedCreateTableAsSelectStmt: control_op
+ResolvedCreateViewStmt: control_op
+ResolvedCreateMaterializedViewStmt: control_op
+ResolvedCreateProcedureStmt: semantic_executor status=planned
+ResolvedCreateFunctionStmt: control_op
+ResolvedCreateTableFunctionStmt: control_op
 # `CREATE MODEL` (BigQuery ML) is `local_stub`: the statement
 # parses, analyzes, and the engine returns OK without materializing
 # a model. A subsequent `ML.PREDICT(<stub-model>)` call surfaces
@@ -75,20 +69,20 @@ ResolvedCreateTableFunctionStmt: control_op plan=local-exec-15-specialized-stubs
 # pipe-DDL pre-dispatch pattern). The posture exists so client
 # libraries that probe BigQuery ML availability by issuing
 # `CREATE MODEL` do not fail at startup.
-ResolvedCreateModelStmt: local_stub plan=local-exec-15-specialized-stubs.plan.md
-ResolvedDropStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedDropFunctionStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedInsertStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedUpdateStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedDeleteStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedMergeStmt: duckdb_rewrite plan=local-exec-14-dml-system.plan.md
-ResolvedCallStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
-ResolvedAssignmentStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedExecuteImmediateStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
-ResolvedAnalyzeStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedAuxLoadDataStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedAssertStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedExportDataStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateModelStmt: local_stub
+ResolvedDropStmt: control_op
+ResolvedDropFunctionStmt: control_op
+ResolvedInsertStmt: semantic_executor
+ResolvedUpdateStmt: semantic_executor
+ResolvedDeleteStmt: semantic_executor
+ResolvedMergeStmt: duckdb_rewrite
+ResolvedCallStmt: semantic_executor status=planned
+ResolvedAssignmentStmt: semantic_executor
+ResolvedExecuteImmediateStmt: semantic_executor status=planned
+ResolvedAnalyzeStmt: control_op
+ResolvedAuxLoadDataStmt: control_op
+ResolvedAssertStmt: semantic_executor
+ResolvedExportDataStmt: control_op
 
 # --- Relational scans --------------------------------------------------
 ResolvedTableScan: duckdb_native
@@ -98,46 +92,46 @@ ResolvedFilterScan: duckdb_native
 ResolvedJoinScan: duckdb_native
 ResolvedArrayScan: duckdb_native
 ResolvedAggregateScan: duckdb_native
-ResolvedAnonymizedAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedDifferentialPrivacyAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedAggregationThresholdAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedAnonymizedAggregateScan: unsupported
+ResolvedDifferentialPrivacyAggregateScan: unsupported
+ResolvedAggregationThresholdAggregateScan: unsupported
 ResolvedSetOperationScan: duckdb_native
 ResolvedOrderByScan: duckdb_native
 ResolvedLimitOffsetScan: duckdb_native
 ResolvedAnalyticScan: duckdb_native
 ResolvedSampleScan: duckdb_native
-ResolvedWithScan: duckdb_native plan=local-exec-02-withscan-cte.plan.md
-ResolvedWithRefScan: duckdb_native plan=local-exec-02-withscan-cte.plan.md
-ResolvedRecursiveScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedRecursiveRefScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedPivotScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedUnpivotScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedMatchRecognizeScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md status=planned
-ResolvedGroupRowsScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
-ResolvedTVFScan: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
-ResolvedRelationArgumentScan: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
-ResolvedBarrierScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
-ResolvedPipeIfScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
-ResolvedPipeForkScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
-ResolvedPipeTeeScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
-ResolvedPipeExportDataScan: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedPipeCreateTableScan: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedPipeInsertScan: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedWithScan: duckdb_native
+ResolvedWithRefScan: duckdb_native
+ResolvedRecursiveScan: duckdb_rewrite
+ResolvedRecursiveRefScan: duckdb_rewrite
+ResolvedPivotScan: duckdb_rewrite
+ResolvedUnpivotScan: duckdb_rewrite
+ResolvedMatchRecognizeScan: semantic_executor status=planned
+ResolvedGroupRowsScan: semantic_executor
+ResolvedTVFScan: semantic_executor status=planned
+ResolvedRelationArgumentScan: semantic_executor status=planned
+ResolvedBarrierScan: semantic_executor
+ResolvedPipeIfScan: semantic_executor
+ResolvedPipeForkScan: semantic_executor
+ResolvedPipeTeeScan: semantic_executor
+ResolvedPipeExportDataScan: control_op
+ResolvedPipeCreateTableScan: control_op
+ResolvedPipeInsertScan: semantic_executor status=planned
 # `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
 # query (GQL) surface is deliberately out of scope locally; every
 # graph scan class enumerated in
 # `googlesql/resolved_ast/resolved_ast.h` is recorded here so the
 # parity checker can read them off this YAML directly instead of
 # inferring from a wildcard.
-ResolvedGraphTableScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphLinearScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphRefScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphCallScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphElementScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphNodeScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphEdgeScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGraphPathScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphTableScan: unsupported
+ResolvedGraphScan: unsupported
+ResolvedGraphLinearScan: unsupported
+ResolvedGraphRefScan: unsupported
+ResolvedGraphCallScan: unsupported
+ResolvedGraphElementScan: unsupported
+ResolvedGraphNodeScan: unsupported
+ResolvedGraphEdgeScan: unsupported
+ResolvedGraphPathScan: unsupported
 
 # --- Expressions -------------------------------------------------------
 ResolvedLiteral: duckdb_native
@@ -149,41 +143,41 @@ ResolvedAnalyticFunctionCall: duckdb_native
 ResolvedCast: duckdb_native
 ResolvedMakeStruct: duckdb_rewrite
 ResolvedGetStructField: duckdb_rewrite
-ResolvedMakeProto: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGetProtoField: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedGetProtoOneof: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedReplaceField: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedMakeProto: unsupported
+ResolvedGetProtoField: unsupported
+ResolvedGetProtoOneof: unsupported
+ResolvedReplaceField: unsupported
 ResolvedGetJsonField: duckdb_rewrite
-ResolvedGetRowField: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedFlatten: semantic_executor plan=local-exec-12-arrays-generators.plan.md status=planned
-ResolvedFlattenedArg: semantic_executor plan=local-exec-12-arrays-generators.plan.md status=planned
-ResolvedSubqueryExpr: duckdb_native plan=local-exec-02-withscan-cte.plan.md
+ResolvedGetRowField: unsupported
+ResolvedFlatten: semantic_executor status=planned
+ResolvedFlattenedArg: semantic_executor status=planned
+ResolvedSubqueryExpr: duckdb_native
 ResolvedWithExpr: duckdb_native
-ResolvedInlineLambda: semantic_executor plan=local-exec-09-date-time.plan.md status=planned
-ResolvedFilterField: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedFilterFieldArg: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedConstant: semantic_executor plan=local-exec-15-specialized-stubs.plan.md
-ResolvedSystemVariable: semantic_executor plan=local-exec-14-dml-system.plan.md
-ResolvedSequence: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedArgumentRef: semantic_executor plan=local-exec-15-specialized-stubs.plan.md
-ResolvedArgumentDef: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
-ResolvedCatalogColumnRef: control_op plan=local-exec-01-ddl-catalog.plan.md
-ResolvedExpressionColumn: unsupported plan=local-exec-15-specialized-stubs.plan.md
-ResolvedUpdateConstructor: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedInlineLambda: semantic_executor status=planned
+ResolvedFilterField: unsupported
+ResolvedFilterFieldArg: unsupported
+ResolvedConstant: semantic_executor
+ResolvedSystemVariable: semantic_executor
+ResolvedSequence: unsupported
+ResolvedArgumentRef: semantic_executor
+ResolvedArgumentDef: semantic_executor status=planned
+ResolvedCatalogColumnRef: control_op
+ResolvedExpressionColumn: unsupported
+ResolvedUpdateConstructor: semantic_executor status=planned
 
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
-ResolvedDeferredComputedColumn: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedDeferredComputedColumn: semantic_executor
 ResolvedOrderByItem: duckdb_native
-ResolvedColumnHolder: semantic_executor plan=local-exec-12-arrays-generators.plan.md
+ResolvedColumnHolder: semantic_executor
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row
 # from SHAPE_TRACKER.md, expanded to per-class rows for the parity
 # checker.
-ResolvedGroupingSet: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedRollup: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedCube: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
-ResolvedAggregateHavingModifier: semantic_executor plan=local-exec-09-date-time.plan.md status=planned
+ResolvedGroupingSet: duckdb_rewrite
+ResolvedRollup: duckdb_rewrite
+ResolvedCube: duckdb_rewrite
+ResolvedAggregateHavingModifier: semantic_executor status=planned
 # `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` row from
 # SHAPE_TRACKER.md, expanded to per-class rows.
 ResolvedWindowFrame: duckdb_native
@@ -191,4 +185,4 @@ ResolvedWindowFrameExpr: duckdb_native
 ResolvedAnalyticFunctionGroup: duckdb_native
 ResolvedSetOperationItem: duckdb_native
 ResolvedFunctionArgument: duckdb_native
-ResolvedReturningClause: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedReturningClause: semantic_executor status=planned

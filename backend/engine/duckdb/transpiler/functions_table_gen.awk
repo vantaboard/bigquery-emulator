@@ -8,8 +8,7 @@
 # The YAML grammar is the same shape as
 # `node_dispositions_table_gen.awk`:
 #
-#   <bq_function>: <disposition> [duckdb_name=<name>]
-#                                [plan=<plan>] [status=planned]
+#   <bq_function>: <disposition> [duckdb_name=<name>] [status=planned]
 #
 # Where:
 #   * blank lines and `#`-comment lines are ignored
@@ -21,8 +20,6 @@
 #     `duckdb_rewrite` rows (the transpiler emits `<NAME>(<args>)`)
 #     and forbidden for the other dispositions (no DuckDB function
 #     name to dispatch to)
-#   * `plan=<plan-file>` is mandatory for `unsupported` rows; the
-#     convention is to point at `local-exec-15-specialized-stubs.plan.md`
 #   * `status=planned` is optional and only valid alongside
 #     dispositions whose runtime emit does not yet exist
 #     (`duckdb_udf`, `semantic_executor`, `control_op`)
@@ -109,7 +106,6 @@ BEGIN {
     }
 
     duckdb_name = ""
-    plan = ""
     status = ""
     for (i = 2; i <= n; i++) {
         tok = parts[i]
@@ -123,8 +119,6 @@ BEGIN {
         meta_val = substr(tok, eq + 1)
         if (meta_key == "duckdb_name") {
             duckdb_name = meta_val
-        } else if (meta_key == "plan") {
-            plan = meta_val
         } else if (meta_key == "status") {
             if (meta_val != "planned") {
                 printf("functions_table_gen.awk: unknown status %s for key %s (allowed: planned)\n", meta_val, key) > "/dev/stderr"
@@ -156,25 +150,12 @@ BEGIN {
         printf("functions_table_gen.awk: %s carries duckdb_name=%s but disposition %s does not emit a DuckDB function call\n", key, duckdb_name, disposition) > "/dev/stderr"
         exit 1
     }
-    if (disposition == "unsupported" && length(plan) == 0) {
-        printf("functions_table_gen.awk: %s is unsupported but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
-        exit 1
-    }
-    # Same posture-row contract for `local_stub`: every stub
-    # function row must point at the owning policy plan so a reader
-    # can trace why the stub was chosen and where the documented
-    # contract lives. `local-exec-15-specialized-stubs.plan.md` is the
-    # canonical owner.
-    if (disposition == "local_stub" && length(plan) == 0) {
-        printf("functions_table_gen.awk: %s is local_stub but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
-        exit 1
-    }
     if (length(status) > 0 && !(disposition in plannable)) {
         printf("functions_table_gen.awk: %s carries status=planned but disposition %s already has a runtime emit\n", key, disposition) > "/dev/stderr"
         exit 1
     }
 
     is_planned = (length(status) > 0) ? "true" : "false"
-    printf("    {\"%s\", FnEntry{Disposition::%s, \"%s\", \"%s\", %s}},\n",
-           key, kind[disposition], duckdb_name, plan, is_planned)
+    printf("    {\"%s\", FnEntry{Disposition::%s, \"%s\", %s}},\n",
+           key, kind[disposition], duckdb_name, is_planned)
 }

@@ -1,7 +1,7 @@
 # `Emit*` empty-string return audit
 
 Audit produced as item 1 of
-`.cursor/plans/local-exec-04-scan-emits.plan.md`. Each row in
+`docs/ENGINE_POLICY.md`. Each row in
 `backend/engine/duckdb/transpiler/transpiler.cc` that returns `""`
 is categorized below. Readers should treat this as the source of
 truth for "which `""` gates are defensive vs runtime and which are
@@ -9,7 +9,7 @@ caught by the classifier".
 
 ## Categories
 
-| Category | Definition | Plan-2 action |
+| Category | Definition | Follow-up action |
 |----------|------------|---------------|
 | **defensive-null** | `nullptr` checks on the resolved node, its `type()`, an inner expression, etc. The analyzer guarantees these are non-null for a well-formed AST; the gate exists to harden a misuse-from-test or a malformed serialized AST round-trip. | Keep. These are not runtime gates. |
 | **defensive-malformed** | Guards that catch an analyzer-contract violation (e.g. `column_index_list_size != column_list_size`, `field_idx out of range`, `default:` arm of an exhaustive `switch`). | Keep. These are not runtime gates. |
@@ -51,10 +51,9 @@ lint:dispositions`) catches that before main.
 * **L303** `if (node->is_value_table()) return "";` --
   **PROPERTY-GATE.** `SELECT AS VALUE ...` collapses the row to a
   single anonymous value; DuckDB has no direct analog. The
-  matching plan-2 action is a classifier `VisitResolvedQueryStmt`
+  matching follow-up action is a classifier `VisitResolvedQueryStmt`
   that promotes to `kSemanticExecutor` when `is_value_table()`
-  is true. The wrapping plan is the semantic executor itself
-  (`local-exec-07-semantic-core-expr.plan.md`); until that plan ships
+  is true. Routes to the semantic executor; until that handler ships
   the stub `SemanticExecutor` returns `UNIMPLEMENTED`, which is
   the same end-user-visible behavior as the empty-string gate.
 * **L305, L310, L313** -- propagation.
@@ -88,8 +87,8 @@ lint:dispositions`) catches that before main.
 * **L494** `is_lateral() || has_using() || parameter_list_size > 0`
   -- **PROPERTY-GATE.** Lateral joins (`is_lateral`) and
   lateral-correlated `parameter_list` slots both belong to
-  `local-exec-12-arrays-generators.plan.md` /
-  `local-exec-02-withscan-cte.plan.md` (the semantic executor owns
+  `docs/ENGINE_POLICY.md` /
+  `docs/ENGINE_POLICY.md` (the semantic executor owns
   evaluation order for those). `has_using()` is the analyzer's
   marker for `JOIN ... USING(...)`; the analyzer canonicalizes
   USING into ON, but the column-list collapse rule needs a
@@ -113,12 +112,12 @@ lint:dispositions`) catches that before main.
   **PROPERTY-GATE.** Multi-array UNNEST (`array_zip_mode`),
   `WITH OFFSET` (`array_offset_column`), LEFT/RIGHT outer UNNEST
   (`is_outer` / `join_expr`) all belong to
-  `local-exec-12-arrays-generators.plan.md`. Plan-2 action:
+  `docs/ENGINE_POLICY.md`. follow-up action:
   classifier `VisitResolvedArrayScan` promotes to
   `kSemanticExecutor` for any of these.
 * **L573** `input_scan != nullptr && input_scan->node_kind != SingleRow`
   -- the lateral cross-join shape (`FROM t, UNNEST(t.arr)`).
-  Same plan ownership; same plan-2 action.
+  Same plan ownership; same follow-up action.
 * **L576** -- propagation.
 
 ### `EmitAggregateScan` (L583-643)
@@ -128,13 +127,13 @@ lint:dispositions`) catches that before main.
   || grouping_call_list_size > 0` -- **child-class-gate**: the
   child rows (`ResolvedGroupingSet`, `ResolvedRollup`,
   `ResolvedCube`) already carry `duckdb_rewrite plan=
-  local-exec-13-advanced-relational.plan.md status=planned` in
+  docs/ENGINE_POLICY.md status=planned` in
   `node_dispositions.yaml`. The classifier visitor walks every
   child node, so the planned-row contract makes the route-promotion
   a no-op today (planned rows do not promote per the existing
   contract); the route stays at `kDuckdbNative` and the
   transpiler's `""` gate keeps the actual behavior at
-  `UNIMPLEMENTED`. When `local-exec-13-advanced-relational.plan.md`
+  `UNIMPLEMENTED`. When `docs/ENGINE_POLICY.md`
   drops the `status=planned` marker, the classifier will start
   promoting and this gate becomes unreachable in practice. Keep
   as defense-in-depth.
@@ -155,7 +154,7 @@ lint:dispositions`) catches that before main.
   the positional projection does not handle. The wrapping shape
   is still `ResolvedSetOperationScan` with disposition
   `duckdb_native`; plan-2 owner for the classifier promotion
-  is `local-exec-13-advanced-relational.plan.md`. **Deferred**: the
+  is `docs/ENGINE_POLICY.md`. **Deferred**: the
   CORRESPONDING surface is BigQuery-only and covered by the
   advanced relational plan; the property-gate stays in the
   transpiler today and we promote in plan 12.
@@ -170,7 +169,7 @@ lint:dispositions`) catches that before main.
 * **L789** `item == nullptr || item->column_ref() == nullptr` --
   defensive-null.
 * **L790** `item->collation_name() != nullptr` -- **property-gate**.
-  COLLATE belongs to `local-exec-09-date-time.plan.md`
+  COLLATE belongs to `docs/ENGINE_POLICY.md`
   (collation-aware comparison). Deferred: same reasoning as
   CORRESPONDING above.
 * **L792, L808** -- propagation.
@@ -183,7 +182,7 @@ lint:dispositions`) catches that before main.
   (L950-1000): every `""` here is either defensive-null or
   propagation, except the property-gates against
   `collation_list` (L865) and `hint_list` (L865, L882) which
-  belong to `local-exec-09-date-time.plan.md`. Deferred.
+  belong to `docs/ENGINE_POLICY.md`. Deferred.
 
 ### `EmitSampleScan` (L1002-1075)
 
@@ -191,7 +190,7 @@ lint:dispositions`) catches that before main.
   defensive-null.
 * **L1037** `repeatable_argument() != nullptr` -- **property-gate**.
   REPEATABLE seed semantics differ from DuckDB; owner is
-  `local-exec-13-advanced-relational.plan.md`. Deferred.
+  `docs/ENGINE_POLICY.md`. Deferred.
 * **L1038** `weight_column() != nullptr` -- **property-gate**. WITH
   WEIGHT has no DuckDB analog. Deferred (same plan).
 * **L1039** `partition_by_list_size > 0` -- **property-gate**.
@@ -204,10 +203,10 @@ lint:dispositions`) catches that before main.
 
 * **L1079** `return "";` -- placeholder for the planned CTE-ref
   emit. The wrapping `ResolvedWithRefScan` row already carries
-  `duckdb_native plan=local-exec-02-withscan-cte.plan.md status=planned`
+  `duckdb_native plan=docs/ENGINE_POLICY.md status=planned`
   in `node_dispositions.yaml`; the planned-row contract keeps the
   classifier from promoting and the transpiler returns `""` as
-  the runtime UNIMPLEMENTED. When `local-exec-02-withscan-cte.plan.md`
+  the runtime UNIMPLEMENTED. When `docs/ENGINE_POLICY.md`
   drops the `planned` marker, the placeholder body lands too.
   **Defensive** (deferred-by-design).
 
@@ -233,11 +232,11 @@ Every `""` here is one of:
 * **property-gate** (`SAFE_ERROR_MODE`, aggregate modifiers
   HAVING/ORDER BY/LIMIT/GROUP BY/NULL-handling, analytic
   IGNORE/RESPECT NULLS). All belong to
-  `local-exec-09-date-time.plan.md`. **Deferred**.
+  `docs/ENGINE_POLICY.md`. **Deferred**.
 * **propagation** (`if (a.empty()) return "";` per arg).
 * **`status=planned` route surface** (`kDuckdbUdf` /
   `kSemanticExecutor` switch arms): see the
-  `execution-disposition-registry.plan.md` contract. The empty
+  `docs/ENGINE_POLICY.md` contract. The empty
   string here mirrors the per-row `status=planned`; once the
   matching plan ships, the row's marker drops and the case stops
   returning `""`.
@@ -261,7 +260,7 @@ Every `""` here is one of:
 * **L1435** `node == nullptr || expr == nullptr` -- defensive-null.
 * **L1436-L1438** `format() / time_zone() / extended_cast() /
   type_modifiers()` -- **property-gate**. Owner is
-  `local-exec-09-date-time.plan.md` (FORMAT clauses,
+  `docs/ENGINE_POLICY.md` (FORMAT clauses,
   collation modifiers, time-zone-aware casts). Deferred.
 * **L1440** `target == nullptr` -- defensive-null.
 * **L1441** `IsCastTargetSupported(kind) == false` --
@@ -302,7 +301,7 @@ Every `""` here is one of:
 * **L1574** `return "";` -- placeholder for the planned subquery
   emit, mirroring `EmitWithRefScan` above. Wrapping row
   `ResolvedSubqueryExpr` is `duckdb_native plan=
-  local-exec-02-withscan-cte.plan.md status=planned`; defensive
+  docs/ENGINE_POLICY.md status=planned`; defensive
   (deferred-by-design).
 
 ### `EmitWithExpr` (L1577-1616)
@@ -329,12 +328,12 @@ Every `""` here is one of:
 
 ## Summary table
 
-| `""` return category | Count | Plan-2 action |
+| `""` return category | Count | follow-up action |
 |----------------------|-------|---------------|
 | defensive-null | 32 | Keep as-is. |
 | defensive-malformed | 22 | Keep as-is. |
 | propagation | 31 | Keep as-is (the classifier walks the tree; the gate short-circuits a partial-emit in defense-in-depth depth). |
-| property-gate (move to classifier in plan 2) | 4 | Plan-2 lands `VisitResolvedQueryStmt` (is_value_table) and `VisitResolvedJoinScan` (is_lateral). |
+| property-gate (move to classifier in plan 2) | 4 | lands `VisitResolvedQueryStmt` (is_value_table) and `VisitResolvedJoinScan` (is_lateral). |
 | property-gate (deferred to a later plan) | ~14 | Documented per-method above with the owning plan. |
 | child-class-gate | 2 | Keep as defense-in-depth (the classifier already catches via tree walk). |
 | `status=planned` placeholder body | 2 | Keep as-is; the row's `planned` marker drives the runtime UNIMPLEMENTED. |
@@ -348,7 +347,7 @@ Every `""` here is one of:
     `is_lateral()` is true (the lateral case is the most narrowly
     semantic-executor-bound of the three flags; HAS USING / lateral
     parameter list stay in the deferred queue and are picked up by
-    `local-exec-12-arrays-generators.plan.md` / `local-exec-02-withscan-cte.plan.md`).
+    `docs/ENGINE_POLICY.md` / `docs/ENGINE_POLICY.md`).
 
 * **Transpiler** (`backend/engine/duckdb/transpiler/transpiler.cc`):
   * Drop the `is_value_table()` early-return in `EmitQueryStmt`
@@ -364,10 +363,10 @@ Every `""` here is one of:
   unreachable in practice.
 
 The deferred property-gates land via their owning plans
-(`local-exec-12-arrays-generators.plan.md`,
-`local-exec-09-date-time.plan.md`,
-`local-exec-13-advanced-relational.plan.md`,
-`local-exec-02-withscan-cte.plan.md`). When each of those plans drops a
+(`docs/ENGINE_POLICY.md`,
+`docs/ENGINE_POLICY.md`,
+`docs/ENGINE_POLICY.md`,
+`docs/ENGINE_POLICY.md`). When each of those plans drops a
 `status=planned` marker or ships its own classifier override, the
 matching transpiler `""` gate becomes unreachable in practice
 and gets removed in the same commit.
@@ -387,26 +386,26 @@ match:
 
 | BQ function | Reason DuckDB target differs (paraphrased from row notes) | Owning plan |
 |-------------|-----------------------------------------------------------|-------------|
-| `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `local-exec-03-operator-disposition.plan.md` |
-| `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `local-exec-03-operator-disposition.plan.md` |
-| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `local-exec-03-operator-disposition.plan.md` |
-| `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `local-exec-09-date-time.plan.md` |
-| `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `local-exec-09-date-time.plan.md` |
-| `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `local-exec-03-operator-disposition.plan.md` |
-| `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `local-exec-03-operator-disposition.plan.md` |
-| `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `local-exec-03-operator-disposition.plan.md` |
-| `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `local-exec-03-operator-disposition.plan.md` |
-| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `local-exec-03-operator-disposition.plan.md` |
-| `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `local-exec-03-operator-disposition.plan.md` |
+| `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `docs/ENGINE_POLICY.md` |
+| `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `docs/ENGINE_POLICY.md` |
+| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `docs/ENGINE_POLICY.md` |
+| `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `docs/ENGINE_POLICY.md` |
+| `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `docs/ENGINE_POLICY.md` |
+| `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `docs/ENGINE_POLICY.md` |
+| `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `docs/ENGINE_POLICY.md` |
+| `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `docs/ENGINE_POLICY.md` |
+| `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `docs/ENGINE_POLICY.md` |
+| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `docs/ENGINE_POLICY.md` |
+| `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `docs/ENGINE_POLICY.md` |
 
 **Migration list: zero rows.** Every `(planned)` row carries a
 documented edge-case BigQuery cares about that DuckDB does NOT
 match without a structural rewrite (`duckdb_rewrite`) or a
 polyfill UDF (`duckdb_udf`). Per "no silent approximation" we do
 NOT promote any of these rows in plan 2; the polyfill plan
-(`local-exec-03-operator-disposition.plan.md`) and the
+(`docs/ENGINE_POLICY.md`) and the
 semantic-functions plan
-(`local-exec-09-date-time.plan.md`) own the migration when
+(`docs/ENGINE_POLICY.md`) own the migration when
 they ship.
 
 The Done-Criterion 3 (`functions.yaml` has no `(planned)` row
@@ -418,7 +417,7 @@ therefore satisfied today as the baseline -- no plan-2 changes to
 
 ## Item 3 -- update from the polyfill UDF library landing
 
-`.cursor/plans/local-exec-03-operator-disposition.plan.md` shipped the
+`docs/ENGINE_POLICY.md` shipped the
 first set of `duckdb_udf` wrappers. The following `functions.yaml`
 rows flipped from `status=planned duckdb_udf` to ready
 `duckdb_udf` and now point at a registered macro in
@@ -443,7 +442,7 @@ rows flipped from `status=planned duckdb_udf` to ready
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
-re-pointed at `local-exec-09-date-time.plan.md` (still
+re-pointed at `docs/ENGINE_POLICY.md` (still
 `status=planned`):
 
 | BQ function | Reason the gap is wider than a thin macro |
@@ -465,7 +464,7 @@ Net result: **zero `status=planned duckdb_udf` rows** remain in
 `status=planned duckdb_udf` row either flipped to ready
 `duckdb_udf` / `duckdb_native` with a wrapper + unit test +
 conformance fixture, or re-pointed at
-`status=planned semantic_executor plan=local-exec-09-date-time.plan.md`
+`status=planned semantic_executor plan=docs/ENGINE_POLICY.md`
 with a documented BigQuery / DuckDB gap that no thin macro can
 close. The polyfill plan is no longer the owning plan for any
 remaining gap; the semantic-functions plan picks up where this

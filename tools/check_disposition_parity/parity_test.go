@@ -19,11 +19,11 @@ const (
 func TestParseYAMLValid(t *testing.T) {
 	src := `# comment line
 ResolvedQueryStmt: duckdb_native
-ResolvedCreateTableStmt: control_op plan=local-exec-01-ddl-catalog.plan.md status=planned
+ResolvedCreateTableStmt: control_op status=planned
 # blank below
 ` +
 		"\n" +
-		`ResolvedExplainStmt: unsupported plan=local-exec-15-specialized-stubs.plan.md
+		`ResolvedExplainStmt: unsupported
 `
 	rows, err := parseYAML(src)
 	if err != nil {

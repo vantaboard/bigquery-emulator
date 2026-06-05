@@ -67,7 +67,7 @@ type shapeRow struct {
 // deps to bootstrap" property the awk-based table generator already
 // has. The same grammar:
 //
-//	<NodeKind>: <disposition> [plan=<plan>] [status=planned]
+//	<NodeKind>: <disposition> [status=planned]
 //
 // applies; we only care about the `<NodeKind>` and `<disposition>`
 // tokens here (the plan / status metadata is relevant to the

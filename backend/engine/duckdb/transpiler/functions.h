@@ -36,18 +36,13 @@
 //   * `kDuckdbUdf` (planned: `entry->planned == true`) -- the
 //     wrapper has not yet landed; the transpiler returns `""` so
 //     the engine surfaces UNIMPLEMENTED.
-//     `local-exec-03-operator-disposition.plan.md` is the owning plan.
-//   * `kSemanticExecutor` -- planned via
-//     `local-exec-09-date-time.plan.md`. Until that plan
-//     lands the transpiler returns `""` so the engine surfaces
-//     UNIMPLEMENTED. `entry->planned` is true.
+//   * `kSemanticExecutor` -- when `entry->planned` is true the
+//     transpiler returns `""` so the engine surfaces UNIMPLEMENTED.
 //   * `kControlOp` -- not used by the function table today but
 //     accepted by the schema for forward compatibility.
 //   * `kUnsupported` -- the function is intentionally out of scope
-//     locally (BigQuery-specific semantics or no DuckDB analog).
-//     The transpiler returns `""` and the engine surfaces
-//     UNIMPLEMENTED. `entry->plan` always points at
-//     `local-exec-15-specialized-stubs.plan.md`.
+//     locally. The transpiler returns `""` and the engine surfaces
+//     UNIMPLEMENTED. See `docs/ENGINE_POLICY.md` for posture.
 //
 // `SAFE.<fn>` form is not represented here. The transpiler checks
 // `ResolvedFunctionCallBase::error_mode() == SAFE_ERROR_MODE` and
@@ -79,19 +74,9 @@ struct FnEntry {
   // rows. The YAML generator enforces these invariants at build
   // time.
   std::string duckdb_name;
-  // Owning `.cursor/plans/*.plan.md` file name, or empty when the
-  // row has no specific owning plan. Mandatory for
-  // `kUnsupported` (the YAML generator rejects an unsupported row
-  // without a plan pointer); points at
-  // `local-exec-15-specialized-stubs.plan.md` by convention.
-  std::string plan;
-  // True when the owning plan has not yet landed an implementation
-  // (the YAML row carried `status=planned`). The engine surfaces
-  // UNIMPLEMENTED for these rows; the flag exists so the log
-  // message can distinguish "planned, waiting for plan X" from "no
-  // disposition row". Only valid for dispositions whose runtime
-  // emit does not yet exist (`kDuckdbUdf`, `kSemanticExecutor`,
-  // `kControlOp`).
+  // True when the YAML row carried `status=planned`. The engine
+  // surfaces UNIMPLEMENTED for these rows until the transpiler or
+  // executor implements the route for this function.
   bool planned;
 };
 
