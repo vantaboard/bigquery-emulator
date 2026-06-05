@@ -23,23 +23,23 @@ Baseline: `.logs/thirdparty-20260605-112926.log`
 
 ## Final aggregator
 
-Log: `.logs/thirdparty-20260605-134407.log` (exit 201, `THIRDPARTY_REBUILD=1`)
+Log: `.logs/thirdparty-20260605-160518.log` (exit 201, `THIRDPARTY_REBUILD=1`, post-unblock lane)
 
-| Suite | Baseline | Final | Status |
-|-------|----------|-------|--------|
+| Suite | Baseline (134407) | Final (160518) | Status |
+|-------|-------------------|----------------|--------|
 | golang-bigquery-tests | OK | OK | PASS |
-| python-bigquery-tests | 34 failed | 1 failed (`test_client_query_total_rows`: seed has 3 TX rows, expects 100) | FAILED |
-| node-bigquery-tests | 59 failed | 45 failing | FAILED (Δ −14) |
-| java-bigquery-tests | panic | `java-bigquery/samples/snippets` failed (`CreateTableExternalHivePartitionedIT` not allowlisted; fake-gcs down for hive path) | FAILED |
-| dataframes-snippet-gate | 33 errors | 2 pass / 2 fail | PARTIAL |
+| python-bigquery-tests | 34 failed | 22 failed (`test_client_query_total_rows` PASS; truncate/resumable + query params remain) | FAILED (Δ −12) |
+| node-bigquery-tests | 45 failing | 18 failing (no `Already Exists`) | FAILED (Δ −27) |
+| java-bigquery-tests | snippets IT fail | OK (`CreateTableExternalHivePartitionedIT` green) | PASS |
+| dataframes-snippet-gate | 2 pass / 2 fail | 3 pass / 1 fail (`performance_optimizations` needs storage read) | PARTIAL |
 
-**Overall:** DEFERRED partial parity — plans 04–11 landed; full `task thirdparty` did not reach zero failures.
+**Overall:** DEFERRED partial parity — unblock lane 01–09 landed; storage gRPC (08) and residual python/node failures block exit 0.
 
 ## Unblock lane
 
 Dispatch: `.cursor/plans/unblock_subagent_dispatch_896b06e4.plan.md`  
 Baseline: `.logs/thirdparty-20260605-134407.log`  
-**NEXT:** `unblock-10-final-aggregator`
+**NEXT:** *(unblock lane complete — second pass on DEFERRED 08 + residual suites)*
 
 | Plan | Attempts | Result | Commit | Notes |
 |------|----------|--------|--------|-------|
@@ -52,16 +52,13 @@ Baseline: `.logs/thirdparty-20260605-134407.log`
 | unblock-07-hive-external | 1 | PASS | bb2bbc3 | CreateTableExternalHivePartitionedIT green |
 | unblock-08-storage-grpc | 2 | DEFERRED | e094416 | bazel storage tests pass; Java ITs need public gRPC shim + Arrow IPC |
 | unblock-09-test-isolation | 1 | PARTIAL | cfcd367 | node 45→18; no Already Exists; cascade delete fixed |
-| unblock-10-final-aggregator | — | pending | — | — |
+| unblock-10-final-aggregator | 1 | DEFERRED | 86f46a2 | exit 201; log `.logs/thirdparty-20260605-160518.log` |
 
 Index: [unblock-00-index.plan.md](unblock-00-index.plan.md)
 
 ## Remaining blockers (honest partial parity)
 
-- **Seed:** Expand `usa_names.usa_1910_2013` TX rows (≥100) for `test_client_query_total_rows`; add `usa_1910_current` view for node Views suite
-- **LOAD:** AVRO/ORC formats; full thirdparty load suite after docker rebuild
-- **External:** Hive-partitioned external table IT (`CreateTableExternalHivePartitionedIT`); Google Sheets samples (501 by design)
-- **Engine:** DuckDB `OrderByScan` for BigFrames pandas_methods; `sessionInfo` on query/job responses
-- **Storage:** Public `BigQueryWrite`/`BigQueryRead` gRPC shim for Java ITs (other modules allowlisted)
-- **Node:** 45 remaining failures (views, routines, external, copy/extract families — see log §node)
-- **Conformance:** TIMESTAMP param fixture (plan 08 optional)
+- **Storage (08):** Public `BigQueryWrite`/`BigQueryRead` gRPC shim + Arrow IPC for `performance_optimizations` and Java storage ITs
+- **Python (22):** Truncate/resumable load URIs, query destination/params, copy/extract, Sheets external (501 by design)
+- **Node (18):** Query transpiler gaps, wire shapes (labels/collation), browse rows, Firestore backup load
+- **LOAD:** Truncate write disposition + resumable upload `Location` header (relative URL → MissingSchema)
