@@ -192,6 +192,15 @@ TEST(SemanticValueTest, ParseParameterValueStructOrderedArray) {
   EXPECT_EQ(v->field(1).string_value(), "foo");
 }
 
+TEST(SemanticValueTest, ParseParameterValueArrayString) {
+  auto v = ParseParameterValue(R"(["WA","WI","WV","WY"])", "ARRAY", "STRING");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->type()->IsArray());
+  EXPECT_EQ(v->num_elements(), 4);
+  EXPECT_EQ(v->element(0).string_value(), "WA");
+  EXPECT_EQ(v->element(3).string_value(), "WY");
+}
+
 TEST(SemanticValueTest, ParseParameterValueDeferTemporalTypes) {
   auto v = ParseParameterValue("\"2020-01-01\"", "DATE");
   EXPECT_FALSE(v.ok());

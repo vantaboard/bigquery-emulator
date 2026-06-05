@@ -57,3 +57,35 @@ func TestQueryParameterValueValueJSON(t *testing.T) {
 		t.Errorf("ValueJSON() = %q, want %q", got, "42")
 	}
 }
+
+const (
+	testParamTypeARRAY  = "ARRAY"
+	testParamTypeSTRING = "STRING"
+)
+
+func TestParameterTypeWireArray(t *testing.T) {
+	t.Parallel()
+
+	kind, typeJSON := bqtypes.ParameterTypeWire(&bqtypes.QueryParameterType{
+		Type:      testParamTypeARRAY,
+		ArrayType: &bqtypes.QueryParameterType{Type: testParamTypeSTRING},
+	})
+	if kind != testParamTypeARRAY || typeJSON != testParamTypeSTRING {
+		t.Errorf("ARRAY<STRING> = (%q, %q), want (ARRAY, STRING)", kind, typeJSON)
+	}
+
+	kind, typeJSON = bqtypes.ParameterTypeWire(&bqtypes.QueryParameterType{
+		Type: testParamTypeARRAY,
+		ArrayType: &bqtypes.QueryParameterType{
+			Type: "STRUCT",
+			StructTypes: []bqtypes.QueryParameterStructType{
+				{Name: "x", Type: bqtypes.QueryParameterType{Type: "INT64"}},
+				{Name: "y", Type: bqtypes.QueryParameterType{Type: testParamTypeSTRING}},
+			},
+		},
+	})
+	if kind != testParamTypeARRAY || typeJSON != "STRUCT:x:INT64,y:STRING" {
+		t.Errorf("ARRAY<STRUCT> = (%q, %q), want (ARRAY, STRUCT:x:INT64,y:STRING)",
+			kind, typeJSON)
+	}
+}

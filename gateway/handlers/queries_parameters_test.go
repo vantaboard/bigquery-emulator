@@ -57,6 +57,34 @@ func TestParametersToEngineMapTimestamp(t *testing.T) {
 	}
 }
 
+func TestParametersToEngineMapArray(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"name":"states",
+		"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		"parameterValue":{"arrayValues":[
+			{"value":"WA"},
+			{"value":"WI"},
+			{"value":"WV"},
+			{"value":"WY"}
+		]}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	got := parametersToEngineMap(params)
+	p := got["states"]
+	if p == nil || p.GetTypeKind() != "ARRAY" {
+		t.Fatalf("states = %+v", p)
+	}
+	if p.GetTypeJson() != "STRING" {
+		t.Errorf("TypeJson = %q, want STRING", p.GetTypeJson())
+	}
+	if p.GetValueJson() != `["WA","WI","WV","WY"]` {
+		t.Errorf("ValueJson = %q, want [\"WA\",\"WI\",\"WV\",\"WY\"]", p.GetValueJson())
+	}
+}
+
 func TestParametersToEngineMapStruct(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{

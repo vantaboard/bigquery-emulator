@@ -5,6 +5,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
@@ -21,6 +22,7 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
+#include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -277,6 +279,30 @@ absl::StatusOr<const ::googlesql::Type*> ParameterTypeForQueryParameter(
     absl::Status s = type_factory->MakeStructType(fields, &struct_type);
     if (!s.ok()) return s;
     return struct_type;
+  }
+  if (parameter.type_kind == "ARRAY") {
+    if (type_factory == nullptr) {
+      return absl::InvalidArgumentError(
+          "LocalCoordinatorEngine: ARRAY parameter requires type_factory");
+    }
+    if (parameter.type_json.empty()) {
+      return absl::InvalidArgumentError(
+          "LocalCoordinatorEngine: ARRAY parameter missing type_json");
+    }
+    QueryParameter element;
+    if (absl::StartsWith(parameter.type_json, "STRUCT:")) {
+      element.type_kind = "STRUCT";
+      element.type_json = parameter.type_json.substr(7);
+    } else {
+      element.type_kind = std::string(parameter.type_json);
+    }
+    auto element_type_or =
+        ParameterTypeForQueryParameter(element, type_factory);
+    if (!element_type_or.ok()) return element_type_or.status();
+    const ::googlesql::ArrayType* array_type = nullptr;
+    absl::Status s = type_factory->MakeArrayType(*element_type_or, &array_type);
+    if (!s.ok()) return s;
+    return array_type;
   }
   return ParameterTypeForKind(parameter.type_kind);
 }

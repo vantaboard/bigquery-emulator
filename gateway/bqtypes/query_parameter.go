@@ -8,7 +8,10 @@ import (
 	"strings"
 )
 
-const parameterTypeStruct = "STRUCT"
+const (
+	parameterTypeStruct = "STRUCT"
+	parameterTypeArray  = "ARRAY"
+)
 
 // UnmarshalJSON accepts BigQuery REST parameter values where `value`
 // may be encoded as a JSON string, number, or bool. The engine expects
@@ -99,6 +102,15 @@ func ParameterTypeWire(t *QueryParameterType) (typeKind, typeJSON string) {
 			parts = append(parts, st.Name+":"+fk)
 		}
 		return parameterTypeStruct, strings.Join(parts, ",")
+	case parameterTypeArray:
+		if t.ArrayType == nil {
+			return parameterTypeArray, ""
+		}
+		elemKind, elemJSON := ParameterTypeWire(t.ArrayType)
+		if elemKind == parameterTypeStruct {
+			return parameterTypeArray, parameterTypeStruct + ":" + elemJSON
+		}
+		return parameterTypeArray, elemKind
 	default:
 		return t.Type, ""
 	}

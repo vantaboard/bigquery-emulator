@@ -116,6 +116,34 @@ absl::StatusOr<const ::googlesql::StructType*> StructTypeFromFieldSpecs(
   return struct_type;
 }
 
+struct ArrayElementDescriptor {
+  std::string type_kind;
+  std::string type_json;
+};
+
+absl::StatusOr<ArrayElementDescriptor> ArrayElementDescriptorFromTypeJson(
+    absl::string_view type_json) {
+  if (type_json.empty()) {
+    return absl::InvalidArgumentError(
+        "semantic: ARRAY parameter missing type_json");
+  }
+  if (absl::StartsWith(type_json, "STRUCT:")) {
+    return ArrayElementDescriptor{"STRUCT", std::string(type_json.substr(7))};
+  }
+  return ArrayElementDescriptor{std::string(type_json), {}};
+}
+
+absl::StatusOr<const ::googlesql::Type*> ArrayElementTypeFromTypeJson(
+    absl::string_view type_json) {
+  auto desc_or = ArrayElementDescriptorFromTypeJson(type_json);
+  if (!desc_or.ok()) return desc_or.status();
+  if (desc_or->type_kind == "STRUCT") {
+    auto specs = ParseStructFieldSpecs(desc_or->type_json);
+    return StructTypeFromFieldSpecs(specs);
+  }
+  return PrimitiveTypeForKind(ParseTypeKindName(desc_or->type_kind));
+}
+
 absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
     absl::string_view json) {
   json = absl::StripAsciiWhitespace(json);
@@ -304,11 +332,27 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
                                             "docs/ENGINE_POLICY.md"));
     case ::googlesql::TYPE_TIMESTAMP:
       return ParseTimestampParameter(body);
-    case ::googlesql::TYPE_ARRAY:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: ARRAY parameters are owned by "
-                       "docs/ENGINE_POLICY.md"));
+    case ::googlesql::TYPE_ARRAY: {
+      auto elem_type_or = ArrayElementTypeFromTypeJson(type_json);
+      if (!elem_type_or.ok()) return elem_type_or.status();
+      auto desc_or = ArrayElementDescriptorFromTypeJson(type_json);
+      if (!desc_or.ok()) return desc_or.status();
+      auto elems_or = ParseJsonArrayElements(trimmed);
+      if (!elems_or.ok()) return elems_or.status();
+      std::vector<Value> elements;
+      elements.reserve(elems_or->size());
+      for (const std::string& elem : *elems_or) {
+        auto field_or =
+            ParseParameterValue(elem, desc_or->type_kind, desc_or->type_json);
+        if (!field_or.ok()) return field_or.status();
+        elements.push_back(*std::move(field_or));
+      }
+      const ::googlesql::ArrayType* array_type = nullptr;
+      absl::Status make =
+          ParameterTypeFactory().MakeArrayType(*elem_type_or, &array_type);
+      if (!make.ok()) return make;
+      return Value::Array(array_type, std::move(elements));
+    }
     case ::googlesql::TYPE_STRUCT: {
       auto specs = ParseStructFieldSpecs(type_json);
       auto struct_type_or = StructTypeFromFieldSpecs(specs);
