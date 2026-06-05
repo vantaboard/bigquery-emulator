@@ -349,6 +349,22 @@ tasks:
         port="${FAKE_GCS_PORT:-4443}"
         bash "${root}/scripts/wait_for_healthz.sh" \
           "http://localhost:${port}/storage/v1/b/cloud-samples-data" 60 fake-gcs-server
+        # In-container gs:// fetches must use the compose service hostname,
+        # not 127.0.0.1 (see gateway/load/fetch.go storageEmulatorBase).
+        # Recreate bigquery-emulator so STORAGE_EMULATOR_HOST is baked in
+        # after fake-gcs is live (suites call emulator-up before fake-gcs-up).
+        export STORAGE_EMULATOR_HOST="http://fake-gcs-server:${port}"
+        echo "thirdparty:fake-gcs-up: recreating bigquery-emulator with STORAGE_EMULATOR_HOST=${STORAGE_EMULATOR_HOST}"
+        docker compose up -d --force-recreate bigquery-emulator
+        emu_port="${EMULATOR_HTTP_PORT:-9050}"
+        bash "${root}/scripts/wait_for_healthz.sh" "http://localhost:${emu_port}/healthz" 120 bigquery-emulator
+        # Postflight: gateway inside the emulator container can reach fake-gcs.
+        if docker compose exec -T bigquery-emulator wget -qO- \
+          "${STORAGE_EMULATOR_HOST}/storage/v1/b/cloud-samples-data" 2>/dev/null | head -c 64 | grep -q .; then
+          echo "thirdparty:fake-gcs-up: in-container fake-gcs reachability OK"
+        else
+          echo "thirdparty:fake-gcs-up: WARNING: in-container wget to fake-gcs failed (load jobs may still fail)" >&2
+        fi
 
   fake-gcs-down:
     desc: Stop fake-gcs-server (other compose services keep running)

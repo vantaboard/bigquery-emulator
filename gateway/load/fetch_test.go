@@ -25,6 +25,21 @@ func TestFetchSourceFileURI(t *testing.T) {
 	}
 }
 
+func TestStorageEmulatorBaseUnsetDefaultsLocalhost(t *testing.T) {
+	t.Setenv("STORAGE_EMULATOR_HOST", "")
+	t.Setenv("FAKE_GCS_PORT", "9999")
+	if got := storageEmulatorBase(); got != "http://127.0.0.1:9999" {
+		t.Fatalf("storageEmulatorBase() = %q, want http://127.0.0.1:9999", got)
+	}
+}
+
+func TestStorageEmulatorBaseDockerHostname(t *testing.T) {
+	t.Setenv("STORAGE_EMULATOR_HOST", "http://fake-gcs-server:4443")
+	if got := storageEmulatorBase(); got != "http://fake-gcs-server:4443" {
+		t.Fatalf("storageEmulatorBase() = %q, want http://fake-gcs-server:4443", got)
+	}
+}
+
 func TestFetchSourceGCSViaEmulator(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/storage/v1/b/bucket/o/object.csv" {

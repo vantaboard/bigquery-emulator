@@ -64,6 +64,11 @@ services:
       # Hint for client SDKs sharing this network or copying this value.
       # Has no effect on the gateway itself; see comment block above.
       BIGQUERY_EMULATOR_HOST: "0.0.0.0:9050"
+      # Gateway load/extract/external paths fetch gs:// via this origin.
+      # Empty by default (docker:smoke / quickstart). thirdparty:fake-gcs-up
+      # exports http://fake-gcs-server:4443 and recreates this service so
+      # in-container fetches reach the compose fake-gcs service (not 127.0.0.1).
+      STORAGE_EMULATOR_HOST: ${STORAGE_EMULATOR_HOST:-}
     volumes:
       - bq-emulator-data:/var/lib/bigquery-emulator
     healthcheck:
