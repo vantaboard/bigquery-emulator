@@ -219,6 +219,17 @@ TEST_F(RouteClassifierTest, CorrelatedArrayScanPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedArrayScan(correlated_input_scan)");
 }
 
+TEST_F(RouteClassifierTest, RowNumberOverFarmFingerprintStaysOnDuckDb) {
+  // Nested ResolvedConstant nodes (FARM_FINGERPRINT('x')) must not promote
+  // the whole query to semantic_executor.
+  const auto* stmt = Analyze(
+      "SELECT ROW_NUMBER() OVER (ORDER BY FARM_FINGERPRINT('x') ASC) "
+      "FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
+}
+
 TEST_F(RouteClassifierTest, StandaloneUnnestStaysOnFastPath) {
   // Defense-in-depth: `SELECT n FROM UNNEST([1,2,3]) AS n` (no
   // offset / not outer / single array / no FROM-side input) MUST

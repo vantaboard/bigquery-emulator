@@ -344,7 +344,8 @@ type QueryResponse struct {
 // emulator surfaces them empty until the matching handlers ship.
 // Mirrors docs/bigquery/docs/reference/rest/v2/JobStatistics.md.
 type JobStatistics struct {
-	Query *JobStatistics2 `json:"query,omitempty"`
+	SessionInfo *SessionInfo    `json:"sessionInfo,omitempty"`
+	Query       *JobStatistics2 `json:"query,omitempty"`
 }
 
 // JobStatistics2 is the per-query statistics block exposed under

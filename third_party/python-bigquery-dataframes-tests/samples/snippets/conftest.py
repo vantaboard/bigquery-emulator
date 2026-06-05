@@ -13,12 +13,23 @@
 # limitations under the License.
 
 from typing import Generator, Iterator
+from pathlib import Path
+import importlib.util
 
 from google.cloud import bigquery, storage
 import pytest
 import test_utils.prefixer
 
 import bigframes.pandas as bpd
+
+_bootstrap_spec = importlib.util.spec_from_file_location(
+    "emulator_bootstrap",
+    Path(__file__).with_name("emulator_bootstrap.py"),
+)
+_bootstrap = importlib.util.module_from_spec(_bootstrap_spec)
+assert _bootstrap_spec.loader is not None
+_bootstrap_spec.loader.exec_module(_bootstrap)
+configure_bigframes_emulator_endpoints = _bootstrap.configure_bigframes_emulator_endpoints
 
 prefixer = test_utils.prefixer.Prefixer(
     "python-bigquery-dataframes", "samples/snippets"
@@ -80,6 +91,7 @@ def reset_session() -> None:
 
     This allows us to have samples that query data in different locations.
     """
+    configure_bigframes_emulator_endpoints()
     bpd.reset_session()
     bpd.options.bigquery.location = None
 

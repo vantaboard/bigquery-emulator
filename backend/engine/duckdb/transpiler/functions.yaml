@@ -312,7 +312,8 @@ initcap: semantic_executor
 repeat: duckdb_native duckdb_name=REPEAT
 right: duckdb_native duckdb_name=RIGHT
 translate: duckdb_native duckdb_name=TRANSLATE
-farm_fingerprint: semantic_executor
+farm_fingerprint: duckdb_native duckdb_name=hash
+rand: duckdb_native duckdb_name=random
 generate_date_array: semantic_executor
 generate_timestamp_array: semantic_executor
 # BQ FORMAT is printf-style with BigQuery extensions: `%t` /
@@ -494,6 +495,9 @@ sum: duckdb_native duckdb_name=SUM
 avg: duckdb_native duckdb_name=AVG
 min: duckdb_native duckdb_name=MIN
 max: duckdb_native duckdb_name=MAX
+stddev_samp: duckdb_native duckdb_name=STDDEV_SAMP
+variance: duckdb_native duckdb_name=VAR_SAMP
+var_samp: duckdb_native duckdb_name=VAR_SAMP
 any_value: duckdb_native duckdb_name=ANY_VALUE
 # ORDER BY / LIMIT modifiers rewrite to list()/list_slice() (and
 # array_to_string for STRING_AGG LIMIT) in EmitAggregateFunctionCall

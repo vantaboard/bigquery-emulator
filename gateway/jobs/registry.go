@@ -107,15 +107,17 @@ type JobConfiguration struct {
 // modelled; the long tail (destination table, scheduling, encryption,
 // ...) is deferred until a handler reads them.
 type JobConfigurationQuery struct {
-	Query               string                                       `json:"query"`
-	DefaultDataset      *bqtypes.DatasetReference                    `json:"defaultDataset,omitempty"`
-	UseLegacySQL        *bool                                        `json:"useLegacySql,omitempty"`
-	ParameterMode       string                                       `json:"parameterMode,omitempty"`
-	QueryParameters     []bqtypes.QueryParameter                     `json:"queryParameters,omitempty"`
-	TableDefinitions    map[string]bqtypes.ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
-	DestinationTable    *bqtypes.TableReference                      `json:"destinationTable,omitempty"`
-	WriteDisposition    string                                       `json:"writeDisposition,omitempty"`
-	SchemaUpdateOptions []string                                     `json:"schemaUpdateOptions,omitempty"`
+	Query                string                                       `json:"query"`
+	DefaultDataset       *bqtypes.DatasetReference                    `json:"defaultDataset,omitempty"`
+	UseLegacySQL         *bool                                        `json:"useLegacySql,omitempty"`
+	ParameterMode        string                                       `json:"parameterMode,omitempty"`
+	QueryParameters      []bqtypes.QueryParameter                     `json:"queryParameters,omitempty"`
+	TableDefinitions     map[string]bqtypes.ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
+	DestinationTable     *bqtypes.TableReference                      `json:"destinationTable,omitempty"`
+	WriteDisposition     string                                       `json:"writeDisposition,omitempty"`
+	SchemaUpdateOptions  []string                                     `json:"schemaUpdateOptions,omitempty"`
+	CreateSession        bool                                         `json:"createSession,omitempty"`
+	ConnectionProperties []bqtypes.ConnectionProperty                 `json:"connectionProperties,omitempty"`
 }
 
 // JobConfigurationLoad is the per-load slice of a JobConfiguration.
@@ -194,13 +196,14 @@ type JobConfigurationExtract struct {
 // even `totalBytesProcessed`, because BigQuery REST never emits
 // 64-bit integers as JSON numbers (clients use `string` decoders).
 type Statistics struct {
-	CreationTime        string             `json:"creationTime,omitempty"`
-	StartTime           string             `json:"startTime,omitempty"`
-	EndTime             string             `json:"endTime,omitempty"`
-	TotalBytesProcessed string             `json:"totalBytesProcessed,omitempty"`
-	Load                *LoadStatistics    `json:"load,omitempty"`
-	Copy                *CopyStatistics    `json:"copy,omitempty"`
-	Extract             *ExtractStatistics `json:"extract,omitempty"`
+	CreationTime        string               `json:"creationTime,omitempty"`
+	StartTime           string               `json:"startTime,omitempty"`
+	EndTime             string               `json:"endTime,omitempty"`
+	TotalBytesProcessed string               `json:"totalBytesProcessed,omitempty"`
+	SessionInfo         *bqtypes.SessionInfo `json:"sessionInfo,omitempty"`
+	Load                *LoadStatistics      `json:"load,omitempty"`
+	Copy                *CopyStatistics      `json:"copy,omitempty"`
+	Extract             *ExtractStatistics   `json:"extract,omitempty"`
 }
 
 // LoadStatistics mirrors upstream `JobStatistics3` (statistics.load).

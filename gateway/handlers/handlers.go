@@ -19,6 +19,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/routines"
+	"github.com/vantaboard/bigquery-emulator/gateway/session"
 	"github.com/vantaboard/bigquery-emulator/gateway/snapshots"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,11 +66,21 @@ type Dependencies struct {
 	// handlers use for routines.* and DDL query jobs register into.
 	// Nil is treated as a per-handler fallback store.
 	Routines *routines.Store
+
+	// Sessions is the in-memory BigQuery session registry used when
+	// queries request createSession or pass connectionProperties
+	// session_id. Nil is treated as a per-handler fallback store.
+	Sessions *session.Store
 }
 
 // NewRoutineStore returns an empty routine registry for gateway deps.
 func NewRoutineStore() *routines.Store {
 	return routines.NewStore()
+}
+
+// NewSessionStore returns an empty session registry for gateway deps.
+func NewSessionStore() *session.Store {
+	return session.NewStore()
 }
 
 // NewSnapshotStore returns an empty table snapshot store for gateway deps.

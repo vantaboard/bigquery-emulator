@@ -156,7 +156,11 @@ ResolvedWithExpr: duckdb_native
 ResolvedInlineLambda: semantic_executor status=planned
 ResolvedFilterField: unsupported
 ResolvedFilterFieldArg: unsupported
-ResolvedConstant: semantic_executor
+# Literals appear inside every lowered expression (e.g. ORDER BY
+# FARM_FINGERPRINT('x')); promoting the whole query to semantic_executor
+# whenever the walker sees a constant breaks analytic/window fast paths.
+# Scalar-only SELECT (`SELECT 1`) still routes via VisitResolvedQueryStmt.
+ResolvedConstant: duckdb_native
 ResolvedSystemVariable: semantic_executor
 ResolvedSequence: unsupported
 ResolvedArgumentRef: semantic_executor

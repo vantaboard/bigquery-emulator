@@ -357,6 +357,8 @@ func writeJobNotFound(w http.ResponseWriter, projectID, jobID, location string) 
 // `QueryResponse` payload `jobs.query` emits — the upstream API
 // surfaces row data only on the sync `jobs.query` and follow-up
 // `jobs.getQueryResults` calls.
+//
+//nolint:funlen // mirrors runQueryExecute; abort-session + external-table branches add statements
 func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	posted *jobs.Job, cfg *jobs.JobConfiguration,
 ) {
@@ -377,6 +379,15 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	if extErr != nil {
 		start := time.Now().UTC()
 		finalizeFailedJob(deps, job, start, extErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	if parseAbortSessionSQL(cfg.Query.Query) {
+		start := time.Now().UTC()
+		end := start
+		sessionInfo := sessionStore(&deps).Resolve(
+			projectID, posted.JobReference.Location, false, cfg.Query.ConnectionProperties)
+		finalizeDoneJob(deps, job, start, end, nil, nil, nil, "", "", sessionInfo, r)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -408,7 +419,10 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	end := time.Now().UTC()
-	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, r)
+	sessionInfo := sessionStore(&deps).Resolve(
+		projectID, posted.JobReference.Location,
+		queryJobCreateSession(cfg), queryJobConnectionProperties(cfg))
+	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, sessionInfo, r)
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -530,12 +544,14 @@ func finalizeFailedJob(_ Dependencies, job *jobs.Job, start time.Time, err error
 // `QueryRun` does: only loopback callers see the debug field.
 func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 	schema *enginepb.TableSchema, dmlStats *enginepb.DmlStats, rows []bqtypes.Row,
-	statementType, emulatorRoute string, r *http.Request,
+	statementType, emulatorRoute string, sessionInfo *bqtypes.SessionInfo, r *http.Request,
 ) {
 	job.Status.State = jobs.JobStateDone
 	job.Statistics.StartTime = millisString(start)
 	job.Statistics.EndTime = millisString(end)
 	job.Statistics.TotalBytesProcessed = "0"
+	stampJobSessionInfo(job, sessionInfo)
+	stampQueryJobDestination(job.JobReference.ProjectID, job, statementType)
 	restSchema := schemaFromProto(schema)
 	restDmlStats := dmlStatsFromProto(dmlStats)
 	visibleRoute := ""

@@ -42,6 +42,7 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		Metadata:  handlers.NewMetadataStore(),
 		Snapshots: handlers.NewSnapshotStore(),
 		Routines:  handlers.NewRoutineStore(),
+		Sessions:  handlers.NewSessionStore(),
 	}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to

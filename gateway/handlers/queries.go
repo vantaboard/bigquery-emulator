@@ -180,6 +180,8 @@ func formatDryRunBytes(estimated int64) string {
 // stub the rest of the route table uses; unit-mode runs (`task
 // emulator:run --engine_binary=""`) keep returning a BigQuery-
 // shaped error envelope instead of a panic.
+//
+//nolint:funlen // engine stream drain + session/DDL stamping in one handler
 func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	req *bqtypes.QueryRequest,
 ) {
@@ -188,6 +190,11 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		return
 	}
 	projectID := r.PathValue("projectId")
+
+	if parseAbortSessionSQL(req.Query) {
+		handleAbortSessionQuery(deps, w, projectID, req.Location, req.ConnProperties)
+		return
+	}
 
 	defaultDataset, ok := queryDefaultDatasetForExecute(deps, w, r, projectID, req)
 	if !ok {
@@ -234,8 +241,11 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		EmulatorRoute:    emulatorRoute,
 		DdlTargetRoutine: ddlTarget,
 	}
+	sessionInfo := sessionStore(&deps).Resolve(
+		projectID, req.Location, req.CreateSession, req.ConnProperties)
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
+	stampJobSessionInfo(job, sessionInfo)
 	// Surface the `emulatorRoute` debug field only to loopback
 	// callers so external BigQuery client libraries pointed at the
 	// emulator see the same JSON shape they would against the
@@ -250,7 +260,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType,
-		visibleRoute, ddlTarget)
+		visibleRoute, ddlTarget, sessionInfo)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -403,6 +413,7 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 	statementType string,
 	emulatorRoute string,
 	ddlTargetRoutine *bqtypes.RoutineReference,
+	sessionInfo *bqtypes.SessionInfo,
 ) bqtypes.QueryResponse {
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
@@ -418,14 +429,19 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
 	}
-	if statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
-		out.Statistics = &bqtypes.JobStatistics{
-			Query: &bqtypes.JobStatistics2{
+	if sessionInfo != nil {
+		out.SessionInfo = sessionInfo
+	}
+	if sessionInfo != nil || statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
+		stats := &bqtypes.JobStatistics{SessionInfo: sessionInfo}
+		if statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
+			stats.Query = &bqtypes.JobStatistics2{
 				StatementType:    statementType,
 				EmulatorRoute:    emulatorRoute,
 				DdlTargetRoutine: ddlTargetRoutine,
-			},
+			}
 		}
+		out.Statistics = stats
 	}
 	if restDmlStats != nil {
 		// Surface BigQuery's DML statistics envelope. `dmlStats`
@@ -559,14 +575,19 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
 	}
-	if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil {
-		out.Statistics = &bqtypes.JobStatistics{
-			Query: &bqtypes.JobStatistics2{
+	if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil || job.Statistics.SessionInfo != nil {
+		stats := &bqtypes.JobStatistics{SessionInfo: job.Statistics.SessionInfo}
+		if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil {
+			stats.Query = &bqtypes.JobStatistics2{
 				StatementType:    statementType,
 				EmulatorRoute:    visibleRoute,
 				DdlTargetRoutine: ddlTargetRoutine,
-			},
+			}
 		}
+		out.Statistics = stats
+	}
+	if job.Statistics.SessionInfo != nil {
+		out.SessionInfo = job.Statistics.SessionInfo
 	}
 	if dmlStats != nil {
 		// DML replay: re-emit the same `dmlStats` /

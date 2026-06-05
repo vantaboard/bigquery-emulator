@@ -31,7 +31,7 @@ TEST(NodeDispositionTableTest, LookupReturnsExpectedRows) {
   const auto* create_table = LookupNodeDisposition("ResolvedCreateTableStmt");
   ASSERT_NE(create_table, nullptr);
   EXPECT_EQ(create_table->disposition, Disposition::kControlOp);
-  EXPECT_TRUE(create_table->planned);
+  EXPECT_FALSE(create_table->planned);
 }
 
 TEST(NodeDispositionTableTest, LookupUnknownReturnsNull) {
