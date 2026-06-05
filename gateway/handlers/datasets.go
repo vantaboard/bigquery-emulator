@@ -94,6 +94,9 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 	if ds.Labels == nil {
 		ds.Labels = map[string]string{}
 	}
+	if ds.Location == "" {
+		ds.Location = "US"
+	}
 	return ds
 }
 

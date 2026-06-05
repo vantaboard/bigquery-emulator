@@ -126,6 +126,10 @@ type Table struct {
 	// (typically `und:ci`). Mirrors Dataset.DefaultCollation;
 	// see that field's comment for the round-trip rationale.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
+	// Location is the BigQuery region for the table (inherited from
+	// its dataset on live BigQuery). Client libraries such as
+	// google-cloud-bigquery and BigFrames read this on tables.get.
+	Location string `json:"location,omitempty"`
 	// RequirePartitionFilter mirrors the table-level partition-filter
 	// requirement BigQuery REST exposes. Pointer semantics let PATCH
 	// bodies set `false` explicitly without conflating unset and false.

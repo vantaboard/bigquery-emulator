@@ -370,7 +370,7 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			}
 			continue
 		}
-		rows = append(rows, bqtypes.CellsToRow(msg.GetCells()))
+		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema))
 	}
 	return schema, dmlStats, rows, statementType, emulatorRoute, true
 }

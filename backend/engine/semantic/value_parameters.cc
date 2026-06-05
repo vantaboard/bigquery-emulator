@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/value.h"
-
 #include <cctype>
 #include <cstdint>
 #include <string>
@@ -18,6 +16,7 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -130,7 +129,8 @@ absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
   std::vector<std::string> out;
   size_t i = 1;
   while (i < json.size()) {
-    while (i < json.size() && absl::ascii_isspace(json[i])) ++i;
+    while (i < json.size() && absl::ascii_isspace(json[i]))
+      ++i;
     if (i >= json.size()) break;
     if (json[i] == ']') break;
     const size_t start = i;
@@ -155,7 +155,8 @@ absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
     }
     out.push_back(
         std::string(absl::StripAsciiWhitespace(json.substr(start, i - start))));
-    while (i < json.size() && absl::ascii_isspace(json[i])) ++i;
+    while (i < json.size() && absl::ascii_isspace(json[i]))
+      ++i;
     if (i < json.size() && json[i] == ',') ++i;
   }
   return out;

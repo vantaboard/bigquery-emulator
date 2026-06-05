@@ -1,6 +1,10 @@
 package bqtypes
 
 import (
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
@@ -77,4 +81,116 @@ func CellsToRow(cells []*enginepb.Cell) Row {
 		out.F = append(out.F, ValueToCell(c))
 	}
 	return out
+}
+
+// CellsToRowForSchema is like CellsToRow but re-encodes TIMESTAMP
+// values as decimal microsecond strings. google-cloud-bigquery's
+// query-result parser (`CELL_DATA_PARSER.timestamp_to_py`) expects
+// microseconds since Unix epoch, not the human-readable strings the
+// engine emits.
+func CellsToRowForSchema(cells []*enginepb.Cell, schema *enginepb.TableSchema) Row {
+	fields := []*enginepb.FieldSchema(nil)
+	if schema != nil {
+		fields = schema.GetFields()
+	}
+	out := Row{F: make([]Cell, 0, len(cells))}
+	for i, c := range cells {
+		var field *enginepb.FieldSchema
+		if i < len(fields) {
+			field = fields[i]
+		}
+		out.F = append(out.F, encodeCellForField(ValueToCell(c), field))
+	}
+	return out
+}
+
+func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
+	if cell.V == nil || field == nil {
+		return cell
+	}
+	fieldType := field.GetType()
+	if strings.HasPrefix(fieldType, "ARRAY<") {
+		elements, ok := cell.V.([]Cell)
+		if !ok {
+			return cell
+		}
+		elemField := arrayElementFieldSchema(field)
+		out := make([]Cell, len(elements))
+		for i, el := range elements {
+			out[i] = encodeCellForField(el, elemField)
+		}
+		return Cell{V: out}
+	}
+	switch fieldType {
+	case "TIMESTAMP":
+		s, ok := cell.V.(string)
+		if !ok {
+			return cell
+		}
+		if micros, err := TimestampStringToMicros(s); err == nil {
+			return Cell{V: micros}
+		}
+		return cell
+	case "STRUCT", "RECORD":
+		row, ok := cell.V.(Row)
+		if !ok {
+			return cell
+		}
+		subFields := field.GetFields()
+		out := make([]Cell, len(row.F))
+		for i, subCell := range row.F {
+			var subField *enginepb.FieldSchema
+			if i < len(subFields) {
+				subField = subFields[i]
+			}
+			out[i] = encodeCellForField(subCell, subField)
+		}
+		return Cell{V: Row{F: out}}
+	default:
+		return cell
+	}
+}
+
+func arrayElementFieldSchema(field *enginepb.FieldSchema) *enginepb.FieldSchema {
+	t := field.GetType()
+	if !strings.HasPrefix(t, "ARRAY<") {
+		return field
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(t, "ARRAY<"), ">")
+	return &enginepb.FieldSchema{Type: inner}
+}
+
+// TimestampStringToMicros parses an engine TIMESTAMP wire string and
+// returns the BigQuery REST query-result encoding: decimal microseconds
+// since 1970-01-01 UTC.
+func TimestampStringToMicros(s string) (string, error) {
+	t, err := parseTimestampWireString(s)
+	if err != nil {
+		return "", err
+	}
+	utc := t.UTC()
+	micros := utc.Unix()*1_000_000 + int64(utc.Nanosecond()/1000)
+	return strconv.FormatInt(micros, 10), nil
+}
+
+func parseTimestampWireString(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	s = strings.Replace(s, "T", " ", 1)
+	s = strings.Replace(s, "+00:00", "+00", 1)
+	s = strings.Replace(s, "Z", "+00", 1)
+	layouts := []string{
+		"2006-01-02 15:04:05.999999-07",
+		"2006-01-02 15:04:05-07",
+		"2006-01-02 15:04:05.999999",
+		"2006-01-02 15:04:05",
+	}
+	var lastErr error
+	for _, layout := range layouts {
+		t, err := time.Parse(layout, s)
+		if err == nil {
+			return t, nil
+		}
+		lastErr = err
+	}
+	return time.Time{}, lastErr
 }

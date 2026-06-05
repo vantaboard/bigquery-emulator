@@ -97,6 +97,9 @@ func tableResource(projectID, datasetID, tableID string, t bqtypes.Table) bqtype
 	if t.Labels == nil {
 		t.Labels = map[string]string{}
 	}
+	if t.Location == "" {
+		t.Location = "US"
+	}
 	return t
 }
 
@@ -398,6 +401,9 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		t := bqtypes.Table{Schema: schemaFromProto(resp.GetSchema())}
+		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok && overlay.Location != "" {
+			t.Location = overlay.Location
+		}
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}

@@ -48,6 +48,7 @@ cc_library(
     hdrs = ["query_internal.h"],
     deps = [
         "//backend/engine",
+        "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/storage",
         "//proto:emulator_cc_proto",

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -15,9 +16,10 @@ import (
 // flagging the repeats and the wire spelling stays a single source of
 // truth.
 const (
-	typeKindINT64   = "INT64"
-	typeKindFLOAT64 = "FLOAT64"
-	typeKindSTRING  = "STRING"
+	typeKindINT64     = "INT64"
+	typeKindFLOAT64   = "FLOAT64"
+	typeKindSTRING    = "STRING"
+	typeKindTIMESTAMP = "TIMESTAMP"
 )
 
 // stringCell wraps a raw engine string-typed cell. It is the most
@@ -75,7 +77,7 @@ func TestWireValueToCellScalars(t *testing.T) {
 		},
 		{"DATE", "DATE", stringCell("1985-04-12"), "1985-04-12"},
 		{
-			"TIMESTAMP", "TIMESTAMP",
+			"TIMESTAMP", typeKindTIMESTAMP,
 			stringCell("1985-04-12T23:20:50.520000Z"),
 			"1985-04-12T23:20:50.520000Z",
 		},
@@ -270,4 +272,32 @@ func TestWireCellsToRow(t *testing.T) {
 			t.Fatalf("got %#v, want %#v", empty, want)
 		}
 	})
+}
+
+func TestTimestampStringToMicros(t *testing.T) {
+	t.Parallel()
+	micros, err := bqtypes.TimestampStringToMicros("1985-04-12T23:20:50.520000Z")
+	if err != nil {
+		t.Fatalf("TimestampStringToMicros: %v", err)
+	}
+	if micros != "482196050520000" {
+		t.Fatalf("got %q, want %q", micros, "482196050520000")
+	}
+}
+
+func TestWireCellsToRowForSchemaTimestamp(t *testing.T) {
+	t.Parallel()
+	schema := &enginepb.TableSchema{
+		Fields: []*enginepb.FieldSchema{{Name: "ts", Type: "TIMESTAMP"}},
+	}
+	got := bqtypes.CellsToRowForSchema(
+		[]*enginepb.Cell{stringCell("2026-06-05 20:26:43.220623+00")},
+		schema,
+	)
+	if got.F[0].V == "2026-06-05 20:26:43.220623+00" {
+		t.Fatalf("TIMESTAMP not converted to micros: %#v", got.F[0])
+	}
+	if _, err := strconv.ParseInt(got.F[0].V.(string), 10, 64); err != nil {
+		t.Fatalf("TIMESTAMP micros not decimal int string: %#v", got.F[0])
+	}
 }

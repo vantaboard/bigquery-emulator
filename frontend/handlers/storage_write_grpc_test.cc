@@ -1,7 +1,5 @@
 // In-process gRPC tests for `StorageWriteService` streaming RPCs.
 
-#include "frontend/handlers/storage_write.h"
-
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -16,6 +14,7 @@
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
+#include "frontend/handlers/storage_write.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/security/credentials.h"

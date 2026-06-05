@@ -208,11 +208,21 @@ absl::Status GoogleSqlCatalog::FindTable(
 
   if (path.size() == 1) {
     absl::string_view single = path[0];
-    const size_t dot = single.find('.');
-    if (dot != absl::string_view::npos) {
-      project_id = project_id_;
-      dataset_id = single.substr(0, dot);
-      table_id = single.substr(dot + 1);
+    const size_t first_dot = single.find('.');
+    if (first_dot != absl::string_view::npos) {
+      const size_t second_dot = single.find('.', first_dot + 1);
+      if (second_dot != absl::string_view::npos) {
+        // Backtick-quoted `project.dataset.table` references arrive as
+        // one path segment; split into three parts instead of treating
+        // everything after the first dot as the table id.
+        project_id = single.substr(0, first_dot);
+        dataset_id = single.substr(first_dot + 1, second_dot - first_dot - 1);
+        table_id = single.substr(second_dot + 1);
+      } else {
+        project_id = project_id_;
+        dataset_id = single.substr(0, first_dot);
+        table_id = single.substr(first_dot + 1);
+      }
     } else if (default_dataset_id_.empty()) {
       return absl::NotFoundError(
           absl::StrCat("Table path must be <dataset>.<table> or "

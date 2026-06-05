@@ -1,5 +1,3 @@
-#include "frontend/handlers/storage_write.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -8,6 +6,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "frontend/handlers/storage_write.h"
 #include "frontend/handlers/storage_write_internal.h"
 #include "proto/storage_write.pb.h"
 
@@ -34,13 +33,12 @@ using internal::AbslToGrpcStatus;
   const std::int64_t buffered_count =
       static_cast<std::int64_t>(state->buffered_rows.size());
   if (offset < 0 || offset >= buffered_count) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::INVALID_ARGUMENT,
-        absl::StrCat("StorageWrite.FlushRows: offset ",
-                     offset,
-                     " is out of range for ",
-                     buffered_count,
-                     " buffered row(s)"));
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          absl::StrCat("StorageWrite.FlushRows: offset ",
+                                       offset,
+                                       " is out of range for ",
+                                       buffered_count,
+                                       " buffered row(s)"));
   }
   if (offset < state->flushed_rows - 1) {
     return ::grpc::Status(
