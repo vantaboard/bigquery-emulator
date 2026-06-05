@@ -8,7 +8,7 @@
 // Runtime shape: the `Engine` is a `LocalCoordinatorEngine` that owns a
 // `RouteClassifier` plus one executor per route (DuckDB / semantic /
 // control-op / unsupported); see
-// `.cursor/plans/engine-router-foundation.plan.md` and
+// `docs/ENGINE_POLICY.md` and
 // `docs/ENGINE_POLICY.md`. The storage backend is the DuckDB
 // Parquet/Arrow store under `--data_dir`. The `--host_port` flag
 // selects the gRPC listen address (default `localhost:9060`);

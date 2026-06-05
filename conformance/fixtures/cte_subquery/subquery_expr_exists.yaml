@@ -4,7 +4,7 @@
 # Pins BigQuery's `EXISTS(<subquery>)` contract: the result is
 # `true` when the subquery returns at least one row, `false`
 # otherwise. The emit is `EXISTS (<inner>)`. Route:
-# `duckdb_native` (`local-exec-02-withscan-cte.plan.md` Family 2).
+# `duckdb_native` (`docs/ENGINE_POLICY.md` Family 2).
 #
 # We pin both the true-side and false-side branches in one fixture
 # via a UNION ALL so a regression that always returns the same

@@ -131,7 +131,7 @@ type Statistics struct {
 //
 // The registry holds the entire result set in memory; this matches
 // the "single-page only" charter from
-// `.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`. Pagination
+// `docs/ENGINE_POLICY.md`. Pagination
 // (real `pageToken` lifecycle, cursored reads from a streaming
 // engine) is deferred until long-running jobs land.
 type QueryResult struct {

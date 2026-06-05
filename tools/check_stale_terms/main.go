@@ -2,7 +2,7 @@
 // only / transpiler-shape-roadmap terminology and fails the build
 // when a hit is not on the allowlist.
 //
-// The linter exists to keep `migration-cleanup-docs.plan.md`'s sweep
+// The linter exists to keep `docs/ENGINE_POLICY.md`'s sweep
 // honest: the canonical seven-route disposition vocabulary lives in
 // `backend/engine/disposition.h` (and is documented in
 // `docs/ENGINE_POLICY.md`), and the prose / code comments in this
@@ -25,7 +25,7 @@
 //     (`unsupported` for specialized families, `semantic_executor`
 //     for BigQuery-exact functions, ...). The function-disposition
 //     migration that owned `kSkiplist` shipped via plan 1
-//     (`execution-disposition-registry.plan.md`).
+//     (`docs/ENGINE_POLICY.md`).
 //   - `\bnot_started\b` -- replace with the matching route
 //     disposition (`(planned)` annotation in SHAPE_TRACKER.md is
 //     the current way to flag a pending row).

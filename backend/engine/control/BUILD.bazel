@@ -6,7 +6,7 @@
 # directly (CREATE TABLE / DROP TABLE / ANALYZE) and lowers the few
 # shapes that need DuckDB SQL as an implementation primitive (CTAS)
 # through a per-query in-memory DuckDB connection. See plan
-# `.cursor/plans/local-exec-01-ddl-catalog.plan.md`.
+# `docs/ENGINE_POLICY.md`.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 

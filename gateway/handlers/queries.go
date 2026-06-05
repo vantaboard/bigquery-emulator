@@ -221,7 +221,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// string, which `assembleQueryResponse` translates into "no
 	// emulatorRoute property" because the JSON struct tag is
 	// `omitempty`. See
-	// `.cursor/plans/conformance-routing-matrix.plan.md`.
+	// `docs/ENGINE_POLICY.md`.
 	visibleRoute := ""
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
@@ -247,7 +247,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 // requires either a proto change (move from `map` to `repeated`)
 // or a synthetic key encoding; both are deferred to the
 // gateway-parameters follow-up plan referenced from
-// `local-exec-07-semantic-core-expr.plan.md`'s deliberately-deferred list.
+// `docs/ENGINE_POLICY.md`'s deliberately-deferred list.
 //
 // Values with a missing `parameterType` are skipped because the
 // engine cannot decode them without a type tag.
@@ -432,7 +432,7 @@ const getQueryResultsKind = "bigquery#getQueryResultsResponse"
 //
 // Replays the cached rows + schema for a previously-run synchronous
 // query. The query-select-e2e charter
-// (`.cursor/plans/query-select-e2e_b3e4f5a6.plan.md`) limits this
+// (`docs/ENGINE_POLICY.md`) limits this
 // handler to single-page reads: the registry holds the entire
 // result set in memory at job-completion time and this endpoint
 // emits it back in one response. Real cursored pagination (multi-page

@@ -228,7 +228,7 @@ func launchEmulator(dataDir string) (*emulatorEnv, error) {
 // launchEmulatorForMain is launchEmulator with a dedicated data directory for
 // the query_port_test port (TestMain has no *testing.T).
 func launchEmulatorForMain() (*emulatorEnv, error) {
-	dir, err := os.MkdirTemp("", "local-exec-query-*")
+	dir, err := os.MkdirTemp("", "bq-emulator-query-*")
 	if err != nil {
 		return nil, err
 	}

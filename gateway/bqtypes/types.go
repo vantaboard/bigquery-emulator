@@ -37,7 +37,7 @@ type JobReference struct {
 // an empty array for newly-created datasets; the emulator must
 // preserve that shape so AuthorizeDatasetIT-style ACL-mutation flows
 // work end-to-end. See the failing-IT inventory in
-// `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`.
+// `docs/ENGINE_POLICY.md`.
 //
 // Labels is always serialized (no `omitempty`) for the same reason:
 // the Node `getDatasetLabels` sample (and several upstream Python
@@ -235,9 +235,9 @@ type JobStatistics struct {
 
 // JobStatistics2 is the per-query statistics block exposed under
 // `Job.statistics.query`. Today the emulator surfaces only
-// `statementType` (see `.cursor/plans/local-exec-01-ddl-catalog.plan.md`
+// `statementType` (see `docs/ENGINE_POLICY.md`
 // item 5) and the loopback-only `emulatorRoute` debug field (see
-// `.cursor/plans/conformance-routing-matrix.plan.md`); the other
+// `docs/ENGINE_POLICY.md`); the other
 // fields land alongside the long-running-jobs follow-up. Mirrors
 // docs/bigquery/docs/reference/rest/v2/JobStatistics2.md.
 type JobStatistics2 struct {

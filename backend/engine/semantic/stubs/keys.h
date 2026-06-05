@@ -9,7 +9,7 @@
 // emulator onto a fake keyset bound to a real KMS root key (or onto
 // a sandboxed Tink fork that does not exist today).
 //
-// Instead, `local-exec-15-specialized-stubs.plan.md` picks the
+// Instead, `docs/ENGINE_POLICY.md` picks the
 // `local_stub` posture for the two key-management entry points that
 // client-library startup probes routinely call:
 //

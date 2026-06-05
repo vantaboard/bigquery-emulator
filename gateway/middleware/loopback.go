@@ -26,7 +26,7 @@ type loopbackCtxKey struct{}
 // ONLY to loopback callers; non-loopback callers receive a response
 // with the field omitted entirely, matching the public BigQuery REST
 // surface byte-for-byte. See
-// `.cursor/plans/conformance-routing-matrix.plan.md` for the wider
+// `docs/ENGINE_POLICY.md` for the wider
 // rationale.
 //
 // The middleware never short-circuits the response: it only attaches

@@ -1,7 +1,7 @@
 # _route_drift_example/select_one_claims_duckdb_native:
 # safety-net fixture for the routing matrix.
 #
-# Plan 16 (`conformance-routing-matrix.plan.md`) commits this
+# Plan 16 (`docs/ENGINE_POLICY.md`) commits this
 # fixture under the leading-`_` `_route_drift_example/` directory
 # so the normal `task conformance:run` walker SKIPS it (see
 # `conformance/runner/fixture.go::LoadDir`). The fixture exists

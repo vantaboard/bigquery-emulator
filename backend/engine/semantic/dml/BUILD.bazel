@@ -2,7 +2,7 @@
 #
 # Owns the INSERT / UPDATE / DELETE / MERGE families that route to
 # the semantic executor per
-# `.cursor/plans/local-exec-14-dml-system.plan.md`. Mutates storage
+# `docs/ENGINE_POLICY.md`. Mutates storage
 # through the abstract `backend::storage::Storage*` the
 # coordinator hands to `SemanticExecutor`; the production
 # coordinator passes a `DuckDBStorage` instance, tests fake the

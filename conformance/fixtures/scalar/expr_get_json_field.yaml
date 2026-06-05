@@ -6,7 +6,7 @@
 # (scalar result) selection on the analyzer-resolved return type.
 # We exercise the `->` / `->` chained shape (JSON typed) here; the
 # `JSON_VALUE` / scalar-coerce shape lives in the polyfill plan
-# (`.cursor/plans/local-exec-03-operator-disposition.plan.md`). Rehomed
+# (`docs/ENGINE_POLICY.md`). Rehomed
 # from `fastpath/` to `scalar/` by plan 17 to match the observed
 # route.
 name: expr_get_json_field

@@ -2,7 +2,7 @@
 #                            and the GROUPING() bit-mask projection
 #                            on the DuckDB fast path.
 #
-# Pins `local-exec-13-advanced-relational.plan.md` Family 1. The transpiler
+# Pins `docs/ENGINE_POLICY.md` Family 1. The transpiler
 # lowers each `grouping_set_list` entry verbatim through DuckDB's
 # `GROUP BY GROUPING SETS (...)` syntax, with `ROLLUP (...)` /
 # `CUBE (...)` preserved so DuckDB's symmetric expansion fast path

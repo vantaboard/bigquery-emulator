@@ -17,7 +17,7 @@ DuckDB resolves them to the registered UDFs.
 Failure to register any UDF is **fail-fast**: `RegisterAll` returns a
 non-OK status and `DuckDbExecutor` propagates it up the executor
 stack. There is no runtime "missing UDF -> fall back to another route"
-path (per `.cursor/plans/local-exec-03-operator-disposition.plan.md`'s
+path (per `docs/ENGINE_POLICY.md`'s
 Done Criterion 2).
 
 ## File layout

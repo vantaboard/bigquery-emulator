@@ -3,7 +3,7 @@
 
 // `CREATE MODEL` statement-level `local_stub` handler.
 //
-// `local-exec-15-specialized-stubs.plan.md` pins the posture for the
+// `docs/ENGINE_POLICY.md` pins the posture for the
 // BigQuery ML surface (`ML.*` functions, `CREATE MODEL`) to a
 // split:
 //
@@ -34,7 +34,7 @@
 // -------------------------------
 //
 // `control_op_executor.cc` is a lint-cap carve-out (see
-// `.cursor/plans/local-exec-13-advanced-relational.plan.md` "don'ts").
+// `docs/ENGINE_POLICY.md` "don'ts").
 // The local-stub family explicitly lives outside that file so
 // future stub handlers (JS UDF metadata-only, when plan 13's
 // deferred UDF body storage lands) can extend the surface without

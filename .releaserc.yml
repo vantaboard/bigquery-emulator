@@ -2,7 +2,7 @@
 #
 # THIS CONFIG IS NOT WIRED TO ANY GITHUB ACTIONS WORKFLOW TODAY. The
 # project's plan-44 release posture (see the
-# `.cursor/plans/goreleaser-release_p3a4b5c6.plan.md` addendum) is
+# `docs/ENGINE_POLICY.md` addendum) is
 # manual tag pushes:
 #
 #   git tag -a v0.0.1 -m 'release: v0.0.1 (preview)'

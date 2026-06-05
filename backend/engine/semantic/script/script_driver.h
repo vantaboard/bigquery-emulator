@@ -3,7 +3,7 @@
 
 // Script-level execution driver.
 //
-// `local-exec-14-dml-system.plan.md` describes the local
+// `docs/ENGINE_POLICY.md` describes the local
 // interpreter for BigQuery scripting (`DECLARE`, `SET`, `BEGIN ...
 // END`, `IF`, `WHILE`, `LOOP`, `FOR`, `BREAK`, `CONTINUE`, `RAISE`,
 // `CALL`, `ASSERT`, `EXECUTE IMMEDIATE`, `CREATE PROCEDURE`). Most
@@ -12,7 +12,7 @@
 // for `EXCEPTION WHEN ERROR THEN ...`. This file is the foundation
 // scaffold for both.
 //
-// What this file owns today (Family 1 of the plan)
+// What this file owns today (the plan)
 // ------------------------------------------------
 //
 //   * `ScriptDriver` -- the type the rest of the engine reaches
@@ -26,7 +26,7 @@
 //
 // The variable-environment primitive itself lives in
 // `backend/engine/semantic/frame_stack.h` so the UDF / TVF
-// invocation surface (`local-exec-15-specialized-stubs.plan.md`) can reuse
+// invocation surface (`docs/ENGINE_POLICY.md`) can reuse
 // the same stack-of-frames type for argument bindings without
 // taking a transitive dependency on the script-statement
 // translation units.
@@ -38,7 +38,7 @@
 //   * Statement sequencing for `BEGIN ... END` -- requires
 //     `googlesql/scripting/script_executor.h` (analyzer-level script
 //     parser; the coordinator analyzer is per-statement). Tracked by
-//     `local-exec-14-dml-system.plan.md` Family 3.
+//     `docs/ENGINE_POLICY.md` Family 3.
 //   * `IF` / `WHILE` / `LOOP` / `FOR` / `BREAK` / `CONTINUE` --
 //     Families 4, 6, 11.
 //   * `RAISE` / `EXCEPTION` handlers -- Family 7.

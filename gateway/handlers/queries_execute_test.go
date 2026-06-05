@@ -282,7 +282,7 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 // `emulator_route` trailer on every reply; the gateway forwards it
 // onto the JSON `statistics.query.emulatorRoute` field for loopback
 // callers (the conformance harness in
-// `.cursor/plans/conformance-routing-matrix.plan.md`) and OMITS the
+// `docs/ENGINE_POLICY.md`) and OMITS the
 // field for non-loopback callers so external BigQuery client
 // libraries see the same JSON shape they would against the public
 // REST surface.

@@ -1,7 +1,7 @@
 # assert_false_surfaces_error: ASSERT on a FALSE predicate surfaces
 # BigQuery's `Assertion failed` envelope.
 #
-# `local-exec-14-dml-system.plan.md` Family 5. BigQuery's
+# `docs/ENGINE_POLICY.md` Family 5. BigQuery's
 # documented behavior for ASSERT (see
 # `docs/bigquery/docs/reference/standard-sql/debugging-statements.md`)
 # is to surface a query error when the predicate evaluates to FALSE

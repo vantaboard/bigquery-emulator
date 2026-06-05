@@ -41,7 +41,7 @@ import org.junit.runners.JUnit4;
  * {@code io.grpc.StatusRuntimeException: UNIMPLEMENTED} from {@code CreateReadSession} and
  * this test is expected to fail. The IT is committed today so Failsafe discovers it the
  * moment the shallow Read-path port lands; see
- * {@code .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md}.
+ * {@code ROADMAP.md
  */
 @RunWith(JUnit4.class)
 @SuppressWarnings("checkstyle:abbreviationaswordinname")

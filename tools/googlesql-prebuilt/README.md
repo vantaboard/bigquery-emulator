@@ -115,7 +115,7 @@ froze 18 emulator-side `@googlesql//...` references and explicitly
 disallowed renaming them: rewriting every emulator `BUILD.bazel` to
 the prebuilt repo's name would be label churn the rollout was
 designed to avoid. The clean two-mode story (consumer-wiring plan
-[`googlesql-prebuilt-consume-wiring_3b4c5d6e.plan.md`](../../docs/dev/googlesql-prebuilt/upgrade-rules.md))
+[`docs/ENGINE_POLICY.md`](../../docs/dev/googlesql-prebuilt/upgrade-rules.md))
 needs **the same** `@googlesql//` label space in both modes so the
 emulator BUILDs do not change. That is only possible if the prebuilt
 artifact's `MODULE.bazel` advertises module identity `googlesql`,

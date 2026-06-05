@@ -14,7 +14,7 @@
 // public `Engine` surface for now and forwards its `ExecuteQuery` /
 // `ExecuteDml` / `ExecuteDdl` calls into this executor; the
 // `LocalCoordinatorEngine` introduced by
-// `.cursor/plans/engine-router-foundation.plan.md` step 5 will
+// `docs/ENGINE_POLICY.md` step 5 will
 // dispatch to this executor directly and the `DuckDBEngine`
 // top-level shim will be deleted (step 6).
 

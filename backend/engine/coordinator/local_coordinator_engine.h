@@ -13,7 +13,7 @@
 //      `Disposition`.
 //
 // The coordinator never re-dispatches at runtime -- per
-// `.cursor/plans/local-execution-roadmap-index.plan.md` the
+// `docs/ENGINE_POLICY.md` the
 // classifier picks one route per shape and the coordinator honors
 // that decision verbatim. A transpiler `UNIMPLEMENTED` inside the
 // DuckDB executor is treated as a fast-path bug, not a routing

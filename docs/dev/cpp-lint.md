@@ -4,8 +4,8 @@ This guide is the developer-facing reference for the C++ lint stack
 that ships with the BigQuery emulator. It covers commands,
 thresholds, and the suppression / baseline policy. The runner
 implementations live in [`tools/lint/cpp/`](../../tools/lint/cpp/);
-the rollout history and rationale live alongside the relevant plan
-under `.cursor/plans/`.
+the rollout history and rationale live in [`ROADMAP.md`](../../ROADMAP.md)
+and [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md).
 
 ## Architecture at a glance
 

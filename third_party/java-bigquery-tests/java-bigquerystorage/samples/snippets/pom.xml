@@ -145,7 +145,7 @@
         bigquery-emulator live-IT lane: bind Failsafe to integration-test +
         verify. Restrict <includes> to the curated ITs targeted by the Java
         live-IT track (failing-IT inventory in
-        .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md). System
+        ROADMAP.md). System
         properties forward the emulator + storage gRPC endpoints; BqStorageOpts
         reads BIGQUERY_STORAGE_GRPC_ENDPOINT (falling back to
         BIGQUERY_EMULATOR_HOST) in the forked JVM.
@@ -167,7 +167,7 @@
             <include>**/WriteBufferedStreamIT.java</include>
             <!--
               Missing-tests follow-up addition (see
-              .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md): smoke IT
+              ROADMAP.md): smoke IT
               for the bigquerystorage-arrow-quickstart sample. Expected to fail
               with io.grpc.StatusRuntimeException: UNIMPLEMENTED from the
               BigQueryRead.CreateReadSession path until the gRPC-server

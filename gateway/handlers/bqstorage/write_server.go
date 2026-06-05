@@ -14,7 +14,7 @@
 //     a streaming-friendly entry from the Go gateway.
 //
 // Both are well outside the shallow-emulator port budget per
-// `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`. The
+// `docs/ENGINE_POLICY.md`. The
 // surface-mapping table below records which failing-IT each
 // go-googlesql `api/bqstorage/` symbol satisfies.
 //

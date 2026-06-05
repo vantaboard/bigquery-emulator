@@ -6,7 +6,7 @@
 # the single inner value. The route is `duckdb_native` (DuckDB's
 # scalar subquery raises on >1 row, matching BigQuery's runtime
 # error contract; both engines also return NULL for a zero-row
-# subquery). See `local-exec-02-withscan-cte.plan.md` Family 2 and
+# subquery). See `docs/ENGINE_POLICY.md` Family 2 and
 # `backend/engine/duckdb/transpiler/transpiler.cc::EmitSubqueryExpr`.
 #
 # Route-label assertion: deferred to plan 16.

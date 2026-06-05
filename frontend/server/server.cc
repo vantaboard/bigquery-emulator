@@ -49,7 +49,7 @@ void HandleSignal(int /*signo*/) {
 // `AppendRows` / `GetWriteStream` for the `_default` + `COMMITTED`
 // stream types (plan 15), with the remaining methods returning
 // UNIMPLEMENTED until the deferred follow-up subagent of
-// `storage-read-write-api-plan.plan.md` lands BUFFERED + PENDING.
+// `docs/ENGINE_POLICY.md` lands BUFFERED + PENDING.
 class GrpcServer final : public Server {
  public:
   GrpcServer(std::unique_ptr<::grpc::Server> server,

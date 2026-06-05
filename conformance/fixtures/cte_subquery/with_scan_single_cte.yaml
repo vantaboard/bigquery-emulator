@@ -7,7 +7,7 @@
 # CTE entry with its inner SELECT projected to positional anchor
 # names (`_cte_<idx>`) and each `ResolvedWithRefScan` renames the
 # anchor back to the analyzer's per-reference column names. See
-# `local-exec-02-withscan-cte.plan.md` Family 1 and
+# `docs/ENGINE_POLICY.md` Family 1 and
 # `backend/engine/duckdb/transpiler/transpiler.cc::EmitWithScan` /
 # `EmitWithRefScan`.
 #

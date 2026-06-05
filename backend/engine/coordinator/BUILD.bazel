@@ -31,7 +31,7 @@ cc_library(
 # `Disposition` per query, plus a structured `RouteDecision` the
 # coordinator dispatches on. Consults the per-node-kind and
 # per-function disposition registries shipped by
-# `execution-disposition-registry.plan.md`; never re-routes at
+# `docs/ENGINE_POLICY.md`; never re-routes at
 # runtime.
 cc_library(
     name = "route_classifier",
@@ -54,8 +54,8 @@ cc_library(
 # `unsupported`). Each one returns UNIMPLEMENTED with a
 # disposition-aware message pointing at the downstream plan that
 # fills in the real behavior; this keeps the coordinator a complete
-# dispatcher while plans `local-exec-07-semantic-core-expr.plan.md`,
-# `local-exec-01-ddl-catalog.plan.md`, and `local-exec-15-specialized-stubs.plan.md`
+# dispatcher while plans `docs/ENGINE_POLICY.md`,
+# `docs/ENGINE_POLICY.md`, and `docs/ENGINE_POLICY.md`
 # ship the real implementations.
 cc_library(
     name = "stub_executors",
@@ -99,7 +99,7 @@ cc_test(
 # LocalCoordinatorEngine is the top-level `Engine` implementation
 # the emulator binary constructs. It owns the analyzer plumbing,
 # the route classifier, and one executor per route. Wired into
-# `binaries/emulator_main` by `engine-router-foundation.plan.md`
+# `binaries/emulator_main` by `docs/ENGINE_POLICY.md`
 # step 6.
 cc_library(
     name = "local_coordinator_engine",
@@ -149,7 +149,7 @@ cc_library(
 # UnsupportedExecutor stub; CREATE TABLE preserves the existing
 # DDL behavior thanks to the `planned` short-circuit in the
 # classifier). See plan
-# `.cursor/plans/engine-router-foundation.plan.md` "Tests" for the
+# `docs/ENGINE_POLICY.md` "Tests" for the
 # exit criteria.
 cc_test(
     name = "local_coordinator_engine_test",

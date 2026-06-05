@@ -1,6 +1,6 @@
 # assert_true_passes: ASSERT on a TRUE predicate is a successful no-op.
 #
-# `local-exec-14-dml-system.plan.md` Family 5. The local
+# `docs/ENGINE_POLICY.md` Family 5. The local
 # script-statement executor (`backend/engine/semantic/script/`)
 # evaluates `ASSERT <expr>` against the same expression evaluator
 # the semantic executor uses for `SELECT <expr>`, so SAFE-mode and

@@ -13,7 +13,7 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
-// JSON extract/query/value/scalar helpers (local-exec-11-json.plan.md).
+// JSON extract/query/value/scalar helpers (docs/ENGINE_POLICY.md).
 absl::StatusOr<Value> JsonExtract(const std::vector<Value>& args,
                                   const ::googlesql::Type* return_type);
 absl::StatusOr<Value> JsonQuery(const std::vector<Value>& args,

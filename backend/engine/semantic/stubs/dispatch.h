@@ -26,7 +26,7 @@
 //      `backend/engine/semantic/stubs/BUILD.bazel`.
 //   2. Adding a Dispatch arm here.
 //   3. Confirming the matching `functions.yaml` row is
-//      `local_stub plan=local-exec-15-specialized-stubs.plan.md`.
+//      `local_stub plan=docs/ENGINE_POLICY.md`.
 //   4. Adding a conformance fixture under
 //      `conformance/fixtures/specialized/`.
 

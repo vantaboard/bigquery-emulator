@@ -23,17 +23,15 @@ deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
 [spanner]: https://github.com/GoogleCloudPlatform/cloud-spanner-emulator
 
-## Execution plans
+## Work tracking
 
-Active work to green the ported **query port suite** is tracked in
-16 sequential themed plans plus an index:
+Active work to green the ported **query port suite** is tracked via:
 
-- [`local-exec-00-index.plan.md`](.cursor/plans/local-exec-00-index.plan.md) — **start here**: ordered plans 01→16 derived from the baseline emulator test run (`568` failures at stamp `20260603T035812Z`).
-- [`.cursor/plans/local-exec-subagent-dispatch.plan.md`](.cursor/plans/local-exec-subagent-dispatch.plan.md) — **run with subagents**: one background subagent per plan, parent cleanup between steps.
+- [`scripts/query_port_failures.sh`](scripts/query_port_failures.sh) — classify failures from gateway e2e test results
+- [`taskfiles/thirdparty.yml`](taskfiles/thirdparty.yml) — third-party Java sample parity tasks
+- Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document, and disposition YAML headers
 
-Route vocabulary, foundation prerequisites, and engine-wide done criteria:
-
-- [`.cursor/plans/local-execution-roadmap-index.plan.md`](.cursor/plans/local-execution-roadmap-index.plan.md) — terminology, foundation plans (`execution-disposition-registry`, `engine-router-foundation`), and links back to the query port index.
+Route vocabulary, foundation prerequisites, and engine-wide done criteria live in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
 
 #### History
 
@@ -324,16 +322,12 @@ behind each, and the multi-strategy coordinator is the only
   (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
   `semantic_executor`, `control_op`, `local_stub`, `unsupported`)
 - 🟡 Local execution router behind `backend/engine/engine.h`: dispatches
-  each query to the strategy that fits its resolved-AST shape. The
-  scaffolding plan is `engine-router-foundation.plan.md`; today the
-  router degenerates to "always DuckDB fast path" and shapes not in
-  the `duckdb_native` set surface `UNIMPLEMENTED`
-- ⏳ Local semantic executor scaffolding
-  (`local-exec-07-semantic-core-expr.plan.md`)
-- ⏳ DuckDB UDF / polyfill library
-  (`local-exec-03-operator-disposition.plan.md`)
-- ⏳ Control-op executor for DDL / metadata
-  (`local-exec-01-ddl-catalog.plan.md`)
+  each query to the strategy that fits its resolved-AST shape. Policy
+  is documented in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md);
+  shapes not yet implemented surface `UNIMPLEMENTED`.
+- ⏳ Local semantic executor (`backend/engine/semantic/`)
+- ⏳ DuckDB UDF / polyfill library (`backend/engine/duckdb/udf/`)
+- ⏳ Control-op executor for DDL / metadata (`backend/engine/control/`)
 
 ## Query analysis (C++ via GoogleSQL)
 
@@ -371,8 +365,9 @@ handler.
   `duckdb_rewrite` / `duckdb_udf` / `semantic_executor` /
   `control_op` / `local_stub` / `unsupported`) lives in
   [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md).
-  Shapes routed to the other strategies are scheduled by the
-  local-execution roadmap index linked at the top of this document
+  Shapes routed to the other strategies are tracked in
+  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) and the Work
+  tracking section at the top of this document
 - ✅ Type lowering: BigQuery / GoogleSQL types -> DuckDB types
   (`INT64`, `FLOAT64`, `STRING`, `BYTES`, `BOOL`, `DATE`, `TIMESTAMP`,
   `NUMERIC`, `BIGNUMERIC`, `JSON`, `INTERVAL`, `UUID`, `ARRAY<T>`,
@@ -388,7 +383,7 @@ handler.
   zip, outer `UNNEST`, and lateral / cross-join shapes still surface
   `  UNIMPLEMENTED` pending the lateral / multi-array / WITH OFFSET
   shapes, which reroute from the DuckDB fast path to the local
-  semantic executor via `local-exec-12-arrays-generators.plan.md`
+  semantic executor (see [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
 - 🟡 Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
@@ -398,16 +393,12 @@ handler.
   `absl::flat_hash_map`. Each entry now records one of the
   seven canonical route dispositions (`duckdb_native`,
   `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
-  `control_op`, `local_stub`, `unsupported`); deferred-lowering
-  rows carry a planned route in either
-  `local-exec-03-operator-disposition.plan.md` or
-  `local-exec-09-date-time.plan.md`, and the unsupported
-  families (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`,
-  `ST_*`, ...) are documented in
-  `local-exec-15-specialized-stubs.plan.md`. The legacy
-  `kMap`/`kFallback`/`kSkiplist` vocabulary was retired by
-  `execution-disposition-registry.plan.md`. `SAFE.<fn>(...)` is
-  handled uniformly regardless of disposition
+  `control_op`, `local_stub`, `unsupported`); deferred rows carry
+  `status=planned` in the YAML tables. Unsupported families
+  (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...) are
+  documented in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The
+  legacy `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
+  `SAFE.<fn>(...)` is handled uniformly regardless of disposition
 - ✅ DuckDB fast-path execution: file-backed `catalog.duckdb`
   connection, the transpiled SQL is bound and executed via the DuckDB
   C++ client, DuckDB errors are translated back to the BigQuery error
@@ -433,22 +424,22 @@ on a per-node basis and in
 [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) as the
 public-facing policy.
 
-| Route                | What it is                                                                                  | Plan                                              |
+| Route                | What it is                                                                                  | Tracking                                          |
 |----------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------|
-| `duckdb_native`      | Lowers directly to DuckDB SQL with semantics that already match BigQuery's exactly.         | `local-exec-04-scan-emits.plan.md`          |
-| `duckdb_rewrite`     | Lowers to DuckDB SQL with a deliberate rewrite (e.g. struct/array shape rewrites, BigQuery JSON operators -> DuckDB JSON operators). | `local-exec-04-scan-emits.plan.md`          |
-| `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | `local-exec-03-operator-disposition.plan.md`             |
-| `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | `local-exec-07-semantic-core-expr.plan.md` + per-family plans |
-| `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | `local-exec-01-ddl-catalog.plan.md`                     |
-| `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | `local-exec-15-specialized-stubs.plan.md`              |
-| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | `local-exec-15-specialized-stubs.plan.md`              |
+| `duckdb_native`      | Lowers directly to DuckDB SQL with semantics that already match BigQuery's exactly.         | [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) |
+| `duckdb_rewrite`     | Lowers to DuckDB SQL with a deliberate rewrite (e.g. struct/array shape rewrites, BigQuery JSON operators -> DuckDB JSON operators). | [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) |
+| `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) |
+| `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) |
+| `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) |
+| `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) |
+| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) |
 
 - 🟡 Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`
 - 🟡 Per-shape dispositions recorded in the shape tracker
 - 🟢 Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
-  Plan 16 (`conformance-routing-matrix.plan.md`) added the
+  The conformance routing matrix added the
   `emulatorRoute` debug field on `Job.statistics.query`
   (loopback-only, gated by `gateway/middleware/loopback.go`
   so only local-loopback callers see it), extended the
@@ -468,9 +459,9 @@ public-facing policy.
   `ResolvedSubqueryExpr::parameter_list()`) but the executor
   itself stays a structured `kNotImplemented` until the
   outer-row iteration primitive lands -- tracked under
-  `local-exec-02-withscan-cte.plan.md`. Recursive CTEs and the LIKE
+  `docs/ENGINE_POLICY.md`. Recursive CTEs and the LIKE
   ANY / ALL subquery family remain out of plan-10 scope and
-  surface UNIMPLEMENTED; see `local-exec-13-advanced-relational.plan.md`
+  surface UNIMPLEMENTED; see `docs/ENGINE_POLICY.md`
 
 ## DML / DDL
 
@@ -483,7 +474,7 @@ public-facing policy.
   (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
   `RETURNING`, and `ResolvedPipeInsertScan` continue to surface
   `UNIMPLEMENTED` and stay tracked under
-  `local-exec-14-dml-system.plan.md`. Conformance fixtures may now seed
+  `docs/ENGINE_POLICY.md`. Conformance fixtures may now seed
   rows via either `tabledata.insertAll` or `INSERT VALUES` `sql:`
   steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
@@ -499,12 +490,10 @@ public-facing policy.
   `EXPORT DATA`, function registration, `ALTER TABLE` still surface
   `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE` continues
   to lower through the DuckDB engine pending its own subagent. Tracked
-  via `local-exec-01-ddl-catalog.plan.md` for the deferred handlers and
-  `local-exec-15-specialized-stubs.plan.md` for materialized-view refresh
+  via the control-op executor; materialized-view refresh
   semantics
 - 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
-  — `local-exec-14-dml-system.plan.md` and
-  `local-exec-15-specialized-stubs.plan.md`. `ASSERT <expr> [AS '<msg>']`
+  — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
   surfaces BigQuery's documented `Assertion failed` envelope; the
   scripting variable environment has been generalized into the
@@ -522,7 +511,7 @@ public-facing policy.
   (the prerequisite for cross-request function persistence)
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
-  `local-exec-14-dml-system.plan.md` Family 1-3 plus the existing DuckDB
+  deferred DML work tracked in `docs/ENGINE_POLICY.md` plus the existing DuckDB
   MERGE path). Deferred shapes (INSERT ... SELECT, deep-STRUCT
   UPDATE, MERGE harder branches, RETURNING, PipeInsertScan) keep
   the field absent until they land; the row count is otherwise
@@ -552,7 +541,7 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
   with `INVALID_ARGUMENT` (see "Supported `ReadOptions`" in
   [`docs/REST_API.md`](./docs/REST_API.md)). Multi-clause expansion
   is deferred to a follow-up subagent of
-  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
   because doing it half-right (parser-only, no analyzer-resolved
   boolean expression) is exactly the silent-approximation hazard
   the plan forbids
@@ -565,7 +554,7 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
 - ⏳ Single-stream sessions only — `max_stream_count > 1` is rejected.
   DuckDB's parallel scan + Arrow output makes multi-stream a
   tractable follow-up. Deferred to a follow-up subagent of
-  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
   pending a deterministic parquet-row-boundary partition design
 
 ## Storage Write API (gRPC)
@@ -592,7 +581,7 @@ already uses.
   `FinalizeWriteStream` / `BatchCommitWriteStreams` / `FlushRows`
   reserve their proto slots but return `UNIMPLEMENTED` until the
   deferred follow-up subagent of
-  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md)
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
   lands the buffer / two-phase commit semantics. Silent
   approximation here is especially bad because `PENDING`'s
   transactional contract is exactly what distinguishes the Storage
@@ -691,7 +680,7 @@ and
   shapes still on the `unsupported` route
   (INSERT / UPDATE / DELETE / scalar-only SELECT today, plus the
   unsupported-by-design families documented in
-  `local-exec-15-specialized-stubs.plan.md`).
+  `docs/ENGINE_POLICY.md`).
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
   later if there's demand, and only with a local implementation or a
   deterministic stub — never with a cloud passthrough.
@@ -758,7 +747,7 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   executor owns. `BUFFERED` and `PENDING` (and the matching
   `FlushRows` / `FinalizeWriteStream` / `BatchCommitWriteStreams`
   RPCs) are deferred to a follow-up subagent of
-  [`storage-read-write-api-plan.plan.md`](./.cursor/plans/storage-read-write-api-plan.plan.md);
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md);
   they reserve their proto slots and return `UNIMPLEMENTED` today.
 - **Dialect translation friction (GoogleSQL <-> DuckDB).** The DuckDB
   fast path is no longer the project's whole story, but the friction
@@ -772,12 +761,12 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     CONFLICT` plus separate `UPDATE` / `DELETE` statements doesn't cover
     the full matrix. The easy shapes route `duckdb_native` /
     `duckdb_rewrite` today; the harder branches will route through the
-    `local-exec-14-dml-system.plan.md` semantic path so we don't have to
+    `docs/ENGINE_POLICY.md` semantic path so we don't have to
     pretend DuckDB SQL can model them.
   - **Deep STRUCT mutations.** `UPDATE t SET s.a.b = ...` is well-defined
     in BigQuery but DuckDB's struct field updates are limited.
     Anything past a single-level rewrite routes through the
-    `local-exec-12-arrays-generators.plan.md` semantic executor so deep
+    `docs/ENGINE_POLICY.md` semantic executor so deep
     nested updates don't have to round-trip through JSON to fake
     field-existence semantics.
   - **Google-specific built-ins.** `APPROX_QUANTILES`, `HLL_COUNT.*`,
@@ -787,13 +776,13 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     function-disposition table now records a routing disposition per
     entry; close-enough functions become `duckdb_udf`, BigQuery-exact
     ones become `semantic_executor`, and entire families
-    (`local-exec-15-specialized-stubs.plan.md`) declare a policy of "local
+    (`docs/ENGINE_POLICY.md`) declare a policy of "local
     implementation now," "deterministic stub with BigQuery-shaped
     error," or "unsupported by design."
   - **NULL-equality, ordering, and float corner cases** between the two
     engines are subtly different (e.g., NaN ordering, `IS NULL` in joins,
     integer overflow behavior). Shapes that depend on these route to
-    the semantic executor (`local-exec-09-date-time.plan.md`)
+    the semantic executor (`docs/ENGINE_POLICY.md`)
     rather than being approximated in DuckDB SQL.
   - **JSON.** BigQuery's `JSON` type and `JSON_VALUE` / `JSON_QUERY`
     functions are mostly portable. The common cases route

@@ -208,7 +208,7 @@ func mountMigration(mux *http.ServeMux, deps handlers.Dependencies) {
 // (`scheduled_query`, `amazon_s3`), in-memory CRUD for
 // transferConfigs + transferRuns, and the AIP-136 custom methods
 // (`scheduleRuns`, `checkValidCreds`, `startManualRuns`). See
-// `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`.
+// `docs/ENGINE_POLICY.md`.
 func mountDataTransfer(mux *http.ServeMux) {
 	dts := datatransfer.NewHandler(nil)
 	dts.Register(mux)
@@ -266,7 +266,7 @@ func wrapMiddleware(opts Options, mux http.Handler) http.Handler {
 	// the synchronous query handler, which surfaces
 	// `Job.statistics.query.emulatorRoute` (the C++ coordinator's
 	// canonical route disposition string) only to loopback callers
-	// per `.cursor/plans/conformance-routing-matrix.plan.md`.
+	// per `docs/ENGINE_POLICY.md`.
 	handler = middleware.WithLoopbackTag(handler)
 	// X-HTTP-Method-Override translation runs OUTSIDE every other
 	// middleware that inspects `r.Method` (auth/loopback/gunzip all

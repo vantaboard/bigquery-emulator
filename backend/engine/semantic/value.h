@@ -5,7 +5,7 @@
 // semantic executor.
 //
 // Design constraint #3 from
-// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`: "Same Arrow
+// `docs/ENGINE_POLICY.md`: "Same Arrow
 // output shape as the DuckDB fast path -- so the Storage Read API and REST
 // `f`/`v` marshaler don't branch on route". Rather than invent a
 // parallel type system the rest of the engine cannot consume, we

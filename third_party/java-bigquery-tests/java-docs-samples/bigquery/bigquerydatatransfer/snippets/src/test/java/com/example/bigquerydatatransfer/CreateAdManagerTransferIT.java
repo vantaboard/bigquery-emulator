@@ -54,7 +54,7 @@ import org.junit.Test;
  * {@link BqDataTransferOpts}; until the gRPC-server follow-up lands a DataTransferService gRPC
  * handler, the assertion below is expected to fail with
  * io.grpc.StatusRuntimeException: UNIMPLEMENTED. See
- * {@code .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md} for the per-IT verdict baseline.
+ * {@code ROADMAP.md for the per-IT verdict baseline.
  */
 public class CreateAdManagerTransferIT {
 

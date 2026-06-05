@@ -12,7 +12,7 @@ import (
 )
 
 // TestQueryScalarSelectArithmetic exercises the
-// `local-exec-07-semantic-core-expr.plan.md` scalar-only SELECT path
+// `docs/ENGINE_POLICY.md` scalar-only SELECT path
 // end-to-end: `SELECT 1 + 2` lowers through the
 // semantic executor (no FROM clause -> classifier promotes to the
 // `kSemanticExecutor` route) and returns a single-row Arrow batch

@@ -755,7 +755,7 @@ tasks:
         # never see traffic from those ITs. The values themselves are inert
         # (the emulator does not talk to AWS / MySQL / DTS); they only
         # exist so JUnit's `requireEnvVar` short-circuits stop firing.
-        # See `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`
+        # See `docs/ENGINE_POLICY.md`
         # (failing-IT baseline rows 8–15) for the precondition matrix.
         export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-000000000000}"
         export AWS_ROLE_ID="${AWS_ROLE_ID:-emulator-role}"
@@ -828,7 +828,7 @@ tasks:
         fi
         # Live-IT posture: do NOT stop the fan-out on the first per-module
         # failure. Until the shallow gRPC backends land
-        # (`java-its-shallow-emulators_b8c9d0e1.plan.md`), the
+        # (`docs/ENGINE_POLICY.md`), the
         # bigqueryconnection / bigquerydatatransfer / bigquerystorage modules
         # are expected to surface NOT_IMPLEMENTED-shaped errors out of
         # Failsafe; we still want the java-bigquery module's verdict and the

@@ -20,7 +20,7 @@ import (
 // the scalar-only SELECT to the local executor and
 // `numeric_edges::BitCount` returns 64.
 //
-// See `.cursor/plans/local-exec-09-date-time.plan.md`.
+// See `docs/ENGINE_POLICY.md`.
 func TestQuerySemanticFunctionBitCountNegative(t *testing.T) {
 	env := startEmulator(t)
 

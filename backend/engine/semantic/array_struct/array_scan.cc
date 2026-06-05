@@ -141,7 +141,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
   // shape (`FROM t, UNNEST(t.arr)`); a non-null `join_expr` is the
   // `LEFT JOIN UNNEST(arr) ON ...` shape. Both need a row source
   // adapter (`RowSource` -> per-row `ColumnBindings`) which is
-  // Family 4 of `local-exec-12-arrays-generators.plan.md`. Until that
+  // `docs/ENGINE_POLICY.md`. Until that
   // lands, surface a structured `kNotImplemented` so the gateway's
   // envelope is consistent with other "planned but not landed"
   // routes.

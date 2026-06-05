@@ -1366,7 +1366,7 @@ type QueryResultRow struct {
 	//     emulator-internal debug signal the conformance harness
 	//     reads back to assert per-query routing decisions, never a
 	//     stable wire field for BigQuery client libraries.
-	//     Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
+	//     Ownership: `docs/ENGINE_POLICY.md`.
 	Schema        *TableSchema `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	Cells         []*Cell      `protobuf:"bytes,2,rep,name=cells,proto3" json:"cells,omitempty"`
 	DmlStats      *DmlStats    `protobuf:"bytes,3,opt,name=dml_stats,json=dmlStats,proto3" json:"dml_stats,omitempty"`

@@ -9,8 +9,7 @@
 # whole row vector back via `Storage::OverwriteRows`.
 #
 # This fixture exercises the scalar-SET path; the deep-STRUCT
-# subfamily (`SET s.a.b = ...`) is owned by Family 4 of
-# `local-exec-14-dml-system.plan.md` and surfaces a structured
+# subfamily (`SET s.a.b = ...`) is owned by # `docs/ENGINE_POLICY.md` and surfaces a structured
 # `kNotImplemented` until that family ships.
 #
 # Per-handler unit coverage:

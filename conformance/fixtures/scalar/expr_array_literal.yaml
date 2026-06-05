@@ -3,7 +3,7 @@
 # Pins ARRAY literal round-trip through the local semantic executor.
 # The classifier promotes scalar-only SELECTs (no FROM clause) to
 # `semantic_executor` per the route-classifier rule documented in
-# `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`, so this fixture's
+# `docs/ENGINE_POLICY.md`, so this fixture's
 # rehome under `scalar/` matches the route the harness actually
 # observes (it previously lived under `fastpath/` -- moved by plan 17).
 # We intentionally include a NULL element so a regression that drops

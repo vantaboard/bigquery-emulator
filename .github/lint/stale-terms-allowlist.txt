@@ -7,7 +7,7 @@
 # Lines starting with `#` are comments. Path separators are
 # forward-slashes regardless of host OS.
 #
-# Owner: `.cursor/plans/migration-cleanup-docs.plan.md` (plan 17).
+# Owner: disposition / policy doc maintenance.
 # Adding a new entry to this file means you intentionally retained
 # a retired term as historical context. Update the matching `History`
 # section so a reader landing on the line knows why the stale term
@@ -19,7 +19,7 @@
 # so the future "why was the engine refactored" question has an answer.
 ROADMAP.md:93-104
 
-# ROADMAP.md "Execution plans" History sub-section explains the retired
+# ROADMAP.md "Work tracking" History sub-section explains the retired
 # DuckDB-only transpiler plan set whose accomplishments carried forward.
 ROADMAP.md:38-49
 
@@ -31,16 +31,6 @@ docs/ENGINE_POLICY.md:192-225
 # Active rule prose intentionally references `FallbackEngine` so a reader
 # can map the rule to the historical hazard it prevents.
 docs/ENGINE_POLICY.md:60-80
-
-# --- Plan files: each plan's Background section explains the problem
-# ---  the new coordinator solves, which means it names the retired
-# ---  vocabulary one or more times. Plan files are documentation
-# ---  artifacts; whitelisted whole-file because their `Background`
-# ---  paragraphs are the reason they exist.
-.cursor/plans/local-execution-roadmap-index.plan.md
-.cursor/plans/migration-cleanup-docs.plan.md
-.cursor/plans/local-exec-00-index.plan.md
-.cursor/plans/engine-router-foundation.plan.md
 
 # --- README has one stale term inside an active prose paragraph that
 # ---  describes a historical removal: the "removed when the

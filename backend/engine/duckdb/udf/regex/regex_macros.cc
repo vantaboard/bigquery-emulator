@@ -24,7 +24,7 @@
 //     so a regression that dropped the `'g'` would surface as
 //     stop-at-first-match output.
 //
-// Out of scope (re-pointed to `local-exec-09-date-time.plan.md`
+// Out of scope (re-pointed to `docs/ENGINE_POLICY.md`
 // in the wrap-up commit): `regexp_extract`, `regexp_extract_all`.
 // Both functions diverge from DuckDB on the capture-group
 // semantic: BigQuery returns the FIRST capturing group when the

@@ -30,7 +30,7 @@
 // -------------------------------
 //
 // `control_op_executor.cc` is a lint-cap carve-out per the
-// `local-exec-13-advanced-relational.plan.md` "don'ts" section, so the
+// `docs/ENGINE_POLICY.md` "don'ts" section, so the
 // pipe-DDL handlers live in this file (and `pipe_export_data.cc`)
 // instead. Both files live next to the executor so they share the
 // same Bazel package and dependency graph.

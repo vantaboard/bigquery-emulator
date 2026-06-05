@@ -11,8 +11,8 @@ import "slices"
 // high) so a reviewer can eyeball the relative weight if it ever
 // comes up.
 //
-// Plan ownership: `.cursor/plans/conformance-routing-matrix.plan.md`
-// (this file) and `.cursor/plans/execution-disposition-registry.plan.md`
+// Plan ownership: `docs/ENGINE_POLICY.md`
+// (this file) and `docs/ENGINE_POLICY.md`
 // (the C++ source of truth). A new disposition value lands on BOTH
 // sides at once.
 //
@@ -47,11 +47,11 @@ const (
 
 	// RouteLocalStub is the deterministic BigQuery-shaped stub
 	// route for specialized features (KEYS.NEW_KEYSET, CREATE
-	// MODEL, ...). See `.cursor/plans/local-exec-15-specialized-stubs.plan.md`.
+	// MODEL, ...). See `docs/ENGINE_POLICY.md`.
 	RouteLocalStub = "local_stub"
 
 	// RouteUnsupported surfaces a BigQuery-shaped `UNIMPLEMENTED`.
-	// See `.cursor/plans/local-exec-15-specialized-stubs.plan.md` for
+	// See `docs/ENGINE_POLICY.md` for
 	// the unsupported families list.
 	RouteUnsupported = "unsupported"
 )

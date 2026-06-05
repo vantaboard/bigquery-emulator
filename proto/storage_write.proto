@@ -6,15 +6,10 @@
 // commit rows through the same `DuckDBStorage::AppendRows` primitive
 // the local DML executor already uses.
 //
-// Plan 15 (`storage-read-write-api-plan.plan.md`) ships the proto +
-// the `CreateWriteStream` / `AppendRows` / `GetWriteStream` handlers
-// for the `_default` and `COMMITTED` stream types. The other two
-// stream types (`BUFFERED`, `PENDING`) plus `FlushRows` /
-// `FinalizeWriteStream` / `BatchCommitWriteStreams` reserve their
-// proto slots here so the wire shape stays stable when the deferred
-// follow-up subagent lights them up; the matching handler methods
-// return UNIMPLEMENTED today and document the rationale on the
-// `bigquery_emulator.v1.StorageWrite` service comment.
+// Storage Read/Write API handlers for `_default` and `COMMITTED` stream types
+// ship first; `BUFFERED`, `PENDING`, `FlushRows`, `FinalizeWriteStream`, and
+// `BatchCommitWriteStreams` reserve proto slots for deferred follow-up (see
+// `ROADMAP.md`). Matching handler methods return UNIMPLEMENTED today.
 //
 // Code generation:
 //   - Go:  `task proto:gen` writes

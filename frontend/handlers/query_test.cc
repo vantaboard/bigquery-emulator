@@ -258,8 +258,8 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   // Four messages: schema, one row, then the trailing
   // `statement_type` + `emulator_route` pair the gateway folds into
   // `Job.statistics.query.{statementType,emulatorRoute}`. See
-  // `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Item 5 and
-  // `.cursor/plans/conformance-routing-matrix.plan.md`.
+  // `docs/ENGINE_POLICY.md` Item 5 and
+  // `docs/ENGINE_POLICY.md`.
   ASSERT_EQ(messages.size(), 4u);
 
   EXPECT_TRUE(messages[0].has_schema());
@@ -276,7 +276,7 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   EXPECT_EQ(messages[2].cells_size(), 0);
   EXPECT_EQ(messages[2].statement_type(), "SELECT");
   // `SELECT 1` has no FROM clause -> semantic executor (see
-  // `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`).
+  // `docs/ENGINE_POLICY.md`).
   EXPECT_EQ(messages[3].emulator_route(), "semantic_executor");
 }
 
@@ -445,7 +445,7 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
   EXPECT_EQ(messages[1].statement_type(), "INSERT");
   // INSERT against a user table routes through the semantic
-  // executor's DML path (plan 9 / `local-exec-14-dml-system.plan.md`).
+  // executor's DML path (/ `docs/ENGINE_POLICY.md`).
   EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
 
   // Storage round-trip: the rows actually landed.
@@ -470,8 +470,8 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   // `Job.statistics.query.statementType` and the `emulator_route`
   // trailer the gateway folds into
   // `Job.statistics.query.emulatorRoute` (loopback-only). See
-  // `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Item 5 and
-  // `.cursor/plans/conformance-routing-matrix.plan.md`.
+  // `docs/ENGINE_POLICY.md` Item 5 and
+  // `docs/ENGINE_POLICY.md`.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   v1::QueryRequest req =
       MakeRequest("CREATE TABLE ds.new_table (id INT64, name STRING)");

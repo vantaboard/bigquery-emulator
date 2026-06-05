@@ -4,7 +4,7 @@
 // Local evaluator for the `ResolvedArrayScan` shapes the DuckDB
 // fast path cannot lower cleanly.
 //
-// `.cursor/plans/local-exec-12-arrays-generators.plan.md` lists the
+// `docs/ENGINE_POLICY.md` lists the
 // divergent subset routed here by `RouteClassifier`'s
 // `VisitResolvedArrayScan` property-based promotion:
 //

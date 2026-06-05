@@ -9,7 +9,7 @@
 # multi-CTE composition cannot silently squeak through.
 #
 # Route: `duckdb_native` via
-# `local-exec-02-withscan-cte.plan.md::EmitWithScan` /
+# `docs/ENGINE_POLICY.md::EmitWithScan` /
 # `EmitWithRefScan`. Route-label assertion deferred to plan 16.
 name: with_scan_multiple_ctes
 description: |

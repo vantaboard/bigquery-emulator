@@ -10,7 +10,7 @@
 // evaluation the rest of the package speaks.
 //
 // Implementation contract (see
-// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`):
+// `docs/ENGINE_POLICY.md`):
 //
 //   * The evaluator NEVER re-analyzes SQL. It walks the resolved
 //     AST the analyzer hands it.

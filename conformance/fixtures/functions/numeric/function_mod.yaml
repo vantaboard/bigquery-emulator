@@ -6,7 +6,7 @@
 # BigQuery's sign-of-dividend convention plus NULL propagation.
 #
 # Route-label assertion: deliberately omitted today; the
-# `conformance-routing-matrix.plan.md` (plan 16) wires the
+# `docs/ENGINE_POLICY.md` (plan 16) wires the
 # `expected.route` field. Until then this fixture only pins the
 # observable rows; the duckdb_udf route is exercised implicitly via
 # the live macro registration in `DuckDbExecutor`.

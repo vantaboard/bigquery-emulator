@@ -38,7 +38,7 @@ emulator when `BIGQUERY_EMULATOR_HOST` /
 `BIGQUERY_STORAGE_GRPC_ENDPOINT` are exported.
 
 After the missing-tests follow-up of the Java live-IT track
-(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) all **24**
+(`ROADMAP.md`) all **24**
 target samples ship a Failsafe IT (the failing-IT inventory patched
 the 15 that shipped upstream; the missing-tests follow-up authored
 the 9 missing ones). The bulk of the bigqueryconnection /
@@ -50,11 +50,11 @@ shallow-emulator port's `bqconnection` and `bqstorage` packages are
 documented-deferral skeletons, and the `datatransfer` REST handler
 is unreachable from the gapic gRPC client). The full per-IT verdict
 baseline lives in
-`.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md` (failing-IT
+`ROADMAP.md` (failing-IT
 inventory: 15 ITs),
-`.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`
+`ROADMAP.md`
 (shallow-emulator port: 15 ITs, +2 PASS from gzip middleware), and
-`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`
+`ROADMAP.md`
 (missing-tests follow-up: 24 ITs after authoring 9 new ones). The
 full sample-ID-to-IT-class index lives in `third_party/README.md`'s
 "Sample coverage" sub-section.

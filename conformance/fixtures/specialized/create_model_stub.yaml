@@ -1,6 +1,6 @@
 # create_model_stub: CREATE MODEL accepted as metadata-only stub.
 #
-# `local-exec-15-specialized-stubs.plan.md` pins `CREATE MODEL` to the
+# `docs/ENGINE_POLICY.md` pins `CREATE MODEL` to the
 # `local_stub` posture: the statement parses, the analyzer
 # accepts it (the coordinator's `ExecuteDdl` is on the
 # `SetSupportsAllStatementKinds` allowlist), the coordinator

@@ -100,7 +100,7 @@
         bigquery-emulator live-IT lane: bind Failsafe to integration-test +
         verify. Restrict <includes> to the curated ITs targeted by the Java
         live-IT track (failing-IT inventory in
-        .cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md). System
+        ROADMAP.md). System
         properties forward the emulator + storage gRPC endpoints;
         BqDataTransferOpts reads them in the forked JVM.
       -->
@@ -123,7 +123,7 @@
             <include>**/ReEnableTransferConfigIT.java</include>
             <!--
               Missing-tests follow-up additions (see
-              .cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md): smoke ITs
+              ROADMAP.md): smoke ITs
               for the 8 third-party connector Create*Transfer samples. Expected
               to fail with io.grpc.StatusRuntimeException: UNIMPLEMENTED from
               the gapic DataTransferService client until the gRPC-server

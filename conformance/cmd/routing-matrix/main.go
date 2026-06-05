@@ -3,7 +3,7 @@
 // quarantine directories) and emits a Markdown table of `Shape |
 // Route | Strict` rows. The output is a non-blocking CI artifact
 // surfaced by `task conformance:routing-matrix` (plan 16,
-// `.cursor/plans/conformance-routing-matrix.plan.md`) and used by
+// `docs/ENGINE_POLICY.md`) and used by
 // reviewers to spot when a fixture family's actual route does not
 // match its directory's aspirational label.
 //

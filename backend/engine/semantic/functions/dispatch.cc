@@ -120,17 +120,17 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "justify_days") return JustifyDays(args);
   if (name == "justify_hours") return JustifyHours(args);
   if (name == "justify_interval") return JustifyInterval(args);
-  // Phase A: parse_*.
+  // Parse functions.
   if (name == "parse_date") return ParseDate(args);
   if (name == "parse_datetime") return ParseDatetime(args);
   if (name == "parse_timestamp") return ParseTimestamp(args);
   if (name == "parse_time") return ParseTime(args);
-  // Phase B: format_*.
+  // Format functions.
   if (name == "format_date") return FormatDate(args);
   if (name == "format_datetime") return FormatDatetime(args);
   if (name == "format_timestamp") return FormatTimestamp(args);
   if (name == "format_time") return FormatTime(args);
-  // Phase C: date/time arithmetic and current_* / unix_*.
+  // Date/time arithmetic and current_* / unix_*.
   if (name == "date_add" || name == "date_sub" || name == "date_diff" ||
       name == "date_trunc") {
     return DateAddSubDiffTrunc(name, args);
@@ -194,7 +194,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
       name == "timestamp_from_datetime") {
     return TimestampConstructor(name, args);
   }
-  // Phase D: intervals and extract.
+  // Intervals and extract.
   if (name == "make_interval") return MakeInterval(args);
   if (name == "extract") return Extract(args, return_type);
   if (auto specialized = DispatchSpecializedScalar(name, args, return_type)) {

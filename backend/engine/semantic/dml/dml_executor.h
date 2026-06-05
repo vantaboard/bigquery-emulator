@@ -4,7 +4,7 @@
 // Storage-aware local DML executor.
 //
 // Owns the DML statement shapes the DuckDB fast path cannot lower
-// cleanly, per `.cursor/plans/local-exec-14-dml-system.plan.md`:
+// cleanly, per `docs/ENGINE_POLICY.md`:
 //
 //   * `ResolvedInsertStmt` -- INSERT VALUES (single + multi-row).
 //     INSERT ... SELECT is recognized but currently surfaces
@@ -14,7 +14,7 @@
 //     the kept rows back through `Storage::OverwriteRows`.
 //   * `ResolvedUpdateStmt` -- `UPDATE t SET col = <expr> WHERE
 //     <pred>` (scalar SET only; deep-STRUCT mutation via
-//     `Value::WithField` is owned by Family 4 of the plan).
+//     `Value::WithField` is owned by the plan).
 //
 // The executor reads + mutates storage through the
 // `backend::storage::Storage*` the coordinator holds, so the

@@ -8,7 +8,7 @@ in-repo SQL-fixture conformance harness:
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
-| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see the per-IT baseline in `.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
+| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see `ROADMAP.md` and `taskfiles/thirdparty.yml`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -364,13 +364,12 @@ drivers + IT-side BigQuery client construction at the local emulator:
 - [`com.example.bigquerydatatransfer.BqDataTransferOpts`](java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets/src/main/java/com/example/bigquerydatatransfer/BqDataTransferOpts.java)
   — `DataTransferServiceSettings` (same gRPC endpoint).
 
-Expected fail states per surface (initial-baseline; see
-`.cursor/plans/java-its-task-conversion_a7b8c9d0.plan.md`):
+Expected fail states per surface (initial baseline; see `ROADMAP.md`):
 
 | Surface | Expectation |
 |---------|-------------|
 | `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets, see the per-IT verdict in the plan). |
-| `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work (`java-its-shallow-emulators_b8c9d0e1.plan.md`) lands the shallow ConnectionService backend. |
+| `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until shallow ConnectionService backend lands (see `ROADMAP.md`). |
 | `bigquerydatatransfer` (3 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands the shallow DataTransferService backend. |
 | `bigquerystorage` (1 IT, `WriteBufferedStreamIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands BigQuery Write API parity. |
 
@@ -429,8 +428,7 @@ sample IDs against the vendored class and its IT (when an IT is shipped).
 Use this when triaging "is sample X available?" or "is sample X exercised
 end-to-end?"; rerun the table when adding more.
 
-After the missing-tests follow-up of the Java live-IT track
-([java-its-missing-tests_c9d0e1f2.plan.md](../.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md))
+After the missing-tests follow-up of the Java live-IT track (see `ROADMAP.md`)
 all 24 target samples ship a Failsafe IT. The current verdict is
 **2 PASS + 20 FAIL + 2 SKIP**: the 2 PASS rows
 (`DeleteDatasetAndContentsIT`, `CreateTableExternalHivePartitionedIT`)

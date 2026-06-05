@@ -19,7 +19,7 @@ task thirdparty:java-bigquery-tests   # mvn -B verify on every JAVA_BQ_SAMPLE_PA
 `integration-test` + `verify` goals with a `<includes>` allowlist that
 names exactly the live-IT-track-targeted classes for this module.
 After the missing-tests follow-up
-(`.cursor/plans/java-its-missing-tests_c9d0e1f2.plan.md`) the
+(`ROADMAP.md`) the
 allowlist covers **11** classes — the failing-IT inventory patched 3,
 the missing-tests follow-up authored 8 new `Create*TransferIT` smoke
 ITs:
@@ -100,4 +100,4 @@ in the local emulator.
   (`thirdparty:java-bigquery-tests`).
 - Per-IT verdict baselines (failing-IT inventory / shallow-emulator
   port / missing-tests follow-up):
-  [`.cursor/plans/java-its-*.plan.md`](../../../../.cursor/plans/).
+  [`ROADMAP.md`](../../../../../../ROADMAP.md).

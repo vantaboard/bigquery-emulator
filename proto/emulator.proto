@@ -239,7 +239,6 @@ message QueryResultRow {
   //     emulator-internal debug signal the conformance harness
   //     reads back to assert per-query routing decisions, never a
   //     stable wire field for BigQuery client libraries.
-  //     Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
   TableSchema schema = 1;
   repeated Cell cells = 2;
   DmlStats dml_stats = 3;

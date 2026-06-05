@@ -41,7 +41,7 @@ cc_library(
         # The `RouteClassifier` + `Disposition` pair surfaces the
         # canonical lowercase-snake route string the handler emits on
         # every reply's trailing `emulator_route` message (see
-        # `.cursor/plans/conformance-routing-matrix.plan.md`).
+        # `docs/ENGINE_POLICY.md`).
         "//backend/engine:disposition",
         "//backend/engine/coordinator:route_classifier",
         "//backend/engine/coordinator:local_coordinator_engine",
@@ -136,7 +136,7 @@ cc_test(
     ],
 )
 
-# StorageWrite handler (plan 15 — storage-read-write-api-plan).
+# StorageWrite handler (storage read/write API surface).
 # Mirrors the storage_read_handler shape: header + .cc + the
 # storage_write proto stubs. Plan 15 lights up the _default +
 # COMMITTED stream types end-to-end; BUFFERED / PENDING return

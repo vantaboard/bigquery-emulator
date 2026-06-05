@@ -76,9 +76,9 @@ tasks:
       fixtures (`conformance/fixtures/functions/`). Targets `~2
       minutes` of wall time, scoped to the `duckdb_native` /
       `duckdb_rewrite` shapes plan-2
-      (`local-exec-04-scan-emits.plan.md`) pins plus the
+      (`docs/ENGINE_POLICY.md`) pins plus the
       `duckdb_udf` shapes plan-3 lands
-      (`local-exec-03-operator-disposition.plan.md`). Wired into the
+      (`docs/ENGINE_POLICY.md`). Wired into the
       PR-gating CI job; run locally before pushing if you touched
       the transpiler, its YAML registries, or the polyfill UDF
       library. Honors EMULATOR_BIN (default `./bin/emulator_main`).
@@ -117,7 +117,7 @@ tasks:
           $OUTPUT_FILE_FLAG
         # array-struct fixtures (`conformance/fixtures/array_struct/`)
         # pin the divergent `ResolvedArrayScan` shapes routed through
-        # the semantic executor by `local-exec-12-arrays-generators.plan.md`.
+        # the semantic executor by `docs/ENGINE_POLICY.md`.
         # Requires `bin/emulator_main` to include the executor's
         # ArrayScan dispatch (plan 8 +); a pre-plan-8 binary will
         # surface NOT_IMPLEMENTED here.
@@ -166,7 +166,7 @@ tasks:
       of shape x route. Reads YAML only (no live emulator). The
       table is a deterministic function of the fixture YAMLs;
       committed to CI as a non-blocking artifact per plan 16
-      (`.cursor/plans/conformance-routing-matrix.plan.md`). Honors
+      (`docs/ENGINE_POLICY.md`). Honors
       OUTPUT_FILE; defaults to stdout.
     cmds:
       - |

@@ -13,7 +13,7 @@
 // can attribute the decision and so future route-label tests can
 // assert which executor served a fixture.
 //
-// Algorithm (see `engine-router-foundation.plan.md`):
+// Algorithm (see `docs/ENGINE_POLICY.md`):
 //
 //   1. Look up the root statement's disposition in
 //      `node_dispositions.yaml`.
@@ -60,7 +60,7 @@ namespace coordinator {
 // Outcome of `RouteClassifier::Classify`. The chosen `disposition`
 // drives the coordinator's executor dispatch; `reason` and
 // `offending_node` are observable surfaces a future
-// `conformance-routing-matrix.plan.md` fixture (or a gateway error
+// `docs/ENGINE_POLICY.md` fixture (or a gateway error
 // message) can read off the engine.
 struct RouteDecision {
   // The route the coordinator dispatches on.

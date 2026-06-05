@@ -1,6 +1,6 @@
 # unpivot: BigQuery UNPIVOT lowers to CROSS JOIN LATERAL (VALUES ...).
 #
-# Pins `local-exec-13-advanced-relational.plan.md` Family 3. The engine
+# Pins `docs/ENGINE_POLICY.md` Family 3. The engine
 # disables `REWRITE_UNPIVOT` so the analyzer hands the route
 # classifier a raw `ResolvedUnpivotScan`; the disposition table
 # routes it through `duckdb_rewrite`; the transpiler's

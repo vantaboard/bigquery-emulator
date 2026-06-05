@@ -62,19 +62,19 @@ plan files **before** the changed artifact is published. The check is:
 1. **Compatibility-surface docs** (this directory) — updated to describe the
    new surface.
 2. **Artifact-producer plan**
-   (`googlesql-prebuilt-producer_2a3b4c5d.plan.md`) — updated to describe the
+   (`docs/ENGINE_POLICY.md`) — updated to describe the
    producer changes needed to emit the new shape.
 3. **Consumer-wiring plan**
-   (`googlesql-prebuilt-consume-wiring_3b4c5d6e.plan.md`) — updated if
+   (`docs/ENGINE_POLICY.md`) — updated if
    wrapper labels / aliases / MODULE.bazel wiring change.
 4. **Entrypoints plan**
-   (`googlesql-prebuilt-entrypoints_4c5d6e7f.plan.md`) — updated if local /
+   (`docs/ENGINE_POLICY.md`) — updated if local /
    CI / Docker / release plumbing must change.
 5. **Safety-gates plan**
-   (`googlesql-prebuilt-safety-gates_5d6e7f80.plan.md`) — updated for any
+   (`docs/ENGINE_POLICY.md`) — updated for any
    change to manifest fields, checksum scope, or parity behaviour.
 6. **Docs and operations plan**
-   (`googlesql-prebuilt-docs-ops_6e7f8091.plan.md`) — updated for user-facing
+   (`docs/ENGINE_POLICY.md`) — updated for user-facing
    diagnostics, troubleshooting steps, or version-bump procedures.
 
 A change that does not touch the surface (e.g. compiler version inside a

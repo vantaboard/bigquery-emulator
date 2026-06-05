@@ -31,7 +31,7 @@ participate in the slower full-suite gate.
 
 ## Route-label assertion
 
-`conformance-routing-matrix.plan.md` (plan 16) shipped the route
+`docs/ENGINE_POLICY.md` (plan 16) shipped the route
 assertion: every fixture in this directory carries an
 `expected.route` of either `duckdb_native` or `duckdb_rewrite` and
 the runner fails if the engine reports a different route. New

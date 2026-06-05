@@ -189,7 +189,7 @@ type Expectation struct {
 	// (the runner then skips the route assertion entirely; see
 	// the package doc above the field set for the rationale).
 	//
-	// Ownership: `.cursor/plans/conformance-routing-matrix.plan.md`.
+	// Ownership: `docs/ENGINE_POLICY.md`.
 	Route string `yaml:"route,omitempty"`
 
 	// RouteAllowlist enumerates the route names the runner accepts

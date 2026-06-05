@@ -6,7 +6,7 @@
 // mutations, and the EXPORT / pipe-EXPORT family land here -- not on
 // the DuckDB SQL evaluator.
 //
-// Per `.cursor/plans/local-exec-01-ddl-catalog.plan.md`:
+// Per `docs/ENGINE_POLICY.md`:
 //
 //   * DDL / metadata / catalog ops bypass the DuckDB SQL evaluator
 //     entirely. The handler is responsible for both (a) the catalog

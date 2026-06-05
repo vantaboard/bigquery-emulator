@@ -8,7 +8,7 @@
 // for an in-query runtime error) carrying a `SemanticErrorReason`
 // payload. The gateway maps the payload onto the BigQuery REST
 // `error.errors[0].reason` token; see
-// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md` "Step 7".
+// `docs/ENGINE_POLICY.md` "Step 7".
 //
 // The plan rule is "no silent approximation": the semantic executor
 // owns the BigQuery-exact error surface. Every reason in the enum

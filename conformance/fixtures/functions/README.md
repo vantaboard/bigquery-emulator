@@ -39,7 +39,7 @@ plan's "no silent approximation" rule).
 
 The fixtures here all resolve to the `duckdb_udf` route once their
 matching `functions.yaml` row flips from `status=planned` to ready.
-`conformance-routing-matrix.plan.md` (plan 16) wires the
+`docs/ENGINE_POLICY.md` (plan 16) wires the
 `expected.route` field; until then this directory does not carry a
 hard route-label assertion -- the route is exercised implicitly via
 the live macro registration in `DuckDbExecutor`.

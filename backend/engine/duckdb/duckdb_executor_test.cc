@@ -2,7 +2,7 @@
 // the contract the future `LocalCoordinatorEngine` relies on: each
 // method takes an already-analyzed `ResolvedStatement` and produces
 // the same wire-facing reply the legacy `DuckDBEngine` shim used
-// to produce before `engine-router-foundation.plan.md` deleted it
+// to produce before `docs/ENGINE_POLICY.md` deleted it
 // in favor of `LocalCoordinatorEngine`. We
 // rebuild the analyzer up-front (the way the coordinator will) and
 // hand the resolved root straight to the executor, so the executor's
@@ -335,7 +335,7 @@ TEST_F(DuckDbExecutorTest,
        ExecuteDdlRejectsCreateTableAfterControlOpMigration) {
   // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
   // `backend/engine/control/control_op_executor.cc` when
-  // `local-exec-01-ddl-catalog.plan.md` landed. The coordinator's
+  // `docs/ENGINE_POLICY.md` landed. The coordinator's
   // `RouteClassifier` dispatches them to the `ControlOpExecutor`
   // directly; the DuckDB executor's `ExecuteDdl` only handles
   // `ALTER TABLE`. Defensively, calling the DuckDB executor with a

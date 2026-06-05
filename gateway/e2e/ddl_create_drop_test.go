@@ -20,13 +20,13 @@ import (
 // inner SELECT continue to lower through the DuckDB transpiler. The
 // engine-policy contract this test pins lives at
 // `docs/ENGINE_POLICY.md` and the route plan in
-// `.cursor/plans/local-exec-01-ddl-catalog.plan.md`.
+// `docs/ENGINE_POLICY.md`.
 //
 // The test:
 //
 //  1. Creates a `src` table and seeds it with three rows via
 //     `tabledata.insertAll` (the canonical seed path; `INSERT VALUES`
-//     is also supported via `local-exec-14-dml-system.plan.md` but
+//     is also supported via `docs/ENGINE_POLICY.md` but
 //     `tabledata.insertAll` keeps the test focused on the DDL story).
 //  2. Runs `CREATE TABLE ds.copy AS SELECT id, name FROM ds.src`
 //     through `jobs.query` and checks the response surfaces
@@ -116,7 +116,7 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 	// REST canonical value for CTAS. The gateway populates the
 	// envelope from the trailing `statement_type` marker the
 	// engine emits per
-	// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Item 5.
+	// `docs/ENGINE_POLICY.md` Item 5.
 	if run.Statistics == nil || run.Statistics.Query == nil {
 		t.Fatalf("statistics.query missing on CTAS response: %+v",
 			run.Statistics)
@@ -164,7 +164,7 @@ func TestDDLCreateTableAsSelectRoundTrip(t *testing.T) {
 // the control-op executor (`backend/engine/control/control_op_executor.cc`)
 // + frontend (`frontend/handlers/query.cc::StatementTypeFor`) +
 // gateway (`gateway/handlers/queries.go`) ship together. Per
-// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Done Criterion #3,
+// `docs/ENGINE_POLICY.md` Done Criterion #3,
 // every supported DDL / metadata / catalog statement must surface
 // the BigQuery REST canonical statement-type string. This test
 // pins three representative shapes (CREATE_TABLE, DROP_TABLE,

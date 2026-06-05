@@ -5,7 +5,7 @@
 //
 // Ported from go-googlesql `api/datatransfer/` (handler.go, handler_runs.go,
 // handler_scheduled_query.go, handlers_project_scoped.go, catalog.go,
-// paging.go) per `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`.
+// paging.go) per `docs/ENGINE_POLICY.md`.
 // Adapter shim: go-googlesql's `apiregion.CheckHTTP` location-mismatch gate
 // is intentionally dropped here — this repo's REST surface does not yet
 // surface regional endpoints and the emulator's docker-compose listener is
