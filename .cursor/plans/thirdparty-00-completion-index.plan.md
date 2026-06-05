@@ -36,7 +36,7 @@ todos:
     content: "thirdparty-11-extract-jobs.plan.md — implement extract jobs to GCS (CSV/JSON/compressed) via DuckDB COPY ... TO (~1 wk, depends on plan 08 and shares GCS plumbing with plan 10)."
     status: pending
   - id: tp12
-    content: "thirdparty-12-routines-crud.plan.md — implement Routines CRUD against a new storage routine registry (~1 wk; coordinates with udf-tvf-module-routing.plan.md for query-time lookup)."
+    content: "thirdparty-12-routines-crud.plan.md — implement Routines CRUD against a new storage routine registry (~1 wk; coordinates with googlesqlite-15-specialized-stubs.plan.md for query-time lookup)."
     status: pending
   - id: tp13
     content: "thirdparty-13-materialized-view-schema.plan.md — fix engine MV output-schema resolution so `SELECT * FROM <mview>` does not collapse to zero columns (~3 d, engine work)."
@@ -170,8 +170,8 @@ flowchart TD
 
 - **12**: Routines CRUD. Adds a storage routine registry and wires
   the `gateway/handlers/routines.go` surface; coordinates with the
-  query-time UDF lookup tracks (`udf-tvf-module-routing.plan.md`,
-  `duckdb-polyfill-udf-library.plan.md`).
+  query-time UDF lookup tracks (`googlesqlite-15-specialized-stubs.plan.md`,
+  `googlesqlite-03-operator-disposition.plan.md`).
 - **13**: Materialized view output-schema resolution. Engine fix in
   `backend/catalog/`; unblocks `QueryMaterializedViewIT`.
 - **14**: Models CRUD (BQML). Designs the engine model registry,

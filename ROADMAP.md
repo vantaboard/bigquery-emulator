@@ -25,15 +25,15 @@ deliberately modeled on Google's [`cloud-spanner-emulator`][spanner]:
 
 ## Execution plans
 
-The remaining unscoped work is the **local multi-strategy execution
-coordinator** — building out the route classifier and the per-route
-executors (DuckDB fast path, DuckDB UDF/polyfill library, semantic
-executor, control-op executor) so every shape the analyzer accepts has
-a planned route disposition with conformance coverage. The execution
-order, terminology, done criteria, and per-route plans live under
-[`.cursor/plans/`](.cursor/plans/); start with the index:
+Active work to green the ported **googlesqlite query suite** is tracked in
+16 sequential themed plans plus an index:
 
-- [`.cursor/plans/local-execution-roadmap-index.plan.md`](.cursor/plans/local-execution-roadmap-index.plan.md) — execution order across the local-execution plan set, with route vocabulary, done criteria, and the rule that every user-visible shape gets a routing disposition plus conformance coverage.
+- [`googlesqlite-00-index.plan.md`](.cursor/plans/googlesqlite-00-index.plan.md) — **start here**: ordered plans 01→16 derived from the baseline emulator test run (`568` failures at stamp `20260603T035812Z`).
+- [`.cursor/plans/googlesqlite-subagent-dispatch.plan.md`](.cursor/plans/googlesqlite-subagent-dispatch.plan.md) — **run with subagents**: one background subagent per plan, parent cleanup between steps.
+
+Route vocabulary, foundation prerequisites, and engine-wide done criteria:
+
+- [`.cursor/plans/local-execution-roadmap-index.plan.md`](.cursor/plans/local-execution-roadmap-index.plan.md) — terminology, foundation plans (`execution-disposition-registry`, `engine-router-foundation`), and links back to the googlesqlite index.
 
 #### History
 
@@ -329,11 +329,11 @@ behind each, and the multi-strategy coordinator is the only
   router degenerates to "always DuckDB fast path" and shapes not in
   the `duckdb_native` set surface `UNIMPLEMENTED`
 - ⏳ Local semantic executor scaffolding
-  (`semantic-executor-core.plan.md`)
+  (`googlesqlite-07-semantic-core-expr.plan.md`)
 - ⏳ DuckDB UDF / polyfill library
-  (`duckdb-polyfill-udf-library.plan.md`)
+  (`googlesqlite-03-operator-disposition.plan.md`)
 - ⏳ Control-op executor for DDL / metadata
-  (`control-op-executor.plan.md`)
+  (`googlesqlite-01-ddl-catalog.plan.md`)
 
 ## Query analysis (C++ via GoogleSQL)
 
@@ -388,7 +388,7 @@ handler.
   zip, outer `UNNEST`, and lateral / cross-join shapes still surface
   `  UNIMPLEMENTED` pending the lateral / multi-array / WITH OFFSET
   shapes, which reroute from the DuckDB fast path to the local
-  semantic executor via `array-struct-semantic-path.plan.md`
+  semantic executor via `googlesqlite-12-arrays-generators.plan.md`
 - 🟡 Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
@@ -400,11 +400,11 @@ handler.
   `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
   `control_op`, `local_stub`, `unsupported`); deferred-lowering
   rows carry a planned route in either
-  `duckdb-polyfill-udf-library.plan.md` or
-  `semantic-functions-compliance.plan.md`, and the unsupported
+  `googlesqlite-03-operator-disposition.plan.md` or
+  `googlesqlite-09-date-time.plan.md`, and the unsupported
   families (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`,
   `ST_*`, ...) are documented in
-  `specialized-feature-policy.plan.md`. The legacy
+  `googlesqlite-15-specialized-stubs.plan.md`. The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired by
   `execution-disposition-registry.plan.md`. `SAFE.<fn>(...)` is
   handled uniformly regardless of disposition
@@ -435,13 +435,13 @@ public-facing policy.
 
 | Route                | What it is                                                                                  | Plan                                              |
 |----------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------|
-| `duckdb_native`      | Lowers directly to DuckDB SQL with semantics that already match BigQuery's exactly.         | `duckdb-fast-path-stabilization.plan.md`          |
-| `duckdb_rewrite`     | Lowers to DuckDB SQL with a deliberate rewrite (e.g. struct/array shape rewrites, BigQuery JSON operators -> DuckDB JSON operators). | `duckdb-fast-path-stabilization.plan.md`          |
-| `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | `duckdb-polyfill-udf-library.plan.md`             |
-| `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | `semantic-executor-core.plan.md` + per-family plans |
-| `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | `control-op-executor.plan.md`                     |
-| `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | `specialized-feature-policy.plan.md`              |
-| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | `specialized-feature-policy.plan.md`              |
+| `duckdb_native`      | Lowers directly to DuckDB SQL with semantics that already match BigQuery's exactly.         | `googlesqlite-04-scan-emits.plan.md`          |
+| `duckdb_rewrite`     | Lowers to DuckDB SQL with a deliberate rewrite (e.g. struct/array shape rewrites, BigQuery JSON operators -> DuckDB JSON operators). | `googlesqlite-04-scan-emits.plan.md`          |
+| `duckdb_udf`         | Adds a DuckDB UDF / macro to make the BigQuery function correct locally.                    | `googlesqlite-03-operator-disposition.plan.md`             |
+| `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics; bypasses DuckDB SQL evaluation. | `googlesqlite-07-semantic-core-expr.plan.md` + per-family plans |
+| `control_op`         | DDL / metadata / catalog ops routed straight through the storage layer.                     | `googlesqlite-01-ddl-catalog.plan.md`                     |
+| `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | `googlesqlite-15-specialized-stubs.plan.md`              |
+| `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | `googlesqlite-15-specialized-stubs.plan.md`              |
 
 - 🟡 Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`
@@ -468,9 +468,9 @@ public-facing policy.
   `ResolvedSubqueryExpr::parameter_list()`) but the executor
   itself stays a structured `kNotImplemented` until the
   outer-row iteration primitive lands -- tracked under
-  `cte-subquery-routing.plan.md`. Recursive CTEs and the LIKE
+  `googlesqlite-02-withscan-cte.plan.md`. Recursive CTEs and the LIKE
   ANY / ALL subquery family remain out of plan-10 scope and
-  surface UNIMPLEMENTED; see `advanced-relational-routing.plan.md`
+  surface UNIMPLEMENTED; see `googlesqlite-13-advanced-relational.plan.md`
 
 ## DML / DDL
 
@@ -483,7 +483,7 @@ public-facing policy.
   (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
   `RETURNING`, and `ResolvedPipeInsertScan` continue to surface
   `UNIMPLEMENTED` and stay tracked under
-  `dml-local-executor.plan.md`. Conformance fixtures may now seed
+  `googlesqlite-14-dml-system.plan.md`. Conformance fixtures may now seed
   rows via either `tabledata.insertAll` or `INSERT VALUES` `sql:`
   steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
@@ -499,12 +499,12 @@ public-facing policy.
   `EXPORT DATA`, function registration, `ALTER TABLE` still surface
   `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE` continues
   to lower through the DuckDB engine pending its own subagent. Tracked
-  via `control-op-executor.plan.md` for the deferred handlers and
-  `specialized-feature-policy.plan.md` for materialized-view refresh
+  via `googlesqlite-01-ddl-catalog.plan.md` for the deferred handlers and
+  `googlesqlite-15-specialized-stubs.plan.md` for materialized-view refresh
   semantics
 - 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
-  — `procedural-scripting-executor.plan.md` and
-  `udf-tvf-module-routing.plan.md`. `ASSERT <expr> [AS '<msg>']`
+  — `googlesqlite-14-dml-system.plan.md` and
+  `googlesqlite-15-specialized-stubs.plan.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
   surfaces BigQuery's documented `Assertion failed` envelope; the
   scripting variable environment has been generalized into the
@@ -522,7 +522,7 @@ public-facing policy.
   (the prerequisite for cross-request function persistence)
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
-  `dml-local-executor.plan.md` Family 1-3 plus the existing DuckDB
+  `googlesqlite-14-dml-system.plan.md` Family 1-3 plus the existing DuckDB
   MERGE path). Deferred shapes (INSERT ... SELECT, deep-STRUCT
   UPDATE, MERGE harder branches, RETURNING, PipeInsertScan) keep
   the field absent until they land; the row count is otherwise
@@ -691,7 +691,7 @@ and
   shapes still on the `unsupported` route
   (INSERT / UPDATE / DELETE / scalar-only SELECT today, plus the
   unsupported-by-design families documented in
-  `specialized-feature-policy.plan.md`).
+  `googlesqlite-15-specialized-stubs.plan.md`).
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
   later if there's demand, and only with a local implementation or a
   deterministic stub — never with a cloud passthrough.
@@ -772,12 +772,12 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     CONFLICT` plus separate `UPDATE` / `DELETE` statements doesn't cover
     the full matrix. The easy shapes route `duckdb_native` /
     `duckdb_rewrite` today; the harder branches will route through the
-    `dml-local-executor.plan.md` semantic path so we don't have to
+    `googlesqlite-14-dml-system.plan.md` semantic path so we don't have to
     pretend DuckDB SQL can model them.
   - **Deep STRUCT mutations.** `UPDATE t SET s.a.b = ...` is well-defined
     in BigQuery but DuckDB's struct field updates are limited.
     Anything past a single-level rewrite routes through the
-    `array-struct-semantic-path.plan.md` semantic executor so deep
+    `googlesqlite-12-arrays-generators.plan.md` semantic executor so deep
     nested updates don't have to round-trip through JSON to fake
     field-existence semantics.
   - **Google-specific built-ins.** `APPROX_QUANTILES`, `HLL_COUNT.*`,
@@ -787,13 +787,13 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     function-disposition table now records a routing disposition per
     entry; close-enough functions become `duckdb_udf`, BigQuery-exact
     ones become `semantic_executor`, and entire families
-    (`specialized-feature-policy.plan.md`) declare a policy of "local
+    (`googlesqlite-15-specialized-stubs.plan.md`) declare a policy of "local
     implementation now," "deterministic stub with BigQuery-shaped
     error," or "unsupported by design."
   - **NULL-equality, ordering, and float corner cases** between the two
     engines are subtly different (e.g., NaN ordering, `IS NULL` in joins,
     integer overflow behavior). Shapes that depend on these route to
-    the semantic executor (`semantic-functions-compliance.plan.md`)
+    the semantic executor (`googlesqlite-09-date-time.plan.md`)
     rather than being approximated in DuckDB SQL.
   - **JSON.** BigQuery's `JSON` type and `JSON_VALUE` / `JSON_QUERY`
     functions are mostly portable. The common cases route

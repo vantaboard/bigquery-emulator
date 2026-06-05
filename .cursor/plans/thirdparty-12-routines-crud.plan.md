@@ -1,6 +1,6 @@
 ---
 name: routines CRUD
-overview: "Implement the routines.* CRUD surface (UDFs, stored procedures, table-valued functions) against a new persistent routine registry in `Storage`. Coordinates with the query-time UDF lookup that `udf-tvf-module-routing.plan.md` and `duckdb-polyfill-udf-library.plan.md` own."
+overview: "Implement the routines.* CRUD surface (UDFs, stored procedures, table-valued functions) against a new persistent routine registry in `Storage`. Coordinates with the query-time UDF lookup that `googlesqlite-15-specialized-stubs.plan.md` and `googlesqlite-03-operator-disposition.plan.md` own."
 todos:
   - id: tp12_registry
     content: "Design + implement a persistent Routines registry in backend/storage/ (catalog-side; columns mirror BigQuery's Routine resource: name, type, language, definitionBody, args, returnType, etag, creation/lastModified time)."
@@ -15,7 +15,7 @@ todos:
     content: "RoutineUpdate (PUT) + RoutinePatch (PATCH) + RoutineDelete: standard CRUD against the registry; honor If-Match etag."
     status: pending
   - id: tp12_query_lookup
-    content: "Confirm the query-time routine lookup (owned by udf-tvf-module-routing.plan.md) reads from the same registry; if not, add a thin adapter so a CREATE FUNCTION via routines.insert is invokable in the next query (and vice versa)."
+    content: "Confirm the query-time routine lookup (owned by googlesqlite-15-specialized-stubs.plan.md) reads from the same registry; if not, add a thin adapter so a CREATE FUNCTION via routines.insert is invokable in the next query (and vice versa)."
     status: pending
   - id: tp12_tests
     content: "Unit-test the registry + handler set; integration-test via the node Routines suite and via a SQL CREATE FUNCTION + SELECT round-trip."
@@ -36,8 +36,8 @@ isProject: false
   - (cascade) `RoutineUpdate`
 - Stubs: [`gateway/handlers/routines.go`](../../gateway/handlers/routines.go).
 - Coordination plans (query-time UDF lookup, not CRUD):
-  - [`udf-tvf-module-routing.plan.md`](./udf-tvf-module-routing.plan.md)
-  - [`duckdb-polyfill-udf-library.plan.md`](./duckdb-polyfill-udf-library.plan.md)
+  - [`googlesqlite-15-specialized-stubs.plan.md`](./googlesqlite-15-specialized-stubs.plan.md)
+  - [`googlesqlite-03-operator-disposition.plan.md`](./googlesqlite-03-operator-disposition.plan.md)
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ isProject: false
 A persistent routine registry in `Storage` plus the six standard CRUD
 handlers (Insert, Get, List, Update, Patch, Delete). The query-time
 half (resolving a routine reference inside a SELECT and dispatching
-it) is owned by `udf-tvf-module-routing.plan.md`; this plan
+it) is owned by `googlesqlite-15-specialized-stubs.plan.md`; this plan
 guarantees they share one source of truth.
 
 ## Implementation
@@ -89,7 +89,7 @@ dataset (mirror Tables).
 ### Query-time integration
 
 Confirm that
-[`udf-tvf-module-routing.plan.md`](./udf-tvf-module-routing.plan.md)
+[`googlesqlite-15-specialized-stubs.plan.md`](./googlesqlite-15-specialized-stubs.plan.md)
 already resolves routine references through the same `Storage`
 surface. If it does, no change. If it does not (e.g. it reads from a
 separate in-memory map populated by `CREATE FUNCTION` DDL), add a
