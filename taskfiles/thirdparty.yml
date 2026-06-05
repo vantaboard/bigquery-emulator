@@ -1012,6 +1012,7 @@ tasks:
         if [ -n "$_bqhost" ] && ! printf '%s' "$_bqhost" | grep -qE '^https?://'; then
           export BIGQUERY_EMULATOR_HOST="http://${_bqhost#//}"
         fi
+        export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
         py="${DATAFRAME_SAMPLES_PYTHON:-}"
         if [ -z "$py" ]; then
           py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
