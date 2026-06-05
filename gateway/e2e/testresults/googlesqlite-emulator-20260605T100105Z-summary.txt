@@ -1,5 +1,0 @@
-pass=705 fail=0 skip=2
-
-Skipped tests:
-  TestFilterFieldsProto
-  TestAnonymizedDPAggregate
