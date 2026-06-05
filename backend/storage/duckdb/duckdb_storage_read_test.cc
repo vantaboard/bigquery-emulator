@@ -394,6 +394,43 @@ TEST(SchemaToDuckDBType, RendersRepeatedAsList) {
   EXPECT_EQ(schema::ColumnSchemaToDuckDBType(col), "VARCHAR[]");
 }
 
+TEST_F(DuckDBStorageTest, CreateReadStreamRoundTripsRepeatedStringColumn) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "people_tags"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  schema::TableSchema schema;
+  schema::ColumnSchema id;
+  id.name = "id";
+  id.type = schema::ColumnType::kInt64;
+  schema.columns.push_back(id);
+  schema::ColumnSchema tags;
+  tags.name = "tags";
+  tags.type = schema::ColumnType::kString;
+  tags.mode = schema::ColumnMode::kRepeated;
+  schema.columns.push_back(tags);
+  ASSERT_TRUE(store.CreateTable(table, schema).ok());
+
+  Row row;
+  row.cells.push_back(Value::Int64(0));
+  std::vector<Value> tag_values;
+  tag_values.push_back(Value::String("t0"));
+  row.cells.push_back(Value::Array(std::move(tag_values)));
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan({row})).ok());
+
+  auto iter_or = store.CreateReadStream(table, ReadFilter{});
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  ASSERT_EQ(scanned[0].cells[1].kind(), Value::Kind::kArray);
+  ASSERT_EQ(scanned[0].cells[1].array_value().size(), 1u);
+  EXPECT_EQ(scanned[0].cells[1].array_value()[0].string_value(), "t0");
+}
+
 TEST(SchemaToDuckDBType, RendersStructWithNestedFields) {
   schema::ColumnSchema col;
   col.name = "person";

@@ -39,7 +39,7 @@ Log: `.logs/thirdparty-20260605-134407.log` (exit 201, `THIRDPARTY_REBUILD=1`)
 
 Dispatch: `.cursor/plans/unblock_subagent_dispatch_896b06e4.plan.md`  
 Baseline: `.logs/thirdparty-20260605-134407.log`  
-**NEXT:** `unblock-08-storage-grpc`
+**NEXT:** `unblock-09-test-isolation`
 
 | Plan | Attempts | Result | Commit | Notes |
 |------|----------|--------|--------|-------|
@@ -50,7 +50,7 @@ Baseline: `.logs/thirdparty-20260605-134407.log`
 | unblock-05-query-params | 1 | PASS | f8f4fb0 | ARRAY/TIMESTAMP/STRUCT handler+engine binding |
 | unblock-06-load-avro-orc | 1 | PARTIAL | 4670fec | AVRO+ORC URI load pass; truncate/resumable + node Jobs remain |
 | unblock-07-hive-external | 1 | PASS | bb2bbc3 | CreateTableExternalHivePartitionedIT green |
-| unblock-08-storage-grpc | — | pending | — | — |
+| unblock-08-storage-grpc | 2 | DEFERRED | — | bazel storage tests pass; Java ITs need public gRPC shim + Arrow IPC |
 | unblock-09-test-isolation | — | pending | — | — |
 | unblock-10-final-aggregator | — | pending | — | — |
 

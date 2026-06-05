@@ -77,7 +77,8 @@ std::string RenderPredicateClause(const EqualityPredicate& pred);
 
 std::string RenderColumnIdentList(const schema::TableSchema& schema);
 
-std::string RenderSelectedColumnIdentList(absl::Span<const std::string> names);
+std::string RenderSelectedColumnIdentList(const schema::TableSchema& schema,
+                                          absl::Span<const std::string> names);
 
 absl::StatusOr<schema::TableSchema> ProjectSchema(
     const schema::TableSchema& schema, absl::Span<const std::string> names);
@@ -104,6 +105,11 @@ absl::Status SnapshotTempTableToParquet(absl::string_view tag,
                                         absl::string_view tmp_table,
                                         const std::string& tmp_path,
                                         const std::string& parquet_path);
+
+// Parses DuckDB's VARCHAR rendering of a LIST (`[a, b]`) into
+// `Value::Array` using `element` as the per-element schema.
+absl::StatusOr<Value> ParseDuckDBListVarchar(
+    absl::string_view text, const schema::ColumnSchema& element);
 
 absl::StatusOr<Value> ReadCell(::duckdb_result* result,
                                idx_t col,

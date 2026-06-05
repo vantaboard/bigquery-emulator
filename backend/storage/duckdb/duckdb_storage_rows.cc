@@ -35,16 +35,28 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
                                idx_t col,
                                idx_t row,
                                const schema::ColumnSchema& column) {
+  // REPEATED LIST columns: decode before the generic NULL probe.
+  // DuckDB's legacy `duckdb_value_is_null` helper can report LIST
+  // cells as NULL even when `duckdb_value_varchar` still renders the
+  // `[elem, ...]` text we wrote via `LIST_VALUE(...)`.
+  if (column.mode == schema::ColumnMode::kRepeated) {
+    auto* str = ::duckdb_value_varchar(result, col, row);
+    const std::string text = str == nullptr ? std::string("") : str;
+    if (str != nullptr) ::duckdb_free(str);
+    schema::ColumnSchema element = column;
+    element.mode = schema::ColumnMode::kNullable;
+    auto parsed = internal::ParseDuckDBListVarchar(text, element);
+    if (!parsed.ok()) {
+      return absl::InternalError(
+          absl::StrCat("ReadCell: failed to decode REPEATED column `",
+                       column.name,
+                       "`: ",
+                       parsed.status().message()));
+    }
+    return *parsed;
+  }
   if (::duckdb_value_is_null(result, col, row)) return Value::Null();
-  // REPEATED cells / ARRAY: pull them through `duckdb_value_varchar`
-  // and parse — DuckDB renders LIST values as `[a, b, c]` which is
-  // the same shape the engines emit; the integration test does not
-  // exercise repeated cells, so we keep this branch on the textual
-  // path and revisit when the engine needs typed arrays. Future
-  // TODO(brighten-tompkins): switch to `duckdb_result_get_chunk` for typed
-  // extraction without the lossy varchar round-trip.
-  if (column.mode == schema::ColumnMode::kRepeated ||
-      column.type == schema::ColumnType::kArray ||
+  if (column.type == schema::ColumnType::kArray ||
       column.type == schema::ColumnType::kStruct) {
     auto* str = ::duckdb_value_varchar(result, col, row);
     Value out = Value::String(str == nullptr ? std::string("") : str);
@@ -392,7 +404,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     if (!projected_or.ok()) return projected_or.status();
     effective_schema = std::move(*projected_or);
     select_cols =
-        internal::RenderSelectedColumnIdentList(filter.selected_fields);
+        internal::RenderSelectedColumnIdentList(schema, filter.selected_fields);
   } else {
     select_cols = internal::RenderColumnIdentList(schema);
   }

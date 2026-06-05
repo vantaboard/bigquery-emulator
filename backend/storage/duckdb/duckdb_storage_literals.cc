@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdlib>
 #include <string>
 
 #include "absl/status/status.h"
@@ -188,17 +189,29 @@ absl::StatusOr<std::string> RenderCellLiteral(
   // element renderer so the recursive call doesn't re-enter the
   // array branch.
   if (column.mode == schema::ColumnMode::kRepeated) {
+    if (cell.kind() != Value::Kind::kArray) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("AppendRows: REPEATED column '",
+                       column.name,
+                       "' expects ARRAY but row provided kind ",
+                       static_cast<int>(cell.kind())));
+    }
     schema::ColumnSchema element = column;
     element.mode = schema::ColumnMode::kNullable;
-    std::string out = "[";
     const auto& elems = cell.array_value();
+    const std::string duckdb_list_type =
+        schema::ColumnSchemaToDuckDBType(element);
+    if (elems.empty()) {
+      return absl::StrCat("CAST([] AS ", duckdb_list_type, ")");
+    }
+    std::string out = "CAST([";
     for (size_t i = 0; i < elems.size(); ++i) {
       if (i > 0) absl::StrAppend(&out, ", ");
       auto inner_or = RenderCellLiteral(elems[i], element);
       if (!inner_or.ok()) return inner_or.status();
       absl::StrAppend(&out, *inner_or);
     }
-    absl::StrAppend(&out, "]");
+    absl::StrAppend(&out, "] AS ", duckdb_list_type, ")");
     return out;
   }
   return RenderScalarLiteral(cell, column);
@@ -254,11 +267,19 @@ std::string RenderPredicateClause(const EqualityPredicate& pred) {
 // trailing parenthesis). Used inside the SELECT projection list for
 // `read_parquet` scans so the column order matches the table schema
 // even if the on-disk parquet shuffled them.
+std::string RenderColumnSelectExpr(const schema::ColumnSchema& column) {
+  const std::string ident = QuoteIdent(column.name);
+  if (column.mode == schema::ColumnMode::kRepeated) {
+    return absl::StrCat("CAST(", ident, " AS VARCHAR) AS ", ident);
+  }
+  return ident;
+}
+
 std::string RenderColumnIdentList(const schema::TableSchema& schema) {
   std::string out;
   for (size_t i = 0; i < schema.columns.size(); ++i) {
     if (i > 0) absl::StrAppend(&out, ", ");
-    absl::StrAppend(&out, QuoteIdent(schema.columns[i].name));
+    absl::StrAppend(&out, RenderColumnSelectExpr(schema.columns[i]));
   }
   return out;
 }
@@ -270,11 +291,22 @@ std::string RenderColumnIdentList(const schema::TableSchema& schema) {
 // caller-supplied order. Empty `names` returns an empty string;
 // callers must fall back to `RenderColumnIdentList(schema)` in that
 // case (the SQL parser does not accept an empty SELECT list).
-std::string RenderSelectedColumnIdentList(absl::Span<const std::string> names) {
+std::string RenderSelectedColumnIdentList(const schema::TableSchema& schema,
+                                          absl::Span<const std::string> names) {
   std::string out;
   for (size_t i = 0; i < names.size(); ++i) {
     if (i > 0) absl::StrAppend(&out, ", ");
-    absl::StrAppend(&out, QuoteIdent(names[i]));
+    bool found = false;
+    for (const auto& column : schema.columns) {
+      if (column.name == names[i]) {
+        absl::StrAppend(&out, RenderColumnSelectExpr(column));
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      absl::StrAppend(&out, QuoteIdent(names[i]));
+    }
   }
   return out;
 }
