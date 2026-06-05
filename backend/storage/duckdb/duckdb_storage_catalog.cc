@@ -45,9 +45,8 @@ absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
     return internal::FilesystemStatus(
         absl::StrCat("failed to create dataset dir: ", ds_dir.string()), ec);
   }
-  const auto meta_status =
-      internal::WriteFileAtomic(DatasetMetaPath(id),
-                               internal::RenderDatasetMetaJson(location));
+  const auto meta_status = internal::WriteFileAtomic(
+      DatasetMetaPath(id), internal::RenderDatasetMetaJson(location));
   if (!meta_status.ok()) {
     fs::remove_all(ds_dir, ec);
     return meta_status;
@@ -57,10 +56,10 @@ absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
   // The two are not strictly redundant: the schema lets the DuckDB
   // engine attach tables by qualified name without re-deriving the
   // directory from the data dir on every query.
-  const auto sql_status = internal::RunSql(
-      impl_.get(),
-      absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                   internal::QuoteIdent(schema_name)));
+  const auto sql_status =
+      internal::RunSql(impl_.get(),
+                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                    internal::QuoteIdent(schema_name)));
   if (!sql_status.ok()) {
     fs::remove_all(ds_dir, ec);
     return sql_status;
@@ -115,12 +114,10 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
   // the file-tree removal above (every table file is gone, so any
   // catalog references in DuckDB must go too).
   const std::string schema_name = DuckDBSchemaName(id);
-  return internal::RunSql(
-      impl_.get(),
-      absl::StrCat(
-          "DROP SCHEMA IF EXISTS ",
-          internal::QuoteIdent(schema_name),
-          " CASCADE"));
+  return internal::RunSql(impl_.get(),
+                          absl::StrCat("DROP SCHEMA IF EXISTS ",
+                                       internal::QuoteIdent(schema_name),
+                                       " CASCADE"));
 }
 
 absl::StatusOr<std::vector<DatasetId>> DuckDBStorage::ListDatasets(

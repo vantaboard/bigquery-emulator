@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -119,7 +118,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
       std::string col = EmitColumnRef(item->column_ref());
       if (col.empty()) return "";
       order_items.push_back(absl::StrCat(
-          col, internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+          col,
+          internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
     }
     if (!order_items.empty()) {
       order_suffix =
@@ -134,8 +134,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
   if (name == "array_concat_agg") {
     std::string prefix = node->distinct() ? "DISTINCT " : "";
     if (!has_order) {
-      order_suffix =
-          absl::StrCat(" ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol), " ASC");
+      order_suffix = absl::StrCat(
+          " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol), " ASC");
     }
     std::string list_body = absl::StrCat(
         "list(", prefix, absl::StrJoin(args, ", "), order_suffix, ")");
@@ -176,7 +176,9 @@ std::string Transpiler::EmitAggregateFunctionCall(
   if (name == "array_agg" && !has_order && !has_limit) {
     const std::string rn_order =
         input_rn_ordering_
-            ? absl::StrCat(" ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol), " ASC")
+            ? absl::StrCat(" ORDER BY ",
+                           internal::QuoteIdent(internal::kBqInputRnCol),
+                           " ASC")
             : "";
     std::string body = node->distinct()
                            ? absl::StrCat("array_agg(DISTINCT ", args[0], ")")

@@ -23,8 +23,12 @@ int RouteClassifierPriority(Disposition d);
 // disposition seen so far.
 class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
  public:
-  Disposition disposition() const { return disposition_; }
-  const std::string& offending_node() const { return offending_node_; }
+  Disposition disposition() const {
+    return disposition_;
+  }
+  const std::string& offending_node() const {
+    return offending_node_;
+  }
 
   absl::Status DefaultVisit(const ::googlesql::ResolvedNode* node) override;
   absl::Status VisitResolvedFunctionCall(

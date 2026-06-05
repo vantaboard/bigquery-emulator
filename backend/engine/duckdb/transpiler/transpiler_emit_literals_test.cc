@@ -165,7 +165,6 @@ TEST_F(TranspilerTest, EmitFunctionCallSafeModeReturnsEmpty) {
       t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()), "");
 }
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

@@ -173,7 +173,7 @@ absl::StatusOr<std::vector<storage::Row>> ReadBackTable(
 // toward `updated_row_count`, mirroring BigQuery's behavior of only
 // surfacing actually-modified rows in `dmlStats`.
 DmlStats DiffByPrimaryKey(absl::Span<const storage::Row> before,
-                                    absl::Span<const storage::Row> after) {
+                          absl::Span<const storage::Row> after) {
   DmlStats stats;
   absl::flat_hash_map<std::string, const storage::Row*> before_by_pk;
   before_by_pk.reserve(before.size());

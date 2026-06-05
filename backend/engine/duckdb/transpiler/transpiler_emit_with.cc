@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -170,7 +169,8 @@ std::string Transpiler::EmitWithScan(
   const bool recursive = node->recursive();
   const bool saved_rn_at_with = input_rn_ordering_;
   input_rn_ordering_ = false;
-  const bool body_needs_input_rn = internal::ScanTreeContainsAnalytic(node->query());
+  const bool body_needs_input_rn =
+      internal::ScanTreeContainsAnalytic(node->query());
   const std::vector<std::string> saved_output_order = output_order_items_;
   bool any_cte_has_rn = false;
   std::vector<std::string> ctes;
@@ -216,11 +216,12 @@ std::string Transpiler::EmitWithScan(
           quoted_cols.empty()
               ? std::string()
               : absl::StrCat("(", absl::StrJoin(quoted_cols, ", "), ")");
-      ctes.push_back(absl::StrCat(internal::QuoteIdent(entry->with_query_name()),
-                                  cols_clause,
-                                  " AS (",
-                                  body_sql,
-                                  ")"));
+      ctes.push_back(
+          absl::StrCat(internal::QuoteIdent(entry->with_query_name()),
+                       cols_clause,
+                       " AS (",
+                       body_sql,
+                       ")"));
     } else {
       std::string sub = EmitScan(sub_scan);
       if (sub.empty()) return "";
@@ -238,9 +239,10 @@ std::string Transpiler::EmitWithScan(
       std::vector<std::string> cols;
       cols.reserve(sub_scan->column_list_size());
       for (int j = 0; j < sub_scan->column_list_size(); ++j) {
-        cols.push_back(absl::StrCat(internal::QuoteIdent(sub_scan->column_list(j).name()),
-                                    " AS ",
-                                    internal::QuoteIdent(WithScanColumnAnchor(j))));
+        cols.push_back(
+            absl::StrCat(internal::QuoteIdent(sub_scan->column_list(j).name()),
+                         " AS ",
+                         internal::QuoteIdent(WithScanColumnAnchor(j))));
       }
       std::string projected;
       if (cols.empty()) {
@@ -255,8 +257,11 @@ std::string Transpiler::EmitWithScan(
                                  internal::QuoteIdent(internal::kBqInputRnCol),
                                  projected.substr(projected.find(" FROM ")));
       }
-      ctes.push_back(absl::StrCat(
-          internal::QuoteIdent(entry->with_query_name()), " AS (", projected, ")"));
+      ctes.push_back(
+          absl::StrCat(internal::QuoteIdent(entry->with_query_name()),
+                       " AS (",
+                       projected,
+                       ")"));
       any_cte_has_rn = any_cte_has_rn || cte_has_rn;
     }
     input_rn_ordering_ = saved_rn_in_cte;
@@ -382,14 +387,16 @@ std::string Transpiler::EmitWithRefScan(
   if (node == nullptr) return "";
   if (node->with_query_name().empty()) return "";
   if (node->column_list_size() == 0) {
-    return absl::StrCat("SELECT * FROM ", internal::QuoteIdent(node->with_query_name()));
+    return absl::StrCat("SELECT * FROM ",
+                        internal::QuoteIdent(node->with_query_name()));
   }
   std::vector<std::string> cols;
   cols.reserve(node->column_list_size());
   for (int i = 0; i < node->column_list_size(); ++i) {
-    cols.push_back(absl::StrCat(internal::QuoteIdent(WithScanColumnAnchor(i)),
-                                " AS ",
-                                internal::QuoteIdent(node->column_list(i).name())));
+    cols.push_back(
+        absl::StrCat(internal::QuoteIdent(WithScanColumnAnchor(i)),
+                     " AS ",
+                     internal::QuoteIdent(node->column_list(i).name())));
   }
   if (input_rn_ordering_) {
     cols.push_back(internal::QuoteIdent(internal::kBqInputRnCol));

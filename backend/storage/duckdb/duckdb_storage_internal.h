@@ -3,8 +3,6 @@
 
 // Shared helpers for the DuckDB storage translation units.
 
-#include "backend/storage/duckdb/duckdb_storage.h"
-
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -14,6 +12,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"

@@ -388,7 +388,6 @@ TEST_F(TranspilerTest, EmitAggregateScanGroupingCallProjectsBitMask) {
 
 // --- Order By -----------------------------------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

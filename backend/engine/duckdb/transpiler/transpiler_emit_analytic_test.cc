@@ -143,7 +143,6 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
 // --- Top-level SELECT (QueryStmt / ProjectScan / SingleRowScan /
 //     OutputColumn / ComputedColumn) -----------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

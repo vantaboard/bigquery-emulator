@@ -362,7 +362,6 @@ TEST_F(TranspilerTest, EmitSetOperationScanExceptAllEmitsKeyword) {
 
 // --- Sample scan -------------------------------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

@@ -216,7 +216,6 @@ TEST_F(TranspilerTest, EmitGetJsonFieldNullExprFallsBack) {
 
 // --- Set operations ----------------------------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

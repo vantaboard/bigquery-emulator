@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -230,7 +229,8 @@ std::string Transpiler::EmitOrderByScan(
     std::string col = EmitColumnRef(item->column_ref());
     if (col.empty()) return "";
     items.push_back(absl::StrCat(
-        col, internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+        col,
+        internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
   }
   if (items.empty()) return "";
   return absl::StrCat(

@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"

@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/scan_eval_internal.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <map>
@@ -13,6 +11,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"

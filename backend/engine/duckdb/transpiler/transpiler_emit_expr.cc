@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -128,8 +127,10 @@ std::string Transpiler::EmitMakeStruct(
   for (int i = 0; i < node->field_list_size(); ++i) {
     std::string v = EmitExpr(node->field_list(i));
     if (v.empty()) return "";
-    kvs.push_back(
-        absl::StrCat(internal::QuoteString(internal::ResolveStructFieldName(*st, i)), ": ", v));
+    kvs.push_back(absl::StrCat(
+        internal::QuoteString(internal::ResolveStructFieldName(*st, i)),
+        ": ",
+        v));
   }
   return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
 }
@@ -163,7 +164,10 @@ std::string Transpiler::EmitGetStructField(
   // `ResolvedAST::CheckFieldsAccessed` otherwise tears down deep
   // copies through the conformance harness.
   (void)node->field_expr_is_positional();
-  return absl::StrCat(base, ".", internal::QuoteIdent(internal::ResolveStructFieldName(*st, idx)));
+  return absl::StrCat(
+      base,
+      ".",
+      internal::QuoteIdent(internal::ResolveStructFieldName(*st, idx)));
 }
 
 std::string Transpiler::EmitGetJsonField(
@@ -396,7 +400,8 @@ std::string Transpiler::EmitComputedColumn(
   if (node == nullptr) return "";
   std::string expr = EmitExpr(node->expr());
   if (expr.empty()) return "";
-  return absl::StrCat(expr, " AS ", internal::QuoteIdent(node->column().name()));
+  return absl::StrCat(
+      expr, " AS ", internal::QuoteIdent(node->column().name()));
 }
 
 }  // namespace transpiler

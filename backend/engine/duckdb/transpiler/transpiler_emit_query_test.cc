@@ -254,7 +254,6 @@ TEST_F(TranspilerTest, EmitQueryStmtFallsBackOnUnloweredProjection) {
 
 // --- Parameters ---------------------------------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

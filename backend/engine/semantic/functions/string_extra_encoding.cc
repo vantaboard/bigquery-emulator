@@ -1,6 +1,3 @@
-#include "backend/engine/semantic/functions/string_extra_internal.h"
-#include "backend/engine/semantic/functions/string_funcs.h"
-
 #include <cctype>
 #include <cstring>
 #include <memory>
@@ -14,6 +11,8 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/functions/string_extra_internal.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/hash.h"
 #include "googlesql/public/functions/normalize_mode.pb.h"
@@ -148,7 +147,6 @@ absl::StatusOr<Value> FarmFingerprintFunc(const std::vector<Value>& args) {
   }
   return Value::Int64(::googlesql::functions::FarmFingerprint(input));
 }
-
 
 }  // namespace functions
 }  // namespace semantic

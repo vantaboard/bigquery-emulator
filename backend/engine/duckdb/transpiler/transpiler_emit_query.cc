@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -106,8 +105,8 @@ std::string Transpiler::EmitQueryStmt(
         std::any_of(output_order_items_.begin(),
                     output_order_items_.end(),
                     [](const std::string& item) {
-                      return item.find(internal::QuoteIdent(internal::kBqInputRnCol)) !=
-                             std::string::npos;
+                      return item.find(internal::QuoteIdent(
+                                 internal::kBqInputRnCol)) != std::string::npos;
                     });
     if (!extra_order_cols.empty() || order_needs_rn) {
       std::vector<std::string> inner_select = outputs;
@@ -136,7 +135,8 @@ std::string Transpiler::EmitQueryStmt(
   } else if (input_rn_ordering_) {
     // DuckDB allows ORDER BY a column from the inner subquery even when
     // the outer SELECT does not project it (UNNEST input-order tests).
-    absl::StrAppend(&sql, " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol));
+    absl::StrAppend(
+        &sql, " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol));
     input_rn_ordering_ = false;
   }
   query_output_column_names_.clear();
@@ -238,7 +238,8 @@ std::string Transpiler::EmitProjectScan(
 
   for (const std::string& item : output_order_items_) {
     const std::string col = internal::OrderItemLeadingColumn(item);
-    if (col.empty() || col == internal::QuoteIdent(internal::kBqInputRnCol)) continue;
+    if (col.empty() || col == internal::QuoteIdent(internal::kBqInputRnCol))
+      continue;
     if (std::find(projections.begin(), projections.end(), col) !=
         projections.end()) {
       continue;
@@ -293,8 +294,9 @@ std::string Transpiler::EmitTableScan(
       // didn't have to disambiguate (a single-table SELECT *).
       projections.push_back(internal::QuoteIdent(src_name));
     } else {
-      projections.push_back(
-          absl::StrCat(internal::QuoteIdent(src_name), " AS ", internal::QuoteIdent(out_name)));
+      projections.push_back(absl::StrCat(internal::QuoteIdent(src_name),
+                                         " AS ",
+                                         internal::QuoteIdent(out_name)));
     }
   }
   std::string select_list =
@@ -335,7 +337,6 @@ std::string Transpiler::EmitFilterScan(
   if (filter.empty()) return "";
   return absl::StrCat("SELECT * FROM (", input, ") WHERE ", filter);
 }
-
 
 }  // namespace transpiler
 }  // namespace duckdb

@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/scan_eval_internal.h"
-
 #include <algorithm>
 #include <map>
 #include <string>
@@ -12,6 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
+#include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -89,7 +88,6 @@ int CompareArrayAggOrderKey(const ::googlesql::ResolvedOrderByItem& item,
   if (item.is_descending()) less = !less;
   return less ? -1 : 1;
 }
-
 
 absl::StatusOr<Value> EvalArrayAgg(
     const ::googlesql::ResolvedAggregateFunctionCall& call,

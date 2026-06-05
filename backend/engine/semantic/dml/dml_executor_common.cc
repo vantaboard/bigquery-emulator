@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/dml/dml_executor_internal.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -14,6 +12,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/semantic/dml/dml_executor.h"
+#include "backend/engine/semantic/dml/dml_executor_internal.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/scan_eval.h"

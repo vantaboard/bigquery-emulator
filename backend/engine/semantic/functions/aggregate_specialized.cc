@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/functions/specialized_funcs.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -16,6 +14,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/hll_funcs.h"
+#include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"

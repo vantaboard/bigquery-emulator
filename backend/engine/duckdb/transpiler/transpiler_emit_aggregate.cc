@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -306,10 +305,11 @@ std::string Transpiler::EmitAggregateScan(
     auto it =
         group_by_id_to_name.find(gc->group_by_column()->column().column_id());
     if (it == group_by_id_to_name.end()) return "";
-    projections.push_back(absl::StrCat("GROUPING(",
-                                       internal::QuoteIdent(it->second),
-                                       ") AS ",
-                                       internal::QuoteIdent(gc->output_column().name())));
+    projections.push_back(
+        absl::StrCat("GROUPING(",
+                     internal::QuoteIdent(it->second),
+                     ") AS ",
+                     internal::QuoteIdent(gc->output_column().name())));
   }
 
   std::string select_list =

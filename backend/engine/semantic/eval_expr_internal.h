@@ -35,7 +35,7 @@ absl::StatusOr<Value> DispatchSub(const std::vector<Value>& args,
 absl::StatusOr<Value> DispatchMul(const std::vector<Value>& args,
                                   const ::googlesql::Type* return_type);
 absl::StatusOr<Value> DispatchDiv(const std::vector<Value>& args,
-                                   const ::googlesql::Type* return_type);
+                                  const ::googlesql::Type* return_type);
 absl::StatusOr<Value> DispatchUnaryMinus(const std::vector<Value>& args,
                                          const ::googlesql::Type* return_type);
 absl::StatusOr<Value> DispatchAbs(const std::vector<Value>& args,
@@ -59,8 +59,8 @@ absl::StatusOr<Value> DispatchNullIf(const std::vector<Value>& args,
 absl::StatusOr<Value> DispatchIf(const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchCaseWithValue(
     const std::vector<Value>& args, const ::googlesql::Type* return_type);
-absl::StatusOr<Value> DispatchCaseNoValue(
-    const std::vector<Value>& args, const ::googlesql::Type* return_type);
+absl::StatusOr<Value> DispatchCaseNoValue(const std::vector<Value>& args,
+                                          const ::googlesql::Type* return_type);
 absl::StatusOr<Value> WrapSafe(absl::StatusOr<Value> result,
                                const ::googlesql::Type* return_type);
 

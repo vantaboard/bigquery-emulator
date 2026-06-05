@@ -224,7 +224,8 @@ absl::StatusOr<storage::Value> ReadArrayCell(
   std::vector<storage::Value> elements;
   elements.reserve(entries[row].length);
   for (uint64_t i = 0; i < entries[row].length; ++i) {
-    auto v = DispatchReadCellFromVector(child, entries[row].offset + i, element);
+    auto v =
+        DispatchReadCellFromVector(child, entries[row].offset + i, element);
     if (!v.ok()) return v.status();
     elements.push_back(std::move(v).value());
   }

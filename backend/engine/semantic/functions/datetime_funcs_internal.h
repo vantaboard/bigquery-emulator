@@ -41,8 +41,8 @@ absl::StatusOr<DatetimeValue> CurrentDatetimeValue();
 absl::StatusOr<TimeValue> CurrentTimeValue();
 absl::StatusOr<Value> BuildDateArray(const std::vector<int64_t>& raw,
                                      const ::googlesql::Type* return_type);
-absl::StatusOr<Value> BuildTimestampArray(
-    const std::vector<int64_t>& micros, const ::googlesql::Type* return_type);
+absl::StatusOr<Value> BuildTimestampArray(const std::vector<int64_t>& micros,
+                                          const ::googlesql::Type* return_type);
 
 }  // namespace datetime_internal
 }  // namespace functions

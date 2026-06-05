@@ -269,7 +269,6 @@ TEST_F(TranspilerTest, EmitSampleScanPercentVsRowsContrast) {
 // `EmitWithRefScan` renames the anchor back to the analyzer's
 // per-reference column names.
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

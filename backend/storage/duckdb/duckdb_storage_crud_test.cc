@@ -1,5 +1,3 @@
-#include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
-
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -11,6 +9,7 @@
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
+#include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 

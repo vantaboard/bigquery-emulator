@@ -20,8 +20,7 @@ namespace string_extra_internal {
 
 bool AnyNull(const std::vector<Value>& args);
 absl::string_view AsStringOrBytes(const Value& v);
-Value StringOrBytesFromView(const Value& template_value,
-                            absl::string_view out);
+Value StringOrBytesFromView(const Value& template_value, absl::string_view out);
 absl::StatusOr<std::unique_ptr<const ::googlesql::functions::RegExp>>
 MakeRegExpForValue(const Value& pattern);
 absl::StatusOr<Value> HashBytes(::googlesql::functions::Hasher::Algorithm algo,

@@ -1,11 +1,10 @@
 // Extended `EvalExpr` coverage (parameters, intervals, argument refs).
 
-#include "backend/engine/semantic/eval_expr_test_fixture.h"
-
 #include <cmath>
 #include <memory>
 
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr_test_fixture.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/types/type_factory.h"

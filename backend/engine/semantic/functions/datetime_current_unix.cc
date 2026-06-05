@@ -1,6 +1,3 @@
-#include "backend/engine/semantic/functions/datetime_funcs.h"
-#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -12,6 +9,8 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/datetime_funcs.h"
+#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/functions/datetime.pb.h"
@@ -28,9 +27,8 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
-using ::googlesql::Value;
-using datetime_internal::CurrentDateValue;
 using datetime_internal::CurrentDatetimeValue;
+using datetime_internal::CurrentDateValue;
 using datetime_internal::CurrentTimeValue;
 using datetime_internal::CurrentUnixMicros;
 using datetime_internal::DateTimestampPart;
@@ -39,6 +37,7 @@ using datetime_internal::HasNull;
 using datetime_internal::kMicros;
 using datetime_internal::LocalTimeZone;
 using datetime_internal::PartFromArg;
+using ::googlesql::Value;
 
 absl::StatusOr<Value> CurrentDate(const std::vector<Value>& args) {
   (void)args;

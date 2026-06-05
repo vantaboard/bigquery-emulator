@@ -50,7 +50,7 @@ inline std::string ResolveFunctionName(const ::googlesql::Function* fn) {
 }
 
 inline std::string WrapArrayAggRespectNulls(absl::string_view body,
-                                     absl::string_view arg) {
+                                            absl::string_view arg) {
   return absl::StrCat(
       "if(count(",
       arg,
@@ -65,8 +65,9 @@ inline constexpr char kBqPctNullSentinel[] = "'!__BQ_NULL__!'";
 inline constexpr const char kBqUnionOrdCol[] = "__bq_union_ord";
 
 // Suffix for ORDER BY direction + NULL ordering.
-inline std::string OrderByItemSuffix(const ::googlesql::ResolvedOrderByItem* item,
-                              bool bigquery_null_defaults = false) {
+inline std::string OrderByItemSuffix(
+    const ::googlesql::ResolvedOrderByItem* item,
+    bool bigquery_null_defaults = false) {
   const char* dir = item->is_descending() ? "DESC" : "ASC";
   const char* nulls = "";
   switch (item->null_order()) {
@@ -142,7 +143,8 @@ inline std::string SynthesizeAnonymousFieldName(int idx) {
 // `EmitGetStructField` aligned -- a drift between the literal/maker
 // emit and the field-access emit would silently produce DuckDB
 // "field does not exist" runtime errors.
-inline std::string ResolveStructFieldName(const ::googlesql::StructType& st, int idx) {
+inline std::string ResolveStructFieldName(const ::googlesql::StructType& st,
+                                          int idx) {
   const ::googlesql::StructField& f = st.field(idx);
   if (f.name.empty()) return SynthesizeAnonymousFieldName(idx);
   return f.name;
@@ -293,8 +295,8 @@ inline std::string OrderItemLeadingColumn(const std::string& item) {
   return item.substr(0, end + 1);
 }
 
-inline bool OutputListContainsColumn(absl::string_view quoted_col,
-                              const ::googlesql::ResolvedQueryStmt* node) {
+inline bool OutputListContainsColumn(
+    absl::string_view quoted_col, const ::googlesql::ResolvedQueryStmt* node) {
   if (node == nullptr) return false;
   for (int i = 0; i < node->output_column_list_size(); ++i) {
     const ::googlesql::ResolvedOutputColumn* out = node->output_column_list(i);
@@ -342,7 +344,6 @@ inline std::vector<std::string> FilterOutputOrderItems(
   }
   return filtered;
 }
-
 
 // `CASE val WHEN w1 THEN t1 ... ELSE e END` for analyzer `$case_with_value`.
 inline std::string EmitCaseWithValue(const std::vector<std::string>& args) {

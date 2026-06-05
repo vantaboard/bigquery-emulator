@@ -16,7 +16,7 @@ task lint:run
 
 - **Go:** `gofmt` + `go vet ./...`
 - **First-party C++:** `clang-format` dry-run + the source-only checker (`tools/lint/cpp`)
-- **Repo policy:** disposition-parity (`tools/check_disposition_parity`) + stale-term sweep (`tools/check_stale_terms`)
+- **Repo policy:** disposition-parity (`tools/check_disposition_parity`)
 
 `task lint:fix` applies auto-fixes for Go (`gofmt`, `golangci-lint --fix`) and first-party C++ (`clang-format -i`).
 
@@ -27,7 +27,6 @@ Treat a **clean** final `task lint:run` as the default bar before that commit. I
 - Go source (`*.go`) or Go lint config (`.golangci.yml`, `go.mod` when it affects builds)
 - First-party C++ sources/headers covered by `go run ./tools/lint/cpp list` (typically `backend/`, `binaries/`, `frontend/`, `tools/googlesql-prebuilt/smoke/`, etc.)
 - Disposition / conformance fixtures checked by `tools/check_disposition_parity`
-- Any file that can trip `tools/check_stale_terms` (most tracked sources under the repo root)
 
 For the **deep** local pass (golangci-lint + clang-tidy + cppcheck), use `task lint:check` — CI's slow `cpp-analysis` job runs `lint:cpp:cppcheck` separately.
 
@@ -36,7 +35,7 @@ For the **deep** local pass (golangci-lint + clang-tidy + cppcheck), use `task l
 Skip running **or** stop iterating on lint and commit **without** insisting on a clean `task lint:run` when **any** of these apply:
 
 1. **Intentional incomplete / broken / checkpoint work** — The user or session clearly wants a WIP, checkpoint, revert-in-progress, bisect marker, or to **leave** known-broken state documented for the next step (e.g. explicit “commit as-is”, “WIP”, “broken on purpose”, “do not fix lint yet”).
-2. **No lint-relevant surface** — The commit is limited to paths `task lint:run` does not cover (e.g. docs-only, images, GitHub workflow YAML-only with no Go/C++/disposition/stale-term impact) and adding a lint run would not validate the change.
+2. **No lint-relevant surface** — The commit is limited to paths `task lint:run` does not cover (e.g. docs-only, images, GitHub workflow YAML-only with no Go/C++/disposition impact) and adding a lint run would not validate the change.
 3. **Lint cannot run or is the wrong lever** — `task lint:fix` / `task lint:run` is missing, the environment lacks the toolchain, or **non-lint failures** dominate (e.g. widespread compile errors, broken `go test` in touched packages, generator or migration steps failing). After a **brief** check, do not spend the session “fixing lint” while the tree cannot build or test; summarize blockers and align with the user.
 4. **Too many unrelated findings** — `task lint:run` reports a **large** volume of issues clearly **outside** the current logical change (pre-existing debt). Do not silently rewrite unrelated packages to green the linter for a small commit; either narrow scope (commit only what belongs with lint for touched files) or ask the user before broad cleanup.
 

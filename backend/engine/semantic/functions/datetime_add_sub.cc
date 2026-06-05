@@ -1,6 +1,3 @@
-#include "backend/engine/semantic/functions/datetime_funcs.h"
-#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
-
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -12,6 +9,8 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/datetime_funcs.h"
+#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/functions/datetime.pb.h"
@@ -28,13 +27,13 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
-using ::googlesql::Value;
 using datetime_internal::DateTimestampPart;
 using datetime_internal::DatetimeValue;
 using datetime_internal::DefaultTimeZone;
 using datetime_internal::kMicros;
 using datetime_internal::PartFromArg;
 using datetime_internal::TimeValue;
+using ::googlesql::Value;
 
 absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
                                           const std::vector<Value>& args) {

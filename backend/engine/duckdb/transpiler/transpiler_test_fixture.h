@@ -1,8 +1,6 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_TEST_FIXTURE_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_TEST_FIXTURE_H_
 
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +10,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"

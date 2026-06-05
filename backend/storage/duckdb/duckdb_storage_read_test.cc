@@ -1,5 +1,3 @@
-#include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
-
 #include <memory>
 #include <string>
 #include <utility>
@@ -8,6 +6,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
+#include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
 #include "backend/storage/row_restriction.h"
 #include "gtest/gtest.h"
 

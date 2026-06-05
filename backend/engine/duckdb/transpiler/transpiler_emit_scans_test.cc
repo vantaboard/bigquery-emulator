@@ -144,7 +144,6 @@ TEST_F(TranspilerTest, EmitJoinScanInnerUsingSingleColumn) {
 
 // --- Aggregate ----------------------------------------------------------
 
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

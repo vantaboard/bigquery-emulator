@@ -32,9 +32,9 @@ namespace internal {
 // column type from `column` to pick the right C-API accessor. NULL
 // cells become Value::Null() regardless of column type.
 absl::StatusOr<Value> ReadCell(::duckdb_result* result,
-                                         idx_t col,
-                                         idx_t row,
-                                         const schema::ColumnSchema& column) {
+                               idx_t col,
+                               idx_t row,
+                               const schema::ColumnSchema& column) {
   if (::duckdb_value_is_null(result, col, row)) return Value::Null();
   // REPEATED cells / ARRAY: pull them through `duckdb_value_varchar`
   // and parse — DuckDB renders LIST values as `[a, b, c]` which is
@@ -248,12 +248,12 @@ namespace internal {
 // ("ScanRows" / "CreateReadStream") so a failure in either branch is
 // attributed to the right surface.
 absl::Status ExecuteSelect(DuckDBStorage::Impl* impl,
-                                     absl::string_view sql,
-                                     const schema::TableSchema& schema,
-                                     absl::string_view tag,
-                                     const TableId& id,
-                                     absl::string_view parquet_path,
-                                     std::vector<Row>* out) {
+                           absl::string_view sql,
+                           const schema::TableSchema& schema,
+                           absl::string_view tag,
+                           const TableId& id,
+                           absl::string_view parquet_path,
+                           std::vector<Row>* out) {
   const std::string sql_str(sql);
   ::duckdb_result result;
   const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
@@ -328,7 +328,8 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
   if (!fs::exists(parquet_path, ec)) {
-    return std::unique_ptr<RowIterator>(new internal::VectorRowIterator(std::move(rows)));
+    return std::unique_ptr<RowIterator>(
+        new internal::VectorRowIterator(std::move(rows)));
   }
 
   // Explicit projection: ScanRows promises rows in column-list
@@ -344,7 +345,8 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   auto status = internal::ExecuteSelect(
       impl_.get(), sql, schema, "ScanRows", id, parquet_path, &rows);
   if (!status.ok()) return status;
-  return std::unique_ptr<RowIterator>(new internal::VectorRowIterator(std::move(rows)));
+  return std::unique_ptr<RowIterator>(
+      new internal::VectorRowIterator(std::move(rows)));
 }
 
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
@@ -374,7 +376,8 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
   if (!fs::exists(parquet_path, ec)) {
-    return std::unique_ptr<RowIterator>(new internal::VectorRowIterator(std::move(rows)));
+    return std::unique_ptr<RowIterator>(
+        new internal::VectorRowIterator(std::move(rows)));
   }
 
   // Plan 15 (storage-read-write): when the caller pins a

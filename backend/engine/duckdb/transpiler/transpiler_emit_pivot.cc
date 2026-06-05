@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -124,8 +123,8 @@ std::string Transpiler::EmitPivotScan(
                                         " = ",
                                         pivot_values_sql[vi],
                                         ")");
-    projections.push_back(
-        absl::StrCat(filtered, " AS ", internal::QuoteIdent(pc->column().name())));
+    projections.push_back(absl::StrCat(
+        filtered, " AS ", internal::QuoteIdent(pc->column().name())));
   }
 
   // Touch column_list for `CheckFieldsAccessed`; the lowering is
@@ -203,7 +202,8 @@ std::string Transpiler::EmitUnpivotScan(
     }
     const std::string& col_name =
         expr->GetAs<::googlesql::ResolvedColumnRef>()->column().name();
-    std::string src = absl::StrCat(kSrcAlias, ".", internal::QuoteIdent(col_name));
+    std::string src =
+        absl::StrCat(kSrcAlias, ".", internal::QuoteIdent(col_name));
     std::string quoted_out = internal::QuoteIdent(cc->column().name());
     projected_input_sql.push_back(
         src == quoted_out ? src : absl::StrCat(src, " AS ", quoted_out));
@@ -214,9 +214,11 @@ std::string Transpiler::EmitUnpivotScan(
   lateral_col_names.reserve(node->value_column_list_size() + 2);
   lateral_col_names.push_back(internal::QuoteIdent(kArgOrdCol));
   for (int j = 0; j < node->value_column_list_size(); ++j) {
-    lateral_col_names.push_back(internal::QuoteIdent(node->value_column_list(j).name()));
+    lateral_col_names.push_back(
+        internal::QuoteIdent(node->value_column_list(j).name()));
   }
-  const std::string label_col_name = internal::QuoteIdent(node->label_column().name());
+  const std::string label_col_name =
+      internal::QuoteIdent(node->label_column().name());
   lateral_col_names.push_back(label_col_name);
 
   // One VALUES tuple per unpivot arg, in IN-list order.
@@ -233,8 +235,8 @@ std::string Transpiler::EmitUnpivotScan(
     for (int j = 0; j < arg->column_list_size(); ++j) {
       const ::googlesql::ResolvedColumnRef* ref = arg->column_list(j);
       if (ref == nullptr) return "";
-      tuple_elems.push_back(
-          absl::StrCat(kSrcAlias, ".", internal::QuoteIdent(ref->column().name())));
+      tuple_elems.push_back(absl::StrCat(
+          kSrcAlias, ".", internal::QuoteIdent(ref->column().name())));
     }
     std::string label_sql = EmitLiteral(node->label_list(i));
     if (label_sql.empty()) return "";
@@ -248,8 +250,10 @@ std::string Transpiler::EmitUnpivotScan(
   outer_projections.reserve(outer_projections.size() +
                             node->value_column_list_size() + 1);
   for (int j = 0; j < node->value_column_list_size(); ++j) {
-    outer_projections.push_back(absl::StrCat(
-        kUnpivotAlias, ".", internal::QuoteIdent(node->value_column_list(j).name())));
+    outer_projections.push_back(
+        absl::StrCat(kUnpivotAlias,
+                     ".",
+                     internal::QuoteIdent(node->value_column_list(j).name())));
   }
   outer_projections.push_back(absl::StrCat(kUnpivotAlias, ".", label_col_name));
 

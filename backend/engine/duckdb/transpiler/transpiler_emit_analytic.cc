@@ -1,6 +1,3 @@
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-
 #include <algorithm>
 #include <optional>
 #include <string>
@@ -17,6 +14,8 @@
 #include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -147,11 +146,12 @@ std::string Transpiler::BuildOrderClause(
     if (it->collation_name() != nullptr) return std::string(kAnalyticBail);
     std::string col = EmitColumnRef(it->column_ref());
     if (col.empty()) return std::string(kAnalyticBail);
-    items.push_back(
-        absl::StrCat(col, internal::OrderByItemSuffix(it, bigquery_null_defaults)));
+    items.push_back(absl::StrCat(
+        col, internal::OrderByItemSuffix(it, bigquery_null_defaults)));
   }
   if (append_input_rn) {
-    items.push_back(absl::StrCat(internal::QuoteIdent(internal::kBqInputRnCol), " ASC"));
+    items.push_back(
+        absl::StrCat(internal::QuoteIdent(internal::kBqInputRnCol), " ASC"));
   }
   if (items.empty()) return "";
   return absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
@@ -201,7 +201,8 @@ std::string Transpiler::BuildAnalyticProjection(
     std::string sort_key = EmitExpr(afn->argument_list(0));
     std::string p_expr = EmitExpr(afn->argument_list(1));
     if (sort_key.empty() || p_expr.empty()) return "";
-    const std::string coalesce_col = internal::QuoteIdent(internal::kBqPctCoalesceCol);
+    const std::string coalesce_col =
+        internal::QuoteIdent(internal::kBqPctCoalesceCol);
     fn_sql = BuildPercentileDiscRespectNullsSql(
         coalesce_col, p_expr, partition_clause, frame_clause);
   } else {
@@ -214,7 +215,8 @@ std::string Transpiler::BuildAnalyticProjection(
   // analyzer (which rejects malformed cases at AnalyzeStatement time)
   // and just propagate the bounds verbatim.
   if (fn_sql.find(" OVER (") != std::string::npos) {
-    return absl::StrCat(fn_sql, " AS ", internal::QuoteIdent(col->column().name()));
+    return absl::StrCat(
+        fn_sql, " AS ", internal::QuoteIdent(col->column().name()));
   }
 
   std::vector<absl::string_view> over_parts;
@@ -275,7 +277,8 @@ void Transpiler::CaptureAnalyticOutputOrder(
       std::string col = EmitColumnRef(item->column_ref());
       if (col.empty()) return;
       output_order_items_.push_back(absl::StrCat(
-          col, internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+          col,
+          internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
     }
   }
 
@@ -381,8 +384,8 @@ std::string Transpiler::EmitAnalyticScan(
         if (p_expr.empty()) return "";
         pct_projections.push_back(BuildPercentileDiscRespectNullsScalarSql(
             p_expr, fn_col->column().name()));
-        pct_refs.push_back(
-            absl::StrCat("_pct.", internal::QuoteIdent(fn_col->column().name())));
+        pct_refs.push_back(absl::StrCat(
+            "_pct.", internal::QuoteIdent(fn_col->column().name())));
       }
     }
     if (pct_projections.empty()) return "";
@@ -426,7 +429,8 @@ std::string Transpiler::EmitAnalyticScan(
         const auto* afn =
             fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
         if (afn != nullptr && afn->function() != nullptr &&
-            internal::ResolveFunctionName(afn->function()) == "percentile_disc" &&
+            internal::ResolveFunctionName(afn->function()) ==
+                "percentile_disc" &&
             afn->null_handling_modifier() ==
                 ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
           effective_order.clear();
