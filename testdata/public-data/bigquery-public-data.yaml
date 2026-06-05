@@ -1,0 +1,46 @@
+# Minimal bigquery-public-data catalog fixtures for thirdparty sample tests.
+# Loaded at gateway startup via --seed-data-file (see Dockerfile CMD and
+# gateway/seedfile/publicdata.go). Not a full public-dataset replica.
+location: US
+datasets:
+  - id: usa_names
+    project_id: bigquery-public-data
+    tables:
+      - id: usa_1910_2013
+        schema:
+          - {name: state, type: STRING}
+          - {name: gender, type: STRING}
+          - {name: year, type: INT64}
+          - {name: name, type: STRING}
+          - {name: number, type: INT64}
+        rows:
+          - {state: TX, gender: M, year: 1920, name: James, number: 120}
+          - {state: TX, gender: F, year: 1920, name: Mary, number: 95}
+          - {state: TX, gender: M, year: 1921, name: Robert, number: 88}
+          - {state: CA, gender: M, year: 1920, name: John, number: 60}
+          - {state: NY, gender: F, year: 1920, name: Anna, number: 40}
+  - id: samples
+    project_id: bigquery-public-data
+    tables:
+      - id: shakespeare
+        schema:
+          - {name: word, type: STRING}
+          - {name: word_count, type: INT64}
+          - {name: corpus, type: STRING}
+          - {name: corpus_date, type: INT64}
+        rows:
+          - {word: the, word_count: 993, corpus: hamlet, corpus_date: 1599}
+          - {word: king, word_count: 201, corpus: kinglear, corpus_date: 1605}
+          - {word: love, word_count: 150, corpus: romeoandjuliet, corpus_date: 1597}
+  - id: stackoverflow
+    project_id: bigquery-public-data
+    tables:
+      - id: posts_questions
+        schema:
+          - {name: id, type: INT64}
+          - {name: view_count, type: INT64}
+          - {name: tags, type: STRING}
+        rows:
+          - {id: 100001, view_count: 85000, tags: "google-bigquery|sql"}
+          - {id: 100002, view_count: 42000, tags: "google-bigquery"}
+          - {id: 100003, view_count: 15000, tags: "python"}

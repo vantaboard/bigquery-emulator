@@ -1,5 +1,9 @@
 # Sample testdata helpers for the third-party suites.
 #
+# `testdata/public-data/bigquery-public-data.yaml` is committed and
+# loaded by the Docker image / `gateway_main --seed-data-file` for
+# thirdparty public-dataset query samples (see testdata/public-data/README.md).
+#
 # Today only `task testdata:fake-gcs-sync` is wired: it mirrors the
 # subset of public Google Cloud Storage objects that the vendored
 # golang-, node-, and python-bigquery-dataframes-tests load against

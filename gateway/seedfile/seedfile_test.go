@@ -19,6 +19,11 @@ import (
 // three row maps.
 const colNameField = "name"
 
+const (
+	testProjectDev   = "dev"
+	testFieldTypeInt = "INT64"
+)
+
 // captureApplier records every call seedfile makes so tests can
 // assert on the order of ensure/insert operations.
 type captureApplier struct {
@@ -88,7 +93,7 @@ datasets:
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if f.DefaultProjectID != "dev" || f.DefaultLocation != "US" {
+	if f.DefaultProjectID != testProjectDev || f.DefaultLocation != "US" {
 		t.Errorf("file defaults = %+v", f)
 	}
 	if len(f.Datasets) != 1 {
@@ -217,13 +222,13 @@ func TestApply_PrecedenceOrder(t *testing.T) {
 // is preserved.
 func TestApply_HappyPathWritesRowsInOrder(t *testing.T) {
 	f := &File{
-		DefaultProjectID: "dev",
+		DefaultProjectID: testProjectDev,
 		Datasets: []Dataset{
 			{ID: "ds", Tables: []Table{
 				{
 					ID: "t",
 					Schema: []FieldSchema{
-						{Name: "id", Type: "INT64"},
+						{Name: "id", Type: testFieldTypeInt},
 						{Name: colNameField, Type: "STRING"},
 					},
 					Rows: []map[string]any{

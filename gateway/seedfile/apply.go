@@ -56,7 +56,9 @@ func ApplyFilesContext(ctx context.Context, paths []string, applier seed.Applier
 //
 // The function is forgiving on "already exists" errors at the
 // dataset and table level: the applier returns created=false in
-// that case, and we proceed to apply rows so reruns work.
+// that case. Rows are inserted only when the table was newly
+// created so gateway restarts against a persistent data_dir do
+// not duplicate seed data.
 func Apply(ctx context.Context, f *File, applier seed.Applier, defaults seed.Defaults) error {
 	if f == nil {
 		return nil
@@ -81,11 +83,12 @@ func Apply(ctx context.Context, f *File, applier seed.Applier, defaults seed.Def
 				DatasetID: ds.ID,
 				TableID:   tbl.ID,
 			}
-			if _, err := applier.EnsureTable(ctx, ref, schema); err != nil {
+			created, err := applier.EnsureTable(ctx, ref, schema)
+			if err != nil {
 				return fmt.Errorf("ensure table %s.%s.%s: %w",
 					project, ds.ID, tbl.ID, err)
 			}
-			if len(tbl.Rows) == 0 {
+			if len(tbl.Rows) == 0 || !created {
 				continue
 			}
 			if _, err := applier.InsertRows(ctx, ref, schema, tbl.Rows); err != nil {

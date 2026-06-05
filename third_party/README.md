@@ -151,7 +151,7 @@ conformance-harness state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 | **GCS sample loads** (`gs://cloud-samples-data/...`) | Skipped when `BIGQUERY_EMULATOR_HOST` is set and `STORAGE_EMULATOR_HOST` is unset. When both are set, tests expect the compose-mounted fake-gcs objects. |
 | **Legacy SQL** | This emulator rejects `useLegacySql=true` with HTTP 400 (see `docs/REST_API.md`); samples that rely on legacy syntax fail rather than skip. Adjust the sample set accordingly. |
 | **CREATE MODEL / ML** + **routine DDL** | Skipped or fails (tracked under SQL gaps in `ROADMAP.md`). Python samples use `emulator_pytest_skip.py`; Node skips `models.test.js` via `test/setup.js`. |
-| **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The vendored go-googlesql snapshot under `testdata/bq-emulator/` (`-initial-data-dir`) seeds these. This emulator does not yet expose a `--initial-data-dir` flag on `gateway_main`; Python/Node tests that query public datasets are skipped when `BIGQUERY_EMULATOR_HOST` is set (see `emulator_pytest_skip.py` and `node-bigquery-tests/test/setup.js`). |
+| **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The Docker image and `gateway_main --seed-data-file` load minimal fixtures from [`testdata/public-data/bigquery-public-data.yaml`](../testdata/public-data/bigquery-public-data.yaml) (`usa_names.usa_1910_2013`, `samples.shakespeare`, `stackoverflow.posts_questions`). Python skips samples that reference other public tables (`emulator_pytest_skip.py`); Node `queries.test.js` runs against the seed; `jobs.test.js` stays skipped for unseeded `utility_us`. |
 
 ### Emulator stderr (benign vs actionable)
 
@@ -234,7 +234,7 @@ When `BIGQUERY_EMULATOR_HOST` is set, the task also loads the
 repo-owned pytest plugin
 [`emulator_pytest_skip.py`](python-bigquery-tests/emulator_pytest_skip.py)
 (`-p emulator_pytest_skip`) which skips BQML, geography, legacy SQL,
-and `bigquery-public-data` sample tests per `docs/ENGINE_POLICY.md`.
+and public-data samples whose tables are not in the bundled seed file.
 Override or narrow via `PYTHON_SAMPLES_PYTEST_ARGS` (appended last).
 
 The default session is `snippets` (upstream-defined; emulator-driven).

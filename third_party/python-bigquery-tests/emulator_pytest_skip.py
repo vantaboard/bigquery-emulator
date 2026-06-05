@@ -37,6 +37,15 @@ _SKIP_FIXTURES: frozenset[str] = frozenset({"model_id", "table_with_data_id"})
 _PUBLIC_DATA_MARKER = "bigquery-public-data"
 _LEGACY_SQL_MARKERS = ("use_legacy_sql", "useLegacySql")
 
+# Tables seeded at gateway startup (testdata/public-data/bigquery-public-data.yaml).
+_SEEDED_PUBLIC_TABLES: frozenset[str] = frozenset(
+    {
+        "bigquery-public-data.usa_names.usa_1910_2013",
+        "bigquery-public-data.samples.shakespeare",
+        "bigquery-public-data.stackoverflow.posts_questions",
+    }
+)
+
 # docs/snippets.py tests that run without public-data fixtures.
 _DOCS_SNIPPETS_EMULATOR_ALLOW: frozenset[str] = frozenset(
     {
@@ -90,9 +99,7 @@ def _docs_snippets_test_should_skip(test_name: str) -> bool:
     body = _docs_snippets_test_body(test_name)
     if not body:
         return True
-    if _PUBLIC_DATA_MARKER in body:
-        return True
-    return any(marker in body for marker in _LEGACY_SQL_MARKERS)
+    return _public_data_text_should_skip(body)
 
 
 def _emulator_mode() -> bool:
@@ -121,14 +128,36 @@ def _sample_module_for_test(test_path: Path) -> Path | None:
     return test_path.parent.parent / sample_name
 
 
+def _public_data_refs_in_text(text: str) -> set[str]:
+    import re
+
+    refs: set[str] = set()
+    for match in re.finditer(
+        r"bigquery-public-data[.:]([a-zA-Z0-9_]+)[.:]([a-zA-Z0-9_]+)", text
+    ):
+        refs.add(
+            f"bigquery-public-data.{match.group(1)}.{match.group(2)}"
+        )
+    return refs
+
+
+def _public_data_text_should_skip(text: str) -> bool:
+    if _PUBLIC_DATA_MARKER not in text:
+        return any(marker in text for marker in _LEGACY_SQL_MARKERS)
+    refs = _public_data_refs_in_text(text)
+    if not refs:
+        return True
+    return bool(refs - _SEEDED_PUBLIC_TABLES) or any(
+        marker in text for marker in _LEGACY_SQL_MARKERS
+    )
+
+
 def _sample_source_indicates_skip(sample_path: Path) -> bool:
     try:
         text = sample_path.read_text(encoding="utf-8")
     except OSError:
         return False
-    if _PUBLIC_DATA_MARKER in text:
-        return True
-    return any(marker in text for marker in _LEGACY_SQL_MARKERS)
+    return _public_data_text_should_skip(text)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

@@ -61,8 +61,8 @@ function patchBigQueryConstructorForEmulatorRegion() {
 patchBigQueryConstructorForEmulatorRegion();
 
 // When BIGQUERY_EMULATOR_HOST is set, skip entire Mocha files and individual
-// tests that require BQML, legacy SQL, or bigquery-public-data catalog
-// fixtures (see third_party/README.md and docs/ENGINE_POLICY.md).
+// tests that require BQML, unseeded public-data tables (e.g. utility_us),
+// or legacy SQL (see third_party/README.md and docs/ENGINE_POLICY.md).
 const EMULATOR_SKIP_FILES =
   /(?:^|[\\/])test[\\/](?:models|jobs)\.test\.js(?::\d+:\d+)?(?:\)|$)/;
 

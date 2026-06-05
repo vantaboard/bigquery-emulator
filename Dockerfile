@@ -442,6 +442,9 @@ COPY LICENSE /LICENSE
 COPY docker/gateway_main.sh /usr/local/bin/bigquery-emulator-gateway
 RUN chmod +x /usr/local/bin/bigquery-emulator-gateway
 
+# Bundled public-dataset seed for thirdparty sample tests (plan 09).
+COPY testdata/public-data/ /opt/bigquery-emulator/testdata/public-data/
+
 # Persistent data dir consumed by the DuckDB storage backend (now the
 # only backend). The emulator opens a `catalog.duckdb` file under this
 # directory and persists the catalog + table rows across boots.
@@ -467,4 +470,4 @@ ENTRYPOINT ["/usr/local/bin/bigquery-emulator-gateway"]
 # storage; there is no other runtime today). `--copy_engine_stderr`
 # surfaces engine logs on the container's stderr so a `docker logs`
 # diagnoses the engine subprocess too.
-CMD ["--http_port=9050", "--grpc_port=9060", "--copy_engine_stderr"]
+CMD ["--http_port=9050", "--grpc_port=9060", "--copy_engine_stderr", "--data-dir=/var/lib/bigquery-emulator", "--seed-data-file=/opt/bigquery-emulator/testdata/public-data/bigquery-public-data.yaml"]

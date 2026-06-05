@@ -46,8 +46,10 @@ The parent repo’s task is **`task thirdparty:node-bigquery-tests`** (same as *
 
 When **`BIGQUERY_EMULATOR_HOST`** is set, **`test/setup.js`** also:
 
-- Skips entire **`models.test.js`** and **`jobs.test.js`** suites (BQML and
-  `bigquery-public-data` fixtures).
+- Skips entire **`models.test.js`** (BQML) and **`jobs.test.js`** (unseeded
+  `utility_us.country_code_iso` plus job-listing noise). **`queries.test.js`**
+  public-data cases (`usa_names`, `shakespeare`, `stackoverflow`) run when the
+  gateway loads `testdata/public-data/bigquery-public-data.yaml` at startup.
 - Skips individual tests whose titles match legacy SQL or cross-project
   public-dataset listing.
 
