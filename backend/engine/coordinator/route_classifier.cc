@@ -11,8 +11,6 @@
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/public/function.h"
-#include "googlesql/public/sql_function.h"
-#include "googlesql/public/templated_sql_function.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node.h"
@@ -26,6 +24,15 @@ namespace coordinator {
 namespace {
 
 namespace transpiler = ::bigquery_emulator::backend::engine::duckdb::transpiler;
+
+// GoogleSQL function-group names for user-defined SQL bodies. Kept as
+// string literals so route classification does not depend on
+// `@googlesql//googlesql/public:sql_function` / `:templated_sql_function`
+// (those labels exist in source mode but are not part of the frozen
+// prebuilt wrapper surface).
+constexpr absl::string_view kSqlFunctionGroup = "Lazy_resolution_function";
+constexpr absl::string_view kTemplatedSqlFunctionGroup =
+    "Templated_SQL_Function";
 
 // Priority lookup for the compositional fallback algorithm. Higher
 // number = higher priority = wins over lower-priority dispositions
@@ -310,9 +317,8 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
     if (fn == nullptr) return;
     // Project-scoped CREATE FUNCTION bodies are evaluated by the semantic
     // executor using the analyzer-resolved expression on the call.
-    if (fn->GetGroup() ==
-            ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup ||
-        fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
+    if (fn->GetGroup() == kTemplatedSqlFunctionGroup ||
+        fn->GetGroup() == kSqlFunctionGroup) {
       MaybePromote(Disposition::kSemanticExecutor,
                    absl::StrCat("sql_udf:", fn->Name()));
       return;

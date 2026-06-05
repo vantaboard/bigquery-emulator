@@ -70,6 +70,7 @@ SOURCE_PATHS=(
 	".bazelrc"
 	".bazelversion"
 	"BUILD.bazel"
+	"googlesql_deps.bzl"
 	"go.mod"
 	"go.sum"
 )

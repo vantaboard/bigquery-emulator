@@ -14,6 +14,7 @@
 # `ROADMAP.md` ("Build systems") for how `@googlesql//` is wired.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -146,7 +147,7 @@ cc_library(
         # the no-colon `@googlesql//googlesql/resolved_ast` form so
         # the link line picks up the bundled visitor base.
         "@googlesql//googlesql/resolved_ast",
-    ],
+    ] + GOOGLESQL_SQL_FUNCTION_DEPS,
 )
 
 cc_test(

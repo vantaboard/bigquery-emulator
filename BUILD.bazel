@@ -4,3 +4,8 @@
 # mirroring cloud-spanner-emulator's layout.
 
 package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "googlesql_source",
+    values = {"define": "googlesql_mode=source"},
+)

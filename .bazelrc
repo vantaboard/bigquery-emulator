@@ -115,6 +115,7 @@ build:googlesql --@io_bazel_rules_go//go/config:linkmode=pie
 # `--config=googlesql-source` to make the mode visible in build logs
 # / CI configuration.
 build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
+build:googlesql-source --define=googlesql_mode=source
 
 # Prebuilt mode points the `googlesql` module at the on-disk
 # unpacked artifact. The path is workspace-root-relative on purpose
@@ -134,6 +135,7 @@ build:googlesql-source --build_metadata=GOOGLESQL_MODE=source
 # `--config=googlesql-prebuilt` is set (build-only flags below).
 common:googlesql-prebuilt --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 common:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
+common:googlesql-prebuilt --define=googlesql_mode=prebuilt
 # ABI parity with the prebuilt artifact. The compatibility-surface manifest commits
 # the producer to `-DNDEBUG` (see
 # `docs/dev/googlesql-prebuilt/manifest.md`'s `cflags` field), which

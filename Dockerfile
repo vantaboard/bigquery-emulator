@@ -158,7 +158,7 @@ WORKDIR /src
 
 # Bazel inputs only: the stage skips `gateway/`, `docs/`, etc. so a
 # touched-Go-only change does not invalidate this expensive layer.
-COPY .bazelrc .bazelversion BUILD.bazel MODULE.bazel MODULE.bazel.lock ./
+COPY .bazelrc .bazelversion BUILD.bazel googlesql_deps.bzl MODULE.bazel MODULE.bazel.lock ./
 COPY backend ./backend
 COPY binaries/emulator_main ./binaries/emulator_main
 COPY frontend ./frontend
