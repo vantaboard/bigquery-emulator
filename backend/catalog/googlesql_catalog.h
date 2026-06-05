@@ -22,16 +22,19 @@
 //
 // Name resolution rules (mirroring BigQuery's REST identifier shape):
 //
+//   * One-element paths resolve to `<default_dataset>.<table>` inside
+//     `project_id_` when `default_dataset_id_` is non-empty (BigQuery
+//     `defaultDataset` on `jobs.query`).
 //   * Two-element paths are interpreted as `<dataset>.<table>` inside
-//     `project_id_`, which is the project the engine was constructed
-//     for (typically the `project_id` field on `QueryRequest`).
+//     `project_id_`, except `INFORMATION_SCHEMA.<view>` which is the
+//     project-scoped metadata view shape.
 //   * Three-element paths are interpreted as
-//     `<project>.<dataset>.<table>` and the first segment overrides
-//     `project_id_`. This is the fully-qualified BigQuery shape.
-//   * Anything else (zero, one, or four-plus elements) returns
-//     `NOT_FOUND`. GoogleSQL's analyzer surfaces that as an
-//     "unrecognized name" error with the offending path, which the
-//     gateway maps to a `notFound` BigQuery REST error.
+//     `<project>.<dataset>.<table>` when the middle segment is not
+//     `INFORMATION_SCHEMA`, otherwise as
+//     `<dataset>.INFORMATION_SCHEMA.<view>`.
+//   * Table ids ending in `*` resolve as BigQuery wildcard tables
+//     (UNION ALL of every matching physical table in the dataset).
+//   * Anything else (zero or four-plus elements) returns `NOT_FOUND`.
 //
 // Materialized tables are `backend::catalog::StorageTable` instances
 // (a `SimpleTable` subclass with a working
@@ -90,7 +93,8 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   GoogleSqlCatalog(absl::string_view project_id,
                    storage::Storage* storage,
                    ::googlesql::TypeFactory* type_factory,
-                   const ::googlesql::LanguageOptions& language);
+                   const ::googlesql::LanguageOptions& language,
+                   absl::string_view default_dataset_id = "");
 
   ~GoogleSqlCatalog() override = default;
 
@@ -102,6 +106,17 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   // contract by always returning the project_id.
   std::string FullName() const override {
     return project_id_;
+  }
+
+  // The `TypeFactory` the caller pinned for this catalog's lifetime.
+  // Analyzer passes must allocate resolved types through this factory
+  // so pointers in the AST stay valid until the query completes.
+  ::googlesql::TypeFactory* type_factory() const {
+    return type_factory_;
+  }
+
+  storage::Storage* storage() const {
+    return storage_;
   }
 
   // Path resolution rules are documented in the file header. A miss
@@ -137,6 +152,16 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
       absl::string_view dataset_id,
       absl::string_view table_id) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
+  absl::StatusOr<const ::googlesql::Table*> MaterializeInfoSchemaView(
+      absl::string_view project_id,
+      absl::string_view dataset_id,
+      absl::string_view view_name) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  absl::StatusOr<const ::googlesql::Table*> MaterializeWildcardTable(
+      absl::string_view project_id,
+      absl::string_view dataset_id,
+      absl::string_view wildcard_table_id) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
   // Cache key shape mirrors `storage::TableId` so a query that
   // qualifies the same table two different ways (with vs. without
   // the project prefix) still collapses onto one cache entry.
@@ -145,13 +170,15 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
                               absl::string_view table_id);
 
   const std::string project_id_;
+  const std::string default_dataset_id_;
   storage::Storage* const storage_ = nullptr;
   ::googlesql::TypeFactory* const type_factory_ = nullptr;
 
   mutable absl::Mutex mu_;
-  // Owns every `StorageTable` we hand out to the analyzer / evaluator.
+  // Owns every catalog table we hand out to the analyzer / evaluator.
   // Keys are `CacheKey(project, dataset, table)`; values are non-null.
-  std::vector<std::unique_ptr<StorageTable>> tables_ ABSL_GUARDED_BY(mu_){};
+  std::vector<std::unique_ptr<::googlesql::SimpleTable>> tables_
+      ABSL_GUARDED_BY(mu_){};
   // Parallel-by-index lookup from cache key to `tables_` entry.
   // `flat_hash_map` would be cleaner but the catalog stays small per
   // query (BigQuery queries rarely reference more than a handful of

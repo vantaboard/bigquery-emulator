@@ -135,8 +135,13 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
     return absl::OkStatus();
   }
   if (type->IsStruct()) {
+    const ::googlesql::StructType* st = type->AsStruct();
+    if (st == nullptr) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "field '", nested_path, "': TYPE_STRUCT without StructType payload"));
+    }
     out->set_type("STRUCT");
-    return FillStructFields(type->AsStruct(), nested_path, out);
+    return FillStructFields(st, nested_path, out);
   }
   // Unsupported kinds (PROTO, ENUM, INTERVAL, RANGE, GRAPH_ELEMENT,
   // EXTENDED, UUID, ...) fall through here. Surface the GoogleSQL

@@ -39,11 +39,114 @@ cc_library(
 )
 
 cc_library(
+    name = "virtual_table",
+    hdrs = ["virtual_table.h"],
+    deps = [
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "//third_party/duckdb",
+        "@googlesql//googlesql/public:simple_catalog",
+    ],
+)
+
+cc_library(
+    name = "info_schema_table",
+    srcs = ["info_schema_table.cc"],
+    hdrs = ["info_schema_table.h"],
+    deps = [
+        ":storage_table",
+        ":virtual_table",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "//third_party/duckdb",
+        "@googlesql//googlesql/public:evaluator_table_iterator",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "wildcard_table",
+    srcs = ["wildcard_table.cc"],
+    hdrs = ["wildcard_table.h"],
+    deps = [
+        ":storage_table",
+        ":virtual_table",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "//third_party/duckdb",
+        "@googlesql//googlesql/public:evaluator_table_iterator",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "create_function_util",
+    srcs = ["create_function_util.cc"],
+    hdrs = ["create_function_util.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "udf_registry",
+    srcs = ["udf_registry.cc"],
+    hdrs = ["udf_registry.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
+    name = "udf_registration_catalog",
+    srcs = ["udf_registration_catalog.cc"],
+    hdrs = ["udf_registration_catalog.h"],
+    deps = [
+        ":googlesql_catalog",
+        ":udf_registry",
+        "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
     name = "googlesql_catalog",
     srcs = ["googlesql_catalog.cc"],
     hdrs = ["googlesql_catalog.h"],
     deps = [
+        ":info_schema_table",
         ":storage_table",
+        ":udf_registry",
+        ":wildcard_table",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/base:core_headers",
