@@ -47,7 +47,7 @@ Baseline: `.logs/thirdparty-20260605-134407.log`
 | unblock-02-public-data-seed | 1 | PASS | 73508c8 | 100 TX rows + usa_1910_current; test_client_query_total_rows PASSED |
 | unblock-03-bigframes-gate | 1 | PARTIAL | d8adef2 | 3/4 snippet gate; performance_optimizations needs storage read (08) |
 | unblock-04-gateway-wire-shapes | 1 | PASS | 78fd622 | expirationTime/labels/writeDisposition/dataset region wire shapes |
-| unblock-05-query-params | 1 | PASS | — | ARRAY/TIMESTAMP/STRUCT handler+engine binding |
+| unblock-05-query-params | 1 | PASS | f8f4fb0 | ARRAY/TIMESTAMP/STRUCT handler+engine binding |
 | unblock-06-load-avro-orc | — | pending | — | — |
 | unblock-07-hive-external | — | pending | — | — |
 | unblock-08-storage-grpc | — | pending | — | — |
