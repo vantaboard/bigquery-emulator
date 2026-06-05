@@ -161,6 +161,8 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
   schema::TableSchema schema_{};
 };
 
+}  // namespace
+
 // Analyze `request.sql` against `catalog` and return the
 // `AnalyzerOutput` (which owns the resolved AST).
 absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
@@ -202,8 +204,6 @@ AnalyzeStatementImpl(const QueryRequest& request,
   }
   return output;
 }
-
-}  // namespace
 
 absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
     absl::string_view type_kind_name) {
