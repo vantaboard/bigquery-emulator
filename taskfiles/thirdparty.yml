@@ -78,6 +78,14 @@
 # fake-gcs requirements, and which surfaces skip when missing.
 version: "3"
 
+# Propagate THIRDPARTY_FRESH_VOLUME into every thirdparty subtask so
+# `task thirdparty` aggregator exports and direct
+# `THIRDPARTY_FRESH_VOLUME=1 task thirdparty:<suite>` invocations
+# reach `emulator-up`'s volume wipe. Default `0` keeps standalone
+# `task thirdparty:<suite>` sticky for interactive iteration.
+env:
+  THIRDPARTY_FRESH_VOLUME: '{{.THIRDPARTY_FRESH_VOLUME | default "0"}}'
+
 vars:
   GO_TEST_FLAGS: ""
   # Default nox session for python-bigquery-tests is the upstream
@@ -689,6 +697,7 @@ tasks:
         set -euo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
+        echo "thirdparty:node-bigquery-tests: THIRDPARTY_FRESH_VOLUME=${THIRDPARTY_FRESH_VOLUME:-0}"
         if [ ! -f third_party/node-bigquery-tests/package.json ]; then
           echo "third_party/node-bigquery-tests missing" >&2
           exit 1

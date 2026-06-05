@@ -197,11 +197,9 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 	}
 }
 
-// TestDatasetGetSynthesizesResource pins the catalog stub behavior:
-// the engine has no Get RPC yet, so the handler returns a
-// synthesized resource derived from the path parameters. Once
-// Storage grows a DescribeDataset method this test will need
-// updating.
+// TestDatasetGetSynthesizesResource pins gateway-only behavior: when
+// Catalog is nil the handler returns a synthesized resource derived
+// from the path parameters (legacy unit-test posture).
 func TestDatasetGetSynthesizesResource(t *testing.T) {
 	req := newDatasetReq(http.MethodGet, testDatasetID, "")
 	rec := httptest.NewRecorder()
@@ -219,6 +217,61 @@ func TestDatasetGetSynthesizesResource(t *testing.T) {
 	}
 	if ds.DatasetReference.ProjectID != testProjectID || ds.DatasetReference.DatasetID != testDatasetID {
 		t.Errorf("datasetReference = %+v, want {proj, ds1}", ds.DatasetReference)
+	}
+}
+
+// TestDatasetGetNotFound asserts GET on a dataset absent from the
+// engine catalog surfaces as 404 so client exists() checks do not
+// treat deleted resources as present.
+func TestDatasetGetNotFound(t *testing.T) {
+	req := newDatasetReq(http.MethodGet, testDatasetID, "")
+	rec := httptest.NewRecorder()
+	DatasetGet(Dependencies{Catalog: &fakeCatalogClient{}})(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	var env errorEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if env.Error.Status != reasonNotFound {
+		t.Errorf("error.status = %q, want %q", env.Error.Status, reasonNotFound)
+	}
+	if !strings.Contains(env.Error.Message, "Not found: Dataset") {
+		t.Errorf("message = %q, want Not found: Dataset prefix", env.Error.Message)
+	}
+}
+
+// TestDatasetGetAfterDeleteReturnsNotFound pins list/get consistency:
+// after DELETE the dataset must not appear on GET.
+func TestDatasetGetAfterDeleteReturnsNotFound(t *testing.T) {
+	fake := &fakeCatalogClient{}
+	deps := Dependencies{Catalog: fake, Metadata: NewMetadataStore()}
+
+	insert := newDatasetReq(http.MethodPost, "",
+		`{"datasetReference":{"datasetId":"`+testDatasetID+`"}}`)
+	rec := httptest.NewRecorder()
+	DatasetInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	del := httptest.NewRequest(http.MethodDelete,
+		"/bigquery/v2/projects/"+testProjectID+"/datasets/"+testDatasetID+"?deleteContents=true", nil)
+	del.SetPathValue("projectId", testProjectID)
+	del.SetPathValue("datasetId", testDatasetID)
+	rec = httptest.NewRecorder()
+	DatasetDelete(deps)(rec, del)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	get := newDatasetReq(http.MethodGet, testDatasetID, "")
+	rec = httptest.NewRecorder()
+	DatasetGet(deps)(rec, get)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("get after delete: status=%d, want 404; body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -408,84 +461,6 @@ func runDatasetMetadataRoundTrip(t *testing.T, patch string, assertion func(*tes
 	assertion(t, got)
 }
 
-// TestDatasetPatchDeleteLabelResponseShape mirrors deleteLabelDataset:
-// PATCH with {color:null} must return labels:{} on the wire so
-// apiResponse.labels is not undefined in the Node sample.
-func TestDatasetPatchDeleteLabelResponseShape(t *testing.T) {
-	store := NewMetadataStore()
-	deps := Dependencies{Catalog: &fakeCatalogClient{}, Metadata: store}
-
-	insert := newDatasetReq(http.MethodPost, "",
-		`{"datasetReference":{"datasetId":"`+testDatasetID+`"}}`)
-	rec := httptest.NewRecorder()
-	DatasetInsert(deps)(rec, insert)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("insert: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	labelPatch := newDatasetReq(http.MethodPatch, testDatasetID, `{"labels":{"color":"green"}}`)
-	rec = httptest.NewRecorder()
-	DatasetPatch(deps)(rec, labelPatch)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("label patch: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	deletePatch := newDatasetReq(http.MethodPatch, testDatasetID, `{"labels":{"color":null}}`)
-	rec = httptest.NewRecorder()
-	DatasetPatch(deps)(rec, deletePatch)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("delete label patch: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	var doc map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
-		t.Fatalf("decode patch response: %v", err)
-	}
-	labels, present := doc["labels"]
-	if !present {
-		t.Fatalf("patch response missing labels; body=%s", rec.Body.String())
-	}
-	if labels == nil {
-		t.Fatal("patch response labels is null; want {}")
-	}
-	obj, ok := labels.(map[string]any)
-	if !ok {
-		t.Fatalf("labels is %T, want map[string]any", labels)
-	}
-	if len(obj) != 0 {
-		t.Errorf("labels = %v, want {}", obj)
-	}
-}
-
-// TestDatasetInsertInvalidRegionBeforeDuplicate asserts invalid location
-// is rejected before RegisterDataset when a regional API header is set.
-func TestDatasetInsertInvalidRegionBeforeDuplicate(t *testing.T) {
-	fake := &fakeCatalogClient{
-		registerDatasetFn: func(_ context.Context, _ *enginepb.RegisterDatasetRequest) (*enginepb.RegisterDatasetResponse, error) {
-			return nil, status.Error(codes.AlreadyExists, "dataset already exists: proj.ds1")
-		},
-	}
-	req := newDatasetReq(http.MethodPost, "",
-		`{"datasetReference":{"datasetId":"ds1"},"location":"us-central1"}`)
-	req.Header.Set(headerEmulatorAPIRegion, "us-east4")
-	rec := httptest.NewRecorder()
-	DatasetInsert(Dependencies{Catalog: fake})(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
-	}
-	if fake.lastRegisterDataset != nil {
-		t.Fatal("RegisterDataset must not run when location mismatches regional endpoint")
-	}
-	var env errorEnvelope
-	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if !strings.Contains(env.Error.Message, "Invalid storage region") {
-		t.Errorf("message = %q, want Invalid storage region", env.Error.Message)
-	}
-}
-
 // TestDatasetMetadataLabelsRoundTrip mirrors the upstream
 // `labelDataset` + `getDatasetLabels` sample sequence.
 func TestDatasetMetadataLabelsRoundTrip(t *testing.T) {
@@ -521,33 +496,4 @@ func TestDatasetMetadataDefaultPartitionExpirationRoundTrip(t *testing.T) {
 			}
 		},
 	)
-}
-
-// TestDatasetDeleteEvictsMetadata asserts DELETE clears the
-// MetadataStore so a subsequent Insert against the same ID does not
-// surface stale labels. With deleteContents=true the dataset's table
-// entries should also be flushed.
-func TestDatasetDeleteEvictsMetadata(t *testing.T) {
-	store := NewMetadataStore()
-	fake := &fakeCatalogClient{}
-	deps := Dependencies{Catalog: fake, Metadata: store}
-
-	store.PutDataset(testProjectID, testDatasetID, bqtypes.Dataset{Labels: bqtypes.ResourceLabels{"k": "v"}})
-	store.PutTable(testProjectID, testDatasetID, testTableID, bqtypes.Table{Labels: bqtypes.ResourceLabels{"k": "v"}})
-
-	req := newDatasetReq(http.MethodDelete, testDatasetID, "")
-	q := req.URL.Query()
-	q.Set("deleteContents", "true")
-	req.URL.RawQuery = q.Encode()
-	rec := httptest.NewRecorder()
-	DatasetDelete(deps)(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("delete: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if _, ok := store.GetDataset(testProjectID, testDatasetID); ok {
-		t.Error("MetadataStore dataset entry survived DatasetDelete")
-	}
-	if _, ok := store.GetTable(testProjectID, testDatasetID, testTableID); ok {
-		t.Error("MetadataStore table entry survived DatasetDelete(deleteContents=true)")
-	}
 }

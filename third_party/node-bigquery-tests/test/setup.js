@@ -114,6 +114,28 @@ function patchDescribeForEmulatorSkips() {
 
 patchDescribeForEmulatorSkips();
 
+// Upstream sample tests call `this.currentTest.retries(2)` so flaky
+// live-API calls get another chance. On the emulator a partial failure
+// often mutates the catalog (dataset/table create) before the assertion
+// fails; the retry then surfaces "Already Exists" instead of the
+// original error and poisons later tests in the same file.
+function patchMochaRetriesForEmulator() {
+  if (!process.env.BIGQUERY_EMULATOR_HOST) {
+    return;
+  }
+  const mocha = require('mocha');
+  if (mocha.Runnable.prototype.__goGooglesqlEmulatorRetriesPatched) {
+    return;
+  }
+  const originalRetries = mocha.Runnable.prototype.retries;
+  mocha.Runnable.prototype.retries = function retries(n) {
+    return originalRetries.call(this, 0);
+  };
+  mocha.Runnable.prototype.__goGooglesqlEmulatorRetriesPatched = true;
+}
+
+patchMochaRetriesForEmulator();
+
 exports.mochaHooks = {
   beforeEach() {
     if (!process.env.BIGQUERY_EMULATOR_HOST) {

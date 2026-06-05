@@ -26,6 +26,11 @@ type fakeCatalogClient struct {
 	insertRowsFn      func(context.Context, *enginepb.InsertRowsRequest) (*enginepb.InsertRowsResponse, error)
 	listRowsFn        func(context.Context, *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error)
 
+	// registeredDatasets mirrors RegisterDataset/DropDataset when no
+	// per-test callback overrides those methods, so ListDatasets and
+	// catalogDatasetExists behave like the live engine in unit tests.
+	registeredDatasets []*enginepb.DatasetRef
+
 	// lastRegisterDataset captures the most recent request so tests
 	// can assert on the values forwarded over the wire without having
 	// to set a callback on every test.
@@ -49,6 +54,10 @@ func (f *fakeCatalogClient) RegisterDataset(
 	if f.registerDatasetFn != nil {
 		return f.registerDatasetFn(ctx, in)
 	}
+	ref := in.GetDataset()
+	if ref != nil {
+		f.registeredDatasets = append(f.registeredDatasets, ref)
+	}
 	return &enginepb.RegisterDatasetResponse{}, nil
 }
 
@@ -61,6 +70,18 @@ func (f *fakeCatalogClient) DropDataset(
 	if f.dropDatasetFn != nil {
 		return f.dropDatasetFn(ctx, in)
 	}
+	ref := in.GetDataset()
+	if ref == nil {
+		return &enginepb.DropDatasetResponse{}, nil
+	}
+	out := f.registeredDatasets[:0]
+	for _, ds := range f.registeredDatasets {
+		if ds.GetProjectId() != ref.GetProjectId() ||
+			ds.GetDatasetId() != ref.GetDatasetId() {
+			out = append(out, ds)
+		}
+	}
+	f.registeredDatasets = out
 	return &enginepb.DropDatasetResponse{}, nil
 }
 
@@ -133,7 +154,13 @@ func (f *fakeCatalogClient) ListDatasets(
 	if f.listDatasetsFn != nil {
 		return f.listDatasetsFn(ctx, in)
 	}
-	return &enginepb.ListDatasetsResponse{}, nil
+	var out []*enginepb.DatasetRef
+	for _, ref := range f.registeredDatasets {
+		if ref.GetProjectId() == in.GetProjectId() {
+			out = append(out, ref)
+		}
+	}
+	return &enginepb.ListDatasetsResponse{Datasets: out}, nil
 }
 
 func (f *fakeCatalogClient) ListTables(

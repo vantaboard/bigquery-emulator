@@ -187,9 +187,9 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 //	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}
 //
 // The Catalog gRPC service does not yet expose a Get RPC (only
-// Register/Drop), so this handler returns a synthesized Dataset
-// resource derived from the path parameters. A true existence check
-// lands when Storage grows a DescribeDataset method.
+// Register/Drop/List), so existence is checked via ListDatasets before
+// synthesizing the Dataset resource from path parameters plus any
+// MetadataStore overlay.
 //
 // REST-only metadata (labels, defaultCollation, friendlyName, ...) is
 // surfaced from the in-memory MetadataStore so a prior
@@ -199,6 +199,16 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 func DatasetGet(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
+		exists, err := catalogDatasetExists(r.Context(), deps, projectID, datasetID)
+		if err != nil {
+			if grpcToHTTPError(w, err) {
+				return
+			}
+		}
+		if !exists {
+			writeDatasetNotFound(w, projectID, datasetID)
+			return
+		}
 		ds := bqtypes.Dataset{}
 		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok {
 			ds = applyDatasetMetadataOverlay(ds, overlay)
@@ -219,6 +229,16 @@ func DatasetGet(deps Dependencies) http.HandlerFunc {
 func DatasetUpdate(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
+		exists, err := catalogDatasetExists(r.Context(), deps, projectID, datasetID)
+		if err != nil {
+			if grpcToHTTPError(w, err) {
+				return
+			}
+		}
+		if !exists {
+			writeDatasetNotFound(w, projectID, datasetID)
+			return
+		}
 		ds, ok := decodeDatasetBody(w, r)
 		if !ok {
 			return
@@ -238,6 +258,16 @@ func DatasetUpdate(deps Dependencies) http.HandlerFunc {
 func DatasetPatch(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID := datasetIDFromPath(r)
+		exists, err := catalogDatasetExists(r.Context(), deps, projectID, datasetID)
+		if err != nil {
+			if grpcToHTTPError(w, err) {
+				return
+			}
+		}
+		if !exists {
+			writeDatasetNotFound(w, projectID, datasetID)
+			return
+		}
 		ds, ok := decodeDatasetBody(w, r)
 		if !ok {
 			return
