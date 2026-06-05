@@ -173,6 +173,7 @@ func mountJobsAndQueries(mux *http.ServeMux, mount mountFunc, deps handlers.Depe
 	// the public BigQuery API and the client libraries hardcode it, so
 	// only the `/upload/bigquery/v2/...` form is registered here.
 	mux.HandleFunc("POST /upload/bigquery/v2/projects/{projectId}/jobs", handlers.JobInsertUpload(deps))
+	mux.HandleFunc("PUT /upload/bigquery/v2/projects/{projectId}/jobs", handlers.JobInsertUpload(deps))
 	mount("GET", "/projects/{projectId}/jobs/{jobId}", handlers.JobGet(deps))
 	mount("POST", "/projects/{projectId}/jobs/{jobId}/cancel", handlers.JobCancel(deps))
 	mount("DELETE", "/projects/{projectId}/jobs/{jobId}/delete", handlers.JobDelete(deps))

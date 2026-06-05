@@ -26,14 +26,27 @@ type Result struct {
 func Execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobConfigurationLoad,
 	defaultProject string,
 ) (Result, error) {
+	return execute(ctx, catalog, cfg, defaultProject, nil)
+}
+
+// ExecuteFromBytes runs a LOAD job using inline upload bytes instead of sourceUris.
+func ExecuteFromBytes(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobConfigurationLoad,
+	defaultProject string, media []byte,
+) (Result, error) {
+	return execute(ctx, catalog, cfg, defaultProject, [][]byte{media})
+}
+
+func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobConfigurationLoad,
+	defaultProject string, inline [][]byte,
+) (Result, error) {
 	if cfg == nil {
 		return Result{}, errors.New("load configuration is required")
 	}
 	if cfg.DestinationTable == nil || cfg.DestinationTable.TableID == "" {
 		return Result{}, errors.New("destinationTable.tableId is required")
 	}
-	if len(cfg.SourceURIs) == 0 {
-		return Result{}, errors.New("sourceUris must not be empty")
+	if len(cfg.SourceURIs) == 0 && len(inline) == 0 {
+		return Result{}, errors.New("sourceUris or upload media is required")
 	}
 
 	projectID := cfg.DestinationTable.ProjectID
@@ -43,30 +56,22 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 	datasetID := cfg.DestinationTable.DatasetID
 	tableID := cfg.DestinationTable.TableID
 
-	var totalBytes int64
-	var parsed ParsedRows
-	for i, uri := range cfg.SourceURIs {
-		data, err := FetchSource(ctx, uri)
-		if err != nil {
-			return Result{}, err
-		}
-		totalBytes += int64(len(data))
-		chunk, err := ParseSource(cfg.SourceFormat, data, cfg.Schema, cfg.SkipLeadingRows(), cfg.Autodetect)
-		if err != nil {
-			return Result{}, err
-		}
-		if i == 0 {
-			parsed = chunk
-		} else {
-			parsed.Rows = append(parsed.Rows, chunk.Rows...)
-		}
-	}
-
-	if err := ensureDataset(ctx, catalog, projectID, datasetID); err != nil {
+	parsed, totalBytes, inputFiles, err := parseLoadSources(ctx, cfg, inline)
+	if err != nil {
 		return Result{}, err
 	}
-	protoSchema := schemaToProto(parsed.Schema)
-	if err := applyWriteDisposition(ctx, catalog, cfg, projectID, datasetID, tableID, protoSchema); err != nil {
+
+	if err = ensureDataset(ctx, catalog, projectID, datasetID); err != nil {
+		return Result{}, err
+	}
+	protoSchema, err := resolveDestinationSchema(ctx, catalog, cfg, projectID, datasetID, tableID, parsed.Schema)
+	if err != nil {
+		return Result{}, err
+	}
+	if protoSchema == nil {
+		protoSchema = schemaToProto(parsed.Schema)
+	}
+	if err = applyWriteDisposition(ctx, catalog, cfg, projectID, datasetID, tableID, protoSchema); err != nil {
 		return Result{}, err
 	}
 
@@ -78,11 +83,59 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 	}
 
 	return Result{
-		InputFiles:     len(cfg.SourceURIs),
+		InputFiles:     inputFiles,
 		InputFileBytes: totalBytes,
 		OutputRows:     int64(inserted),
 		OutputBytes:    totalBytes,
 	}, nil
+}
+
+func parseLoadSources(ctx context.Context, cfg *jobs.JobConfigurationLoad, inline [][]byte,
+) (parsed ParsedRows, totalBytes int64, inputFiles int, err error) {
+	if len(inline) > 0 {
+		return parseInlineSources(cfg, inline)
+	}
+	return parseURISources(ctx, cfg)
+}
+
+func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte) (ParsedRows, int64, int, error) {
+	var parsed ParsedRows
+	var totalBytes int64
+	for i, data := range inline {
+		totalBytes += int64(len(data))
+		chunk, err := ParseSource(cfg.SourceFormat, data, cfg.Schema, cfg.SkipLeadingRows(), cfg.Autodetect)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+		parsed = mergeParsedChunk(parsed, chunk, i == 0)
+	}
+	return parsed, totalBytes, len(inline), nil
+}
+
+func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad) (ParsedRows, int64, int, error) {
+	var parsed ParsedRows
+	var totalBytes int64
+	for i, uri := range cfg.SourceURIs {
+		data, err := FetchSource(ctx, uri)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+		totalBytes += int64(len(data))
+		chunk, err := ParseSource(cfg.SourceFormat, data, cfg.Schema, cfg.SkipLeadingRows(), cfg.Autodetect)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+		parsed = mergeParsedChunk(parsed, chunk, i == 0)
+	}
+	return parsed, totalBytes, len(cfg.SourceURIs), nil
+}
+
+func mergeParsedChunk(acc, chunk ParsedRows, first bool) ParsedRows {
+	if first {
+		return chunk
+	}
+	acc.Rows = append(acc.Rows, chunk.Rows...)
+	return acc
 }
 
 func ensureDataset(ctx context.Context, catalog enginepb.CatalogClient, projectID, datasetID string) error {
@@ -96,7 +149,7 @@ func applyWriteDisposition(ctx context.Context, catalog enginepb.CatalogClient,
 ) error {
 	wd := cfg.WriteDisposition
 	if wd == "" {
-		wd = "WRITE_APPEND"
+		wd = writeAppend
 	}
 	tableRef := &enginepb.TableRef{
 		ProjectId: projectID,

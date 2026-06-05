@@ -172,13 +172,27 @@ func JobInsert(deps Dependencies) http.HandlerFunc {
 // JobInsertUpload implements `bigquery.jobs.insert` (media-upload variant):
 //
 //	POST /upload/bigquery/v2/projects/{projectId}/jobs
+//	PUT  /upload/bigquery/v2/projects/{projectId}/jobs
 //
 // Selected via `?uploadType=multipart` or `?uploadType=resumable`. The
-// emulator must accept both because the official client libraries pick
-// one based on payload size. Plan tp04 leaves this surface untouched —
-// load uploads land in plan tp08.
-func JobInsertUpload(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+// emulator accepts both because the official client libraries pick one
+// based on payload size.
+func JobInsertUpload(deps Dependencies) http.HandlerFunc {
+	if deps.Jobs == nil {
+		deps.Jobs = jobs.NewRegistry()
+	}
+	store := load.DefaultUploadStore()
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleJobInsertUploadPost(deps, store, w, r)
+		case http.MethodPut:
+			handleJobInsertUploadPut(deps, store, w, r)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, reasonInvalid,
+				"jobs.insert upload supports POST and PUT only")
+		}
+	}
 }
 
 // JobGet implements `bigquery.jobs.get`:
@@ -380,109 +394,6 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	}
 	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, r)
 	writeJSON(w, http.StatusOK, job)
-}
-
-// runSyncLoadInsert accepts a load-job body, fetches source bytes, parses
-// CSV/JSON, and bulk-inserts into the destination table.
-func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
-	posted *jobs.Job, cfg *jobs.JobConfiguration,
-) {
-	projectID := r.PathValue("projectId")
-	job := newPendingJob(deps, projectID, posted, cfg)
-	start := time.Now().UTC()
-	if deps.Catalog == nil {
-		finalizeDeferredDataPlaneJob(job, cfg, start, "load")
-		writeJSON(w, http.StatusOK, job)
-		return
-	}
-	result, err := load.Execute(r.Context(), deps.Catalog, cfg.Load, projectID)
-	if err != nil {
-		finalizeFailedJob(deps, job, start, err)
-		writeJSON(w, http.StatusOK, job)
-		return
-	}
-	finalizeSuccessfulLoadJob(job, start, result)
-	writeJSON(w, http.StatusOK, job)
-}
-
-// runSyncCopyInsert accepts a copy-job body. Row copy lands in thirdparty-05.
-func runSyncCopyInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
-	posted *jobs.Job, cfg *jobs.JobConfiguration,
-) {
-	projectID := r.PathValue("projectId")
-	job := newPendingJob(deps, projectID, posted, cfg)
-	start := time.Now().UTC()
-	finalizeDeferredDataPlaneJob(job, cfg, start, "copy")
-	writeJSON(w, http.StatusOK, job)
-}
-
-// runSyncExtractInsert accepts an extract-job body. GCS export lands in thirdparty-05.
-func runSyncExtractInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
-	posted *jobs.Job, cfg *jobs.JobConfiguration,
-) {
-	projectID := r.PathValue("projectId")
-	job := newPendingJob(deps, projectID, posted, cfg)
-	start := time.Now().UTC()
-	finalizeDeferredDataPlaneJob(job, cfg, start, "extract")
-	writeJSON(w, http.StatusOK, job)
-}
-
-// finalizeSuccessfulLoadJob marks a LOAD job DONE with statistics.load and
-// no errorResult.
-func finalizeSuccessfulLoadJob(job *jobs.Job, start time.Time, result load.Result) {
-	end := time.Now().UTC()
-	job.Status.State = jobs.JobStateDone
-	job.Status.ErrorResult = nil
-	job.Statistics.StartTime = millisString(start)
-	job.Statistics.EndTime = millisString(end)
-	job.Statistics.Load = load.FormatStatistics(result)
-}
-
-// finalizeDeferredDataPlaneJob marks a tp08 foundation job DONE with an
-// errorResult naming the deferred data-plane plan and zeroed per-type
-// statistics counters. HTTP stays 200 per the jobs.insert contract;
-// clients inspect job.status.errorResult.
-func finalizeDeferredDataPlaneJob(job *jobs.Job, cfg *jobs.JobConfiguration, start time.Time, kind string) {
-	end := time.Now().UTC()
-	job.Status.State = jobs.JobStateDone
-	job.Status.ErrorResult = &bqtypes.ErrorProto{
-		Reason: reasonNotImplemented,
-		Message: "jobs.insert: " + kind + " job data plane not yet implemented; " +
-			"load / copy / extract execution lands in thirdparty-04/05.",
-	}
-	job.Statistics.StartTime = millisString(start)
-	job.Statistics.EndTime = millisString(end)
-	switch kind {
-	case "load":
-		inputFiles := "0"
-		if cfg.Load != nil {
-			inputFiles = strconv.Itoa(len(cfg.Load.SourceURIs))
-		}
-		job.Statistics.Load = &jobs.LoadStatistics{
-			InputFiles:     inputFiles,
-			InputFileBytes: "0",
-			OutputRows:     "0",
-			OutputBytes:    "0",
-			BadRecords:     "0",
-		}
-	case "copy":
-		job.Statistics.Copy = &jobs.CopyStatistics{
-			CopiedRows:         "0",
-			CopiedLogicalBytes: "0",
-		}
-	case "extract":
-		var counts []string
-		if cfg.Extract != nil && len(cfg.Extract.DestinationURIs) > 0 {
-			counts = make([]string, len(cfg.Extract.DestinationURIs))
-			for i := range counts {
-				counts[i] = "0"
-			}
-		}
-		job.Statistics.Extract = &jobs.ExtractStatistics{
-			DestinationURIFileCounts: counts,
-			InputBytes:               "0",
-		}
-	}
 }
 
 // runSyncQueryDryRunInsert handles jobs.insert with configuration.dryRun

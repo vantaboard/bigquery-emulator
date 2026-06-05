@@ -11,7 +11,15 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
-const fieldTypeString = "STRING"
+const (
+	fieldTypeString   = "STRING"
+	fieldTypeInteger  = "INTEGER"
+	fieldTypeFloat    = "FLOAT"
+	fieldTypeBoolean  = "BOOLEAN"
+	fieldTypeRecord   = "RECORD"
+	fieldModeRequired = "REQUIRED"
+	writeAppend       = "WRITE_APPEND"
+)
 
 // ParsedRows is the in-memory row batch produced by a format parser.
 type ParsedRows struct {
@@ -28,6 +36,12 @@ func ParseSource(format string, data []byte, schema *bqtypes.TableSchema,
 		return parseCSV(data, schema, skipLeading, autodetect)
 	case "NEWLINE_DELIMITED_JSON":
 		return parseNDJSON(data, schema, autodetect)
+	case "PARQUET":
+		return parseParquet(data, schema, autodetect)
+	case "AVRO":
+		return parseAvro(data, schema, autodetect)
+	case "ORC":
+		return parseORC(data, schema, autodetect)
 	default:
 		return ParsedRows{}, fmt.Errorf("unsupported sourceFormat %q", format)
 	}

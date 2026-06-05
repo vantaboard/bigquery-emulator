@@ -20,7 +20,7 @@ func TestParseCSVWithSchemaAndSkipHeader(t *testing.T) {
 	if len(got.Rows) != 2 {
 		t.Fatalf("rows = %d, want 2", len(got.Rows))
 	}
-	if got.Rows[0]["name"] != "Alabama" || got.Rows[0]["post_abbr"] != "AL" {
+	if got.Rows[0]["name"] != testStateName || got.Rows[0]["post_abbr"] != testStateCode {
 		t.Fatalf("row0 = %#v", got.Rows[0])
 	}
 }
