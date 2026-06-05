@@ -150,8 +150,8 @@ conformance-harness state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 | **ManagedWriter / Storage Read** | Skipped unless `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set; uses `bqopts.StorageGRPCClientOptions()`. |
 | **GCS sample loads** (`gs://cloud-samples-data/...`) | Skipped when `BIGQUERY_EMULATOR_HOST` is set and `STORAGE_EMULATOR_HOST` is unset. When both are set, tests expect the compose-mounted fake-gcs objects. |
 | **Legacy SQL** | This emulator rejects `useLegacySql=true` with HTTP 400 (see `docs/REST_API.md`); samples that rely on legacy syntax fail rather than skip. Adjust the sample set accordingly. |
-| **CREATE MODEL / ML** + **routine DDL** | Skipped or fails (tracked under SQL gaps in `ROADMAP.md`). |
-| **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The vendored go-googlesql snapshot under `testdata/bq-emulator/` (`-initial-data-dir`) seeds these. This emulator does not yet expose a `--initial-data-dir` flag on `gateway_main`; tests that need pre-seeded public catalog data will need to skip or be re-driven through fixture setup. |
+| **CREATE MODEL / ML** + **routine DDL** | Skipped or fails (tracked under SQL gaps in `ROADMAP.md`). Python samples use `emulator_pytest_skip.py`; Node skips `models.test.js` via `test/setup.js`. |
+| **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The vendored go-googlesql snapshot under `testdata/bq-emulator/` (`-initial-data-dir`) seeds these. This emulator does not yet expose a `--initial-data-dir` flag on `gateway_main`; Python/Node tests that query public datasets are skipped when `BIGQUERY_EMULATOR_HOST` is set (see `emulator_pytest_skip.py` and `node-bigquery-tests/test/setup.js`). |
 
 ### Emulator stderr (benign vs actionable)
 
@@ -229,6 +229,13 @@ nox process and the surrounding `task thirdparty:default` chain still
 sees the bare form their Go/Node clients expect. Snippet tests under
 `samples/tests/` use `AnonymousCredentials` when the emulator host is
 set.
+
+When `BIGQUERY_EMULATOR_HOST` is set, the task also loads the
+repo-owned pytest plugin
+[`emulator_pytest_skip.py`](python-bigquery-tests/emulator_pytest_skip.py)
+(`-p emulator_pytest_skip`) which skips BQML, geography, legacy SQL,
+and `bigquery-public-data` sample tests per `docs/ENGINE_POLICY.md`.
+Override or narrow via `PYTHON_SAMPLES_PYTEST_ARGS` (appended last).
 
 The default session is `snippets` (upstream-defined; emulator-driven).
 Override via the Task CLI: `task thirdparty:python-bigquery-tests
@@ -370,8 +377,8 @@ Expected fail states per surface (initial baseline; see `ROADMAP.md`):
 |---------|-------------|
 | `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets, see the per-IT verdict in the plan). |
 | `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until shallow ConnectionService backend lands (see `ROADMAP.md`). |
-| `bigquerydatatransfer` (3 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands the shallow DataTransferService backend. |
-| `bigquerystorage` (1 IT, `WriteBufferedStreamIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands BigQuery Write API parity. |
+| `bigquerydatatransfer` (11 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands the shallow DataTransferService backend. |
+| `bigquerystorage` (2 ITs: `WriteBufferedStreamIT`, `StorageArrowSampleIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands BigQuery Write/Read API parity. |
 
 Setting `JAVA_BQ_SKIP_TESTS=true` reverts to the legacy compile-only
 posture (`-DskipTests=true -Dmaven.test.skip=true`); useful when you
@@ -380,9 +387,14 @@ just want the libraries-bom drift check.
 The CI job
 [`java-bigquery-tests-live`](../.github/workflows/thirdparty-samples.yml)
 exercises the same fan-out on every push/PR with Temurin 17. Until the
-shallow-emulators work lands, the job tolerates the 9 expected-fail ITs
-via a `JAVA_BQ_ALLOW_FAILING_ITS` allowlist (see the workflow for the
-expected diagnostic).
+shallow-emulators work lands, the job tolerates the expected-fail gRPC
+ITs via `JAVA_BQ_ALLOW_FAILING_ITS` (comma-separated Failsafe class
+names). The same allowlist is wired in
+[`taskfiles/thirdparty.yml`](../taskfiles/thirdparty.yml): when every
+failing IT in a module is on the list, that module is treated as OK.
+`QueryMaterializedViewIT` is **not** allowlisted — it exercises REST
+materialized-view schema inference and must pass once the gateway bug
+is fixed.
 
 ### Emulator wiring
 
@@ -418,7 +430,8 @@ mirror of the libraries-bom on first run.
 | Knob | Default | Purpose |
 |------|---------|---------|
 | `JAVA_BQ_MAVEN_GOALS` | `package` | Maven goals run on every snippets module in the fan-out. Override to `compile`, `verify`, etc. |
-| `JAVA_BQ_SKIP_TESTS` | `true` | When `false`, drops `-Dmaven.test.skip=true` so test-compile + Failsafe execute (only useful with a `BqOpts`-routed IT and a live emulator). |
+| `JAVA_BQ_SKIP_TESTS` | `false` | When `true`, reverts to compile-only (`-DskipTests=true -Dmaven.test.skip=true`). |
+| `JAVA_BQ_ALLOW_FAILING_ITS` | see `taskfiles/thirdparty.yml` | Comma-separated Failsafe IT simple class names whose failure is expected until gRPC shallow backends land. Empty/unset disables allowlisting (local runs fail on any IT failure). |
 | `JAVA_BQ_SAMPLE_PATHS` | the four paths in the upstream table above (whitespace-separated) | Snippet module paths relative to `third_party/java-bigquery-tests/`. Override to narrow the fan-out (e.g. `JAVA_BQ_SAMPLE_PATHS=java-bigquery/samples/snippets` while iterating on a single tree). |
 
 ### Sample coverage
@@ -443,8 +456,10 @@ deferred-to-gRPC-server-follow-ups root causes:
   handlers for datatransfer, but the Java gapic clients use gRPC).
 - `AuthorizeDatasetIT` fails on the bare `POST /datasets/{id}` legacy
   PATCH path the emulator currently rejects.
-- `QueryMaterializedViewIT` fails on the GoogleSQL engine bug where
-  `SELECT *` over a materialized view resolves to zero columns.
+- `QueryMaterializedViewIT` previously failed when REST `tables.insert` omitted
+  schema on materialized views (gateway dropped `materializedView` and registered
+  zero columns, so `SELECT *` expanded to nothing). The gateway now dry-runs the
+  MV query to infer schema on insert; rebuild the compose image to pick up the fix.
 
 See the shallow-emulators plan and the missing-tests follow-up plan for
 the per-IT verdict tables and the queued gRPC-server follow-ups.
@@ -527,10 +542,26 @@ instead of walking up to `bigquery-emulator/.git`.
 Once the snippets are present, the task runs:
 
 ```bash
-task thirdparty:python-bigquery-dataframes-tests
-# Narrow CI gate (curated emulator-passing allowlist):
-task thirdparty:python-bigquery-dataframes-snippet-gate
+task thirdparty:python-bigquery-dataframes-tests          # full 32-snippet tree
+task thirdparty:python-bigquery-dataframes-snippet-gate   # default thirdparty gate (4 non-ML smokes)
 ```
+
+`task thirdparty` / `task thirdparty:default` invokes
+**`python-bigquery-dataframes-snippet-gate`**, not the full suite. The
+gate runs only:
+
+- `test_bigquery_dataframes_set_options`
+- `test_bigquery_dataframes_load_data_from_bigquery`
+- `test_bigquery_dataframes_pandas_methods`
+- `test_performance_optimizations`
+
+**Skipped by default (BQML / Gemini / out of scope):** after sync, the
+tree ships 15+ ML-oriented snippet tests (`*_model_test.py`, `bqml_*`,
+`gemini_*`, `imported_*`, `multimodal_*`, forecasting, clustering, etc.)
+that require `CREATE MODEL`, remote ONNX/TensorFlow imports, or Gemini
+APIs this emulator does not implement (`docs/ENGINE_POLICY.md`). Run the
+full `python-bigquery-dataframes-tests` task locally when triaging ML
+parity; do not expect those snippets to pass against the emulator.
 
 Only `samples/snippets` (nox session `py`) is invoked; the post-sync
 tree includes `bigframes/` and `third_party/bigframes_vendored/` for

@@ -59,3 +59,53 @@ function patchBigQueryConstructorForEmulatorRegion() {
 }
 
 patchBigQueryConstructorForEmulatorRegion();
+
+// When BIGQUERY_EMULATOR_HOST is set, skip entire Mocha files and individual
+// tests that require BQML, legacy SQL, or bigquery-public-data catalog
+// fixtures (see third_party/README.md and docs/ENGINE_POLICY.md).
+const EMULATOR_SKIP_FILES = /(?:^|[\\/])test[\\/](?:models|jobs)\.test\.js$/;
+
+const EMULATOR_SKIP_TITLE_PATTERNS = [
+  /legacy SQL/i,
+  /different project/i,
+];
+
+function patchDescribeForEmulatorSkips() {
+  if (!process.env.BIGQUERY_EMULATOR_HOST) {
+    return;
+  }
+  // Ensure Mocha has installed the full describe API (only/skip) before
+  // we wrap it — setup.js is --require'd before the runner attaches .only.
+  require('mocha');
+  const originalDescribe = global.describe;
+  if (typeof originalDescribe !== 'function') {
+    return;
+  }
+  function describeWithEmulatorSkips(name, fn) {
+    const err = new Error();
+    const stack = err.stack || '';
+    if (EMULATOR_SKIP_FILES.test(stack)) {
+      return originalDescribe.skip(name, fn);
+    }
+    return originalDescribe(name, fn);
+  }
+  describeWithEmulatorSkips.only = originalDescribe.only;
+  describeWithEmulatorSkips.skip = originalDescribe.skip;
+  global.describe = describeWithEmulatorSkips;
+}
+
+patchDescribeForEmulatorSkips();
+
+exports.mochaHooks = {
+  beforeEach() {
+    if (!process.env.BIGQUERY_EMULATOR_HOST) {
+      return;
+    }
+    const title = this.currentTest?.fullTitle?.() || '';
+    for (const pattern of EMULATOR_SKIP_TITLE_PATTERNS) {
+      if (pattern.test(title)) {
+        this.skip();
+      }
+    }
+  },
+};

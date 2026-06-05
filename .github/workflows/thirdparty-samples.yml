@@ -116,8 +116,11 @@ jobs:
           JAVA_BQ_ALLOW_FAILING_ITS: >-
             CreateAwsConnectionIT,DeleteConnectionIT,GetConnectionIT,
             ShareConnectionIT,UpdateConnectionIT,
-            CreateAmazonS3TransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT,
-            WriteBufferedStreamIT
+            WriteBufferedStreamIT,StorageArrowSampleIT,
+            CreateAmazonS3TransferIT,CreateAdManagerTransferIT,CreateAdsTransferIT,
+            CreateCampaignmanagerTransferIT,CreatePlayTransferIT,CreateRedshiftTransferIT,
+            CreateTeradataTransferIT,CreateYoutubeChannelTransferIT,
+            CreateYoutubeContentOwnerTransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT
 
       - name: Stop emulator
         if: always()

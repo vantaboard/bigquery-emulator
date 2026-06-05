@@ -44,6 +44,13 @@ BigQuery emulator and **fake-gcs-server** where the samples and client support i
 
 The parent repo’s task is **`task thirdparty:node-bigquery-tests`** (same as **`npm test`** here).
 
+When **`BIGQUERY_EMULATOR_HOST`** is set, **`test/setup.js`** also:
+
+- Skips entire **`models.test.js`** and **`jobs.test.js`** suites (BQML and
+  `bigquery-public-data` fixtures).
+- Skips individual tests whose titles match legacy SQL or cross-project
+  public-dataset listing.
+
 **CI / narrow checks:** from this directory you can run **`npx mocha test/clients.test.js --timeout 200000 --require ./test/setup.js`** after **`npm install`** for lightweight client setup checks (see **Smoke test** above).
 
 **CI:** In **go-googlesql** **`.github/workflows/thirdparty-samples.yml`**, the **nodejs-bigquery**
