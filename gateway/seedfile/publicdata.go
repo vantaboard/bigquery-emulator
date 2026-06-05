@@ -24,6 +24,7 @@ const PublicDataSeedContainerPath = "/opt/bigquery-emulator/testdata/public-data
 // third_party/README.md) treat only these refs as emulator-backed.
 var SeededPublicTables = []string{
 	PublicDataProject + ".usa_names.usa_1910_2013",
+	PublicDataProject + ".usa_names.usa_1910_current",
 	PublicDataProject + ".samples.shakespeare",
 	PublicDataProject + ".stackoverflow.posts_questions",
 	PublicDataProject + ".ml_datasets.penguins",

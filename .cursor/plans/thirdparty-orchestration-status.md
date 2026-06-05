@@ -39,12 +39,12 @@ Log: `.logs/thirdparty-20260605-134407.log` (exit 201, `THIRDPARTY_REBUILD=1`)
 
 Dispatch: `.cursor/plans/unblock_subagent_dispatch_896b06e4.plan.md`  
 Baseline: `.logs/thirdparty-20260605-134407.log`  
-**NEXT:** `unblock-02-public-data-seed`
+**NEXT:** `unblock-03-bigframes-gate`
 
 | Plan | Attempts | Result | Commit | Notes |
 |------|----------|--------|--------|-------|
-| unblock-01-gcs-networking | 1 | PASS | pending | in-container fake-gcs OK; test_load_table_uri_csv PASSED |
-| unblock-02-public-data-seed | — | pending | — | — |
+| unblock-01-gcs-networking | 1 | PASS | add0410 | in-container fake-gcs OK; test_load_table_uri_csv PASSED |
+| unblock-02-public-data-seed | 1 | PASS | pending | 100 TX rows + usa_1910_current; test_client_query_total_rows PASSED |
 | unblock-03-bigframes-gate | — | pending | — | — |
 | unblock-04-gateway-wire-shapes | — | pending | — | — |
 | unblock-05-query-params | — | pending | — | — |

@@ -42,7 +42,7 @@ func TestPublicDataFixtureLoads(t *testing.T) {
 		t.Fatalf("datasets=%d, want 4", len(f.Datasets))
 	}
 	wantTables := map[string]int{
-		"usa_names":     1,
+		"usa_names":     2,
 		"samples":       1,
 		"stackoverflow": 1,
 		"ml_datasets":   1,
@@ -101,6 +101,11 @@ func TestPublicDataRefsFullySeeded(t *testing.T) {
 		{
 			name: "usa_names only",
 			sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_2013`",
+			want: true,
+		},
+		{
+			name: "usa_1910_current",
+			sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_current`",
 			want: true,
 		},
 		{
