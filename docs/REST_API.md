@@ -55,7 +55,7 @@ omit the host and use `{x}` for path variables.
 | `tables.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableGet`][tables] |
 | `tables.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableUpdate`][tables] |
 | `tables.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TablePatch`][tables] |
-| `tables.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableDelete`][tables] |
+| `tables.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done (captures snapshot for undelete) | [`gateway/handlers/tables.go::TableDelete`][tables] |
 | `tables.getIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy` | wired | [`gateway/handlers/tables.go::TableGetIamPolicy`][tables] |
 | `tables.setIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy` | wired | [`gateway/handlers/tables.go::TableSetIamPolicy`][tables] |
 | `tables.testIamPermissions` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions` | wired | [`gateway/handlers/tables.go::TableTestIamPermissions`][tables] |
@@ -72,7 +72,7 @@ omit the host and use `{x}` for path variables.
 | Method | Path | Status | Handler |
 |---|---|---|---|
 | `jobs.list` | `GET /bigquery/v2/projects/{projectId}/jobs` | wired | [`gateway/handlers/jobs.go::JobList`][jobs] |
-| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | wired (query done; LOAD CSV/JSON/Parquet + schema updates; copy/extract stub) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
+| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | wired (query, LOAD, COPY, EXTRACT) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
 | `jobs.insert` (media upload) | `POST /upload/bigquery/v2/projects/{projectId}/jobs` | wired (multipart + resumable LOAD) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
 | `jobs.insert` (resumable chunk) | `PUT /upload/bigquery/v2/projects/{projectId}/jobs` | wired (resumable LOAD upload) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
 | `jobs.get` | `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` | wired | [`gateway/handlers/jobs.go::JobGet`][jobs] |
@@ -82,6 +82,17 @@ omit the host and use `{x}` for path variables.
 The literal `/delete` segment after `{jobId}` is not a typo — that is
 the upstream URL template, see
 [`docs/bigquery/docs/reference/rest/v2/jobs/delete.md`][delete-md].
+
+**COPY / EXTRACT / undelete (tp08):** `configuration.copy` copies rows
+from `sourceTable` / `sourceTables` into `destinationTable`, honoring
+`writeDisposition` (`WRITE_EMPTY`, `WRITE_TRUNCATE`, `WRITE_APPEND`).
+Live sources prefer engine SQL (`CREATE TABLE AS SELECT` / `UNION ALL`);
+snapshot sources (`tableId@epoch`) and SQL fallbacks use catalog row copy.
+`configuration.extract` serializes a source table to `destinationUris`
+(`CSV`, `NEWLINE_DELIMITED_JSON`, optional `GZIP`) via fake-gcs HTTP upload.
+Table undelete (python `test_undelete_table`, node `undeleteTable`) is a
+COPY job from a snapshot decorator after `tables.delete`; there is no
+separate `tables.undelete` RPC.
 
 [delete-md]: ./bigquery/docs/reference/rest/v2/jobs/delete.md
 

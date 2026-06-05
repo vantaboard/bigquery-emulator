@@ -18,6 +18,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/snapshots"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -53,6 +54,16 @@ type Dependencies struct {
 	// response. Nil is treated as a no-op store so legacy unit
 	// tests that do not opt in keep their echo posture.
 	Metadata *MetadataStore
+
+	// Snapshots retains deleted-table row captures for COPY jobs that
+	// reference table@epoch decorators (undelete samples). Nil is a
+	// no-op store.
+	Snapshots *snapshots.Store
+}
+
+// NewSnapshotStore returns an empty table snapshot store for gateway deps.
+func NewSnapshotStore() *snapshots.Store {
+	return snapshots.NewStore()
 }
 
 // Health is a trivial liveness endpoint useful for `docker-compose`

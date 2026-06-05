@@ -38,8 +38,9 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 	// jobs.get, and jobs.list handlers so a job minted by the sync
 	// query API is discoverable by subsequent reads.
 	deps := handlers.Dependencies{
-		Jobs:     jobs.NewRegistry(),
-		Metadata: handlers.NewMetadataStore(),
+		Jobs:      jobs.NewRegistry(),
+		Metadata:  handlers.NewMetadataStore(),
+		Snapshots: handlers.NewSnapshotStore(),
 	}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to

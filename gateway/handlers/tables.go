@@ -259,6 +259,12 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
+		created := nowMillis()
+		if deps.Snapshots != nil {
+			if ms, parseErr := strconv.ParseInt(created, 10, 64); parseErr == nil {
+				deps.Snapshots.RecordCreation(projectID, datasetID, tableID, ms)
+			}
+		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -382,6 +388,11 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}
+		if deps.Snapshots != nil {
+			if ct, ok := deps.Snapshots.CreationTimeMs(projectID, datasetID, tableID); ok {
+				t.CreationTime = strconv.FormatInt(ct, 10)
+			}
+		}
 		if rowsResp, listErr := deps.Catalog.ListRows(r.Context(), &enginepb.ListRowsRequest{
 			Table: &enginepb.TableRef{
 				ProjectId: projectID,
@@ -452,6 +463,10 @@ func TableDelete(deps Dependencies) http.HandlerFunc {
 		if deps.Catalog == nil {
 			NotImplemented(w, r)
 			return
+		}
+		if deps.Snapshots != nil {
+			_ = deps.Snapshots.CaptureBeforeDelete(r.Context(), deps.Catalog,
+				projectID, datasetID, tableID)
 		}
 		_, err := deps.Catalog.DropTable(r.Context(), &enginepb.DropTableRequest{
 			Table: &enginepb.TableRef{

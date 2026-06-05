@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/copy"
+	"github.com/vantaboard/bigquery-emulator/gateway/extract"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
@@ -36,26 +38,66 @@ func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, job)
 }
 
-// runSyncCopyInsert accepts a copy-job body. Row copy lands in thirdparty-05.
+// runSyncCopyInsert executes a copy job via engine SQL or catalog row copy.
 func runSyncCopyInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	posted *jobs.Job, cfg *jobs.JobConfiguration,
 ) {
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
 	start := time.Now().UTC()
-	finalizeDeferredDataPlaneJob(job, cfg, start, "copy")
+	if deps.Catalog == nil {
+		finalizeDeferredDataPlaneJob(job, cfg, start, "copy")
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	result, err := copy.Execute(r.Context(), deps.Catalog, deps.Query, deps.Snapshots, cfg.Copy, projectID)
+	if err != nil {
+		finalizeFailedJob(deps, job, start, err)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	finalizeSuccessfulCopyJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
 }
 
-// runSyncExtractInsert accepts an extract-job body. GCS export lands in thirdparty-05.
+// runSyncExtractInsert reads table rows and uploads CSV/JSON to GCS.
 func runSyncExtractInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	posted *jobs.Job, cfg *jobs.JobConfiguration,
 ) {
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
 	start := time.Now().UTC()
-	finalizeDeferredDataPlaneJob(job, cfg, start, "extract")
+	if deps.Catalog == nil {
+		finalizeDeferredDataPlaneJob(job, cfg, start, "extract")
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	result, err := extract.Execute(r.Context(), deps.Catalog, cfg.Extract, projectID)
+	if err != nil {
+		finalizeFailedJob(deps, job, start, err)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	finalizeSuccessfulExtractJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
+}
+
+func finalizeSuccessfulCopyJob(job *jobs.Job, start time.Time, result copy.Result) {
+	end := time.Now().UTC()
+	job.Status.State = jobs.JobStateDone
+	job.Status.ErrorResult = nil
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	job.Statistics.Copy = copy.FormatStatistics(result)
+}
+
+func finalizeSuccessfulExtractJob(job *jobs.Job, start time.Time, result extract.Result) {
+	end := time.Now().UTC()
+	job.Status.State = jobs.JobStateDone
+	job.Status.ErrorResult = nil
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	job.Statistics.Extract = extract.FormatStatistics(result)
 }
 
 func finalizeSuccessfulLoadJob(job *jobs.Job, start time.Time, result load.Result) {

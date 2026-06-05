@@ -168,10 +168,11 @@ func (c *JobConfigurationLoad) UnmarshalJSON(data []byte) error {
 
 // JobConfigurationCopy is the per-copy slice of a JobConfiguration.
 type JobConfigurationCopy struct {
-	SourceTable      *bqtypes.TableReference  `json:"sourceTable,omitempty"`
-	SourceTables     []bqtypes.TableReference `json:"sourceTables,omitempty"`
-	DestinationTable *bqtypes.TableReference  `json:"destinationTable,omitempty"`
-	WriteDisposition string                   `json:"writeDisposition,omitempty"`
+	SourceTable       *bqtypes.TableReference  `json:"sourceTable,omitempty"`
+	SourceTables      []bqtypes.TableReference `json:"sourceTables,omitempty"`
+	DestinationTable  *bqtypes.TableReference  `json:"destinationTable,omitempty"`
+	WriteDisposition  string                   `json:"writeDisposition,omitempty"`
+	CreateDisposition string                   `json:"createDisposition,omitempty"`
 }
 
 // JobConfigurationExtract is the per-extract slice of a JobConfiguration.
