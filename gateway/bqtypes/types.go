@@ -292,6 +292,11 @@ type JobStatistics2 struct {
 	// libraries running against a non-loopback emulator see the
 	// field omitted entirely.
 	EmulatorRoute string `json:"emulatorRoute,omitempty"`
+
+	// DdlTargetRoutine is populated on CREATE_FUNCTION /
+	// CREATE_PROCEDURE DDL statements. Mirrors upstream
+	// JobStatistics2.ddlTargetRoutine.
+	DdlTargetRoutine *RoutineReference `json:"ddlTargetRoutine,omitempty"`
 }
 
 // SessionInfo tracks the session a query is running under, when sessions
@@ -395,6 +400,71 @@ type TableDataInsertAllResponse struct {
 type TableDataInsertAllErrorEntry struct {
 	Index  uint64       `json:"index"`
 	Errors []ErrorProto `json:"errors,omitempty"`
+}
+
+// RoutineReference is a stable handle to a routine (UDF / TVF / procedure).
+type RoutineReference struct {
+	ProjectID string `json:"projectId"`
+	DatasetID string `json:"datasetId"`
+	RoutineID string `json:"routineId"`
+}
+
+// StandardSqlDataType mirrors the BigQuery REST StandardSqlDataType
+// resource. See docs/bigquery/docs/reference/rest/v2/StandardSqlDataType.md.
+//
+//nolint:revive // wire name uses Sql, not SQL
+type StandardSqlDataType struct {
+	TypeKind         string                 `json:"typeKind"`
+	ArrayElementType *StandardSqlDataType   `json:"arrayElementType,omitempty"`
+	StructType       *StandardSqlStructType `json:"structType,omitempty"`
+	RangeElementType *StandardSqlDataType   `json:"rangeElementType,omitempty"`
+}
+
+// StandardSqlStructType is the struct sub-object of StandardSqlDataType.
+//
+//nolint:revive // wire name uses Sql, not SQL
+type StandardSqlStructType struct {
+	Fields []StandardSqlField `json:"fields,omitempty"`
+}
+
+// StandardSqlField is one field of a STRUCT type.
+//
+//nolint:revive // wire name uses Sql, not SQL
+type StandardSqlField struct {
+	Name string              `json:"name"`
+	Type StandardSqlDataType `json:"type"`
+}
+
+// StandardSqlTableType is the return-table type for table-valued functions.
+//
+//nolint:revive // wire name uses Sql, not SQL
+type StandardSqlTableType struct {
+	Columns []StandardSqlField `json:"columns,omitempty"`
+}
+
+// RoutineArgument is an input/output argument of a routine.
+type RoutineArgument struct {
+	Name         string               `json:"name,omitempty"`
+	ArgumentKind string               `json:"argumentKind,omitempty"`
+	Mode         string               `json:"mode,omitempty"`
+	DataType     *StandardSqlDataType `json:"dataType,omitempty"`
+}
+
+// Routine is the BigQuery Routine resource (subset).
+// See docs/bigquery/docs/reference/rest/v2/routines.md.
+type Routine struct {
+	Etag             string                `json:"etag,omitempty"`
+	RoutineReference RoutineReference      `json:"routineReference"`
+	RoutineType      string                `json:"routineType,omitempty"`
+	CreationTime     string                `json:"creationTime,omitempty"`
+	LastModifiedTime string                `json:"lastModifiedTime,omitempty"`
+	Language         string                `json:"language,omitempty"`
+	Arguments        []RoutineArgument     `json:"arguments,omitempty"`
+	ReturnType       *StandardSqlDataType  `json:"returnType,omitempty"`
+	ReturnTableType  *StandardSqlTableType `json:"returnTableType,omitempty"`
+	DefinitionBody   string                `json:"definitionBody,omitempty"`
+	Description      string                `json:"description,omitempty"`
+	StrictMode       *bool                 `json:"strictMode,omitempty"`
 }
 
 // TableDataList is the response of GET .../tables/{tableId}/data.

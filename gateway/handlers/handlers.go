@@ -18,6 +18,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 	"github.com/vantaboard/bigquery-emulator/gateway/snapshots"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,6 +60,16 @@ type Dependencies struct {
 	// reference table@epoch decorators (undelete samples). Nil is a
 	// no-op store.
 	Snapshots *snapshots.Store
+
+	// Routines is the in-memory UDF / TVF / procedure registry REST
+	// handlers use for routines.* and DDL query jobs register into.
+	// Nil is treated as a per-handler fallback store.
+	Routines *routines.Store
+}
+
+// NewRoutineStore returns an empty routine registry for gateway deps.
+func NewRoutineStore() *routines.Store {
+	return routines.NewStore()
 }
 
 // NewSnapshotStore returns an empty table snapshot store for gateway deps.

@@ -119,16 +119,24 @@ succeed; specific-resource methods return 404 (absent) or 501
 
 ### Routines (`bigquery.routines.*`)
 
-Routines (UDFs / TVFs / stored procedures) are not yet registered in
-the engine catalog. Same wired-stub posture as `models.*`.
+Routines (UDFs / TVFs / stored procedures) are stored in the
+gateway's in-memory registry ([`gateway/routines/`][routines-pkg]).
+REST insert/get/list/update/delete round-trip metadata for client
+libraries; `CREATE FUNCTION` / `CREATE PROCEDURE` DDL via `jobs.query`
+also registers routines and surfaces `ddlTargetRoutine` on the job
+statistics envelope. The engine catalog persists UDF definitions for
+SQL execution but does not yet expose a list/describe RPC — the
+gateway registry is the source of truth for the REST surface.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `routines.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | wired | [`gateway/handlers/routines.go::RoutineList`][routines] |
-| `routines.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | wired | [`gateway/handlers/routines.go::RoutineInsert`][routines] |
-| `routines.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineGet`][routines] |
-| `routines.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineUpdate`][routines] |
-| `routines.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | wired | [`gateway/handlers/routines.go::RoutineDelete`][routines] |
+| `routines.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | done | [`gateway/handlers/routines.go::RoutineList`][routines] |
+| `routines.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines` | done | [`gateway/handlers/routines.go::RoutineInsert`][routines] |
+| `routines.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | done | [`gateway/handlers/routines.go::RoutineGet`][routines] |
+| `routines.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | done | [`gateway/handlers/routines.go::RoutineUpdate`][routines] |
+| `routines.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | done | [`gateway/handlers/routines.go::RoutineDelete`][routines] |
+
+[routines-pkg]: ../gateway/routines/
 
 ### Row-access policies (`bigquery.rowAccessPolicies.*`)
 

@@ -257,6 +257,9 @@ type QueryResult struct {
 	// `middleware.IsLoopback`) so the public REST shape stays the
 	// same.
 	EmulatorRoute string
+	// DdlTargetRoutine is set when a CREATE_FUNCTION /
+	// CREATE_PROCEDURE DDL statement registers a routine.
+	DdlTargetRoutine *bqtypes.RoutineReference
 }
 
 // Job is the gateway's view of a single BigQuery job. Today it's

@@ -41,6 +41,7 @@ func NewServer(opts Options, eng *engine.Client) http.Handler {
 		Jobs:      jobs.NewRegistry(),
 		Metadata:  handlers.NewMetadataStore(),
 		Snapshots: handlers.NewSnapshotStore(),
+		Routines:  handlers.NewRoutineStore(),
 	}
 	if eng != nil {
 		// Engine subprocess is wired up; surface the gRPC clients to
@@ -147,7 +148,7 @@ func mountTables(mount mountFunc, deps handlers.Dependencies) {
 }
 
 // mountModelsAndRoutines registers the BQML and routines (UDF / TVF
-// / stored procedure) endpoints. Engine has no model or routine
+// / stored procedure) endpoints. BQML has no engine backing; routines
 // store today; the handlers return wired stubs (empty list page,
 // 404 on get/delete) so client probes behave predictably.
 func mountModelsAndRoutines(mount mountFunc, deps handlers.Dependencies) {

@@ -13,6 +13,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
+	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 )
 
 // queryResponseKind is the value the BigQuery REST API returns for the
@@ -215,12 +216,18 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// follow-up wires the real metric.
 	restSchema := schemaFromProto(schema)
 	restDmlStats := dmlStatsFromProto(dmlStats)
+	var ddlTarget *bqtypes.RoutineReference
+	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
+		store := routineStore(&deps)
+		ddlTarget = routines.RegisterFromDDL(store, projectID, defaultDataset, req.Query)
+	}
 	result := &jobs.QueryResult{
-		Schema:        restSchema,
-		Rows:          rows,
-		DmlStats:      restDmlStats,
-		StatementType: statementType,
-		EmulatorRoute: emulatorRoute,
+		Schema:           restSchema,
+		Rows:             rows,
+		DmlStats:         restDmlStats,
+		StatementType:    statementType,
+		EmulatorRoute:    emulatorRoute,
+		DdlTargetRoutine: ddlTarget,
 	}
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
@@ -238,7 +245,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType,
-		visibleRoute)
+		visibleRoute, ddlTarget)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -398,6 +405,7 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 	dmlStats *enginepb.DmlStats, restDmlStats *bqtypes.DmlStats,
 	statementType string,
 	emulatorRoute string,
+	ddlTargetRoutine *bqtypes.RoutineReference,
 ) bqtypes.QueryResponse {
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
@@ -413,11 +421,12 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 		EndTime:             job.Statistics.EndTime,
 		Location:            jobRef.Location,
 	}
-	if statementType != "" || emulatorRoute != "" {
+	if statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
 		out.Statistics = &bqtypes.JobStatistics{
 			Query: &bqtypes.JobStatistics2{
-				StatementType: statementType,
-				EmulatorRoute: emulatorRoute,
+				StatementType:    statementType,
+				EmulatorRoute:    emulatorRoute,
+				DdlTargetRoutine: ddlTargetRoutine,
 			},
 		}
 	}
@@ -514,11 +523,12 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 // loopback-gated `emulatorRoute` replay landed.
 func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.QueryResponse {
 	var (
-		schema        *bqtypes.TableSchema
-		allRows       []bqtypes.Row
-		dmlStats      *bqtypes.DmlStats
-		statementType string
-		emulatorRoute string
+		schema           *bqtypes.TableSchema
+		allRows          []bqtypes.Row
+		dmlStats         *bqtypes.DmlStats
+		statementType    string
+		emulatorRoute    string
+		ddlTargetRoutine *bqtypes.RoutineReference
 	)
 	if result := job.Result; result != nil {
 		schema = result.Schema
@@ -526,6 +536,7 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		dmlStats = result.DmlStats
 		statementType = result.StatementType
 		emulatorRoute = result.EmulatorRoute
+		ddlTargetRoutine = result.DdlTargetRoutine
 	}
 
 	pageRows, pageToken := paginateResults(allRows, r.URL.Query())
@@ -551,11 +562,12 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
 	}
-	if statementType != "" || visibleRoute != "" {
+	if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil {
 		out.Statistics = &bqtypes.JobStatistics{
 			Query: &bqtypes.JobStatistics2{
-				StatementType: statementType,
-				EmulatorRoute: visibleRoute,
+				StatementType:    statementType,
+				EmulatorRoute:    visibleRoute,
+				DdlTargetRoutine: ddlTargetRoutine,
 			},
 		}
 	}
