@@ -35,7 +35,7 @@
 #                            landed yet) and surface UNIMPLEMENTED.
 #   * `semantic_executor` - run on the local row/value semantic
 #                            executor. Until
-#                            `semantic-functions-compliance.plan.md`
+#                            `googlesqlite-09-date-time.plan.md`
 #                            lands, rows on this disposition surface
 #                            UNIMPLEMENTED.
 #   * `control_op`        - DDL/metadata; no function-table use case
@@ -48,11 +48,11 @@
 #                            `backend/engine/control/stubs/` for
 #                            statement-level stubs). Routed through
 #                            the semantic executor at runtime.
-#                            `specialized-feature-policy.plan.md`
+#                            `googlesqlite-15-specialized-stubs.plan.md`
 #                            owns these rows.
 #   * `unsupported`       - intentionally out of scope today; the
 #                            engine surfaces UNIMPLEMENTED.
-#                            `specialized-feature-policy.plan.md`
+#                            `googlesqlite-15-specialized-stubs.plan.md`
 #                            owns these rows.
 #
 # Optional metadata:
@@ -88,6 +88,45 @@
 # `status=planned` without the matching emit + conformance fixture
 # landing in the same commit.
 
+# --- Internal operators (googlesqlite-03) --------------------------------
+# Analyzer builtins (`$equal`, `$add`, ...) lower to SQL infix via the
+# transpiler's dedicated operator emit path; `duckdb_name` carries the
+# DuckDB token for parity with other `duckdb_native` rows.
+$add: duckdb_native duckdb_name=+
+$subtract: duckdb_native duckdb_name=-
+$multiply: duckdb_native duckdb_name=*
+$divide: duckdb_native duckdb_name=/
+$unary_minus: duckdb_native duckdb_name=-
+$equal: duckdb_native duckdb_name==
+$not_equal: duckdb_native duckdb_name=!=
+$less: duckdb_native duckdb_name=<
+$less_or_equal: duckdb_native duckdb_name=<=
+$greater: duckdb_native duckdb_name=>
+$greater_or_equal: duckdb_native duckdb_name=>=
+$and: duckdb_native duckdb_name=AND
+$or: duckdb_native duckdb_name=OR
+$not: duckdb_native duckdb_name=NOT
+$is_null: duckdb_native duckdb_name=IS_NULL
+$is_not_null: duckdb_native duckdb_name=IS_NOT_NULL
+$like: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$between: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$in: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_true: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_not_true: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_false: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_not_false: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_distinct_from: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$is_not_distinct_from: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_and: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_or: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_xor: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_not: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_left_shift: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$bitwise_right_shift: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+$interval: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+justify_days: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+justify_hours: semantic_executor plan=googlesqlite-08-semantic-operators.plan.md
+
 # --- Math --------------------------------------------------------------
 abs: duckdb_native duckdb_name=ABS
 ceil: duckdb_native duckdb_name=CEIL
@@ -117,7 +156,7 @@ log10: duckdb_native duckdb_name=LOG10
 # `LogTwoArgIdentity`, and `LogNullPropagation`; the
 # error-path divergence is documented and acceptable because
 # every common-path call surfaces a numerically-correct result.
-log: duckdb_udf duckdb_name=bq_log plan=duckdb-polyfill-udf-library.plan.md
+log: duckdb_udf duckdb_name=bq_log plan=googlesqlite-03-operator-disposition.plan.md
 # BQ MOD(x, y) returns the remainder with sign-of-dividend
 # (truncated-division semantics). DuckDB's `%` agrees today; the
 # `bq_mod` macro (registered by
@@ -126,7 +165,7 @@ log: duckdb_udf duckdb_name=bq_log plan=duckdb-polyfill-udf-library.plan.md
 # switches `%`'s sign convention surfaces as a unit-test failure
 # (`backend/engine/duckdb/udf/numeric/numeric_macros_test.cc`,
 # `ModSignTracksDividend`) instead of as silent semantic drift.
-mod: duckdb_udf duckdb_name=bq_mod plan=duckdb-polyfill-udf-library.plan.md
+mod: duckdb_udf duckdb_name=bq_mod plan=googlesqlite-03-operator-disposition.plan.md
 pow: duckdb_native duckdb_name=POW
 power: duckdb_native duckdb_name=POW
 # `sqrt_numeric` is a placeholder row for the case where BigQuery
@@ -141,7 +180,7 @@ power: duckdb_native duckdb_name=POW
 # re-points at the semantic-functions plan where the
 # argument-type-aware emit can be addressed alongside the other
 # NUMERIC / BIGNUMERIC dispatch cases.
-sqrt_numeric: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+sqrt_numeric: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
 cbrt: duckdb_native duckdb_name=CBRT
 is_inf: duckdb_native duckdb_name=ISINF
 is_nan: duckdb_native duckdb_name=ISNAN
@@ -152,7 +191,7 @@ is_nan: duckdb_native duckdb_name=ISNAN
 # re-implementing the special-case dispatch in macro syntax. The
 # semantic executor owns the BigQuery-exact result.
 # (`backend/engine/semantic/functions/numeric_edges.cc::IeeeDivide`).
-ieee_divide: semantic_executor plan=semantic-functions-compliance.plan.md
+ieee_divide: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ BIT_COUNT(INT64) counts the bits set in the two's-complement
 # representation; `BIT_COUNT(-1) == 64`. DuckDB v1.5.3's
 # `bit_count` accepts only unsigned arguments, so a thin macro
@@ -160,7 +199,7 @@ ieee_divide: semantic_executor plan=semantic-functions-compliance.plan.md
 # cast that loses the two's-complement bit pattern. The semantic
 # executor (`backend/engine/semantic/functions/numeric_edges.cc::BitCount`)
 # owns the BigQuery-exact result.
-bit_count: semantic_executor plan=semantic-functions-compliance.plan.md
+bit_count: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ SAFE_DIVIDE returns NULL on /0; DuckDB raises. SAFE semantics
 # are exact, not close, so the semantic executor owns these. The
 # semantic executor wraps the strict `$divide` operator with a
@@ -168,7 +207,7 @@ bit_count: semantic_executor plan=semantic-functions-compliance.plan.md
 # NULL of the FLOAT64 return type
 # (`backend/engine/semantic/eval_expr.cc::DispatchFunctionByName`
 # `safe_divide` case + `WrapSafe`).
-safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md
+safe_divide: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ DIV truncates toward zero; DuckDB's `//` operator is FLOOR
 # division, which disagrees on mixed-sign inputs
 # (`DIV(-5, 2) == -2` vs `-5 // 2 == -3`). The `bq_div` macro
@@ -176,14 +215,14 @@ safe_divide: semantic_executor plan=semantic-functions-compliance.plan.md
 # bridges with the identity `(x - x % y) // y`, which is exact integer
 # division because `x - x % y` is divisible by y. Unit test
 # `DivTruncatesNotFloors` pins the mixed-sign edge case.
-div: duckdb_udf duckdb_name=bq_div plan=duckdb-polyfill-udf-library.plan.md
+div: duckdb_udf duckdb_name=bq_div plan=googlesqlite-03-operator-disposition.plan.md
 # BQ SAFE_NEGATE returns NULL on INT64 overflow; DuckDB raises.
 # The semantic executor wraps the strict unary-minus operator with
 # the SAFE trampoline so `SAFE_NEGATE(INT64_MIN)` returns NULL
 # instead of erroring out
 # (`backend/engine/semantic/eval_expr.cc::DispatchFunctionByName`
 # `safe_negate` case + `WrapSafe`).
-safe_negate: semantic_executor plan=semantic-functions-compliance.plan.md
+safe_negate: semantic_executor plan=googlesqlite-09-date-time.plan.md
 
 # --- String ------------------------------------------------------------
 concat: duckdb_native duckdb_name=CONCAT
@@ -200,8 +239,9 @@ trim: duckdb_native duckdb_name=TRIM
 ltrim: duckdb_native duckdb_name=LTRIM
 rtrim: duckdb_native duckdb_name=RTRIM
 lpad: duckdb_native duckdb_name=LPAD
-rpad: duckdb_native duckdb_name=RPAD
-reverse: duckdb_native duckdb_name=REVERSE
+rpad: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+# DuckDB REVERSE is VARCHAR-only; BYTES reversal is semantic.
+reverse: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
 ascii: duckdb_native duckdb_name=ASCII
 chr: duckdb_native duckdb_name=CHR
 starts_with: duckdb_native duckdb_name=STARTS_WITH
@@ -234,7 +274,7 @@ from_hex: duckdb_native duckdb_name=FROM_HEX
 #   * BYTES input: BigQuery SPLIT works on both STRING and BYTES;
 #     DuckDB's `string_split` is VARCHAR-only. The BYTES path is
 #     out of scope today.
-split: duckdb_udf duckdb_name=bq_split plan=duckdb-polyfill-udf-library.plan.md
+split: duckdb_udf duckdb_name=bq_split plan=googlesqlite-03-operator-disposition.plan.md
 # BQ REGEXP_CONTAINS(value, regex) -> BOOL. Both BigQuery and
 # DuckDB v1.5.3 use RE2 for regex evaluation, so the dialects
 # agree on anchoring, character classes, embedded `(?i)`
@@ -247,7 +287,7 @@ split: duckdb_udf duckdb_name=bq_split plan=duckdb-polyfill-udf-library.plan.md
 # `RegexpContainsCaseSensitiveByDefault`, and
 # `RegexpContainsHonorsInlineFlags` guard against silent
 # RE2-dialect drift.
-regexp_contains: duckdb_udf duckdb_name=bq_regexp_contains plan=duckdb-polyfill-udf-library.plan.md
+regexp_contains: duckdb_udf duckdb_name=bq_regexp_contains plan=googlesqlite-03-operator-disposition.plan.md
 # BQ REGEXP_REPLACE(value, regex, replacement) replaces ALL
 # non-overlapping matches; DuckDB's `regexp_replace` defaults to
 # replacing ONLY the first match. The `bq_regexp_replace` macro
@@ -257,7 +297,7 @@ regexp_contains: duckdb_udf duckdb_name=bq_regexp_contains plan=duckdb-polyfill-
 # `regex_macros_test::RegexpReplaceIsGlobal` pins the global
 # contract (`'aaaa' / 'a' / 'b' -> 'bbbb'`); a regression that
 # dropped the `'g'` would surface as `'baaa'`.
-regexp_replace: duckdb_udf duckdb_name=bq_regexp_replace plan=duckdb-polyfill-udf-library.plan.md
+regexp_replace: duckdb_udf duckdb_name=bq_regexp_replace plan=googlesqlite-03-operator-disposition.plan.md
 # BQ REGEXP_EXTRACT / REGEXP_EXTRACT_ALL diverge from DuckDB's
 # `regexp_extract` / `regexp_extract_all` on capture-group
 # semantics. BigQuery contract: "If the regular expression contains
@@ -270,9 +310,19 @@ regexp_replace: duckdb_udf duckdb_name=bq_regexp_replace plan=duckdb-polyfill-ud
 # the semantic executor (parse the regex, count `(...)` groups
 # minus non-capturing `(?:...)`, dispatch to `regexp_extract(..., 1)`
 # or `regexp_extract(..., 0)` accordingly), so the rows re-point
-# at `semantic-functions-compliance.plan.md`.
-regexp_extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-regexp_extract_all: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+# at `googlesqlite-09-date-time.plan.md`.
+regexp_extract: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+regexp_extract_all: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+regexp_instr: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+normalize: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+to_code_points: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+initcap: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+repeat: duckdb_native duckdb_name=REPEAT
+right: duckdb_native duckdb_name=RIGHT
+translate: duckdb_native duckdb_name=TRANSLATE
+farm_fingerprint: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+generate_date_array: semantic_executor plan=googlesqlite-12-arrays-generators.plan.md
+generate_timestamp_array: semantic_executor plan=googlesqlite-12-arrays-generators.plan.md
 # BQ FORMAT is printf-style with BigQuery extensions: `%t` /
 # `%T` for type-aware rendering, `%p` for parameterized
 # substitution, type-specific format codes for ARRAY / STRUCT /
@@ -282,20 +332,20 @@ regexp_extract_all: semantic_executor plan=semantic-functions-compliance.plan.md
 # the BigQuery extensions. The format-spec translation table is
 # non-trivial (parses the spec, dispatches per type) and is more
 # naturally expressed as Go in the semantic executor.
-format: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+format: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
 # BQ CONTAINS_SUBSTR applies Unicode NFKC normalization plus
 # case-folding to both arguments before substring search; DuckDB's
 # `contains` does exact byte-level match. The gap is wider than a
 # thin macro (no DuckDB NFKC primitive), so the row re-points at
 # the semantic executor per the polyfill plan's "no silent
 # approximation" rule.
-contains_substr: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+contains_substr: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
 # BQ STRPOS returns 1-based index; DuckDB strpos agrees today. The
 # `bq_strpos` macro pins the contract under our name so a future
 # DuckDB upgrade flipping to 0-based would surface as a unit-test
 # failure (`StrposReturnsOneBasedIndex`) instead of as a silent
 # off-by-one regression.
-strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.md
+strpos: duckdb_udf duckdb_name=bq_strpos plan=googlesqlite-03-operator-disposition.plan.md
 # BQ INSTR is variadic: `INSTR(value, subvalue [, position [, occurrence]])`
 # where `position` may be negative (search from the right) and
 # `occurrence` selects the Nth match. DuckDB's `instr` is 2-arg
@@ -306,7 +356,7 @@ strpos: duckdb_udf duckdb_name=bq_strpos plan=duckdb-polyfill-udf-library.plan.m
 # reverse (position < 0) searches plus the `occurrence` Nth-match
 # selector. Empty subvalue returns the clamped start position;
 # missing match returns 0.
-instr: semantic_executor plan=semantic-functions-compliance.plan.md
+instr: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # DuckDB v1.5.3 does NOT ship a `soundex` scalar function (verified
 # directly: `SELECT soundex('Robert')` -> Catalog Error). A thin
 # macro wrapper is therefore impossible; the classic 4-character
@@ -315,7 +365,7 @@ instr: semantic_executor plan=semantic-functions-compliance.plan.md
 # Reference outputs pinned by `string_funcs_test.cc` cover the
 # Wikipedia / BigQuery documentation examples
 # (`Robert -> R163`, `Ashcraft -> A261`, `Tymczak -> T522`).
-soundex: semantic_executor plan=semantic-functions-compliance.plan.md
+soundex: semantic_executor plan=googlesqlite-09-date-time.plan.md
 
 # --- Datetime ----------------------------------------------------------
 # Most datetime functions need interval-semantics rewriting before
@@ -327,6 +377,8 @@ current_timestamp: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
 current_date: duckdb_native duckdb_name=CURRENT_DATE
 current_time: duckdb_native duckdb_name=CURRENT_TIME
 current_datetime: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
+# BigQuery DATE(expr) truncates TIMESTAMP / DATETIME to DATE.
+date: duckdb_native duckdb_name=DATE
 # BQ DATE_ADD / DATE_SUB / DATETIME_ADD / DATETIME_SUB /
 # TIMESTAMP_ADD / TIMESTAMP_SUB all diverge from DuckDB's
 # `<value> + INTERVAL N PART` arithmetic on the MONTH-END SNAP
@@ -343,8 +395,8 @@ current_datetime: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
 # `DATE_ADD(DATE '2020-02-29', INTERVAL 1 YEAR) == DATE
 # '2021-02-28'`). The semantic executor owns this rewrite
 # alongside the rest of BigQuery-exact date arithmetic.
-date_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-date_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+date_add: semantic_executor plan=googlesqlite-09-date-time.plan.md
+date_sub: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ DATE_DIFF / DATETIME_DIFF / TIMESTAMP_DIFF count CALENDAR
 # BOUNDARIES (not whole units): `DATE_DIFF(DATE '2024-01-31',
 # DATE '2024-01-01', MONTH) == 0` because only the day-of-month
@@ -355,7 +407,7 @@ date_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=pl
 # uses ISO-8601 week numbering. DuckDB's `date_diff` is
 # elapsed-units based and does not match either contract. The
 # semantic executor owns the rewrite.
-date_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+date_diff: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ DATE_TRUNC / DATETIME_TRUNC / TIMESTAMP_TRUNC differ from
 # DuckDB's `date_trunc(part, value)` on the calendar-week
 # definitions (WEEK with Sunday vs Monday start, ISOWEEK, ISOYEAR,
@@ -364,14 +416,14 @@ date_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=p
 # date_trunc has no zone parameter and truncates in the column's
 # zone). The semantic executor owns the rewrite alongside the
 # DIFF family.
-date_trunc: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-datetime_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-datetime_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-datetime_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-timestamp_add: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-timestamp_sub: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-timestamp_diff: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-timestamp_trunc: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+date_trunc: semantic_executor plan=googlesqlite-09-date-time.plan.md
+datetime_add: semantic_executor plan=googlesqlite-09-date-time.plan.md
+datetime_sub: semantic_executor plan=googlesqlite-09-date-time.plan.md
+datetime_diff: semantic_executor plan=googlesqlite-09-date-time.plan.md
+timestamp_add: semantic_executor plan=googlesqlite-09-date-time.plan.md
+timestamp_sub: semantic_executor plan=googlesqlite-09-date-time.plan.md
+timestamp_diff: semantic_executor plan=googlesqlite-09-date-time.plan.md
+timestamp_trunc: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ EXTRACT(part FROM value) has BigQuery-specific parts
 # (DATE / TIME / DATETIME extraction from a TIMESTAMP at a
 # specified timezone, ISOYEAR, ISOWEEK, MICROSECOND with
@@ -380,7 +432,7 @@ timestamp_trunc: semantic_executor plan=semantic-functions-compliance.plan.md st
 # subset and uses ISO-8601 conventions where BQ uses the
 # Sunday-start convention. A thin macro cannot translate the
 # part token between dialects without losing edge cases.
-extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+extract: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ FORMAT_TIMESTAMP / FORMAT_DATE / FORMAT_DATETIME and the
 # matching PARSE_* family use BigQuery's extended strftime
 # specification (`%E4Y` for 4-digit zero-padded year, `%E*S` for
@@ -391,12 +443,12 @@ extract: semantic_executor plan=semantic-functions-compliance.plan.md status=pla
 # extensions. The format-spec translation table is doable but
 # extensive (each spec needs a translated emit + a fallback for
 # unsupported specs); more naturally expressed in Go.
-format_timestamp: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-format_date: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-format_datetime: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-parse_date: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-parse_timestamp: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-parse_datetime: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+format_timestamp: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
+format_date: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
+format_datetime: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
+parse_date: semantic_executor plan=googlesqlite-09-date-time.plan.md
+parse_timestamp: semantic_executor plan=googlesqlite-09-date-time.plan.md
+parse_datetime: semantic_executor plan=googlesqlite-09-date-time.plan.md
 # BQ UNIX_SECONDS(timestamp) returns BIGINT seconds since
 # 1970-01-01 UTC with sub-second precision truncated. DuckDB's
 # `epoch(timestamp)` returns DOUBLE; the `bq_unix_seconds` macro
@@ -406,18 +458,18 @@ parse_datetime: semantic_executor plan=semantic-functions-compliance.plan.md sta
 # positive epoch values). Unit test
 # `datetime_macros_test::UnixSecondsTruncatesSubsecond` pins the
 # truncation contract.
-unix_seconds: duckdb_udf duckdb_name=bq_unix_seconds plan=duckdb-polyfill-udf-library.plan.md
+unix_seconds: duckdb_udf duckdb_name=bq_unix_seconds plan=googlesqlite-03-operator-disposition.plan.md
 # BQ UNIX_MILLIS / UNIX_MICROS map cleanly to DuckDB's already-
 # BIGINT `epoch_ms` / `epoch_us`. The macros pin the contract
 # under our own name so a future DuckDB precision drift would
 # surface as a unit-test failure.
-unix_millis: duckdb_udf duckdb_name=bq_unix_millis plan=duckdb-polyfill-udf-library.plan.md
-unix_micros: duckdb_udf duckdb_name=bq_unix_micros plan=duckdb-polyfill-udf-library.plan.md
+unix_millis: duckdb_udf duckdb_name=bq_unix_millis plan=googlesqlite-03-operator-disposition.plan.md
+unix_micros: duckdb_udf duckdb_name=bq_unix_micros plan=googlesqlite-03-operator-disposition.plan.md
 # BQ UNIX_DATE(date) returns BIGINT days since 1970-01-01.
 # `date_diff('day', '1970-01-01'::DATE, value)` is calendar-day-
 # boundary counted, matching the BQ contract exactly (including
 # negative values for pre-epoch dates).
-unix_date: duckdb_udf duckdb_name=bq_unix_date plan=duckdb-polyfill-udf-library.plan.md
+unix_date: duckdb_udf duckdb_name=bq_unix_date plan=googlesqlite-03-operator-disposition.plan.md
 
 # --- Conditional / null-handling --------------------------------------
 ifnull: duckdb_native duckdb_name=IFNULL
@@ -427,11 +479,11 @@ nullif: duckdb_native duckdb_name=NULLIF
 # NULL cond falls through to B. The `bq_if` macro pins that contract
 # via `CASE WHEN cond THEN A ELSE B END`; unit test
 # `IfNullCondFallsThroughToElse` guards the NULL-cond edge case.
-if: duckdb_udf duckdb_name=bq_if plan=duckdb-polyfill-udf-library.plan.md
+if: duckdb_udf duckdb_name=bq_if plan=googlesqlite-03-operator-disposition.plan.md
 # BQ ISNULL(x) is the call-form of the `IS NULL` operator. The
 # `bq_isnull` macro pins the contract via `(x IS NULL)`; unit test
 # `IsNullOnNonNullValues` pins the empty-string-is-not-NULL case.
-isnull: duckdb_udf duckdb_name=bq_isnull plan=duckdb-polyfill-udf-library.plan.md
+isnull: duckdb_udf duckdb_name=bq_isnull plan=googlesqlite-03-operator-disposition.plan.md
 
 # --- Array -------------------------------------------------------------
 array_length: duckdb_native duckdb_name=LEN
@@ -451,8 +503,11 @@ avg: duckdb_native duckdb_name=AVG
 min: duckdb_native duckdb_name=MIN
 max: duckdb_native duckdb_name=MAX
 any_value: duckdb_native duckdb_name=ANY_VALUE
-array_agg: duckdb_native duckdb_name=ARRAY_AGG
-string_agg: duckdb_native duckdb_name=STRING_AGG
+# ORDER BY / LIMIT modifiers rewrite to list()/list_slice() (and
+# array_to_string for STRING_AGG LIMIT) in EmitAggregateFunctionCall
+# — see googlesqlite-06-aggregate-modifiers.plan.md.
+array_agg: duckdb_rewrite duckdb_name=ARRAY_AGG
+string_agg: duckdb_rewrite duckdb_name=STRING_AGG
 # BQ COUNTIF(b) returns the count of TRUE values for `b`; NULL and
 # FALSE values are not counted. DuckDB v1.5.3 ships an aggregate
 # `count_if(arg)` with identical semantics ("Returns the number of
@@ -485,10 +540,16 @@ lead: duckdb_native duckdb_name=LEAD
 first_value: duckdb_native duckdb_name=FIRST_VALUE
 last_value: duckdb_native duckdb_name=LAST_VALUE
 nth_value: duckdb_native duckdb_name=NTH_VALUE
+percentile_cont: duckdb_native duckdb_name=quantile_cont
+percentile_disc: duckdb_native duckdb_name=quantile_disc
+
+# Internal extract/subscript operators lowered by the semantic executor.
+$extract: semantic_executor plan=googlesqlite-09-date-time.plan.md
+$subscript: duckdb_rewrite duckdb_name=$subscript
 
 # --- Specialized families: stub-and-defer -----------------------------
 # These rows pick the per-family posture documented by
-# `specialized-feature-policy.plan.md`'s scope table.
+# `googlesqlite-15-specialized-stubs.plan.md`'s scope table.
 #
 # `unsupported` rows: deliberately out of scope today; the engine
 #   surfaces UNIMPLEMENTED with a family-named, doc-linking error
@@ -500,7 +561,7 @@ nth_value: duckdb_native duckdb_name=NTH_VALUE
 # `semantic_executor status=planned` rows: graduated from
 #   `unsupported` to `local_impl` by the specialized-feature
 #   policy plan; the actual implementation is deferred to
-#   `semantic-functions-compliance.plan.md`. Until that plan ships
+#   `googlesqlite-09-date-time.plan.md`. Until that plan ships
 #   its handler, the engine surfaces UNIMPLEMENTED with the
 #   per-family "planned, waiting for ..." pointer (same surface as
 #   any other `status=planned` semantic-executor function).
@@ -517,20 +578,23 @@ nth_value: duckdb_native duckdb_name=NTH_VALUE
 # stub: DP semantics are too easy to get wrong by accident, and a
 # placeholder result would mask the missing implementation. The
 # `unsupported` row is the no-silent-approximation choice.
-approx_quantiles: unsupported plan=specialized-feature-policy.plan.md
-approx_count_distinct: unsupported plan=specialized-feature-policy.plan.md
-approx_top_count: unsupported plan=specialized-feature-policy.plan.md
-approx_top_sum: unsupported plan=specialized-feature-policy.plan.md
+approx_quantiles: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+approx_count_distinct: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+approx_top_count: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+approx_top_sum: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+
+# Internal array subscript helpers (OFFSET/ORDINAL) for semantic path.
+$array_at_offset: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
 
 # HLL_COUNT.* graduates to `local_impl` (semantic executor) per the
 # specialized-feature plan. The HLL algorithm is small, deterministic,
-# and seedable; `semantic-functions-compliance.plan.md` owns the
+# and seedable; `googlesqlite-09-date-time.plan.md` owns the
 # actual implementation. Until that plan ships its handler the
 # engine surfaces a per-function `status=planned` UNIMPLEMENTED.
-hll_count.init: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-hll_count.merge: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-hll_count.merge_partial: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-hll_count.extract: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+hll_count.init: semantic_executor plan=googlesqlite-09-date-time.plan.md
+hll_count.merge: semantic_executor plan=googlesqlite-09-date-time.plan.md
+hll_count.merge_partial: semantic_executor plan=googlesqlite-09-date-time.plan.md
+hll_count.extract: semantic_executor plan=googlesqlite-09-date-time.plan.md
 
 # BigQuery ML inference: `unsupported`. There is no local model
 # training / serving surface, and a stub `ML.PREDICT` would lie
@@ -539,20 +603,28 @@ hll_count.extract: semantic_executor plan=semantic-functions-compliance.plan.md 
 # `node_dispositions.yaml::ResolvedCreateModelStmt`) so client
 # library registration probes succeed; calling `ML.PREDICT` on the
 # stub-registered model returns the family-named UNIMPLEMENTED.
-ml.predict: unsupported plan=specialized-feature-policy.plan.md
-ml.forecast: unsupported plan=specialized-feature-policy.plan.md
-ml.evaluate: unsupported plan=specialized-feature-policy.plan.md
+ml.predict: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+ml.forecast: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+ml.evaluate: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
 
 # NET.* graduates to `local_impl` (semantic executor) per the
 # specialized-feature plan. The surface is small, deterministic,
 # and a good fit for the semantic executor; the actual
-# implementation lives in `semantic-functions-compliance.plan.md`.
+# implementation lives in `googlesqlite-09-date-time.plan.md`.
 # Until that plan ships its handler the engine surfaces a per-
 # function `status=planned` UNIMPLEMENTED.
-net.ip_from_string: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-net.ip_to_string: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-net.host: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
-net.public_suffix: semantic_executor plan=semantic-functions-compliance.plan.md status=planned
+net.ip_from_string: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.safe_ip_from_string: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.ip_to_string: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.ip_net_mask: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.ip_trunc: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.ipv4_from_int64: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.ipv4_to_int64: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+net.host: semantic_executor plan=googlesqlite-09-date-time.plan.md
+net.public_suffix: semantic_executor plan=googlesqlite-09-date-time.plan.md
+net.reg_domain: semantic_executor plan=googlesqlite-09-date-time.plan.md
+string: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
+normalize_and_casefold: semantic_executor plan=googlesqlite-10-string-hash-format.plan.md
 
 # KEYS.* is `local_stub` per the specialized-feature plan: the
 # emulator does not implement real keysets, but accepting the
@@ -563,29 +635,47 @@ net.public_suffix: semantic_executor plan=semantic-functions-compliance.plan.md 
 # `unsupported` -- a stub there would silently produce
 # unencrypted bytes a caller might mistake for real ciphertext,
 # which violates the no-silent-approximation rule.
-keys.new_keyset: local_stub plan=specialized-feature-policy.plan.md
-keys.keyset_length: local_stub plan=specialized-feature-policy.plan.md
-keys.encrypt: unsupported plan=specialized-feature-policy.plan.md
-keys.decrypt_bytes: unsupported plan=specialized-feature-policy.plan.md
+keys.new_keyset: local_stub plan=googlesqlite-15-specialized-stubs.plan.md
+keys.keyset_length: local_stub plan=googlesqlite-15-specialized-stubs.plan.md
+keys.encrypt: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+keys.decrypt_bytes: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
 
 # Geography / GIS: `unsupported` for now. DuckDB's `spatial`
 # extension could close the gap but the integration is a separate
 # initiative; until that lands the deliberate posture is
 # `unsupported` (per the specialized-feature plan).
-st_geogfromtext: unsupported plan=specialized-feature-policy.plan.md
-st_geogfromwkb: unsupported plan=specialized-feature-policy.plan.md
-st_distance: unsupported plan=specialized-feature-policy.plan.md
-st_within: unsupported plan=specialized-feature-policy.plan.md
-st_contains: unsupported plan=specialized-feature-policy.plan.md
-st_intersects: unsupported plan=specialized-feature-policy.plan.md
+st_geogfromtext: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+st_geogfromwkb: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+st_distance: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+st_within: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+st_contains: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+st_intersects: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+
+# --- JSON (googlesqlite-11) -------------------------------------------
+# BigQuery JSON extract/query/value functions diverge from DuckDB's
+# `json_extract` / `->` operators on path syntax, NULL propagation,
+# and scalar-vs-JSON return typing. The semantic executor delegates
+# to GoogleSQL's `JsonPathEvaluator` for BigQuery-exact behavior.
+json_extract: semantic_executor plan=googlesqlite-11-json.plan.md
+json_query: semantic_executor plan=googlesqlite-11-json.plan.md
+json_value: semantic_executor plan=googlesqlite-11-json.plan.md
+json_extract_scalar: semantic_executor plan=googlesqlite-11-json.plan.md
+json_extract_array: semantic_executor plan=googlesqlite-11-json.plan.md
+json_query_array: semantic_executor plan=googlesqlite-11-json.plan.md
+json_value_array: semantic_executor plan=googlesqlite-11-json.plan.md
+json_type: semantic_executor plan=googlesqlite-11-json.plan.md
+json_extract_string_array: semantic_executor plan=googlesqlite-11-json.plan.md
+parse_json: semantic_executor plan=googlesqlite-11-json.plan.md
+to_json: semantic_executor plan=googlesqlite-11-json.plan.md
+to_json_string: semantic_executor plan=googlesqlite-11-json.plan.md
 
 # Misc BigQuery-specific scalars. `GENERATE_UUID` is non-deterministic
 # (stub would lie about uniqueness across calls); `SESSION_USER` has
 # no analog in the emulator's no-auth posture; `ERROR(msg)` is a
 # control-flow function whose semantics belong to the procedural
-# scripting executor (`procedural-scripting-executor.plan.md`).
+# scripting executor (`googlesqlite-14-dml-system.plan.md`).
 # All three stay `unsupported` until the matching plan lands a
 # real implementation.
-generate_uuid: unsupported plan=specialized-feature-policy.plan.md
-session_user: unsupported plan=specialized-feature-policy.plan.md
-error: unsupported plan=specialized-feature-policy.plan.md
+generate_uuid: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+session_user: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
+error: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md

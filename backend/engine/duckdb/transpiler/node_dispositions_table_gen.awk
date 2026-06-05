@@ -105,18 +105,18 @@ BEGIN {
     # Enforce: every `unsupported` row must carry a `plan=` pointer
     # so a reader can trace the deliberate posture. This matches the
     # plan's done-criteria: every kUnsupported row points at
-    # `specialized-feature-policy.plan.md`.
+    # `googlesqlite-15-specialized-stubs.plan.md`.
     if (disposition == "unsupported" && length(plan) == 0) {
-        printf("node_dispositions_table_gen.awk: %s is unsupported but has no plan= pointer (expected specialized-feature-policy.plan.md)\n", key) > "/dev/stderr"
+        printf("node_dispositions_table_gen.awk: %s is unsupported but has no plan= pointer (expected googlesqlite-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
         exit 1
     }
     # Same contract for `local_stub`: every stub row points at the
     # owning policy plan so a reader can trace the deliberate-stub
-    # posture. `specialized-feature-policy.plan.md` is the canonical
+    # posture. `googlesqlite-15-specialized-stubs.plan.md` is the canonical
     # owner; the YAML loader does not pin the value, it only
     # requires that one is set.
     if (disposition == "local_stub" && length(plan) == 0) {
-        printf("node_dispositions_table_gen.awk: %s is local_stub but has no plan= pointer (expected specialized-feature-policy.plan.md)\n", key) > "/dev/stderr"
+        printf("node_dispositions_table_gen.awk: %s is local_stub but has no plan= pointer (expected googlesqlite-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
         exit 1
     }
 

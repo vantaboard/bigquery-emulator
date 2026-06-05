@@ -2,13 +2,18 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "backend/schema/schema.h"
@@ -115,6 +120,115 @@ std::string FormatDecimalInt64(int64_t v, uint8_t scale) {
   return negative ? absl::StrCat("-", out) : out;
 }
 
+// Pack a signed integer that fits in int64 into DuckDB's HUGEINT wire
+// layout (lower + sign-extended upper).
+inline ::duckdb_hugeint Int64ToDuckdbHugeint(int64_t raw) {
+  ::duckdb_hugeint h;
+  h.lower = static_cast<uint64_t>(raw);
+  h.upper = (raw < 0) ? -1 : 0;
+  return h;
+}
+
+// Narrow a HUGEINT vector cell to int64 when the value fits the int64
+// range exactly. Window aggregates and SUM/COUNT paths often land here
+// even when the analyzer typed the output column INT64.
+absl::StatusOr<int64_t> HugeintCellToInt64(const ::duckdb_hugeint& h,
+                                           const schema::ColumnSchema& column) {
+  if (h.upper == 0) {
+    if (h.lower > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+      return absl::OutOfRangeError(
+          absl::StrCat("arrow_to_bq: INT64 column '",
+                       column.name,
+                       "' HUGEINT value exceeds INT64 range"));
+    }
+    return static_cast<int64_t>(h.lower);
+  }
+  if (h.upper == -1) {
+    return static_cast<int64_t>(h.lower);
+  }
+  return absl::OutOfRangeError(
+      absl::StrCat("arrow_to_bq: INT64 column '",
+                   column.name,
+                   "' HUGEINT value exceeds INT64 range"));
+}
+
+// Read a DECIMAL vector cell as FLOAT64 via DuckDB's decimal helpers.
+// DuckDB promotes SUM/AVG over FLOAT columns to DECIMAL; the analyzer
+// still types those outputs FLOAT64.
+absl::StatusOr<double> ReadDecimalCellAsDouble(
+    ::duckdb_vector vector,
+    ::idx_t row,
+    ::duckdb_logical_type logical,
+    const schema::ColumnSchema& column) {
+  const auto scale = ::duckdb_decimal_scale(logical);
+  const auto width = ::duckdb_decimal_width(logical);
+  const ::duckdb_type internal = ::duckdb_decimal_internal_type(logical);
+  ::duckdb_decimal dec;
+  dec.width = width;
+  dec.scale = scale;
+  switch (internal) {
+    case ::DUCKDB_TYPE_SMALLINT: {
+      const auto* data =
+          static_cast<const int16_t*>(::duckdb_vector_get_data(vector));
+      dec.value = Int64ToDuckdbHugeint(static_cast<int64_t>(data[row]));
+      break;
+    }
+    case ::DUCKDB_TYPE_INTEGER: {
+      const auto* data =
+          static_cast<const int32_t*>(::duckdb_vector_get_data(vector));
+      dec.value = Int64ToDuckdbHugeint(static_cast<int64_t>(data[row]));
+      break;
+    }
+    case ::DUCKDB_TYPE_BIGINT: {
+      const auto* data =
+          static_cast<const int64_t*>(::duckdb_vector_get_data(vector));
+      dec.value = Int64ToDuckdbHugeint(data[row]);
+      break;
+    }
+    case ::DUCKDB_TYPE_HUGEINT: {
+      const auto* data = static_cast<const ::duckdb_hugeint*>(
+          ::duckdb_vector_get_data(vector));
+      dec.value = data[row];
+      break;
+    }
+    default:
+      return absl::UnimplementedError(
+          absl::StrCat("arrow_to_bq: FLOAT64 column '",
+                       column.name,
+                       "' DECIMAL internal type is not yet supported"));
+  }
+  return ::duckdb_decimal_to_double(dec);
+}
+
+// DuckDB sometimes renders BLOB cells as VARCHAR holding hex text
+// (`X'010203'` or `x010203`). Decode to raw bytes for BYTES columns.
+absl::StatusOr<std::string> DecodeDuckDbBlobText(absl::string_view s) {
+  if (absl::StartsWith(s, "X'") && absl::EndsWith(s, "'")) {
+    std::string hex(s.substr(2, s.size() - 3));
+    std::string out;
+    if (!absl::HexStringToBytes(hex, &out)) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("arrow_to_bq: invalid BLOB hex literal X'", hex, "'"));
+    }
+    return out;
+  }
+  if (absl::StartsWith(s, "x") && s.size() > 1 && (s.size() - 1) % 2 == 0) {
+    std::string hex(s.substr(1));
+    bool all_hex = true;
+    for (char c : hex) {
+      if (!absl::ascii_isxdigit(static_cast<unsigned char>(c))) {
+        all_hex = false;
+        break;
+      }
+    }
+    if (all_hex) {
+      std::string out;
+      if (absl::HexStringToBytes(hex, &out)) return out;
+    }
+  }
+  return std::string(s);
+}
+
 // Read a single varchar / blob cell out of the vector at `row`. Used
 // both for VARCHAR (UTF-8 string) and BLOB (raw bytes) - the caller
 // picks the Value variant.
@@ -183,6 +297,30 @@ absl::StatusOr<storage::Value> ReadInt64Cell(
       v = static_cast<int64_t>(data[row]);
       break;
     }
+    case ::DUCKDB_TYPE_HUGEINT: {
+      const auto* data = static_cast<const ::duckdb_hugeint*>(
+          ::duckdb_vector_get_data(vector));
+      auto narrowed = HugeintCellToInt64(data[row], column);
+      if (!narrowed.ok()) return narrowed.status();
+      v = *narrowed;
+      break;
+    }
+    case ::DUCKDB_TYPE_VARCHAR: {
+      // DuckDB `list()` / `ARRAY_AGG` sometimes materialize INT64
+      // elements as VARCHAR; coerce when the analyzer typed INT64.
+      const std::string text(std::string(ReadVarchar(vector, row)));
+      char* end = nullptr;
+      const int64_t parsed = std::strtoll(text.c_str(), &end, 10);
+      if (end == text.c_str() || *end != '\0') {
+        return absl::InvalidArgumentError(
+            absl::StrCat("arrow_to_bq: INT64 column '",
+                         column.name,
+                         "' VARCHAR cell is not an integer: ",
+                         text));
+      }
+      v = parsed;
+      break;
+    }
     default:
       return absl::UnimplementedError(
           absl::StrCat("arrow_to_bq: INT64 column '",
@@ -198,6 +336,7 @@ absl::StatusOr<storage::Value> ReadInt64Cell(
 absl::StatusOr<storage::Value> ReadFloat64Cell(
     ::duckdb_vector vector,
     ::idx_t row,
+    ::duckdb_logical_type logical,
     ::duckdb_type type_id,
     const schema::ColumnSchema& column) {
   double v = 0.0;
@@ -212,6 +351,12 @@ absl::StatusOr<storage::Value> ReadFloat64Cell(
       const auto* data =
           static_cast<const double*>(::duckdb_vector_get_data(vector));
       v = data[row];
+      break;
+    }
+    case ::DUCKDB_TYPE_DECIMAL: {
+      auto as_double = ReadDecimalCellAsDouble(vector, row, logical, column);
+      if (!as_double.ok()) return as_double.status();
+      v = *as_double;
       break;
     }
     default:
@@ -339,15 +484,20 @@ absl::StatusOr<storage::Value> ReadScalarCell(
     case schema::ColumnType::kInt64:
       return ReadInt64Cell(vector, row, type_id, column);
     case schema::ColumnType::kFloat64:
-      return ReadFloat64Cell(vector, row, type_id, column);
+      return ReadFloat64Cell(vector, row, logical, type_id, column);
     case schema::ColumnType::kString:
     case schema::ColumnType::kJson:
     case schema::ColumnType::kGeography:
       return storage::Value::String(std::string(ReadVarchar(vector, row)));
-    case schema::ColumnType::kBytes:
-      // VARCHAR and BLOB share the duckdb_string_t storage layout;
-      // only the cell-level kind differs.
-      return storage::Value::Bytes(std::string(ReadVarchar(vector, row)));
+    case schema::ColumnType::kBytes: {
+      absl::string_view raw = ReadVarchar(vector, row);
+      if (type_id == ::DUCKDB_TYPE_BLOB) {
+        return storage::Value::Bytes(std::string(raw));
+      }
+      absl::StatusOr<std::string> decoded = DecodeDuckDbBlobText(raw);
+      if (!decoded.ok()) return decoded.status();
+      return storage::Value::Bytes(*std::move(decoded));
+    }
     case schema::ColumnType::kDate: {
       const auto* data =
           static_cast<const int32_t*>(::duckdb_vector_get_data(vector));

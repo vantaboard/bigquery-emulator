@@ -83,8 +83,62 @@ absl::Status RegisterString(::duckdb_connection conn) {
   if (auto s = internal::RunMacroDdl(
           conn,
           "CREATE OR REPLACE MACRO bq_split(value, delimiter := ',') AS "
-          "CASE WHEN delimiter IS NULL THEN NULL "
+          "CASE WHEN value IS NULL THEN []::VARCHAR[] "
+          "WHEN delimiter IS NULL THEN NULL "
           "ELSE string_split(value, delimiter) END");
+      !s.ok()) {
+    return s;
+  }
+
+  // `bq_lpad_bytes(val, len, pattern)` --- BigQuery LPAD on BYTES.
+  //
+  // DuckDB's `lpad` is VARCHAR-only. BigQuery pads on the left to
+  // `len` bytes, repeating `pattern` cyclically (truncating the
+  // final repetition). NULL in any argument returns NULL.
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_lpad_bytes(val, len, pattern) AS "
+          "CAST(CASE "
+          "WHEN val IS NULL OR len IS NULL OR pattern IS NULL THEN NULL "
+          "WHEN octet_length(val) >= len THEN CAST(array_slice(val, 1, len) AS "
+          "BLOB) "
+          "ELSE CAST(concat("
+          "array_slice(repeat(pattern, CAST(ceil((len - "
+          "octet_length(val))::DOUBLE "
+          "/ greatest(octet_length(pattern), 1)) AS BIGINT)), 1, "
+          "greatest(0, len - octet_length(val))), val) AS BLOB) "
+          "END AS BLOB)");
+      !s.ok()) {
+    return s;
+  }
+
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_reverse_bytes(val) AS "
+          "CASE WHEN val IS NULL THEN NULL "
+          "ELSE list_reduce("
+          "list_reverse(list_transform(range(1, octet_length(val) + 1), "
+          "i -> array_slice(val, i, i))), "
+          "CAST(NULL AS BLOB), "
+          "(acc, b) -> CASE WHEN acc IS NULL THEN b ELSE acc || b END) "
+          "END");
+      !s.ok()) {
+    return s;
+  }
+
+  if (auto s = internal::RunMacroDdl(
+          conn,
+          "CREATE OR REPLACE MACRO bq_rpad_bytes(val, len, pattern) AS "
+          "CAST(CASE "
+          "WHEN val IS NULL OR len IS NULL OR pattern IS NULL THEN NULL "
+          "WHEN octet_length(val) >= len THEN CAST(array_slice(val, 1, len) AS "
+          "BLOB) "
+          "ELSE CAST(concat(val, "
+          "array_slice(repeat(pattern, CAST(ceil((len - "
+          "octet_length(val))::DOUBLE "
+          "/ greatest(octet_length(pattern), 1)) AS BIGINT)), 1, "
+          "greatest(0, len - octet_length(val)))) AS BLOB) "
+          "END AS BLOB)");
       !s.ok()) {
     return s;
   }

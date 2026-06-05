@@ -156,6 +156,10 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // that case.
   std::string Transpile(const ::googlesql::ResolvedNode* node);
 
+  // Lower a relational `ResolvedScan` subtree to DuckDB SQL. Used by
+  // CTAS and other control-op paths that already have a scan root.
+  std::string TranspileScan(const ::googlesql::ResolvedScan* scan);
+
   // Bind-order accumulator for the GoogleSQL parameters encountered
   // during the most recent traversal. Slot `i` (0-based) is the
   // parameter the transpiler emitted as `$<i+1>`. The engine reads
@@ -317,11 +321,16 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   std::string BuildPartitionClause(
       const ::googlesql::ResolvedWindowPartitioning* p);
   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o);
+  std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o,
+                               bool bigquery_null_defaults,
+                               bool append_input_rn);
   std::string BuildFrameClause(const ::googlesql::ResolvedWindowFrame* wf);
   std::string BuildAnalyticProjection(
       const ::googlesql::ResolvedComputedColumnBase* col,
       absl::string_view partition_clause,
       absl::string_view order_clause);
+  void CaptureAnalyticOutputOrder(
+      const ::googlesql::ResolvedAnalyticFunctionGroup* group);
 
   // Lower one `ResolvedSetOperationItem` into a derived-table SELECT
   // that projects `parent->column_list()` in order. Each
@@ -368,6 +377,21 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
     std::vector<std::string> column_names;
   };
   std::vector<RecursiveCteContext> recursive_cte_stack_;
+
+  // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST
+  // ordinality or an explicit row_number() stamp).
+  bool input_has_rn_column_ = false;
+  // Set when the final query needs ORDER BY using `__bq_input_rn` /
+  // analytic output order (window queries only).
+  bool input_rn_ordering_ = false;
+  // Final ORDER BY keys derived from the first analytic group's
+  // PARTITION BY / ORDER BY spec (BigQuery result ordering).
+  std::vector<std::string> output_order_items_;
+  // True when the user-visible SELECT list includes `__bq_input_rn`.
+  bool output_includes_input_rn_ = false;
+  // User-visible output column names from `ResolvedQueryStmt`; used to
+  // decide whether PARTITION BY keys belong in the final ORDER BY.
+  std::vector<std::string> query_output_column_names_;
 };
 
 }  // namespace transpiler

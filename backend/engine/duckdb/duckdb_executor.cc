@@ -19,10 +19,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/catalog/virtual_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
-#include "backend/engine/engine.h"
+#include "backend/engine/semantic/value.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -456,6 +457,97 @@ absl::Status AttachStorageTable(::duckdb_connection conn,
   return AttachStorageTableAt(conn, storage, table, QuoteIdent(table.Name()));
 }
 
+absl::StatusOr<std::string> RenderSemanticParameterLiteral(
+    const semantic::Value& v) {
+  if (v.is_null()) return std::string("NULL");
+  auto storage_or = semantic::ToStorageValue(v);
+  if (!storage_or.ok()) return storage_or.status();
+  schema::ColumnSchema col;
+  col.name = "p";
+  col.mode = schema::ColumnMode::kNullable;
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_BOOL:
+      col.type = schema::ColumnType::kBool;
+      break;
+    case ::googlesql::TYPE_INT64:
+      col.type = schema::ColumnType::kInt64;
+      break;
+    case ::googlesql::TYPE_DOUBLE:
+      col.type = schema::ColumnType::kFloat64;
+      break;
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_JSON:
+    case ::googlesql::TYPE_GEOGRAPHY:
+      col.type = schema::ColumnType::kString;
+      break;
+    case ::googlesql::TYPE_BYTES:
+      col.type = schema::ColumnType::kBytes;
+      break;
+    case ::googlesql::TYPE_DATE:
+      col.type = schema::ColumnType::kDate;
+      break;
+    case ::googlesql::TYPE_TIMESTAMP:
+      col.type = schema::ColumnType::kTimestamp;
+      break;
+    case ::googlesql::TYPE_NUMERIC:
+      col.type = schema::ColumnType::kNumeric;
+      break;
+    case ::googlesql::TYPE_BIGNUMERIC:
+      col.type = schema::ColumnType::kBignumeric;
+      break;
+    default:
+      col.type = schema::ColumnType::kString;
+      break;
+  }
+  return RenderScalarLiteral(*storage_or, col);
+}
+
+absl::StatusOr<std::string> SubstituteDuckdbParameters(
+    std::string sql,
+    const std::vector<transpiler::Transpiler::ParameterRef>& order,
+    absl::Span<const QueryParameter> parameters) {
+  if (order.empty()) return sql;
+  std::vector<std::string> literals(order.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    const transpiler::Transpiler::ParameterRef& ref = order[i];
+    const QueryParameter* param = nullptr;
+    if (!ref.name.empty()) {
+      for (const QueryParameter& p : parameters) {
+        if (absl::EqualsIgnoreCase(p.name, ref.name)) {
+          param = &p;
+          break;
+        }
+      }
+    } else {
+      int seen = 0;
+      for (const QueryParameter& p : parameters) {
+        if (!p.name.empty()) continue;
+        if (++seen == ref.position) {
+          param = &p;
+          break;
+        }
+      }
+    }
+    if (param == nullptr) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "DuckDbExecutor: missing query parameter for DuckDB placeholder $",
+          i + 1));
+    }
+    auto value =
+        semantic::ParseParameterValue(param->value_json, param->type_kind);
+    if (!value.ok()) return value.status();
+    auto literal = RenderSemanticParameterLiteral(*value);
+    if (!literal.ok()) return literal.status();
+    literals[i] = *std::move(literal);
+  }
+  for (int slot = static_cast<int>(order.size()); slot >= 1; --slot) {
+    const std::string placeholder = absl::StrCat("$", slot);
+    sql = absl::StrReplaceAll(
+        sql, {{placeholder, literals[static_cast<size_t>(slot - 1)]}});
+  }
+  return sql;
+}
+
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
@@ -504,12 +596,26 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   transpiler::Transpiler t;
   std::string sql = t.Transpile(query_stmt);
   if (sql.empty()) {
+    const char* plan = "googlesqlite-04-scan-emits.plan.md";
+    const std::string kind = query_stmt->query()->node_kind_string();
+    if (kind == "WithScan" || kind == "WithRefScan") {
+      plan = "googlesqlite-02-withscan-cte.plan.md";
+    } else if (kind == "OrderByScan") {
+      plan = "googlesqlite-04-scan-emits.plan.md";
+    }
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: transpiler does not yet cover this query shape "
         "(family: node:",
-        query_stmt->query()->node_kind_string(),
-        ", route: duckdb_native); see docs/ENGINE_POLICY.md and plan "
-        "duckdb-fast-path-stabilization.plan.md for the missing emit"));
+        kind,
+        ", route: duckdb_native); see docs/ENGINE_POLICY.md and plan ",
+        plan,
+        " for the missing emit"));
+  }
+  if (!t.parameter_order().empty()) {
+    auto substituted = SubstituteDuckdbParameters(
+        std::move(sql), t.parameter_order(), request.parameters);
+    if (!substituted.ok()) return substituted.status();
+    sql = *std::move(substituted);
   }
 
   // 3. Collect every referenced table so we can materialize them
@@ -540,7 +646,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // here; the transpiler then emits a plain `<udf_name>(<args>)`
   // call below. Registration failure is fail-fast: there is no
   // runtime "missing UDF -> fall back to another route" path
-  // (per `duckdb-polyfill-udf-library.plan.md`'s Done Criterion 2).
+  // (per `googlesqlite-03-operator-disposition.plan.md`'s Done Criterion 2).
   if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
@@ -551,6 +657,17 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // The transpiler assumes `Table::Name()` resolves to a relation
   // already present in the connection's default schema.
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (const auto* virtual_table =
+            dynamic_cast<const catalog::VirtualCatalogTable*>(tbl)) {
+      absl::Status status = virtual_table->MaterializeInDuckDB(
+          conn, storage_, QuoteIdent(tbl->Name()));
+      if (!status.ok()) {
+        ::duckdb_disconnect(&conn);
+        ::duckdb_close(&db);
+        return status;
+      }
+      continue;
+    }
     const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (storage_table == nullptr) {
       ::duckdb_disconnect(&conn);
@@ -800,7 +917,7 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
         "node:",
         stmt.node_kind_string(),
         ", route: semantic_executor); see docs/ENGINE_POLICY.md and plan "
-        "dml-local-executor.plan.md"));
+        "googlesqlite-14-dml-system.plan.md"));
   }
   const auto* merge_stmt = stmt.GetAs<::googlesql::ResolvedMergeStmt>();
   if (merge_stmt->table_scan() == nullptr ||
@@ -962,7 +1079,7 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
 //
 // CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE all moved to
 // `backend/engine/control/control_op_executor.{h,cc}` when
-// `.cursor/plans/control-op-executor.plan.md` landed: those rows
+// `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` landed: those rows
 // dropped `status=planned` from `node_dispositions.yaml`, so the
 // route classifier dispatches them to the `ControlOpExecutor`
 // directly and the DuckDB executor never sees them.
@@ -1055,7 +1172,8 @@ absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
         action->node_kind_string(),
         " is not implemented (only ADD COLUMN is supported); ALTER TABLE "
         "is on the control_op route per docs/ENGINE_POLICY.md and plan "
-        "control-op-executor.plan.md, but the per-action handlers still "
+        "googlesqlite-01-ddl-catalog.plan.md, but the per-action handlers "
+        "still "
         "live here pending the migration"));
   }
   const auto* add = action->GetAs<::googlesql::ResolvedAddColumnAction>();
@@ -1210,7 +1328,7 @@ absl::Status DuckDbExecutor::ExecuteDdl(
     default:
       // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
       // `backend/engine/control/control_op_executor.cc` when
-      // `control-op-executor.plan.md` landed; the route classifier
+      // `googlesqlite-01-ddl-catalog.plan.md` landed; the route classifier
       // dispatches them to the `ControlOpExecutor` directly. If
       // one reaches us here, the classifier or the YAML
       // disposition row drifted out of sync with this dispatch

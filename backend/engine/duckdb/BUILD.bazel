@@ -37,10 +37,12 @@ cc_library(
     deps = [
         ":arrow_to_bq",
         "//backend/catalog:storage_table",
+        "//backend/catalog:virtual_table",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb/transpiler",
         "//backend/engine/duckdb/udf:registrar",
+        "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",

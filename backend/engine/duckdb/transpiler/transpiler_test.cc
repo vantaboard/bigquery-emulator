@@ -326,7 +326,7 @@ TEST_F(TranspilerTest, EmitFunctionCallIfnull) {
 TEST_F(TranspilerTest, EmitFunctionCallNonLoweringDispositionReturnsEmpty) {
   // `BIT_COUNT` is on the `semantic_executor` route in
   // `functions.yaml` (BQ flavor differs from DuckDB's `bit_count`)
-  // with the body deferred to `semantic-functions-compliance.plan.md`.
+  // with the body deferred to `googlesqlite-09-date-time.plan.md`.
   // The transpiler has no DuckDB lowering for this disposition, so
   // the emit returns "" and the engine surfaces UNIMPLEMENTED for
   // the whole query.
@@ -430,13 +430,9 @@ TEST_F(TranspilerTest, EmitFilterScanWrapsInputScanWithWhere) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_FILTER_SCAN);
   TestTranspiler t;
-  // The filter expression itself is a `>` function call which we
-  // don't yet emit (not on the COALESCE/IFNULL whitelist), so the
-  // emit propagates "" upward. We assert on that contract because
-  // it is what the engine fallback reads to decide whether to take
-  // the DuckDB path.
   EXPECT_EQ(t.EmitFilterScan(scan->GetAs<::googlesql::ResolvedFilterScan>()),
-            "");
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") WHERE "
+            "(\"id\" > 0)");
 }
 
 TEST_F(TranspilerTest, EmitFilterScanWithCoalescePredicateLowers) {
@@ -452,13 +448,9 @@ TEST_F(TranspilerTest, EmitFilterScanWithCoalescePredicateLowers) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_FILTER_SCAN);
   TestTranspiler t;
-  // The `=` is a function call we don't emit (yet); the filter emit
-  // propagates "" out of EmitFunctionCall. The point of the
-  // assertion is that the composition is deterministic — once the
-  // equality op lands on the disposition table, this test will
-  // tighten to the full SELECT shape.
   EXPECT_EQ(t.EmitFilterScan(scan->GetAs<::googlesql::ResolvedFilterScan>()),
-            "");
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") WHERE "
+            "(COALESCE(\"name\", 'x') = 'x')");
 }
 
 // --- Join ---------------------------------------------------------------
@@ -494,9 +486,9 @@ TEST_F(TranspilerTest, EmitJoinScanInnerWithLiteralPredicate) {
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
   EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
             "INNER JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
-            "ON true");
+            "AS __bq_r ON true");
 }
 
 TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
@@ -511,23 +503,40 @@ TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
   EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
             "LEFT JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
-            "ON true");
+            "AS __bq_r ON true");
 }
 
-TEST_F(TranspilerTest, EmitJoinScanFallsBackOnUnsupportedPredicate) {
-  // `=` isn't on the function-call whitelist used by the scan
-  // emits, so the join_expr emit returns "" and the JoinScan emit
-  // propagates the empty string up to the engine. The engine
-  // surfaces UNIMPLEMENTED for this shape.
+TEST_F(TranspilerTest, EmitJoinScanInnerOnEqualPredicate) {
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT id FROM people INNER JOIN orders ON id = order_id");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()), "");
+  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
+            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
+            "INNER JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
+            "AS __bq_r ON (__bq_l.\"id\" = __bq_r.\"order_id\")");
+}
+
+TEST_F(TranspilerTest, EmitJoinScanInnerUsingSingleColumn) {
+  // `USING (id)` canonicalizes to `$equal` in `join_expr`, but the
+  // emit peels the column name back out and emits DuckDB's native
+  // `USING (...)` so we do not need `$equal` on the disposition table.
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT p.id FROM people p INNER JOIN people p2 USING (id)");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
+  const auto* join = scan->GetAs<::googlesql::ResolvedJoinScan>();
+  ASSERT_TRUE(join->has_using());
+  TestTranspiler t;
+  std::string sql = t.EmitJoinScan(join);
+  EXPECT_NE(sql.find("INNER JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("USING (\"id\")"), std::string::npos) << sql;
+  EXPECT_EQ(sql.find(" ON "), std::string::npos) << sql;
 }
 
 // --- Aggregate ----------------------------------------------------------
@@ -598,13 +607,56 @@ TEST_F(TranspilerTest, EmitAggregateScanArrayAggMapsThroughTable) {
   TestTranspiler t;
   EXPECT_EQ(
       t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>()),
-      "SELECT \"id\", ARRAY_AGG(\"id\") AS \"$agg1\" FROM (SELECT \"id\", "
-      "\"name\" FROM \"people\") GROUP BY \"id\"");
+      "SELECT \"id\", if(count(\"id\") < count(*), "
+      "error('ARRAY_AGG: input value must be not null'), list(\"id\")) AS "
+      "\"$agg1\" FROM (SELECT *, row_number() OVER () AS \"__bq_input_rn\" "
+      "FROM (SELECT \"id\", \"name\" FROM \"people\")) GROUP BY \"id\"");
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanArrayAggOrderByLimitRewritesToList) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT ARRAY_AGG(x ORDER BY x LIMIT 2) FROM UNNEST([3, 1, 2, 4]) AS x");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("list_slice(list(\"x\" ORDER BY"), std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find(", 1, 2)"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanStringAggLimitRewritesToArrayToString) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT STRING_AGG(fruit, ' & ' LIMIT 2) FROM "
+      "UNNEST(['apple', 'pear', 'banana']) AS fruit");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("array_to_string(list_slice(list("), std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find(", ' & ')"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanStringAggOrderByLimit) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT STRING_AGG(x, ',' ORDER BY x ASC LIMIT 2) FROM "
+      "UNNEST(['c', 'a', 'b']) AS x");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("array_to_string(list_slice(list("), std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("ORDER BY \"x\" ASC"), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnsupportedAggregate) {
   // `APPROX_QUANTILES` is on the `unsupported` route per
-  // `specialized-feature-policy.plan.md`; the aggregate emit returns
+  // `googlesqlite-15-specialized-stubs.plan.md`; the aggregate emit returns
   // "" and the AggregateScan emit propagates the empty string. The
   // engine surfaces UNIMPLEMENTED for the whole query.
   const ::googlesql::ResolvedStatement* stmt =
@@ -620,7 +672,7 @@ TEST_F(TranspilerTest, EmitAggregateScanFallsBackOnUnsupportedAggregate) {
 
 // --- GROUPING SETS / ROLLUP / CUBE / GROUPING() ------------------------
 //
-// `advanced-relational-routing.plan.md` Family 1. Each shape exercises
+// `googlesqlite-13-advanced-relational.plan.md` Family 1. Each shape exercises
 // the `grouping_set_list` path in `EmitAggregateScan`:
 //
 //   * Explicit GROUPING SETS  -> `(a, b)`, `(a)`, `()` entries.
@@ -778,9 +830,9 @@ TEST_F(TranspilerTest, EmitPivotScanMultipleAggregates) {
 
 TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
   // BigQuery's default UNPIVOT semantic (EXCLUDE NULLS). The emit
-  // produces one UNION ALL branch per arg in unpivot_arg_list; each
-  // branch's WHERE filters out rows where every value column is
-  // NULL. The label column is the analyzer's string label_list[i].
+  // expands each input row via CROSS JOIN LATERAL (VALUES ...); the
+  // outer WHERE filters out rows where every value column is NULL.
+  // The label column is the analyzer's string label_list[i].
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT * FROM wide UNPIVOT(value FOR quarter IN (q1, q2))");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -789,18 +841,18 @@ TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
   TestTranspiler t;
   std::string sql =
       t.EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
-  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos)
-      << "expected UNION ALL between unpivot branches; got: " << sql;
-  EXPECT_NE(sql.find("'q1' AS \"quarter\""), std::string::npos)
-      << "expected q1 label projection; got: " << sql;
-  EXPECT_NE(sql.find("'q2' AS \"quarter\""), std::string::npos)
-      << "expected q2 label projection; got: " << sql;
-  EXPECT_NE(sql.find("WHERE NOT (\"value\" IS NULL)"), std::string::npos)
+  EXPECT_NE(sql.find(" CROSS JOIN LATERAL (VALUES "), std::string::npos)
+      << "expected LATERAL VALUES unpivot expansion; got: " << sql;
+  EXPECT_NE(sql.find("'q1'"), std::string::npos)
+      << "expected q1 label in VALUES tuple; got: " << sql;
+  EXPECT_NE(sql.find("'q2'"), std::string::npos)
+      << "expected q2 label in VALUES tuple; got: " << sql;
+  EXPECT_NE(sql.find("WHERE NOT (u.\"value\" IS NULL)"), std::string::npos)
       << "expected EXCLUDE NULLS filter; got: " << sql;
 }
 
 TEST_F(TranspilerTest, EmitWithScanRecursiveLowersToWithRecursive) {
-  // `advanced-relational-routing.plan.md` Family 4. A `WITH
+  // `googlesqlite-13-advanced-relational.plan.md` Family 4. A `WITH
   // RECURSIVE t AS (SELECT 1 AS n UNION ALL SELECT n FROM t) ...`
   // lowers to DuckDB's `WITH RECURSIVE`. The transpiler stages a
   // per-CTE context with stable anchor column names (`_cte_0`),
@@ -834,7 +886,7 @@ TEST_F(TranspilerTest, EmitWithScanRecursiveLowersToWithRecursive) {
 }
 
 TEST_F(TranspilerTest, EmitUnpivotScanIncludeNullsSkipsFilter) {
-  // `INCLUDE NULLS` flips `include_nulls()` true; the per-arg branch
+  // `INCLUDE NULLS` flips `include_nulls()` true; the outer query
   // should not carry the WHERE filter.
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT * FROM wide "
@@ -847,7 +899,7 @@ TEST_F(TranspilerTest, EmitUnpivotScanIncludeNullsSkipsFilter) {
       t.EmitUnpivotScan(scan->GetAs<::googlesql::ResolvedUnpivotScan>());
   EXPECT_EQ(sql.find("WHERE NOT"), std::string::npos)
       << "INCLUDE NULLS should omit the WHERE filter; got: " << sql;
-  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos) << sql;
+  EXPECT_NE(sql.find(" CROSS JOIN LATERAL (VALUES "), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitAggregateScanGroupingCallProjectsBitMask) {
@@ -888,7 +940,7 @@ TEST_F(TranspilerTest, EmitOrderByScanAscDefault) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
             "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-            "ORDER BY \"id\" ASC");
+            "ORDER BY \"id\" ASC NULLS FIRST");
 }
 
 TEST_F(TranspilerTest, EmitOrderByScanDescNullsFirst) {
@@ -920,7 +972,7 @@ TEST_F(TranspilerTest, EmitOrderByScanMultipleItems) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitOrderByScan(scan->GetAs<::googlesql::ResolvedOrderByScan>()),
             "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-            "ORDER BY \"id\" DESC, \"name\" ASC NULLS LAST");
+            "ORDER BY \"id\" DESC NULLS LAST, \"name\" ASC NULLS LAST");
 }
 
 // --- Limit / Offset -----------------------------------------------------
@@ -944,7 +996,7 @@ TEST_F(TranspilerTest, EmitLimitOffsetScanLimitOnly) {
   EXPECT_EQ(t.EmitLimitOffsetScan(
                 scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()),
             "SELECT * FROM (SELECT * FROM (SELECT \"id\", \"name\" FROM "
-            "\"people\") ORDER BY \"id\" ASC) LIMIT 10");
+            "\"people\") ORDER BY \"id\" ASC NULLS FIRST) LIMIT 10");
 }
 
 TEST_F(TranspilerTest, EmitLimitOffsetScanLimitAndOffset) {
@@ -962,7 +1014,7 @@ TEST_F(TranspilerTest, EmitLimitOffsetScanLimitAndOffset) {
   EXPECT_EQ(t.EmitLimitOffsetScan(
                 scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()),
             "SELECT * FROM (SELECT * FROM (SELECT \"id\", \"name\" FROM "
-            "\"people\") ORDER BY \"id\" ASC) LIMIT 10 OFFSET 5");
+            "\"people\") ORDER BY \"id\" ASC NULLS FIRST) LIMIT 10 OFFSET 5");
 }
 
 // --- STRUCT / UNNEST / ARRAY --------------------------------------------
@@ -1185,7 +1237,8 @@ TEST_F(TranspilerTest, EmitArrayScanStandaloneUnnestLiteral) {
   // of type `ARRAY<INT64>`), and a single element column named "x".
   // The emit lowers it to DuckDB's `SELECT unnest(<arr>) AS "<col>"`
   // shape, which produces one row per array element with the column
-  // carrying the BQ alias name.
+  // carrying the BQ alias name. WITH ORDINALITY stamps __bq_input_rn
+  // so downstream window/aggregate scans preserve UNNEST input order.
   const ::googlesql::ResolvedStatement* stmt =
       Analyze("SELECT 1 FROM UNNEST([1, 2]) AS x");
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
@@ -1193,7 +1246,8 @@ TEST_F(TranspilerTest, EmitArrayScanStandaloneUnnestLiteral) {
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
   TestTranspiler t;
   EXPECT_EQ(t.EmitArrayScan(scan->GetAs<::googlesql::ResolvedArrayScan>()),
-            "SELECT unnest([1, 2]) AS \"x\"");
+            "SELECT \"x\", ord AS \"__bq_input_rn\" FROM unnest([1, 2]) "
+            "WITH ORDINALITY AS __bq_unnest__(\"x\", ord)");
 }
 
 TEST_F(TranspilerTest, EmitArrayScanWithOffsetFallsBack) {
@@ -1264,12 +1318,16 @@ TEST(FunctionsTableTest, LookupKnownMappedScalar) {
 }
 
 TEST(FunctionsTableTest, LookupKnownAggregate) {
-  // `array_agg` is in the table so the aggregate emit dispatches
-  // through it; ditto for the SUM / COUNT family.
+  // `array_agg` / `string_agg` are `duckdb_rewrite` because ORDER BY /
+  // LIMIT modifiers lower to list()/list_slice() in the aggregate emit.
   const FnEntry* agg = LookupFunction("array_agg");
   ASSERT_NE(agg, nullptr);
-  EXPECT_EQ(agg->disposition, Disposition::kDuckdbNative);
+  EXPECT_EQ(agg->disposition, Disposition::kDuckdbRewrite);
   EXPECT_EQ(agg->duckdb_name, "ARRAY_AGG");
+  const FnEntry* string_agg = LookupFunction("string_agg");
+  ASSERT_NE(string_agg, nullptr);
+  EXPECT_EQ(string_agg->disposition, Disposition::kDuckdbRewrite);
+  EXPECT_EQ(string_agg->duckdb_name, "STRING_AGG");
   const FnEntry* sum = LookupFunction("sum");
   ASSERT_NE(sum, nullptr);
   EXPECT_EQ(sum->disposition, Disposition::kDuckdbNative);
@@ -1283,9 +1341,9 @@ TEST(FunctionsTableTest, LookupUnsupportedFunction) {
   // feature policy.
   const FnEntry* e = LookupFunction("approx_quantiles");
   ASSERT_NE(e, nullptr);
-  EXPECT_EQ(e->disposition, Disposition::kUnsupported);
+  EXPECT_EQ(e->disposition, Disposition::kSemanticExecutor);
   EXPECT_TRUE(e->duckdb_name.empty());
-  EXPECT_EQ(e->plan, "specialized-feature-policy.plan.md");
+  EXPECT_EQ(e->plan, "googlesqlite-15-specialized-stubs.plan.md");
   EXPECT_FALSE(e->planned);
 }
 
@@ -1321,14 +1379,14 @@ TEST(FunctionsTableTest, LookupReadyDuckdbUdfFunction) {
 TEST(FunctionsTableTest, LookupPlannedSemanticExecutorFunction) {
   // SAFE-family rows route to the semantic executor (BigQuery-exact
   // semantics differ from DuckDB's raise-on-overflow). Runtime
-  // stays UNIMPLEMENTED until `semantic-functions-compliance.plan.md`
+  // stays UNIMPLEMENTED until `googlesqlite-09-date-time.plan.md`
   // lands.
   const FnEntry* e = LookupFunction("safe_divide");
   ASSERT_NE(e, nullptr);
   EXPECT_EQ(e->disposition, Disposition::kSemanticExecutor);
   EXPECT_TRUE(e->duckdb_name.empty());
-  EXPECT_EQ(e->plan, "semantic-functions-compliance.plan.md");
-  EXPECT_TRUE(e->planned);
+  EXPECT_EQ(e->plan, "googlesqlite-09-date-time.plan.md");
+  EXPECT_FALSE(e->planned);
 }
 
 TEST(FunctionsTableTest, LookupUnknownReturnsNull) {
@@ -1428,10 +1486,14 @@ TEST_F(TranspilerTest, EmitAnalyticScanRowNumber) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
   TestTranspiler t;
+  const std::string kPeopleWithRn =
+      "SELECT *, row_number() OVER () AS \"__bq_input_rn\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\")";
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
-      "SELECT *, ROW_NUMBER() OVER (ORDER BY \"id\" ASC) AS \"$analytic1\""
-      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+      "SELECT *, ROW_NUMBER() OVER (ORDER BY \"id\" ASC NULLS FIRST) AS "
+      "\"$analytic1\" FROM (" +
+          kPeopleWithRn + ")");
 }
 
 TEST_F(TranspilerTest, EmitAnalyticScanRankPartitionByOrderBy) {
@@ -1445,10 +1507,14 @@ TEST_F(TranspilerTest, EmitAnalyticScanRankPartitionByOrderBy) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
   TestTranspiler t;
+  const std::string kPeopleWithRn =
+      "SELECT *, row_number() OVER () AS \"__bq_input_rn\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\")";
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
-      "SELECT *, RANK() OVER (PARTITION BY \"name\" ORDER BY \"id\" DESC)"
-      " AS \"$analytic1\" FROM (SELECT \"id\", \"name\" FROM \"people\")");
+      "SELECT *, RANK() OVER (PARTITION BY \"name\" ORDER BY \"id\" DESC "
+      "NULLS LAST) AS \"$analytic1\" FROM (" +
+          kPeopleWithRn + ")");
 }
 
 TEST_F(TranspilerTest, EmitAnalyticScanDenseRank) {
@@ -1461,10 +1527,14 @@ TEST_F(TranspilerTest, EmitAnalyticScanDenseRank) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
   TestTranspiler t;
+  const std::string kPeopleWithRn =
+      "SELECT *, row_number() OVER () AS \"__bq_input_rn\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\")";
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
-      "SELECT *, DENSE_RANK() OVER (ORDER BY \"id\" ASC) AS \"$analytic1\""
-      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+      "SELECT *, DENSE_RANK() OVER (ORDER BY \"id\" ASC NULLS FIRST) AS "
+      "\"$analytic1\" FROM (" +
+          kPeopleWithRn + ")");
 }
 
 TEST_F(TranspilerTest, EmitAnalyticScanSumOverWithFrame) {
@@ -1481,11 +1551,14 @@ TEST_F(TranspilerTest, EmitAnalyticScanSumOverWithFrame) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
   TestTranspiler t;
+  const std::string kPeopleWithRn =
+      "SELECT *, row_number() OVER () AS \"__bq_input_rn\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\")";
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
-      "SELECT *, SUM(\"id\") OVER (ORDER BY \"id\" ASC ROWS BETWEEN "
-      "UNBOUNDED PRECEDING AND CURRENT ROW) AS \"$analytic1\""
-      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+      "SELECT *, SUM(\"id\") OVER (ORDER BY \"id\" ASC NULLS FIRST ROWS "
+      "BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS \"$analytic1\" FROM (" +
+          kPeopleWithRn + ")");
 }
 
 TEST_F(TranspilerTest, EmitAnalyticScanCountStarOverPartition) {
@@ -1502,11 +1575,14 @@ TEST_F(TranspilerTest, EmitAnalyticScanCountStarOverPartition) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
   TestTranspiler t;
+  const std::string kPeopleWithRn =
+      "SELECT *, row_number() OVER () AS \"__bq_input_rn\" FROM (SELECT "
+      "\"id\", \"name\" FROM \"people\")";
   EXPECT_EQ(
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()),
       "SELECT *, COUNT(*) OVER (PARTITION BY \"name\" ROWS BETWEEN "
-      "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS \"$analytic1\""
-      " FROM (SELECT \"id\", \"name\" FROM \"people\")");
+      "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS \"$analytic1\" FROM (" +
+          kPeopleWithRn + ")");
 }
 
 TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
@@ -1892,7 +1968,7 @@ TEST_F(TranspilerTest, EmitLimitOffsetScanWithNamedParameter) {
   EXPECT_EQ(t.EmitLimitOffsetScan(
                 scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()),
             "SELECT * FROM (SELECT * FROM (SELECT \"id\", \"name\" FROM "
-            "\"people\") ORDER BY \"id\" ASC) LIMIT $1 OFFSET $1");
+            "\"people\") ORDER BY \"id\" ASC NULLS FIRST) LIMIT $1 OFFSET $1");
   ASSERT_EQ(t.parameter_order().size(), 1u);
   EXPECT_EQ(t.parameter_order()[0].name, "n");
 }
@@ -2283,11 +2359,12 @@ TEST_F(TranspilerTest, EmitSetOperationScanUnionAll) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitSetOperationScan(
                 scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))"
-            " UNION ALL "
-            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
-            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+            "SELECT \"id\" FROM (SELECT *, 1 AS \"__bq_union_ord\" FROM "
+            "(SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", "
+            "\"name\" FROM \"people\"))) UNION ALL SELECT *, 2 AS "
+            "\"__bq_union_ord\" FROM (SELECT \"order_id\" AS \"id\" FROM "
+            "(SELECT \"order_id\" FROM (SELECT \"order_id\", \"amount\" FROM "
+            "\"orders\")))) ORDER BY \"__bq_union_ord\"");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanUnionDistinct) {
@@ -2347,11 +2424,10 @@ TEST_F(TranspilerTest, EmitSetOperationScanExceptDistinct) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitSetOperationScan(
                 scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))"
-            " EXCEPT "
-            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
-            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+            "SELECT * FROM (SELECT \"id\" FROM (SELECT \"id\" FROM "
+            "(SELECT \"id\", \"name\" FROM \"people\")) EXCEPT SELECT "
+            "\"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))) ORDER BY 1");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanIdenticalArmsBothCollapse) {
@@ -2372,11 +2448,12 @@ TEST_F(TranspilerTest, EmitSetOperationScanIdenticalArmsBothCollapse) {
   TestTranspiler t;
   EXPECT_EQ(t.EmitSetOperationScan(
                 scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))"
-            " UNION ALL "
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))");
+            "SELECT \"id\" FROM (SELECT *, 1 AS \"__bq_union_ord\" FROM "
+            "(SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", "
+            "\"name\" FROM \"people\"))) UNION ALL SELECT *, 2 AS "
+            "\"__bq_union_ord\" FROM (SELECT \"id\" FROM (SELECT \"id\" FROM "
+            "(SELECT \"id\", \"name\" FROM \"people\")))) ORDER BY "
+            "\"__bq_union_ord\"");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanMultiColumnPreservesOrder) {
@@ -2403,11 +2480,13 @@ TEST_F(TranspilerTest, EmitSetOperationScanMultiColumnPreservesOrder) {
   EXPECT_EQ(
       t.EmitSetOperationScan(
           scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-      "SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" FROM \"people\")"
-      " UNION ALL "
-      "SELECT \"order_id\" AS \"id\", \"$col2\" AS \"name\" FROM (SELECT "
+      "SELECT \"id\", \"name\" FROM (SELECT *, 1 AS \"__bq_union_ord\" FROM "
+      "(SELECT \"id\", \"name\" FROM (SELECT \"id\", \"name\" FROM "
+      "\"people\")) UNION ALL SELECT *, 2 AS \"__bq_union_ord\" FROM "
+      "(SELECT \"order_id\" AS \"id\", \"$col2\" AS \"name\" FROM (SELECT "
       "\"order_id\", CAST(\"amount\" AS VARCHAR) AS \"$col2\" FROM (SELECT "
-      "\"order_id\", \"amount\" FROM \"orders\"))");
+      "\"order_id\", \"amount\" FROM \"orders\")))) ORDER BY "
+      "\"__bq_union_ord\"");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanThreeArmFlattening) {
@@ -2426,14 +2505,15 @@ TEST_F(TranspilerTest, EmitSetOperationScanThreeArmFlattening) {
   ASSERT_EQ(set_op->input_item_list_size(), 3);
   TestTranspiler t;
   EXPECT_EQ(t.EmitSetOperationScan(set_op),
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))"
-            " UNION ALL "
-            "SELECT \"order_id\" AS \"id\" FROM (SELECT \"order_id\" FROM "
-            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))"
-            " UNION ALL "
-            "SELECT \"amount\" AS \"id\" FROM (SELECT \"amount\" FROM "
-            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))");
+            "SELECT \"id\" FROM (SELECT *, 1 AS \"__bq_union_ord\" FROM "
+            "(SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", "
+            "\"name\" FROM \"people\"))) UNION ALL SELECT *, 2 AS "
+            "\"__bq_union_ord\" FROM (SELECT \"order_id\" AS \"id\" FROM "
+            "(SELECT \"order_id\" FROM (SELECT \"order_id\", \"amount\" FROM "
+            "\"orders\"))) UNION ALL SELECT *, 3 AS \"__bq_union_ord\" FROM "
+            "(SELECT \"amount\" AS \"id\" FROM (SELECT \"amount\" FROM "
+            "(SELECT \"order_id\", \"amount\" FROM \"orders\")))) ORDER BY "
+            "\"__bq_union_ord\"");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanNestedDifferentOps) {
@@ -2457,16 +2537,15 @@ TEST_F(TranspilerTest, EmitSetOperationScanNestedDifferentOps) {
   // onto its own parent column `id` for the second arm.
   EXPECT_EQ(t.EmitSetOperationScan(
                 scan->GetAs<::googlesql::ResolvedSetOperationScan>()),
-            "SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", \"name\" "
-            "FROM \"people\"))"
-            " UNION ALL "
-            "SELECT \"order_id\" AS \"id\" FROM ("
-            "SELECT \"order_id\" FROM (SELECT \"order_id\" FROM (SELECT "
-            "\"order_id\", \"amount\" FROM \"orders\"))"
-            " INTERSECT "
-            "SELECT \"amount\" AS \"order_id\" FROM (SELECT \"amount\" FROM "
-            "(SELECT \"order_id\", \"amount\" FROM \"orders\"))"
-            ")");
+            "SELECT \"id\" FROM (SELECT *, 1 AS \"__bq_union_ord\" FROM "
+            "(SELECT \"id\" FROM (SELECT \"id\" FROM (SELECT \"id\", "
+            "\"name\" FROM \"people\"))) UNION ALL SELECT *, 2 AS "
+            "\"__bq_union_ord\" FROM (SELECT \"order_id\" AS \"id\" FROM "
+            "(SELECT \"order_id\" FROM (SELECT \"order_id\" FROM (SELECT "
+            "\"order_id\", \"amount\" FROM \"orders\")) INTERSECT SELECT "
+            "\"amount\" AS \"order_id\" FROM (SELECT \"amount\" FROM (SELECT "
+            "\"order_id\", \"amount\" FROM \"orders\"))))) ORDER BY "
+            "\"__bq_union_ord\"");
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanFallsBackOnUnloweredChild) {
@@ -2604,7 +2683,8 @@ TEST_F(TranspilerTest, EmitSetOperationScanExceptAllEmitsKeyword) {
       ::googlesql::ResolvedSetOperationScan::BY_POSITION);
   TestTranspiler t;
   EXPECT_EQ(t.EmitSetOperationScan(scan.get()),
-            "SELECT * FROM (SELECT 1) EXCEPT ALL SELECT * FROM (SELECT 1)");
+            "SELECT * FROM (SELECT * FROM (SELECT 1) EXCEPT ALL SELECT * "
+            "FROM (SELECT 1)) ORDER BY 1");
 }
 
 // --- Sample scan -------------------------------------------------------
@@ -2862,7 +2942,7 @@ TEST_F(TranspilerTest, EmitSampleScanPercentVsRowsContrast) {
 
 // --- ResolvedWithScan / ResolvedWithRefScan ----------------------------
 //
-// `cte-subquery-routing.plan.md` Family 1. These tests pin the
+// `googlesqlite-02-withscan-cte.plan.md` Family 1. These tests pin the
 // CTE emit shape end-to-end (`Transpile(stmt)` from a real
 // `AnalyzeStatement` output) so a regression that changes the
 // CTE-side anchor naming or the ref-scan-side rename surfaces as a
@@ -3033,7 +3113,7 @@ TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {
 
 // --- ResolvedSubqueryExpr (non-correlated) -----------------------------
 //
-// `cte-subquery-routing.plan.md` Family 2. Non-correlated SCALAR /
+// `googlesqlite-02-withscan-cte.plan.md` Family 2. Non-correlated SCALAR /
 // IN / EXISTS / ARRAY subqueries lower to DuckDB's native subquery
 // surface. Correlated forms (non-empty `parameter_list()`) are
 // the classifier's responsibility (Family 3 promotes them to
@@ -3183,15 +3263,11 @@ TEST_F(TranspilerTest, TranspileSelectFromWhereGroupByOrderByLimit) {
   // column thread together; the per-piece coverage above keeps each
   // emit honest, while this assertion pins the composition.
   std::string sql = t.Transpile(stmt);
-  // The filter expression `id > 0` uses the `$greater` function which
-  // is on the disposition fallback, so the FilterScan emit returns
-  // "" and the entire QueryStmt emit propagates the empty-string
-  // fallback contract. That's the documented baseline today; once a
-  // future plan lands the comparison-operator emit, this test will
-  // tighten to the full SQL string. The point of asserting here is
-  // to catch any silent partial-emit regression -- the empty string
-  // is the right answer until the predicate emit path lights up.
-  EXPECT_EQ(sql, "");
+  ASSERT_FALSE(sql.empty());
+  EXPECT_NE(sql.find("WHERE (\"id\" > 0)"), std::string::npos);
+  EXPECT_NE(sql.find("GROUP BY \"id\""), std::string::npos);
+  EXPECT_NE(sql.find("ORDER BY \"id\" ASC"), std::string::npos);
+  EXPECT_NE(sql.find("LIMIT 10"), std::string::npos);
 }
 
 }  // namespace

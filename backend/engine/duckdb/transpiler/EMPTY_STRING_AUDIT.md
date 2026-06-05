@@ -1,7 +1,7 @@
 # `Emit*` empty-string return audit
 
 Audit produced as item 1 of
-`.cursor/plans/duckdb-fast-path-stabilization.plan.md`. Each row in
+`.cursor/plans/googlesqlite-04-scan-emits.plan.md`. Each row in
 `backend/engine/duckdb/transpiler/transpiler.cc` that returns `""`
 is categorized below. Readers should treat this as the source of
 truth for "which `""` gates are defensive vs runtime and which are
@@ -54,7 +54,7 @@ lint:dispositions`) catches that before main.
   matching plan-2 action is a classifier `VisitResolvedQueryStmt`
   that promotes to `kSemanticExecutor` when `is_value_table()`
   is true. The wrapping plan is the semantic executor itself
-  (`semantic-executor-core.plan.md`); until that plan ships
+  (`googlesqlite-07-semantic-core-expr.plan.md`); until that plan ships
   the stub `SemanticExecutor` returns `UNIMPLEMENTED`, which is
   the same end-user-visible behavior as the empty-string gate.
 * **L305, L310, L313** -- propagation.
@@ -88,8 +88,8 @@ lint:dispositions`) catches that before main.
 * **L494** `is_lateral() || has_using() || parameter_list_size > 0`
   -- **PROPERTY-GATE.** Lateral joins (`is_lateral`) and
   lateral-correlated `parameter_list` slots both belong to
-  `array-struct-semantic-path.plan.md` /
-  `cte-subquery-routing.plan.md` (the semantic executor owns
+  `googlesqlite-12-arrays-generators.plan.md` /
+  `googlesqlite-02-withscan-cte.plan.md` (the semantic executor owns
   evaluation order for those). `has_using()` is the analyzer's
   marker for `JOIN ... USING(...)`; the analyzer canonicalizes
   USING into ON, but the column-list collapse rule needs a
@@ -113,7 +113,7 @@ lint:dispositions`) catches that before main.
   **PROPERTY-GATE.** Multi-array UNNEST (`array_zip_mode`),
   `WITH OFFSET` (`array_offset_column`), LEFT/RIGHT outer UNNEST
   (`is_outer` / `join_expr`) all belong to
-  `array-struct-semantic-path.plan.md`. Plan-2 action:
+  `googlesqlite-12-arrays-generators.plan.md`. Plan-2 action:
   classifier `VisitResolvedArrayScan` promotes to
   `kSemanticExecutor` for any of these.
 * **L573** `input_scan != nullptr && input_scan->node_kind != SingleRow`
@@ -128,13 +128,13 @@ lint:dispositions`) catches that before main.
   || grouping_call_list_size > 0` -- **child-class-gate**: the
   child rows (`ResolvedGroupingSet`, `ResolvedRollup`,
   `ResolvedCube`) already carry `duckdb_rewrite plan=
-  advanced-relational-routing.plan.md status=planned` in
+  googlesqlite-13-advanced-relational.plan.md status=planned` in
   `node_dispositions.yaml`. The classifier visitor walks every
   child node, so the planned-row contract makes the route-promotion
   a no-op today (planned rows do not promote per the existing
   contract); the route stays at `kDuckdbNative` and the
   transpiler's `""` gate keeps the actual behavior at
-  `UNIMPLEMENTED`. When `advanced-relational-routing.plan.md`
+  `UNIMPLEMENTED`. When `googlesqlite-13-advanced-relational.plan.md`
   drops the `status=planned` marker, the classifier will start
   promoting and this gate becomes unreachable in practice. Keep
   as defense-in-depth.
@@ -155,7 +155,7 @@ lint:dispositions`) catches that before main.
   the positional projection does not handle. The wrapping shape
   is still `ResolvedSetOperationScan` with disposition
   `duckdb_native`; plan-2 owner for the classifier promotion
-  is `advanced-relational-routing.plan.md`. **Deferred**: the
+  is `googlesqlite-13-advanced-relational.plan.md`. **Deferred**: the
   CORRESPONDING surface is BigQuery-only and covered by the
   advanced relational plan; the property-gate stays in the
   transpiler today and we promote in plan 12.
@@ -170,7 +170,7 @@ lint:dispositions`) catches that before main.
 * **L789** `item == nullptr || item->column_ref() == nullptr` --
   defensive-null.
 * **L790** `item->collation_name() != nullptr` -- **property-gate**.
-  COLLATE belongs to `semantic-functions-compliance.plan.md`
+  COLLATE belongs to `googlesqlite-09-date-time.plan.md`
   (collation-aware comparison). Deferred: same reasoning as
   CORRESPONDING above.
 * **L792, L808** -- propagation.
@@ -183,7 +183,7 @@ lint:dispositions`) catches that before main.
   (L950-1000): every `""` here is either defensive-null or
   propagation, except the property-gates against
   `collation_list` (L865) and `hint_list` (L865, L882) which
-  belong to `semantic-functions-compliance.plan.md`. Deferred.
+  belong to `googlesqlite-09-date-time.plan.md`. Deferred.
 
 ### `EmitSampleScan` (L1002-1075)
 
@@ -191,7 +191,7 @@ lint:dispositions`) catches that before main.
   defensive-null.
 * **L1037** `repeatable_argument() != nullptr` -- **property-gate**.
   REPEATABLE seed semantics differ from DuckDB; owner is
-  `advanced-relational-routing.plan.md`. Deferred.
+  `googlesqlite-13-advanced-relational.plan.md`. Deferred.
 * **L1038** `weight_column() != nullptr` -- **property-gate**. WITH
   WEIGHT has no DuckDB analog. Deferred (same plan).
 * **L1039** `partition_by_list_size > 0` -- **property-gate**.
@@ -204,10 +204,10 @@ lint:dispositions`) catches that before main.
 
 * **L1079** `return "";` -- placeholder for the planned CTE-ref
   emit. The wrapping `ResolvedWithRefScan` row already carries
-  `duckdb_native plan=cte-subquery-routing.plan.md status=planned`
+  `duckdb_native plan=googlesqlite-02-withscan-cte.plan.md status=planned`
   in `node_dispositions.yaml`; the planned-row contract keeps the
   classifier from promoting and the transpiler returns `""` as
-  the runtime UNIMPLEMENTED. When `cte-subquery-routing.plan.md`
+  the runtime UNIMPLEMENTED. When `googlesqlite-02-withscan-cte.plan.md`
   drops the `planned` marker, the placeholder body lands too.
   **Defensive** (deferred-by-design).
 
@@ -233,7 +233,7 @@ Every `""` here is one of:
 * **property-gate** (`SAFE_ERROR_MODE`, aggregate modifiers
   HAVING/ORDER BY/LIMIT/GROUP BY/NULL-handling, analytic
   IGNORE/RESPECT NULLS). All belong to
-  `semantic-functions-compliance.plan.md`. **Deferred**.
+  `googlesqlite-09-date-time.plan.md`. **Deferred**.
 * **propagation** (`if (a.empty()) return "";` per arg).
 * **`status=planned` route surface** (`kDuckdbUdf` /
   `kSemanticExecutor` switch arms): see the
@@ -261,7 +261,7 @@ Every `""` here is one of:
 * **L1435** `node == nullptr || expr == nullptr` -- defensive-null.
 * **L1436-L1438** `format() / time_zone() / extended_cast() /
   type_modifiers()` -- **property-gate**. Owner is
-  `semantic-functions-compliance.plan.md` (FORMAT clauses,
+  `googlesqlite-09-date-time.plan.md` (FORMAT clauses,
   collation modifiers, time-zone-aware casts). Deferred.
 * **L1440** `target == nullptr` -- defensive-null.
 * **L1441** `IsCastTargetSupported(kind) == false` --
@@ -302,7 +302,7 @@ Every `""` here is one of:
 * **L1574** `return "";` -- placeholder for the planned subquery
   emit, mirroring `EmitWithRefScan` above. Wrapping row
   `ResolvedSubqueryExpr` is `duckdb_native plan=
-  cte-subquery-routing.plan.md status=planned`; defensive
+  googlesqlite-02-withscan-cte.plan.md status=planned`; defensive
   (deferred-by-design).
 
 ### `EmitWithExpr` (L1577-1616)
@@ -348,7 +348,7 @@ Every `""` here is one of:
     `is_lateral()` is true (the lateral case is the most narrowly
     semantic-executor-bound of the three flags; HAS USING / lateral
     parameter list stay in the deferred queue and are picked up by
-    `array-struct-semantic-path.plan.md` / `cte-subquery-routing.plan.md`).
+    `googlesqlite-12-arrays-generators.plan.md` / `googlesqlite-02-withscan-cte.plan.md`).
 
 * **Transpiler** (`backend/engine/duckdb/transpiler/transpiler.cc`):
   * Drop the `is_value_table()` early-return in `EmitQueryStmt`
@@ -364,10 +364,10 @@ Every `""` here is one of:
   unreachable in practice.
 
 The deferred property-gates land via their owning plans
-(`array-struct-semantic-path.plan.md`,
-`semantic-functions-compliance.plan.md`,
-`advanced-relational-routing.plan.md`,
-`cte-subquery-routing.plan.md`). When each of those plans drops a
+(`googlesqlite-12-arrays-generators.plan.md`,
+`googlesqlite-09-date-time.plan.md`,
+`googlesqlite-13-advanced-relational.plan.md`,
+`googlesqlite-02-withscan-cte.plan.md`). When each of those plans drops a
 `status=planned` marker or ships its own classifier override, the
 matching transpiler `""` gate becomes unreachable in practice
 and gets removed in the same commit.
@@ -387,26 +387,26 @@ match:
 
 | BQ function | Reason DuckDB target differs (paraphrased from row notes) | Owning plan |
 |-------------|-----------------------------------------------------------|-------------|
-| `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `duckdb-polyfill-udf-library.plan.md` |
-| `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `duckdb-polyfill-udf-library.plan.md` |
-| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `duckdb-polyfill-udf-library.plan.md` |
-| `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `semantic-functions-compliance.plan.md` |
-| `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `semantic-functions-compliance.plan.md` |
-| `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `duckdb-polyfill-udf-library.plan.md` |
-| `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `duckdb-polyfill-udf-library.plan.md` |
-| `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `duckdb-polyfill-udf-library.plan.md` |
-| `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `duckdb-polyfill-udf-library.plan.md` |
-| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `duckdb-polyfill-udf-library.plan.md` |
-| `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `duckdb-polyfill-udf-library.plan.md` |
+| `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `googlesqlite-03-operator-disposition.plan.md` |
+| `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `googlesqlite-03-operator-disposition.plan.md` |
+| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `googlesqlite-03-operator-disposition.plan.md` |
+| `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `googlesqlite-09-date-time.plan.md` |
+| `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `googlesqlite-09-date-time.plan.md` |
+| `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `googlesqlite-03-operator-disposition.plan.md` |
+| `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `googlesqlite-03-operator-disposition.plan.md` |
+| `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `googlesqlite-03-operator-disposition.plan.md` |
+| `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `googlesqlite-03-operator-disposition.plan.md` |
+| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `googlesqlite-03-operator-disposition.plan.md` |
+| `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `googlesqlite-03-operator-disposition.plan.md` |
 
 **Migration list: zero rows.** Every `(planned)` row carries a
 documented edge-case BigQuery cares about that DuckDB does NOT
 match without a structural rewrite (`duckdb_rewrite`) or a
 polyfill UDF (`duckdb_udf`). Per "no silent approximation" we do
 NOT promote any of these rows in plan 2; the polyfill plan
-(`duckdb-polyfill-udf-library.plan.md`) and the
+(`googlesqlite-03-operator-disposition.plan.md`) and the
 semantic-functions plan
-(`semantic-functions-compliance.plan.md`) own the migration when
+(`googlesqlite-09-date-time.plan.md`) own the migration when
 they ship.
 
 The Done-Criterion 3 (`functions.yaml` has no `(planned)` row
@@ -418,7 +418,7 @@ therefore satisfied today as the baseline -- no plan-2 changes to
 
 ## Item 3 -- update from the polyfill UDF library landing
 
-`.cursor/plans/duckdb-polyfill-udf-library.plan.md` shipped the
+`.cursor/plans/googlesqlite-03-operator-disposition.plan.md` shipped the
 first set of `duckdb_udf` wrappers. The following `functions.yaml`
 rows flipped from `status=planned duckdb_udf` to ready
 `duckdb_udf` and now point at a registered macro in
@@ -443,7 +443,7 @@ rows flipped from `status=planned duckdb_udf` to ready
 
 The following rows were investigated during the polyfill landing
 and found to require more than a thin DuckDB macro; they
-re-pointed at `semantic-functions-compliance.plan.md` (still
+re-pointed at `googlesqlite-09-date-time.plan.md` (still
 `status=planned`):
 
 | BQ function | Reason the gap is wider than a thin macro |
@@ -465,7 +465,7 @@ Net result: **zero `status=planned duckdb_udf` rows** remain in
 `status=planned duckdb_udf` row either flipped to ready
 `duckdb_udf` / `duckdb_native` with a wrapper + unit test +
 conformance fixture, or re-pointed at
-`status=planned semantic_executor plan=semantic-functions-compliance.plan.md`
+`status=planned semantic_executor plan=googlesqlite-09-date-time.plan.md`
 with a documented BigQuery / DuckDB gap that no thin macro can
 close. The polyfill plan is no longer the owning plan for any
 remaining gap; the semantic-functions plan picks up where this

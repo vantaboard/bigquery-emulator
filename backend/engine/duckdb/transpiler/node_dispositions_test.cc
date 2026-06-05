@@ -14,13 +14,13 @@ namespace duckdb {
 namespace transpiler {
 namespace {
 
-// `specialized-feature-policy.plan.md` is the canonical owner of
+// `googlesqlite-15-specialized-stubs.plan.md` is the canonical owner of
 // every `kUnsupported` row. The plan summary in
 // `.cursor/plans/local-execution-roadmap-index.plan.md` calls this
 // out explicitly; pin it here so a future YAML edit that points an
 // unsupported row at the wrong plan fails the build.
 constexpr absl::string_view kSpecializedFeaturePolicy =
-    "specialized-feature-policy.plan.md";
+    "googlesqlite-15-specialized-stubs.plan.md";
 
 TEST(NodeDispositionTableTest, LookupReturnsExpectedRows) {
   // Sanity check on one row per disposition (sentinel rows the
@@ -71,7 +71,7 @@ TEST(NodeDispositionTableTest, EveryNodeApplicableDispositionIsReachable) {
   //
   // `kLocalStub` IS expected at the node level today:
   // `ResolvedCreateModelStmt` is the statement-level stub that
-  // `specialized-feature-policy.plan.md` introduces (the
+  // `googlesqlite-15-specialized-stubs.plan.md` introduces (the
   // coordinator pre-dispatches `RESOLVED_CREATE_MODEL_STMT` to
   // `backend/engine/control/stubs/create_model.cc`). The function-
   // level stubs (`KEYS.NEW_KEYSET`, ...) live in
@@ -101,7 +101,7 @@ TEST(NodeDispositionTableTest, EveryNodeApplicableDispositionIsReachable) {
 
 TEST(NodeDispositionTableTest, EveryUnsupportedRowPointsAtPolicyPlan) {
   // Every `kUnsupported` row must point at
-  // `specialized-feature-policy.plan.md`, per the plan's done
+  // `googlesqlite-15-specialized-stubs.plan.md`, per the plan's done
   // criteria. The YAML generator already rejects an unsupported
   // row without any plan pointer; this test pins the *value*.
   int unsupported_rows = 0;
@@ -121,7 +121,7 @@ TEST(NodeDispositionTableTest, EveryUnsupportedRowPointsAtPolicyPlan) {
 TEST(NodeDispositionTableTest, EveryLocalStubRowPointsAtPolicyPlan) {
   // Same posture-row contract as `EveryUnsupportedRowPointsAtPolicy
   // Plan` above, applied to `kLocalStub`. Every stub row must point
-  // at `specialized-feature-policy.plan.md` so a reader can trace
+  // at `googlesqlite-15-specialized-stubs.plan.md` so a reader can trace
   // why the deliberate-stub posture was chosen. The YAML generator
   // rejects a `local_stub` row without any `plan=` pointer; this
   // test pins the *value*. Today's only entry is

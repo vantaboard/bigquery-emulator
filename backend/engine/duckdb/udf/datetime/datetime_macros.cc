@@ -15,7 +15,7 @@
 //   * `bq_unix_micros(timestamp)`  -- BIGINT microseconds.
 //   * `bq_unix_date(date)`         -- BIGINT days since 1970-01-01.
 //
-// Out of scope (re-pointed to `semantic-functions-compliance.plan.md`
+// Out of scope (re-pointed to `googlesqlite-09-date-time.plan.md`
 // in the wrap-up commit): `date_add` / `date_sub` / `date_diff` /
 // `date_trunc` and the `datetime_*` / `timestamp_*` variants
 // (BigQuery's month-end snap semantics for interval addition,

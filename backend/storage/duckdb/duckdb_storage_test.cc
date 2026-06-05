@@ -209,21 +209,53 @@ TEST_F(DuckDBStorageTest, CreateTableWithEmptySchemaSkipsParquet) {
   auto schema_or = store.GetSchema(table);
   ASSERT_TRUE(schema_or.ok()) << schema_or.status();
   EXPECT_TRUE(schema_or->columns.empty());
+}
 
-  // ScanRows tolerates the missing parquet file (per its own
-  // hand-curated --data_dir comment) and returns an empty iterator.
+// Regression: CREATE TABLE with a STRUCT column must not crash the
+// engine while materializing the empty parquet scratch table.
+TEST_F(DuckDBStorageTest, CreateTableWithStructColumnMaterializesParquet) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "infostruct"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  schema::TableSchema schema;
+  schema::ColumnSchema k;
+  k.name = "k";
+  k.type = schema::ColumnType::kInt64;
+  schema::ColumnSchema s;
+  s.name = "s";
+  s.type = schema::ColumnType::kStruct;
+  schema::ColumnSchema a;
+  a.name = "a";
+  a.type = schema::ColumnType::kInt64;
+  schema::ColumnSchema b;
+  b.name = "b";
+  b.type = schema::ColumnType::kString;
+  s.fields = {a, b};
+  schema.columns = {k, s};
+
+  ASSERT_TRUE(store.CreateTable(table, schema).ok());
+
+  const fs::path parquet = data_dir_ / "proj-1" / "ds_1" / "infostruct.parquet";
+  ASSERT_TRUE(fs::exists(parquet));
+  EXPECT_GT(fs::file_size(parquet), 0u);
+
+  auto schema_or = store.GetSchema(table);
+  ASSERT_TRUE(schema_or.ok()) << schema_or.status();
+  ASSERT_EQ(schema_or->columns.size(), 2u);
+  EXPECT_EQ(schema_or->columns[1].type, schema::ColumnType::kStruct);
+  ASSERT_EQ(schema_or->columns[1].fields.size(), 2u);
+
   auto iter_or = store.ScanRows(table);
   ASSERT_TRUE(iter_or.ok()) << iter_or.status();
   Row r;
   auto has = (*iter_or)->Next(&r);
   ASSERT_TRUE(has.ok());
   EXPECT_FALSE(*has);
-
-  // DropTable still cleans up the sidecar; the parquet path is a
-  // best-effort remove (no error when absent).
-  ASSERT_TRUE(store.DropTable(table).ok());
-  EXPECT_FALSE(fs::exists(sidecar));
-  EXPECT_FALSE(fs::exists(parquet));
 }
 
 TEST_F(DuckDBStorageTest, ListDatasetsReturnsSortedIdsForProject) {

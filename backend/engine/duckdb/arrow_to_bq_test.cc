@@ -222,6 +222,43 @@ TEST_F(ArrowToBqTest, RendersStructAsStructCell) {
   EXPECT_EQ(rows[0].cells[0].struct_value()[1].string_value(), "grace");
 }
 
+// Window SUM over integers often lands as HUGEINT vectors while the
+// analyzer still types the output column INT64 (googlesqlite plan 05).
+TEST_F(ArrowToBqTest, RendersHugeintWindowSumAsInt64) {
+  schema::TableSchema s;
+  schema::ColumnSchema sum_col;
+  sum_col.name = "running_sum";
+  sum_col.type = schema::ColumnType::kInt64;
+  s.columns.push_back(sum_col);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT SUM(x) OVER (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDING AND "
+      "CURRENT ROW) AS running_sum "
+      "FROM (VALUES (1), (2), (3)) AS t(x)",
+      s);
+  ASSERT_EQ(rows.size(), 3u);
+  EXPECT_EQ(rows[0].cells[0].int64_value(), 1);
+  EXPECT_EQ(rows[1].cells[0].int64_value(), 3);
+  EXPECT_EQ(rows[2].cells[0].int64_value(), 6);
+}
+
+// SUM over DOUBLE inputs is promoted to DECIMAL in DuckDB; FLOAT64
+// output columns must still marshal (group_by / rollup fixtures).
+TEST_F(ArrowToBqTest, RendersDecimalSumAsFloat64) {
+  schema::TableSchema s;
+  schema::ColumnSchema total;
+  total.name = "total";
+  total.type = schema::ColumnType::kFloat64;
+  s.columns.push_back(total);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT SUM(amount) AS total FROM (VALUES (10.5), (2.25)) AS t(amount)",
+      s);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kFloat64);
+  EXPECT_DOUBLE_EQ(rows[0].cells[0].float64_value(), 12.75);
+}
+
 // Column-count mismatch surfaces as INVALID_ARGUMENT instead of
 // silently truncating the rendered row. This is the contract the
 // engine relies on when the analyzer and DuckDB disagree on shape.

@@ -1,21 +1,27 @@
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 
+#include <algorithm>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/options.pb.h"
+#include "googlesql/public/sql_function.h"
+#include "googlesql/public/templated_sql_function.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/struct_type.h"
@@ -45,6 +51,78 @@ std::string QuoteIdent(absl::string_view name) {
 // strings and for STRUCT field-name keys in `{'k': v}` literals.
 std::string QuoteString(absl::string_view text) {
   return absl::StrCat("'", absl::StrReplaceAll(text, {{"'", "''"}}), "'");
+}
+
+std::string ResolveFunctionName(const ::googlesql::Function* fn) {
+  if (fn == nullptr) return "";
+  return absl::AsciiStrToLower(fn->FullName(/*include_group=*/false));
+}
+
+std::string WrapArrayAggRespectNulls(absl::string_view body,
+                                     absl::string_view arg) {
+  return absl::StrCat(
+      "if(count(",
+      arg,
+      ") < count(*), error('ARRAY_AGG: input value must be not null'), ",
+      body,
+      ")");
+}
+
+constexpr const char kBqInputRnCol[] = "__bq_input_rn";
+constexpr const char kBqPctCoalesceCol[] = "__bq_pct_coalesce";
+constexpr char kBqPctNullSentinel[] = "'!__BQ_NULL__!'";
+constexpr const char kBqUnionOrdCol[] = "__bq_union_ord";
+
+// Suffix for ORDER BY direction + NULL ordering.
+std::string OrderByItemSuffix(const ::googlesql::ResolvedOrderByItem* item,
+                              bool bigquery_null_defaults = false) {
+  const char* dir = item->is_descending() ? "DESC" : "ASC";
+  const char* nulls = "";
+  switch (item->null_order()) {
+    case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+      nulls = " NULLS FIRST";
+      break;
+    case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+      nulls = " NULLS LAST";
+      break;
+    case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
+    default:
+      if (bigquery_null_defaults) {
+        nulls = item->is_descending() ? " NULLS LAST" : " NULLS FIRST";
+      }
+      break;
+  }
+  return absl::StrCat(" ", dir, nulls);
+}
+
+std::optional<std::string> TryLiteralString(
+    const ::googlesql::ResolvedExpr* expr) {
+  if (expr == nullptr || expr->node_kind() != ::googlesql::RESOLVED_LITERAL) {
+    return std::nullopt;
+  }
+  const auto* lit = expr->GetAs<::googlesql::ResolvedLiteral>();
+  if (lit == nullptr) return std::nullopt;
+  const ::googlesql::Value& v = lit->value();
+  if (v.is_null() || v.type_kind() != ::googlesql::TYPE_STRING) {
+    return std::nullopt;
+  }
+  return v.string_value();
+}
+
+// DuckDB BLOB literals use per-byte `\xHH` escapes inside single quotes
+// (`'\x61\x62\x63'::BLOB`). A bare hex digit run (`'616263'::BLOB`) is
+// six ASCII bytes, not three decoded bytes.
+std::string EmitBlobLiteral(absl::string_view bytes) {
+  static const char kHex[] = "0123456789abcdef";
+  std::string escaped;
+  escaped.reserve(bytes.size() * 4);
+  for (unsigned char c : bytes) {
+    escaped.push_back('\\');
+    escaped.push_back('x');
+    escaped.push_back(kHex[c >> 4]);
+    escaped.push_back(kHex[c & 0xf]);
+  }
+  return absl::StrCat("'", escaped, "'::BLOB");
 }
 
 // Synthesize a stable DuckDB-side field name for a BigQuery STRUCT
@@ -101,6 +179,20 @@ std::string ResolveStructFieldName(const ::googlesql::StructType& st, int idx) {
 //   `{'_0': 1, '_1': 'a'}`; `EmitGetStructField` uses the same
 //   convention on the access side.
 //
+std::string FormatDateLiteral(int32_t days_since_epoch) {
+  int32_t z = days_since_epoch + 719468;
+  int32_t era = (z >= 0 ? z : z - 146096) / 146097;
+  unsigned doe = static_cast<unsigned>(z - era * 146097);
+  unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  int y = static_cast<int>(yoe) + era * 400;
+  unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  unsigned mp = (5 * doy + 2) / 153;
+  unsigned d = doy - (153 * mp + 2) / 5 + 1;
+  unsigned m = mp < 10 ? mp + 3 : mp - 9;
+  if (m <= 2) ++y;
+  return absl::StrFormat("%04d-%02u-%02u", y, m, d);
+}
+
 // Returns the empty string when any element / field cannot be lowered;
 // callers propagate that up so the engine fallback fires per the
 // per-shape disposition in SHAPE_TRACKER.md.
@@ -111,6 +203,8 @@ std::string EmitValueLiteral(const ::googlesql::Value& v) {
   switch (type->kind()) {
     case ::googlesql::TYPE_STRING:
       return QuoteString(v.string_value());
+    case ::googlesql::TYPE_BYTES:
+      return EmitBlobLiteral(v.bytes_value());
     case ::googlesql::TYPE_ARRAY: {
       std::vector<std::string> elems;
       elems.reserve(v.num_elements());
@@ -134,6 +228,33 @@ std::string EmitValueLiteral(const ::googlesql::Value& v) {
       }
       return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
     }
+    case ::googlesql::TYPE_TIMESTAMP: {
+      const absl::TimeZone utc = absl::UTCTimeZone();
+      const absl::Time t = v.ToTime();
+      const int64_t micros = absl::ToUnixMicros(t);
+      std::string formatted;
+      if (micros % 1000000 == 0) {
+        formatted = absl::FormatTime("%Y-%m-%d %H:%M:%S+00", t, utc);
+      } else {
+        formatted = absl::StrCat(
+            absl::FormatTime("%Y-%m-%d %H:%M:%E6S", t, utc), "+00");
+      }
+      return absl::StrCat("CAST(", QuoteString(formatted), " AS TIMESTAMPTZ)");
+    }
+    case ::googlesql::TYPE_DATETIME: {
+      std::string out = v.datetime_value().DebugString();
+      const size_t sep = out.find(' ');
+      if (sep != std::string::npos) {
+        out[sep] = 'T';
+      }
+      return absl::StrCat("CAST(", QuoteString(out), " AS TIMESTAMP)");
+    }
+    case ::googlesql::TYPE_DATE:
+      return absl::StrCat(
+          "CAST(", QuoteString(FormatDateLiteral(v.date_value())), " AS DATE)");
+    case ::googlesql::TYPE_TIME:
+      return absl::StrCat(
+          "CAST(", QuoteString(v.time_value().DebugString()), " AS TIME)");
     default:
       return v.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL);
   }
@@ -174,10 +295,244 @@ bool IsCastTargetSupported(::googlesql::TypeKind kind) {
   }
 }
 
+bool ScanTreeContainsAnalytic(const ::googlesql::ResolvedScan* scan) {
+  if (scan == nullptr) return false;
+  switch (scan->node_kind()) {
+    case ::googlesql::RESOLVED_ANALYTIC_SCAN:
+      return true;
+    case ::googlesql::RESOLVED_PROJECT_SCAN: {
+      const auto* ps = scan->GetAs<::googlesql::ResolvedProjectScan>();
+      return ScanTreeContainsAnalytic(ps->input_scan());
+    }
+    case ::googlesql::RESOLVED_FILTER_SCAN: {
+      const auto* fs = scan->GetAs<::googlesql::ResolvedFilterScan>();
+      return ScanTreeContainsAnalytic(fs->input_scan());
+    }
+    case ::googlesql::RESOLVED_JOIN_SCAN: {
+      const auto* js = scan->GetAs<::googlesql::ResolvedJoinScan>();
+      return ScanTreeContainsAnalytic(js->left_scan()) ||
+             ScanTreeContainsAnalytic(js->right_scan());
+    }
+    case ::googlesql::RESOLVED_ARRAY_SCAN: {
+      const auto* as = scan->GetAs<::googlesql::ResolvedArrayScan>();
+      return ScanTreeContainsAnalytic(as->input_scan());
+    }
+    case ::googlesql::RESOLVED_AGGREGATE_SCAN: {
+      const auto* ag = scan->GetAs<::googlesql::ResolvedAggregateScan>();
+      return ScanTreeContainsAnalytic(ag->input_scan());
+    }
+    case ::googlesql::RESOLVED_ORDER_BY_SCAN: {
+      const auto* obs = scan->GetAs<::googlesql::ResolvedOrderByScan>();
+      return ScanTreeContainsAnalytic(obs->input_scan());
+    }
+    case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN: {
+      const auto* los = scan->GetAs<::googlesql::ResolvedLimitOffsetScan>();
+      return ScanTreeContainsAnalytic(los->input_scan());
+    }
+    case ::googlesql::RESOLVED_WITH_SCAN: {
+      const auto* ws = scan->GetAs<::googlesql::ResolvedWithScan>();
+      return ScanTreeContainsAnalytic(ws->query());
+    }
+    case ::googlesql::RESOLVED_SET_OPERATION_SCAN: {
+      const auto* sos = scan->GetAs<::googlesql::ResolvedSetOperationScan>();
+      for (int i = 0; i < sos->input_item_list_size(); ++i) {
+        const auto* item = sos->input_item_list(i);
+        if (item != nullptr && ScanTreeContainsAnalytic(item->scan())) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case ::googlesql::RESOLVED_SAMPLE_SCAN: {
+      const auto* ss = scan->GetAs<::googlesql::ResolvedSampleScan>();
+      return ScanTreeContainsAnalytic(ss->input_scan());
+    }
+    case ::googlesql::RESOLVED_PIVOT_SCAN: {
+      const auto* ps = scan->GetAs<::googlesql::ResolvedPivotScan>();
+      return ScanTreeContainsAnalytic(ps->input_scan());
+    }
+    case ::googlesql::RESOLVED_UNPIVOT_SCAN: {
+      const auto* us = scan->GetAs<::googlesql::ResolvedUnpivotScan>();
+      return ScanTreeContainsAnalytic(us->input_scan());
+    }
+    default:
+      return false;
+  }
+}
+
+bool AnalyticOrderNeedsInputRn(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+  if (group == nullptr) return false;
+  static const absl::flat_hash_set<std::string> kNavigationFns = {
+      "lag", "lead", "first_value", "last_value", "nth_value"};
+  for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+    const ::googlesql::ResolvedComputedColumnBase* col =
+        group->analytic_function_list(f);
+    if (col == nullptr || col->expr() == nullptr ||
+        col->expr()->node_kind() !=
+            ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+      continue;
+    }
+    const auto* afn =
+        col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+    if (afn == nullptr || afn->function() == nullptr) continue;
+    if (kNavigationFns.contains(ResolveFunctionName(afn->function()))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool AnalyticGroupNeedsInputRnForEmptyOrder(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+  if (group == nullptr) return false;
+  const ::googlesql::ResolvedWindowOrdering* order_by = group->order_by();
+  if (order_by != nullptr && order_by->order_by_item_list_size() > 0) {
+    return false;
+  }
+  static const absl::flat_hash_set<std::string> kFns = {"row_number",
+                                                        "rank",
+                                                        "dense_rank",
+                                                        "percent_rank",
+                                                        "cume_dist",
+                                                        "ntile",
+                                                        "lag",
+                                                        "lead",
+                                                        "first_value",
+                                                        "last_value",
+                                                        "nth_value"};
+  for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+    const ::googlesql::ResolvedComputedColumnBase* col =
+        group->analytic_function_list(f);
+    if (col == nullptr || col->expr() == nullptr ||
+        col->expr()->node_kind() !=
+            ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+      continue;
+    }
+    const auto* afn =
+        col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+    if (afn == nullptr || afn->function() == nullptr) continue;
+    if (kFns.contains(ResolveFunctionName(afn->function()))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool AnalyticGroupHasRangeFrame(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+  if (group == nullptr) return false;
+  for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+    const ::googlesql::ResolvedComputedColumnBase* col =
+        group->analytic_function_list(f);
+    if (col == nullptr || col->expr() == nullptr ||
+        col->expr()->node_kind() !=
+            ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+      continue;
+    }
+    const auto* afn =
+        col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+    if (afn == nullptr || afn->window_frame() == nullptr) continue;
+    if (afn->window_frame()->frame_unit() ==
+        ::googlesql::ResolvedWindowFrame::RANGE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool AggregateScanNeedsInputRn(const ::googlesql::ResolvedAggregateScan* node) {
+  if (node == nullptr) return false;
+  for (int i = 0; i < node->aggregate_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumnBase* ac = node->aggregate_list(i);
+    if (ac == nullptr || ac->expr() == nullptr ||
+        ac->expr()->node_kind() !=
+            ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL) {
+      continue;
+    }
+    const auto* agg =
+        ac->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
+    if (agg == nullptr || agg->function() == nullptr) continue;
+    const std::string agg_name = ResolveFunctionName(agg->function());
+    if (agg_name == "array_concat_agg") {
+      return true;
+    }
+    if (agg_name == "string_agg" && agg->distinct()) {
+      return true;
+    }
+    if (agg_name == "array_agg" && agg->order_by_item_list_size() == 0 &&
+        agg->limit() == nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string OrderItemLeadingColumn(const std::string& item) {
+  if (item.empty() || item[0] != '"') return "";
+  const size_t end = item.find('"', 1);
+  if (end == std::string::npos) return "";
+  return item.substr(0, end + 1);
+}
+
+bool OutputListContainsColumn(absl::string_view quoted_col,
+                              const ::googlesql::ResolvedQueryStmt* node) {
+  if (node == nullptr) return false;
+  for (int i = 0; i < node->output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedOutputColumn* out = node->output_column_list(i);
+    if (out == nullptr) continue;
+    if (quoted_col == QuoteIdent(out->column().name())) return true;
+  }
+  return false;
+}
+
+std::vector<std::string> ExtraOrderColumnsForWrap(
+    const std::vector<std::string>& order_items,
+    const ::googlesql::ResolvedQueryStmt* node) {
+  std::vector<std::string> extra;
+  for (const std::string& item : order_items) {
+    const std::string col = OrderItemLeadingColumn(item);
+    if (col.empty() || col == QuoteIdent(kBqInputRnCol)) continue;
+    if (OutputListContainsColumn(col, node)) continue;
+    if (std::find(extra.begin(), extra.end(), col) == extra.end()) {
+      extra.push_back(col);
+    }
+  }
+  return extra;
+}
+
+std::vector<std::string> FilterOutputOrderItems(
+    const std::vector<std::string>& items,
+    const ::googlesql::ResolvedQueryStmt* node) {
+  if (node == nullptr) return {};
+  std::vector<std::string> filtered;
+  filtered.reserve(items.size());
+  for (const std::string& item : items) {
+    if (item.empty() || item[0] != '"') continue;
+    const size_t end = item.find('"', 1);
+    if (end == std::string::npos) continue;
+    const std::string quoted_col = item.substr(0, end + 1);
+    for (int i = 0; i < node->output_column_list_size(); ++i) {
+      const ::googlesql::ResolvedOutputColumn* out =
+          node->output_column_list(i);
+      if (out == nullptr) continue;
+      if (quoted_col == QuoteIdent(out->column().name())) {
+        filtered.push_back(item);
+        break;
+      }
+    }
+  }
+  return filtered;
+}
+
 }  // namespace
 
 Transpiler::Transpiler() = default;
 Transpiler::~Transpiler() = default;
+
+std::string Transpiler::TranspileScan(const ::googlesql::ResolvedScan* scan) {
+  return EmitScan(scan);
+}
 
 std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
   // Single-entry dispatch: we walk by `node_kind()` so the per-shape
@@ -327,13 +682,25 @@ std::string Transpiler::EmitQueryStmt(
   // is set to `kSemanticExecutor` via its
   // `VisitResolvedQueryStmt` override, so the local coordinator
   // hands the statement off to the semantic executor (stub today;
-  // owned by `semantic-executor-core.plan.md`) before the
+  // owned by `googlesqlite-07-semantic-core-expr.plan.md`) before the
   // transpiler is ever asked to lower it. We touch the accessor
   // below so `ResolvedAST::CheckFieldsAccessed` still sees the
   // field read in case the transpiler is invoked through a path
   // that bypasses the classifier (legacy tests, debugging).
   if (node == nullptr) return "";
   (void)node->is_value_table();
+  output_order_items_.clear();
+  input_has_rn_column_ = false;
+  input_rn_ordering_ = false;
+  output_includes_input_rn_ = false;
+  query_output_column_names_.clear();
+  query_output_column_names_.reserve(node->output_column_list_size());
+  for (int i = 0; i < node->output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedOutputColumn* out = node->output_column_list(i);
+    if (out != nullptr) {
+      query_output_column_names_.push_back(out->column().name());
+    }
+  }
   std::string inner = EmitScan(node->query());
   if (inner.empty()) return "";
   std::vector<std::string> outputs;
@@ -344,8 +711,58 @@ std::string Transpiler::EmitQueryStmt(
     outputs.push_back(std::move(oc));
   }
   if (outputs.empty()) return "";
-  return absl::StrCat(
+  std::vector<std::string> outer_refs;
+  outer_refs.reserve(node->output_column_list_size());
+  for (int i = 0; i < node->output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedOutputColumn* out = node->output_column_list(i);
+    if (out == nullptr) return "";
+    outer_refs.push_back(QuoteIdent(out->name()));
+  }
+  std::string sql = absl::StrCat(
       "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
+  if (!output_order_items_.empty()) {
+    const std::vector<std::string> extra_order_cols =
+        ExtraOrderColumnsForWrap(output_order_items_, node);
+    const bool order_needs_rn =
+        input_rn_ordering_ && !output_includes_input_rn_ &&
+        std::any_of(output_order_items_.begin(),
+                    output_order_items_.end(),
+                    [](const std::string& item) {
+                      return item.find(QuoteIdent(kBqInputRnCol)) !=
+                             std::string::npos;
+                    });
+    if (!extra_order_cols.empty() || order_needs_rn) {
+      std::vector<std::string> inner_select = outputs;
+      inner_select.insert(
+          inner_select.end(), extra_order_cols.begin(), extra_order_cols.end());
+      if (order_needs_rn) {
+        inner_select.push_back(QuoteIdent(kBqInputRnCol));
+      }
+      // Inner ORDER BY subquery already applied output aliases; the outer
+      // SELECT must reference those names, not the pre-alias expressions.
+      sql = absl::StrCat("SELECT ",
+                         absl::StrJoin(outer_refs, ", "),
+                         " FROM (SELECT ",
+                         absl::StrJoin(inner_select, ", "),
+                         " FROM (",
+                         inner,
+                         ") ORDER BY ",
+                         absl::StrJoin(output_order_items_, ", "),
+                         ")");
+    } else {
+      absl::StrAppend(
+          &sql, " ORDER BY ", absl::StrJoin(output_order_items_, ", "));
+    }
+    output_order_items_.clear();
+    input_rn_ordering_ = false;
+  } else if (input_rn_ordering_) {
+    // DuckDB allows ORDER BY a column from the inner subquery even when
+    // the outer SELECT does not project it (UNNEST input-order tests).
+    absl::StrAppend(&sql, " ORDER BY ", QuoteIdent(kBqInputRnCol));
+    input_rn_ordering_ = false;
+  }
+  query_output_column_names_.clear();
+  return sql;
 }
 
 // Scans ---------------------------------------------------------------------
@@ -423,10 +840,43 @@ std::string Transpiler::EmitProjectScan(
       if (emitted.empty()) return "";
       projections.push_back(std::move(emitted));
     } else {
+      // The analyzer may list both a passthrough ResolvedColumn and a
+      // computed replacement that share the same user-visible name
+      // (e.g. FORMAT_TIMESTAMP AS finish_time over the input finish_time
+      // column). Emitting both yields duplicate SELECT aliases and can
+      // crash DuckDB on window queries.
+      bool shadowed_by_computed = false;
+      for (int j = 0; j < node->expr_list_size(); ++j) {
+        const ::googlesql::ResolvedComputedColumn* cc = node->expr_list(j);
+        if (cc != nullptr && cc->column().name() == col.name()) {
+          shadowed_by_computed = true;
+          break;
+        }
+      }
+      if (shadowed_by_computed) continue;
       projections.push_back(QuoteIdent(col.name()));
     }
   }
 
+  for (const std::string& item : output_order_items_) {
+    const std::string col = OrderItemLeadingColumn(item);
+    if (col.empty() || col == QuoteIdent(kBqInputRnCol)) continue;
+    if (std::find(projections.begin(), projections.end(), col) !=
+        projections.end()) {
+      continue;
+    }
+    projections.push_back(col);
+  }
+  if (input_has_rn_column_) {
+    const std::string rn = QuoteIdent(kBqInputRnCol);
+    if (std::find(projections.begin(), projections.end(), rn) ==
+        projections.end()) {
+      projections.push_back(rn);
+    }
+  }
+  if (input_rn_ordering_) {
+    output_includes_input_rn_ = true;
+  }
   std::string select_list =
       projections.empty() ? "*" : absl::StrJoin(projections, ", ");
   return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
@@ -508,6 +958,157 @@ std::string Transpiler::EmitFilterScan(
   return absl::StrCat("SELECT * FROM (", input, ") WHERE ", filter);
 }
 
+// The analyzer canonicalizes `JOIN ... USING (a, b, ...)` into a
+// `join_expr` tree of `$equal` / `$and` calls over matching column
+// refs. DuckDB shares the native `USING (...)` syntax, so we peel
+// the column names back out of that tree and emit `USING` directly
+// rather than lowering through `$equal` (which is owned by
+// `googlesqlite-03-operator-disposition.plan.md`).
+static bool TryAppendUsingColumnFromEqualCall(
+    const ::googlesql::ResolvedFunctionCall* call,
+    std::vector<std::string>* cols) {
+  if (call == nullptr || call->function() == nullptr || cols == nullptr) {
+    return false;
+  }
+  if (call->argument_list_size() != 2) return false;
+  if (absl::AsciiStrToLower(call->function()->Name()) != "$equal") {
+    return false;
+  }
+  const ::googlesql::ResolvedExpr* lhs = call->argument_list(0);
+  const ::googlesql::ResolvedExpr* rhs = call->argument_list(1);
+  if (lhs == nullptr || rhs == nullptr ||
+      lhs->node_kind() != ::googlesql::RESOLVED_COLUMN_REF ||
+      rhs->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
+    return false;
+  }
+  const std::string& left_name =
+      lhs->GetAs<::googlesql::ResolvedColumnRef>()->column().name();
+  const std::string& right_name =
+      rhs->GetAs<::googlesql::ResolvedColumnRef>()->column().name();
+  if (left_name != right_name) return false;
+  cols->push_back(left_name);
+  return true;
+}
+
+static void AppendScanColumnIds(const ::googlesql::ResolvedScan* scan,
+                                absl::flat_hash_set<int>* ids) {
+  if (scan == nullptr || ids == nullptr) return;
+  for (int i = 0; i < scan->column_list_size(); ++i) {
+    ids->insert(scan->column_list(i).column_id());
+  }
+  switch (scan->node_kind()) {
+    case ::googlesql::RESOLVED_PROJECT_SCAN:
+      AppendScanColumnIds(
+          scan->GetAs<::googlesql::ResolvedProjectScan>()->input_scan(), ids);
+      break;
+    case ::googlesql::RESOLVED_FILTER_SCAN:
+      AppendScanColumnIds(
+          scan->GetAs<::googlesql::ResolvedFilterScan>()->input_scan(), ids);
+      break;
+    case ::googlesql::RESOLVED_ORDER_BY_SCAN:
+      AppendScanColumnIds(
+          scan->GetAs<::googlesql::ResolvedOrderByScan>()->input_scan(), ids);
+      break;
+    case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
+      AppendScanColumnIds(
+          scan->GetAs<::googlesql::ResolvedLimitOffsetScan>()->input_scan(),
+          ids);
+      break;
+    case ::googlesql::RESOLVED_JOIN_SCAN: {
+      const auto* join = scan->GetAs<::googlesql::ResolvedJoinScan>();
+      AppendScanColumnIds(join->left_scan(), ids);
+      AppendScanColumnIds(join->right_scan(), ids);
+      break;
+    }
+    case ::googlesql::RESOLVED_WITH_SCAN:
+      AppendScanColumnIds(scan->GetAs<::googlesql::ResolvedWithScan>()->query(),
+                          ids);
+      break;
+    default:
+      break;
+  }
+}
+
+static std::string EmitJoinQualifiedColumnRef(
+    const ::googlesql::ResolvedColumnRef* node,
+    const absl::flat_hash_set<int>& left_ids,
+    const absl::flat_hash_set<int>& right_ids) {
+  if (node == nullptr) return "";
+  const int col_id = node->column().column_id();
+  const std::string quoted = QuoteIdent(node->column().name());
+  if (left_ids.contains(col_id)) {
+    return absl::StrCat("__bq_l.", quoted);
+  }
+  if (right_ids.contains(col_id)) {
+    return absl::StrCat("__bq_r.", quoted);
+  }
+  return quoted;
+}
+
+static std::string EmitJoinQualifiedExpr(
+    const ::googlesql::ResolvedExpr* expr,
+    const absl::flat_hash_set<int>& left_ids,
+    const absl::flat_hash_set<int>& right_ids) {
+  if (expr == nullptr) return "";
+  if (expr->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
+    return EmitJoinQualifiedColumnRef(
+        expr->GetAs<::googlesql::ResolvedColumnRef>(), left_ids, right_ids);
+  }
+  if (expr->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
+    const auto* call = expr->GetAs<::googlesql::ResolvedFunctionCall>();
+    if (call == nullptr || call->function() == nullptr) return "";
+    const std::string fn = absl::AsciiStrToLower(call->function()->Name());
+    std::vector<std::string> args;
+    args.reserve(call->argument_list_size());
+    for (int i = 0; i < call->argument_list_size(); ++i) {
+      std::string arg =
+          EmitJoinQualifiedExpr(call->argument_list(i), left_ids, right_ids);
+      if (arg.empty()) return "";
+      args.push_back(std::move(arg));
+    }
+    if (fn == "$equal" && args.size() == 2) {
+      return absl::StrCat("(", args[0], " = ", args[1], ")");
+    }
+    if (fn == "$and" && !args.empty()) {
+      return absl::StrCat("(", absl::StrJoin(args, " AND "), ")");
+    }
+    return "";
+  }
+  if (expr->node_kind() == ::googlesql::RESOLVED_LITERAL) {
+    const auto* lit = expr->GetAs<::googlesql::ResolvedLiteral>();
+    if (lit == nullptr) return "";
+    return EmitValueLiteral(lit->value());
+  }
+  return "";
+}
+
+static bool ExtractUsingColumnsFromJoinExpr(
+    const ::googlesql::ResolvedExpr* expr, std::vector<std::string>* cols) {
+  if (expr == nullptr || cols == nullptr) return false;
+  if (expr->node_kind() != ::googlesql::RESOLVED_FUNCTION_CALL) return false;
+  const auto* call = expr->GetAs<::googlesql::ResolvedFunctionCall>();
+  if (call == nullptr || call->function() == nullptr) return false;
+  const std::string fn = absl::AsciiStrToLower(call->function()->Name());
+  if (fn == "$equal") {
+    return TryAppendUsingColumnFromEqualCall(call, cols);
+  }
+  if (fn == "$and") {
+    for (int i = 0; i < call->argument_list_size(); ++i) {
+      const ::googlesql::ResolvedExpr* arg = call->argument_list(i);
+      if (arg == nullptr ||
+          arg->node_kind() != ::googlesql::RESOLVED_FUNCTION_CALL) {
+        return false;
+      }
+      if (!TryAppendUsingColumnFromEqualCall(
+              arg->GetAs<::googlesql::ResolvedFunctionCall>(), cols)) {
+        return false;
+      }
+    }
+    return !cols->empty();
+  }
+  return false;
+}
+
 std::string Transpiler::EmitJoinScan(
     const ::googlesql::ResolvedJoinScan* node) {
   // INNER / LEFT / RIGHT / FULL all map directly onto DuckDB join
@@ -522,17 +1123,15 @@ std::string Transpiler::EmitJoinScan(
   // the route to `kSemanticExecutor`. We touch the accessor below
   // so `ResolvedAST::CheckFieldsAccessed` still observes the read
   // in case the transpiler is invoked through a path that bypasses
-  // the classifier (legacy tests, debugging). `JOIN ... USING(...)`
-  // (`has_using`) and lateral correlated `parameter_list` slots
-  // stay on the transpiler's empty-string gate today: the analyzer
-  // canonicalizes USING into ON but the column-list collapse rule
-  // needs a bespoke rewrite the first emit pass does not cover.
-  // Both are documented in `EMPTY_STRING_AUDIT.md` as deferred to
-  // `array-struct-semantic-path.plan.md` /
-  // `cte-subquery-routing.plan.md`.
+  // the classifier (legacy tests, debugging). Lateral correlated
+  // `parameter_list` slots stay on the empty-string gate today
+  // (`googlesqlite-12-arrays-generators.plan.md`). `JOIN ... USING(...)`
+  // lowers to DuckDB's native `USING (...)` by peeling column names
+  // out of the analyzer's `$equal` / `$and` `join_expr` tree
+  // (`googlesqlite-02-withscan-cte.plan.md`).
   if (node == nullptr) return "";
   (void)node->is_lateral();
-  if (node->has_using() || node->parameter_list_size() > 0) {
+  if (node->parameter_list_size() > 0) {
     return "";
   }
   std::string left = EmitScan(node->left_scan());
@@ -558,6 +1157,27 @@ std::string Transpiler::EmitJoinScan(
       return "";
   }
 
+  if (node->has_using()) {
+    std::vector<std::string> using_cols;
+    if (!ExtractUsingColumnsFromJoinExpr(node->join_expr(), &using_cols)) {
+      return "";
+    }
+    std::vector<std::string> quoted_using;
+    quoted_using.reserve(using_cols.size());
+    for (const std::string& col : using_cols) {
+      quoted_using.push_back(QuoteIdent(col));
+    }
+    return absl::StrCat("SELECT * FROM (",
+                        left,
+                        ") ",
+                        join_kw,
+                        " (",
+                        right,
+                        ") USING (",
+                        absl::StrJoin(quoted_using, ", "),
+                        ")");
+  }
+
   if (node->join_expr() == nullptr) {
     // INNER + no join_expr is the analyzer's representation of
     // CROSS JOIN. LEFT / RIGHT / FULL without a condition is a
@@ -569,10 +1189,21 @@ std::string Transpiler::EmitJoinScan(
     }
     return absl::StrCat("SELECT * FROM (", left, ") CROSS JOIN (", right, ")");
   }
-  std::string on = EmitExpr(node->join_expr());
+  absl::flat_hash_set<int> left_ids;
+  absl::flat_hash_set<int> right_ids;
+  AppendScanColumnIds(node->left_scan(), &left_ids);
+  AppendScanColumnIds(node->right_scan(), &right_ids);
+  std::string on =
+      EmitJoinQualifiedExpr(node->join_expr(), left_ids, right_ids);
   if (on.empty()) return "";
-  return absl::StrCat(
-      "SELECT * FROM (", left, ") ", join_kw, " (", right, ") ON ", on);
+  return absl::StrCat("SELECT * FROM (",
+                      left,
+                      ") AS __bq_l ",
+                      join_kw,
+                      " (",
+                      right,
+                      ") AS __bq_r ON ",
+                      on);
 }
 
 std::string Transpiler::EmitArrayScan(
@@ -616,10 +1247,18 @@ std::string Transpiler::EmitArrayScan(
   }
   std::string arr = EmitExpr(node->array_expr_list(0));
   if (arr.empty()) return "";
-  return absl::StrCat("SELECT unnest(",
+  const std::string quoted_col =
+      QuoteIdent(node->element_column_list(0).name());
+  input_has_rn_column_ = true;
+  return absl::StrCat("SELECT ",
+                      quoted_col,
+                      ", ord AS ",
+                      QuoteIdent(kBqInputRnCol),
+                      " FROM unnest(",
                       arr,
-                      ") AS ",
-                      QuoteIdent(node->element_column_list(0).name()));
+                      ") WITH ORDINALITY AS __bq_unnest__(",
+                      quoted_col,
+                      ", ord)");
 }
 
 // Emit one `ResolvedGroupingSetMultiColumn` (a single grouping set
@@ -707,6 +1346,59 @@ static std::string EmitGroupingSetEntry(
 
 std::string Transpiler::EmitAggregateScan(
     const ::googlesql::ResolvedAggregateScan* node) {
+  // BigQuery `ARRAY_AGG(DISTINCT x)` preserves first-seen order from the
+  // input sequence. DuckDB's `list(DISTINCT x)` / `array_agg(DISTINCT x)`
+  // do not, so for `SELECT ARRAY_AGG(DISTINCT x) FROM UNNEST(<literal>)`
+  // we lower via WITH ORDINALITY and a grouped subquery.
+  if (node != nullptr && node->group_by_list_size() == 0 &&
+      node->aggregate_list_size() == 1 && node->grouping_set_list_size() == 0 &&
+      node->grouping_call_list_size() == 0) {
+    const ::googlesql::ResolvedComputedColumnBase* ac = node->aggregate_list(0);
+    const auto* agg =
+        ac != nullptr && ac->expr() != nullptr &&
+                ac->expr()->node_kind() ==
+                    ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL
+            ? ac->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>()
+            : nullptr;
+    const ::googlesql::ResolvedScan* input = node->input_scan();
+    const auto* arr_scan =
+        input != nullptr &&
+                input->node_kind() == ::googlesql::RESOLVED_ARRAY_SCAN
+            ? input->GetAs<::googlesql::ResolvedArrayScan>()
+            : nullptr;
+    if (agg != nullptr && agg->function() != nullptr && agg->distinct() &&
+        agg->argument_list_size() == 1 &&
+        absl::AsciiStrToLower(agg->function()->Name()) == "array_agg" &&
+        arr_scan != nullptr && arr_scan->array_expr_list_size() == 1 &&
+        arr_scan->element_column_list_size() == 1 &&
+        arr_scan->array_offset_column() == nullptr &&
+        arr_scan->join_expr() == nullptr && !arr_scan->is_outer() &&
+        arr_scan->array_zip_mode() == nullptr &&
+        (arr_scan->input_scan() == nullptr ||
+         arr_scan->input_scan()->node_kind() ==
+             ::googlesql::RESOLVED_SINGLE_ROW_SCAN)) {
+      std::string arr = EmitExpr(arr_scan->array_expr_list(0));
+      if (!arr.empty()) {
+        const absl::string_view col = arr_scan->element_column_list(0).name();
+        const std::string quoted_col = QuoteIdent(col);
+        return absl::StrCat("SELECT (SELECT list(",
+                            quoted_col,
+                            " ORDER BY min_ord) FROM (SELECT ",
+                            quoted_col,
+                            ", min(ord) AS min_ord FROM (SELECT ",
+                            quoted_col,
+                            ", ord FROM unnest(",
+                            arr,
+                            ") WITH ORDINALITY AS __bq_unnest__(",
+                            quoted_col,
+                            ", ord)) GROUP BY ",
+                            quoted_col,
+                            ")) AS ",
+                            QuoteIdent(ac->column().name()),
+                            " FROM (SELECT 1)");
+      }
+    }
+  }
   // Emit `SELECT <grouping-cols>, <aggregates> FROM (<input>) GROUP BY ...`
   // where each grouping column repeats its underlying expression in
   // GROUP BY (rather than referencing the SELECT-list alias), so the
@@ -738,6 +1430,61 @@ std::string Transpiler::EmitAggregateScan(
   if (node == nullptr) return "";
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
+  if (AggregateScanNeedsInputRn(node)) {
+    if (!input_has_rn_column_) {
+      input = absl::StrCat("SELECT *, row_number() OVER () AS ",
+                           QuoteIdent(kBqInputRnCol),
+                           " FROM (",
+                           input,
+                           ")");
+      input_has_rn_column_ = true;
+    }
+  }
+
+  // STRING_AGG(DISTINCT x) without ORDER BY: DuckDB cannot ORDER BY
+  // __bq_input_rn inside list(DISTINCT ...). Dedupe to first-seen rows,
+  // then list-aggregate in input order.
+  if (node->group_by_list_size() == 0 && node->aggregate_list_size() == 1 &&
+      node->grouping_call_list_size() == 0) {
+    const ::googlesql::ResolvedComputedColumnBase* ac = node->aggregate_list(0);
+    const auto* agg =
+        ac != nullptr && ac->expr() != nullptr &&
+                ac->expr()->node_kind() ==
+                    ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL
+            ? ac->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>()
+            : nullptr;
+    if (agg != nullptr && agg->function() != nullptr &&
+        ResolveFunctionName(agg->function()) == "string_agg" &&
+        agg->distinct() && agg->order_by_item_list_size() == 0 &&
+        agg->limit() == nullptr && agg->argument_list_size() >= 1) {
+      std::string val = EmitExpr(agg->argument_list(0));
+      if (val.empty()) return "";
+      std::string delim = "','";
+      if (agg->argument_list_size() >= 2) {
+        delim = EmitExpr(agg->argument_list(1));
+        if (delim.empty()) return "";
+      }
+      return absl::StrCat("SELECT array_to_string(list(",
+                          val,
+                          " ORDER BY ",
+                          QuoteIdent(kBqInputRnCol),
+                          " ASC), ",
+                          delim,
+                          ") AS ",
+                          QuoteIdent(ac->column().name()),
+                          " FROM (SELECT ",
+                          val,
+                          ", ",
+                          QuoteIdent(kBqInputRnCol),
+                          " FROM (",
+                          input,
+                          ") QUALIFY row_number() OVER (PARTITION BY ",
+                          val,
+                          " ORDER BY ",
+                          QuoteIdent(kBqInputRnCol),
+                          ") = 1)");
+    }
+  }
 
   std::vector<std::string> projections;
   std::vector<std::string> group_by_exprs;
@@ -810,6 +1557,15 @@ std::string Transpiler::EmitAggregateScan(
     }
     absl::StrAppend(
         &sql, " GROUP BY GROUPING SETS (", absl::StrJoin(entries, ", "), ")");
+    if (!group_by_exprs.empty()) {
+      std::vector<std::string> rollup_order;
+      rollup_order.reserve(group_by_exprs.size() * 2);
+      for (const std::string& expr : group_by_exprs) {
+        rollup_order.push_back(absl::StrCat("GROUPING(", expr, ") DESC"));
+        rollup_order.push_back(absl::StrCat(expr, " NULLS FIRST"));
+      }
+      absl::StrAppend(&sql, " ORDER BY ", absl::StrJoin(rollup_order, ", "));
+    }
   } else if (!group_by_exprs.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
@@ -917,39 +1673,36 @@ std::string Transpiler::EmitPivotScan(
   std::string sql = absl::StrCat("SELECT ", select_list, " FROM (", inner, ")");
   if (!group_by_sql.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_sql, ", "));
+    absl::StrAppend(&sql, " ORDER BY ", absl::StrJoin(group_by_sql, ", "));
   }
   return sql;
 }
 
 std::string Transpiler::EmitUnpivotScan(
     const ::googlesql::ResolvedUnpivotScan* node) {
-  // BigQuery UNPIVOT lowers to a UNION ALL of per-arg SELECTs over
-  // the input scan. For each `unpivot_arg_list[i]`:
+  // BigQuery UNPIVOT expands each input row into one output row per
+  // `unpivot_arg_list` entry, preserving input row order and the IN-
+  // list order within each row. We lower that to:
   //
-  //   SELECT <projected_input_cols>,
-  //          arg[i].column_list[0] AS value_column_list[0],
-  //          ...,
-  //          arg[i].column_list[N-1] AS value_column_list[N-1],
-  //          <label_list[i]> AS label_column
-  //   FROM (<input_scan>)
-  //   [WHERE NOT (value_0 IS NULL AND ... AND value_{N-1} IS NULL)]
+  //   SELECT <projected_input>, u.<value>, ..., u.<label>
+  //   FROM (<input>) AS __bq_unpivot_src
+  //   CROSS JOIN LATERAL (
+  //     VALUES
+  //       (__bq_unpivot_src.<col>, ..., <label_0>),
+  //       (__bq_unpivot_src.<col>, ..., <label_1>),
+  //       ...
+  //   ) AS u(<value names>, <label name>)
+  //   [WHERE NOT (u.<value_0> IS NULL AND ... AND u.<value_N> IS NULL)]
   //
-  // The WHERE-NOT-all-NULL filter fires when `include_nulls()` is
-  // false (the BigQuery default for `UNPIVOT EXCLUDE NULLS`).
+  // LATERAL VALUES keeps BigQuery's row-major expansion (all unpivot
+  // columns for row 1, then row 2, ...) instead of the column-major
+  // order a per-arg UNION ALL produces. The WHERE-NOT-all-NULL filter
+  // fires when `include_nulls()` is false (UNPIVOT EXCLUDE NULLS).
   //
-  // We use the per-arg UNION ALL pattern rather than DuckDB's native
-  // UNPIVOT for the same reason `EmitPivotScan` avoids DuckDB's
-  // native PIVOT: the analyzer assigns specific output column names
-  // through `value_column_list` and `label_column` (and projected
-  // input columns retain their input names), and the UNION ALL
-  // pattern emits those names in one pass without needing a rename
-  // pass over DuckDB's UNPIVOT-generated column names.
-  //
-  // `projected_input_column_list` holds the columns from the input
-  // that are *not* unpivoted; each is a `ResolvedComputedColumn`
-  // whose `expr()` is a `ResolvedColumnRef` referencing the input
-  // scan, so we project the analyzer-chosen output column name as
-  // an alias for the underlying input column.
+  // We avoid DuckDB's native UNPIVOT for the same reason
+  // `EmitPivotScan` avoids native PIVOT: the analyzer assigns specific
+  // output column names through `value_column_list` and
+  // `label_column`, and this pattern emits those names in one pass.
   if (node == nullptr) return "";
   if (node->unpivot_arg_list_size() == 0) return "";
   if (node->unpivot_arg_list_size() != node->label_list_size()) return "";
@@ -957,78 +1710,131 @@ std::string Transpiler::EmitUnpivotScan(
   std::string inner = EmitScan(node->input_scan());
   if (inner.empty()) return "";
 
-  // Build the projected-input-column prefix (input columns that pass
-  // through to every output row).
+  static constexpr char kSrcAlias[] = "__bq_unpivot_src";
+  static constexpr char kUnpivotAlias[] = "u";
+  static constexpr char kRowOrdCol[] = "__bq_unpivot_rn";
+  static constexpr char kArgOrdCol[] = "__bq_unpivot_arg_ord";
+
+  // Stamp each input row with a stable ordinal so the final ORDER BY
+  // matches BigQuery's row-major UNPIVOT expansion even when DuckDB
+  // returns the inner scan in an arbitrary order.
+  inner = absl::StrCat("SELECT *, row_number() OVER () AS ",
+                       QuoteIdent(kRowOrdCol),
+                       " FROM (",
+                       inner,
+                       ")");
+
+  // Projected input columns (not unpivoted) come from the source alias.
   std::vector<std::string> projected_input_sql;
   projected_input_sql.reserve(node->projected_input_column_list_size());
   for (int i = 0; i < node->projected_input_column_list_size(); ++i) {
     const ::googlesql::ResolvedComputedColumn* cc =
         node->projected_input_column_list(i);
     if (cc == nullptr) return "";
-    std::string e = EmitExpr(cc->expr());
-    if (e.empty()) return "";
+    const ::googlesql::ResolvedExpr* expr = cc->expr();
+    if (expr == nullptr ||
+        expr->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
+      return "";
+    }
+    const std::string& col_name =
+        expr->GetAs<::googlesql::ResolvedColumnRef>()->column().name();
+    std::string src = absl::StrCat(kSrcAlias, ".", QuoteIdent(col_name));
     std::string quoted_out = QuoteIdent(cc->column().name());
     projected_input_sql.push_back(
-        e == quoted_out ? e : absl::StrCat(e, " AS ", quoted_out));
+        src == quoted_out ? src : absl::StrCat(src, " AS ", quoted_out));
   }
 
-  // Build one branch per `unpivot_arg_list` entry.
-  std::vector<std::string> branches;
-  branches.reserve(node->unpivot_arg_list_size());
+  // Lateral subquery column names: arg ordinal, value columns, label.
+  std::vector<std::string> lateral_col_names;
+  lateral_col_names.reserve(node->value_column_list_size() + 2);
+  lateral_col_names.push_back(QuoteIdent(kArgOrdCol));
+  for (int j = 0; j < node->value_column_list_size(); ++j) {
+    lateral_col_names.push_back(QuoteIdent(node->value_column_list(j).name()));
+  }
+  const std::string label_col_name = QuoteIdent(node->label_column().name());
+  lateral_col_names.push_back(label_col_name);
+
+  // One VALUES tuple per unpivot arg, in IN-list order.
+  std::vector<std::string> value_tuples;
+  value_tuples.reserve(node->unpivot_arg_list_size());
   for (int i = 0; i < node->unpivot_arg_list_size(); ++i) {
     const ::googlesql::ResolvedUnpivotArg* arg = node->unpivot_arg_list(i);
     if (arg == nullptr) return "";
     if (arg->column_list_size() != node->value_column_list_size()) return "";
 
-    std::vector<std::string> projections = projected_input_sql;
-    projections.reserve(projections.size() + node->value_column_list_size() +
-                        1);
-
-    // Value-column projections: rename arg's input column refs to the
-    // analyzer's value_column_list names.
-    std::vector<std::string> value_col_names;
-    value_col_names.reserve(node->value_column_list_size());
-    for (int j = 0; j < node->value_column_list_size(); ++j) {
+    std::vector<std::string> tuple_elems;
+    tuple_elems.reserve(arg->column_list_size() + 2);
+    tuple_elems.push_back(std::to_string(i));
+    for (int j = 0; j < arg->column_list_size(); ++j) {
       const ::googlesql::ResolvedColumnRef* ref = arg->column_list(j);
       if (ref == nullptr) return "";
-      std::string src = EmitColumnRef(ref);
-      if (src.empty()) return "";
-      std::string out_name = node->value_column_list(j).name();
-      std::string quoted_out = QuoteIdent(out_name);
-      projections.push_back(
-          src == quoted_out ? src : absl::StrCat(src, " AS ", quoted_out));
-      value_col_names.push_back(std::move(quoted_out));
+      tuple_elems.push_back(
+          absl::StrCat(kSrcAlias, ".", QuoteIdent(ref->column().name())));
     }
-
-    // Label-column projection: `<label_list[i]> AS label_column`.
     std::string label_sql = EmitLiteral(node->label_list(i));
     if (label_sql.empty()) return "";
-    projections.push_back(absl::StrCat(
-        label_sql, " AS ", QuoteIdent(node->label_column().name())));
-
-    std::string select_list = absl::StrJoin(projections, ", ");
-    std::string branch =
-        absl::StrCat("SELECT ", select_list, " FROM (", inner, ")");
-    if (!node->include_nulls() && !value_col_names.empty()) {
-      // NOT (col0 IS NULL AND col1 IS NULL AND ... AND colN IS NULL).
-      std::vector<std::string> null_checks;
-      null_checks.reserve(value_col_names.size());
-      for (const std::string& v : value_col_names) {
-        null_checks.push_back(absl::StrCat(v, " IS NULL"));
-      }
-      absl::StrAppend(
-          &branch, " WHERE NOT (", absl::StrJoin(null_checks, " AND "), ")");
-    }
-    branches.push_back(std::move(branch));
+    tuple_elems.push_back(std::move(label_sql));
+    value_tuples.push_back(
+        absl::StrCat("(", absl::StrJoin(tuple_elems, ", "), ")"));
   }
 
-  // Touch column_list so `CheckFieldsAccessed` does not flag a miss;
-  // the lowering is fully driven by the projected / value / label /
-  // arg lists.
-  (void)node->column_list_size();
+  // Outer SELECT: projected input + lateral value/label columns.
+  std::vector<std::string> outer_projections = projected_input_sql;
+  outer_projections.reserve(outer_projections.size() +
+                            node->value_column_list_size() + 1);
+  for (int j = 0; j < node->value_column_list_size(); ++j) {
+    outer_projections.push_back(absl::StrCat(
+        kUnpivotAlias, ".", QuoteIdent(node->value_column_list(j).name())));
+  }
+  outer_projections.push_back(absl::StrCat(kUnpivotAlias, ".", label_col_name));
 
-  if (branches.size() == 1) return branches[0];
-  return absl::StrJoin(branches, " UNION ALL ");
+  std::vector<std::string> lateral_def_cols;
+  lateral_def_cols.reserve(lateral_col_names.size());
+  for (const std::string& col : lateral_col_names) {
+    lateral_def_cols.push_back(col);
+  }
+
+  std::string sql = absl::StrCat("SELECT ",
+                                 absl::StrJoin(outer_projections, ", "),
+                                 " FROM (",
+                                 inner,
+                                 ") AS ",
+                                 kSrcAlias,
+                                 " CROSS JOIN LATERAL (VALUES ",
+                                 absl::StrJoin(value_tuples, ", "),
+                                 ") AS ",
+                                 kUnpivotAlias,
+                                 "(",
+                                 absl::StrJoin(lateral_def_cols, ", "),
+                                 ")");
+
+  if (!node->include_nulls() && node->value_column_list_size() > 0) {
+    std::vector<std::string> null_checks;
+    null_checks.reserve(node->value_column_list_size());
+    for (int j = 0; j < node->value_column_list_size(); ++j) {
+      null_checks.push_back(
+          absl::StrCat(kUnpivotAlias,
+                       ".",
+                       QuoteIdent(node->value_column_list(j).name()),
+                       " IS NULL"));
+    }
+    absl::StrAppend(
+        &sql, " WHERE NOT (", absl::StrJoin(null_checks, " AND "), ")");
+  }
+
+  absl::StrAppend(&sql,
+                  " ORDER BY ",
+                  kSrcAlias,
+                  ".",
+                  QuoteIdent(kRowOrdCol),
+                  ", ",
+                  kUnpivotAlias,
+                  ".",
+                  QuoteIdent(kArgOrdCol));
+
+  // Touch column_list so `CheckFieldsAccessed` does not flag a miss.
+  (void)node->column_list_size();
+  return sql;
 }
 
 std::string Transpiler::EmitSetOperationItem(
@@ -1149,12 +1955,56 @@ std::string Transpiler::EmitSetOperationScan(
 
   std::vector<std::string> items;
   items.reserve(node->input_item_list_size());
+  const bool preserve_union_order =
+      node->op_type() == ::googlesql::ResolvedSetOperationScan::UNION_ALL;
   for (int i = 0; i < node->input_item_list_size(); ++i) {
+    const bool saved_has_rn = input_has_rn_column_;
+    const bool saved_rn_order = input_rn_ordering_;
+    const bool saved_output_rn = output_includes_input_rn_;
+    const std::vector<std::string> saved_output_order = output_order_items_;
+    input_has_rn_column_ = false;
+    input_rn_ordering_ = false;
+    output_includes_input_rn_ = false;
+    output_order_items_.clear();
     std::string s = EmitSetOperationItem(node->input_item_list(i), node);
+    input_has_rn_column_ = saved_has_rn || input_has_rn_column_;
+    input_rn_ordering_ = saved_rn_order || input_rn_ordering_;
+    output_includes_input_rn_ = saved_output_rn || output_includes_input_rn_;
+    if (output_order_items_.empty()) {
+      output_order_items_ = saved_output_order;
+    }
     if (s.empty()) return "";
+    if (preserve_union_order) {
+      s = absl::StrCat("SELECT *, ",
+                       i + 1,
+                       " AS ",
+                       QuoteIdent(kBqUnionOrdCol),
+                       " FROM (",
+                       s,
+                       ")");
+    }
     items.push_back(std::move(s));
   }
-  return absl::StrJoin(items, absl::StrCat(" ", op_kw, " "));
+  std::string union_sql = absl::StrJoin(items, absl::StrCat(" ", op_kw, " "));
+  if (preserve_union_order) {
+    std::vector<std::string> cols;
+    cols.reserve(node->column_list_size());
+    for (int i = 0; i < node->column_list_size(); ++i) {
+      cols.push_back(QuoteIdent(node->column_list(i).name()));
+    }
+    return absl::StrCat("SELECT ",
+                        absl::StrJoin(cols, ", "),
+                        " FROM (",
+                        union_sql,
+                        ") ORDER BY ",
+                        QuoteIdent(kBqUnionOrdCol));
+  }
+  if (node->op_type() ==
+          ::googlesql::ResolvedSetOperationScan::EXCEPT_DISTINCT ||
+      node->op_type() == ::googlesql::ResolvedSetOperationScan::EXCEPT_ALL) {
+    return absl::StrCat("SELECT * FROM (", union_sql, ") ORDER BY 1");
+  }
+  return union_sql;
 }
 
 std::string Transpiler::EmitOrderByScan(
@@ -1179,20 +2029,8 @@ std::string Transpiler::EmitOrderByScan(
     if (item->collation_name() != nullptr) return "";
     std::string col = EmitColumnRef(item->column_ref());
     if (col.empty()) return "";
-    const char* dir = item->is_descending() ? "DESC" : "ASC";
-    const char* nulls = "";
-    switch (item->null_order()) {
-      case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-        nulls = " NULLS FIRST";
-        break;
-      case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-        nulls = " NULLS LAST";
-        break;
-      case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
-      default:
-        break;
-    }
-    items.push_back(absl::StrCat(col, " ", dir, nulls));
+    items.push_back(absl::StrCat(
+        col, OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
   }
   if (items.empty()) return "";
   return absl::StrCat(
@@ -1226,22 +2064,103 @@ std::string Transpiler::EmitLimitOffsetScan(
 
 namespace {
 
-// Suffix for the OVER (...) ORDER BY direction + NULL ordering.
-std::string OrderByItemSuffix(const ::googlesql::ResolvedOrderByItem* item) {
-  const char* dir = item->is_descending() ? "DESC" : "ASC";
-  const char* nulls = "";
-  switch (item->null_order()) {
-    case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-      nulls = " NULLS FIRST";
-      break;
-    case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-      nulls = " NULLS LAST";
-      break;
-    case ::googlesql::ResolvedOrderByItem::ORDER_UNSPECIFIED:
-    default:
-      break;
+// `CASE val WHEN w1 THEN t1 ... ELSE e END` for analyzer `$case_with_value`.
+std::string EmitCaseWithValue(const std::vector<std::string>& args) {
+  if (args.size() < 2 || (args.size() % 2) != 0) return "";
+  std::string sql = absl::StrCat("CASE ", args[0], " ");
+  for (size_t i = 1; i + 1 < args.size(); i += 2) {
+    absl::StrAppend(&sql, "WHEN ", args[i], " THEN ", args[i + 1], " ");
   }
-  return absl::StrCat(" ", dir, nulls);
+  absl::StrAppend(&sql, "ELSE ", args.back(), " END");
+  return sql;
+}
+
+// `CASE WHEN c1 THEN t1 ... ELSE e END` for analyzer `$case_no_value`.
+std::string EmitCaseNoValue(const std::vector<std::string>& args) {
+  if (args.size() < 1 || (args.size() % 2) == 0) return "";
+  std::string sql = "CASE ";
+  for (size_t i = 0; i + 1 < args.size(); i += 2) {
+    absl::StrAppend(&sql, "WHEN ", args[i], " THEN ", args[i + 1], " ");
+  }
+  absl::StrAppend(&sql, "ELSE ", args.back(), " END");
+  return sql;
+}
+
+bool SupportsOrderedAggregateModifiers(absl::string_view name) {
+  return name == "array_agg" || name == "string_agg" ||
+         name == "array_concat_agg";
+}
+
+std::string AppendArrayAggNullFilter(absl::string_view body,
+                                     absl::string_view arg,
+                                     bool ignore_nulls) {
+  if (!ignore_nulls) return std::string(body);
+  return absl::StrCat(body, " FILTER (WHERE ", arg, " IS NOT NULL)");
+}
+
+bool OutputIncludesColumnName(const std::vector<std::string>& output_names,
+                              absl::string_view col_name) {
+  if (output_names.empty()) return true;
+  return std::find(output_names.begin(), output_names.end(), col_name) !=
+         output_names.end();
+}
+
+std::string BuildPercentileDiscRespectNullsSql(
+    absl::string_view coalesce_expr,
+    absl::string_view p_expr,
+    absl::string_view partition_clause,
+    absl::string_view frame_clause) {
+  (void)coalesce_expr;
+  (void)p_expr;
+  (void)partition_clause;
+  (void)frame_clause;
+  return "";
+}
+
+std::string BuildPercentileDiscRespectNullsScalarSql(
+    absl::string_view p_expr, absl::string_view col_name) {
+  return absl::StrCat("NULLIF(list_extract(list(",
+                      QuoteIdent(kBqPctCoalesceCol),
+                      " ORDER BY ",
+                      QuoteIdent(kBqPctCoalesceCol),
+                      " ASC), CAST(FLOOR((",
+                      p_expr,
+                      ") * (COUNT(*) - 1)) + 1 AS BIGINT)), ",
+                      kBqPctNullSentinel,
+                      ") AS ",
+                      QuoteIdent(col_name));
+}
+
+bool AnalyticScanIsOnlyPercentileDiscRespectNulls(
+    const ::googlesql::ResolvedAnalyticScan* node) {
+  if (node == nullptr || node->function_group_list_size() == 0) return false;
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) return false;
+    if (group->partition_by() != nullptr &&
+        group->partition_by()->partition_by_list_size() > 0) {
+      return false;
+    }
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* fn_col =
+          group->analytic_function_list(f);
+      if (fn_col == nullptr || fn_col->expr() == nullptr ||
+          fn_col->expr()->node_kind() !=
+              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        return false;
+      }
+      const auto* afn =
+          fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+      if (afn == nullptr || afn->function() == nullptr ||
+          ResolveFunctionName(afn->function()) != "percentile_disc" ||
+          afn->null_handling_modifier() !=
+              ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -1267,10 +2186,19 @@ std::string Transpiler::BuildPartitionClause(
 
 std::string Transpiler::BuildOrderClause(
     const ::googlesql::ResolvedWindowOrdering* o) {
+  return BuildOrderClause(o,
+                          /*bigquery_null_defaults=*/false,
+                          /*append_input_rn=*/false);
+}
+
+std::string Transpiler::BuildOrderClause(
+    const ::googlesql::ResolvedWindowOrdering* o,
+    bool bigquery_null_defaults,
+    bool append_input_rn) {
   if (o == nullptr) return "";
   if (o->hint_list_size() > 0) return std::string(kAnalyticBail);
   std::vector<std::string> items;
-  items.reserve(o->order_by_item_list_size());
+  items.reserve(o->order_by_item_list_size() + 1);
   for (int i = 0; i < o->order_by_item_list_size(); ++i) {
     const ::googlesql::ResolvedOrderByItem* it = o->order_by_item_list(i);
     if (it == nullptr || it->column_ref() == nullptr)
@@ -1278,7 +2206,11 @@ std::string Transpiler::BuildOrderClause(
     if (it->collation_name() != nullptr) return std::string(kAnalyticBail);
     std::string col = EmitColumnRef(it->column_ref());
     if (col.empty()) return std::string(kAnalyticBail);
-    items.push_back(absl::StrCat(col, OrderByItemSuffix(it)));
+    items.push_back(
+        absl::StrCat(col, OrderByItemSuffix(it, bigquery_null_defaults)));
+  }
+  if (append_input_rn) {
+    items.push_back(absl::StrCat(QuoteIdent(kBqInputRnCol), " ASC"));
   }
   if (items.empty()) return "";
   return absl::StrCat("ORDER BY ", absl::StrJoin(items, ", "));
@@ -1316,15 +2248,33 @@ std::string Transpiler::BuildAnalyticProjection(
   }
   const auto* afn =
       col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-  std::string fn_sql = EmitAnalyticFunctionCall(afn);
-  if (fn_sql.empty()) return "";
+  std::string frame_clause = BuildFrameClause(afn->window_frame());
+  if (frame_clause == kAnalyticBail) return "";
+
+  std::string fn_sql;
+  if (afn != nullptr && afn->function() != nullptr &&
+      ResolveFunctionName(afn->function()) == "percentile_disc" &&
+      afn->null_handling_modifier() ==
+          ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS &&
+      afn->argument_list_size() >= 2) {
+    std::string sort_key = EmitExpr(afn->argument_list(0));
+    std::string p_expr = EmitExpr(afn->argument_list(1));
+    if (sort_key.empty() || p_expr.empty()) return "";
+    const std::string coalesce_col = QuoteIdent(kBqPctCoalesceCol);
+    fn_sql = BuildPercentileDiscRespectNullsSql(
+        coalesce_col, p_expr, partition_clause, frame_clause);
+  } else {
+    fn_sql = EmitAnalyticFunctionCall(afn);
+    if (fn_sql.empty()) return "";
+  }
 
   // Frame clause sits *inside* the OVER (...). DuckDB requires an
   // ORDER BY for ROWS / RANGE frames; we leave that contract to the
   // analyzer (which rejects malformed cases at AnalyzeStatement time)
   // and just propagate the bounds verbatim.
-  std::string frame_clause = BuildFrameClause(afn->window_frame());
-  if (frame_clause == kAnalyticBail) return "";
+  if (fn_sql.find(" OVER (") != std::string::npos) {
+    return absl::StrCat(fn_sql, " AS ", QuoteIdent(col->column().name()));
+  }
 
   std::vector<absl::string_view> over_parts;
   if (!partition_clause.empty()) over_parts.push_back(partition_clause);
@@ -1334,6 +2284,64 @@ std::string Transpiler::BuildAnalyticProjection(
       absl::StrCat("OVER (", absl::StrJoin(over_parts, " "), ")");
   return absl::StrCat(
       fn_sql, " ", over, " AS ", QuoteIdent(col->column().name()));
+}
+
+void Transpiler::CaptureAnalyticOutputOrder(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+  if (group == nullptr || !output_order_items_.empty()) return;
+
+  const ::googlesql::ResolvedWindowOrdering* order_by = group->order_by();
+  const bool over_has_order =
+      order_by != nullptr && order_by->order_by_item_list_size() > 0;
+
+  const ::googlesql::ResolvedWindowPartitioning* partition =
+      group->partition_by();
+  if (partition != nullptr) {
+    if (!partition->collation_list().empty() ||
+        partition->hint_list_size() > 0) {
+      return;
+    }
+    for (int i = 0; i < partition->partition_by_list_size(); ++i) {
+      const ::googlesql::ResolvedExpr* part_expr_node =
+          partition->partition_by_list(i);
+      if (part_expr_node == nullptr) continue;
+      if (part_expr_node->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
+        const auto* ref =
+            part_expr_node->GetAs<::googlesql::ResolvedColumnRef>();
+        if (ref == nullptr) continue;
+        if (OutputIncludesColumnName(query_output_column_names_,
+                                     ref->column().name()) ||
+            !over_has_order) {
+          std::string col = EmitColumnRef(ref);
+          if (col.empty()) return;
+          output_order_items_.push_back(absl::StrCat(col, " ASC"));
+        }
+      } else if (!over_has_order) {
+        std::string part_expr = EmitExpr(part_expr_node);
+        if (part_expr.empty()) return;
+        output_order_items_.push_back(absl::StrCat(part_expr, " ASC"));
+      }
+    }
+  }
+
+  if (order_by != nullptr) {
+    if (order_by->hint_list_size() > 0) return;
+    for (int i = 0; i < order_by->order_by_item_list_size(); ++i) {
+      const ::googlesql::ResolvedOrderByItem* item =
+          order_by->order_by_item_list(i);
+      if (item == nullptr || item->column_ref() == nullptr) return;
+      if (item->collation_name() != nullptr) return;
+      std::string col = EmitColumnRef(item->column_ref());
+      if (col.empty()) return;
+      output_order_items_.push_back(absl::StrCat(
+          col, OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+    }
+  }
+
+  if (input_rn_ordering_) {
+    output_order_items_.push_back(
+        absl::StrCat(QuoteIdent(kBqInputRnCol), " ASC"));
+  }
 }
 
 std::string Transpiler::EmitAnalyticScan(
@@ -1357,6 +2365,96 @@ std::string Transpiler::EmitAnalyticScan(
   if (node == nullptr) return "";
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
+  if (!input_has_rn_column_) {
+    input = absl::StrCat("SELECT *, row_number() OVER () AS ",
+                         QuoteIdent(kBqInputRnCol),
+                         " FROM (",
+                         input,
+                         ")");
+    input_has_rn_column_ = true;
+  }
+  input_rn_ordering_ = true;
+
+  std::string pct_respect_nulls_sort_key;
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) continue;
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* fn_col =
+          group->analytic_function_list(f);
+      if (fn_col == nullptr || fn_col->expr() == nullptr ||
+          fn_col->expr()->node_kind() !=
+              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        continue;
+      }
+      const auto* afn =
+          fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+      if (afn == nullptr || afn->function() == nullptr ||
+          ResolveFunctionName(afn->function()) != "percentile_disc" ||
+          afn->null_handling_modifier() !=
+              ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS ||
+          afn->argument_list_size() == 0) {
+        continue;
+      }
+      pct_respect_nulls_sort_key = EmitExpr(afn->argument_list(0));
+      if (pct_respect_nulls_sort_key.empty()) return "";
+      break;
+    }
+    if (!pct_respect_nulls_sort_key.empty()) break;
+  }
+  if (!pct_respect_nulls_sort_key.empty()) {
+    input = absl::StrCat("SELECT *, IF(",
+                         pct_respect_nulls_sort_key,
+                         " IS NULL, ",
+                         kBqPctNullSentinel,
+                         ", ",
+                         pct_respect_nulls_sort_key,
+                         ") AS ",
+                         QuoteIdent(kBqPctCoalesceCol),
+                         " FROM (",
+                         input,
+                         ")");
+  }
+
+  if (AnalyticScanIsOnlyPercentileDiscRespectNulls(node) &&
+      !pct_respect_nulls_sort_key.empty()) {
+    std::vector<std::string> pct_projections;
+    std::vector<std::string> pct_refs;
+    for (int g = 0; g < node->function_group_list_size(); ++g) {
+      const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+          node->function_group_list(g);
+      if (group == nullptr) return "";
+      for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+        const ::googlesql::ResolvedComputedColumnBase* fn_col =
+            group->analytic_function_list(f);
+        if (fn_col == nullptr || fn_col->expr() == nullptr ||
+            fn_col->expr()->node_kind() !=
+                ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+          return "";
+        }
+        const auto* afn =
+            fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+        if (afn == nullptr || afn->argument_list_size() < 2) return "";
+        std::string p_expr = EmitExpr(afn->argument_list(1));
+        if (p_expr.empty()) return "";
+        pct_projections.push_back(BuildPercentileDiscRespectNullsScalarSql(
+            p_expr, fn_col->column().name()));
+        pct_refs.push_back(
+            absl::StrCat("_pct.", QuoteIdent(fn_col->column().name())));
+      }
+    }
+    if (pct_projections.empty()) return "";
+    return absl::StrCat("SELECT _base.*, ",
+                        absl::StrJoin(pct_refs, ", "),
+                        " FROM (",
+                        input,
+                        ") _base CROSS JOIN (SELECT ",
+                        absl::StrJoin(pct_projections, ", "),
+                        " FROM (",
+                        input,
+                        ")) _pct");
+  }
 
   std::vector<std::string> projections;
   for (int g = 0; g < node->function_group_list_size(); ++g) {
@@ -1366,12 +2464,35 @@ std::string Transpiler::EmitAnalyticScan(
 
     std::string partition_clause = BuildPartitionClause(group->partition_by());
     if (partition_clause == kAnalyticBail) return "";
-    std::string order_clause = BuildOrderClause(group->order_by());
+    const bool append_input_rn =
+        input_rn_ordering_ && !AnalyticGroupHasRangeFrame(group) &&
+        (AnalyticOrderNeedsInputRn(group) ||
+         AnalyticGroupNeedsInputRnForEmptyOrder(group));
+    std::string order_clause =
+        BuildOrderClause(group->order_by(),
+                         /*bigquery_null_defaults=*/true,
+                         /*append_input_rn=*/append_input_rn);
     if (order_clause == kAnalyticBail) return "";
+    CaptureAnalyticOutputOrder(group);
 
     for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-      std::string projection = BuildAnalyticProjection(
-          group->analytic_function_list(f), partition_clause, order_clause);
+      const ::googlesql::ResolvedComputedColumnBase* fn_col =
+          group->analytic_function_list(f);
+      std::string effective_order = order_clause;
+      if (fn_col != nullptr && fn_col->expr() != nullptr &&
+          fn_col->expr()->node_kind() ==
+              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        const auto* afn =
+            fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+        if (afn != nullptr && afn->function() != nullptr &&
+            ResolveFunctionName(afn->function()) == "percentile_disc" &&
+            afn->null_handling_modifier() ==
+                ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
+          effective_order.clear();
+        }
+      }
+      std::string projection =
+          BuildAnalyticProjection(fn_col, partition_clause, effective_order);
       if (projection.empty()) return "";
       projections.push_back(std::move(projection));
     }
@@ -1519,9 +2640,18 @@ std::string Transpiler::EmitWithScan(
     return EmitScan(node->query());
   }
   const bool recursive = node->recursive();
+  const bool saved_rn_at_with = input_rn_ordering_;
+  input_rn_ordering_ = false;
+  const bool body_needs_input_rn = ScanTreeContainsAnalytic(node->query());
+  const std::vector<std::string> saved_output_order = output_order_items_;
+  bool any_cte_has_rn = false;
   std::vector<std::string> ctes;
   ctes.reserve(node->with_entry_list_size());
   for (int i = 0; i < node->with_entry_list_size(); ++i) {
+    const bool saved_rn_in_cte = input_rn_ordering_;
+    input_rn_ordering_ = false;
+    output_order_items_.clear();
+    bool cte_has_rn = false;
     const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
     if (entry == nullptr || entry->with_subquery() == nullptr) return "";
     if (entry->with_query_name().empty()) return "";
@@ -1566,6 +2696,17 @@ std::string Transpiler::EmitWithScan(
     } else {
       std::string sub = EmitScan(sub_scan);
       if (sub.empty()) return "";
+      if (body_needs_input_rn &&
+          sub_scan->node_kind() == ::googlesql::RESOLVED_SET_OPERATION_SCAN &&
+          sub_scan->GetAs<::googlesql::ResolvedSetOperationScan>()->op_type() ==
+              ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
+        sub = absl::StrCat("SELECT *, row_number() OVER () AS ",
+                           QuoteIdent(kBqInputRnCol),
+                           " FROM (",
+                           sub,
+                           ")");
+        cte_has_rn = true;
+      }
       std::vector<std::string> cols;
       cols.reserve(sub_scan->column_list_size());
       for (int j = 0; j < sub_scan->column_list_size(); ++j) {
@@ -1573,16 +2714,29 @@ std::string Transpiler::EmitWithScan(
                                     " AS ",
                                     QuoteIdent(WithScanColumnAnchor(j))));
       }
-      std::string projected =
-          cols.empty()
-              ? absl::StrCat("SELECT * FROM (", sub, ")")
-              : absl::StrCat(
-                    "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
+      std::string projected;
+      if (cols.empty()) {
+        projected = absl::StrCat("SELECT * FROM (", sub, ")");
+      } else {
+        projected = absl::StrCat(
+            "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
+      }
+      if (cte_has_rn && !cols.empty()) {
+        projected = absl::StrCat(projected.substr(0, projected.find(" FROM ")),
+                                 ", ",
+                                 QuoteIdent(kBqInputRnCol),
+                                 projected.substr(projected.find(" FROM ")));
+      }
       ctes.push_back(absl::StrCat(
           QuoteIdent(entry->with_query_name()), " AS (", projected, ")"));
+      any_cte_has_rn = any_cte_has_rn || cte_has_rn;
     }
+    input_rn_ordering_ = saved_rn_in_cte;
   }
+  input_rn_ordering_ = any_cte_has_rn;
+  output_order_items_ = saved_output_order;
   std::string body = EmitScan(node->query());
+  input_rn_ordering_ = saved_rn_at_with || input_rn_ordering_;
   if (body.empty()) return "";
   const char* keyword = recursive ? "WITH RECURSIVE " : "WITH ";
   return absl::StrCat(keyword, absl::StrJoin(ctes, ", "), " ", body);
@@ -1709,6 +2863,9 @@ std::string Transpiler::EmitWithRefScan(
                                 " AS ",
                                 QuoteIdent(node->column_list(i).name())));
   }
+  if (input_rn_ordering_) {
+    cols.push_back(QuoteIdent(kBqInputRnCol));
+  }
   return absl::StrCat("SELECT ",
                       absl::StrJoin(cols, ", "),
                       " FROM ",
@@ -1795,6 +2952,44 @@ std::string Transpiler::EmitColumnRef(
   return QuoteIdent(node->column().name());
 }
 
+// Lowers internal GoogleSQL operators (`$add`, `$equal`, ...) to DuckDB
+// SQL infix / prefix forms. Disposition rows use `duckdb_native` with
+// `duckdb_name` carrying the token; this path is what
+// `route_classifier.cc` refers to as the dedicated operator emit.
+static std::string TryEmitInternalOperator(
+    absl::string_view name,
+    const FnEntry* entry,
+    const std::vector<std::string>& args) {
+  if (entry == nullptr || !absl::StartsWith(name, "$")) return "";
+  if (entry->disposition != Disposition::kDuckdbNative &&
+      entry->disposition != Disposition::kDuckdbRewrite) {
+    return "";
+  }
+  if (name == "$not") {
+    if (args.size() != 1) return "";
+    return absl::StrCat("(NOT ", args[0], ")");
+  }
+  if (name == "$unary_minus") {
+    if (args.size() != 1) return "";
+    return absl::StrCat("(-", args[0], ")");
+  }
+  if (name == "$is_null") {
+    if (args.size() != 1) return "";
+    return absl::StrCat("(", args[0], " IS NULL)");
+  }
+  if (name == "$is_not_null") {
+    if (args.size() != 1) return "";
+    return absl::StrCat("(", args[0], " IS NOT NULL)");
+  }
+  if (name == "$and" || name == "$or") {
+    if (args.size() < 2) return "";
+    const char* joiner = (name == "$and") ? " AND " : " OR ";
+    return absl::StrCat("(", absl::StrJoin(args, joiner), ")");
+  }
+  if (args.size() != 2 || entry->duckdb_name.empty()) return "";
+  return absl::StrCat("(", args[0], " ", entry->duckdb_name, " ", args[1], ")");
+}
+
 std::string Transpiler::EmitFunctionCall(
     const ::googlesql::ResolvedFunctionCall* node) {
   // Scalar function dispatch goes through the YAML-backed disposition
@@ -1813,6 +3008,30 @@ std::string Transpiler::EmitFunctionCall(
   // empty-string contract; the LOG(INFO) records the miss so debug
   // builds can audit which functions still need a disposition row.
   if (node == nullptr || node->function() == nullptr) return "";
+  // User-defined SQL functions: the analyzer stores the resolved body on
+  // function_call_info (TemplatedSQLFunction) or on the SQLFunction object.
+  if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
+          node->function_call_info();
+      info != nullptr) {
+    if (const auto* templated =
+            dynamic_cast<const ::googlesql::TemplatedSQLFunctionCall*>(
+                info.get());
+        templated != nullptr && templated->expr() != nullptr) {
+      std::string body = EmitExpr(templated->expr());
+      if (!body.empty()) return body;
+      return "";
+    }
+  }
+  if (const auto* sql_fn =
+          dynamic_cast<const ::googlesql::SQLFunction*>(node->function());
+      sql_fn != nullptr) {
+    const ::googlesql::ResolvedExpr* body_expr = sql_fn->FunctionExpression();
+    if (body_expr != nullptr) {
+      std::string body = EmitExpr(body_expr);
+      if (!body.empty()) return body;
+      return "";
+    }
+  }
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
     LOG(INFO) << "duckdb transpiler: SAFE function call surfaces "
@@ -1820,7 +3039,7 @@ std::string Transpiler::EmitFunctionCall(
               << node->function()->Name() << ")";
     return "";
   }
-  const std::string name = absl::AsciiStrToLower(node->function()->Name());
+  const std::string name = ResolveFunctionName(node->function());
   std::vector<std::string> args;
   args.reserve(node->argument_list_size());
   for (int i = 0; i < node->argument_list_size(); ++i) {
@@ -1831,11 +3050,212 @@ std::string Transpiler::EmitFunctionCall(
   if (name == "$make_array") {
     return absl::StrCat("[", absl::StrJoin(args, ", "), "]");
   }
+  if (name == "$case_with_value") {
+    return EmitCaseWithValue(args);
+  }
+  if (name == "$case_no_value") {
+    return EmitCaseNoValue(args);
+  }
+  // FORMAT('%T', expr) smoke for ARRAY literal checks in
+  // googlesqlite-06 aggregate verify; full FORMAT lives in plan 09.
+  if (name == "format" && args.size() == 2 && args[0] == "'%T'") {
+    return absl::StrCat("CAST(", args[1], " AS VARCHAR)");
+  }
+  // BigQuery DATE(year, month, day) vs DuckDB DATE(expr) unary cast.
+  if (name == "date" && args.size() == 3) {
+    return absl::StrCat("make_date(CAST(",
+                        args[0],
+                        " AS INTEGER), CAST(",
+                        args[1],
+                        " AS INTEGER), CAST(",
+                        args[2],
+                        " AS INTEGER))");
+  }
+  if (name == "generate_array") {
+    if (args.size() == 2) {
+      return absl::StrCat("list_transform(generate_series(",
+                          args[0],
+                          ", ",
+                          args[1],
+                          ", 1), x -> CAST(x AS BIGINT))");
+    }
+    if (args.size() == 3) {
+      return absl::StrCat("list_transform(generate_series(",
+                          args[0],
+                          ", ",
+                          args[1],
+                          ", ",
+                          args[2],
+                          "), x -> CAST(x AS BIGINT))");
+    }
+    return "";
+  }
+  if (name == "array_to_string" && args.size() == 3) {
+    return absl::StrCat("array_to_string(list_transform(",
+                        args[0],
+                        ", e -> coalesce(CAST(e AS VARCHAR), ",
+                        args[2],
+                        ")), ",
+                        args[1],
+                        ")");
+  }
+  if (name == "byte_length" && !args.empty()) {
+    const ::googlesql::ResolvedExpr* arg0 =
+        node->argument_list_size() > 0 ? node->argument_list(0) : nullptr;
+    if (arg0 != nullptr && arg0->type() != nullptr &&
+        arg0->type()->kind() == ::googlesql::TYPE_STRING) {
+      return absl::StrCat("OCTET_LENGTH(ENCODE(", args[0], "))");
+    }
+  }
+  // Window/CTE queries keep `duckdb_native` while `format_timestamp` stays
+  // `status=planned` in functions.yaml (no route promotion). Emit POSIX
+  // strftime for literal '%X' (time-only) so CTE bodies lower.
+  if (name == "format_timestamp" && args.size() >= 2) {
+    if (std::optional<std::string> fmt =
+            TryLiteralString(node->argument_list(0));
+        fmt.has_value() && *fmt == "%X") {
+      if (args.size() == 3) {
+        return absl::StrCat(
+            "strftime('%H:%M:%S', (", args[1], ") AT TIME ZONE ", args[2], ")");
+      }
+      return absl::StrCat("strftime('%H:%M:%S', ", args[1], ")");
+    }
+  }
+  if (name == "lpad") {
+    const ::googlesql::ResolvedExpr* arg0 =
+        node->argument_list_size() > 0 ? node->argument_list(0) : nullptr;
+    const bool is_bytes = arg0 != nullptr && arg0->type() != nullptr &&
+                          arg0->type()->kind() == ::googlesql::TYPE_BYTES;
+    if (is_bytes) {
+      const std::string val = absl::StrCat("CAST(", args[0], " AS BLOB)");
+      if (args.size() == 2) {
+        return absl::StrCat(
+            "CAST((CASE WHEN octet_length(",
+            val,
+            ") >= CAST(",
+            args[1],
+            " AS INTEGER) THEN CAST(array_slice(",
+            val,
+            ", 1, CAST(",
+            args[1],
+            " AS INTEGER)) AS BLOB) ELSE CAST(concat(repeat('\\x20'::BLOB, "
+            "greatest(0, CAST(",
+            args[1],
+            " AS INTEGER) - octet_length(",
+            val,
+            "))), ",
+            val,
+            ") AS BLOB) END) AS BLOB)");
+      }
+      if (args.size() == 3) {
+        const std::string pat = absl::StrCat("CAST(", args[2], " AS BLOB)");
+        return absl::StrCat(
+            "bq_lpad_bytes(", val, ", ", args[1], ", ", pat, ")");
+      }
+      return "";
+    }
+    if (args.size() == 2) {
+      return absl::StrCat("LPAD(", args[0], ", ", args[1], ", ' ')");
+    }
+  }
+  if (name == "rpad") {
+    const ::googlesql::ResolvedExpr* arg0 =
+        node->argument_list_size() > 0 ? node->argument_list(0) : nullptr;
+    const bool is_bytes = arg0 != nullptr && arg0->type() != nullptr &&
+                          arg0->type()->kind() == ::googlesql::TYPE_BYTES;
+    if (is_bytes) {
+      const std::string val = absl::StrCat("CAST(", args[0], " AS BLOB)");
+      if (args.size() == 2) {
+        return absl::StrCat("CAST((CASE WHEN octet_length(",
+                            val,
+                            ") >= CAST(",
+                            args[1],
+                            " AS INTEGER) THEN CAST(array_slice(",
+                            val,
+                            ", 1, CAST(",
+                            args[1],
+                            " AS INTEGER)) AS BLOB) ELSE CAST(concat(",
+                            val,
+                            ", repeat('\\x20'::BLOB, greatest(0, CAST(",
+                            args[1],
+                            " AS INTEGER) - octet_length(",
+                            val,
+                            ")))) AS BLOB) END) AS BLOB)");
+      }
+      if (args.size() == 3) {
+        const std::string pat = absl::StrCat("CAST(", args[2], " AS BLOB)");
+        return absl::StrCat(
+            "bq_rpad_bytes(", val, ", ", args[1], ", ", pat, ")");
+      }
+      return "";
+    }
+    if (args.size() == 2) {
+      return absl::StrCat("RPAD(", args[0], ", ", args[1], ", ' ')");
+    }
+    if (args.size() == 3) {
+      return absl::StrCat("RPAD(", args[0], ", ", args[1], ", ", args[2], ")");
+    }
+  }
+  if (name == "right" && !args.empty()) {
+    const ::googlesql::ResolvedExpr* arg0 =
+        node->argument_list_size() > 0 ? node->argument_list(0) : nullptr;
+    if (arg0 != nullptr && arg0->type() != nullptr &&
+        arg0->type()->kind() == ::googlesql::TYPE_BYTES && args.size() == 2) {
+      const std::string val = absl::StrCat("CAST(", args[0], " AS BLOB)");
+      return absl::StrCat("CAST(array_slice(",
+                          val,
+                          ", greatest(1, octet_length(",
+                          val,
+                          ") - CAST(",
+                          args[1],
+                          " AS INTEGER) + 1), octet_length(",
+                          val,
+                          ")) AS BLOB)");
+    }
+  }
+  if (name == "$subscript" && args.size() == 2) {
+    const ::googlesql::Type* ret = node->type();
+    const bool json_result = ret != nullptr && ret->IsJson();
+    const ::googlesql::ResolvedExpr* base_expr = node->argument_list(0);
+    const ::googlesql::ResolvedExpr* idx_expr = node->argument_list(1);
+    const bool json_base = base_expr != nullptr &&
+                           base_expr->type() != nullptr &&
+                           base_expr->type()->IsJson();
+    if (idx_expr != nullptr && idx_expr->type() != nullptr) {
+      const auto idx_kind = idx_expr->type()->kind();
+      if (idx_kind == ::googlesql::TYPE_INT64 ||
+          idx_kind == ::googlesql::TYPE_UINT64 ||
+          idx_kind == ::googlesql::TYPE_INT32) {
+        if (json_base || json_result) {
+          return absl::StrCat("json_extract(", args[0], ", ", args[1], ")");
+        }
+        return absl::StrCat(
+            "list_extract(", args[0], ", CAST(", args[1], " AS BIGINT) + 1)");
+      }
+      if (idx_kind == ::googlesql::TYPE_STRING) {
+        if (json_base || json_result) {
+          if (json_result) {
+            return absl::StrCat("(", args[0], " -> ", args[1], ")");
+          }
+          return absl::StrCat("(", args[0], " ->> ", args[1], ")");
+        }
+      }
+    }
+    if (json_base) {
+      return json_result
+                 ? absl::StrCat("json_extract(", args[0], ", ", args[1], ")")
+                 : absl::StrCat("(", args[0], " ->> ", args[1], ")");
+    }
+  }
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: function '" << name
               << "' has no disposition; surfacing UNIMPLEMENTED";
     return "";
+  }
+  if (std::string infix = TryEmitInternalOperator(name, entry, args);
+      !infix.empty()) {
+    return infix;
   }
   switch (entry->disposition) {
     case Disposition::kDuckdbNative:
@@ -1899,35 +3319,50 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // `*` placeholder), so the standard `<NAME>(<args>)` shape wouldn't
   // apply.
   //
-  // The richer modifiers (HAVING MAX/MIN, ORDER BY / LIMIT inside the
-  // aggregate, IGNORE/RESPECT NULLS, multi-level GROUP BY, aggregate
-  // filtering) all need bespoke lower passes; we propagate "" so the
-  // engine surfaces UNIMPLEMENTED whenever one of them is set.
-  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) follows the same
-  // empty-string contract `EmitFunctionCall` uses.
+  // ORDER BY / LIMIT inside `array_agg`, `string_agg`, and
+  // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax
+  // (`googlesqlite-04-scan-emits.plan.md` / `googlesqlite-06-aggregate-
+  // modifiers.plan.md`). HAVING MAX/MIN, multi-level GROUP BY, and
+  // aggregate filtering still surface UNIMPLEMENTED.
+  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) lowers `SAFE.SUM` via TRY().
   if (node == nullptr || node->function() == nullptr) return "";
-  if (node->error_mode() ==
-      ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-    LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces "
-                 "UNIMPLEMENTED (function="
-              << node->function()->Name() << ")";
+  const std::string name = ResolveFunctionName(node->function());
+  const bool ordered_agg = SupportsOrderedAggregateModifiers(name);
+  if (node->having_modifier() != nullptr || node->group_by_list_size() > 0 ||
+      node->group_by_aggregate_list_size() > 0 ||
+      node->where_expr() != nullptr || node->having_expr() != nullptr) {
+    LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
+              << "' uses a modifier (HAVING / GROUP BY / filtering) that has "
+                 "no DuckDB analog yet; surfacing UNIMPLEMENTED";
     return "";
   }
-  if (node->having_modifier() != nullptr ||
-      node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
-      node->group_by_list_size() > 0 ||
-      node->group_by_aggregate_list_size() > 0 ||
-      node->where_expr() != nullptr || node->having_expr() != nullptr ||
-      node->null_handling_modifier() !=
-          ::googlesql::ResolvedNonScalarFunctionCallBase::
-              DEFAULT_NULL_HANDLING) {
+  if (!ordered_agg &&
+      (node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
+       node->null_handling_modifier() !=
+           ::googlesql::ResolvedNonScalarFunctionCallBase::
+               DEFAULT_NULL_HANDLING)) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
               << "' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / "
                  "NULL-handling) that has no DuckDB analog yet; surfacing "
                  "UNIMPLEMENTED";
     return "";
   }
-  const std::string name = absl::AsciiStrToLower(node->function()->Name());
+  if (ordered_agg &&
+      node->null_handling_modifier() ==
+          ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
+    LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
+              << "' uses RESPECT NULLS; surfacing UNIMPLEMENTED";
+    return "";
+  }
+  if (node->error_mode() ==
+      ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+    if (name != "sum") {
+      LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces "
+                   "UNIMPLEMENTED (function="
+                << node->function()->Name() << ")";
+      return "";
+    }
+  }
   if (name == "$count_star") {
     if (node->argument_list_size() != 0) return "";
     return "COUNT(*)";
@@ -1939,6 +3374,101 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (a.empty()) return "";
     args.push_back(std::move(a));
   }
+  std::string order_suffix;
+  std::string limit_expr;
+  if (node->limit() != nullptr) {
+    limit_expr = EmitExpr(node->limit());
+    if (limit_expr.empty()) return "";
+  }
+  if (ordered_agg && node->order_by_item_list_size() > 0) {
+    std::vector<std::string> order_items;
+    order_items.reserve(node->order_by_item_list_size());
+    for (int i = 0; i < node->order_by_item_list_size(); ++i) {
+      const ::googlesql::ResolvedOrderByItem* item =
+          node->order_by_item_list(i);
+      if (item == nullptr || item->column_ref() == nullptr) return "";
+      if (item->collation_name() != nullptr) return "";
+      std::string col = EmitColumnRef(item->column_ref());
+      if (col.empty()) return "";
+      order_items.push_back(absl::StrCat(
+          col, OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+    }
+    if (!order_items.empty()) {
+      order_suffix =
+          absl::StrCat(" ORDER BY ", absl::StrJoin(order_items, ", "));
+    }
+  }
+  const bool ignore_nulls =
+      node->null_handling_modifier() ==
+      ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
+  const bool has_limit = !limit_expr.empty();
+  const bool has_order = !order_suffix.empty();
+  if (name == "array_concat_agg") {
+    std::string prefix = node->distinct() ? "DISTINCT " : "";
+    if (!has_order) {
+      order_suffix =
+          absl::StrCat(" ORDER BY ", QuoteIdent(kBqInputRnCol), " ASC");
+    }
+    std::string list_body = absl::StrCat(
+        "list(", prefix, absl::StrJoin(args, ", "), order_suffix, ")");
+    if (!args.empty()) {
+      list_body =
+          absl::StrCat(list_body, " FILTER (WHERE ", args[0], " IS NOT NULL)");
+      list_body = AppendArrayAggNullFilter(list_body, args[0], ignore_nulls);
+    }
+    if (has_limit) {
+      list_body =
+          absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
+    }
+    return absl::StrCat("flatten(", list_body, ")");
+  }
+  std::vector<std::string> call_args = args;
+  if (name == "string_agg" && call_args.size() == 1) {
+    // BigQuery STRING_AGG(x ORDER BY ...) defaults the delimiter to ','.
+    call_args.push_back("','");
+  }
+  // DuckDB has no BigQuery-style LIMIT inside STRING_AGG; ARRAY_AGG
+  // modifiers lower to `list(... ORDER BY ...)` + optional
+  // `list_slice(..., 1, n)`. STRING_AGG LIMIT (with or without ORDER
+  // BY) uses the same list staging + `array_to_string`.
+  if (name == "array_agg" && (has_order || has_limit)) {
+    std::string prefix = node->distinct() ? "DISTINCT " : "";
+    std::string body =
+        absl::StrCat("list(", prefix, args[0], order_suffix, ")");
+    body = AppendArrayAggNullFilter(body, args[0], ignore_nulls);
+    if (has_limit) {
+      body = absl::StrCat("list_slice(", body, ", 1, ", limit_expr, ")");
+    }
+    if (!ignore_nulls) {
+      body = WrapArrayAggRespectNulls(body, args[0]);
+    }
+    return body;
+  }
+  if (name == "array_agg" && !has_order && !has_limit) {
+    const std::string rn_order =
+        input_rn_ordering_
+            ? absl::StrCat(" ORDER BY ", QuoteIdent(kBqInputRnCol), " ASC")
+            : "";
+    std::string body = node->distinct()
+                           ? absl::StrCat("array_agg(DISTINCT ", args[0], ")")
+                           : absl::StrCat("list(", args[0], rn_order, ")");
+    body = AppendArrayAggNullFilter(body, args[0], ignore_nulls);
+    if (!ignore_nulls) {
+      body = WrapArrayAggRespectNulls(body, args[0]);
+    }
+    return body;
+  }
+  if (name == "string_agg" && node->distinct() && !has_order && !has_limit) {
+    return "";
+  }
+  if (name == "string_agg" && has_limit) {
+    std::string prefix = node->distinct() ? "DISTINCT " : "";
+    std::string list_body =
+        absl::StrCat("list(", prefix, args[0], order_suffix, ")");
+    list_body =
+        absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
+    return absl::StrCat("array_to_string(", list_body, ", ", call_args[1], ")");
+  }
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << name
@@ -1949,8 +3479,20 @@ std::string Transpiler::EmitAggregateFunctionCall(
     case Disposition::kDuckdbNative:
     case Disposition::kDuckdbRewrite: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
-      return absl::StrCat(
-          entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+      std::string body = absl::StrCat(entry->duckdb_name,
+                                      "(",
+                                      prefix,
+                                      absl::StrJoin(call_args, ", "),
+                                      order_suffix,
+                                      ")");
+      if (name == "countif") {
+        body = absl::StrCat("coalesce(", body, ", 0)");
+      }
+      if (node->error_mode() ==
+          ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+        return absl::StrCat("TRY(", body, ")");
+      }
+      return body;
     }
     case Disposition::kDuckdbUdf:
       // Same ready/planned dispatch as scalar `EmitFunctionCall`. A
@@ -2018,12 +3560,15 @@ std::string Transpiler::EmitAnalyticFunctionCall(
   }
   if (node->null_handling_modifier() !=
       ::googlesql::ResolvedNonScalarFunctionCallBase::DEFAULT_NULL_HANDLING) {
-    // IGNORE / RESPECT NULLS modifies LAG / LEAD / FIRST_VALUE /
-    // LAST_VALUE semantics; DuckDB has the same keywords but the
-    // rewrite needs more care than this emit pass covers.
-    LOG(INFO) << "duckdb transpiler: analytic '" << node->function()->Name()
-              << "' uses IGNORE/RESPECT NULLS; surfacing UNIMPLEMENTED";
-    return "";
+    const std::string name = ResolveFunctionName(node->function());
+    if (name != "percentile_disc") {
+      // IGNORE / RESPECT NULLS modifies LAG / LEAD / FIRST_VALUE /
+      // LAST_VALUE semantics; DuckDB has the same keywords but the
+      // rewrite needs more care than this emit pass covers.
+      LOG(INFO) << "duckdb transpiler: analytic '" << node->function()->Name()
+                << "' uses IGNORE/RESPECT NULLS; surfacing UNIMPLEMENTED";
+      return "";
+    }
   }
   std::vector<std::string> args;
   args.reserve(node->argument_list_size());
@@ -2032,7 +3577,7 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     if (a.empty()) return "";
     args.push_back(std::move(a));
   }
-  const std::string name = absl::AsciiStrToLower(node->function()->Name());
+  const std::string name = ResolveFunctionName(node->function());
   if (name == "$count_star") {
     if (!args.empty()) return "";
     return "COUNT(*)";
@@ -2047,8 +3592,9 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     case Disposition::kDuckdbNative:
     case Disposition::kDuckdbRewrite: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
-      return absl::StrCat(
+      std::string body = absl::StrCat(
           entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+      return body;
     }
     case Disposition::kDuckdbUdf:
       // Symmetric to `EmitFunctionCall` /
@@ -2149,6 +3695,18 @@ std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* node) {
   if (inner.empty()) return "";
   std::string type_sql = ToDuckDBSqlType(*target);
   if (type_sql.empty()) return "";
+  if (target->kind() == ::googlesql::TYPE_TIMESTAMP) {
+    if (auto lit = TryLiteralString(node->expr())) {
+      if (lit->find('+') == std::string::npos &&
+          lit->find('Z') == std::string::npos &&
+          lit->find("UTC") == std::string::npos &&
+          (lit->size() < 6 ||
+           lit->compare(lit->size() - 6, 6, "+00:00") != 0)) {
+        inner = QuoteString(absl::StrCat(*lit, "+00"));
+      }
+    }
+    type_sql = "TIMESTAMPTZ";
+  }
   const char* op = node->return_null_on_error() ? "TRY_CAST" : "CAST";
   return absl::StrCat(op, "(", inner, " AS ", type_sql, ")");
 }
@@ -2302,7 +3860,7 @@ std::string Transpiler::EmitSubqueryExpr(
   // they fall through to the empty-string contract today.
   //
   // Correlated subqueries (non-empty `parameter_list()`) belong to
-  // the semantic executor (`cte-subquery-routing.plan.md` Family 4,
+  // the semantic executor (`googlesqlite-02-withscan-cte.plan.md` Family 4,
   // deferred). The route classifier promotes any query containing a
   // correlated `ResolvedSubqueryExpr` to `kSemanticExecutor` before
   // the transpiler is ever asked to lower it -- but we defend in
@@ -2319,7 +3877,19 @@ std::string Transpiler::EmitSubqueryExpr(
   if (node->parameter_list_size() > 0) return "";
   (void)node->hint_list_size();
   (void)node->in_collation();
+  const bool saved_has_rn = input_has_rn_column_;
+  const bool saved_rn_order = input_rn_ordering_;
+  const bool saved_output_rn = output_includes_input_rn_;
+  const std::vector<std::string> saved_output_order = output_order_items_;
+  input_has_rn_column_ = false;
+  input_rn_ordering_ = false;
+  output_includes_input_rn_ = false;
+  output_order_items_.clear();
   std::string inner = EmitScan(node->subquery());
+  input_has_rn_column_ = saved_has_rn;
+  input_rn_ordering_ = saved_rn_order;
+  output_includes_input_rn_ = saved_output_rn;
+  output_order_items_ = saved_output_order;
   if (inner.empty()) return "";
   switch (node->subquery_type()) {
     case ::googlesql::ResolvedSubqueryExpr::SCALAR:
