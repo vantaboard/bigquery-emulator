@@ -5,20 +5,13 @@
 #include <string>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
-#include "grpcpp/support/status.h"
-#include "proto/emulator.pb.h"
+#include "frontend/handlers/handler_common.h"
 
 namespace bigquery_emulator {
 namespace frontend {
 namespace internal {
-
-::grpc::Status AbslToGrpcStatus(const absl::Status& status);
-
-void ValueToCell(const backend::storage::Value& value, v1::Cell* out);
 
 bool SchemasEqualByShape(const backend::schema::TableSchema& a,
                          const backend::schema::TableSchema& b);

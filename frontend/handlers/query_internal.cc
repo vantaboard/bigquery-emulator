@@ -76,17 +76,11 @@ namespace internal {
   return options;
 }
 
-// Mirrors `frontend/handlers/catalog.cc::ValueToCell`: marshals an
-// engine-agnostic `backend::storage::Value` onto the `v1::Cell`
-// oneof the proto carries on the wire. Duplicated here (instead of
-// extracted) because the catalog and query handlers are the only
-// two callers and a shared utility would otherwise pull a third
-// `cell_marshal` library into the build graph just to host one
-// function. The two implementations must stay in sync; both follow
-// the BigQuery REST `f`/`v` shape (primitives flattened to their
-// decimal-string formatting so STRING / INT64 / FLOAT64 / BOOL all
-// land on the wire as `string_value`).
-void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
+// Query-result marshaller: same shape as `handler_common::ValueToCell`
+// except BYTES columns are base64-encoded to match
+// `gateway/bqtypes/wire.go::ValueToCell`.
+void QueryResultValueToCell(const backend::storage::Value& value,
+                            v1::Cell* out) {
   using Kind = backend::storage::Value::Kind;
   out->Clear();
   switch (value.kind()) {
@@ -111,14 +105,14 @@ void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
     case Kind::kArray: {
       auto* arr = out->mutable_array();
       for (const auto& el : value.array_value()) {
-        ValueToCell(el, arr->add_elements());
+        QueryResultValueToCell(el, arr->add_elements());
       }
       return;
     }
     case Kind::kStruct: {
       auto* st = out->mutable_struct_value();
       for (const auto& f : value.struct_value()) {
-        ValueToCell(f, st->add_fields());
+        QueryResultValueToCell(f, st->add_fields());
       }
       return;
     }

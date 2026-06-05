@@ -200,7 +200,7 @@ namespace internal {
     if (!*next) break;
     v1::QueryResultRow row_message;
     for (const auto& cell : row.cells) {
-      ValueToCell(cell, row_message.add_cells());
+      QueryResultValueToCell(cell, row_message.add_cells());
     }
     if (!write(row_message)) {
       return ::grpc::Status(

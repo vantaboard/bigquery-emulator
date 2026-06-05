@@ -24,7 +24,8 @@ namespace internal {
 
 ::googlesql::AnalyzerOptions MakeAnalyzerOptions();
 
-void ValueToCell(const backend::storage::Value& value, v1::Cell* out);
+void QueryResultValueToCell(const backend::storage::Value& value,
+                            v1::Cell* out);
 
 backend::engine::QueryRequest ProtoToEngineRequest(
     const v1::QueryRequest& request);

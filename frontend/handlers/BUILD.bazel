@@ -10,6 +10,19 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "handler_common",
+    srcs = ["handler_common.cc"],
+    hdrs = ["handler_common.h"],
+    deps = [
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "catalog_handler",
     srcs = ["catalog.cc"],
     hdrs = ["catalog.h"],
@@ -126,11 +139,9 @@ cc_library(
     srcs = ["storage_read_internal.cc"],
     hdrs = ["storage_read_internal.h"],
     deps = [
+        ":handler_common",
         "//backend/schema",
         "//backend/storage",
-        "//proto:emulator_cc_proto",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -195,10 +206,8 @@ cc_library(
     srcs = ["storage_write_internal.cc"],
     hdrs = ["storage_write_internal.h"],
     deps = [
+        ":handler_common",
         "//backend/storage",
-        "//proto:emulator_cc_proto",
-        "@com_github_grpc_grpc//:grpc++",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
     ],
 )
