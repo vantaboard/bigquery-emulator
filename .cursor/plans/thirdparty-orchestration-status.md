@@ -48,7 +48,7 @@ Baseline: `.logs/thirdparty-20260605-134407.log`
 | unblock-03-bigframes-gate | 1 | PARTIAL | d8adef2 | 3/4 snippet gate; performance_optimizations needs storage read (08) |
 | unblock-04-gateway-wire-shapes | 1 | PASS | 78fd622 | expirationTime/labels/writeDisposition/dataset region wire shapes |
 | unblock-05-query-params | 1 | PASS | f8f4fb0 | ARRAY/TIMESTAMP/STRUCT handler+engine binding |
-| unblock-06-load-avro-orc | 1 | PARTIAL | — | AVRO+ORC URI load pass; truncate/resumable + node Jobs remain |
+| unblock-06-load-avro-orc | 1 | PARTIAL | 4670fec | AVRO+ORC URI load pass; truncate/resumable + node Jobs remain |
 | unblock-07-hive-external | — | pending | — | — |
 | unblock-08-storage-grpc | — | pending | — | — |
 | unblock-09-test-isolation | — | pending | — | — |
