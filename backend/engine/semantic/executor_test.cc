@@ -210,7 +210,7 @@ TEST_F(SemanticExecutorTest, RejectsSelectWithFromShape) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
 }
 
-// `advanced-relational-routing.plan.md` Family 2. A
+// `googlesqlite-13-advanced-relational.plan.md` Family 2. A
 // `ResolvedBarrierScan` wrapping a SingleRowScan is the
 // pipe-operator analog of `SELECT 1 + 2`; the barrier is the
 // analyzer's pipe-boundary marker and rows pass through
@@ -256,7 +256,7 @@ TEST_F(SemanticExecutorTest, BarrierScanOverSingleRowPassesThrough) {
 }
 
 TEST_F(SemanticExecutorTest, UnnestWithOffsetEmitsRowPerElement) {
-  // Family 1 of array-struct-semantic-path.plan.md: a
+  // Family 1 of googlesqlite-12-arrays-generators.plan.md: a
   // standalone `UNNEST(...) WITH OFFSET` flowing through the
   // semantic executor produces one row per element with two
   // columns (the element value + the 0-based offset).

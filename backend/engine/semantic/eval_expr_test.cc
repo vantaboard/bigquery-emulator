@@ -332,6 +332,72 @@ TEST_F(EvalExprTest, IsNotNullForNonNullOperand) {
   EXPECT_TRUE(v->bool_value());
 }
 
+TEST_F(EvalExprTest, LikeOperator) {
+  const auto* expr = AnalyzeExpr(R"("abcd" LIKE "a%d")");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->bool_value());
+}
+
+TEST_F(EvalExprTest, BetweenOperatorOnDates) {
+  const auto* expr =
+      AnalyzeExpr(R"(DATE "2022-09-10" BETWEEN "2022-09-01" AND "2022-10-01")");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->bool_value());
+}
+
+TEST_F(EvalExprTest, InOperatorNullLhs) {
+  const auto* expr = AnalyzeExpr("NULL IN (1)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->is_null());
+}
+
+TEST_F(EvalExprTest, BitwiseAndOperator) {
+  const auto* expr = AnalyzeExpr("3 & 1");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->int64_value(), 1);
+}
+
+TEST_F(EvalExprTest, IsDistinctFromNullAndNull) {
+  const auto* expr = AnalyzeExpr("NULL IS DISTINCT FROM NULL");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_FALSE(v->bool_value());
+}
+
+TEST_F(EvalExprTest, IntervalLiteralDay) {
+  const auto* expr = AnalyzeExpr("INTERVAL 29 DAY");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_FALSE(v->is_null());
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_INTERVAL);
+}
+
+TEST_F(EvalExprTest, JustifyDaysOn29Days) {
+  const auto* expr = AnalyzeExpr("JUSTIFY_DAYS(INTERVAL 29 DAY)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->interval_value().ToString(), "0-0 29 0:0:0");
+}
+
+TEST_F(EvalExprTest, JustifyHoursNegativeMinuteLiteral) {
+  const auto* expr = AnalyzeExpr("JUSTIFY_HOURS(INTERVAL -12345 MINUTE)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->interval_value().ToString(), "0-0 -8 -13:45:0");
+}
+
 TEST_F(EvalExprTest, ResolvedArgumentRefResolvesAgainstFrameStack) {
   // `ResolvedArgumentRef` resolves through `EvalContext::arguments`
   // (a `FrameStack`). The analyzer usually only emits this kind

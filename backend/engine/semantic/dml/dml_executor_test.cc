@@ -264,7 +264,7 @@ TEST_F(DmlExecutorTest, InsertValuesOmittedColumnDefaultsNull) {
   EXPECT_TRUE(rows[0].cells[1].is_null());
 }
 
-TEST_F(DmlExecutorTest, InsertSelectIsDeferredKindToFamily5) {
+TEST_F(DmlExecutorTest, InsertSelectFromLiteralRows) {
   const auto* stmt = Analyze(
       "INSERT INTO test_ds.people (id, name) "
       "SELECT 1, 'a'");
@@ -272,10 +272,13 @@ TEST_F(DmlExecutorTest, InsertSelectIsDeferredKindToFamily5) {
 
   QueryRequest request;
   auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_FALSE(stats.ok());
-  EXPECT_EQ(stats.status().code(), absl::StatusCode::kUnimplemented);
-  EXPECT_EQ(GetSemanticErrorReason(stats.status()),
-            SemanticErrorReason::kNotImplemented);
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 1);
+
+  const auto& rows = storage_->Rows(table_id_);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].int64_value(), 1);
+  EXPECT_EQ(rows[0].cells[1].string_value(), "a");
 }
 
 // --- DELETE -----------------------------------------------------------------

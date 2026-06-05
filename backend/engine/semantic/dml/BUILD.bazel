@@ -2,7 +2,7 @@
 #
 # Owns the INSERT / UPDATE / DELETE / MERGE families that route to
 # the semantic executor per
-# `.cursor/plans/dml-local-executor.plan.md`. Mutates storage
+# `.cursor/plans/googlesqlite-14-dml-system.plan.md`. Mutates storage
 # through the abstract `backend::storage::Storage*` the
 # coordinator hands to `SemanticExecutor`; the production
 # coordinator passes a `DuckDBStorage` instance, tests fake the
@@ -21,6 +21,7 @@ cc_library(
         "//backend/engine",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:scan_eval",
         "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/storage",

@@ -4,7 +4,7 @@
 // Compositional `RowSource` adapters used by the semantic executor.
 //
 // Design constraint #2 from
-// `.cursor/plans/semantic-executor-core.plan.md` is that the
+// `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md` is that the
 // semantic executor REUSES `DuckDbExecutor` for shapes the
 // fast-path covers (table scans, joins, aggregations); it never
 // opens a new DuckDB connection of its own. The
@@ -22,8 +22,8 @@
 // For the basic scalar-only SELECT path shipped in this plan, the
 // executor never reaches for the adapter -- the value table /
 // FROM-clause shapes that do are owned by
-// `array-struct-semantic-path.plan.md` and
-// `cte-subquery-routing.plan.md`. The adapter ships here so those
+// `googlesqlite-12-arrays-generators.plan.md` and
+// `googlesqlite-02-withscan-cte.plan.md`. The adapter ships here so those
 // plans have a stable interface to consume.
 
 #include <memory>
@@ -84,7 +84,7 @@ class MaterializedRowSource : public RowSource {
 // the fast-path shapes the semantic executor composes with cap out
 // at a few thousand rows; streaming-style draining is in scope for
 // the row-source plan that follows
-// `array-struct-semantic-path.plan.md`.
+// `googlesqlite-12-arrays-generators.plan.md`.
 absl::StatusOr<std::unique_ptr<RowSource>> DrainRowSource(RowSource& source);
 
 }  // namespace semantic

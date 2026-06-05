@@ -107,6 +107,32 @@ absl::StatusOr<Value> EvaluateArrayExpr(const ::googlesql::ResolvedExpr* expr,
 
 }  // namespace
 
+void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
+                                int n_arrays,
+                                ColumnBindings& bindings) {
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    const int public_id = scan.column_list(i).column_id();
+    if (bindings.count(public_id) != 0) continue;
+    if (i < n_arrays) {
+      const int element_id = scan.element_column_list(i).column_id();
+      auto it = bindings.find(element_id);
+      if (it != bindings.end()) {
+        bindings.emplace(public_id, it->second);
+        continue;
+      }
+    }
+    const std::string& pub_name = scan.column_list(i).name();
+    for (int j = 0; j < n_arrays; ++j) {
+      if (scan.element_column_list(j).name() != pub_name) continue;
+      auto it = bindings.find(scan.element_column_list(j).column_id());
+      if (it != bindings.end()) {
+        bindings.emplace(public_id, it->second);
+      }
+      break;
+    }
+  }
+}
+
 absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
     const ::googlesql::ResolvedArrayScan& scan, const EvalContext& parent_ctx) {
   // -------- Out-of-scope shapes (deferred to follow-up subagents).
@@ -115,24 +141,22 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
   // shape (`FROM t, UNNEST(t.arr)`); a non-null `join_expr` is the
   // `LEFT JOIN UNNEST(arr) ON ...` shape. Both need a row source
   // adapter (`RowSource` -> per-row `ColumnBindings`) which is
-  // Family 4 of `array-struct-semantic-path.plan.md`. Until that
+  // Family 4 of `googlesqlite-12-arrays-generators.plan.md`. Until that
   // lands, surface a structured `kNotImplemented` so the gateway's
   // envelope is consistent with other "planned but not landed"
   // routes.
-  if (scan.input_scan() != nullptr &&
-      scan.input_scan()->node_kind() != ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
+  if (scan.join_expr() != nullptr && parent_ctx.columns == nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        "semantic: correlated ResolvedArrayScan (FROM t, UNNEST(t.arr)) is "
-        "deferred to a follow-up subagent of "
-        "array-struct-semantic-path.plan.md (Family 4)");
+        "semantic: ResolvedArrayScan.join_expr must be lowered by "
+        "scan_eval MaterializeArrayScan");
   }
-  if (scan.join_expr() != nullptr) {
+  if (scan.input_scan() != nullptr &&
+      scan.input_scan()->node_kind() != ::googlesql::RESOLVED_SINGLE_ROW_SCAN &&
+      parent_ctx.columns == nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        "semantic: ResolvedArrayScan.join_expr (LEFT JOIN UNNEST ... ON ...) "
-        "is deferred to a follow-up subagent of "
-        "array-struct-semantic-path.plan.md (Family 4)");
+        "semantic: correlated ResolvedArrayScan requires outer row bindings");
   }
 
   // -------- Shape-shape invariants enforced by the analyzer.
@@ -267,6 +291,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
       bindings.emplace(scan.array_offset_column()->column().column_id(),
                        Value::NullInt64());
     }
+    AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
     rows.push_back(std::move(bindings));
     return rows;
   }
@@ -294,6 +319,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
       bindings.emplace(scan.array_offset_column()->column().column_id(),
                        Value::Int64(static_cast<int64_t>(idx)));
     }
+    AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
     rows.push_back(std::move(bindings));
   }
   return rows;

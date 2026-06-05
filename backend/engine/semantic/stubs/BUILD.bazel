@@ -1,6 +1,6 @@
 # Local-stub families dispatched through the semantic executor.
 #
-# `specialized-feature-policy.plan.md` defines three postures for
+# `googlesqlite-15-specialized-stubs.plan.md` defines three postures for
 # the specialized feature families: `local_impl`, `local_stub`, and
 # `unsupported`. `local_stub` is the BigQuery-shaped-placeholder
 # posture: the function is accepted at parse / analyzer time, the
@@ -19,7 +19,7 @@
 #
 # A new stub family follows this checklist:
 #   1. Flip the matching `functions.yaml` row to `local_stub
-#      plan=specialized-feature-policy.plan.md`.
+#      plan=googlesqlite-15-specialized-stubs.plan.md`.
 #   2. Add `<family>.{h,cc}` + a unit test here.
 #   3. Wire the family into `eval_expr.cc`'s
 #      `DispatchFunctionByName` so the semantic executor reaches it.
@@ -77,7 +77,7 @@ cc_test(
 # stub family means (a) a `cc_library` entry above, (b) a Dispatch
 # wiring entry here. Both the route classifier and the unsupported
 # stub executor's error envelope rely on the YAML row pointing at
-# `specialized-feature-policy.plan.md`.
+# `googlesqlite-15-specialized-stubs.plan.md`.
 cc_library(
     name = "dispatch",
     srcs = ["dispatch.cc"],

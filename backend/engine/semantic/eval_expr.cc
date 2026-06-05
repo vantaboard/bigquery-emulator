@@ -14,17 +14,28 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/functions/datetime_funcs.h"
 #include "backend/engine/semantic/functions/dispatch.h"
+#include "backend/engine/semantic/functions/json_funcs.h"
+#include "backend/engine/semantic/functions/operator_funcs.h"
 #include "backend/engine/semantic/stubs/dispatch.h"
+#include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/constant.h"
 #include "googlesql/public/function.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/datetime.pb.h"
 #include "googlesql/public/numeric_value.h"
+#include "googlesql/public/sql_function.h"
+#include "googlesql/public/templated_sql_function.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
@@ -34,7 +45,34 @@ namespace backend {
 namespace engine {
 namespace semantic {
 
+// Implemented in `scan_eval.cc`; linked via the `scan_eval` target.
+absl::StatusOr<Value> EvalSubqueryExpr(
+    const ::googlesql::ResolvedSubqueryExpr& node, const EvalContext& ctx);
+
 namespace {
+
+// BigQuery internal functions (e.g. `IF`) often have an empty
+// `FullName(false)`; fall back to `Name()` so dispatch keys match
+// `DispatchFunctionByName` / lazy `if` handling.
+std::string LowerFunctionDispatchName(const ::googlesql::Function* fn) {
+  if (fn == nullptr) return "";
+  std::string name =
+      absl::AsciiStrToLower(fn->FullName(/*include_group=*/false));
+  if (name.empty()) {
+    name = absl::AsciiStrToLower(fn->Name());
+  }
+  return name;
+}
+
+std::string SynthesizeAnonymousFieldName(int idx) {
+  return absl::StrCat("_", idx);
+}
+
+std::string ResolveStructFieldName(const ::googlesql::StructType& st, int idx) {
+  const ::googlesql::StructField& f = st.field(idx);
+  if (f.name.empty()) return SynthesizeAnonymousFieldName(idx);
+  return f.name;
+}
 
 // Build a NULL `Value` of `type`'s kind. Used when an operator
 // detects a NULL operand and BigQuery semantics propagate NULL, or
@@ -154,6 +192,46 @@ absl::StatusOr<Value> MulInt64(int64_t a, int64_t b) {
 }
 
 absl::StatusOr<Value> ArithmeticAdd(const Value& a, const Value& b) {
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_INT64) {
+    int32_t out = 0;
+    if (auto s = ::googlesql::functions::AddDate(
+            a.date_value(),
+            ::googlesql::functions::DateTimestampPart::DAY,
+            b.int64_value(),
+            &out);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(out);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    ::googlesql::DatetimeValue datetime;
+    if (auto s = ::googlesql::functions::AddDate(
+            a.date_value(), b.interval_value(), &datetime);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Datetime(datetime);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    ::googlesql::DatetimeValue datetime;
+    if (auto s = ::googlesql::functions::AddDatetime(
+            a.datetime_value(), b.interval_value(), &datetime);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Datetime(datetime);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    auto out = ::googlesql::functions::AddTimestamp(
+        a.ToUnixPicos().ToPicoTime(), b.interval_value());
+    if (!out.ok()) return out.status();
+    return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
+  }
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '+' operands have mismatched kinds: ",
@@ -182,6 +260,51 @@ absl::StatusOr<Value> ArithmeticAdd(const Value& a, const Value& b) {
 }
 
 absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_INT64) {
+    int32_t out = 0;
+    if (auto s = ::googlesql::functions::SubDate(
+            a.date_value(),
+            ::googlesql::functions::DateTimestampPart::DAY,
+            b.int64_value(),
+            &out);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(out);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_DATE) {
+    auto iv = ::googlesql::functions::IntervalDiffDates(a.date_value(),
+                                                        b.date_value());
+    if (!iv.ok()) return iv.status();
+    return Value::Interval(*iv);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
+      b.type_kind() == ::googlesql::TYPE_DATETIME) {
+    absl::Time ta;
+    absl::Time tb;
+    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+            a.datetime_value(), absl::UTCTimeZone(), &ta);
+        !s.ok()) {
+      return s;
+    }
+    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+            b.datetime_value(), absl::UTCTimeZone(), &tb);
+        !s.ok()) {
+      return s;
+    }
+    auto iv = ::googlesql::functions::IntervalDiffTimestamps(ta, tb);
+    if (!iv.ok()) return iv.status();
+    return Value::Interval(*iv);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      b.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+    auto iv =
+        ::googlesql::functions::IntervalDiffTimestamps(a.ToTime(), b.ToTime());
+    if (!iv.ok()) return iv.status();
+    return Value::Interval(*iv);
+  }
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '-' operands have mismatched kinds: ",
@@ -387,6 +510,25 @@ absl::StatusOr<Value> DispatchUnaryMinus(const std::vector<Value>& args,
   }
   if (args[0].is_null()) return NullOfType(return_type);
   return UnaryMinus(args[0]);
+}
+
+absl::StatusOr<Value> DispatchAbs(const std::vector<Value>& args,
+                                  const ::googlesql::Type* return_type) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        "semantic: ABS expects exactly one argument");
+  }
+  if (args[0].is_null()) return NullOfType(return_type);
+  const Value& v = args[0];
+  if (v.type_kind() == ::googlesql::TYPE_INT64) {
+    const int64_t x = v.int64_value();
+    return Value::Int64(x < 0 ? -x : x);
+  }
+  if (v.type_kind() == ::googlesql::TYPE_DOUBLE) {
+    return Value::Double(std::abs(v.double_value()));
+  }
+  return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                           "semantic: ABS requires numeric argument");
 }
 
 absl::StatusOr<Value> DispatchEqual(const std::vector<Value>& args) {
@@ -607,7 +749,8 @@ absl::StatusOr<Value> WrapSafe(absl::StatusOr<Value> result,
 absl::StatusOr<Value> DispatchFunctionByName(
     absl::string_view name,
     const std::vector<Value>& args,
-    const ::googlesql::Type* return_type) {
+    const ::googlesql::Type* return_type,
+    const EvalContext* ctx = nullptr) {
   if (name == "$add" || name == "add") {
     return DispatchAdd(args, return_type);
   }
@@ -622,6 +765,14 @@ absl::StatusOr<Value> DispatchFunctionByName(
   }
   if (name == "$unary_minus" || name == "unary_minus") {
     return DispatchUnaryMinus(args, return_type);
+  }
+  if (name == "abs") return DispatchAbs(args, return_type);
+  if (name == "$make_array") {
+    if (return_type == nullptr || !return_type->IsArray()) {
+      return absl::InvalidArgumentError(
+          "semantic: $make_array requires ARRAY return type");
+    }
+    return Value::Array(return_type->AsArray(), args);
   }
   if (name == "$equal" || name == "equal") {
     return DispatchEqual(args);
@@ -656,6 +807,32 @@ absl::StatusOr<Value> DispatchFunctionByName(
   if (name == "$is_not_null" || name == "is_not_null") {
     return DispatchIsNull(args, /*negate=*/true);
   }
+  if (name == "$like" || name == "$not_like") {
+    return functions::DispatchLike(name, args);
+  }
+  if (name == "$between" || name == "$not_between") {
+    return functions::DispatchBetween(name, args);
+  }
+  if (name == "$in" || name == "$not_in") {
+    return functions::DispatchIn(name, args);
+  }
+  if (name == "$is_true" || name == "$is_not_true") {
+    return functions::DispatchIsTrue(name, args);
+  }
+  if (name == "$is_false" || name == "$is_not_false") {
+    return functions::DispatchIsFalse(name, args);
+  }
+  if (name == "$is_distinct_from" || name == "$is_not_distinct_from") {
+    return functions::DispatchIsDistinctFrom(name, args);
+  }
+  if (name == "$bitwise_and" || name == "$bitwise_or" ||
+      name == "$bitwise_xor" || name == "$bitwise_not" ||
+      name == "$bitwise_left_shift" || name == "$bitwise_right_shift") {
+    return functions::DispatchBitwise(name, args);
+  }
+  if (name == "$interval") {
+    return functions::DispatchInterval(args, return_type);
+  }
   if (name == "if") return DispatchIf(args);
   if (name == "coalesce") return DispatchCoalesce(args, return_type);
   if (name == "ifnull") return DispatchIfNull(args);
@@ -685,17 +862,42 @@ absl::StatusOr<Value> DispatchFunctionByName(
   if (name == "safe_divide") {
     return WrapSafe(DispatchDiv(args, return_type), return_type);
   }
+  if (absl::StartsWith(name, "$extract_")) {
+    const std::string part = std::string(name).substr(9);
+    if (args.empty() || args[0].is_null()) return NullOfType(return_type);
+    if (part == "date" && return_type != nullptr && return_type->IsDate() &&
+        args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+      int32_t date = 0;
+      if (auto s = ::googlesql::functions::ExtractFromTimestamp(
+              ::googlesql::functions::DateTimestampPart::DATE,
+              args[0].ToUnixMicros(),
+              ::googlesql::functions::TimestampScale::kMicroseconds,
+              absl::UTCTimeZone(),
+              &date);
+          !s.ok()) {
+        return s;
+      }
+      return Value::Date(date);
+    }
+    std::vector<Value> extract_args;
+    extract_args.push_back(args[0]);
+    extract_args.push_back(Value::String(absl::AsciiStrToUpper(part)));
+    if (args.size() > 1) extract_args.push_back(args[1]);
+    auto extracted = functions::Extract(extract_args, return_type);
+    if (!extracted.ok()) return extracted.status();
+    return *std::move(extracted);
+  }
   // Fall through to the per-family dispatch table for functions
   // whose `functions.yaml` row picks the `semantic_executor`
-  // disposition with `plan=semantic-functions-compliance.plan.md`.
+  // disposition with `plan=googlesqlite-09-date-time.plan.md`.
   // `functions::Dispatch` returns nullopt when the name is not
   // wired here; we surface NOT_IMPLEMENTED in that case so the
   // gateway envelope stays the same as for an unknown function.
-  if (auto dispatched = functions::Dispatch(name, args, return_type)) {
+  if (auto dispatched = functions::Dispatch(name, args, return_type, ctx)) {
     return *std::move(dispatched);
   }
   // Local-stub families (`local_stub` posture, e.g. KEYS.*).
-  // `specialized-feature-policy.plan.md` picks the deterministic
+  // `googlesqlite-15-specialized-stubs.plan.md` picks the deterministic
   // BigQuery-shaped-placeholder posture for a handful of families;
   // the route classifier promotes the surrounding query to
   // `kLocalStub`, the coordinator dispatches it onto the semantic
@@ -713,13 +915,186 @@ absl::StatusOr<Value> DispatchFunctionByName(
                    "' is not yet implemented in the semantic executor"));
 }
 
+absl::StatusOr<Value> EvalArrayTransform(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  const ::googlesql::ResolvedExpr* array_expr = nullptr;
+  const ::googlesql::ResolvedInlineLambda* lambda = nullptr;
+  if (call.generic_argument_list_size() >= 2) {
+    const ::googlesql::ResolvedFunctionArgument* a0 =
+        call.generic_argument_list(0);
+    const ::googlesql::ResolvedFunctionArgument* a1 =
+        call.generic_argument_list(1);
+    if (a0 != nullptr) array_expr = a0->expr();
+    if (a1 != nullptr) lambda = a1->inline_lambda();
+  }
+  if (array_expr == nullptr && call.argument_list_size() >= 1) {
+    array_expr = call.argument_list(0);
+  }
+  if (array_expr == nullptr || lambda == nullptr) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        "semantic: ARRAY_TRANSFORM requires array and inline lambda arguments");
+  }
+  if (lambda->body() == nullptr || lambda->parameter_list_size() < 1) {
+    return absl::InvalidArgumentError(
+        "semantic: ARRAY_TRANSFORM lambda is malformed");
+  }
+  auto array_val = EvalExpr(*array_expr, ctx);
+  if (!array_val.ok()) return array_val.status();
+  if (array_val->is_null()) return Value::Null(call.type());
+  if (!array_val->type()->IsArray()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: ARRAY_TRANSFORM first argument must "
+                             "be ARRAY");
+  }
+  const ::googlesql::ArrayType* out_arr =
+      call.type() != nullptr && call.type()->IsArray()
+          ? call.type()->AsArray()
+          : array_val->type()->AsArray();
+  const int param_col_id = lambda->parameter_list(0)->column().column_id();
+  std::vector<Value> out_elems;
+  out_elems.reserve(array_val->num_elements());
+  for (int i = 0; i < array_val->num_elements(); ++i) {
+    ColumnBindings bind;
+    bind.emplace(param_col_id, array_val->element(i));
+    EvalContext row_ctx = ctx;
+    row_ctx.columns = &bind;
+    auto mapped = EvalExpr(*lambda->body(), row_ctx);
+    if (!mapped.ok()) return mapped.status();
+    out_elems.push_back(*std::move(mapped));
+  }
+  return Value::Array(out_arr, std::move(out_elems));
+}
+
 }  // namespace
+
+absl::StatusOr<Value> EvalIfLazy(const ::googlesql::ResolvedFunctionCall& call,
+                                 const EvalContext& ctx) {
+  if (call.argument_list_size() != 3) {
+    return absl::InvalidArgumentError("semantic: IF expects three arguments");
+  }
+  auto cond = EvalExpr(*call.argument_list(0), ctx);
+  if (!cond.ok()) return cond.status();
+  const bool take_then = !cond->is_null() &&
+                         cond->type_kind() == ::googlesql::TYPE_BOOL &&
+                         cond->bool_value();
+  return EvalExpr(*call.argument_list(take_then ? 1 : 2), ctx);
+}
+
+absl::StatusOr<Value> EvalIfNullLazy(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  if (call.argument_list_size() != 2) {
+    return absl::InvalidArgumentError("semantic: IFNULL expects two arguments");
+  }
+  auto first = EvalExpr(*call.argument_list(0), ctx);
+  if (!first.ok()) return first.status();
+  if (!first->is_null()) return *std::move(first);
+  return EvalExpr(*call.argument_list(1), ctx);
+}
+
+absl::StatusOr<Value> EvalCaseNoValueLazy(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  const int n = call.argument_list_size();
+  if (n < 1 || (n % 2) == 0) {
+    return absl::InvalidArgumentError(
+        "semantic: CASE expects odd argument count");
+  }
+  for (int i = 0; i + 1 < n; i += 2) {
+    auto cond = EvalExpr(*call.argument_list(i), ctx);
+    if (!cond.ok()) return cond.status();
+    if (!cond->is_null() && cond->type_kind() == ::googlesql::TYPE_BOOL &&
+        cond->bool_value()) {
+      return EvalExpr(*call.argument_list(i + 1), ctx);
+    }
+  }
+  return EvalExpr(*call.argument_list(n - 1), ctx);
+}
+
+absl::StatusOr<Value> EvalSqlUdfBody(
+    const ::googlesql::ResolvedFunctionCall& call,
+    const ::googlesql::ResolvedExpr& body,
+    const EvalContext& ctx) {
+  const ::googlesql::Function* fn = call.function();
+  if (fn == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: SQL UDF call has null function");
+  }
+  std::vector<std::string> arg_names;
+  if (fn->GetGroup() ==
+      ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup) {
+    arg_names = static_cast<const ::googlesql::TemplatedSQLFunction*>(fn)
+                    ->GetArgumentNames();
+  } else if (fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
+    arg_names =
+        static_cast<const ::googlesql::SQLFunction*>(fn)->GetArgumentNames();
+  } else {
+    return absl::InvalidArgumentError(
+        "semantic: SQL UDF call is not a templated or SQL function");
+  }
+  if (arg_names.size() != static_cast<size_t>(call.argument_list_size())) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: SQL UDF argument count mismatch (expected ",
+                     arg_names.size(),
+                     ", got ",
+                     call.argument_list_size(),
+                     ")"));
+  }
+  FrameStack arg_frames;
+  arg_frames.PushFrame();
+  for (int i = 0; i < call.argument_list_size(); ++i) {
+    auto v = EvalExpr(*call.argument_list(i), ctx);
+    if (!v.ok()) return v.status();
+    absl::Status declared = arg_frames.Declare(arg_names[i], *std::move(v));
+    if (!declared.ok()) return declared;
+  }
+  EvalContext inner = ctx;
+  inner.arguments = &arg_frames;
+  return EvalExpr(body, inner);
+}
 
 absl::StatusOr<Value> EvalFunctionCall(
     const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
   if (call.function() == nullptr) {
     return absl::InvalidArgumentError(
         "semantic: ResolvedFunctionCall has null function");
+  }
+  const ::googlesql::Function* fn = call.function();
+  if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
+          call.function_call_info();
+      info != nullptr && fn != nullptr &&
+      fn->GetGroup() ==
+          ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup) {
+    const auto* templated =
+        static_cast<const ::googlesql::TemplatedSQLFunctionCall*>(info.get());
+    if (templated->expr() != nullptr) {
+      return EvalSqlUdfBody(call, *templated->expr(), ctx);
+    }
+  }
+  if (fn != nullptr &&
+      fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
+    const auto* sql_fn = static_cast<const ::googlesql::SQLFunction*>(fn);
+    if (sql_fn->FunctionExpression() != nullptr) {
+      return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);
+    }
+  }
+  const std::string name = LowerFunctionDispatchName(call.function());
+  if (name == "array_transform") {
+    return EvalArrayTransform(call, ctx);
+  }
+  if (name == "if") {
+    return EvalIfLazy(call, ctx);
+  }
+  if (name == "ifnull") {
+    return EvalIfNullLazy(call, ctx);
+  }
+  if (name == "$case_no_value") {
+    return EvalCaseNoValueLazy(call, ctx);
+  }
+  if (name == "error" && call.argument_list_size() == 1) {
+    auto msg = EvalExpr(*call.argument_list(0), ctx);
+    if (!msg.ok()) return msg.status();
+    std::vector<Value> args = {*std::move(msg)};
+    return DispatchFunctionByName(name, args, call.type(), &ctx);
   }
   std::vector<Value> args;
   args.reserve(call.argument_list_size());
@@ -752,9 +1127,7 @@ absl::StatusOr<Value> EvalFunctionCall(
   // dispositions, so the names line up across the two sides. For
   // non-namespaced functions (`concat`, `abs`, `safe_divide`)
   // `FullName(false) == Name()`, so this is a no-op.
-  const std::string name =
-      absl::AsciiStrToLower(call.function()->FullName(/*include_group=*/false));
-  auto result = DispatchFunctionByName(name, args, call.type());
+  auto result = DispatchFunctionByName(name, args, call.type(), &ctx);
   if (!result.ok() &&
       call.error_mode() ==
           ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
@@ -840,7 +1213,7 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       }
       // The semantic executor's CAST surface is intentionally
       // narrow today; the full table lives with
-      // `semantic-functions-compliance.plan.md`. We cover the
+      // `googlesqlite-09-date-time.plan.md`. We cover the
       // implicit-coercion casts the analyzer inserts inside scalar
       // arithmetic (INT64 -> FLOAT64 for `/`, ...).
       if (inner->is_null()) return NullOfType(target);
@@ -849,9 +1222,47 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
         if (!d.ok()) return d.status();
         return Value::Double(*d);
       }
-      if (target->kind() == ::googlesql::TYPE_INT64 &&
-          inner->type_kind() == ::googlesql::TYPE_INT64) {
-        return inner;
+      if (target->kind() == ::googlesql::TYPE_STRING) {
+        if (inner->type_kind() == ::googlesql::TYPE_INT64) {
+          return Value::String(absl::StrCat(inner->int64_value()));
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_BOOL) {
+          return Value::String(inner->bool_value() ? "true" : "false");
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_DOUBLE) {
+          return Value::String(absl::StrCat(inner->double_value()));
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_NUMERIC) {
+          return Value::String(inner->numeric_value().ToString());
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
+          return Value::String(inner->bignumeric_value().ToString());
+        }
+      }
+      if (target->kind() == ::googlesql::TYPE_INT64) {
+        if (inner->type_kind() == ::googlesql::TYPE_INT64) return inner;
+        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
+          if (inner->is_null()) return Value::NullInt64();
+          absl::string_view s = inner->string_value();
+          if (!s.empty() && (s[0] == '+' || s[0] == '-')) {
+            s.remove_prefix(1);
+          }
+          while (s.size() > 1 && s[0] == '0') {
+            s.remove_prefix(1);
+          }
+          int64_t parsed = 0;
+          if (s.empty()) {
+            parsed = 0;
+          } else if (!absl::SimpleAtoi(s, &parsed)) {
+            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                     "semantic: CAST STRING to INT64 failed");
+          }
+          if (!inner->string_value().empty() &&
+              inner->string_value()[0] == '-') {
+            parsed = -parsed;
+          }
+          return Value::Int64(parsed);
+        }
       }
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
@@ -951,11 +1362,12 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       if (ctx.columns == nullptr) {
         return MakeSemanticError(
             SemanticErrorReason::kNotImplemented,
-            absl::StrCat("semantic: ResolvedColumnRef '",
-                         ref.column().name(),
-                         "' referenced without a row binding; correlated scans "
-                         "are owned by array-struct-semantic-path.plan.md "
-                         "(Family 4 / cte-subquery-routing.plan.md)"));
+            absl::StrCat(
+                "semantic: ResolvedColumnRef '",
+                ref.column().name(),
+                "' referenced without a row binding; correlated scans "
+                "are owned by googlesqlite-12-arrays-generators.plan.md "
+                "(Family 4 / googlesqlite-02-withscan-cte.plan.md)"));
       }
       auto it = ctx.columns->find(ref.column().column_id());
       if (it == ctx.columns->end()) {
@@ -968,6 +1380,69 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                          ")"));
       }
       return it->second;
+    }
+    case ::googlesql::RESOLVED_MAKE_STRUCT: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedMakeStruct>();
+      const ::googlesql::Type* type = node.type();
+      if (type == nullptr || !type->IsStruct()) {
+        return absl::InvalidArgumentError(
+            "semantic: ResolvedMakeStruct has non-STRUCT type");
+      }
+      const ::googlesql::StructType* st = type->AsStruct();
+      if (st == nullptr || st->num_fields() != node.field_list_size()) {
+        return absl::InvalidArgumentError(
+            "semantic: ResolvedMakeStruct field count mismatch");
+      }
+      std::vector<Value> fields;
+      fields.reserve(node.field_list_size());
+      for (int i = 0; i < node.field_list_size(); ++i) {
+        const ::googlesql::ResolvedExpr* field_expr = node.field_list(i);
+        if (field_expr == nullptr) {
+          return absl::InvalidArgumentError(
+              "semantic: ResolvedMakeStruct field is null");
+        }
+        auto v = EvalExpr(*field_expr, ctx);
+        if (!v.ok()) return v.status();
+        fields.push_back(*std::move(v));
+      }
+      return Value::Struct(st, std::move(fields));
+    }
+    case ::googlesql::RESOLVED_GET_STRUCT_FIELD: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedGetStructField>();
+      if (node.expr() == nullptr) {
+        return absl::InvalidArgumentError(
+            "semantic: ResolvedGetStructField has null expr");
+      }
+      auto base = EvalExpr(*node.expr(), ctx);
+      if (!base.ok()) return base.status();
+      if (base->is_null()) return NullOfType(expr.type());
+      if (!base->type()->IsStruct()) {
+        return absl::InvalidArgumentError(
+            "semantic: GetStructField base is not STRUCT");
+      }
+      const int idx = node.field_idx();
+      if (idx < 0 || idx >= base->num_fields()) {
+        return absl::InvalidArgumentError(
+            "semantic: GetStructField index out of range");
+      }
+      return base->field(idx);
+    }
+    case ::googlesql::RESOLVED_GET_JSON_FIELD: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedGetJsonField>();
+      if (node.expr() == nullptr) {
+        return absl::InvalidArgumentError(
+            "semantic: ResolvedGetJsonField has null expr");
+      }
+      auto base = EvalExpr(*node.expr(), ctx);
+      if (!base.ok()) return base.status();
+      return functions::JsonGetField(*base, node.field_name(), expr.type());
+    }
+    case ::googlesql::RESOLVED_SUBQUERY_EXPR:
+      return EvalSubqueryExpr(*expr.GetAs<::googlesql::ResolvedSubqueryExpr>(),
+                              ctx);
+    case ::googlesql::RESOLVED_SYSTEM_VARIABLE: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedSystemVariable>();
+      return GetSystemVariable(ctx.project_id, node.name_path());
     }
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,

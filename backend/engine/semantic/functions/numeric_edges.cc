@@ -26,10 +26,17 @@ absl::StatusOr<Value> BitCount(const std::vector<Value>& args) {
   }
   const Value& v = args[0];
   if (v.is_null()) return Value::NullInt64();
+  if (v.type_kind() == ::googlesql::TYPE_BYTES) {
+    int64_t count = 0;
+    for (unsigned char c : v.bytes_value()) {
+      count += static_cast<int64_t>(std::bitset<8>(c).count());
+    }
+    return Value::Int64(count);
+  }
   if (v.type_kind() != ::googlesql::TYPE_INT64) {
     return MakeSemanticError(
         SemanticErrorReason::kInvalidArgument,
-        absl::StrCat("semantic: BIT_COUNT requires INT64, got ",
+        absl::StrCat("semantic: BIT_COUNT requires INT64 or BYTES, got ",
                      v.type()->DebugString()));
   }
   // BigQuery's contract counts bits in the two's-complement

@@ -15,7 +15,7 @@
 #   * A `RowSource` adapter that lets downstream plans compose with
 #     `DuckDbExecutor` output.
 #
-# See `.cursor/plans/semantic-executor-core.plan.md` for the full
+# See `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md` for the full
 # scope and design constraints.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -46,7 +46,10 @@ cc_test(
 cc_library(
     name = "value",
     srcs = ["value.cc"],
-    hdrs = ["value.h"],
+    hdrs = [
+        "eval_context.h",
+        "value.h",
+    ],
     deps = [
         ":error",
         "//backend/schema",
@@ -83,14 +86,33 @@ cc_test(
 )
 
 cc_library(
+    name = "system_variables",
+    srcs = ["system_variables.cc"],
+    hdrs = ["system_variables.h"],
+    deps = [
+        ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
     name = "eval_expr",
     srcs = ["eval_expr.cc"],
     hdrs = ["eval_expr.h"],
     deps = [
         ":error",
         ":frame_stack",
+        ":system_variables",
         ":value",
         "//backend/engine/semantic/functions:dispatch",
+        "//backend/engine/semantic/functions:operator_funcs",
         "//backend/engine/semantic/stubs:dispatch",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
@@ -106,7 +128,25 @@ cc_library(
         "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:civil_time",
+        "@googlesql//googlesql/public:evaluator",
         "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "scan_eval",
+    srcs = ["scan_eval.cc"],
+    hdrs = ["scan_eval.h"],
+    deps = [
+        ":error",
+        ":eval_expr",
+        ":value",
+        "//backend/catalog:storage_table",
+        "//backend/engine/semantic/array_struct:array_scan",
+        "//backend/engine/semantic/functions:specialized_funcs",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ],
@@ -119,6 +159,7 @@ cc_test(
         ":error",
         ":eval_expr",
         ":frame_stack",
+        ":scan_eval",
         ":value",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -197,13 +238,14 @@ cc_library(
         ":error",
         ":eval_expr",
         ":row_source",
+        ":scan_eval",
         ":value",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
-        "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/dml:dml_executor",
         "//backend/engine/semantic/script:assert_stmt",
         "//backend/engine/semantic/script:script_driver",
+        ":system_variables",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/container:flat_hash_map",

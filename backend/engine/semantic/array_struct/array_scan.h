@@ -4,7 +4,7 @@
 // Local evaluator for the `ResolvedArrayScan` shapes the DuckDB
 // fast path cannot lower cleanly.
 //
-// `.cursor/plans/array-struct-semantic-path.plan.md` lists the
+// `.cursor/plans/googlesqlite-12-arrays-generators.plan.md` lists the
 // divergent subset routed here by `RouteClassifier`'s
 // `VisitResolvedArrayScan` property-based promotion:
 //
@@ -58,6 +58,12 @@ namespace array_struct {
 // hook into Family 4 when correlated scans land.
 absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
     const ::googlesql::ResolvedArrayScan& scan, const EvalContext& parent_ctx);
+
+// Duplicate `element_column_list` bindings onto `column_list` ids
+// for `FROM UNNEST(...) AS alias` shapes.
+void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
+                                int n_arrays,
+                                ColumnBindings& bindings);
 
 }  // namespace array_struct
 }  // namespace semantic

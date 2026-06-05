@@ -16,6 +16,7 @@
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -49,6 +50,9 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
     if (p.name.empty()) {
       bindings.by_position.push_back(*std::move(value));
       any_positional = true;
+    } else if (IsSyntheticPositionalParameterName(p.name)) {
+      bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
+      any_named = true;
     } else {
       bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
       any_named = true;
@@ -253,7 +257,7 @@ absl::Status RejectUnsupportedDmlFeatures(
         absl::StrCat("semantic/dml: ",
                      kind,
                      " RETURNING clause is owned by Family 7 of "
-                     "dml-local-executor.plan.md"));
+                     "googlesqlite-14-dml-system.plan.md"));
   }
   if (assert_rows != nullptr) {
     return MakeSemanticError(
@@ -269,7 +273,7 @@ absl::Status RejectUnsupportedDmlFeatures(
             "semantic/dml: ",
             kind,
             " WITH OFFSET requires correlated lateral evaluation owned by "
-            "Family 4 of array-struct-semantic-path.plan.md"));
+            "Family 4 of googlesqlite-12-arrays-generators.plan.md"));
   }
   if (generated_column_count > 0) {
     return MakeSemanticError(
@@ -285,16 +289,6 @@ absl::StatusOr<DmlStats> ExecuteInsert(
     const ::googlesql::ResolvedInsertStmt& insert,
     storage::Storage& storage,
     EvalContext& ctx) {
-  // VALUES vs. INSERT ... SELECT: the analyzer leaves `query()`
-  // null and populates `row_list()` for the VALUES form; the
-  // SELECT form is the inverse. SELECT streaming is owned by
-  // Family 5 (deferred per the plan).
-  if (insert.query() != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic/dml: INSERT ... SELECT is owned by Family 5 of "
-        "dml-local-executor.plan.md (deferred from this subagent)");
-  }
   if (insert.insert_mode() != ::googlesql::ResolvedInsertStmt::OR_ERROR) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -336,6 +330,54 @@ absl::StatusOr<DmlStats> ExecuteInsert(
                        "' not found in storage table schema"));
     }
     column_idx_for_insert_position.push_back(idx);
+  }
+
+  // INSERT ... SELECT: materialize `query()` and append rows.
+  if (insert.query() != nullptr) {
+    if (insert.query_output_column_list_size() !=
+        insert.insert_column_list_size()) {
+      return absl::InternalError(
+          "semantic/dml: INSERT column list size does not match SELECT "
+          "output column list size");
+    }
+    std::vector<int> source_col_ids;
+    source_col_ids.reserve(insert.query_output_column_list_size());
+    for (int i = 0; i < insert.query_output_column_list_size(); ++i) {
+      source_col_ids.push_back(insert.query_output_column_list(i).column_id());
+    }
+
+    auto rows_or = MaterializeScan(insert.query(), ctx);
+    if (!rows_or.ok()) return rows_or.status();
+
+    std::vector<storage::Row> rows;
+    rows.reserve(rows_or->size());
+    for (const ColumnBindings& bind : *rows_or) {
+      storage::Row out;
+      out.cells.assign(schema.columns.size(), storage::Value::Null());
+      for (size_t i = 0; i < source_col_ids.size(); ++i) {
+        auto it = bind.find(source_col_ids[i]);
+        if (it == bind.end()) {
+          return absl::InternalError(absl::StrCat(
+              "semantic/dml: INSERT ... SELECT row missing column_id=",
+              source_col_ids[i]));
+        }
+        auto cell = ToStorageValue(it->second);
+        if (!cell.ok()) return cell.status();
+        out.cells[column_idx_for_insert_position[i]] = *std::move(cell);
+      }
+      rows.push_back(std::move(out));
+    }
+
+    if (rows.empty()) {
+      DmlStats stats;
+      return stats;
+    }
+    absl::Status appended =
+        storage.AppendRows(target->storage_table_id(), rows);
+    if (!appended.ok()) return appended;
+    DmlStats stats;
+    stats.inserted_row_count = static_cast<int64_t>(rows.size());
+    return stats;
   }
 
   // Evaluate each VALUES row and collect the resulting
@@ -488,7 +530,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "owned by Family 4 of dml-local-executor.plan.md");
+          "owned by Family 4 of googlesqlite-14-dml-system.plan.md");
     }
     if (item->target() == nullptr) {
       return absl::InternalError(
@@ -500,7 +542,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
           absl::StrCat("semantic/dml: UPDATE SET target kind ",
                        item->target()->node_kind_string(),
                        " (deep STRUCT mutation) is owned by Family 4 of "
-                       "dml-local-executor.plan.md"));
+                       "googlesqlite-14-dml-system.plan.md"));
     }
     if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
       return absl::InternalError(
@@ -612,6 +654,7 @@ absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
     bindings = *std::move(built);
   }
   EvalContext ctx;
+  ctx.project_id = request.project_id;
   ctx.parameters = &bindings;
 
   switch (kind) {
@@ -634,7 +677,7 @@ absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: MERGE harder branches (WHEN NOT MATCHED BY "
           "SOURCE / multi-action) are owned by Family 6 of "
-          "dml-local-executor.plan.md (deferred)");
+          "googlesqlite-14-dml-system.plan.md (deferred)");
     case ::googlesql::RESOLVED_TRUNCATE_STMT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

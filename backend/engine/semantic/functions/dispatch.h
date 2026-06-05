@@ -9,7 +9,7 @@
 // `ArithmeticAdd` / `ArithmeticDiv` / ... helpers). For BigQuery
 // functions that the polyfill UDF library cannot model cleanly
 // (per the matching `functions.yaml` row's `plan=
-// semantic-functions-compliance.plan.md` pointer), the inline
+// googlesqlite-09-date-time.plan.md` pointer), the inline
 // dispatch falls through to `Dispatch` below.
 //
 // `Dispatch` returns:
@@ -34,6 +34,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 
@@ -41,6 +42,7 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace semantic {
+
 namespace functions {
 
 // Dispatch the lowered BigQuery function `name` with the
@@ -57,7 +59,8 @@ namespace functions {
 std::optional<absl::StatusOr<Value>> Dispatch(
     absl::string_view name,
     const std::vector<Value>& args,
-    const ::googlesql::Type* return_type);
+    const ::googlesql::Type* return_type,
+    const EvalContext* ctx = nullptr);
 
 }  // namespace functions
 }  // namespace semantic

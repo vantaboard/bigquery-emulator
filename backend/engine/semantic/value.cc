@@ -9,6 +9,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
@@ -18,6 +19,7 @@
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/civil_time.h"
@@ -44,13 +46,27 @@ namespace {
 // precision without a TZ suffix, so we match that shape here so the
 // gateway sees the same envelope regardless of route.
 std::string FormatTimestampUtc(absl::Time t) {
-  // %E*S formats fractional seconds with as few digits as needed,
-  // trimming trailing zeros -- which matches GoogleSQL's
-  // `Value::DebugString()` convention for TIMESTAMP and keeps the
-  // wire payload compact for round seconds. We pin UTC so the
-  // gateway / clients see a single canonical form regardless of
-  // the emulator host's TZ.
-  return absl::FormatTime("%Y-%m-%d %H:%M:%E*S+00", t, absl::UTCTimeZone());
+  const absl::TimeZone utc = absl::UTCTimeZone();
+  const int64_t micros = absl::ToUnixMicros(t);
+  const absl::CivilSecond cs = absl::ToCivilSecond(t, utc);
+  if (micros % 1000000 == 0) {
+    return absl::StrFormat("%04d-%02d-%02d %02d:%02d:%02d+00",
+                           cs.year(),
+                           cs.month(),
+                           cs.day(),
+                           cs.hour(),
+                           cs.minute(),
+                           cs.second());
+  }
+  const int64_t frac = micros >= 0 ? micros % 1000000 : -micros % 1000000;
+  return absl::StrFormat("%04d-%02d-%02d %02d:%02d:%02d.%06d+00",
+                         cs.year(),
+                         cs.month(),
+                         cs.day(),
+                         cs.hour(),
+                         cs.minute(),
+                         cs.second(),
+                         static_cast<int>(frac));
 }
 
 // JSON unquoting helper for parameter parsing: strip a single layer
@@ -142,7 +158,8 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
   return ::googlesql::TYPE_UNKNOWN;
 }
 
-absl::StatusOr<storage::Value> ToStorageValue(const Value& value) {
+absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
+                                              const EvalContext* ctx) {
   if (!value.is_valid()) {
     return absl::InvalidArgumentError(
         "semantic: cannot lower invalid Value onto storage::Value");
@@ -172,16 +189,29 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value) {
       // sub-second is zero), matching GoogleSQL's canonical TIME
       // text form.
       return storage::Value::String(value.time_value().DebugString());
-    case ::googlesql::TYPE_DATETIME:
-      // DatetimeValue::DebugString returns
-      // "YYYY-MM-DD HH:MM:SS[.ffffff]" with the same trim rule.
-      return storage::Value::String(value.datetime_value().DebugString());
+    case ::googlesql::TYPE_DATETIME: {
+      // BigQuery REST / googlesqlite parity uses
+      // "YYYY-MM-DDTHH:MM:SS[.ffffff]".
+      std::string out = value.datetime_value().DebugString();
+      const size_t sep = out.find(' ');
+      if (sep != std::string::npos) {
+        out[sep] = 'T';
+      }
+      return storage::Value::String(out);
+    }
     case ::googlesql::TYPE_TIMESTAMP:
       return storage::Value::String(FormatTimestampUtc(value.ToTime()));
     case ::googlesql::TYPE_NUMERIC:
       return storage::Value::String(value.numeric_value().ToString());
-    case ::googlesql::TYPE_BIGNUMERIC:
+    case ::googlesql::TYPE_BIGNUMERIC: {
+      if (ctx != nullptr && ctx->bignumeric_render_override.has_value()) {
+        storage::Value out =
+            storage::Value::String(*ctx->bignumeric_render_override);
+        ctx->bignumeric_render_override.reset();
+        return out;
+      }
       return storage::Value::String(value.bignumeric_value().ToString());
+    }
     case ::googlesql::TYPE_JSON:
       return storage::Value::String(value.json_string());
     case ::googlesql::TYPE_GEOGRAPHY:
@@ -316,6 +346,16 @@ absl::StatusOr<schema::ColumnSchema> ColumnSchemaForType(
   return column;
 }
 
+bool IsSyntheticPositionalParameterName(absl::string_view name) {
+  if (name.empty() || !absl::StartsWith(name, "p")) return false;
+  name.remove_prefix(1);
+  if (name.empty()) return false;
+  for (char c : name) {
+    if (!absl::ascii_isdigit(static_cast<unsigned char>(c))) return false;
+  }
+  return true;
+}
+
 absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
                                           absl::string_view type_kind_name) {
   ::googlesql::TypeKind kind = ParseTypeKindName(type_kind_name);
@@ -394,8 +434,14 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
     }
     case ::googlesql::TYPE_STRING:
       return Value::String(std::string(body));
-    case ::googlesql::TYPE_BYTES:
-      return Value::Bytes(std::string(body));
+    case ::googlesql::TYPE_BYTES: {
+      std::string decoded;
+      if (!absl::Base64Unescape(body, &decoded)) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            "semantic: invalid BYTES parameter value '", value_json, "'"));
+      }
+      return Value::Bytes(decoded);
+    }
     case ::googlesql::TYPE_NUMERIC: {
       auto n = ::googlesql::NumericValue::FromString(body);
       if (!n.ok()) return n.status();
@@ -417,20 +463,20 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
       // requires the same FromString-style parsers GoogleSQL ships
       // for literals; routing them through is in scope for the
       // semantic functions plan
-      // (`semantic-functions-compliance.plan.md`). Surface
+      // (`googlesqlite-09-date-time.plan.md`). Surface
       // NOT_IMPLEMENTED today so the wire envelope is consistent.
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           absl::StrCat("semantic: parameter type '",
                        type_kind_name,
                        "' is not yet supported; see "
-                       "semantic-functions-compliance.plan.md"));
+                       "googlesqlite-09-date-time.plan.md"));
     case ::googlesql::TYPE_ARRAY:
     case ::googlesql::TYPE_STRUCT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           absl::StrCat("semantic: ARRAY / STRUCT parameters are owned by "
-                       "array-struct-semantic-path.plan.md"));
+                       "googlesqlite-12-arrays-generators.plan.md"));
     default:
       return absl::InvalidArgumentError(absl::StrCat(
           "semantic: unsupported parameter type kind '", type_kind_name, "'"));

@@ -43,6 +43,9 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
     if (p.name.empty()) {
       bindings.by_position.push_back(*std::move(value));
       any_positional = true;
+    } else if (IsSyntheticPositionalParameterName(p.name)) {
+      bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
+      any_named = true;
     } else {
       bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
       any_named = true;

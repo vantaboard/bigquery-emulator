@@ -2,7 +2,7 @@
 #
 # This package owns the BigQuery-exact implementations for every
 # function whose `functions.yaml` row picks the `semantic_executor`
-# disposition with `plan=semantic-functions-compliance.plan.md`.
+# disposition with `plan=googlesqlite-09-date-time.plan.md`.
 # `EvalFunctionCall` (in `backend/engine/semantic/eval_expr.cc`)
 # forwards to `:dispatch::Dispatch` after the in-line operator /
 # SAFE_* handling, so a new function only needs (a) a per-family
@@ -10,7 +10,7 @@
 # `functions.yaml` row flip from `status=planned` to ready in the
 # same commit.
 #
-# See `.cursor/plans/semantic-functions-compliance.plan.md` for the
+# See `.cursor/plans/googlesqlite-09-date-time.plan.md` for the
 # full scope and the per-family ordering.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
@@ -49,8 +49,90 @@ cc_test(
 )
 
 cc_library(
+    name = "json_funcs",
+    srcs = ["json_funcs.cc"],
+    hdrs = ["json_funcs.h"],
+    deps = [
+        ":string_funcs",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "json_funcs_test",
+    srcs = ["json_funcs_test.cc"],
+    deps = [
+        ":json_funcs",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "operator_funcs",
+    srcs = ["operator_funcs.cc"],
+    hdrs = ["operator_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:interval_value",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "datetime_funcs",
+    srcs = ["datetime_funcs.cc"],
+    hdrs = ["datetime_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@googlesql//googlesql/public:interval_value",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:civil_time",
+        "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "datetime_funcs_test",
+    srcs = ["datetime_funcs_test.cc"],
+    deps = [
+        ":datetime_funcs",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "string_funcs",
-    srcs = ["string_funcs.cc"],
+    srcs = [
+        "string_extra_funcs.cc",
+        "string_funcs.cc",
+    ],
     hdrs = ["string_funcs.h"],
     deps = [
         "//backend/engine/semantic:error",
@@ -58,6 +140,10 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:numeric_value",
+        "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:type_cc_proto",
         "@googlesql//googlesql/public:value",
@@ -78,11 +164,91 @@ cc_test(
 )
 
 cc_library(
+    name = "array_funcs",
+    srcs = ["array_funcs.cc"],
+    hdrs = ["array_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "array_funcs_test",
+    srcs = ["array_funcs_test.cc"],
+    deps = [
+        ":array_funcs",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "hll_funcs",
+    srcs = ["hll_funcs.cc"],
+    hdrs = ["hll_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "hll_funcs_test",
+    srcs = ["hll_funcs_test.cc"],
+    deps = [
+        ":hll_funcs",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
+    name = "specialized_funcs",
+    srcs = ["specialized_funcs.cc"],
+    hdrs = ["specialized_funcs.h"],
+    deps = [
+        ":hll_funcs",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
     name = "dispatch",
     srcs = ["dispatch.cc"],
     hdrs = ["dispatch.h"],
     deps = [
+        ":array_funcs",
+        ":datetime_funcs",
+        ":json_funcs",
         ":numeric_edges",
+        ":operator_funcs",
+        ":specialized_funcs",
         ":string_funcs",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status:statusor",

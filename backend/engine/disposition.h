@@ -43,19 +43,19 @@
 //                           The UDF body owns the BigQuery-specific
 //                           behavior. Not yet emit-able from this
 //                           plan; see
-//                           `duckdb-polyfill-udf-library.plan.md`.
+//                           `googlesqlite-03-operator-disposition.plan.md`.
 //   * `kSemanticExecutor` — runs on the local row/value semantic
 //                           executor instead of DuckDB SQL
 //                           evaluation. DuckDB is still used as the
 //                           row source; the executor owns expression
 //                           evaluation and error surfaces. Not yet
 //                           emit-able from this plan; see
-//                           `semantic-executor-core.plan.md`.
+//                           `googlesqlite-07-semantic-core-expr.plan.md`.
 //   * `kControlOp`        — DDL / metadata / catalog op routed
 //                           through the storage layer. Bypasses
 //                           query execution entirely. Not yet
 //                           emit-able from this plan; see
-//                           `control-op-executor.plan.md`.
+//                           `googlesqlite-01-ddl-catalog.plan.md`.
 //   * `kLocalStub`        — deterministic BigQuery-shaped stub for a
 //                           specialized feature family that is
 //                           accepted at parse / analyzer time but
@@ -80,7 +80,7 @@
 //                           Surfaces a BigQuery-shaped
 //                           `UNIMPLEMENTED` (or
 //                           `INVALID_ARGUMENT` where appropriate).
-//                           `specialized-feature-policy.plan.md`
+//                           `googlesqlite-15-specialized-stubs.plan.md`
 //                           documents the unsupported families.
 
 #include "absl/strings/string_view.h"

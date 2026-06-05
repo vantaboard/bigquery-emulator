@@ -4,7 +4,7 @@
 // Storage-aware local DML executor.
 //
 // Owns the DML statement shapes the DuckDB fast path cannot lower
-// cleanly, per `.cursor/plans/dml-local-executor.plan.md`:
+// cleanly, per `.cursor/plans/googlesqlite-14-dml-system.plan.md`:
 //
 //   * `ResolvedInsertStmt` -- INSERT VALUES (single + multi-row).
 //     INSERT ... SELECT is recognized but currently surfaces

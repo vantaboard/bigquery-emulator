@@ -1,20 +1,34 @@
 #include "backend/engine/semantic/functions/string_funcs.h"
 
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/hash.h"
+#include "googlesql/public/functions/normalize_mode.pb.h"
+#include "googlesql/public/functions/numeric.h"
+#include "googlesql/public/functions/regexp.h"
+#include "googlesql/public/functions/string.h"
+#include "googlesql/public/functions/string_format.h"
+#include "googlesql/public/numeric_value.h"
+#include "googlesql/public/options.pb.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
-#include "googlesql/public/value.h"
+#include "googlesql/public/types/struct_type.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -24,20 +38,91 @@ namespace functions {
 
 namespace {
 
+using ::googlesql::BigNumericValue;
+using ::googlesql::NumericValue;
+using ::googlesql::ProductMode;
+using ::googlesql::functions::Hasher;
+using ::googlesql::functions::MakeRegExpBytes;
+using ::googlesql::functions::MakeRegExpUtf8;
+using ::googlesql::functions::RegExp;
+using ::googlesql::functions::StringFormatUtf8;
+
 // Soundex code for a single uppercase letter. Returns '0' for
 // vowels / Y / H / W (skipped during the run-length collapse)
 // and '?' for non-letters (treated as ignored by the caller).
-//
-// Mapping per the classic Soundex (and BigQuery's documented
-// English-alphabet table):
-//
-//   B F P V             -> 1
-//   C G J K Q S X Z     -> 2
-//   D T                 -> 3
-//   L                   -> 4
-//   M N                 -> 5
-//   R                   -> 6
-//   A E I O U Y H W     -> 0 (skipped after the first letter)
+bool AnyNull(const std::vector<Value>& args) {
+  for (const Value& v : args) {
+    if (v.is_null()) return true;
+  }
+  return false;
+}
+
+absl::string_view AsStringOrBytes(const Value& v) {
+  return v.type_kind() == ::googlesql::TYPE_BYTES ? v.bytes_value()
+                                                  : v.string_value();
+}
+
+Value StringOrBytesFromView(const Value& template_value,
+                            absl::string_view out) {
+  if (template_value.type_kind() == ::googlesql::TYPE_BYTES) {
+    return Value::Bytes(std::string(out));
+  }
+  return Value::String(std::string(out));
+}
+
+absl::StatusOr<std::unique_ptr<const RegExp>> MakeRegExpForValue(
+    const Value& pattern) {
+  if (pattern.type_kind() == ::googlesql::TYPE_BYTES) {
+    return MakeRegExpBytes(pattern.bytes_value());
+  }
+  return MakeRegExpUtf8(pattern.string_value());
+}
+
+std::string EncodeBase32(absl::string_view input) {
+  static const char* kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  std::string out;
+  int buffer = 0;
+  int bits = 0;
+  for (unsigned char c : input) {
+    buffer = (buffer << 8) | c;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out.push_back(kAlphabet[(buffer >> bits) & 0x1F]);
+    }
+  }
+  if (bits > 0) {
+    out.push_back(kAlphabet[(buffer << (5 - bits)) & 0x1F]);
+  }
+  while (out.size() % 8 != 0) {
+    out.push_back('=');
+  }
+  return out;
+}
+
+bool DecodeBase32(absl::string_view input,
+                  std::string* out,
+                  absl::Status* error) {
+  static const char* kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  int buffer = 0;
+  int bits = 0;
+  for (char c : input) {
+    if (c == '=') break;
+    const char* p = std::strchr(kAlphabet, static_cast<char>(std::toupper(c)));
+    if (p == nullptr) {
+      *error = absl::InvalidArgumentError("semantic: invalid base32 input");
+      return false;
+    }
+    buffer = (buffer << 5) | static_cast<int>(p - kAlphabet);
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out->push_back(static_cast<char>((buffer >> bits) & 0xFF));
+    }
+  }
+  return true;
+}
+
 char SoundexCode(char ch) {
   switch (ch) {
     case 'B':
@@ -96,37 +181,27 @@ absl::StatusOr<Value> Soundex(const std::vector<Value>& args) {
   absl::string_view in = v.string_value();
   if (in.empty()) return Value::String("");
 
-  // Find the first ASCII letter and use its uppercased form as
-  // the result's first character. BigQuery's algorithm anchors
-  // on the first letter; non-letter prefix bytes are skipped.
-  // If there is no letter at all, return the input verbatim
-  // (matching BigQuery's observed behavior of returning the
-  // input when no SOUNDEX-eligible character is present).
   size_t start = 0;
   while (start < in.size() && !absl::ascii_isalpha(in[start]))
     ++start;
-  if (start == in.size()) return Value::String(std::string(in));
+  if (start == in.size()) return Value::String("");
 
   std::string out;
   out.reserve(4);
-  out.push_back(static_cast<char>(absl::ascii_toupper(in[start])));
+  out.push_back(static_cast<char>(in[start]));
   char prev_code = SoundexCode(out[0]);
 
-  // Walk the remaining characters, mapping each letter to its
-  // SOUNDEX code and collapsing runs of the same non-zero code.
-  // Letters classified as '0' (vowels + Y/H/W) act as a "code
-  // reset" -- they themselves are skipped from the output but
-  // they break the adjacency chain so a subsequent same-coded
-  // consonant emits again (matches the classic algorithm; e.g.
-  // ASHCRAFT -> A261 because the H between S and C resets the
-  // 2-run).
   for (size_t i = start + 1; i < in.size() && out.size() < 4; ++i) {
     if (!absl::ascii_isalpha(in[i])) continue;
     char upper = static_cast<char>(absl::ascii_toupper(in[i]));
     char code = SoundexCode(upper);
-    if (code == '?') continue;  // non-letter; defensive (isalpha filters)
+    if (code == '?') continue;
     if (code == '0') {
-      prev_code = '0';
+      // H/W are skipped without resetting the previous code; vowels
+      // and Y break duplicate suppression for the next consonant.
+      if (upper != 'H' && upper != 'W') {
+        prev_code = '0';
+      }
       continue;
     }
     if (code != prev_code) {
@@ -226,6 +301,106 @@ absl::StatusOr<Value> Instr(const std::vector<Value>& args) {
     }
   }
   return Value::Int64(0);
+}
+
+std::string ResolveStructFieldNameForJson(const ::googlesql::StructType& st,
+                                          int idx) {
+  const ::googlesql::StructField& f = st.field(idx);
+  if (f.name.empty()) return absl::StrCat("_", idx);
+  return f.name;
+}
+
+std::string ValueToJsonText(const Value& v);
+
+std::string BytesLiteral(const std::string& bytes) {
+  std::string out = "b\"";
+  for (unsigned char c : bytes) {
+    if (c == '\\' || c == '"') {
+      out.push_back('\\');
+      out.push_back(static_cast<char>(c));
+    } else if (c >= 0x20 && c < 0x7f) {
+      out.push_back(static_cast<char>(c));
+    } else {
+      absl::StrAppendFormat(&out, "\\x%02x", c);
+    }
+  }
+  out.push_back('"');
+  return out;
+}
+
+std::string StructToJson(const Value& v) {
+  std::string out = "{";
+  for (int i = 0; i < v.num_fields(); ++i) {
+    if (i > 0) absl::StrAppend(&out, ",");
+    const ::googlesql::StructType* st = v.type()->AsStruct();
+    std::string name = st != nullptr ? ResolveStructFieldNameForJson(*st, i)
+                                     : absl::StrCat("_", i);
+    absl::StrAppend(&out, "\"", name, "\":", ValueToJsonText(v.field(i)));
+  }
+  absl::StrAppend(&out, "}");
+  return out;
+}
+
+std::string ValueToJsonText(const Value& v) {
+  if (v.is_null()) return "null";
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_BOOL:
+      return v.bool_value() ? "true" : "false";
+    case ::googlesql::TYPE_INT64:
+      return std::to_string(v.int64_value());
+    case ::googlesql::TYPE_DOUBLE: {
+      std::string s = absl::StrCat(v.double_value());
+      return s;
+    }
+    case ::googlesql::TYPE_STRING:
+      return absl::StrCat("\"", absl::Utf8SafeCEscape(v.string_value()), "\"");
+    case ::googlesql::TYPE_BYTES:
+      return absl::StrCat("\"", absl::Utf8SafeCEscape(v.bytes_value()), "\"");
+    case ::googlesql::TYPE_JSON:
+      return v.json_string();
+    case ::googlesql::TYPE_ARRAY: {
+      std::string out = "[";
+      for (int i = 0; i < v.num_elements(); ++i) {
+        if (i > 0) out.push_back(',');
+        absl::StrAppend(&out, ValueToJsonText(v.element(i)));
+      }
+      out.push_back(']');
+      return out;
+    }
+    case ::googlesql::TYPE_STRUCT:
+      return StructToJson(v);
+    default:
+      return absl::StrCat("\"", absl::Utf8SafeCEscape(v.DebugString()), "\"");
+  }
+}
+
+absl::StatusOr<Value> RegexpContains(const std::vector<Value>& args) {
+  if (args.size() != 2) {
+    return absl::InvalidArgumentError(
+        "semantic: REGEXP_CONTAINS expects two arguments");
+  }
+  if (args[0].is_null() || args[1].is_null()) return Value::NullBool();
+  auto re = MakeRegExpForValue(args[1]);
+  if (!re.ok()) return re.status();
+  absl::Status error;
+  bool out = false;
+  if (!(*re)->Contains(AsStringOrBytes(args[0]), &out, &error)) {
+    return error;
+  }
+  return Value::Bool(out);
+}
+
+absl::StatusOr<Value> Format(const std::vector<Value>& args) {
+  return FormatString(args);
+}
+
+absl::StatusOr<Value> ToJson(const std::vector<Value>& args) {
+  if (args.empty() || args.size() > 2) {
+    return absl::InvalidArgumentError(
+        "semantic: TO_JSON expects one or two arguments");
+  }
+  if (args[0].is_null()) return Value::NullJson();
+  return Value::UnvalidatedJsonString(ValueToJsonText(args[0]));
 }
 
 }  // namespace functions

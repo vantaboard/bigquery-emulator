@@ -4,7 +4,7 @@
 # `ResolvedArrayScan` (UNNEST WITH OFFSET, outer UNNEST, multi-array
 # zip; the correlated and FLATTEN cases stay
 # `kNotImplemented` until follow-up subagents of
-# `array-struct-semantic-path.plan.md` land them).
+# `googlesqlite-12-arrays-generators.plan.md` land them).
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 

@@ -5,8 +5,8 @@
 // semantic executor.
 //
 // Design constraint #3 from
-// `.cursor/plans/semantic-executor-core.plan.md`: "Same Arrow output
-// shape as the DuckDB fast path -- so the Storage Read API and REST
+// `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`: "Same Arrow
+// output shape as the DuckDB fast path -- so the Storage Read API and REST
 // `f`/`v` marshaler don't branch on route". Rather than invent a
 // parallel type system the rest of the engine cannot consume, we
 // reuse `googlesql::Value` (the same value type the analyzer hands
@@ -31,10 +31,12 @@
 // without leaking analyzer types into the gateway path.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/type.h"
@@ -70,7 +72,8 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type);
 // Returns INVALID_ARGUMENT on an unsupported type kind so callers
 // can surface a clean failure instead of silently mis-rendering a
 // cell.
-absl::StatusOr<storage::Value> ToStorageValue(const Value& value);
+absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
+                                              const EvalContext* ctx = nullptr);
 
 // Build the BigQuery-shaped `ColumnSchema` corresponding to one
 // output column of a SELECT projection. `name` is copied onto the
@@ -111,6 +114,10 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
 // `::googlesql::TypeKind`. Accepts both "INT64" and "TYPE_INT64";
 // returns `TYPE_UNKNOWN` on an unrecognized name.
 ::googlesql::TypeKind ParseTypeKindName(absl::string_view type_kind_name);
+
+// True for gateway synthetic positional keys (`p0`, `p1`, ...) emitted
+// by `emulator_sql.go` when binding `?` placeholders.
+bool IsSyntheticPositionalParameterName(absl::string_view name);
 
 }  // namespace semantic
 }  // namespace engine
