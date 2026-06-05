@@ -1,0 +1,97 @@
+#ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_DML_DML_EXECUTOR_INTERNAL_H_
+#define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_DML_DML_EXECUTOR_INTERNAL_H_
+
+#include <string>
+#include <vector>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+
+namespace bigquery_emulator {
+namespace backend {
+namespace engine {
+namespace semantic {
+namespace dml {
+
+absl::StatusOr<ParameterBindings> BuildParameterBindings(
+    const QueryRequest& request);
+
+template <typename StmtT>
+absl::StatusOr<const catalog::StorageTable*> StorageTargetFor(
+    const StmtT& stmt, absl::string_view kind) {
+  if (stmt.table_scan() == nullptr || stmt.table_scan()->table() == nullptr) {
+    return absl::InternalError(absl::StrCat(
+        "semantic/dml: ", kind, " has no resolved target table scan"));
+  }
+  const auto* storage_table =
+      dynamic_cast<const catalog::StorageTable*>(stmt.table_scan()->table());
+  if (storage_table == nullptr) {
+    return absl::FailedPreconditionError(
+        absl::StrCat("semantic/dml: ",
+                     kind,
+                     " target '",
+                     stmt.table_scan()->table()->FullName(),
+                     "' is not backed by a StorageTable; cannot apply DML"));
+  }
+  return storage_table;
+}
+
+int IndexOfColumn(const schema::TableSchema& schema, absl::string_view name);
+
+absl::StatusOr<absl::flat_hash_map<int, int>> BuildColumnIndexByColumnId(
+    const ::googlesql::ResolvedTableScan& scan,
+    const schema::TableSchema& schema);
+
+absl::StatusOr<std::vector<storage::Row>> ScanAllRows(
+    storage::Storage& storage, const storage::TableId& id);
+
+absl::StatusOr<ColumnBindings> BindRow(
+    const storage::Row& row,
+    const ::googlesql::ResolvedTableScan& scan,
+    const absl::flat_hash_map<int, int>& by_id,
+    const schema::TableSchema& schema);
+
+absl::StatusOr<storage::Row> BuildInsertRow(
+    const ::googlesql::ResolvedInsertRow& row_node,
+    const std::vector<int>& column_idx_for_insert_position,
+    const schema::TableSchema& schema,
+    EvalContext& ctx);
+
+absl::Status RejectUnsupportedDmlFeatures(
+    const ::googlesql::ResolvedReturningClause* returning,
+    const ::googlesql::ResolvedAssertRowsModified* assert_rows,
+    bool has_array_offset_column,
+    int generated_column_count,
+    absl::string_view kind);
+
+absl::StatusOr<DmlStats> ExecuteInsert(
+    const ::googlesql::ResolvedInsertStmt& insert,
+    storage::Storage& storage,
+    EvalContext& ctx);
+
+absl::StatusOr<DmlStats> ExecuteDelete(
+    const ::googlesql::ResolvedDeleteStmt& del,
+    storage::Storage& storage,
+    EvalContext& ctx);
+
+absl::StatusOr<DmlStats> ExecuteUpdate(
+    const ::googlesql::ResolvedUpdateStmt& upd,
+    storage::Storage& storage,
+    EvalContext& ctx);
+
+}  // namespace dml
+}  // namespace semantic
+}  // namespace engine
+}  // namespace backend
+}  // namespace bigquery_emulator
+
+#endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_DML_DML_EXECUTOR_INTERNAL_H_

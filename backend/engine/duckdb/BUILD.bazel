@@ -13,8 +13,15 @@ package(default_visibility = ["//visibility:public"])
 # pulling in GoogleSQL: it depends on libduckdb only.
 cc_library(
     name = "arrow_to_bq",
-    srcs = ["arrow_to_bq.cc"],
-    hdrs = ["arrow_to_bq.h"],
+    srcs = [
+        "arrow_to_bq.cc",
+        "arrow_to_bq_read.cc",
+        "arrow_to_bq_types.cc",
+    ],
+    hdrs = [
+        "arrow_to_bq.h",
+        "arrow_to_bq_internal.h",
+    ],
     deps = [
         "//backend/schema",
         "//backend/storage",
@@ -32,8 +39,16 @@ cc_library(
 # `ResolvedStatement`; the executor never re-parses the SQL itself.
 cc_library(
     name = "duckdb_executor",
-    srcs = ["duckdb_executor.cc"],
-    hdrs = ["duckdb_executor.h"],
+    srcs = [
+        "duckdb_executor_ddl.cc",
+        "duckdb_executor_dml.cc",
+        "duckdb_executor_literals.cc",
+        "duckdb_executor_query.cc",
+    ],
+    hdrs = [
+        "duckdb_executor.h",
+        "duckdb_executor_internal.h",
+    ],
     deps = [
         ":arrow_to_bq",
         "//backend/catalog:storage_table",

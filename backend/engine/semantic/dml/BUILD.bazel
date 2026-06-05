@@ -14,8 +14,15 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "dml_executor",
-    srcs = ["dml_executor.cc"],
-    hdrs = ["dml_executor.h"],
+    srcs = [
+        "dml_executor_common.cc",
+        "dml_insert.cc",
+        "dml_mutate.cc",
+    ],
+    hdrs = [
+        "dml_executor.h",
+        "dml_executor_internal.h",
+    ],
     deps = [
         "//backend/catalog:storage_table",
         "//backend/engine",

@@ -14,8 +14,15 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "control_op_executor",
-    srcs = ["control_op_executor.cc"],
-    hdrs = ["control_op_executor.h"],
+    srcs = [
+        "control_op_ddl.cc",
+        "control_op_executor.cc",
+        "control_op_literals.cc",
+    ],
+    hdrs = [
+        "control_op_executor.h",
+        "control_op_internal.h",
+    ],
     deps = [
         "//backend/catalog:create_function_util",
         "//backend/catalog:googlesql_catalog",

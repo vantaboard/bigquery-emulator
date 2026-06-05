@@ -19,8 +19,7 @@ well in this repo:
    `sources_test.go` — that test is the "tested invariant of the
    ownership boundary" the rollout plan calls out.
 2. **Whole-file line cap.** `cpp-lint check` rejects first-party
-   `.cc`/`.h` files over 500 lines unless they are listed in the
-   `baseline.txt` ratchet. `clang-tidy`'s
+   `.cc`/`.h` files over 500 lines. `clang-tidy`'s
    `readability-function-size` does not enforce a per-file cap, so
    this rule lives here.
 3. **Repo-specific anti-patterns.**
@@ -53,14 +52,12 @@ the way `tools/coverage` does for the coverage pipeline.
 go run ./tools/lint/cpp list                        # print first-party C++ paths
 go run ./tools/lint/cpp list -tests=false           # skip *_test.cc entries
 go run ./tools/lint/cpp check                       # run source-only checks
-go run ./tools/lint/cpp check -no-baseline          # run without the file-length ratchet
-go run ./tools/lint/cpp baseline                    # regenerate baseline.txt after a refactor
 ```
 
-The corresponding Task targets (`task lint:cpp:source`,
-`task lint:cpp:baseline`) wrap these so contributors do not have to
-remember the binary path; `task lint:run` includes
-`task lint:cpp:source` in the fast pre-commit gate.
+The corresponding Task targets (`task lint:cpp:source`) wrap these
+so contributors do not have to remember the binary path;
+`task lint:run` includes `task lint:cpp:source` in the fast
+pre-commit gate.
 
 ## Inline suppressions
 

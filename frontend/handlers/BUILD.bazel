@@ -27,10 +27,36 @@ cc_library(
 )
 
 cc_library(
+    name = "query_internal",
+    srcs = [
+        "query_internal.cc",
+        "query_stream_internal.cc",
+    ],
+    hdrs = ["query_internal.h"],
+    deps = [
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:error_helpers",
+        "@googlesql//googlesql/public:error_location_cc_proto",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
     name = "query_handler",
     srcs = ["query.cc"],
     hdrs = ["query.h"],
     deps = [
+        ":query_internal",
         "//backend/catalog:googlesql_catalog",
         "//backend/catalog:udf_registry",
         # `backend/engine` carries the required `Engine*` parameter on
@@ -71,7 +97,11 @@ cc_library(
 
 cc_test(
     name = "query_handler_test",
-    srcs = ["query_test.cc"],
+    srcs = [
+        "query_dry_run_test.cc",
+        "query_execute_test.cc",
+        "query_test_fixture.h",
+    ],
     deps = [
         ":query_handler",
         "//backend/engine/coordinator:local_coordinator_engine",
@@ -92,10 +122,25 @@ cc_test(
 # `CreateReadSession`; plan 38 will light up the streaming `ReadRows`
 # reply on the same library.
 cc_library(
+    name = "storage_read_internal",
+    srcs = ["storage_read_internal.cc"],
+    hdrs = ["storage_read_internal.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "storage_read_handler",
     srcs = ["storage_read.cc"],
     hdrs = ["storage_read.h"],
     deps = [
+        ":storage_read_internal",
         "//backend/schema",
         "//backend/storage",
         # The handler converts `backend::storage::Value` cells onto
@@ -116,7 +161,11 @@ cc_library(
 
 cc_test(
     name = "storage_read_handler_test",
-    srcs = ["storage_read_test.cc"],
+    srcs = [
+        "storage_read_create_session_test.cc",
+        "storage_read_grpc_test.cc",
+        "storage_read_test_fixture.h",
+    ],
     deps = [
         ":storage_read_handler",
         "//backend/schema",
@@ -142,10 +191,24 @@ cc_test(
 # COMMITTED stream types end-to-end; BUFFERED / PENDING return
 # UNIMPLEMENTED until the deferred follow-up subagent lands.
 cc_library(
+    name = "storage_write_internal",
+    srcs = ["storage_write_internal.cc"],
+    hdrs = ["storage_write_internal.h"],
+    deps = [
+        "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "storage_write_handler",
     srcs = ["storage_write.cc"],
     hdrs = ["storage_write.h"],
     deps = [
+        ":storage_write_internal",
         "//backend/schema",
         "//backend/storage",
         # The handler decodes `bigquery_emulator.v1.Cell` shapes onto

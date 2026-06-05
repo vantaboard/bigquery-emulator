@@ -105,8 +105,16 @@ cc_library(
 
 cc_library(
     name = "eval_expr",
-    srcs = ["eval_expr.cc"],
-    hdrs = ["eval_expr.h"],
+    srcs = [
+        "eval_expr.cc",
+        "eval_expr_calls.cc",
+        "eval_expr_dispatch.cc",
+        "eval_expr_operators.cc",
+    ],
+    hdrs = [
+        "eval_expr.h",
+        "eval_expr_internal.h",
+    ],
     deps = [
         ":error",
         ":frame_stack",
@@ -139,8 +147,16 @@ cc_library(
 
 cc_library(
     name = "scan_eval",
-    srcs = ["scan_eval.cc"],
-    hdrs = ["scan_eval.h"],
+    srcs = [
+        "scan_eval.cc",
+        "scan_eval_aggregate.cc",
+        "scan_eval_materialize.cc",
+        "scan_eval_scan_impl.cc",
+    ],
+    hdrs = [
+        "scan_eval.h",
+        "scan_eval_internal.h",
+    ],
     deps = [
         ":error",
         ":eval_expr",
@@ -155,7 +171,11 @@ cc_library(
 
 cc_test(
     name = "eval_expr_test",
-    srcs = ["eval_expr_test.cc"],
+    srcs = [
+        "eval_expr_extended_test.cc",
+        "eval_expr_test.cc",
+        "eval_expr_test_fixture.h",
+    ],
     deps = [
         ":error",
         ":eval_expr",

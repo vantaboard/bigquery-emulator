@@ -243,6 +243,11 @@ func runList(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	root, err := repoRoot()
+	if err != nil {
+		return err
+	}
+	files = filterExistingOnDisk(root, files)
 	for _, f := range files {
 		if !*withTests && IsTestFile(f) {
 			continue
@@ -274,7 +279,22 @@ func readSources() ([]string, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	files = filterExistingOnDisk(root, files)
 	return files, root, nil
+}
+
+// filterExistingOnDisk drops git-tracked paths that are not present
+// on disk (for example after a split where old monoliths were deleted
+// but `git rm` has not landed yet). Downstream tools such as
+// clang-format would fail on the missing paths anyway.
+func filterExistingOnDisk(root string, files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, rel := range files {
+		if _, err := os.Stat(resolveAgainstRoot(root, rel)); err == nil {
+			out = append(out, rel)
+		}
+	}
+	return out
 }
 
 // currentRepoRoot is a test seam. Tests set it via setRepoRoot to

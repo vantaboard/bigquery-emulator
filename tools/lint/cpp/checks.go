@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,14 +49,8 @@ func (f Finding) Format() string {
 // rules land.
 type CheckOptions struct {
 	// MaxFileLines is the whole-file line count above which a file
-	// is rejected unless explicitly baselined. 500 today (see plan
-	// thresholds).
+	// is rejected. 500 today (see plan thresholds).
 	MaxFileLines int
-	// Baseline is the set of files (repo-relative) that are
-	// permitted to exceed MaxFileLines. New oversized files still
-	// fail; this only grandfathers existing offenders so the lint
-	// gate can land without a sweeping refactor.
-	Baseline map[string]struct{}
 }
 
 // runOnce applies every source-only check to a single file and
@@ -217,8 +210,7 @@ const (
 // checkFileLength enforces the whole-file line cap. The plan
 // chooses 500 lines for first-party `.cc`/`.h` to mirror the Go
 // `revive` `file-length-limit` rule already enabled in
-// `.golangci.yml`. New oversized files fail immediately; existing
-// offenders are grandfathered through the baseline.
+// `.golangci.yml`.
 func checkFileLength(path string, body []byte, opts CheckOptions) []Finding {
 	if opts.MaxFileLines <= 0 {
 		return nil
@@ -227,15 +219,12 @@ func checkFileLength(path string, body []byte, opts CheckOptions) []Finding {
 	if lines <= opts.MaxFileLines {
 		return nil
 	}
-	if _, baselined := opts.Baseline[path]; baselined {
-		return nil
-	}
 	return []Finding{
 		{
 			Rule: ruleFileLength,
 			Path: path,
 			Message: fmt.Sprintf(
-				"file has %d lines (max %d); split it or add to tools/lint/cpp/baseline.txt with a follow-up issue",
+				"file has %d lines (max %d); split the file",
 				lines,
 				opts.MaxFileLines,
 			),
@@ -608,19 +597,9 @@ func hasNearbyStatusGuard(lines []string, line int) bool {
 //
 // Flags:
 //   - `--max-lines` overrides the file-length cap (default 500).
-//   - `--baseline` overrides the baseline file path (default
-//     `tools/lint/cpp/baseline.txt`).
-//   - `--no-baseline` disables the baseline so a maintainer can
-//     verify a refactor has actually shrunk every entry.
 func runCheck(args []string, stdout, stderr io.Writer) error {
 	fs := flagSet("check", stderr)
 	maxLines := fs.Int("max-lines", 500, "fail when a first-party C++ file exceeds this many lines")
-	baselinePath := fs.String(
-		"baseline",
-		filepath.FromSlash("tools/lint/cpp/baseline.txt"),
-		"path to the file-length baseline",
-	)
-	noBaseline := fs.Bool("no-baseline", false, "disable the file-length baseline (every offender fails)")
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
@@ -634,15 +613,7 @@ func runCheck(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	baseline := map[string]struct{}{}
-	if !*noBaseline {
-		baseline, err = readBaseline(filepath.Join(root, *baselinePath))
-		if err != nil {
-			return fmt.Errorf("read baseline: %w", err)
-		}
-	}
-
-	opts := CheckOptions{MaxFileLines: *maxLines, Baseline: baseline}
+	opts := CheckOptions{MaxFileLines: *maxLines}
 	var totalFindings int
 	for _, rel := range files {
 		body, rerr := readFile(resolveAgainstRoot(root, rel))

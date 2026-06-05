@@ -1,0 +1,459 @@
+#include <cmath>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_replace.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "backend/catalog/create_function_util.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/engine/control/control_op_internal.h"
+#include "backend/engine/duckdb/arrow_to_bq.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/udf/registrar.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/semantic/value.h"
+#include "backend/schema/googlesql_to_bq.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
+#include "googlesql/public/catalog.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+#include "proto/emulator.pb.h"
+
+namespace bigquery_emulator {
+namespace backend {
+namespace engine {
+namespace control {
+namespace internal {
+
+// --- Name-path resolution -------------------------------------------------
+
+// Resolve `name_path` (as produced by `ResolvedCreateStatement::
+// name_path()` / `ResolvedDropStmt::name_path()` etc.) to a
+// `storage::TableId` under `default_project_id`. One-segment paths
+// use `default_dataset_id` when set (BigQuery `defaultDataset` on
+// jobs.query). Two-segment paths default the project; three-segment
+// paths override it.
+absl::StatusOr<storage::TableId> NamePathToTableId(
+    const std::vector<std::string>& name_path,
+    absl::string_view default_project_id,
+    absl::string_view default_dataset_id) {
+  if (name_path.size() == 1) {
+    if (default_dataset_id.empty()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "control op executor: DDL target name must be <dataset>.<table> or "
+          "<project>.<dataset>.<table>; got 1 segment (",
+          name_path[0],
+          ") with no defaultDataset in the query request"));
+    }
+    return storage::TableId{std::string(default_project_id),
+                            std::string(default_dataset_id),
+                            name_path[0]};
+  }
+  if (name_path.size() == 2) {
+    return storage::TableId{
+        std::string(default_project_id), name_path[0], name_path[1]};
+  }
+  if (name_path.size() == 3) {
+    return storage::TableId{name_path[0], name_path[1], name_path[2]};
+  }
+  return absl::InvalidArgumentError(absl::StrCat(
+      "control op executor: DDL target name must be <dataset>.<table> or "
+      "<project>.<dataset>.<table>; got ",
+      name_path.size(),
+      " segments"));
+}
+
+// Create the dataset directory if it does not exist yet. query port
+// port tests issue `CREATE TABLE ds.t` without a prior datasets.insert.
+absl::Status EnsureDatasetExists(storage::Storage& storage,
+                                 absl::string_view project_id,
+                                 absl::string_view dataset_id) {
+  if (dataset_id.empty()) {
+    return absl::InvalidArgumentError(
+        "EnsureDatasetExists: dataset_id must be non-empty");
+  }
+  storage::DatasetId id{std::string(project_id), std::string(dataset_id)};
+  absl::Status created = storage.CreateDataset(id, "US");
+  if (created.ok()) return absl::OkStatus();
+  if (created.code() == absl::StatusCode::kAlreadyExists) {
+    return absl::OkStatus();
+  }
+  return created;
+}
+
+// --- Schema helpers -------------------------------------------------------
+
+void ApplyAnnotations(const ::googlesql::ResolvedColumnDefinition* def,
+                      v1::FieldSchema* field) {
+  if (def == nullptr) return;
+  if (field->mode() == "REPEATED") return;
+  const ::googlesql::ResolvedColumnAnnotations* ann = def->annotations();
+  if (ann != nullptr && ann->not_null()) {
+    field->set_mode("REQUIRED");
+  }
+}
+
+absl::StatusOr<schema::TableSchema> ColumnDefinitionListToTableSchema(
+    const std::vector<
+        std::unique_ptr<const ::googlesql::ResolvedColumnDefinition>>&
+        column_definition_list) {
+  v1::TableSchema proto;
+  for (const auto& def : column_definition_list) {
+    if (def == nullptr) {
+      return absl::InvalidArgumentError(
+          "control op executor: column_definition_list has a null entry");
+    }
+    v1::FieldSchema* field = proto.add_fields();
+    absl::Status s =
+        backend::schema::TypeToFieldSchema(def->type(), def->name(), field);
+    if (!s.ok()) return s;
+    ApplyAnnotations(def.get(), field);
+  }
+  return backend::schema::TableSchemaFromProto(proto);
+}
+
+// Apply CREATE-mode semantics on top of a `Storage::CreateTable`
+// status. CREATE_IF_NOT_EXISTS swallows ALREADY_EXISTS; the other
+// modes propagate it.
+absl::Status ApplyCreateMode(
+    absl::Status existing_status,
+    ::googlesql::ResolvedCreateStatement::CreateMode create_mode) {
+  if (existing_status.ok()) return absl::OkStatus();
+  if (create_mode ==
+          ::googlesql::ResolvedCreateStatement::CREATE_IF_NOT_EXISTS &&
+      existing_status.code() == absl::StatusCode::kAlreadyExists) {
+    return absl::OkStatus();
+  }
+  return existing_status;
+}
+
+// --- CREATE TABLE handler -------------------------------------------------
+//
+// statementType: `CREATE_TABLE` per BigQuery REST documentation
+// (`Job.statistics.query.statementType`).
+absl::Status RunCreateTable(storage::Storage& storage,
+                            absl::string_view project_id,
+                            absl::string_view default_dataset_id,
+                            const ::googlesql::ResolvedCreateTableStmt* stmt) {
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: CREATE TABLE has null resolved "
+        "statement");
+  }
+  absl::StatusOr<storage::TableId> target =
+      NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
+  if (!target.ok()) return target.status();
+  if (auto ds =
+          EnsureDatasetExists(storage, target->project_id, target->dataset_id);
+      !ds.ok()) {
+    return ds;
+  }
+  absl::StatusOr<schema::TableSchema> bq_schema =
+      ColumnDefinitionListToTableSchema(stmt->column_definition_list());
+  if (!bq_schema.ok()) return bq_schema.status();
+
+  if (stmt->create_mode() ==
+      ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
+    absl::Status dropped = storage.DropTable(*target);
+    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
+      return dropped;
+    }
+  }
+  return ApplyCreateMode(storage.CreateTable(*target, *bq_schema),
+                         stmt->create_mode());
+}
+
+absl::StatusOr<std::string> BuildDuckdbCtasSql(
+    absl::string_view request_sql,
+    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt,
+    const storage::TableId& target,
+    const schema::TableSchema& bq_schema,
+    absl::Span<const QueryParameter> parameters) {
+  if (stmt == nullptr || stmt->query() == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: CTAS has null query scan");
+  }
+  duckdb::transpiler::Transpiler transpiler;
+  std::string select_sql = transpiler.TranspileScan(stmt->query());
+  if (select_sql.empty()) {
+    return absl::UnimplementedError(
+        "control op executor: CTAS query scan did not transpile to DuckDB SQL");
+  }
+  if (!transpiler.parameter_order().empty()) {
+    auto substituted = SubstituteDuckdbParameters(
+        std::move(select_sql), transpiler.parameter_order(), parameters);
+    if (!substituted.ok()) return substituted.status();
+    select_sql = *std::move(substituted);
+  }
+  (void)bq_schema;
+  const bool is_temp = absl::StrContains(request_sql, "CREATE TEMP") ||
+                       absl::StrContains(request_sql, "create temp");
+  // DuckDB temp tables live in the session default schema; schema-
+  // qualified `CREATE TEMP TABLE "ds"."t"` fails with "schema does
+  // not exist". Persistent targets use `"dataset"."table"`.
+  const std::string dest_name =
+      is_temp ? QuoteIdent(target.table_id)
+              : absl::StrCat(QuoteIdent(target.dataset_id),
+                             ".",
+                             QuoteIdent(target.table_id));
+  // DuckDB accepts `CREATE TABLE ... AS <select>` but not BigQuery's
+  // `CREATE TABLE (col list) AS <select>` spelling. The analyzer's
+  // `column_definition_list` still drives the storage-layer schema
+  // we persist after draining the DuckDB result.
+  return absl::StrCat("CREATE ",
+                      is_temp ? "OR REPLACE TEMP " : "",
+                      "TABLE ",
+                      dest_name,
+                      " AS ",
+                      select_sql);
+}
+
+// --- CREATE TABLE AS SELECT handler ---------------------------------------
+//
+// statementType: `CREATE_TABLE_AS_SELECT`. The handler materializes
+// each referenced source table inside a per-query in-memory DuckDB
+// connection, runs the user-submitted SQL verbatim, then reads back
+// the resulting rows under the BigQuery-typed schema (so storage
+// records the BigQuery view of the schema, not DuckDB's inferred
+// types). This is the same migration-compatible path the prior
+// `DuckDbExecutor::ExecuteDdl::RunCreateTableAsSelect` carried -- the
+// "run SELECT half through the coordinator" refactor the plan
+// envisions is deferred to a follow-up because it requires injecting
+// a `coordinator::Engine*` back into this executor (circular
+// dependency with `LocalCoordinatorEngine`).
+absl::Status RunCreateTableAsSelect(
+    storage::Storage& storage,
+    absl::string_view project_id,
+    const QueryRequest& request,
+    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt,
+    const ::googlesql::ResolvedStatement* root_stmt) {
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: CTAS has null resolved statement");
+  }
+  absl::StatusOr<storage::TableId> target = NamePathToTableId(
+      stmt->name_path(), project_id, request.default_dataset_id);
+  if (!target.ok()) return target.status();
+  if (auto ds =
+          EnsureDatasetExists(storage, target->project_id, target->dataset_id);
+      !ds.ok()) {
+    return ds;
+  }
+  absl::StatusOr<schema::TableSchema> bq_schema =
+      ColumnDefinitionListToTableSchema(stmt->column_definition_list());
+  if (!bq_schema.ok()) return bq_schema.status();
+
+  TableScanCollector collector;
+  absl::Status visit_status = root_stmt->Accept(&collector);
+  if (!visit_status.ok()) return visit_status;
+
+  ::duckdb_database db = nullptr;
+  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: duckdb_open(in-memory) failed");
+  }
+  ::duckdb_connection conn = nullptr;
+  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
+    ::duckdb_close(&db);
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: duckdb_connect failed");
+  }
+  if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return reg;
+  }
+
+  const bool is_temp_ctas = absl::StrContains(request.sql, "CREATE TEMP") ||
+                            absl::StrContains(request.sql, "create temp");
+  if (!is_temp_ctas) {
+    absl::Status target_schema_status =
+        RunSqlNoResult(conn,
+                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                    QuoteIdent(target->dataset_id)));
+    if (!target_schema_status.ok()) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return target_schema_status;
+    }
+  }
+
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (source_table == nullptr) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return absl::FailedPreconditionError(absl::StrCat(
+          "ControlOpExecutor::ExecuteDdl: cannot attach non-StorageTable '",
+          tbl->Name(),
+          "' for CTAS; rebuild against a "
+          "GoogleSqlCatalog-backed analyzer"));
+    }
+    // Attach at the bare table name so transpiled `FROM "people"` (see
+    // `EmitTableScan`) resolves in the connection default schema, matching
+    // `DuckDbExecutor::ExecuteQuery`.
+    absl::Status attach = AttachStorageTableAt(
+        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
+    if (!attach.ok()) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return attach;
+    }
+  }
+
+  if (stmt->name_path_size() == 3) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: CTAS with a project-qualified "
+                     "target ('",
+                     stmt->name_path(0),
+                     ".",
+                     stmt->name_path(1),
+                     ".",
+                     stmt->name_path(2),
+                     "') is not yet implemented; drop the project segment "
+                     "(the BigQuery REST `projectId` path parameter already "
+                     "carries it) and re-run with a 2-segment target"));
+  }
+
+  if (stmt->create_mode() ==
+      ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
+    absl::Status dropped = storage.DropTable(*target);
+    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return dropped;
+    }
+  }
+
+  absl::StatusOr<std::string> ctas_sql = BuildDuckdbCtasSql(
+      request.sql, stmt, *target, *bq_schema, request.parameters);
+  if (!ctas_sql.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return ctas_sql.status();
+  }
+
+  ::duckdb_result ctas_result;
+  if (::duckdb_query(conn, ctas_sql->c_str(), &ctas_result) !=
+      ::DuckDBSuccess) {
+    const auto* err = ::duckdb_result_error(&ctas_result);
+    std::string detail = err == nullptr ? std::string("") : std::string(err);
+    ::duckdb_destroy_result(&ctas_result);
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return absl::InvalidArgumentError(
+        absl::StrCat("ControlOpExecutor: DuckDB rejected CTAS: ",
+                     detail,
+                     " (sql=",
+                     *ctas_sql,
+                     ")"));
+  }
+  ::duckdb_destroy_result(&ctas_result);
+
+  const std::string quoted_target =
+      is_temp_ctas ? QuoteIdent(target->table_id)
+                   : absl::StrCat(QuoteIdent(target->dataset_id),
+                                  ".",
+                                  QuoteIdent(target->table_id));
+  absl::StatusOr<std::vector<storage::Row>> after_rows =
+      DrainTableRows(conn, quoted_target, *bq_schema);
+  ::duckdb_disconnect(&conn);
+  ::duckdb_close(&db);
+  if (!after_rows.ok()) return after_rows.status();
+
+  if (is_temp_ctas) {
+    (void)storage.DropTable(*target);
+  }
+
+  absl::Status created = ApplyCreateMode(
+      storage.CreateTable(*target, *bq_schema), stmt->create_mode());
+  if (!created.ok()) return created;
+  if (after_rows->empty()) return absl::OkStatus();
+  return storage.AppendRows(*target, absl::MakeConstSpan(*after_rows));
+}
+
+// --- DROP TABLE handler ---------------------------------------------------
+//
+// statementType: `DROP_TABLE`. Currently only `DROP TABLE`; other
+// `DROP <kind>` forms surface UNIMPLEMENTED. View / materialized-
+// view drops belong here once view storage exists (today the
+// `Storage` interface has no view-CRUD surface).
+absl::Status RunDropTable(storage::Storage& storage,
+                          absl::string_view project_id,
+                          absl::string_view default_dataset_id,
+                          const ::googlesql::ResolvedDropStmt* stmt) {
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: DROP has null resolved statement");
+  }
+  if (stmt->object_type() != "TABLE") {
+    return absl::UnimplementedError(absl::StrCat(
+        "control op executor: DROP ",
+        stmt->object_type(),
+        " is not implemented yet (only DROP TABLE is supported); the "
+        "view / materialized-view drop paths land alongside the storage-"
+        "side view-CRUD surface; see docs/ENGINE_POLICY.md"));
+  }
+  absl::StatusOr<storage::TableId> target =
+      NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
+  if (!target.ok()) return target.status();
+  absl::Status dropped = storage.DropTable(*target);
+  if (!dropped.ok() && stmt->is_if_exists() &&
+      dropped.code() == absl::StatusCode::kNotFound) {
+    return absl::OkStatus();
+  }
+  return dropped;
+}
+
+// --- ANALYZE handler ------------------------------------------------------
+//
+// statementType: `ANALYZE`. The emulator's storage layer does not
+// keep optimizer statistics, so ANALYZE is a no-op metadata refresh:
+// we validate that every named table exists (NOT_FOUND otherwise)
+// and return OK. Callers see the operation succeed without any
+// observable side-effect, which matches the BigQuery posture where
+// `ANALYZE` is a metadata hint the query optimizer is free to
+// ignore. The deeper "actually compute and persist statistics" path
+// is tracked by `docs/ENGINE_POLICY.md`.
+absl::Status RunAnalyze(storage::Storage& storage,
+                        absl::string_view project_id,
+                        const ::googlesql::ResolvedAnalyzeStmt* stmt) {
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: ANALYZE has null resolved statement");
+  }
+  for (const auto& target : stmt->table_and_column_index_list()) {
+    if (target == nullptr || target->table() == nullptr) continue;
+    const auto* storage_table =
+        dynamic_cast<const catalog::StorageTable*>(target->table());
+    if (storage_table == nullptr) continue;
+    const storage::TableId& id = storage_table->storage_table_id();
+    auto schema_or = storage.GetSchema(id);
+    if (!schema_or.ok()) return schema_or.status();
+  }
+  (void)project_id;
+  return absl::OkStatus();
+}
+
+}  // namespace internal
+}  // namespace control
+}  // namespace engine
+}  // namespace backend
+}  // namespace bigquery_emulator

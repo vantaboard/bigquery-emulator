@@ -114,8 +114,25 @@ cc_test(
 
 cc_library(
     name = "transpiler",
-    srcs = ["transpiler.cc"],
-    hdrs = ["transpiler.h"],
+    srcs = [
+        "transpiler.cc",
+        "transpiler_scan_tree.cc",
+        "transpiler_emit_query.cc",
+        "transpiler_emit_join.cc",
+        "transpiler_emit_aggregate.cc",
+        "transpiler_emit_pivot.cc",
+        "transpiler_emit_setops.cc",
+        "transpiler_emit_analytic.cc",
+        "transpiler_emit_with.cc",
+        "transpiler_emit_expr_literals.cc",
+        "transpiler_emit_function_call.cc",
+        "transpiler_emit_aggregate_function.cc",
+        "transpiler_emit_expr.cc",
+    ],
+    hdrs = [
+        "transpiler.h",
+        "transpiler_internal.h",
+    ],
     deps = [
         ":functions",
         ":types",
@@ -152,7 +169,21 @@ cc_library(
 
 cc_test(
     name = "transpiler_test",
-    srcs = ["transpiler_test.cc"],
+    srcs = [
+        "transpiler_emit_literals_test.cc",
+        "transpiler_emit_scans_test.cc",
+        "transpiler_emit_aggregate_test.cc",
+        "transpiler_functions_table_test.cc",
+        "transpiler_emit_analytic_test.cc",
+        "transpiler_emit_query_test.cc",
+        "transpiler_emit_parameters_test.cc",
+        "transpiler_emit_struct_json_test.cc",
+        "transpiler_emit_setops_test.cc",
+        "transpiler_emit_sample_test.cc",
+        "transpiler_emit_with_test.cc",
+        "transpiler_integration_test.cc",
+        "transpiler_test_fixture.h",
+    ],
     deps = [
         ":functions",
         ":transpiler",

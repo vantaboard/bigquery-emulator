@@ -1,0 +1,343 @@
+#include "backend/engine/semantic/scan_eval_internal.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/semantic/array_struct/array_scan.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/value.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.h"
+#include "googlesql/public/types/struct_type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+
+namespace bigquery_emulator {
+namespace backend {
+namespace engine {
+namespace semantic {
+namespace scan_eval_internal {
+
+using ::bigquery_emulator::backend::engine::semantic::EvalContext;
+using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
+
+absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
+    const ::googlesql::ResolvedProjectScan& project,
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx) {
+  absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*> expr_by_column_id;
+  for (int i = 0; i < project.expr_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* cc = project.expr_list(i);
+    if (cc == nullptr || cc->expr() == nullptr) {
+      return absl::InternalError(
+          "semantic: ResolvedComputedColumn has null expr");
+    }
+    expr_by_column_id[cc->column().column_id()] = cc->expr();
+  }
+
+  if (input_rows.empty()) {
+    return std::vector<ColumnBindings>{};
+  }
+  std::vector<ColumnBindings> out;
+  out.reserve(input_rows.size());
+  for (const ColumnBindings& input : input_rows) {
+    // Keep inner scan bindings (e.g. `$agg1`) so the executor's
+    // `ProjectOneRow` pass can still resolve column refs in the
+    // output projection expressions.
+    ColumnBindings row = input;
+    row.reserve(row.size() + project.column_list_size());
+    for (int i = 0; i < project.column_list_size(); ++i) {
+      const ::googlesql::ResolvedColumn& col = project.column_list(i);
+      const int col_id = col.column_id();
+      auto eit = expr_by_column_id.find(col_id);
+      EvalContext row_ctx = ctx;
+      row_ctx.columns = &input;
+      Value v;
+      if (eit != expr_by_column_id.end()) {
+        auto eval_v = EvalExpr(*eit->second, row_ctx);
+        if (!eval_v.ok()) return eval_v.status();
+        v = *std::move(eval_v);
+      } else {
+        auto cit = input.find(col_id);
+        if (cit == input.end()) {
+          return absl::InternalError(
+              absl::StrCat("semantic: ProjectScan missing binding for column '",
+                           col.name(),
+                           "'"));
+        }
+        v = cit->second;
+      }
+      row.emplace(col_id, std::move(v));
+    }
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeTableScan(
+    const ::googlesql::ResolvedTableScan& scan) {
+  if (scan.table() == nullptr) {
+    return absl::InternalError("semantic: TableScan has null table");
+  }
+  const auto* simple_table =
+      dynamic_cast<const ::googlesql::SimpleTable*>(scan.table());
+  if (simple_table == nullptr) {
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             absl::StrCat("semantic: table '",
+                                          scan.table()->FullName(),
+                                          "' is not iterable via SimpleTable"));
+  }
+  if (scan.column_list_size() != scan.column_index_list_size()) {
+    return absl::InternalError(
+        "semantic: TableScan column_list / column_index_list size mismatch");
+  }
+  std::vector<int> column_idxs;
+  column_idxs.reserve(scan.column_list_size());
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    column_idxs.push_back(scan.column_index_list(i));
+  }
+  absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>> iter_or =
+      simple_table->CreateEvaluatorTableIterator(column_idxs);
+  if (!iter_or.ok()) return iter_or.status();
+  std::unique_ptr<::googlesql::EvaluatorTableIterator> iter =
+      std::move(iter_or).value();
+  std::vector<ColumnBindings> out;
+  while (iter->NextRow()) {
+    absl::Status st = iter->Status();
+    if (!st.ok()) return st;
+    ColumnBindings row;
+    row.reserve(scan.column_list_size());
+    for (int i = 0; i < scan.column_list_size(); ++i) {
+      const ::googlesql::ResolvedColumn& col = scan.column_list(i);
+      row.emplace(col.column_id(), iter->GetValue(i));
+    }
+    out.push_back(std::move(row));
+  }
+  absl::Status st = iter->Status();
+  if (!st.ok()) return st;
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeSingleRowScan(
+    const ::googlesql::ResolvedSingleRowScan& scan) {
+  ColumnBindings row;
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = scan.column_list(i);
+    row.emplace(col.column_id(), Value::Null(col.type()));
+  }
+  return std::vector<ColumnBindings>{std::move(row)};
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithRefScan(
+    const ::googlesql::ResolvedWithRefScan& ref, EvalContext& ctx) {
+  if (ctx.with_tables == nullptr) {
+    return absl::InternalError(
+        "semantic: WithRefScan without active WithScan bindings");
+  }
+  auto it = ctx.with_tables->find(std::string(ref.with_query_name()));
+  if (it == ctx.with_tables->end()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: unknown CTE '", ref.with_query_name(), "'"));
+  }
+  const CteTable& cte = it->second;
+  if (static_cast<int>(cte.column_ids.size()) != ref.column_list_size()) {
+    return absl::InternalError(
+        "semantic: WithRefScan column count does not match CTE");
+  }
+  std::vector<ColumnBindings> out;
+  out.reserve(cte.rows.size());
+  for (const ColumnBindings& cte_row : cte.rows) {
+    ColumnBindings row;
+    row.reserve(ref.column_list_size());
+    for (int i = 0; i < ref.column_list_size(); ++i) {
+      const ::googlesql::ResolvedColumn& dst = ref.column_list(i);
+      const int src_id = cte.column_ids[i];
+      auto cit = cte_row.find(src_id);
+      if (cit == cte_row.end()) {
+        return absl::InternalError(
+            absl::StrCat("semantic: CTE row missing column_id=", src_id));
+      }
+      row.emplace(dst.column_id(), cit->second);
+    }
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeSetOperationScan(
+    const ::googlesql::ResolvedSetOperationScan& set_op, EvalContext& ctx) {
+  if (set_op.op_type() != ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: SetOperationScan op is not UNION ALL");
+  }
+  std::vector<ColumnBindings> out;
+  for (int i = 0; i < set_op.input_item_list_size(); ++i) {
+    const ::googlesql::ResolvedSetOperationItem* item =
+        set_op.input_item_list(i);
+    if (item == nullptr || item->scan() == nullptr) {
+      return absl::InternalError("semantic: SetOperationItem has null scan");
+    }
+    auto part = MaterializeScanImpl(item->scan(), ctx);
+    if (!part.ok()) return part.status();
+    const ::googlesql::ResolvedScan* part_scan = item->scan();
+    for (const ColumnBindings& part_row : *part) {
+      ColumnBindings remapped;
+      for (int j = 0; j < set_op.column_list_size(); ++j) {
+        const int out_id = set_op.column_list(j).column_id();
+        const ::googlesql::Type* out_type = set_op.column_list(j).type();
+        if (part_scan != nullptr && j < part_scan->column_list_size()) {
+          const int src_id = part_scan->column_list(j).column_id();
+          auto it = part_row.find(src_id);
+          if (it != part_row.end()) {
+            remapped.emplace(out_id, it->second);
+            continue;
+          }
+        }
+        remapped.emplace(out_id, Value::Null(out_type));
+      }
+      out.push_back(std::move(remapped));
+    }
+  }
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(
+    const ::googlesql::ResolvedJoinScan& join, EvalContext& ctx) {
+  if (join.is_lateral()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        "semantic: lateral JoinScan is not yet implemented");
+  }
+  if (join.join_type() == ::googlesql::ResolvedJoinScan::RIGHT ||
+      join.join_type() == ::googlesql::ResolvedJoinScan::FULL) {
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: RIGHT/FULL JOIN not yet implemented");
+  }
+  auto left_or = MaterializeScanImpl(join.left_scan(), ctx);
+  if (!left_or.ok()) return left_or.status();
+  auto right_or = MaterializeScanImpl(join.right_scan(), ctx);
+  if (!right_or.ok()) return right_or.status();
+
+  const bool is_left_outer =
+      join.join_type() == ::googlesql::ResolvedJoinScan::LEFT;
+  const bool is_cross =
+      join.join_expr() == nullptr &&
+      join.join_type() == ::googlesql::ResolvedJoinScan::INNER;
+
+  const ::googlesql::ResolvedScan* rscan = StripBarrierScans(join.right_scan());
+
+  std::vector<ColumnBindings> out;
+  for (const ColumnBindings& lrow : *left_or) {
+    bool any_match = false;
+    for (const ColumnBindings& rrow : *right_or) {
+      ColumnBindings merged = lrow;
+      merged.insert(rrow.begin(), rrow.end());
+      EvalContext merged_ctx = ctx;
+      merged_ctx.columns = &merged;
+      bool include = is_cross || join.join_expr() == nullptr;
+      if (!include) {
+        auto ok = EvalBoolExpr(join.join_expr(), merged_ctx);
+        if (!ok.ok()) return ok.status();
+        include = *ok;
+      }
+      if (include) {
+        any_match = true;
+        out.push_back(std::move(merged));
+      }
+    }
+    if (!any_match && is_left_outer) {
+      ColumnBindings merged = lrow;
+      if (rscan != nullptr) {
+        for (int i = 0; i < rscan->column_list_size(); ++i) {
+          const ::googlesql::ResolvedColumn& col = rscan->column_list(i);
+          merged.emplace(col.column_id(), Value::Null(col.type()));
+        }
+      }
+      out.push_back(std::move(merged));
+    }
+  }
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScan(
+    const ::googlesql::ResolvedArrayScan& scan, EvalContext& ctx) {
+  if (scan.join_expr() != nullptr && scan.input_scan() != nullptr) {
+    auto left_or = MaterializeScanImpl(scan.input_scan(), ctx);
+    if (!left_or.ok()) return left_or.status();
+    std::vector<ColumnBindings> out;
+    for (const ColumnBindings& lrow : *left_or) {
+      EvalContext row_ctx = ctx;
+      row_ctx.columns = &lrow;
+      auto array_rows = array_struct::EvaluateArrayScan(scan, row_ctx);
+      if (!array_rows.ok()) return array_rows.status();
+      bool any = false;
+      for (const ColumnBindings& arow : *array_rows) {
+        ColumnBindings merged = lrow;
+        merged.insert(arow.begin(), arow.end());
+        EvalContext merged_ctx = ctx;
+        merged_ctx.columns = &merged;
+        auto ok = EvalBoolExpr(scan.join_expr(), merged_ctx);
+        if (!ok.ok()) return ok.status();
+        if (*ok) {
+          any = true;
+          out.push_back(std::move(merged));
+        }
+      }
+      if (!any && scan.is_outer()) {
+        ColumnBindings merged = lrow;
+        for (int i = 0; i < scan.element_column_list_size(); ++i) {
+          merged.emplace(scan.element_column_list(i).column_id(),
+                         Value::Null(scan.element_column_list(i).type()));
+        }
+        if (scan.array_offset_column() != nullptr) {
+          merged.emplace(scan.array_offset_column()->column().column_id(),
+                         Value::NullInt64());
+        }
+        out.push_back(std::move(merged));
+      }
+    }
+    return out;
+  }
+
+  if (scan.input_scan() != nullptr &&
+      scan.input_scan()->node_kind() != ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
+    auto left_or = MaterializeScanImpl(scan.input_scan(), ctx);
+    if (!left_or.ok()) return left_or.status();
+    std::vector<ColumnBindings> out;
+    for (const ColumnBindings& lrow : *left_or) {
+      EvalContext row_ctx = ctx;
+      row_ctx.columns = &lrow;
+      auto array_rows = array_struct::EvaluateArrayScan(scan, row_ctx);
+      if (!array_rows.ok()) return array_rows.status();
+      for (const ColumnBindings& arow : *array_rows) {
+        ColumnBindings merged = lrow;
+        merged.insert(arow.begin(), arow.end());
+        out.push_back(std::move(merged));
+      }
+    }
+    return out;
+  }
+
+  auto rows_or = array_struct::EvaluateArrayScan(scan, ctx);
+  if (!rows_or.ok()) return rows_or.status();
+  const int n_arrays = scan.array_expr_list_size();
+  for (ColumnBindings& row : *rows_or) {
+    array_struct::AliasUnnestPublicColumnIds(scan, n_arrays, row);
+  }
+  return rows_or;
+}
+
+}  // namespace scan_eval_internal
+}  // namespace semantic
+}  // namespace engine
+}  // namespace backend
+}  // namespace bigquery_emulator

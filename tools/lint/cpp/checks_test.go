@@ -9,8 +9,7 @@ import (
 )
 
 // TestCheckFileLength_Threshold pins the line-cap behaviour: a
-// file at the cap passes, one over the cap fails, and a baselined
-// path is grandfathered.
+// file at the cap passes, one over the cap fails.
 func TestCheckFileLength_Threshold(t *testing.T) {
 	exact := bytes.Repeat([]byte("x\n"), 500)
 	over := bytes.Repeat([]byte("x\n"), 501)
@@ -24,17 +23,6 @@ func TestCheckFileLength_Threshold(t *testing.T) {
 	}
 	if !strings.Contains(got[0].Message, "501 lines (max 500)") {
 		t.Errorf("finding message missing line counts: %q", got[0].Message)
-	}
-
-	baseline := map[string]struct{}{"backend/foo.cc": {}}
-	if got := checkFileLength(
-		"backend/foo.cc",
-		over,
-		CheckOptions{MaxFileLines: 500, Baseline: baseline},
-	); len(
-		got,
-	) != 0 {
-		t.Errorf("baselined file should pass, got %v", got)
 	}
 }
 

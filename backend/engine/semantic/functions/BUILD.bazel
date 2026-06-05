@@ -97,8 +97,17 @@ cc_library(
 
 cc_library(
     name = "datetime_funcs",
-    srcs = ["datetime_funcs.cc"],
-    hdrs = ["datetime_funcs.h"],
+    srcs = [
+        "datetime_add_sub.cc",
+        "datetime_current_unix.cc",
+        "datetime_funcs.cc",
+        "datetime_helpers.cc",
+        "datetime_parse_format.cc",
+    ],
+    hdrs = [
+        "datetime_funcs.h",
+        "datetime_funcs_internal.h",
+    ],
     deps = [
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",
@@ -130,10 +139,18 @@ cc_test(
 cc_library(
     name = "string_funcs",
     srcs = [
-        "string_extra_funcs.cc",
+        "string_extra_core.cc",
+        "string_extra_encoding.cc",
+        "string_extra_substr.cc",
+        "string_extra_helpers.cc",
+        "string_extra_regex_format.cc",
+        "string_extra_unicode.cc",
         "string_funcs.cc",
     ],
-    hdrs = ["string_funcs.h"],
+    hdrs = [
+        "string_funcs.h",
+        "string_extra_internal.h",
+    ],
     deps = [
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",
@@ -222,7 +239,10 @@ cc_test(
 
 cc_library(
     name = "specialized_funcs",
-    srcs = ["specialized_funcs.cc"],
+    srcs = [
+        "aggregate_specialized.cc",
+        "net_funcs.cc",
+    ],
     hdrs = ["specialized_funcs.h"],
     deps = [
         ":hll_funcs",

@@ -10,9 +10,7 @@
 //     party can never sneak into clang-format, clang-tidy, or
 //     cppcheck.
 //  2. A whole-file line-count rule (default 500 lines) that
-//     clang-tidy's `readability-function-size` cannot express,
-//     ratcheted via a baseline file so the existing oversized files
-//     under `backend/engine/duckdb/` do not block the rollout.
+//     clang-tidy's `readability-function-size` cannot express.
 //  3. Repo-specific anti-patterns: banned production logging APIs
 //     (`std::cout` / `std::cerr` / `printf` outside tests and
 //     tools), and obvious `absl::Status` / `absl::StatusOr<T>`
@@ -37,9 +35,8 @@ import (
 // Subcommand names. Centralised so the dispatch in run() and the
 // table-driven tests stay aligned.
 const (
-	cmdList     = "list"
-	cmdCheck    = "check"
-	cmdBaseline = "baseline"
+	cmdList  = "list"
+	cmdCheck = "check"
 )
 
 // run is the testable entry point. It returns an error instead of
@@ -56,8 +53,6 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runList(rest, stdout, stderr)
 	case cmdCheck:
 		return runCheck(rest, stdout, stderr)
-	case cmdBaseline:
-		return runBaseline(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return nil
@@ -84,7 +79,6 @@ func usage(w io.Writer) {
 Subcommands:
   list      Print the canonical first-party C++ source list (one path per line).
   check     Run the source-only checks (file size, banned logging, status misuse).
-  baseline  Regenerate the file-size baseline used by 'check' to allow existing oversized files.
 
 Run "cpp-lint <subcommand> -h" for per-subcommand flags.
 `)

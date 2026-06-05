@@ -6,8 +6,17 @@ package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "duckdb_storage",
-    srcs = ["duckdb_storage.cc"],
-    hdrs = ["duckdb_storage.h"],
+    srcs = [
+        "duckdb_storage.cc",
+        "duckdb_storage_catalog.cc",
+        "duckdb_storage_literals.cc",
+        "duckdb_storage_meta.cc",
+        "duckdb_storage_rows.cc",
+    ],
+    hdrs = [
+        "duckdb_storage.h",
+        "duckdb_storage_internal.h",
+    ],
     deps = [
         "//backend/schema",
         "//backend/storage",
@@ -32,7 +41,12 @@ cc_library(
 # the duckdb_executor_test follow-up uses the same plumbing.
 cc_test(
     name = "duckdb_storage_test",
-    srcs = ["duckdb_storage_test.cc"],
+    srcs = [
+        "duckdb_storage_crud_test.cc",
+        "duckdb_storage_read_test.cc",
+        "duckdb_storage_test_fixture.cc",
+        "duckdb_storage_test_fixture.h",
+    ],
     deps = [
         ":duckdb_storage",
         "//backend/schema",

@@ -13,7 +13,6 @@
 #        task lint:cpp:format      (clang-format dry-run on first-party .cc/.h)
 #        task lint:cpp:format-fix  (apply clang-format -i)
 #        task lint:cpp:source      (file-length / banned-logging / status checks)
-#        task lint:cpp:baseline    (regenerate tools/lint/cpp/baseline.txt)
 #        task lint:cpp:tidy        (clang-tidy, compile-aware, slow lane)
 #        task lint:cpp:cppcheck    (cppcheck, slow secondary-analysis lane)
 #
@@ -291,10 +290,9 @@ tasks:
   cpp:source:
     desc: Source-only C++ checks (file length, banned logging, status anti-patterns)
     # `tools/lint/cpp` enforces three classes of rule that clang-format
-    # and clang-tidy do not cover well: a 500-line whole-file cap
-    # (ratcheted via `tools/lint/cpp/baseline.txt`), banned production
-    # logging APIs (`std::cout`, `std::cerr`, `printf`, …), and obvious
-    # `absl::Status` / `absl::StatusOr<T>` misuse. See
+    # and clang-tidy do not cover well: a 500-line whole-file cap,
+    # banned production logging APIs (`std::cout`, `std::cerr`, `printf`, …),
+    # and obvious `absl::Status` / `absl::StatusOr<T>` misuse. See
     # `tools/lint/cpp/README.md`.
     cmds:
       - |
@@ -302,15 +300,6 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         go run ./tools/lint/cpp check
-
-  cpp:baseline:
-    desc: Regenerate tools/lint/cpp/baseline.txt from the current first-party file lengths
-    cmds:
-      - |
-        set -eo pipefail
-        root="$(git rev-parse --show-toplevel)"
-        cd "$root"
-        go run ./tools/lint/cpp baseline
 
   cpp:tidy:
     desc: |

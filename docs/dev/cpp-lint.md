@@ -18,9 +18,8 @@ and [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md).
 |                 |       +-----------+-----------+
 |  list           |                   │
 |  check          |       +-----------v-----------+
-|  baseline       |       | clang-tidy            |
-+--------+--------+       +-----------+-----------+
-         │                            │
++--------+--------+       | clang-tidy            |
+         │                +-----------+-----------+
          │  canonical                 │
          │  first-party file list     │
          │                            │
@@ -48,7 +47,6 @@ ownership boundary is pinned by
 | Apply autofixes | `task lint:fix` | gofmt, clang-format, go vet. |
 | Format C++ only | `task lint:cpp:format` / `task lint:cpp:format-fix` | Reads from `tools/lint/cpp list`. |
 | Source-only C++ checks | `task lint:cpp:source` | File length, banned logging, status anti-patterns. |
-| Regenerate baseline | `task lint:cpp:baseline` | Use after a refactor that splits an oversized file. |
 | clang-tidy (slow) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
 | Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
 | cppcheck (slow) | `task lint:cpp:cppcheck` | Secondary-analysis lane. |
@@ -105,8 +103,7 @@ Implemented in [`tools/lint/cpp/`](../../tools/lint/cpp/). Three
 rules:
 
 1. **`file-length`** — first-party `.cc`/`.h` files over 500 lines
-   fail unless they are baselined in
-   [`tools/lint/cpp/baseline.txt`](../../tools/lint/cpp/baseline.txt).
+   fail. Split the file before landing the change.
 2. **`banned-logging`** — `std::cout`, `std::cerr`, `std::clog`,
    `std::printf`, `std::fprintf`, `printf`, `fprintf` are banned in
    production C++. Tests, the `tools/googlesql-prebuilt/smoke/`
@@ -141,24 +138,10 @@ them only with a recorded rationale in the commit message.
 | Function parameters | 8 | `readability-function-size.ParameterThreshold` | |
 | Cognitive complexity | 25 | `readability-function-cognitive-complexity.Threshold` | Matches `cyclop`'s `max-complexity: 25` in `.golangci.yml`. |
 
-The whole-file cap is the only rule with a baseline ratchet today.
-Per-function complexity findings are surfaced by clang-tidy's
-warning-only lane and are expected to be addressed inline.
-
-## Baselines
-
-[`tools/lint/cpp/baseline.txt`](../../tools/lint/cpp/baseline.txt)
-grandfathers files that already exceed the 500-line cap. New
-oversized files always fail; the baseline only protects existing
-code so the lint gate could land without a sweeping refactor.
-
-Every entry should map to a follow-up issue tracking the eventual
-split. Removing an entry is a one-liner once the file is below the
-cap; regenerate via `task lint:cpp:baseline` after the refactor.
-
-Do **not** add a file to the baseline as a workaround for a new
-violation. The whole point of the ratchet is that the threshold
-gets tighter over time, not looser.
+The whole-file cap is enforced by the source-only checker; split
+oversized files rather than suppressing the rule. Per-function
+complexity findings are surfaced by clang-tidy's warning-only lane
+and are expected to be addressed inline.
 
 ## Suppressions
 
