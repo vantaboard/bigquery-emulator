@@ -39,6 +39,53 @@ func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 	}
 }
 
+func TestParametersToEngineMapTimestamp(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"name":"ts_value",
+		"parameterType":{"type":"TIMESTAMP"},
+		"parameterValue":{"value":"2016-12-07T08:00:00+00:00"}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	got := parametersToEngineMap(params)
+	p := got["ts_value"]
+	if p == nil || p.GetTypeKind() != "TIMESTAMP" ||
+		p.GetValueJson() != "2016-12-07T08:00:00+00:00" {
+		t.Fatalf("ts_value = %+v", p)
+	}
+}
+
+func TestParametersToEngineMapStruct(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"name":"struct_value",
+		"parameterType":{"type":"STRUCT","structTypes":[
+			{"name":"x","type":{"type":"INT64"}},
+			{"name":"y","type":{"type":"STRING"}}
+		]},
+		"parameterValue":{"structValues":{
+			"x":{"value":"1"},
+			"y":{"value":"foo"}
+		}}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	got := parametersToEngineMap(params)
+	p := got["struct_value"]
+	if p == nil || p.GetTypeKind() != "STRUCT" {
+		t.Fatalf("struct_value = %+v", p)
+	}
+	if p.GetTypeJson() != "x:INT64,y:STRING" {
+		t.Errorf("TypeJson = %q, want x:INT64,y:STRING", p.GetTypeJson())
+	}
+	if p.GetValueJson() != `[1,"foo"]` {
+		t.Errorf("ValueJson = %q, want [1,\"foo\"]", p.GetValueJson())
+	}
+}
+
 func TestParametersToEngineMapSkipsUntyped(t *testing.T) {
 	t.Parallel()
 	got := parametersToEngineMap([]bqtypes.QueryParameter{{

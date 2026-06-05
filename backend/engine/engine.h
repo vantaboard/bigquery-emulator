@@ -47,6 +47,9 @@ struct QueryParameter {
   // GoogleSQL `TypeKind` name, e.g. "INT64", "STRING".
   std::string type_kind;
   std::string value_json;
+  // Gateway-encoded REST `parameterType` descriptor for STRUCT/ARRAY
+  // parameters (field names and nested type kinds); empty for scalars.
+  std::string type_json;
 };
 
 // One query the engine is asked to plan or execute. The fields mirror

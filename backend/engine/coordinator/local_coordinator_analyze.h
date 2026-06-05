@@ -17,6 +17,7 @@
 namespace googlesql {
 class Catalog;
 class Type;
+class TypeFactory;
 }  // namespace googlesql
 
 namespace bigquery_emulator {
@@ -28,13 +29,18 @@ absl::Status ValidateRequest(const QueryRequest& request,
                              const ::googlesql::Catalog* catalog);
 
 absl::Status PopulateParameterOptions(const QueryRequest& request,
-                                      ::googlesql::AnalyzerOptions& options);
+                                      ::googlesql::AnalyzerOptions& options,
+                                      ::googlesql::TypeFactory* type_factory);
 
 absl::Status PopulateAnalyzerParameters(const QueryRequest& request,
-                                        ::googlesql::AnalyzerOptions& options);
+                                        ::googlesql::AnalyzerOptions& options,
+                                        ::googlesql::TypeFactory* type_factory);
 
 absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
     absl::string_view type_kind_name);
+
+absl::StatusOr<const ::googlesql::Type*> ParameterTypeForQueryParameter(
+    const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory);
 
 absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
 AnalyzeStatementImpl(const QueryRequest& request,

@@ -254,8 +254,8 @@ absl::StatusOr<std::string> SubstituteDuckdbParameters(
                        "placeholder $",
                        i + 1));
     }
-    auto value =
-        semantic::ParseParameterValue(param->value_json, param->type_kind);
+    auto value = semantic::ParseParameterValue(
+        param->value_json, param->type_kind, param->type_json);
     if (!value.ok()) return value.status();
     auto literal = RenderSemanticParameterLiteral(*value);
     if (!literal.ok()) return literal.status();

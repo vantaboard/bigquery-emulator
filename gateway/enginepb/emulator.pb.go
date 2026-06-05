@@ -1227,9 +1227,12 @@ func (x *QueryRequest) GetUseLegacySql() bool {
 }
 
 type QueryParameter struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TypeKind      string                 `protobuf:"bytes,1,opt,name=type_kind,json=typeKind,proto3" json:"type_kind,omitempty"`    // googlesql TypeKind name (e.g. INT64, STRING).
-	ValueJson     string                 `protobuf:"bytes,2,opt,name=value_json,json=valueJson,proto3" json:"value_json,omitempty"` // JSON-encoded literal value.
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	TypeKind  string                 `protobuf:"bytes,1,opt,name=type_kind,json=typeKind,proto3" json:"type_kind,omitempty"`    // googlesql TypeKind name (e.g. INT64, STRING).
+	ValueJson string                 `protobuf:"bytes,2,opt,name=value_json,json=valueJson,proto3" json:"value_json,omitempty"` // JSON-encoded literal value.
+	// Optional STRUCT/ARRAY field-type descriptor (gateway-encoded from
+	// REST `parameterType`; empty for scalar parameters).
+	TypeJson      string `protobuf:"bytes,3,opt,name=type_json,json=typeJson,proto3" json:"type_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1274,6 +1277,13 @@ func (x *QueryParameter) GetTypeKind() string {
 func (x *QueryParameter) GetValueJson() string {
 	if x != nil {
 		return x.ValueJson
+	}
+	return ""
+}
+
+func (x *QueryParameter) GetTypeJson() string {
+	if x != nil {
+		return x.TypeJson
 	}
 	return ""
 }
@@ -1366,7 +1376,6 @@ type QueryResultRow struct {
 	//     emulator-internal debug signal the conformance harness
 	//     reads back to assert per-query routing decisions, never a
 	//     stable wire field for BigQuery client libraries.
-	//     Ownership: `docs/ENGINE_POLICY.md`.
 	Schema        *TableSchema `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
 	Cells         []*Cell      `protobuf:"bytes,2,rep,name=cells,proto3" json:"cells,omitempty"`
 	DmlStats      *DmlStats    `protobuf:"bytes,3,opt,name=dml_stats,json=dmlStats,proto3" json:"dml_stats,omitempty"`
@@ -1797,11 +1806,12 @@ const file_emulator_proto_rawDesc = "" +
 	"\x0euse_legacy_sql\x18\x05 \x01(\bR\fuseLegacySql\x1ac\n" +
 	"\x0fParametersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
-	"\x05value\x18\x02 \x01(\v2$.bigquery_emulator.v1.QueryParameterR\x05value:\x028\x01\"L\n" +
+	"\x05value\x18\x02 \x01(\v2$.bigquery_emulator.v1.QueryParameterR\x05value:\x028\x01\"i\n" +
 	"\x0eQueryParameter\x12\x1b\n" +
 	"\ttype_kind\x18\x01 \x01(\tR\btypeKind\x12\x1d\n" +
 	"\n" +
-	"value_json\x18\x02 \x01(\tR\tvalueJson\"\x87\x01\n" +
+	"value_json\x18\x02 \x01(\tR\tvalueJson\x12\x1b\n" +
+	"\ttype_json\x18\x03 \x01(\tR\btypeJson\"\x87\x01\n" +
 	"\x0eDryRunResponse\x129\n" +
 	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x12:\n" +
 	"\x19estimated_bytes_processed\x18\x02 \x01(\x03R\x17estimatedBytesProcessed\"\x88\x02\n" +

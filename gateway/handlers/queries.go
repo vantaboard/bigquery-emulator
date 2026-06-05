@@ -261,15 +261,10 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 // `parameterType`, and `parameterValue`; the engine speaks a
 // name-keyed map plus a `type_kind` / `value_json` value pair.
 //
-// Named parameters flow through unchanged. Positional parameters
-// are currently dropped on the floor (the engine proto's map shape
-// cannot represent them; the engine binds them by `request.parameters`
-// list order via the matching positional-parameter slot the
-// analyzer assigned). Wiring positional parameters end-to-end
-// requires either a proto change (move from `map` to `repeated`)
-// or a synthetic key encoding; both are deferred to the
-// gateway-parameters follow-up plan referenced from
-// `docs/ENGINE_POLICY.md`'s deliberately-deferred list.
+// Named parameters flow through unchanged. Positional parameters use
+// synthetic map keys (`p0`, `p1`, ...) because the engine proto is
+// name-keyed; the frontend strips those keys before binding `?`
+// placeholders.
 //
 // Values with a missing `parameterType` are skipped because the
 // engine cannot decode them without a type tag.
@@ -288,17 +283,14 @@ func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.Que
 			name = "p" + strconv.Itoa(positionalIdx)
 			positionalIdx++
 		}
+		typeKind, typeJSON := bqtypes.ParameterTypeWire(p.ParameterType)
 		var value string
 		if p.ParameterValue != nil {
-			if len(p.ParameterValue.ArrayValues) > 0 ||
-				len(p.ParameterValue.StructValues) > 0 {
-				value = p.ParameterValue.ValueJSON()
-			} else {
-				value = p.ParameterValue.Value
-			}
+			value = bqtypes.ParameterValueWire(p.ParameterType, p.ParameterValue)
 		}
 		out[name] = &enginepb.QueryParameter{
-			TypeKind:  p.ParameterType.Type,
+			TypeKind:  typeKind,
+			TypeJson:  typeJSON,
 			ValueJson: value,
 		}
 	}

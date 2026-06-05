@@ -194,7 +194,7 @@ QueryService::QueryService(backend::storage::Storage* storage,
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
   if (absl::Status param_status =
           backend::engine::coordinator::PopulateAnalyzerParameters(
-              engine_request, analyzer_options);
+              engine_request, analyzer_options, type_factory);
       !param_status.ok()) {
     return AnalyzeStatusToGrpc(param_status);
   }

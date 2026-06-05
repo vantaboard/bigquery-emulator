@@ -176,6 +176,22 @@ TEST(SemanticValueTest, ParseParameterValueRejectsUnknownTypeKind) {
   EXPECT_FALSE(v.ok());
 }
 
+TEST(SemanticValueTest, ParseParameterValueTimestampRFC3339) {
+  auto v = ParseParameterValue("\"2016-12-07T08:00:00+00:00\"", "TIMESTAMP");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+  EXPECT_FALSE(v->is_null());
+}
+
+TEST(SemanticValueTest, ParseParameterValueStructOrderedArray) {
+  auto v = ParseParameterValue(R"(["1","foo"])", "STRUCT", "x:INT64,y:STRING");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->type()->IsStruct());
+  EXPECT_EQ(v->num_fields(), 2);
+  EXPECT_EQ(v->field(0).int64_value(), 1);
+  EXPECT_EQ(v->field(1).string_value(), "foo");
+}
+
 TEST(SemanticValueTest, ParseParameterValueDeferTemporalTypes) {
   auto v = ParseParameterValue("\"2020-01-01\"", "DATE");
   EXPECT_FALSE(v.ok());

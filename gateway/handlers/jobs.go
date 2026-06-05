@@ -13,6 +13,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
+	"github.com/vantaboard/bigquery-emulator/gateway/query"
 )
 
 // jobListKind is the value the BigQuery REST API returns for the
@@ -395,12 +396,18 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	schema, dmlStats, rows, statementType, emulatorRoute, streamErr := drainSyncStream(stream)
-	end := time.Now().UTC()
 	if streamErr != nil {
 		finalizeFailedJob(deps, job, start, streamErr)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	restSchema := schemaFromProto(schema)
+	if err := query.AppendResults(r.Context(), deps.Catalog, cfg.Query, projectID, restSchema, rows); err != nil {
+		finalizeFailedJob(deps, job, start, err)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	end := time.Now().UTC()
 	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, r)
 	writeJSON(w, http.StatusOK, job)
 }

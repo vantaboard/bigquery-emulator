@@ -78,6 +78,67 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 	return protoMerged, nil
 }
 
+// MergeSchemasForAppend merges an existing table schema with a query
+// result schema honoring BigQuery schemaUpdateOptions.
+func MergeSchemasForAppend(
+	existing *bqtypes.TableSchema,
+	query *bqtypes.TableSchema,
+	opts []string,
+) (*bqtypes.TableSchema, bool) {
+	return mergeSchemas(existing, query, opts)
+}
+
+// ApplySchemaUpdate merges querySchema into the destination catalog
+// table when schemaUpdateOptions require field addition or relaxation.
+// Existing rows are preserved via drop-and-recreate when the merged
+// schema differs from the catalog.
+func ApplySchemaUpdate(ctx context.Context, catalog enginepb.CatalogClient,
+	tableRef *enginepb.TableRef, querySchema *bqtypes.TableSchema, opts []string,
+) (*enginepb.TableSchema, error) {
+	if len(opts) == 0 || querySchema == nil {
+		desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+		if err != nil {
+			return nil, fmt.Errorf("describe destination table: %w", err)
+		}
+		return desc.GetSchema(), nil
+	}
+	desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+	if err != nil {
+		return nil, fmt.Errorf("describe destination table: %w", err)
+	}
+	existing := schemaFromProto(desc.GetSchema())
+	merged, changed := mergeSchemas(existing, querySchema, opts)
+	if !changed {
+		return desc.GetSchema(), nil
+	}
+	preserved, err := listAllRows(ctx, catalog, tableRef, desc.GetSchema())
+	if err != nil {
+		return nil, err
+	}
+	protoMerged := schemaToProto(merged)
+	if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
+		return nil, fmt.Errorf("schema update drop table: %w", err)
+	}
+	if _, err := catalog.RegisterTable(ctx, &enginepb.RegisterTableRequest{
+		Table:  tableRef,
+		Schema: protoMerged,
+	}); err != nil {
+		return nil, fmt.Errorf("schema update register table: %w", err)
+	}
+	if len(preserved) > 0 {
+		ref := seed.TableRef{
+			ProjectID: tableRef.GetProjectId(),
+			DatasetID: tableRef.GetDatasetId(),
+			TableID:   tableRef.GetTableId(),
+		}
+		applier := seed.NewCatalogApplier(catalog)
+		if _, err := applier.InsertRows(ctx, ref, protoMerged, preserved); err != nil {
+			return nil, fmt.Errorf("schema update re-insert rows: %w", err)
+		}
+	}
+	return protoMerged, nil
+}
+
 func mergeSchemas(
 	existing *bqtypes.TableSchema,
 	load *bqtypes.TableSchema,

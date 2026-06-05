@@ -69,16 +69,6 @@ std::string FormatTimestampUtc(absl::Time t) {
                          static_cast<int>(frac));
 }
 
-// JSON unquoting helper for parameter parsing: strip a single layer
-// of outer double quotes. The gateway already passes the body
-// verbatim, so we just normalize the common bare-literal case.
-absl::string_view StripJsonQuotes(absl::string_view body) {
-  if (body.size() >= 2 && body.front() == '"' && body.back() == '"') {
-    return body.substr(1, body.size() - 2);
-  }
-  return body;
-}
-
 }  // namespace
 
 absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
@@ -155,6 +145,11 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
   if (absl::EqualsIgnoreCase(name, "INTERVAL"))
     return ::googlesql::TYPE_INTERVAL;
   if (absl::EqualsIgnoreCase(name, "UUID")) return ::googlesql::TYPE_UUID;
+  if (absl::EqualsIgnoreCase(name, "ARRAY")) return ::googlesql::TYPE_ARRAY;
+  if (absl::EqualsIgnoreCase(name, "STRUCT") ||
+      absl::EqualsIgnoreCase(name, "RECORD")) {
+    return ::googlesql::TYPE_STRUCT;
+  }
   return ::googlesql::TYPE_UNKNOWN;
 }
 
@@ -344,142 +339,6 @@ absl::StatusOr<schema::ColumnSchema> ColumnSchemaForType(
                                                      core->DebugString()));
   }
   return column;
-}
-
-bool IsSyntheticPositionalParameterName(absl::string_view name) {
-  if (name.empty() || !absl::StartsWith(name, "p")) return false;
-  name.remove_prefix(1);
-  if (name.empty()) return false;
-  for (char c : name) {
-    if (!absl::ascii_isdigit(static_cast<unsigned char>(c))) return false;
-  }
-  return true;
-}
-
-absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
-                                          absl::string_view type_kind_name) {
-  ::googlesql::TypeKind kind = ParseTypeKindName(type_kind_name);
-  if (kind == ::googlesql::TYPE_UNKNOWN) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: unknown parameter type kind '", type_kind_name, "'"));
-  }
-  absl::string_view trimmed = absl::StripAsciiWhitespace(value_json);
-  // BigQuery's REST `QueryParameterValue.value` is always a JSON
-  // string; the gateway forwards it verbatim. NULL is encoded as a
-  // missing field at the gateway, which collapses to an empty
-  // `value_json` here.
-  if (trimmed.empty() || trimmed == "null") {
-    switch (kind) {
-      case ::googlesql::TYPE_BOOL:
-        return Value::NullBool();
-      case ::googlesql::TYPE_INT64:
-        return Value::NullInt64();
-      case ::googlesql::TYPE_DOUBLE:
-        return Value::NullDouble();
-      case ::googlesql::TYPE_STRING:
-        return Value::NullString();
-      case ::googlesql::TYPE_BYTES:
-        return Value::NullBytes();
-      case ::googlesql::TYPE_DATE:
-        return Value::NullDate();
-      case ::googlesql::TYPE_TIME:
-        return Value::NullTime();
-      case ::googlesql::TYPE_DATETIME:
-        return Value::NullDatetime();
-      case ::googlesql::TYPE_TIMESTAMP:
-        return Value::NullTimestamp();
-      case ::googlesql::TYPE_NUMERIC:
-        return Value::NullNumeric();
-      case ::googlesql::TYPE_BIGNUMERIC:
-        return Value::NullBigNumeric();
-      case ::googlesql::TYPE_JSON:
-        return Value::NullJson();
-      default:
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            absl::StrCat("semantic: NULL parameter for type kind '",
-                         type_kind_name,
-                         "' is not yet implemented"));
-    }
-  }
-  absl::string_view body = StripJsonQuotes(trimmed);
-  switch (kind) {
-    case ::googlesql::TYPE_BOOL: {
-      if (absl::EqualsIgnoreCase(trimmed, "true") ||
-          absl::EqualsIgnoreCase(body, "true")) {
-        return Value::Bool(true);
-      }
-      if (absl::EqualsIgnoreCase(trimmed, "false") ||
-          absl::EqualsIgnoreCase(body, "false")) {
-        return Value::Bool(false);
-      }
-      return absl::InvalidArgumentError(absl::StrCat(
-          "semantic: invalid BOOL parameter value '", value_json, "'"));
-    }
-    case ::googlesql::TYPE_INT64: {
-      int64_t v = 0;
-      if (!absl::SimpleAtoi(body, &v)) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "semantic: invalid INT64 parameter value '", value_json, "'"));
-      }
-      return Value::Int64(v);
-    }
-    case ::googlesql::TYPE_DOUBLE: {
-      double v = 0;
-      if (!absl::SimpleAtod(body, &v)) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "semantic: invalid FLOAT64 parameter value '", value_json, "'"));
-      }
-      return Value::Double(v);
-    }
-    case ::googlesql::TYPE_STRING:
-      return Value::String(std::string(body));
-    case ::googlesql::TYPE_BYTES: {
-      std::string decoded;
-      if (!absl::Base64Unescape(body, &decoded)) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "semantic: invalid BYTES parameter value '", value_json, "'"));
-      }
-      return Value::Bytes(decoded);
-    }
-    case ::googlesql::TYPE_NUMERIC: {
-      auto n = ::googlesql::NumericValue::FromString(body);
-      if (!n.ok()) return n.status();
-      return Value::Numeric(*n);
-    }
-    case ::googlesql::TYPE_BIGNUMERIC: {
-      auto n = ::googlesql::BigNumericValue::FromString(body);
-      if (!n.ok()) return n.status();
-      return Value::BigNumeric(*n);
-    }
-    case ::googlesql::TYPE_DATE:
-    case ::googlesql::TYPE_TIME:
-    case ::googlesql::TYPE_DATETIME:
-    case ::googlesql::TYPE_TIMESTAMP:
-    case ::googlesql::TYPE_JSON:
-    case ::googlesql::TYPE_INTERVAL:
-    case ::googlesql::TYPE_UUID:
-      // Date / time / json / interval / uuid parameter binding
-      // requires the same FromString-style parsers GoogleSQL ships
-      // for literals; routing them through is in scope for the
-      // semantic functions plan
-      // (`docs/ENGINE_POLICY.md`). Surface
-      // NOT_IMPLEMENTED today so the wire envelope is consistent.
-      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                               absl::StrCat("semantic: parameter type '",
-                                            type_kind_name,
-                                            "' is not yet supported; see "
-                                            "docs/ENGINE_POLICY.md"));
-    case ::googlesql::TYPE_ARRAY:
-    case ::googlesql::TYPE_STRUCT:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: ARRAY / STRUCT parameters are owned by "
-                       "docs/ENGINE_POLICY.md"));
-    default:
-      return absl::InvalidArgumentError(absl::StrCat(
-          "semantic: unsupported parameter type kind '", type_kind_name, "'"));
-  }
 }
 
 }  // namespace semantic

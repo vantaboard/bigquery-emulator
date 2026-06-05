@@ -103,12 +103,14 @@ absl::StatusOr<schema::ColumnSchema> ColumnSchemaForType(
 // gateway / engine plumbing does not have to canonicalize twice.
 //
 // Returns INVALID_ARGUMENT when the type kind is unknown or the
-// JSON body cannot be parsed against the requested kind. ARRAY and
-// STRUCT parameter types are deferred to a downstream plan; calling
-// with them returns NOT_IMPLEMENTED so the caller can surface a
-// clean envelope.
+// JSON body cannot be parsed against the requested kind.
 absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
-                                          absl::string_view type_kind_name);
+                                          absl::string_view type_kind_name,
+                                          absl::string_view type_json = {});
+
+// Zero-based index for gateway synthetic positional keys (`p0`, `p1`, ...).
+// Returns -1 when `name` is not synthetic.
+int SyntheticPositionalParameterIndex(absl::string_view name);
 
 // Map a BigQuery / GoogleSQL type-kind spelling onto
 // `::googlesql::TypeKind`. Accepts both "INT64" and "TYPE_INT64";
@@ -116,8 +118,11 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
 ::googlesql::TypeKind ParseTypeKindName(absl::string_view type_kind_name);
 
 // True for gateway synthetic positional keys (`p0`, `p1`, ...) emitted
-// by `emulator_sql.go` when binding `?` placeholders.
+// when binding REST positional query parameters.
 bool IsSyntheticPositionalParameterName(absl::string_view name);
+
+// True when the parameter should bind positionally (`?` placeholders).
+bool IsPositionalParameterName(absl::string_view name);
 
 }  // namespace semantic
 }  // namespace engine

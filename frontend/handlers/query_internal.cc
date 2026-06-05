@@ -9,6 +9,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
 #include "googlesql/public/error_helpers.h"
 #include "googlesql/public/error_location.pb.h"
@@ -137,6 +138,11 @@ backend::engine::QueryRequest ProtoToEngineRequest(
     parameter.name = kv.first;
     parameter.type_kind = kv.second.type_kind();
     parameter.value_json = kv.second.value_json();
+    parameter.type_json = kv.second.type_json();
+    if (backend::engine::semantic::IsSyntheticPositionalParameterName(
+            parameter.name)) {
+      parameter.name.clear();
+    }
     engine_request.parameters.push_back(std::move(parameter));
   }
   // Proto map iteration order is undefined; sort positional keys (p0, p1,

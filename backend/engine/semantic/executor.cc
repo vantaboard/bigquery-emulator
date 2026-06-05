@@ -42,14 +42,25 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
   bool any_positional = false;
   bool any_named = false;
   for (const QueryParameter& p : request.parameters) {
-    auto value = ParseParameterValue(p.value_json, p.type_kind);
+    auto value = ParseParameterValue(p.value_json, p.type_kind, p.type_json);
     if (!value.ok()) return value.status();
-    if (p.name.empty()) {
-      bindings.by_position.push_back(*std::move(value));
+    if (IsPositionalParameterName(p.name)) {
+      if (p.name.empty()) {
+        bindings.by_position.push_back(*std::move(value));
+      } else {
+        const int idx = SyntheticPositionalParameterIndex(p.name);
+        if (idx < 0) {
+          return absl::InvalidArgumentError(
+              absl::StrCat("semantic: invalid synthetic positional parameter '",
+                           p.name,
+                           "'"));
+        }
+        if (bindings.by_position.size() <= static_cast<size_t>(idx)) {
+          bindings.by_position.resize(static_cast<size_t>(idx) + 1);
+        }
+        bindings.by_position[static_cast<size_t>(idx)] = *std::move(value);
+      }
       any_positional = true;
-    } else if (IsSyntheticPositionalParameterName(p.name)) {
-      bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
-      any_named = true;
     } else {
       bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);
       any_named = true;

@@ -46,7 +46,10 @@ cc_test(
 
 cc_library(
     name = "value",
-    srcs = ["value.cc"],
+    srcs = [
+        "value.cc",
+        "value_parameters.cc",
+    ],
     hdrs = [
         "eval_context.h",
         "value.h",

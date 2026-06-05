@@ -6,6 +6,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/engine.h"
@@ -19,8 +21,7 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
-#include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
+#include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
@@ -172,13 +173,6 @@ AnalyzeStatementImpl(const QueryRequest& request,
   ::googlesql::AnalyzerOptions options =
       all_statements ? MakeAnalyzerOptionsAllStatements()
                      : MakeAnalyzerOptions();
-  absl::Status param_status = PopulateParameterOptions(request, options);
-  if (!param_status.ok()) return param_status;
-  // Types embedded in the resolved AST are owned by the catalog's
-  // `TypeFactory` (see `GoogleSqlCatalog`'s constructor contract).
-  // A stack-local factory here would be destroyed before
-  // `ExecuteDdl` walks STRUCT column definitions -- that use-after-
-  // free surfaced as a SIGSEGV on CREATE TABLE with nested STRUCT.
   auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
   if (bq_catalog == nullptr) {
     return absl::FailedPreconditionError(
@@ -189,6 +183,14 @@ AnalyzeStatementImpl(const QueryRequest& request,
     return absl::FailedPreconditionError(
         "LocalCoordinatorEngine: catalog type_factory is null");
   }
+  absl::Status param_status =
+      PopulateParameterOptions(request, options, type_factory);
+  if (!param_status.ok()) return param_status;
+  // Types embedded in the resolved AST are owned by the catalog's
+  // `TypeFactory` (see `GoogleSqlCatalog`'s constructor contract).
+  // A stack-local factory here would be destroyed before
+  // `ExecuteDdl` walks STRUCT column definitions -- that use-after-
+  // free surfaced as a SIGSEGV on CREATE TABLE with nested STRUCT.
   if (absl::Status sys_status =
           RegisterSystemVariablesOnOptions(type_factory, options);
       !sys_status.ok()) {
@@ -247,13 +249,46 @@ absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
   }
 }
 
+absl::StatusOr<const ::googlesql::Type*> ParameterTypeForQueryParameter(
+    const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory) {
+  if (parameter.type_kind == "STRUCT") {
+    if (type_factory == nullptr) {
+      return absl::InvalidArgumentError(
+          "LocalCoordinatorEngine: STRUCT parameter requires type_factory");
+    }
+    std::vector<::googlesql::StructType::StructField> fields;
+    for (absl::string_view part : absl::StrSplit(parameter.type_json, ',')) {
+      part = absl::StripAsciiWhitespace(part);
+      if (part.empty()) continue;
+      const size_t colon = part.find(':');
+      if (colon == absl::string_view::npos) continue;
+      const absl::string_view field_name = part.substr(0, colon);
+      const absl::string_view field_kind =
+          absl::StripAsciiWhitespace(part.substr(colon + 1));
+      auto field_type_or = ParameterTypeForKind(field_kind);
+      if (!field_type_or.ok()) return field_type_or.status();
+      fields.emplace_back(std::string(field_name), *field_type_or);
+    }
+    if (fields.empty()) {
+      return absl::InvalidArgumentError(
+          "LocalCoordinatorEngine: STRUCT parameter missing type_json");
+    }
+    const ::googlesql::StructType* struct_type = nullptr;
+    absl::Status s = type_factory->MakeStructType(fields, &struct_type);
+    if (!s.ok()) return s;
+    return struct_type;
+  }
+  return ParameterTypeForKind(parameter.type_kind);
+}
+
 absl::Status PopulateParameterOptions(const QueryRequest& request,
-                                      ::googlesql::AnalyzerOptions& options) {
+                                      ::googlesql::AnalyzerOptions& options,
+                                      ::googlesql::TypeFactory* type_factory) {
   if (request.parameters.empty()) return absl::OkStatus();
   bool has_named = false;
   bool has_positional = false;
   for (const QueryParameter& p : request.parameters) {
-    if (p.name.empty()) {
+    if (semantic::IsPositionalParameterName(p.name)) {
       has_positional = true;
     } else {
       has_named = true;
@@ -267,9 +302,9 @@ absl::Status PopulateParameterOptions(const QueryRequest& request,
   options.set_parameter_mode(has_positional ? ::googlesql::PARAMETER_POSITIONAL
                                             : ::googlesql::PARAMETER_NAMED);
   for (const QueryParameter& p : request.parameters) {
-    auto type_or = ParameterTypeForKind(p.type_kind);
+    auto type_or = ParameterTypeForQueryParameter(p, type_factory);
     if (!type_or.ok()) return type_or.status();
-    if (p.name.empty()) {
+    if (semantic::IsPositionalParameterName(p.name)) {
       absl::Status s = options.AddPositionalQueryParameter(*type_or);
       if (!s.ok()) return s;
     } else {
@@ -280,9 +315,11 @@ absl::Status PopulateParameterOptions(const QueryRequest& request,
   return absl::OkStatus();
 }
 
-absl::Status PopulateAnalyzerParameters(const QueryRequest& request,
-                                        ::googlesql::AnalyzerOptions& options) {
-  return PopulateParameterOptions(request, options);
+absl::Status PopulateAnalyzerParameters(
+    const QueryRequest& request,
+    ::googlesql::AnalyzerOptions& options,
+    ::googlesql::TypeFactory* type_factory) {
+  return PopulateParameterOptions(request, options, type_factory);
 }
 
 absl::StatusOr<std::unique_ptr<AnalyzedQuery>> AnalyzeSelectQuery(

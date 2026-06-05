@@ -92,7 +92,8 @@ class LocalCoordinatorEngine : public Engine {
 // Used by the coordinator and by `frontend/handlers/query.cc`'s
 // pre-classify pass so DML with named parameters classifies correctly.
 absl::Status PopulateAnalyzerParameters(const QueryRequest& request,
-                                        ::googlesql::AnalyzerOptions& options);
+                                        ::googlesql::AnalyzerOptions& options,
+                                        ::googlesql::TypeFactory* type_factory);
 
 }  // namespace coordinator
 }  // namespace engine

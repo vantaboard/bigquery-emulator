@@ -197,6 +197,9 @@ message QueryRequest {
 message QueryParameter {
   string type_kind = 1;   // googlesql TypeKind name (e.g. INT64, STRING).
   string value_json = 2;  // JSON-encoded literal value.
+  // Optional STRUCT/ARRAY field-type descriptor (gateway-encoded from
+  // REST `parameterType`; empty for scalar parameters).
+  string type_json = 3;
 }
 
 message DryRunResponse {

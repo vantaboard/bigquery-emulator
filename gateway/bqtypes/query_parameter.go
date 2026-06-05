@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 )
+
+const parameterTypeStruct = "STRUCT"
 
 // UnmarshalJSON accepts BigQuery REST parameter values where `value`
 // may be encoded as a JSON string, number, or bool. The engine expects
@@ -77,6 +80,51 @@ func (v *QueryParameterValue) ValueJSON() string {
 		return string(raw)
 	}
 	return v.Value
+}
+
+// ParameterTypeWire returns the engine `type_kind` and optional
+// `type_json` descriptor for a REST query parameter type.
+func ParameterTypeWire(t *QueryParameterType) (typeKind, typeJSON string) {
+	if t == nil {
+		return "", ""
+	}
+	switch t.Type {
+	case parameterTypeStruct:
+		if len(t.StructTypes) == 0 {
+			return parameterTypeStruct, ""
+		}
+		parts := make([]string, 0, len(t.StructTypes))
+		for _, st := range t.StructTypes {
+			fk, _ := ParameterTypeWire(&st.Type)
+			parts = append(parts, st.Name+":"+fk)
+		}
+		return parameterTypeStruct, strings.Join(parts, ",")
+	default:
+		return t.Type, ""
+	}
+}
+
+// ParameterValueWire returns the JSON literal forwarded as engine
+// `value_json`. STRUCT parameters use a positional JSON array aligned
+// with `parameterType.structTypes`.
+func ParameterValueWire(pt *QueryParameterType, v *QueryParameterValue) string {
+	if v == nil {
+		return ""
+	}
+	if pt != nil && pt.Type == parameterTypeStruct && len(pt.StructTypes) > 0 &&
+		len(v.StructValues) > 0 {
+		elems := make([]json.RawMessage, 0, len(pt.StructTypes))
+		for _, st := range pt.StructTypes {
+			fv := v.StructValues[st.Name]
+			elems = append(elems, json.RawMessage(fv.marshalParameterJSON()))
+		}
+		raw, err := json.Marshal(elems)
+		if err != nil {
+			return "[]"
+		}
+		return string(raw)
+	}
+	return v.ValueJSON()
 }
 
 func (v QueryParameterValue) marshalParameterJSON() []byte {
