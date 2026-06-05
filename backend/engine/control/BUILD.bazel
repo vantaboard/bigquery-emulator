@@ -6,7 +6,7 @@
 # directly (CREATE TABLE / DROP TABLE / ANALYZE) and lowers the few
 # shapes that need DuckDB SQL as an implementation primitive (CTAS)
 # through a per-query in-memory DuckDB connection. See plan
-# `.cursor/plans/control-op-executor.plan.md`.
+# `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
@@ -17,11 +17,16 @@ cc_library(
     srcs = ["control_op_executor.cc"],
     hdrs = ["control_op_executor.h"],
     deps = [
+        "//backend/catalog:create_function_util",
+        "//backend/catalog:googlesql_catalog",
         "//backend/catalog:storage_table",
+        "//backend/catalog:udf_registry",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb:arrow_to_bq",
+        "//backend/engine/duckdb/transpiler:transpiler",
         "//backend/engine/duckdb/udf:registrar",
+        "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",

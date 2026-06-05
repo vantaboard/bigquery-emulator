@@ -237,7 +237,7 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_TRUE(absl::StrContains(source.status().message(), "unsupported"))
       << source.status().message();
   EXPECT_TRUE(absl::StrContains(source.status().message(),
-                                "specialized-feature-policy.plan.md"))
+                                "googlesqlite-15-specialized-stubs.plan.md"))
       << source.status().message();
 }
 
@@ -263,6 +263,21 @@ TEST_F(LocalCoordinatorEngineTest,
   auto schema = storage_->GetSchema({"proj-test", "ds", "new_table"});
   ASSERT_TRUE(schema.ok()) << schema.status();
   EXPECT_EQ(schema->columns.size(), 2u);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteDdlCreateTableWithStructColumnRoutesThroughControlOp) {
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  CatalogBundle bundle = MakeCatalog();
+  auto status = engine_->ExecuteDdl(
+      MakeRequest("CREATE TABLE ds.t (k INT64, s STRUCT<a INT64, b STRING>)"),
+      bundle.catalog.get());
+  ASSERT_TRUE(status.ok()) << status;
+  auto schema = storage_->GetSchema({"proj-test", "ds", "t"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 2u);
+  EXPECT_EQ(schema->columns[1].type, schema::ColumnType::kStruct);
+  ASSERT_EQ(schema->columns[1].fields.size(), 2u);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +400,7 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDdlAlterTableAddColumnPadsRows) {
 
 TEST_F(LocalCoordinatorEngineTest, ExecuteQueryScalarSelectRoutesToSemantic) {
   // Scalar-only SELECT (no FROM) classifies to
-  // `kSemanticExecutor` after `semantic-executor-core.plan.md`
+  // `kSemanticExecutor` after `googlesqlite-07-semantic-core-expr.plan.md`
   // landed; the coordinator dispatches to the local
   // `semantic::SemanticExecutor`, which evaluates the expression
   // tree directly and returns a one-row Arrow batch matching the
@@ -460,7 +475,7 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
-// `advanced-relational-routing.plan.md` Family 6: the pipe-DDL
+// `googlesqlite-13-advanced-relational.plan.md` Family 6: the pipe-DDL
 // forms (`FROM ... |> EXPORT DATA ...` and `FROM ... |> CREATE
 // TABLE ...`) arrive at the engine as a `ResolvedQueryStmt`
 // whose body is a `ResolvedPipeExportDataScan` /
@@ -506,6 +521,33 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_TRUE(absl::StrContains(source.status().message(),
                                 "pipe-form CREATE TABLE adapter"))
       << source.status();
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
+  CatalogBundle bundle = MakeCatalog();
+  ASSERT_TRUE(engine_
+                  ->ExecuteDdl(MakeRequest(R"(CREATE FUNCTION customfunc(
+  arr ARRAY<STRUCT<name STRING, val INT64>>
+) AS (
+  (SELECT SUM(IF(elem.name = "foo",elem.val,null)) FROM UNNEST(arr) AS elem)
+))"),
+                               bundle.catalog.get())
+                  .ok());
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(MakeRequest(R"(SELECT customfunc([
+  STRUCT<name STRING, val INT64>("foo", 10),
+  STRUCT<name STRING, val INT64>("bar", 40),
+  STRUCT<name STRING, val INT64>("foo", 20)
+]))"),
+                                      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+  EXPECT_EQ(row.cells[0].int64_value(), 30);
 }
 
 }  // namespace

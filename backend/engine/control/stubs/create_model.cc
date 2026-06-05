@@ -23,7 +23,7 @@ absl::Status RunCreateModel(const ::googlesql::ResolvedStatement& stmt) {
   // Mark every field accessed so the analyzer's per-node field-
   // access tracker is satisfied. The stub deliberately does NOT
   // persist any of these to storage -- this is the metadata-only
-  // contract from `specialized-feature-policy.plan.md` -- but
+  // contract from `googlesqlite-15-specialized-stubs.plan.md` -- but
   // the analyzer demands every field on a resolved node be
   // accessed at least once or the AST owner reports an unchecked-
   // fields error when it is destroyed. Marking is cheaper than

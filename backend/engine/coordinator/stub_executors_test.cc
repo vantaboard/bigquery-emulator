@@ -92,7 +92,8 @@ TEST_F(StubExecutorsTest, UnsupportedExecuteQueryNamesRoute) {
   EXPECT_EQ(out.status().code(), absl::StatusCode::kUnimplemented);
   const std::string msg(out.status().message());
   EXPECT_NE(msg.find("unsupported"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("specialized-feature-policy.plan.md"), std::string::npos)
+  EXPECT_NE(msg.find("googlesqlite-15-specialized-stubs.plan.md"),
+            std::string::npos)
       << msg;
 }
 
@@ -111,7 +112,7 @@ TEST_F(StubExecutorsTest, UnsupportedReportsStatementKind) {
 }
 
 TEST_F(StubExecutorsTest, UnsupportedMessageLinksEnginePolicyDoc) {
-  // `specialized-feature-policy.plan.md` requires the unsupported
+  // `googlesqlite-15-specialized-stubs.plan.md` requires the unsupported
   // envelope to point a user at `docs/ENGINE_POLICY.md` so they
   // can find the family-by-family posture table without first
   // having to locate the plan file. The plan file remains the

@@ -7,14 +7,22 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/catalog/create_function_util.h"
+#include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/catalog/udf_registry.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/value.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -174,6 +182,99 @@ absl::StatusOr<std::string> RenderScalarLiteral(
           "'", EscapeStringLiteralInner(cell.string_value()), "'");
   }
   return absl::InternalError("RenderScalarLiteral: unreachable");
+}
+
+absl::StatusOr<std::string> RenderSemanticParameterLiteral(
+    const semantic::Value& v) {
+  if (v.is_null()) return std::string("NULL");
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_BOOL:
+      return std::string(v.bool_value() ? "TRUE" : "FALSE");
+    case ::googlesql::TYPE_INT64:
+      return absl::StrCat(v.int64_value());
+    case ::googlesql::TYPE_DOUBLE: {
+      storage::Value cell = storage::Value::Float64(v.double_value());
+      return RenderFloatLiteral(cell);
+    }
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_JSON:
+    case ::googlesql::TYPE_GEOGRAPHY:
+      return absl::StrCat("'", EscapeStringLiteralInner(v.string_value()), "'");
+    case ::googlesql::TYPE_BYTES:
+      return RenderBlobLiteral(v.bytes_value());
+    default: {
+      auto storage_or = semantic::ToStorageValue(v);
+      if (!storage_or.ok()) return storage_or.status();
+      schema::ColumnSchema col;
+      col.name = "p";
+      col.mode = schema::ColumnMode::kNullable;
+      switch (v.type_kind()) {
+        case ::googlesql::TYPE_DATE:
+          col.type = schema::ColumnType::kDate;
+          break;
+        case ::googlesql::TYPE_TIMESTAMP:
+          col.type = schema::ColumnType::kTimestamp;
+          break;
+        case ::googlesql::TYPE_NUMERIC:
+          col.type = schema::ColumnType::kNumeric;
+          break;
+        case ::googlesql::TYPE_BIGNUMERIC:
+          col.type = schema::ColumnType::kBignumeric;
+          break;
+        default:
+          col.type = schema::ColumnType::kString;
+          break;
+      }
+      return RenderScalarLiteral(*storage_or, col);
+    }
+  }
+}
+
+absl::StatusOr<std::string> SubstituteDuckdbParameters(
+    std::string sql,
+    const std::vector<duckdb::transpiler::Transpiler::ParameterRef>& order,
+    absl::Span<const QueryParameter> parameters) {
+  if (order.empty()) return sql;
+  std::vector<std::string> literals(order.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    const duckdb::transpiler::Transpiler::ParameterRef& ref = order[i];
+    const QueryParameter* param = nullptr;
+    if (!ref.name.empty()) {
+      for (const QueryParameter& p : parameters) {
+        if (absl::EqualsIgnoreCase(p.name, ref.name)) {
+          param = &p;
+          break;
+        }
+      }
+    } else {
+      int seen = 0;
+      for (const QueryParameter& p : parameters) {
+        if (!p.name.empty()) continue;
+        if (++seen == ref.position) {
+          param = &p;
+          break;
+        }
+      }
+    }
+    if (param == nullptr) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("ControlOpExecutor: missing query parameter for DuckDB ",
+                       "placeholder $",
+                       i + 1));
+    }
+    auto value =
+        semantic::ParseParameterValue(param->value_json, param->type_kind);
+    if (!value.ok()) return value.status();
+    auto literal = RenderSemanticParameterLiteral(*value);
+    if (!literal.ok()) return literal.status();
+    literals[i] = *std::move(literal);
+  }
+  for (int slot = static_cast<int>(order.size()); slot >= 1; --slot) {
+    const std::string placeholder = absl::StrCat("$", slot);
+    sql = absl::StrReplaceAll(
+        sql, {{placeholder, literals[static_cast<size_t>(slot - 1)]}});
+  }
+  return sql;
 }
 
 absl::StatusOr<std::string> RenderCellLiteral(
@@ -352,11 +453,26 @@ absl::StatusOr<std::vector<storage::Row>> DrainTableRows(
 
 // Resolve `name_path` (as produced by `ResolvedCreateStatement::
 // name_path()` / `ResolvedDropStmt::name_path()` etc.) to a
-// `storage::TableId` under `default_project_id`. Two-segment paths
-// default the project, three-segment paths override it.
+// `storage::TableId` under `default_project_id`. One-segment paths
+// use `default_dataset_id` when set (BigQuery `defaultDataset` on
+// jobs.query). Two-segment paths default the project; three-segment
+// paths override it.
 absl::StatusOr<storage::TableId> NamePathToTableId(
     const std::vector<std::string>& name_path,
-    absl::string_view default_project_id) {
+    absl::string_view default_project_id,
+    absl::string_view default_dataset_id) {
+  if (name_path.size() == 1) {
+    if (default_dataset_id.empty()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "control op executor: DDL target name must be <dataset>.<table> or "
+          "<project>.<dataset>.<table>; got 1 segment (",
+          name_path[0],
+          ") with no defaultDataset in the query request"));
+    }
+    return storage::TableId{std::string(default_project_id),
+                            std::string(default_dataset_id),
+                            name_path[0]};
+  }
   if (name_path.size() == 2) {
     return storage::TableId{
         std::string(default_project_id), name_path[0], name_path[1]};
@@ -369,6 +485,24 @@ absl::StatusOr<storage::TableId> NamePathToTableId(
       "<project>.<dataset>.<table>; got ",
       name_path.size(),
       " segments"));
+}
+
+// Create the dataset directory if it does not exist yet. googlesqlite
+// port tests issue `CREATE TABLE ds.t` without a prior datasets.insert.
+absl::Status EnsureDatasetExists(storage::Storage& storage,
+                                 absl::string_view project_id,
+                                 absl::string_view dataset_id) {
+  if (dataset_id.empty()) {
+    return absl::InvalidArgumentError(
+        "EnsureDatasetExists: dataset_id must be non-empty");
+  }
+  storage::DatasetId id{std::string(project_id), std::string(dataset_id)};
+  absl::Status created = storage.CreateDataset(id, "US");
+  if (created.ok()) return absl::OkStatus();
+  if (created.code() == absl::StatusCode::kAlreadyExists) {
+    return absl::OkStatus();
+  }
+  return created;
 }
 
 // --- Schema helpers -------------------------------------------------------
@@ -423,6 +557,7 @@ absl::Status ApplyCreateMode(
 // (`Job.statistics.query.statementType`).
 absl::Status RunCreateTable(storage::Storage& storage,
                             absl::string_view project_id,
+                            absl::string_view default_dataset_id,
                             const ::googlesql::ResolvedCreateTableStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
@@ -430,8 +565,13 @@ absl::Status RunCreateTable(storage::Storage& storage,
         "statement");
   }
   absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
+      NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
   if (!target.ok()) return target.status();
+  if (auto ds =
+          EnsureDatasetExists(storage, target->project_id, target->dataset_id);
+      !ds.ok()) {
+    return ds;
+  }
   absl::StatusOr<schema::TableSchema> bq_schema =
       ColumnDefinitionListToTableSchema(stmt->column_definition_list());
   if (!bq_schema.ok()) return bq_schema.status();
@@ -445,6 +585,51 @@ absl::Status RunCreateTable(storage::Storage& storage,
   }
   return ApplyCreateMode(storage.CreateTable(*target, *bq_schema),
                          stmt->create_mode());
+}
+
+absl::StatusOr<std::string> BuildDuckdbCtasSql(
+    absl::string_view request_sql,
+    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt,
+    const storage::TableId& target,
+    const schema::TableSchema& bq_schema,
+    absl::Span<const QueryParameter> parameters) {
+  if (stmt == nullptr || stmt->query() == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: CTAS has null query scan");
+  }
+  duckdb::transpiler::Transpiler transpiler;
+  std::string select_sql = transpiler.TranspileScan(stmt->query());
+  if (select_sql.empty()) {
+    return absl::UnimplementedError(
+        "control op executor: CTAS query scan did not transpile to DuckDB SQL");
+  }
+  if (!transpiler.parameter_order().empty()) {
+    auto substituted = SubstituteDuckdbParameters(
+        std::move(select_sql), transpiler.parameter_order(), parameters);
+    if (!substituted.ok()) return substituted.status();
+    select_sql = *std::move(substituted);
+  }
+  (void)bq_schema;
+  const bool is_temp = absl::StrContains(request_sql, "CREATE TEMP") ||
+                       absl::StrContains(request_sql, "create temp");
+  // DuckDB temp tables live in the session default schema; schema-
+  // qualified `CREATE TEMP TABLE "ds"."t"` fails with "schema does
+  // not exist". Persistent targets use `"dataset"."table"`.
+  const std::string dest_name =
+      is_temp ? QuoteIdent(target.table_id)
+              : absl::StrCat(QuoteIdent(target.dataset_id),
+                             ".",
+                             QuoteIdent(target.table_id));
+  // DuckDB accepts `CREATE TABLE ... AS <select>` but not BigQuery's
+  // `CREATE TABLE (col list) AS <select>` spelling. The analyzer's
+  // `column_definition_list` still drives the storage-layer schema
+  // we persist after draining the DuckDB result.
+  return absl::StrCat("CREATE ",
+                      is_temp ? "OR REPLACE TEMP " : "",
+                      "TABLE ",
+                      dest_name,
+                      " AS ",
+                      select_sql);
 }
 
 // --- CREATE TABLE AS SELECT handler ---------------------------------------
@@ -470,9 +655,14 @@ absl::Status RunCreateTableAsSelect(
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: CTAS has null resolved statement");
   }
-  absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
+  absl::StatusOr<storage::TableId> target = NamePathToTableId(
+      stmt->name_path(), project_id, request.default_dataset_id);
   if (!target.ok()) return target.status();
+  if (auto ds =
+          EnsureDatasetExists(storage, target->project_id, target->dataset_id);
+      !ds.ok()) {
+    return ds;
+  }
   absl::StatusOr<schema::TableSchema> bq_schema =
       ColumnDefinitionListToTableSchema(stmt->column_definition_list());
   if (!bq_schema.ok()) return bq_schema.status();
@@ -498,14 +688,18 @@ absl::Status RunCreateTableAsSelect(
     return reg;
   }
 
-  absl::Status target_schema_status =
-      RunSqlNoResult(conn,
-                     absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                  QuoteIdent(target->dataset_id)));
-  if (!target_schema_status.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return target_schema_status;
+  const bool is_temp_ctas = absl::StrContains(request.sql, "CREATE TEMP") ||
+                            absl::StrContains(request.sql, "create temp");
+  if (!is_temp_ctas) {
+    absl::Status target_schema_status =
+        RunSqlNoResult(conn,
+                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                    QuoteIdent(target->dataset_id)));
+    if (!target_schema_status.ok()) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return target_schema_status;
+    }
   }
 
   for (const ::googlesql::Table* tbl : collector.tables()) {
@@ -519,20 +713,11 @@ absl::Status RunCreateTableAsSelect(
           "' for CTAS; rebuild against a "
           "GoogleSqlCatalog-backed analyzer"));
     }
-    const storage::TableId& id = source_table->storage_table_id();
-    absl::Status schema_status =
-        RunSqlNoResult(conn,
-                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                    QuoteIdent(id.dataset_id)));
-    if (!schema_status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return schema_status;
-    }
-    const std::string qualified =
-        absl::StrCat(QuoteIdent(id.dataset_id), ".", QuoteIdent(id.table_id));
-    absl::Status attach =
-        AttachStorageTableAt(conn, &storage, *source_table, qualified);
+    // Attach at the bare table name so transpiled `FROM "people"` (see
+    // `EmitTableScan`) resolves in the connection default schema, matching
+    // `DuckDbExecutor::ExecuteQuery`.
+    absl::Status attach = AttachStorageTableAt(
+        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
     if (!attach.ok()) {
       ::duckdb_disconnect(&conn);
       ::duckdb_close(&db);
@@ -566,8 +751,16 @@ absl::Status RunCreateTableAsSelect(
     }
   }
 
+  absl::StatusOr<std::string> ctas_sql = BuildDuckdbCtasSql(
+      request.sql, stmt, *target, *bq_schema, request.parameters);
+  if (!ctas_sql.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return ctas_sql.status();
+  }
+
   ::duckdb_result ctas_result;
-  if (::duckdb_query(conn, request.sql.c_str(), &ctas_result) !=
+  if (::duckdb_query(conn, ctas_sql->c_str(), &ctas_result) !=
       ::DuckDBSuccess) {
     const auto* err = ::duckdb_result_error(&ctas_result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
@@ -578,18 +771,25 @@ absl::Status RunCreateTableAsSelect(
         absl::StrCat("ControlOpExecutor: DuckDB rejected CTAS: ",
                      detail,
                      " (sql=",
-                     request.sql,
+                     *ctas_sql,
                      ")"));
   }
   ::duckdb_destroy_result(&ctas_result);
 
-  const std::string quoted_target = absl::StrCat(
-      QuoteIdent(target->dataset_id), ".", QuoteIdent(target->table_id));
+  const std::string quoted_target =
+      is_temp_ctas ? QuoteIdent(target->table_id)
+                   : absl::StrCat(QuoteIdent(target->dataset_id),
+                                  ".",
+                                  QuoteIdent(target->table_id));
   absl::StatusOr<std::vector<storage::Row>> after_rows =
       DrainTableRows(conn, quoted_target, *bq_schema);
   ::duckdb_disconnect(&conn);
   ::duckdb_close(&db);
   if (!after_rows.ok()) return after_rows.status();
+
+  if (is_temp_ctas) {
+    (void)storage.DropTable(*target);
+  }
 
   absl::Status created = ApplyCreateMode(
       storage.CreateTable(*target, *bq_schema), stmt->create_mode());
@@ -606,6 +806,7 @@ absl::Status RunCreateTableAsSelect(
 // `Storage` interface has no view-CRUD surface).
 absl::Status RunDropTable(storage::Storage& storage,
                           absl::string_view project_id,
+                          absl::string_view default_dataset_id,
                           const ::googlesql::ResolvedDropStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
@@ -618,10 +819,10 @@ absl::Status RunDropTable(storage::Storage& storage,
         " is not implemented yet (only DROP TABLE is supported); the "
         "view / materialized-view drop paths land alongside the storage-"
         "side view-CRUD surface tracked by the same plan "
-        "(control-op-executor.plan.md)"));
+        "(googlesqlite-01-ddl-catalog.plan.md)"));
   }
   absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id);
+      NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
   if (!target.ok()) return target.status();
   absl::Status dropped = storage.DropTable(*target);
   if (!dropped.ok() && stmt->is_if_exists() &&
@@ -640,7 +841,7 @@ absl::Status RunDropTable(storage::Storage& storage,
 // observable side-effect, which matches the BigQuery posture where
 // `ANALYZE` is a metadata hint the query optimizer is free to
 // ignore. The deeper "actually compute and persist statistics" path
-// is tracked by `specialized-feature-policy.plan.md`.
+// is tracked by `googlesqlite-15-specialized-stubs.plan.md`.
 absl::Status RunAnalyze(storage::Storage& storage,
                         absl::string_view project_id,
                         const ::googlesql::ResolvedAnalyzeStmt* stmt) {
@@ -713,6 +914,7 @@ absl::Status ControlOpExecutor::ExecuteDdl(
     case ::googlesql::RESOLVED_CREATE_TABLE_STMT:
       return RunCreateTable(*storage_,
                             project_id,
+                            request.default_dataset_id,
                             stmt.GetAs<::googlesql::ResolvedCreateTableStmt>());
     case ::googlesql::RESOLVED_CREATE_TABLE_AS_SELECT_STMT:
       return RunCreateTableAsSelect(
@@ -722,8 +924,10 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           stmt.GetAs<::googlesql::ResolvedCreateTableAsSelectStmt>(),
           &stmt);
     case ::googlesql::RESOLVED_DROP_STMT:
-      return RunDropTable(
-          *storage_, project_id, stmt.GetAs<::googlesql::ResolvedDropStmt>());
+      return RunDropTable(*storage_,
+                          project_id,
+                          request.default_dataset_id,
+                          stmt.GetAs<::googlesql::ResolvedDropStmt>());
     case ::googlesql::RESOLVED_ANALYZE_STMT:
       return RunAnalyze(*storage_,
                         project_id,
@@ -741,7 +945,7 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "control op executor: CREATE VIEW is not implemented yet; the "
           "Storage interface has no view-CRUD surface today (see "
           "backend/storage/storage.h). Tracked by "
-          "control-op-executor.plan.md follow-up: 'add Storage view "
+          "googlesqlite-01-ddl-catalog.plan.md follow-up: 'add Storage view "
           "CRUD + handler'.");
     case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
       return absl::UnimplementedError(
@@ -749,54 +953,29 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "implemented yet; the metadata side requires the same view-"
           "CRUD surface CREATE VIEW needs, and the full-refresh "
           "execution behavior is owned by "
-          "specialized-feature-policy.plan.md per "
-          "control-op-executor.plan.md (better-than-silently-wrong).");
+          "googlesqlite-15-specialized-stubs.plan.md per "
+          "googlesqlite-01-ddl-catalog.plan.md (better-than-silently-wrong).");
     case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
-      // CREATE FUNCTION splits by `LANGUAGE` at implementation
-      // time. SQL UDFs (`LANGUAGE SQL`) belong on
-      // `udf-tvf-module-routing.plan.md` Family 4 (deferred at the
-      // end of plan 13 -- needs cross-request UDF body storage
-      // through `DuckDBStorage`'s catalog). JavaScript UDFs
-      // (`LANGUAGE js`) are `local_stub`-posture metadata-only per
-      // `specialized-feature-policy.plan.md`: the registration
-      // succeeds (BigQuery-shaped placeholder for client tools
-      // that issue CREATE FUNCTION as a setup step) and the call
-      // site surfaces UNIMPLEMENTED with the JavaScript-named
-      // family envelope. The JS UDF stub IS DEFERRED until the
-      // UDF body storage round-trip lands per plan 13's family-4
-      // deferral -- a registration that does not persist the body
-      // is silent approximation in the "did the catalog accept the
-      // create" sense. Today both flavors share this UNIMPLEMENTED
-      // envelope; the splits land alongside the storage work. See
-      // docs/ENGINE_POLICY.md.
-      return absl::UnimplementedError(
-          "control op executor: CREATE FUNCTION registration is not "
-          "implemented yet; needs a per-engine functions registry. "
-          "SQL UDFs tracked by udf-tvf-module-routing.plan.md "
-          "(family 4, deferred -- needs UDF body storage). JavaScript "
-          "UDFs (LANGUAGE js) are local-stub metadata-only per "
-          "specialized-feature-policy.plan.md but their stub is "
-          "BLOCKED on the same UDF body storage round-trip; "
-          "registering a body that does not persist would silently "
-          "approximate the BigQuery contract. See "
-          "docs/ENGINE_POLICY.md.");
+      // Registered in `LocalCoordinatorEngine::ExecuteDdl` with pinned
+      // `AnalyzerOutput` so UDF type pointers stay valid across RPCs.
+      return absl::OkStatus();
     case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT:
       return absl::UnimplementedError(
           "control op executor: CREATE TABLE FUNCTION registration is "
           "not implemented yet; tracked by "
-          "udf-tvf-module-routing.plan.md.");
+          "googlesqlite-15-specialized-stubs.plan.md.");
     case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
       return absl::UnimplementedError(
           "control op executor: DROP FUNCTION is not implemented yet; "
           "needs the functions registry CREATE FUNCTION will land. "
-          "Tracked by udf-tvf-module-routing.plan.md (and "
-          "control-op-executor.plan.md for the metadata side).");
+          "Tracked by googlesqlite-15-specialized-stubs.plan.md (and "
+          "googlesqlite-01-ddl-catalog.plan.md for the metadata side).");
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
       // LOAD DATA splits by URI scheme at implementation time:
       // `LOAD DATA LOCAL ...` belongs on the control-op route
       // (local filesystem reader; deferred to the follow-up below).
       // `LOAD DATA <gs://...>` (cloud-storage) is `unsupported`
-      // per `specialized-feature-policy.plan.md` -- the emulator
+      // per `googlesqlite-15-specialized-stubs.plan.md` -- the emulator
       // deliberately does NOT model the BigQuery cloud-storage
       // ingest surface. `ResolvedAuxLoadDataStmt` carries no
       // `is_local` flag; the differentiation happens when the
@@ -811,16 +990,16 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "ORC) for `LOAD DATA LOCAL <local-uri>` plus URI-scheme "
           "differentiation so cloud-storage `LOAD DATA <gs://...>` "
           "falls through to the unsupported route. "
-          "Tracked by control-op-executor.plan.md follow-up: 'add "
+          "Tracked by googlesqlite-01-ddl-catalog.plan.md follow-up: 'add "
           "LOAD DATA reader family'. Cloud-storage LOAD DATA stays "
-          "unsupported per specialized-feature-policy.plan.md; see "
+          "unsupported per googlesqlite-15-specialized-stubs.plan.md; see "
           "docs/ENGINE_POLICY.md.");
     case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
       return absl::UnimplementedError(
           "control op executor: EXPORT DATA is not implemented yet; "
           "needs Arrow / Parquet / CSV / JSON writers and the "
           "fake-gcs-server / local-filesystem URI scheme dispatch. "
-          "Tracked by control-op-executor.plan.md follow-up: 'add "
+          "Tracked by googlesqlite-01-ddl-catalog.plan.md follow-up: 'add "
           "EXPORT DATA writer family'.");
     default:
       return absl::UnimplementedError(

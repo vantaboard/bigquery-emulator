@@ -41,6 +41,7 @@
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/executor.h"
 #include "backend/storage/storage.h"
+#include "googlesql/public/analyzer_options.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -86,6 +87,12 @@ class LocalCoordinatorEngine : public Engine {
   control::ControlOpExecutor control_op_executor_;
   UnsupportedExecutor unsupported_executor_{};
 };
+
+// Wire `request.parameters` into `options` before `AnalyzeStatement`.
+// Used by the coordinator and by `frontend/handlers/query.cc`'s
+// pre-classify pass so DML with named parameters classifies correctly.
+absl::Status PopulateAnalyzerParameters(const QueryRequest& request,
+                                        ::googlesql::AnalyzerOptions& options);
 
 }  // namespace coordinator
 }  // namespace engine

@@ -11,6 +11,8 @@
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/public/function.h"
+#include "googlesql/public/sql_function.h"
+#include "googlesql/public/templated_sql_function.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node.h"
@@ -119,7 +121,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   //   2. A scalar-only SELECT (no FROM, i.e. the inner query is a
   //      `ResolvedProjectScan` over a `ResolvedSingleRowScan`)
   //      routes to `semantic_executor` per
-  //      `.cursor/plans/semantic-executor-core.plan.md`. DuckDB
+  //      `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`. DuckDB
   //      can render the SQL on its side, but the semantic
   //      executor's strict NULL / overflow / error contracts are
   //      what the gateway/e2e suite asserts on. Promoting at the
@@ -162,11 +164,11 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // marks the lateral / correlated join shape. BigQuery's lateral
   // evaluation order does not map cleanly onto DuckDB's
   // `LATERAL` / `unnest(...)` model, so the semantic executor owns
-  // the shape (`array-struct-semantic-path.plan.md`).
+  // the shape (`googlesqlite-12-arrays-generators.plan.md`).
   // `has_using()` / lateral `parameter_list_size > 0` stay in the
   // transpiler's empty-string defense-in-depth gate today; they
-  // are picked up by `array-struct-semantic-path.plan.md` /
-  // `cte-subquery-routing.plan.md` when those plans ship.
+  // are picked up by `googlesqlite-12-arrays-generators.plan.md` /
+  // `googlesqlite-02-withscan-cte.plan.md` when those plans ship.
   absl::Status VisitResolvedJoinScan(
       const ::googlesql::ResolvedJoinScan* node) override {
     if (node != nullptr && node->is_lateral()) {
@@ -179,7 +181,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // Property-based promotion for `ResolvedArrayScan`: the YAML row is
   // `duckdb_native` because the standalone `UNNEST(<arr>) AS <col>`
   // shape lowers cleanly to DuckDB's `SELECT unnest(...)`. The
-  // divergent subset listed in `array-struct-semantic-path.plan.md`
+  // divergent subset listed in `googlesqlite-12-arrays-generators.plan.md`
   // promotes to the semantic executor because DuckDB's `LIST` model
   // does not match BigQuery's `ARRAY` model in those cases:
   //
@@ -203,7 +205,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // `semantic-executor not-implemented` envelope instead of the
   // transpiler's empty-string UNIMPLEMENTED. The owning plan rows
   // in `node_dispositions.yaml` continue to point at
-  // `array-struct-semantic-path.plan.md` until a follow-up subagent
+  // `googlesqlite-12-arrays-generators.plan.md` until a follow-up subagent
   // lands them.
   // Property-based promotion for `ResolvedSubqueryExpr`. The node
   // class disposition is `duckdb_native` (the transpiler's
@@ -216,7 +218,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // per-outer-row evaluation order on every shape. Promoting at
   // planning time hands the correlated shape to the semantic
   // executor (today's stub; the executor for correlated subqueries
-  // is `cte-subquery-routing.plan.md` Family 4, deferred to a
+  // is `googlesqlite-02-withscan-cte.plan.md` Family 4, deferred to a
   // follow-up subagent) so we never silently approximate.
   //
   // LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE ALL also live on
@@ -307,6 +309,15 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       fn = node->GetAs<::googlesql::ResolvedAnalyticFunctionCall>()->function();
     }
     if (fn == nullptr) return;
+    // Project-scoped CREATE FUNCTION bodies are evaluated by the semantic
+    // executor using the analyzer-resolved expression on the call.
+    if (fn->GetGroup() ==
+            ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup ||
+        fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   absl::StrCat("sql_udf:", fn->Name()));
+      return;
+    }
     // Use `FullName(include_group=false)` so namespaced families
     // like `KEYS.NEW_KEYSET` / `NET.HOST` / `HLL_COUNT.MERGE`
     // resolve to their dotted YAML key (`keys.new_keyset`,
@@ -384,7 +395,7 @@ std::string ReasonFor(Disposition d,
           "query routes to the local-stub executor (specialized feature "
           "family promoted by ",
           offending_node,
-          "); see specialized-feature-policy.plan.md");
+          "); see googlesqlite-15-specialized-stubs.plan.md");
     case Disposition::kUnsupported:
       return absl::StrCat(
           "query is unsupported (offending node: ", offending_node, ")");

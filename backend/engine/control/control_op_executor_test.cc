@@ -12,7 +12,7 @@
 // schema mapping, or storage-write call surface as a unit-test
 // failure first.
 //
-// Plan ownership: `.cursor/plans/control-op-executor.plan.md` Tests
+// Plan ownership: `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Tests
 // section.
 
 #include "backend/engine/control/control_op_executor.h"
@@ -195,6 +195,25 @@ TEST_F(ControlOpExecutorTest, CreateTableWritesSchemaToStorage) {
   EXPECT_EQ(schema->columns[1].type, schema::ColumnType::kString);
 }
 
+TEST_F(ControlOpExecutorTest, CreateTableWithNestedStructColumn) {
+  absl::Status s =
+      RunDdl("CREATE TABLE ds.t (k INT64, s STRUCT<a INT64, b STRING>)");
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto schema = storage_->GetSchema({"proj-test", "ds", "t"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 2u);
+  EXPECT_EQ(schema->columns[0].name, "k");
+  EXPECT_EQ(schema->columns[0].type, schema::ColumnType::kInt64);
+  ASSERT_EQ(schema->columns[1].name, "s");
+  EXPECT_EQ(schema->columns[1].type, schema::ColumnType::kStruct);
+  ASSERT_EQ(schema->columns[1].fields.size(), 2u);
+  EXPECT_EQ(schema->columns[1].fields[0].name, "a");
+  EXPECT_EQ(schema->columns[1].fields[0].type, schema::ColumnType::kInt64);
+  EXPECT_EQ(schema->columns[1].fields[1].name, "b");
+  EXPECT_EQ(schema->columns[1].fields[1].type, schema::ColumnType::kString);
+}
+
 TEST_F(ControlOpExecutorTest, CreateTableHonoursNotNullAnnotation) {
   absl::Status s = RunDdl("CREATE TABLE ds.t (id INT64 NOT NULL, name STRING)");
   ASSERT_TRUE(s.ok()) << s;
@@ -217,6 +236,31 @@ TEST_F(ControlOpExecutorTest, CreateTableIfNotExistsSwallowsExisting) {
   ASSERT_TRUE(RunDdl("CREATE TABLE ds.t (id INT64)").ok());
   absl::Status second = RunDdl("CREATE TABLE IF NOT EXISTS ds.t (id INT64)");
   EXPECT_TRUE(second.ok()) << second;
+}
+
+TEST_F(ControlOpExecutorTest, CreateTableAutoCreatesMissingDataset) {
+  absl::Status s = RunDdl("CREATE TABLE fresh_ds.t (id INT64)");
+  ASSERT_TRUE(s.ok()) << s;
+  auto schema = storage_->GetSchema({"proj-test", "fresh_ds", "t"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+}
+
+TEST_F(ControlOpExecutorTest, CreateTableOneSegmentUsesDefaultDataset) {
+  CatalogBundle bundle = MakeCatalog();
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ::googlesql::TypeFactory type_factory;
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
+  const std::string sql = "CREATE TABLE typed (i INT64)";
+  ASSERT_TRUE(::googlesql::AnalyzeStatement(
+                  sql, options, bundle.catalog.get(), &type_factory, &output)
+                  .ok());
+  QueryRequest req = MakeRequest(sql);
+  req.default_dataset_id = "_default";
+  absl::Status s = executor_->ExecuteDdl(
+      req, *output->resolved_statement(), bundle.catalog.get());
+  ASSERT_TRUE(s.ok()) << s;
+  auto schema = storage_->GetSchema({"proj-test", "_default", "typed"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
 }
 
 TEST_F(ControlOpExecutorTest, CreateOrReplaceTableReplacesExisting) {
@@ -323,8 +367,9 @@ TEST_F(ControlOpExecutorTest, CreateViewSurfacesUnimplemented) {
   absl::Status s = RunDdl("CREATE VIEW ds.v AS SELECT 1 AS id");
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("control-op-executor.plan.md"),
-            std::string::npos)
+  EXPECT_NE(
+      std::string(s.message()).find("googlesqlite-01-ddl-catalog.plan.md"),
+      std::string::npos)
       << s.message();
 }
 
@@ -332,7 +377,7 @@ TEST_F(ControlOpExecutorTest, CreateMaterializedViewSurfacesUnimplemented) {
   absl::Status s = RunDdl("CREATE MATERIALIZED VIEW ds.mv AS SELECT 1 AS id");
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("specialized-feature-policy"),
+  EXPECT_NE(std::string(s.message()).find("googlesqlite-15-specialized-stubs"),
             std::string::npos)
       << s.message();
 }

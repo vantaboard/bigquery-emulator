@@ -54,8 +54,8 @@ cc_library(
 # `unsupported`). Each one returns UNIMPLEMENTED with a
 # disposition-aware message pointing at the downstream plan that
 # fills in the real behavior; this keeps the coordinator a complete
-# dispatcher while plans `semantic-executor-core.plan.md`,
-# `control-op-executor.plan.md`, and `specialized-feature-policy.plan.md`
+# dispatcher while plans `googlesqlite-07-semantic-core-expr.plan.md`,
+# `googlesqlite-01-ddl-catalog.plan.md`, and `googlesqlite-15-specialized-stubs.plan.md`
 # ship the real implementations.
 cc_library(
     name = "stub_executors",
@@ -109,6 +109,10 @@ cc_library(
         ":executor",
         ":route_classifier",
         ":stub_executors",
+        "//backend/catalog:create_function_util",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:udf_registry",
+        "//backend/catalog:udf_registration_catalog",
         "//backend/engine",
         "//backend/engine:disposition",
         "//backend/engine/control:control_op_executor",
@@ -116,6 +120,7 @@ cc_library(
         "//backend/engine/control/stubs:create_model",
         "//backend/engine/duckdb:duckdb_executor",
         "//backend/engine/semantic:executor",
+        "//backend/engine/semantic:system_variables",
         "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",

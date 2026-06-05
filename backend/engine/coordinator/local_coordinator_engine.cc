@@ -6,6 +6,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
+#include "backend/catalog/create_function_util.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/udf_registration_catalog.h"
+#include "backend/catalog/udf_registry.h"
 #include "backend/engine/control/pipe_create_table.h"
 #include "backend/engine/control/pipe_export_data.h"
 #include "backend/engine/control/stubs/create_model.h"
@@ -13,6 +18,7 @@
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -33,6 +39,9 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace coordinator {
+
+absl::Status PopulateParameterOptions(const QueryRequest& request,
+                                      ::googlesql::AnalyzerOptions& options);
 
 namespace {
 
@@ -86,8 +95,19 @@ namespace {
   // generalized form on top.
   options.mutable_language()->AddSupportedStatementKind(
       ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT);
+  // Naive TIMESTAMP literals (no timezone suffix) must resolve as UTC
+  // to match BigQuery / googlesqlite (see window_dense_rank_with_group).
+  options.set_default_time_zone(absl::UTCTimeZone());
   options.CreateDefaultArenasIfNotSet();
   return options;
+}
+
+// Registers @@ system variables on `options` once `type_factory` is
+// available (called from AnalyzeStatementImpl after catalog lookup).
+absl::Status RegisterSystemVariablesOnOptions(
+    ::googlesql::TypeFactory* type_factory,
+    ::googlesql::AnalyzerOptions& options) {
+  return semantic::RegisterAnalyzerSystemVariables(type_factory, options);
 }
 
 // `MakeAnalyzerOptions` plus the all-statement-kind allowlist
@@ -149,14 +169,50 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
   schema::TableSchema schema_{};
 };
 
-// Map a `QueryParameter::type_kind` spelling to a
-// `::googlesql::Type*` instance the analyzer accepts on
-// `AddQueryParameter` / `AddPositionalQueryParameter`. Mirrors
-// `backend/engine/semantic/value.cc::ParseTypeKindName` and the
-// builtin type accessors in `googlesql/public/types/type_factory.h`.
-// Returns INVALID_ARGUMENT when the type kind is unknown or one of
-// the compound types (ARRAY / STRUCT) that the upstream parameter
-// plumbing has not yet wired through.
+// Analyze `request.sql` against `catalog` and return the
+// `AnalyzerOutput` (which owns the resolved AST).
+absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
+AnalyzeStatementImpl(const QueryRequest& request,
+                     ::googlesql::Catalog* catalog,
+                     bool all_statements) {
+  ::googlesql::AnalyzerOptions options =
+      all_statements ? MakeAnalyzerOptionsAllStatements()
+                     : MakeAnalyzerOptions();
+  absl::Status param_status = PopulateParameterOptions(request, options);
+  if (!param_status.ok()) return param_status;
+  // Types embedded in the resolved AST are owned by the catalog's
+  // `TypeFactory` (see `GoogleSqlCatalog`'s constructor contract).
+  // A stack-local factory here would be destroyed before
+  // `ExecuteDdl` walks STRUCT column definitions -- that use-after-
+  // free surfaced as a SIGSEGV on CREATE TABLE with nested STRUCT.
+  auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
+  if (bq_catalog == nullptr) {
+    return absl::FailedPreconditionError(
+        "LocalCoordinatorEngine: catalog must be a GoogleSqlCatalog");
+  }
+  ::googlesql::TypeFactory* type_factory = bq_catalog->type_factory();
+  if (type_factory == nullptr) {
+    return absl::FailedPreconditionError(
+        "LocalCoordinatorEngine: catalog type_factory is null");
+  }
+  if (absl::Status sys_status =
+          RegisterSystemVariablesOnOptions(type_factory, options);
+      !sys_status.ok()) {
+    return sys_status;
+  }
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
+  absl::Status analyze = ::googlesql::AnalyzeStatement(
+      request.sql, options, catalog, type_factory, &output);
+  if (!analyze.ok()) return analyze;
+  if (output == nullptr || output->resolved_statement() == nullptr) {
+    return absl::InternalError(
+        "LocalCoordinatorEngine: analyzer returned no resolved statement");
+  }
+  return output;
+}
+
+}  // namespace
+
 absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
     absl::string_view type_kind_name) {
   ::googlesql::TypeKind kind = semantic::ParseTypeKindName(type_kind_name);
@@ -199,10 +255,6 @@ absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
   }
 }
 
-// Add the request's parameter declarations to `options`. The
-// analyzer needs to see every parameter the SQL references at
-// `AnalyzeStatement` time so it can produce typed
-// `ResolvedParameter` nodes the semantic executor binds against.
 absl::Status PopulateParameterOptions(const QueryRequest& request,
                                       ::googlesql::AnalyzerOptions& options) {
   if (request.parameters.empty()) return absl::OkStatus();
@@ -236,30 +288,10 @@ absl::Status PopulateParameterOptions(const QueryRequest& request,
   return absl::OkStatus();
 }
 
-// Analyze `request.sql` against `catalog` and return the
-// `AnalyzerOutput` (which owns the resolved AST).
-absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-AnalyzeStatementImpl(const QueryRequest& request,
-                     ::googlesql::Catalog* catalog,
-                     bool all_statements) {
-  ::googlesql::AnalyzerOptions options =
-      all_statements ? MakeAnalyzerOptionsAllStatements()
-                     : MakeAnalyzerOptions();
-  absl::Status param_status = PopulateParameterOptions(request, options);
-  if (!param_status.ok()) return param_status;
-  ::googlesql::TypeFactory type_factory;
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  absl::Status analyze = ::googlesql::AnalyzeStatement(
-      request.sql, options, catalog, &type_factory, &output);
-  if (!analyze.ok()) return analyze;
-  if (output == nullptr || output->resolved_statement() == nullptr) {
-    return absl::InternalError(
-        "LocalCoordinatorEngine: analyzer returned no resolved statement");
-  }
-  return output;
+absl::Status PopulateAnalyzerParameters(const QueryRequest& request,
+                                        ::googlesql::AnalyzerOptions& options) {
+  return PopulateParameterOptions(request, options);
 }
-
-}  // namespace
 
 LocalCoordinatorEngine::LocalCoordinatorEngine(storage::Storage* storage)
     : duckdb_executor_(storage),
@@ -279,7 +311,7 @@ Executor* LocalCoordinatorEngine::RouteFor(
       // `DuckDbExecutor`. `kDuckdbUdf` is included because the
       // disposition is still owned by DuckDB (the polyfill UDF
       // library is loaded into DuckDB) even though
-      // `duckdb-polyfill-udf-library.plan.md` has not yet shipped
+      // `googlesqlite-03-operator-disposition.plan.md` has not yet shipped
       // its polyfills; the transpiler's empty-string contract
       // surfaces UNIMPLEMENTED for shapes the polyfill set does
       // not cover, which is consistent with the no-silent-
@@ -373,7 +405,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
   // coordinator intercepts them here and dispatches to the per-
   // shape handler in `backend/engine/control/pipe_*.cc`. The
   // `control_op_executor.cc` lint-cap carve-out (see
-  // `.cursor/plans/advanced-relational-routing.plan.md` "don'ts")
+  // `.cursor/plans/googlesqlite-13-advanced-relational.plan.md` "don'ts")
   // is the reason this dispatch lives in the coordinator rather
   // than in `ControlOpExecutor::ExecuteQuery`.
   if (executor == &control_op_executor_) {
@@ -435,6 +467,52 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
   // the model was never registered in storage.
   if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_MODEL_STMT) {
     return control::stubs::RunCreateModel(*stmt);
+  }
+  if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_FUNCTION_STMT) {
+    auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
+    if (bq_catalog == nullptr) {
+      return absl::FailedPreconditionError(
+          "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION requires "
+          "GoogleSqlCatalog");
+    }
+    ::googlesql::TypeFactory* reg_tf =
+        catalog::EnsureProjectTypeFactory(request.project_id);
+    ::googlesql::LanguageOptions language;
+    language.EnableMaximumLanguageFeatures();
+    language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
+    language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+    catalog::GoogleSqlCatalog* reg_catalog =
+        catalog::GetOrCreateRegistrationCatalog(request.project_id,
+                                                bq_catalog->storage(),
+                                                reg_tf,
+                                                language,
+                                                request.default_dataset_id);
+    if (reg_catalog == nullptr) {
+      return absl::InternalError(
+          "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION registration "
+          "catalog unavailable");
+    }
+    absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
+        reg_output =
+            AnalyzeStatementImpl(request, reg_catalog, /*all_statements=*/true);
+    if (!reg_output.ok()) return reg_output.status();
+    const ::googlesql::ResolvedStatement* reg_stmt =
+        (*reg_output)->resolved_statement();
+    const auto* create_fn =
+        reg_stmt->GetAs<::googlesql::ResolvedCreateFunctionStmt>();
+    if (create_fn == nullptr) {
+      return absl::InternalError(
+          "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION has null "
+          "resolved stmt");
+    }
+    absl::StatusOr<std::unique_ptr<const ::googlesql::Function>> fn_or =
+        catalog::MakeFunctionFromCreateFunction(*create_fn,
+                                                /*function_options=*/nullptr);
+    if (!fn_or.ok()) return fn_or.status();
+    const bool is_temp = create_fn->create_scope() ==
+                         ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
+    return catalog::RegisterProjectFunction(
+        request.project_id, is_temp, std::move(*reg_output), std::move(*fn_or));
   }
   Executor* executor = RouteFor(*stmt);
   if (executor == nullptr) {
