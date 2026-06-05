@@ -120,7 +120,7 @@ TEST_F(ArrayScanTest, UnnestWithOffsetBindsOffsetColumn) {
   // `UNNEST(...) WITH OFFSET AS idx` produces one row per element
   // with two bindings: the element column and the (0-based)
   // offset column. This is Family 1 of
-  // `googlesqlite-12-arrays-generators.plan.md`.
+  // `local-exec-12-arrays-generators.plan.md`.
   const auto* scan = AnalyzeArrayScan(
       "SELECT n, idx FROM UNNEST(['a', 'b', 'c']) AS n WITH OFFSET AS idx");
   ASSERT_NE(scan, nullptr);
@@ -159,7 +159,7 @@ TEST_F(ArrayScanTest, EmptyArrayInnerProducesZeroRows) {
 // `ResolvedArrayScan` is the right-hand side of a
 // `LEFT JOIN UNNEST(...)` shape, which inherently requires a
 // non-trivial `input_scan` (correlated). That shape is gated by
-// Family 4 of `googlesqlite-12-arrays-generators.plan.md`: until the
+// Family 4 of `local-exec-12-arrays-generators.plan.md`: until the
 // correlated input-scan evaluator lands, `EvaluateArrayScan`
 // surfaces `kNotImplemented`, so a syntactic `is_outer=true`
 // fixture cannot exercise the empty-array NULL-row branch yet.

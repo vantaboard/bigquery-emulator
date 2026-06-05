@@ -50,7 +50,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> RunPipeExportData(
       "control op executor: pipe-form EXPORT DATA is not implemented yet; "
       "needs the same Arrow / Parquet / CSV / JSON writers and URI scheme "
       "dispatch surface the statement-form EXPORT DATA needs. Tracked by "
-      "googlesqlite-01-ddl-catalog.plan.md follow-up: 'add EXPORT DATA writer "
+      "local-exec-01-ddl-catalog.plan.md follow-up: 'add EXPORT DATA writer "
       "family'.");
 }
 

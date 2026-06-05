@@ -2,7 +2,7 @@
 #
 # This package owns the BigQuery-exact implementations for every
 # function whose `functions.yaml` row picks the `semantic_executor`
-# disposition with `plan=googlesqlite-09-date-time.plan.md`.
+# disposition with `plan=local-exec-09-date-time.plan.md`.
 # `EvalFunctionCall` (in `backend/engine/semantic/eval_expr.cc`)
 # forwards to `:dispatch::Dispatch` after the in-line operator /
 # SAFE_* handling, so a new function only needs (a) a per-family
@@ -10,7 +10,7 @@
 # `functions.yaml` row flip from `status=planned` to ready in the
 # same commit.
 #
-# See `.cursor/plans/googlesqlite-09-date-time.plan.md` for the
+# See `.cursor/plans/local-exec-09-date-time.plan.md` for the
 # full scope and the per-family ordering.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")

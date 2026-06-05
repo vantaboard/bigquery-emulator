@@ -96,7 +96,7 @@ namespace {
   options.mutable_language()->AddSupportedStatementKind(
       ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT);
   // Naive TIMESTAMP literals (no timezone suffix) must resolve as UTC
-  // to match BigQuery / googlesqlite (see window_dense_rank_with_group).
+  // to match BigQuery / query port (see window_dense_rank_with_group).
   options.set_default_time_zone(absl::UTCTimeZone());
   options.CreateDefaultArenasIfNotSet();
   return options;
@@ -311,7 +311,7 @@ Executor* LocalCoordinatorEngine::RouteFor(
       // `DuckDbExecutor`. `kDuckdbUdf` is included because the
       // disposition is still owned by DuckDB (the polyfill UDF
       // library is loaded into DuckDB) even though
-      // `googlesqlite-03-operator-disposition.plan.md` has not yet shipped
+      // `local-exec-03-operator-disposition.plan.md` has not yet shipped
       // its polyfills; the transpiler's empty-string contract
       // surfaces UNIMPLEMENTED for shapes the polyfill set does
       // not cover, which is consistent with the no-silent-
@@ -405,7 +405,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
   // coordinator intercepts them here and dispatches to the per-
   // shape handler in `backend/engine/control/pipe_*.cc`. The
   // `control_op_executor.cc` lint-cap carve-out (see
-  // `.cursor/plans/googlesqlite-13-advanced-relational.plan.md` "don'ts")
+  // `.cursor/plans/local-exec-13-advanced-relational.plan.md` "don'ts")
   // is the reason this dispatch lives in the coordinator rather
   // than in `ControlOpExecutor::ExecuteQuery`.
   if (executor == &control_op_executor_) {

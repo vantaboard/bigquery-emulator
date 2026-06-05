@@ -39,7 +39,7 @@ docs/ENGINE_POLICY.md:60-80
 # ---  paragraphs are the reason they exist.
 .cursor/plans/local-execution-roadmap-index.plan.md
 .cursor/plans/migration-cleanup-docs.plan.md
-.cursor/plans/googlesqlite-00-index.plan.md
+.cursor/plans/local-exec-00-index.plan.md
 .cursor/plans/engine-router-foundation.plan.md
 
 # --- README has one stale term inside an active prose paragraph that

@@ -1,6 +1,6 @@
 ---
-name: googlesqlite-02-withscan-cte
-overview: Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 googlesqlite tests.
+name: local-exec-02-withscan-cte
+overview: Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 query port tests.
 todos:
   - id: gsql-02-withscan-cte
     content: Implement EmitWithScan/EmitWithRefScan in DuckDB transpiler
@@ -8,22 +8,22 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 02: WithScan / CTE Emit
+# query port 02: WithScan / CTE Emit
 
 ## Goal
 
-Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 googlesqlite tests.
+Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 query port tests.
 
 Baseline: `20260603T035812Z` (51 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-01-ddl-catalog.plan.md`](googlesqlite-01-ddl-catalog.plan.md)
+- [`local-exec-01-ddl-catalog.plan.md`](local-exec-01-ddl-catalog.plan.md)
 
 ## Root cause
 
 - `I0000 00:00:1780459094.089375  399173 transpiler.cc:1836] duckdb transpiler: function '$equal' has no disposition; surfacing UNIMPLEMENTED`
-- `googlesqlite_query_test.go:145: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:WithScan, route: duckdb_nati...`
+- `query_port_test.go:145: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:WithScan, route: duckdb_nati...`
 - `I0000 00:00:1780459094.910303  399173 transpiler.cc:1924] duckdb transpiler: aggregate 'array_agg' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / NULL-handling) that has no DuckDB analog y...`
 
 ## Primary files
@@ -52,7 +52,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 51 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~51.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~51.
 
 ## Failing tests
 

@@ -106,7 +106,7 @@ cc_test(
 # DuckDB gap is wider than a thin macro (CONTAINS_SUBSTR's NFKC
 # normalization, INSTR's full variadic surface, SOUNDEX's missing
 # DuckDB analog, FORMAT's printf-spec divergence) stay at
-# `status=planned` and re-point to `googlesqlite-09-date-time.plan.md`.
+# `status=planned` and re-point to `local-exec-09-date-time.plan.md`.
 cc_test(
     name = "string_macros_test",
     srcs = ["string/string_macros_test.cc"],
@@ -123,7 +123,7 @@ cc_test(
 # `bq_regexp_replace` (global-replacement contract + backref
 # handling). `regexp_extract` / `regexp_extract_all` stay at
 # `status=planned` and re-point to
-# `googlesqlite-09-date-time.plan.md` because the BQ
+# `local-exec-09-date-time.plan.md` because the BQ
 # capture-group semantic (return group 1 when present, fall back
 # to whole match otherwise) requires pattern introspection that
 # is not expressible as a thin macro.
@@ -146,7 +146,7 @@ cc_test(
 # time / datetime / timestamp arithmetic family (DATE_ADD /
 # DATE_SUB / DATE_DIFF / DATE_TRUNC + DATETIME_* + TIMESTAMP_*)
 # stays at `status=planned` and re-points to
-# `googlesqlite-09-date-time.plan.md` because the BigQuery
+# `local-exec-09-date-time.plan.md` because the BigQuery
 # month-end snap, ISO-year discrimination, and timezone-aware
 # truncation semantics are too rich for a thin polyfill macro.
 cc_test(

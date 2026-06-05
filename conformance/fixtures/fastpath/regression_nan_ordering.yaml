@@ -1,7 +1,7 @@
 # regression_nan_ordering: NaN sort order.
 #
 # Fast-path sharp edge documented in
-# `.cursor/plans/googlesqlite-04-scan-emits.plan.md`. BigQuery
+# `.cursor/plans/local-exec-04-scan-emits.plan.md`. BigQuery
 # orders NaN as the largest possible FLOAT64 value (so it sorts
 # AFTER +Infinity in ASC, BEFORE -Infinity in DESC). DuckDB
 # matches that contract today; pin it explicitly so any future

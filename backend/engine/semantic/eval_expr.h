@@ -10,7 +10,7 @@
 // evaluation the rest of the package speaks.
 //
 // Implementation contract (see
-// `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`):
+// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`):
 //
 //   * The evaluator NEVER re-analyzes SQL. It walks the resolved
 //     AST the analyzer hands it.

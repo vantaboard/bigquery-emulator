@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the ported googlesqlite query tests against emulator_main and save logs.
+# Run the ported query port tests against emulator_main and save logs.
 set -euo pipefail
 
 E2E_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,17 +9,17 @@ cd "${REPO_ROOT}"
 LOG_DIR="${E2E_DIR}/testresults"
 mkdir -p "$LOG_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG="${LOG_DIR}/googlesqlite-emulator-${STAMP}.log"
-JSON="${LOG_DIR}/googlesqlite-emulator-${STAMP}.json"
-SUMMARY="${LOG_DIR}/googlesqlite-emulator-${STAMP}-summary.txt"
+LOG="${LOG_DIR}/query-port-${STAMP}.log"
+JSON="${LOG_DIR}/query-port-${STAMP}.json"
+SUMMARY="${LOG_DIR}/query-port-${STAMP}-summary.txt"
 
-RUN="$(awk '/^func Test/{sub(/\(.*/,"",$2); print $2}' "${E2E_DIR}/googlesqlite_query_test.go" | paste -sd'|' -)"
+RUN="$(awk '/^func Test/{sub(/\(.*/,"",$2); print $2}' "${E2E_DIR}/query_port_test.go" | paste -sd'|' -)"
 
 : "${BIGQUERY_EMULATOR_BIN:=${REPO_ROOT}/bin/emulator_main}"
 export BIGQUERY_EMULATOR_BIN
 
 {
-  echo "# googlesqlite emulator port test run"
+  echo "# query port emulator test run"
   echo "# started: $(date -u -Iseconds)"
   echo "# emulator: ${BIGQUERY_EMULATOR_BIN}"
   echo "# -run: ^(${RUN})$"
@@ -114,8 +114,8 @@ PY
   echo "# summary: ${SUMMARY}"
 } | tee -a "$LOG"
 
-ln -sfn "$(basename "$LOG")" "${LOG_DIR}/googlesqlite-emulator-latest.log"
-ln -sfn "$(basename "$JSON")" "${LOG_DIR}/googlesqlite-emulator-latest.json"
-ln -sfn "$(basename "$SUMMARY")" "${LOG_DIR}/googlesqlite-emulator-latest-summary.txt"
+ln -sfn "$(basename "$LOG")" "${LOG_DIR}/query-port-latest.log"
+ln -sfn "$(basename "$JSON")" "${LOG_DIR}/query-port-latest.json"
+ln -sfn "$(basename "$SUMMARY")" "${LOG_DIR}/query-port-latest-summary.txt"
 
 exit "$EXIT"

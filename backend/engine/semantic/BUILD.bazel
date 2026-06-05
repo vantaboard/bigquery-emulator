@@ -15,7 +15,7 @@
 #   * A `RowSource` adapter that lets downstream plans compose with
 #     `DuckDbExecutor` output.
 #
-# See `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md` for the full
+# See `.cursor/plans/local-exec-07-semantic-core-expr.plan.md` for the full
 # scope and design constraints.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")

@@ -36,8 +36,10 @@ std::string QuoteIdent(absl::string_view ident) {
   escaped.reserve(ident.size() + 2);
   escaped.push_back('"');
   for (char c : ident) {
-    if (c == '"') escaped.append("\"\"");
-    else escaped.push_back(c);
+    if (c == '"')
+      escaped.append("\"\"");
+    else
+      escaped.push_back(c);
   }
   escaped.push_back('"');
   return escaped;
@@ -47,8 +49,10 @@ std::string EscapeStringLiteral(absl::string_view s) {
   std::string out;
   out.reserve(s.size());
   for (char c : s) {
-    if (c == '\'') out.append("''");
-    else out.push_back(c);
+    if (c == '\'')
+      out.append("''");
+    else
+      out.push_back(c);
   }
   return out;
 }
@@ -101,7 +105,8 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
 
 absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
   ::duckdb_result result;
-  if (::duckdb_query(conn, std::string(sql).c_str(), &result) != ::DuckDBSuccess) {
+  if (::duckdb_query(conn, std::string(sql).c_str(), &result) !=
+      ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
@@ -144,7 +149,9 @@ std::string InfoSchemaDataType(const schema::ColumnSchema& column) {
     std::string out = "STRUCT<";
     for (size_t i = 0; i < column.fields.size(); ++i) {
       if (i > 0) out.append(", ");
-      absl::StrAppend(&out, column.fields[i].name, " ",
+      absl::StrAppend(&out,
+                      column.fields[i].name,
+                      " ",
                       InfoSchemaDataType(column.fields[i]));
     }
     out.push_back('>');
@@ -218,19 +225,24 @@ schema::TableSchema SchemataViewSchema() {
 }
 
 std::vector<SimpleTable::NameAndType> ColumnsForView(InfoSchemaViewKind kind,
-                                                      TypeFactory* factory) {
+                                                     TypeFactory* factory) {
   std::vector<SimpleTable::NameAndType> out;
   auto str = [&]() { return factory->get_string(); };
   auto i64 = [&]() { return factory->get_int64(); };
   switch (kind) {
     case InfoSchemaViewKind::kTables:
-      out = {{"table_catalog", str()}, {"table_schema", str()},
-             {"table_name", str()},     {"table_type", str()}};
+      out = {{"table_catalog", str()},
+             {"table_schema", str()},
+             {"table_name", str()},
+             {"table_type", str()}};
       break;
     case InfoSchemaViewKind::kColumns:
-      out = {{"table_catalog", str()},    {"table_schema", str()},
-             {"table_name", str()},       {"column_name", str()},
-             {"ordinal_position", i64()}, {"is_nullable", str()},
+      out = {{"table_catalog", str()},
+             {"table_schema", str()},
+             {"table_name", str()},
+             {"column_name", str()},
+             {"ordinal_position", i64()},
+             {"is_nullable", str()},
              {"data_type", str()}};
       break;
     case InfoSchemaViewKind::kSchemata:
@@ -242,12 +254,11 @@ std::vector<SimpleTable::NameAndType> ColumnsForView(InfoSchemaViewKind kind,
 
 class InfoSchemaEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
  public:
-  InfoSchemaEvaluatorIterator(
-      std::vector<storage::Row> rows,
-      schema::TableSchema schema,
-      std::vector<int> column_idxs,
-      std::vector<std::string> column_names,
-      std::vector<const Type*> column_types)
+  InfoSchemaEvaluatorIterator(std::vector<storage::Row> rows,
+                              schema::TableSchema schema,
+                              std::vector<int> column_idxs,
+                              std::vector<std::string> column_names,
+                              std::vector<const Type*> column_types)
       : rows_(std::move(rows)),
         schema_(std::move(schema)),
         column_idxs_(std::move(column_idxs)),
@@ -328,11 +339,10 @@ InfoSchemaTable::InfoSchemaTable(absl::string_view view_name,
       dataset_id_(dataset_id),
       storage_(storage),
       type_factory_(type_factory),
-      row_schema_(kind == InfoSchemaViewKind::kTables
-                      ? TablesViewSchema()
-                      : kind == InfoSchemaViewKind::kColumns
-                            ? ColumnsViewSchema()
-                            : SchemataViewSchema()) {
+      row_schema_(kind == InfoSchemaViewKind::kTables ? TablesViewSchema()
+                  : kind == InfoSchemaViewKind::kColumns
+                      ? ColumnsViewSchema()
+                      : SchemataViewSchema()) {
   (void)set_full_name(std::string(full_name));
 }
 
@@ -434,7 +444,8 @@ InfoSchemaTable::CreateEvaluatorTableIterator(
   std::vector<const Type*> types;
   if (column_idxs.empty()) {
     idxs.resize(row_schema_.columns.size());
-    for (size_t i = 0; i < row_schema_.columns.size(); ++i) idxs[i] = i;
+    for (size_t i = 0; i < row_schema_.columns.size(); ++i)
+      idxs[i] = i;
   } else {
     idxs.assign(column_idxs.begin(), column_idxs.end());
   }
@@ -447,9 +458,11 @@ InfoSchemaTable::CreateEvaluatorTableIterator(
     names.push_back(GetColumn(idx)->Name());
     types.push_back(GetColumn(idx)->GetType());
   }
-  return std::make_unique<InfoSchemaEvaluatorIterator>(
-      std::move(*rows), row_schema_, std::move(idxs), std::move(names),
-      std::move(types));
+  return std::make_unique<InfoSchemaEvaluatorIterator>(std::move(*rows),
+                                                       row_schema_,
+                                                       std::move(idxs),
+                                                       std::move(names),
+                                                       std::move(types));
 }
 
 absl::Status InfoSchemaTable::MaterializeInDuckDB(
@@ -460,9 +473,12 @@ absl::Status InfoSchemaTable::MaterializeInDuckDB(
   absl::StatusOr<std::vector<storage::Row>> rows = GenerateRows();
   if (!rows.ok()) return rows.status();
   const std::string table_name(quoted_table_name);
-  absl::Status create = RunSqlNoResult(
-      conn, absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ",
-                         RenderColumnList(row_schema_)));
+  absl::Status create =
+      RunSqlNoResult(conn,
+                     absl::StrCat("CREATE OR REPLACE TABLE ",
+                                  table_name,
+                                  " ",
+                                  RenderColumnList(row_schema_)));
   if (!create.ok()) return create;
   return InsertRows(conn, table_name, row_schema_, *rows);
 }

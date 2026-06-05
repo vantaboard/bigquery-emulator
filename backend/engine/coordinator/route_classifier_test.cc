@@ -166,7 +166,7 @@ TEST_F(RouteClassifierTest, SafeDivideRoutesToSemanticExecutor) {
 TEST_F(RouteClassifierTest, ControlOpStatementRoutesToControlOp) {
   // `ResolvedCreateTableStmt` is `disposition=control_op` (no
   // `status=planned`) in `node_dispositions.yaml`. Per
-  // `googlesqlite-01-ddl-catalog.plan.md` the executor for that disposition
+  // `local-exec-01-ddl-catalog.plan.md` the executor for that disposition
   // shipped, so the classifier promotes the root statement to
   // `kControlOp` and the coordinator dispatches DDL through
   // `backend/engine/control/control_op_executor.cc` -- not through
@@ -183,7 +183,7 @@ TEST_F(RouteClassifierTest, ControlOpStatementRoutesToControlOp) {
 
 TEST_F(RouteClassifierTest, ApproxQuantilesFunctionRoutesToSemanticExecutor) {
   // `APPROX_QUANTILES` is on the `semantic_executor` route per
-  // `functions.yaml` and `googlesqlite-15-specialized-stubs.plan.md`.
+  // `functions.yaml` and `local-exec-15-specialized-stubs.plan.md`.
   const auto* stmt = Analyze("SELECT APPROX_QUANTILES(id, 4) FROM people");
   ASSERT_NE(stmt, nullptr);
 
@@ -214,7 +214,7 @@ TEST_F(RouteClassifierTest, ScalarOnlySelectPromotesToSemanticExecutor) {
   // `SELECT 1` (and any other no-FROM SELECT) resolves to
   // `ResolvedQueryStmt(query=ResolvedProjectScan(input_scan=
   // ResolvedSingleRowScan))`. Per
-  // `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md` the classifier
+  // `.cursor/plans/local-exec-07-semantic-core-expr.plan.md` the classifier
   // promotes this shape to `kSemanticExecutor` at planning time
   // so the semantic executor's strict NULL / overflow / error
   // contracts handle the evaluation; the DuckDB fast path keeps
@@ -245,7 +245,7 @@ TEST_F(RouteClassifierTest,
   // route to `kSemanticExecutor` via the
   // `VisitResolvedQueryStmt(is_value_table=true)` override in
   // `route_classifier.cc`. Plan-2 owner is the semantic executor
-  // (`googlesqlite-07-semantic-core-expr.plan.md`); the stub returns
+  // (`local-exec-07-semantic-core-expr.plan.md`); the stub returns
   // UNIMPLEMENTED today, which is the same end-user-visible
   // outcome as the prior empty-string gate inside `EmitQueryStmt`.
   const auto* stmt = Analyze("SELECT AS VALUE STRUCT(1 AS a, 'b' AS b)");
@@ -269,7 +269,7 @@ TEST_F(RouteClassifierTest,
 // `ResolvedArrayScan` (NOT a `ResolvedJoinScan`), so they exercise
 // a different route-promotion path. The lateral-promotion route
 // will be pinned by the integration suite owned by
-// `googlesqlite-12-arrays-generators.plan.md` once that plan ships its
+// `local-exec-12-arrays-generators.plan.md` once that plan ships its
 // catalog. Until then, the override stays in place as
 // defense-in-depth -- the only cost of the dead branch is the
 // per-Visit dispatch and a `MaybePromote` bookkeeping call.
@@ -281,7 +281,7 @@ TEST_F(RouteClassifierTest, UnnestWithOffsetPromotesToSemanticExecutor) {
   // returns "" for any `array_offset_column != nullptr` case, so
   // the classifier promotes the whole query to `kSemanticExecutor`
   // via the `VisitResolvedArrayScan` override. See
-  // `.cursor/plans/googlesqlite-12-arrays-generators.plan.md` Family 1.
+  // `.cursor/plans/local-exec-12-arrays-generators.plan.md` Family 1.
   const auto* stmt =
       Analyze("SELECT n, idx FROM UNNEST([1, 2, 3]) AS n WITH OFFSET AS idx");
   ASSERT_NE(stmt, nullptr);
@@ -295,7 +295,7 @@ TEST_F(RouteClassifierTest, OuterUnnestPromotesToSemanticExecutor) {
   // true; BigQuery emits one all-NULL row when the array is empty,
   // DuckDB drops the row. Classifier promotes the query to the
   // semantic executor so the empty-array NULL-row contract gets
-  // honored. See `googlesqlite-12-arrays-generators.plan.md` Family 2.
+  // honored. See `local-exec-12-arrays-generators.plan.md` Family 2.
   const auto* stmt = Analyze(
       "SELECT id, n FROM arr_table LEFT JOIN UNNEST(arr_table.arr) AS n "
       "ON TRUE");
@@ -320,7 +320,7 @@ TEST_F(RouteClassifierTest, MultiArrayUnnestZipPromotesToSemanticExecutor) {
   // ENUM literal (PAD by default). DuckDB has no native array
   // zip, so the classifier promotes the query to
   // `kSemanticExecutor`. See
-  // `googlesqlite-12-arrays-generators.plan.md` Family 3.
+  // `local-exec-12-arrays-generators.plan.md` Family 3.
   const auto* stmt = Analyze("SELECT * FROM UNNEST([1, 2, 3], [10, 20, 30])");
   ASSERT_NE(stmt, nullptr);
   RouteDecision d = classifier_.Classify(*stmt);
@@ -334,7 +334,7 @@ TEST_F(RouteClassifierTest, CorrelatedArrayScanPromotesToSemanticExecutor) {
   // (not a SingleRowScan). The DuckDB fast path's standalone-UNNEST
   // emit returns "" for this shape; the classifier promotes the
   // query to `kSemanticExecutor`. See Family 4 of
-  // `googlesqlite-12-arrays-generators.plan.md`.
+  // `local-exec-12-arrays-generators.plan.md`.
   const auto* stmt =
       Analyze("SELECT id, n FROM arr_table, UNNEST(arr_table.arr) AS n");
   ASSERT_NE(stmt, nullptr);
@@ -364,7 +364,7 @@ TEST_F(RouteClassifierTest, UncorrelatedSubqueryExprStaysOnFastPath) {
   // `(<lhs> IN (<sub>))` shape, so the classifier MUST keep the
   // query on `kDuckdbNative` -- a false promotion would force the
   // semantic executor to run a shape the fast path handles
-  // correctly. See `googlesqlite-02-withscan-cte.plan.md` Family 3.
+  // correctly. See `local-exec-02-withscan-cte.plan.md` Family 3.
   const auto* stmt = Analyze(
       "SELECT id FROM people "
       "WHERE id IN (SELECT n FROM UNNEST([1, 2, 3]) AS n)");
@@ -388,7 +388,7 @@ TEST_F(RouteClassifierTest,
   // subquery once per outer row in the local interpreter.
   //
   // The semantic executor's correlated-subquery evaluator is
-  // `googlesqlite-02-withscan-cte.plan.md` Family 4 (deferred to a
+  // `local-exec-02-withscan-cte.plan.md` Family 4 (deferred to a
   // follow-up subagent); until it lands the gateway surfaces
   // UNIMPLEMENTED via the executor stub. That is the same
   // end-user-visible outcome the fast path's empty-string
@@ -424,7 +424,7 @@ TEST_F(RouteClassifierTest,
 }
 
 TEST_F(RouteClassifierTest, BarrierScanPromotesToSemanticExecutor) {
-  // `googlesqlite-13-advanced-relational.plan.md` Family 2. A
+  // `local-exec-13-advanced-relational.plan.md` Family 2. A
   // `ResolvedBarrierScan` is a pipe-operator optimizer marker that
   // blocks fusion across its boundary. DuckDB has no analog
   // contract, so the classifier MUST promote any query containing
@@ -459,7 +459,7 @@ TEST_F(RouteClassifierTest, BarrierScanPromotesToSemanticExecutor) {
 }
 
 TEST_F(RouteClassifierTest, PivotScanRoutesToDuckdbRewrite) {
-  // `googlesqlite-13-advanced-relational.plan.md` Family 3. The engine
+  // `local-exec-13-advanced-relational.plan.md` Family 3. The engine
   // disables `REWRITE_PIVOT` so the analyzer hands us a raw
   // `ResolvedPivotScan`; the disposition table routes it through
   // `kDuckdbRewrite`, and the transpiler's `EmitPivotScan` lowers
@@ -484,7 +484,7 @@ TEST_F(RouteClassifierTest, UnpivotScanRoutesToDuckdbRewrite) {
 }
 
 TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
-  // `googlesqlite-13-advanced-relational.plan.md` Family 4. The disposition
+  // `local-exec-13-advanced-relational.plan.md` Family 4. The disposition
   // table routes `ResolvedRecursiveScan` (and its
   // `ResolvedRecursiveRefScan` reference) through `kDuckdbRewrite`;
   // the transpiler's `EmitRecursiveScan` lowers it to DuckDB's
@@ -502,7 +502,7 @@ TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
 }
 
 TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
-  // `googlesqlite-13-advanced-relational.plan.md` Family 5. A
+  // `local-exec-13-advanced-relational.plan.md` Family 5. A
   // `ResolvedDeferredComputedColumn` is the side-effect-aware
   // form of a computed column the analyzer emits when conditional
   // / pipe-evaluation features capture errors in a companion
@@ -552,7 +552,7 @@ TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
 
 TEST_F(RouteClassifierTest, KeysFunctionRoutesToLocalStub) {
   // `KEYS.NEW_KEYSET('AEAD_AES_GCM_256')` is a `local_stub` row in
-  // `functions.yaml` per `googlesqlite-15-specialized-stubs.plan.md`. A
+  // `functions.yaml` per `local-exec-15-specialized-stubs.plan.md`. A
   // SELECT referencing it must promote the route to `kLocalStub`
   // (above `kSemanticExecutor`, below `kUnsupported`) so the
   // coordinator dispatches into the semantic executor's per-family

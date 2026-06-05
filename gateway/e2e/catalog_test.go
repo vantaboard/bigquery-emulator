@@ -118,7 +118,7 @@ type emulatorEnv struct {
 	// address to open their own channel.
 	engineAddr string
 	// dataDir is the `--data_dir` passed when spawning emulator_main.
-	// The googlesqlite TestMain harness reuses it when restarting after
+	// The query port TestMain harness reuses it when restarting after
 	// an engine crash (503 EOF / connection refused).
 	dataDir string
 }
@@ -175,7 +175,7 @@ func startEmulator(t *testing.T) *emulatorEnv {
 }
 
 // launchEmulator starts emulator_main and an in-process gateway. Used by
-// TestMain for the googlesqlite query port and by startEmulatorWithFlags.
+// TestMain for the query port and by startEmulatorWithFlags.
 func launchEmulator(dataDir string) (*emulatorEnv, error) {
 	if runtime.GOOS == "windows" {
 		return nil, errors.New("emulator_main is a POSIX subprocess; Windows is not yet wired")
@@ -226,9 +226,9 @@ func launchEmulator(dataDir string) (*emulatorEnv, error) {
 }
 
 // launchEmulatorForMain is launchEmulator with a dedicated data directory for
-// the googlesqlite query_test port (TestMain has no *testing.T).
+// the query_port_test port (TestMain has no *testing.T).
 func launchEmulatorForMain() (*emulatorEnv, error) {
-	dir, err := os.MkdirTemp("", "googlesqlite-query-*")
+	dir, err := os.MkdirTemp("", "local-exec-query-*")
 	if err != nil {
 		return nil, err
 	}

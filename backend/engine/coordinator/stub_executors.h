@@ -10,11 +10,11 @@
 // stubs make the coordinator a complete dispatcher today while the
 // real implementations land in:
 //
-//   * `googlesqlite-07-semantic-core-expr.plan.md` -- `SemanticExecutor`
-//   * `googlesqlite-15-specialized-stubs.plan.md` -- `UnsupportedExecutor`
+//   * `local-exec-07-semantic-core-expr.plan.md` -- `SemanticExecutor`
+//   * `local-exec-15-specialized-stubs.plan.md` -- `UnsupportedExecutor`
 //
 // `ControlOpExecutor` used to live here too, but
-// `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` lifted it into its own
+// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` lifted it into its own
 // `backend/engine/control/` package once it grew real per-statement
 // handlers (CREATE TABLE / CTAS / DROP TABLE / ANALYZE today, with
 // the rest of the control_op surface dispatched as
@@ -23,7 +23,7 @@
 // package, not this header.
 //
 // `SemanticExecutor` also graduated out of this stub file when
-// `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md` landed -- the
+// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md` landed -- the
 // real local row/array/value interpreter lives at
 // `backend/engine/semantic/executor.{h,cc}`. The coordinator's
 // `semantic_executor_` member references the new package.
@@ -55,7 +55,7 @@ namespace coordinator {
 // statement / node / function the classifier sees flagged as
 // `unsupported` in the disposition registry. The reply identifies
 // the offending node so the operator can find the right downstream
-// plan; the catch-all owner is `googlesqlite-15-specialized-stubs.plan.md`.
+// plan; the catch-all owner is `local-exec-15-specialized-stubs.plan.md`.
 class UnsupportedExecutor : public Executor {
  public:
   UnsupportedExecutor() = default;

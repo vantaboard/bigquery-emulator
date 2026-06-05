@@ -335,7 +335,7 @@ TEST_F(DuckDbExecutorTest,
        ExecuteDdlRejectsCreateTableAfterControlOpMigration) {
   // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
   // `backend/engine/control/control_op_executor.cc` when
-  // `googlesqlite-01-ddl-catalog.plan.md` landed. The coordinator's
+  // `local-exec-01-ddl-catalog.plan.md` landed. The coordinator's
   // `RouteClassifier` dispatches them to the `ControlOpExecutor`
   // directly; the DuckDB executor's `ExecuteDdl` only handles
   // `ALTER TABLE`. Defensively, calling the DuckDB executor with a

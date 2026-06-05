@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-15-specialized-stubs
+name: local-exec-15-specialized-stubs
 overview: Resolve specialized-feature 501s and NET.* / UDF tests (~24 tests) with local impl or deterministic stubs.
 todos:
   - id: gsql-15-specialized-stubs
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 15: Specialized / NET / UDF Stubs
+# query port 15: Specialized / NET / UDF Stubs
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (24 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-14-dml-system.plan.md`](googlesqlite-14-dml-system.plan.md)
+- [`local-exec-14-dml-system.plan.md`](local-exec-14-dml-system.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"local coordinator: ExecuteQuery on route 'unsupported' is not implemented (statement kind: QueryStmt, family: fun...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"control op executor: CREATE FUNCTION registration is not implemented yet; needs a per-engine functions registry. ...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 400: {"error":{"code":400,"message":"3:1: Syntax error: Expected end of input but got keyword SELECT [at 3:1]","errors":[{"reason":"invalidQuery","mes...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"local coordinator: ExecuteQuery on route 'unsupported' is not implemented (statement kind: QueryStmt, family: fun...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"control op executor: CREATE FUNCTION registration is not implemented yet; needs a per-engine functions registry. ...`
+- `query_port_test.go:8045: jobs.query -> 400: {"error":{"code":400,"message":"3:1: Syntax error: Expected end of input but got keyword SELECT [at 3:1]","errors":[{"reason":"invalidQuery","mes...`
 
 ## Primary files
 
@@ -37,7 +37,7 @@ Baseline: `20260603T035812Z` (24 failing tests in this bucket).
 1. Replace legacy specialized-feature plan references in 501 messages with this plan.
 2. For each failing specialized family, choose local_impl vs local_stub vs unsupported per test expectation.
 3. Implement or stub `net.*` functions referenced by `TestQuery/net_*` subtests.
-4. Wire CREATE FUNCTION / temp function tests to udf routing or explicit unsupported errors matching googlesqlite expectations.
+4. Wire CREATE FUNCTION / temp function tests to udf routing or explicit unsupported errors matching query port expectations.
 
 ## Verify
 
@@ -55,7 +55,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 24 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~24.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~24.
 
 ## Failing tests
 

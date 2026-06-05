@@ -76,9 +76,9 @@ tasks:
       fixtures (`conformance/fixtures/functions/`). Targets `~2
       minutes` of wall time, scoped to the `duckdb_native` /
       `duckdb_rewrite` shapes plan-2
-      (`googlesqlite-04-scan-emits.plan.md`) pins plus the
+      (`local-exec-04-scan-emits.plan.md`) pins plus the
       `duckdb_udf` shapes plan-3 lands
-      (`googlesqlite-03-operator-disposition.plan.md`). Wired into the
+      (`local-exec-03-operator-disposition.plan.md`). Wired into the
       PR-gating CI job; run locally before pushing if you touched
       the transpiler, its YAML registries, or the polyfill UDF
       library. Honors EMULATOR_BIN (default `./bin/emulator_main`).
@@ -117,7 +117,7 @@ tasks:
           $OUTPUT_FILE_FLAG
         # array-struct fixtures (`conformance/fixtures/array_struct/`)
         # pin the divergent `ResolvedArrayScan` shapes routed through
-        # the semantic executor by `googlesqlite-12-arrays-generators.plan.md`.
+        # the semantic executor by `local-exec-12-arrays-generators.plan.md`.
         # Requires `bin/emulator_main` to include the executor's
         # ArrayScan dispatch (plan 8 +); a pre-plan-8 binary will
         # surface NOT_IMPLEMENTED here.

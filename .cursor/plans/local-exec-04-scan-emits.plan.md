@@ -1,6 +1,6 @@
 ---
-name: googlesqlite-04-scan-emits
-overview: Close missing DuckDB emit coverage for core scan nodes blocking ~56 googlesqlite tests.
+name: local-exec-04-scan-emits
+overview: Close missing DuckDB emit coverage for core scan nodes blocking ~56 query port tests.
 todos:
   - id: gsql-04-scan-emits
     content: Implement missing DuckDB scan emit methods
@@ -8,23 +8,23 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 04: Scan Emits (ProjectScan, OrderByScan, …)
+# query port 04: Scan Emits (ProjectScan, OrderByScan, …)
 
 ## Goal
 
-Close missing DuckDB emit coverage for core scan nodes blocking ~56 googlesqlite tests.
+Close missing DuckDB emit coverage for core scan nodes blocking ~56 query port tests.
 
 Baseline: `20260603T035812Z` (62 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-02-withscan-cte.plan.md`](googlesqlite-02-withscan-cte.plan.md)
-- [`googlesqlite-03-operator-disposition.plan.md`](googlesqlite-03-operator-disposition.plan.md)
+- [`local-exec-02-withscan-cte.plan.md`](local-exec-02-withscan-cte.plan.md)
+- [`local-exec-03-operator-disposition.plan.md`](local-exec-03-operator-disposition.plan.md)
 
 ## Root cause
 
 - `I0000 00:00:1780459094.934444  399173 transpiler.cc:1924] duckdb transpiler: aggregate 'array_agg' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / NULL-handling) that has no DuckDB analog y...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:ProjectScan, route: duckdb_native); s...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:ProjectScan, route: duckdb_native); s...`
 - `I0000 00:00:1780459094.928458  399173 transpiler.cc:1924] duckdb transpiler: aggregate 'array_agg' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / NULL-handling) that has no DuckDB analog y...`
 
 ## Primary files
@@ -37,7 +37,7 @@ Baseline: `20260603T035812Z` (62 failing tests in this bucket).
 
 1. Implement or complete `EmitProjectScan` for SELECT-list / computed-column projections.
 2. Implement `EmitOrderByScan`, `EmitLimitOffsetScan`, and `EmitSetOperationScan` where still returning empty SQL.
-3. Update 501 error strings to cite `googlesqlite-04-scan-emits.plan.md`.
+3. Update 501 error strings to cite `local-exec-04-scan-emits.plan.md`.
 4. Add one conformance fixture per newly supported scan kind.
 5. Run plan verify regex against `TestQuery` ProjectScan failures.
 
@@ -53,7 +53,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 62 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~62.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~62.
 
 ## Failing tests
 

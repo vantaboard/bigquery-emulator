@@ -4,7 +4,7 @@
 # `match: ordered`. Rows are seeded via `tabledata.insertAll` so the
 # row payload pins the streaming-insert path; INSERT VALUES is also
 # available now via the local DML executor (see plan 9,
-# `googlesqlite-14-dml-system.plan.md`).
+# `local-exec-14-dml-system.plan.md`).
 name: select_where_clause
 description: |
   SELECT with a WHERE filter on a STRING column. Verifies the engine

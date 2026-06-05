@@ -48,8 +48,8 @@ Out of scope (other plans):
 - Implementing the route classifier itself
   (`engine-router-foundation.plan.md`).
 - Implementing any of the new routes
-  (`googlesqlite-03-operator-disposition.plan.md`,
-  `googlesqlite-07-semantic-core-expr.plan.md`, `googlesqlite-01-ddl-catalog.plan.md`).
+  (`local-exec-03-operator-disposition.plan.md`,
+  `local-exec-07-semantic-core-expr.plan.md`, `local-exec-01-ddl-catalog.plan.md`).
 
 ## Implementation Plan
 
@@ -87,7 +87,7 @@ Out of scope (other plans):
 - Unit test for `Disposition` enum / `DispositionToString`.
 - Unit test for the generated `node_dispositions_table.inc`: every
   enum value is reachable; every `kUnsupported` row has the same
-  plan file name (`googlesqlite-15-specialized-stubs.plan.md`).
+  plan file name (`local-exec-15-specialized-stubs.plan.md`).
 - Unit test for `LookupFunction` returning the new enum.
 - Lint test for the parity checker: a deliberately drifted row in
   one source causes the checker to fail.

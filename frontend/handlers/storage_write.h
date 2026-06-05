@@ -25,7 +25,7 @@ namespace frontend {
 // Plan-15 scope: `_default` + `COMMITTED` stream types end-to-end.
 // Both commit on every flushed AppendRows batch through the same
 // `DuckDBStorage::AppendRows` primitive the local DML executor uses
-// (plan 9, `googlesqlite-14-dml-system.plan.md`). The four other RPCs
+// (plan 9, `local-exec-14-dml-system.plan.md`). The four other RPCs
 // (`FinalizeWriteStream`, `BatchCommitWriteStreams`, `FlushRows`,
 // plus `BUFFERED` / `PENDING` stream creation) reserve their proto
 // slots but return UNIMPLEMENTED until the deferred follow-up subagent

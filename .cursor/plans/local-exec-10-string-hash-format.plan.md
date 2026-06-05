@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-10-string-hash-format
+name: local-exec-10-string-hash-format
 overview: Implement string, regex, hash, encoding, and `format` functions (~94 tests).
 todos:
   - id: gsql-10-string-hash-format
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 10: Semantic String / Hash / Format
+# query port 10: Semantic String / Hash / Format
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (83 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-09-date-time.plan.md`](googlesqlite-09-date-time.plan.md)
+- [`local-exec-09-date-time.plan.md`](local-exec-09-date-time.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'ascii' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemented",...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: DuckDB rejected transpiled SQL: Parser Error: syntax error at or near \"AS\"\n\nLINE 1: ...' AS \"...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'byte_length' is not yet implemented in the semantic executor","errors":[{"reason":"notImpleme...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'ascii' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemented",...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: DuckDB rejected transpiled SQL: Parser Error: syntax error at or near \"AS\"\n\nLINE 1: ...' AS \"...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'byte_length' is not yet implemented in the semantic executor","errors":[{"reason":"notImpleme...`
 
 ## Primary files
 
@@ -54,7 +54,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 83 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~83.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~83.
 
 ## Failing tests
 

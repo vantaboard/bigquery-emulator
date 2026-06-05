@@ -38,8 +38,8 @@ that owns:
 
 The DuckDB fast path stays as today's primary route; the other
 executors land empty in this plan and are filled in by their own
-plans (`googlesqlite-07-semantic-core-expr.plan.md`,
-`googlesqlite-01-ddl-catalog.plan.md`).
+plans (`local-exec-07-semantic-core-expr.plan.md`,
+`local-exec-01-ddl-catalog.plan.md`).
 
 ## Dependencies
 

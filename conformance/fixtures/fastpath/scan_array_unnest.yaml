@@ -6,7 +6,7 @@
 # `input_scan` is null/SingleRow). This emits
 # `SELECT unnest(<arr>) AS "<col>"`. The cross-joined
 # `FROM t, UNNEST(t.arr)` and `WITH OFFSET` shapes belong to the
-# semantic executor (see `googlesqlite-12-arrays-generators.plan.md`)
+# semantic executor (see `local-exec-12-arrays-generators.plan.md`)
 # and are intentionally NOT exercised here.
 name: scan_array_unnest
 description: |

@@ -257,7 +257,7 @@ absl::Status RejectUnsupportedDmlFeatures(
         absl::StrCat("semantic/dml: ",
                      kind,
                      " RETURNING clause is owned by Family 7 of "
-                     "googlesqlite-14-dml-system.plan.md"));
+                     "local-exec-14-dml-system.plan.md"));
   }
   if (assert_rows != nullptr) {
     return MakeSemanticError(
@@ -273,7 +273,7 @@ absl::Status RejectUnsupportedDmlFeatures(
             "semantic/dml: ",
             kind,
             " WITH OFFSET requires correlated lateral evaluation owned by "
-            "Family 4 of googlesqlite-12-arrays-generators.plan.md"));
+            "Family 4 of local-exec-12-arrays-generators.plan.md"));
   }
   if (generated_column_count > 0) {
     return MakeSemanticError(
@@ -530,7 +530,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "owned by Family 4 of googlesqlite-14-dml-system.plan.md");
+          "owned by Family 4 of local-exec-14-dml-system.plan.md");
     }
     if (item->target() == nullptr) {
       return absl::InternalError(
@@ -542,7 +542,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
           absl::StrCat("semantic/dml: UPDATE SET target kind ",
                        item->target()->node_kind_string(),
                        " (deep STRUCT mutation) is owned by Family 4 of "
-                       "googlesqlite-14-dml-system.plan.md"));
+                       "local-exec-14-dml-system.plan.md"));
     }
     if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
       return absl::InternalError(
@@ -677,7 +677,7 @@ absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: MERGE harder branches (WHEN NOT MATCHED BY "
           "SOURCE / multi-action) are owned by Family 6 of "
-          "googlesqlite-14-dml-system.plan.md (deferred)");
+          "local-exec-14-dml-system.plan.md (deferred)");
     case ::googlesql::RESOLVED_TRUNCATE_STMT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

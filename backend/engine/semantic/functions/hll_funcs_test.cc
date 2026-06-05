@@ -35,11 +35,13 @@ std::string MergedSketch() {
 }
 
 TEST(HllFuncsTest, InitMatchesExpectedSketchVectors) {
-  auto br = HllCountInitValues({Value::String("customer_id_3")}, /*precision=*/10);
+  auto br =
+      HllCountInitValues({Value::String("customer_id_3")}, /*precision=*/10);
   ASSERT_TRUE(br.ok()) << br.status();
   EXPECT_EQ(br->bytes_value(), BrSketch());
 
-  auto cz = HllCountInitValues({Value::String("customer_id_2")}, /*precision=*/10);
+  auto cz =
+      HllCountInitValues({Value::String("customer_id_2")}, /*precision=*/10);
   ASSERT_TRUE(cz.ok()) << cz.status();
   EXPECT_EQ(cz->bytes_value(), CzSketch());
 
@@ -51,13 +53,16 @@ TEST(HllFuncsTest, InitMatchesExpectedSketchVectors) {
 }
 
 TEST(HllFuncsTest, MergeAndExtractMatchExpectedVectors) {
-  auto merge = HllCountMergeAggregate(
-      {{Value::Bytes(UaSketch()), Value::Bytes(BrSketch()), Value::Bytes(CzSketch())}});
+  auto merge = HllCountMergeAggregate({{Value::Bytes(UaSketch()),
+                                        Value::Bytes(BrSketch()),
+                                        Value::Bytes(CzSketch())}});
   ASSERT_TRUE(merge.ok()) << merge.status();
   EXPECT_EQ(merge->int64_value(), 3);
 
-  auto merge_partial = HllCountMergePartialAggregate(
-      {{Value::Bytes(UaSketch()), Value::Bytes(BrSketch()), Value::Bytes(CzSketch())}});
+  auto merge_partial =
+      HllCountMergePartialAggregate({{Value::Bytes(UaSketch()),
+                                      Value::Bytes(BrSketch()),
+                                      Value::Bytes(CzSketch())}});
   ASSERT_TRUE(merge_partial.ok()) << merge_partial.status();
   EXPECT_EQ(merge_partial->bytes_value(), MergedSketch());
 

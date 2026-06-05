@@ -9,12 +9,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv("BIGQUERY_EMULATOR_SKIP_GOOGLESQLITE_PORT") != "" {
+	if os.Getenv("BIGQUERY_EMULATOR_SKIP_QUERY_PORT") != "" {
 		os.Exit(m.Run())
 	}
 	env, err := launchEmulatorForMain()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "googlesqlite port: start emulator: %v\n", err)
+		fmt.Fprintf(os.Stderr, "query port: start emulator: %v\n", err)
 		os.Exit(1)
 	}
 	sharedEmulator = env

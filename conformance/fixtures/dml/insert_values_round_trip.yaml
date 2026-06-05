@@ -1,6 +1,6 @@
 # insert_values_round_trip: INSERT VALUES landed by the local DML executor.
 #
-# Per `.cursor/plans/googlesqlite-14-dml-system.plan.md`, INSERT VALUES
+# Per `.cursor/plans/local-exec-14-dml-system.plan.md`, INSERT VALUES
 # leaves the DuckDB fast path entirely and routes through
 # `backend/engine/semantic/dml/dml_executor.cc::ExecuteInsert`,
 # which evaluates each `ResolvedInsertRow::value_list()` element

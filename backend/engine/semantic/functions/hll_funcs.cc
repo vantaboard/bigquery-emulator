@@ -39,7 +39,9 @@ inline uint64_t RotateRight(uint64_t x, int bits) {
   return (x >> bits) | (x << (64 - bits));
 }
 
-uint64_t ShiftMix(uint64_t value) { return value ^ (value >> 47); }
+uint64_t ShiftMix(uint64_t value) {
+  return value ^ (value >> 47);
+}
 
 uint64_t Load64(absl::string_view bytes, size_t offset) {
   uint64_t out;
@@ -50,8 +52,7 @@ uint64_t Load64(absl::string_view bytes, size_t offset) {
 uint64_t Load64Safely(absl::string_view bytes, size_t offset, size_t len) {
   uint64_t out = 0;
   for (size_t i = 0; i < len; ++i) {
-    out |= static_cast<uint64_t>(
-               static_cast<unsigned char>(bytes[offset + i]))
+    out |= static_cast<uint64_t>(static_cast<unsigned char>(bytes[offset + i]))
            << (8 * i);
   }
   return out;
@@ -88,9 +89,12 @@ uint64_t MurmurHash64WithSeed(absl::string_view bytes, uint64_t seed) {
   return hash;
 }
 
-void WeakHashLength32WithSeeds(absl::string_view bytes, size_t offset,
-                               uint64_t seed_a, uint64_t seed_b,
-                               uint64_t* out0, uint64_t* out1) {
+void WeakHashLength32WithSeeds(absl::string_view bytes,
+                               size_t offset,
+                               uint64_t seed_a,
+                               uint64_t seed_b,
+                               uint64_t* out0,
+                               uint64_t* out1) {
   uint64_t part1 = Load64(bytes, offset);
   uint64_t part2 = Load64(bytes, offset + 8);
   uint64_t part3 = Load64(bytes, offset + 16);
@@ -108,7 +112,8 @@ void WeakHashLength32WithSeeds(absl::string_view bytes, size_t offset,
 uint64_t HashLength33To64(absl::string_view bytes) {
   const size_t length = bytes.size();
   uint64_t z = Load64(bytes, 24);
-  uint64_t a = Load64(bytes, 0) + (length + Load64(bytes, length - 16)) * kHashK0;
+  uint64_t a =
+      Load64(bytes, 0) + (length + Load64(bytes, length - 16)) * kHashK0;
   uint64_t b = RotateRight(a + z, 52);
   uint64_t c = RotateRight(a, 37);
   a += Load64(bytes, 8);
@@ -137,8 +142,8 @@ uint64_t FullFingerprint(absl::string_view bytes) {
   uint64_t z = Load64(bytes, length - 56) ^ kHashK0;
   uint64_t v0 = 0, v1 = 0, w0 = 0, w1 = 0;
   WeakHashLength32WithSeeds(bytes, length - 64, length, y, &v0, &v1);
-  WeakHashLength32WithSeeds(bytes, length - 32, length * kHashK1, kHashK0, &w0,
-                            &w1);
+  WeakHashLength32WithSeeds(
+      bytes, length - 32, length * kHashK1, kHashK0, &w0, &w1);
   z += ShiftMix(v1) * kHashK1;
   x = RotateRight(z + x, 39) * kHashK1;
   y = RotateRight(y, 33) * kHashK1;
@@ -218,13 +223,17 @@ std::string SerializeSketch(std::vector<uint64_t> hashes) {
   return out;
 }
 
-absl::StatusOr<int64_t> ParseAndValidatePrecision(std::optional<int64_t> precision) {
+absl::StatusOr<int64_t> ParseAndValidatePrecision(
+    std::optional<int64_t> precision) {
   if (!precision.has_value()) return int64_t{15};
   if (*precision < kMinPrecision || *precision > kMaxPrecision) {
     return MakeSemanticError(
         SemanticErrorReason::kInvalidArgument,
-        absl::StrCat("HLL_COUNT.INIT precision must be in [", kMinPrecision,
-                     ", ", kMaxPrecision, "]"));
+        absl::StrCat("HLL_COUNT.INIT precision must be in [",
+                     kMinPrecision,
+                     ", ",
+                     kMaxPrecision,
+                     "]"));
   }
   return *precision;
 }
@@ -294,9 +303,8 @@ absl::StatusOr<Value> HllCountInitAggregate(
     for (const Value& v : input_column_values[1]) {
       if (v.is_null()) continue;
       if (v.type_kind() != ::googlesql::TYPE_INT64) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "HLL_COUNT.INIT precision must be INT64");
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 "HLL_COUNT.INIT precision must be INT64");
       }
       precision = v.int64_value();
       break;

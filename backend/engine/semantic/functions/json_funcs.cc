@@ -126,8 +126,8 @@ absl::StatusOr<std::string> PathFromArgs(const std::vector<Value>& args,
 
 absl::StatusOr<std::unique_ptr<JsonPathEvaluator>> MakeEvaluator(
     absl::string_view path, bool sql_standard_mode) {
-  auto evaluator = JsonPathEvaluator::Create(path, sql_standard_mode,
-                                             kEscapingValues, kEscapingKeys);
+  auto evaluator = JsonPathEvaluator::Create(
+      path, sql_standard_mode, kEscapingValues, kEscapingKeys);
   if (!evaluator.ok()) return evaluator.status();
   return std::move(*evaluator);
 }
@@ -192,9 +192,10 @@ absl::StatusOr<Value> ExtractScalarText(const std::vector<Value>& args,
   return Value::String(std::move(out));
 }
 
-absl::StatusOr<Value> ExtractArrayValues(
-    const std::vector<Value>& args, const ::googlesql::Type* return_type,
-    bool sql_standard_mode, bool unquote_strings) {
+absl::StatusOr<Value> ExtractArrayValues(const std::vector<Value>& args,
+                                         const ::googlesql::Type* return_type,
+                                         bool sql_standard_mode,
+                                         bool unquote_strings) {
   if (args.empty()) {
     return absl::InvalidArgumentError(
         "semantic: JSON_*_ARRAY expects at least one argument");
@@ -212,7 +213,8 @@ absl::StatusOr<Value> ExtractArrayValues(
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
                                                        : nullptr;
   if (arr_type == nullptr) {
-    return absl::InternalError("semantic: JSON_*_ARRAY missing ARRAY return type");
+    return absl::InternalError(
+        "semantic: JSON_*_ARRAY missing ARRAY return type");
   }
   const ::googlesql::Type* elem_type = arr_type->element_type();
   const bool elem_is_json =
@@ -285,25 +287,33 @@ absl::StatusOr<Value> JsonExtractScalar(const std::vector<Value>& args,
 
 absl::StatusOr<Value> JsonExtractArray(const std::vector<Value>& args,
                                        const ::googlesql::Type* return_type) {
-  return ExtractArrayValues(args, return_type, /*sql_standard_mode=*/false,
+  return ExtractArrayValues(args,
+                            return_type,
+                            /*sql_standard_mode=*/false,
                             /*unquote_strings=*/false);
 }
 
 absl::StatusOr<Value> JsonQueryArray(const std::vector<Value>& args,
                                      const ::googlesql::Type* return_type) {
-  return ExtractArrayValues(args, return_type, /*sql_standard_mode=*/true,
+  return ExtractArrayValues(args,
+                            return_type,
+                            /*sql_standard_mode=*/true,
                             /*unquote_strings=*/false);
 }
 
 absl::StatusOr<Value> JsonExtractStringArray(
     const std::vector<Value>& args, const ::googlesql::Type* return_type) {
-  return ExtractArrayValues(args, return_type, /*sql_standard_mode=*/false,
+  return ExtractArrayValues(args,
+                            return_type,
+                            /*sql_standard_mode=*/false,
                             /*unquote_strings=*/true);
 }
 
 absl::StatusOr<Value> JsonValueArray(const std::vector<Value>& args,
                                      const ::googlesql::Type* return_type) {
-  return ExtractArrayValues(args, return_type, /*sql_standard_mode=*/true,
+  return ExtractArrayValues(args,
+                            return_type,
+                            /*sql_standard_mode=*/true,
                             /*unquote_strings=*/true);
 }
 
@@ -370,8 +380,8 @@ absl::StatusOr<Value> JsonCastFloat64(const std::vector<Value>& args) {
   std::optional<JSONValue> storage;
   auto ref = JsonRefFromArg(args[0], &storage);
   if (!ref.ok()) return ref.status();
-  auto converted = ConvertJsonToDouble(*ref, WideNumberMode::kRound,
-                                       ProductMode::PRODUCT_EXTERNAL);
+  auto converted = ConvertJsonToDouble(
+      *ref, WideNumberMode::kRound, ProductMode::PRODUCT_EXTERNAL);
   if (!converted.ok()) return converted.status();
   return Value::Double(*converted);
 }
@@ -398,8 +408,8 @@ absl::StatusOr<Value> JsonRefToSemanticValue(
   if (return_type != nullptr && return_type->IsJson()) {
     return Value::UnvalidatedJsonString(ref.ToString());
   }
-  if (return_type != nullptr && return_type->kind() == ::googlesql::TYPE_STRING &&
-      ref.IsString()) {
+  if (return_type != nullptr &&
+      return_type->kind() == ::googlesql::TYPE_STRING && ref.IsString()) {
     return Value::String(ref.GetString());
   }
   return Value::String(ref.ToString());
@@ -436,8 +446,8 @@ absl::StatusOr<Value> JsonSubscript(const std::vector<Value>& args,
     if (idx < 0 || static_cast<size_t>(idx) >= ref->GetArraySize()) {
       return NullForReturnType(return_type);
     }
-    return JsonRefToSemanticValue(ref->GetArrayElement(static_cast<size_t>(idx)),
-                                  return_type);
+    return JsonRefToSemanticValue(
+        ref->GetArrayElement(static_cast<size_t>(idx)), return_type);
   }
   if (args[1].type_kind() == ::googlesql::TYPE_STRING) {
     if (!ref->IsObject()) return NullForReturnType(return_type);

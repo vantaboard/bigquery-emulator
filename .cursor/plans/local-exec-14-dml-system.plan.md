@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-14-dml-system
+name: local-exec-14-dml-system
 overview: Support DML setup statements, `@@` system variables, and information_schema queries.
 todos:
   - id: gsql-14-dml-system
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 14: DML / System Variables / information_schema
+# query port 14: DML / System Variables / information_schema
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (6 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-13-advanced-relational.plan.md`](googlesqlite-13-advanced-relational.plan.md)
+- [`local-exec-13-advanced-relational.plan.md`](local-exec-13-advanced-relational.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:1672: CREATE/INSERT: jobs.query -> 400: {"error":{"code":400,"message":"2:18: Syntax error: Expected end of input but got keyword INSERT [at 2:18]","errors":[{"reason":"i...`
-- `googlesqlite_query_test.go:1650: CREATE/INSERT: jobs.query -> 400: {"error":{"code":400,"message":"2:18: Syntax error: Expected end of input but got keyword CREATE [at 2:18]","errors":[{"reason":"i...`
-- `googlesqlite_query_test.go:545: CREATE: jobs.query -> 400: {"error":{"code":400,"message":"2:43: Syntax error: Expected end of input but got keyword CREATE [at 2:43]","errors":[{"reason":"invalidQu...`
+- `query_port_test.go:1672: CREATE/INSERT: jobs.query -> 400: {"error":{"code":400,"message":"2:18: Syntax error: Expected end of input but got keyword INSERT [at 2:18]","errors":[{"reason":"i...`
+- `query_port_test.go:1650: CREATE/INSERT: jobs.query -> 400: {"error":{"code":400,"message":"2:18: Syntax error: Expected end of input but got keyword CREATE [at 2:18]","errors":[{"reason":"i...`
+- `query_port_test.go:545: CREATE: jobs.query -> 400: {"error":{"code":400,"message":"2:43: Syntax error: Expected end of input but got keyword CREATE [at 2:43]","errors":[{"reason":"invalidQu...`
 
 ## Primary files
 
@@ -38,7 +38,7 @@ Baseline: `20260603T035812Z` (6 failing tests in this bucket).
 1. Support multi-statement scripts or sequential exec in `emulator_sql.go` for CREATE+INSERT patterns.
 2. Implement UPDATE/DELETE/INSERT paths used by dedicated DML tests.
 3. Recognize `@@time_zone` and related system variables (`TestSystemVariableSet`, `TestSystemVariableTimeZone`).
-4. Expose information_schema tables for googlesqlite catalog introspection tests.
+4. Expose information_schema tables for query port catalog introspection tests.
 
 ## Verify
 
@@ -52,7 +52,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 6 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~6.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~6.
 
 ## Failing tests
 

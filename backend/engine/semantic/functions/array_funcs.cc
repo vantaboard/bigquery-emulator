@@ -45,7 +45,9 @@ absl::StatusOr<const ::googlesql::ArrayType*> ExpectArrayType(
     const Value& v, absl::string_view what) {
   if (!v.type()->IsArray()) {
     return absl::InvalidArgumentError(
-        absl::StrCat("semantic: ", what, " requires ARRAY argument; got ",
+        absl::StrCat("semantic: ",
+                     what,
+                     " requires ARRAY argument; got ",
                      v.type()->DebugString()));
   }
   return v.type()->AsArray();

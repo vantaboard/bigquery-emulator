@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-16-result-fixes
+name: local-exec-16-result-fixes
 overview: Fix remaining wrong results, empty row sets, and Go driver scan type mismatches (~16 tests).
 todos:
   - id: gsql-16-result-fixes
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 16: Result / Driver Fixes
+# query port 16: Result / Driver Fixes
 
 ## Goal
 
@@ -18,7 +18,7 @@ Baseline: `20260603T035812Z` (19 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-15-specialized-stubs.plan.md`](googlesqlite-15-specialized-stubs.plan.md)
+- [`local-exec-15-specialized-stubs.plan.md`](local-exec-15-specialized-stubs.plan.md)
 
 ## Notes
 
@@ -26,9 +26,9 @@ Run last; some tests here may clear earlier once upstream plans land.
 
 ## Root cause
 
-- `googlesqlite_query_test.go:1631: Scan: sql: no rows in result set`
-- `googlesqlite_query_test.go:350: IN: sql: no rows in result set`
-- `googlesqlite_query_test.go:1208: Scan: cannot scan int64 into *sql.NullInt64`
+- `query_port_test.go:1631: Scan: sql: no rows in result set`
+- `query_port_test.go:350: IN: sql: no rows in result set`
+- `query_port_test.go:1208: Scan: cannot scan int64 into *sql.NullInt64`
 
 ## Primary files
 
@@ -40,7 +40,7 @@ Run last; some tests here may clear earlier once upstream plans land.
 1. Fix `sql.NullInt64` scanning: return NULL as sql.NullInt64 valid=false instead of bare int64.
 2. Fix LIMIT/OFFSET result delivery (`TestLimitOffset`).
 3. Fix EXISTS/IN/subquery tests returning empty result sets when rows expected.
-4. Sweep any tests still failing after plans 01–15; re-baseline with `run_googlesqlite_emulator_tests.sh`.
+4. Sweep any tests still failing after plans 01–15; re-baseline with `run_query_port_tests.sh`.
 
 ## Verify
 
@@ -58,15 +58,15 @@ Parent re-gate (2026-06-04): **10/19 pass** (6 top-level + 4 `TestSubqueryExpr/*
 ## Full suite (after plan 16)
 
 ```bash
-./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh
+./gateway/e2e/testresults/run_query_port_tests.sh
 ```
 
-Latest: `googlesqlite-emulator-20260604T201957Z-summary.txt` — **pass=197 fail=508 skip=2** (baseline fail=568). Many post-`use_function` failures are connection-refused cascades, not plan-16 regressions.
+Latest: `query-port-20260604T201957Z-summary.txt` — **pass=197 fail=508 skip=2** (baseline fail=568). Many post-`use_function` failures are connection-refused cascades, not plan-16 regressions.
 
 ## Done when
 
 - All 19 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~19.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~19.
 
 ## Failing tests
 

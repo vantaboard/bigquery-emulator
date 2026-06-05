@@ -682,7 +682,7 @@ std::string Transpiler::EmitQueryStmt(
   // is set to `kSemanticExecutor` via its
   // `VisitResolvedQueryStmt` override, so the local coordinator
   // hands the statement off to the semantic executor (stub today;
-  // owned by `googlesqlite-07-semantic-core-expr.plan.md`) before the
+  // owned by `local-exec-07-semantic-core-expr.plan.md`) before the
   // transpiler is ever asked to lower it. We touch the accessor
   // below so `ResolvedAST::CheckFieldsAccessed` still sees the
   // field read in case the transpiler is invoked through a path
@@ -963,7 +963,7 @@ std::string Transpiler::EmitFilterScan(
 // refs. DuckDB shares the native `USING (...)` syntax, so we peel
 // the column names back out of that tree and emit `USING` directly
 // rather than lowering through `$equal` (which is owned by
-// `googlesqlite-03-operator-disposition.plan.md`).
+// `local-exec-03-operator-disposition.plan.md`).
 static bool TryAppendUsingColumnFromEqualCall(
     const ::googlesql::ResolvedFunctionCall* call,
     std::vector<std::string>* cols) {
@@ -1125,10 +1125,10 @@ std::string Transpiler::EmitJoinScan(
   // in case the transpiler is invoked through a path that bypasses
   // the classifier (legacy tests, debugging). Lateral correlated
   // `parameter_list` slots stay on the empty-string gate today
-  // (`googlesqlite-12-arrays-generators.plan.md`). `JOIN ... USING(...)`
+  // (`local-exec-12-arrays-generators.plan.md`). `JOIN ... USING(...)`
   // lowers to DuckDB's native `USING (...)` by peeling column names
   // out of the analyzer's `$equal` / `$and` `join_expr` tree
-  // (`googlesqlite-02-withscan-cte.plan.md`).
+  // (`local-exec-02-withscan-cte.plan.md`).
   if (node == nullptr) return "";
   (void)node->is_lateral();
   if (node->parameter_list_size() > 0) {
@@ -3057,7 +3057,7 @@ std::string Transpiler::EmitFunctionCall(
     return EmitCaseNoValue(args);
   }
   // FORMAT('%T', expr) smoke for ARRAY literal checks in
-  // googlesqlite-06 aggregate verify; full FORMAT lives in plan 09.
+  // local-exec-06 aggregate verify; full FORMAT lives in plan 09.
   if (name == "format" && args.size() == 2 && args[0] == "'%T'") {
     return absl::StrCat("CAST(", args[1], " AS VARCHAR)");
   }
@@ -3321,7 +3321,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
   //
   // ORDER BY / LIMIT inside `array_agg`, `string_agg`, and
   // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax
-  // (`googlesqlite-04-scan-emits.plan.md` / `googlesqlite-06-aggregate-
+  // (`local-exec-04-scan-emits.plan.md` / `local-exec-06-aggregate-
   // modifiers.plan.md`). HAVING MAX/MIN, multi-level GROUP BY, and
   // aggregate filtering still surface UNIMPLEMENTED.
   // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) lowers `SAFE.SUM` via TRY().
@@ -3860,7 +3860,7 @@ std::string Transpiler::EmitSubqueryExpr(
   // they fall through to the empty-string contract today.
   //
   // Correlated subqueries (non-empty `parameter_list()`) belong to
-  // the semantic executor (`googlesqlite-02-withscan-cte.plan.md` Family 4,
+  // the semantic executor (`local-exec-02-withscan-cte.plan.md` Family 4,
   // deferred). The route classifier promotes any query containing a
   // correlated `ResolvedSubqueryExpr` to `kSemanticExecutor` before
   // the transpiler is ever asked to lower it -- but we defend in

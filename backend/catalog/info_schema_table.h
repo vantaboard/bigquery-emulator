@@ -7,10 +7,10 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/catalog/virtual_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
-#include "absl/types/span.h"
 #include "googlesql/public/evaluator_table_iterator.h"
 #include "googlesql/public/types/type_factory.h"
 

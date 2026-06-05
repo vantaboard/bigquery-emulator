@@ -9,7 +9,7 @@
 // `ArithmeticAdd` / `ArithmeticDiv` / ... helpers). For BigQuery
 // functions that the polyfill UDF library cannot model cleanly
 // (per the matching `functions.yaml` row's `plan=
-// googlesqlite-09-date-time.plan.md` pointer), the inline
+// local-exec-09-date-time.plan.md` pointer), the inline
 // dispatch falls through to `Dispatch` below.
 //
 // `Dispatch` returns:

@@ -30,8 +30,10 @@ std::string QuoteIdent(absl::string_view ident) {
   escaped.reserve(ident.size() + 2);
   escaped.push_back('"');
   for (char c : ident) {
-    if (c == '"') escaped.append("\"\"");
-    else escaped.push_back(c);
+    if (c == '"')
+      escaped.append("\"\"");
+    else
+      escaped.push_back(c);
   }
   escaped.push_back('"');
   return escaped;
@@ -41,8 +43,10 @@ std::string EscapeStringLiteral(absl::string_view s) {
   std::string out;
   out.reserve(s.size());
   for (char c : s) {
-    if (c == '\'') out.append("''");
-    else out.push_back(c);
+    if (c == '\'')
+      out.append("''");
+    else
+      out.push_back(c);
   }
   return out;
 }
@@ -95,7 +99,8 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
 
 absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
   ::duckdb_result result;
-  if (::duckdb_query(conn, std::string(sql).c_str(), &result) != ::DuckDBSuccess) {
+  if (::duckdb_query(conn, std::string(sql).c_str(), &result) !=
+      ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&result);
@@ -108,12 +113,11 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
 
 class WildcardEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
  public:
-  WildcardEvaluatorIterator(
-      std::vector<storage::Row> rows,
-      schema::TableSchema schema,
-      std::vector<int> column_idxs,
-      std::vector<std::string> column_names,
-      std::vector<const Type*> column_types)
+  WildcardEvaluatorIterator(std::vector<storage::Row> rows,
+                            schema::TableSchema schema,
+                            std::vector<int> column_idxs,
+                            std::vector<std::string> column_names,
+                            std::vector<const Type*> column_types)
       : rows_(std::move(rows)),
         schema_(std::move(schema)),
         column_idxs_(std::move(column_idxs)),
@@ -180,15 +184,14 @@ class WildcardEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
 
 }  // namespace
 
-WildcardTable::WildcardTable(
-    absl::string_view wildcard_table_id,
-    absl::string_view full_name,
-    storage::TableId wildcard_id,
-    std::vector<storage::TableId> matched_tables,
-    schema::TableSchema union_schema,
-    absl::Span<const NameAndType> columns,
-    const storage::Storage* storage,
-    ::googlesql::TypeFactory* type_factory)
+WildcardTable::WildcardTable(absl::string_view wildcard_table_id,
+                             absl::string_view full_name,
+                             storage::TableId wildcard_id,
+                             std::vector<storage::TableId> matched_tables,
+                             schema::TableSchema union_schema,
+                             absl::Span<const NameAndType> columns,
+                             const storage::Storage* storage,
+                             ::googlesql::TypeFactory* type_factory)
     : VirtualCatalogTable(std::string(wildcard_table_id), columns),
       wildcard_id_(std::move(wildcard_id)),
       matched_tables_(std::move(matched_tables)),
@@ -225,7 +228,8 @@ WildcardTable::CreateEvaluatorTableIterator(
   std::vector<const Type*> types;
   if (column_idxs.empty()) {
     idxs.resize(union_schema_.columns.size());
-    for (size_t i = 0; i < union_schema_.columns.size(); ++i) idxs[i] = i;
+    for (size_t i = 0; i < union_schema_.columns.size(); ++i)
+      idxs[i] = i;
   } else {
     idxs.assign(column_idxs.begin(), column_idxs.end());
   }
@@ -238,9 +242,11 @@ WildcardTable::CreateEvaluatorTableIterator(
     names.push_back(GetColumn(idx)->Name());
     types.push_back(GetColumn(idx)->GetType());
   }
-  return std::make_unique<WildcardEvaluatorIterator>(
-      std::move(rows), union_schema_, std::move(idxs), std::move(names),
-      std::move(types));
+  return std::make_unique<WildcardEvaluatorIterator>(std::move(rows),
+                                                     union_schema_,
+                                                     std::move(idxs),
+                                                     std::move(names),
+                                                     std::move(types));
 }
 
 absl::Status WildcardTable::MaterializeInDuckDB(
@@ -252,9 +258,12 @@ absl::Status WildcardTable::MaterializeInDuckDB(
         "WildcardTable: storage backend is not configured");
   }
   const std::string table_name(quoted_table_name);
-  absl::Status create = RunSqlNoResult(
-      conn, absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ",
-                         RenderColumnList(union_schema_)));
+  absl::Status create =
+      RunSqlNoResult(conn,
+                     absl::StrCat("CREATE OR REPLACE TABLE ",
+                                  table_name,
+                                  " ",
+                                  RenderColumnList(union_schema_)));
   if (!create.ok()) return create;
 
   std::string insert_sql;

@@ -596,12 +596,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   transpiler::Transpiler t;
   std::string sql = t.Transpile(query_stmt);
   if (sql.empty()) {
-    const char* plan = "googlesqlite-04-scan-emits.plan.md";
+    const char* plan = "local-exec-04-scan-emits.plan.md";
     const std::string kind = query_stmt->query()->node_kind_string();
     if (kind == "WithScan" || kind == "WithRefScan") {
-      plan = "googlesqlite-02-withscan-cte.plan.md";
+      plan = "local-exec-02-withscan-cte.plan.md";
     } else if (kind == "OrderByScan") {
-      plan = "googlesqlite-04-scan-emits.plan.md";
+      plan = "local-exec-04-scan-emits.plan.md";
     }
     return absl::UnimplementedError(absl::StrCat(
         "duckdb engine: transpiler does not yet cover this query shape "
@@ -646,7 +646,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // here; the transpiler then emits a plain `<udf_name>(<args>)`
   // call below. Registration failure is fail-fast: there is no
   // runtime "missing UDF -> fall back to another route" path
-  // (per `googlesqlite-03-operator-disposition.plan.md`'s Done Criterion 2).
+  // (per `local-exec-03-operator-disposition.plan.md`'s Done Criterion 2).
   if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
@@ -917,7 +917,7 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
         "node:",
         stmt.node_kind_string(),
         ", route: semantic_executor); see docs/ENGINE_POLICY.md and plan "
-        "googlesqlite-14-dml-system.plan.md"));
+        "local-exec-14-dml-system.plan.md"));
   }
   const auto* merge_stmt = stmt.GetAs<::googlesql::ResolvedMergeStmt>();
   if (merge_stmt->table_scan() == nullptr ||
@@ -1079,7 +1079,7 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
 //
 // CREATE TABLE / CREATE TABLE AS SELECT / DROP TABLE all moved to
 // `backend/engine/control/control_op_executor.{h,cc}` when
-// `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` landed: those rows
+// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` landed: those rows
 // dropped `status=planned` from `node_dispositions.yaml`, so the
 // route classifier dispatches them to the `ControlOpExecutor`
 // directly and the DuckDB executor never sees them.
@@ -1172,7 +1172,7 @@ absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
         action->node_kind_string(),
         " is not implemented (only ADD COLUMN is supported); ALTER TABLE "
         "is on the control_op route per docs/ENGINE_POLICY.md and plan "
-        "googlesqlite-01-ddl-catalog.plan.md, but the per-action handlers "
+        "local-exec-01-ddl-catalog.plan.md, but the per-action handlers "
         "still "
         "live here pending the migration"));
   }
@@ -1328,7 +1328,7 @@ absl::Status DuckDbExecutor::ExecuteDdl(
     default:
       // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
       // `backend/engine/control/control_op_executor.cc` when
-      // `googlesqlite-01-ddl-catalog.plan.md` landed; the route classifier
+      // `local-exec-01-ddl-catalog.plan.md` landed; the route classifier
       // dispatches them to the `ControlOpExecutor` directly. If
       // one reaches us here, the classifier or the YAML
       // disposition row drifted out of sync with this dispatch

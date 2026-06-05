@@ -235,7 +235,7 @@ type JobStatistics struct {
 
 // JobStatistics2 is the per-query statistics block exposed under
 // `Job.statistics.query`. Today the emulator surfaces only
-// `statementType` (see `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`
+// `statementType` (see `.cursor/plans/local-exec-01-ddl-catalog.plan.md`
 // item 5) and the loopback-only `emulatorRoute` debug field (see
 // `.cursor/plans/conformance-routing-matrix.plan.md`); the other
 // fields land alongside the long-running-jobs follow-up. Mirrors

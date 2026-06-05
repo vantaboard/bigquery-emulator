@@ -12,7 +12,7 @@
 // schema mapping, or storage-write call surface as a unit-test
 // failure first.
 //
-// Plan ownership: `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Tests
+// Plan ownership: `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Tests
 // section.
 
 #include "backend/engine/control/control_op_executor.h"
@@ -367,9 +367,8 @@ TEST_F(ControlOpExecutorTest, CreateViewSurfacesUnimplemented) {
   absl::Status s = RunDdl("CREATE VIEW ds.v AS SELECT 1 AS id");
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(
-      std::string(s.message()).find("googlesqlite-01-ddl-catalog.plan.md"),
-      std::string::npos)
+  EXPECT_NE(std::string(s.message()).find("local-exec-01-ddl-catalog.plan.md"),
+            std::string::npos)
       << s.message();
 }
 
@@ -377,7 +376,7 @@ TEST_F(ControlOpExecutorTest, CreateMaterializedViewSurfacesUnimplemented) {
   absl::Status s = RunDdl("CREATE MATERIALIZED VIEW ds.mv AS SELECT 1 AS id");
   ASSERT_FALSE(s.ok());
   EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("googlesqlite-15-specialized-stubs"),
+  EXPECT_NE(std::string(s.message()).find("local-exec-15-specialized-stubs"),
             std::string::npos)
       << s.message();
 }

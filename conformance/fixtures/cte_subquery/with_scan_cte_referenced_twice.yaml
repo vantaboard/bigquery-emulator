@@ -8,7 +8,7 @@
 # Pins that contract end-to-end.
 #
 # Route: `duckdb_native` via
-# `googlesqlite-02-withscan-cte.plan.md::EmitWithScan` /
+# `local-exec-02-withscan-cte.plan.md::EmitWithScan` /
 # `EmitWithRefScan`. Route-label assertion deferred to plan 16.
 name: with_scan_cte_referenced_twice
 description: |

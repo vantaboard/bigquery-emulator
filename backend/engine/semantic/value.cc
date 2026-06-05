@@ -190,7 +190,7 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
       // text form.
       return storage::Value::String(value.time_value().DebugString());
     case ::googlesql::TYPE_DATETIME: {
-      // BigQuery REST / googlesqlite parity uses
+      // BigQuery REST / query port parity uses
       // "YYYY-MM-DDTHH:MM:SS[.ffffff]".
       std::string out = value.datetime_value().DebugString();
       const size_t sep = out.find(' ');
@@ -463,20 +463,19 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
       // requires the same FromString-style parsers GoogleSQL ships
       // for literals; routing them through is in scope for the
       // semantic functions plan
-      // (`googlesqlite-09-date-time.plan.md`). Surface
+      // (`local-exec-09-date-time.plan.md`). Surface
       // NOT_IMPLEMENTED today so the wire envelope is consistent.
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: parameter type '",
-                       type_kind_name,
-                       "' is not yet supported; see "
-                       "googlesqlite-09-date-time.plan.md"));
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               absl::StrCat("semantic: parameter type '",
+                                            type_kind_name,
+                                            "' is not yet supported; see "
+                                            "local-exec-09-date-time.plan.md"));
     case ::googlesql::TYPE_ARRAY:
     case ::googlesql::TYPE_STRUCT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           absl::StrCat("semantic: ARRAY / STRUCT parameters are owned by "
-                       "googlesqlite-12-arrays-generators.plan.md"));
+                       "local-exec-12-arrays-generators.plan.md"));
     default:
       return absl::InvalidArgumentError(absl::StrCat(
           "semantic: unsupported parameter type kind '", type_kind_name, "'"));

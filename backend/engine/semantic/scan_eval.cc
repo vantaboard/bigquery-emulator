@@ -12,12 +12,12 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
-#include "googlesql/public/simple_catalog.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -69,7 +69,8 @@ bool ValueEqual(const Value& a, const Value& b) {
 }
 
 int CompareArrayAggOrderKey(const ::googlesql::ResolvedOrderByItem& item,
-                            const Value& va, const Value& vb) {
+                            const Value& va,
+                            const Value& vb) {
   if (ValueEqual(va, vb)) return 0;
   if (va.is_null() || vb.is_null()) {
     bool nulls_first;
@@ -96,7 +97,8 @@ int CompareArrayAggOrderKey(const ::googlesql::ResolvedOrderByItem& item,
 absl::StatusOr<Value> EvalArrayAgg(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
-    const std::vector<ColumnBindings>& input_rows, EvalContext& ctx) {
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx) {
   if (input_column_values.size() != 1) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "semantic: ARRAY_AGG expects one argument");
@@ -156,17 +158,16 @@ absl::StatusOr<Value> EvalArrayAgg(
   }
 
   if (call.order_by_item_list_size() > 0) {
-    std::stable_sort(rows.begin(), rows.end(),
-                     [&](const Row& a, const Row& b) {
-                       for (int i = 0; i < call.order_by_item_list_size(); ++i) {
-                         const ::googlesql::ResolvedOrderByItem* item =
-                             call.order_by_item_list(i);
-                         int cmp = CompareArrayAggOrderKey(*item, a.sort_keys[i],
-                                                           b.sort_keys[i]);
-                         if (cmp != 0) return cmp < 0;
-                       }
-                       return false;
-                     });
+    std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) {
+      for (int i = 0; i < call.order_by_item_list_size(); ++i) {
+        const ::googlesql::ResolvedOrderByItem* item =
+            call.order_by_item_list(i);
+        int cmp =
+            CompareArrayAggOrderKey(*item, a.sort_keys[i], b.sort_keys[i]);
+        if (cmp != 0) return cmp < 0;
+      }
+      return false;
+    });
   }
 
   if (call.limit() != nullptr) {
@@ -182,8 +183,9 @@ absl::StatusOr<Value> EvalArrayAgg(
     }
     const int64_t limit = limit_or->int64_value();
     if (limit < 0) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: ARRAY_AGG LIMIT must be non-negative");
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic: ARRAY_AGG LIMIT must be non-negative");
     }
     if (rows.size() > static_cast<size_t>(limit)) {
       rows.resize(static_cast<size_t>(limit));
@@ -229,7 +231,8 @@ std::string GroupKeyFingerprint(const std::vector<Value>& keys) {
 absl::StatusOr<Value> EvalAggregateForRows(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const std::vector<ColumnBindings>& input_rows,
-    const std::vector<size_t>& row_indices, EvalContext& ctx) {
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx) {
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(agg.argument_list_size()));
   for (size_t r : row_indices) {
@@ -243,8 +246,8 @@ absl::StatusOr<Value> EvalAggregateForRows(
   }
   std::string agg_name;
   if (agg.function() != nullptr) {
-    agg_name =
-        absl::AsciiStrToLower(agg.function()->FullName(/*include_group=*/false));
+    agg_name = absl::AsciiStrToLower(
+        agg.function()->FullName(/*include_group=*/false));
     if (agg_name.empty()) {
       agg_name = absl::AsciiStrToLower(agg.function()->Name());
     }
@@ -263,10 +266,12 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
     const ::googlesql::ResolvedAggregateScan& aggregate,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    const std::vector<Value>* group_keys, EvalContext& ctx) {
+    const std::vector<Value>* group_keys,
+    EvalContext& ctx) {
   ColumnBindings out_row;
   if (group_keys != nullptr) {
-    if (static_cast<int>(group_keys->size()) != aggregate.group_by_list_size()) {
+    if (static_cast<int>(group_keys->size()) !=
+        aggregate.group_by_list_size()) {
       return absl::InternalError(
           "semantic: aggregate group key arity mismatch");
     }
@@ -276,7 +281,8 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
     }
   }
   for (int i = 0; i < aggregate.aggregate_list_size(); ++i) {
-    const ::googlesql::ResolvedComputedColumnBase* cc = aggregate.aggregate_list(i);
+    const ::googlesql::ResolvedComputedColumnBase* cc =
+        aggregate.aggregate_list(i);
     if (cc == nullptr || cc->expr() == nullptr) {
       return absl::InternalError("semantic: aggregate column has null expr");
     }
@@ -314,8 +320,11 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     for (size_t r = 0; r < input_rows.size(); ++r) {
       all_rows.push_back(r);
     }
-    auto row_or = MaterializeAggregateGroup(aggregate, input_rows, all_rows,
-                                              /*group_keys=*/nullptr, ctx);
+    auto row_or = MaterializeAggregateGroup(aggregate,
+                                            input_rows,
+                                            all_rows,
+                                            /*group_keys=*/nullptr,
+                                            ctx);
     if (!row_or.ok()) return row_or.status();
     return std::vector<ColumnBindings>{std::move(*row_or)};
   }
@@ -340,7 +349,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const std::string fp = GroupKeyFingerprint(keys);
     auto it = groups.find(fp);
     if (it == groups.end()) {
-      groups.emplace(fp, std::make_pair(std::move(keys), std::vector<size_t>{r}));
+      groups.emplace(fp,
+                     std::make_pair(std::move(keys), std::vector<size_t>{r}));
     } else {
       it->second.second.push_back(r);
     }
@@ -359,7 +369,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
 
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
-    const std::vector<ColumnBindings>& input_rows, EvalContext& ctx) {
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx) {
   absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*> expr_by_column_id;
   for (int i = 0; i < project.expr_list_size(); ++i) {
     const ::googlesql::ResolvedComputedColumn* cc = project.expr_list(i);
@@ -395,9 +406,10 @@ absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
       } else {
         auto cit = input.find(col_id);
         if (cit == input.end()) {
-          return absl::InternalError(absl::StrCat(
-              "semantic: ProjectScan missing binding for column '",
-              col.name(), "'"));
+          return absl::InternalError(
+              absl::StrCat("semantic: ProjectScan missing binding for column '",
+                           col.name(),
+                           "'"));
         }
         v = cit->second;
       }
@@ -416,11 +428,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTableScan(
   const auto* simple_table =
       dynamic_cast<const ::googlesql::SimpleTable*>(scan.table());
   if (simple_table == nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat("semantic: table '",
-                     scan.table()->FullName(),
-                     "' is not iterable via SimpleTable"));
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             absl::StrCat("semantic: table '",
+                                          scan.table()->FullName(),
+                                          "' is not iterable via SimpleTable"));
   }
   if (scan.column_list_size() != scan.column_index_list_size()) {
     return absl::InternalError(
@@ -490,8 +501,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithRefScan(
       const int src_id = cte.column_ids[i];
       auto cit = cte_row.find(src_id);
       if (cit == cte_row.end()) {
-        return absl::InternalError(absl::StrCat(
-            "semantic: CTE row missing column_id=", src_id));
+        return absl::InternalError(
+            absl::StrCat("semantic: CTE row missing column_id=", src_id));
       }
       row.emplace(dst.column_id(), cit->second);
     }
@@ -503,17 +514,15 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithRefScan(
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSetOperationScan(
     const ::googlesql::ResolvedSetOperationScan& set_op, EvalContext& ctx) {
   if (set_op.op_type() != ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: SetOperationScan op is not UNION ALL");
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: SetOperationScan op is not UNION ALL");
   }
   std::vector<ColumnBindings> out;
   for (int i = 0; i < set_op.input_item_list_size(); ++i) {
     const ::googlesql::ResolvedSetOperationItem* item =
         set_op.input_item_list(i);
     if (item == nullptr || item->scan() == nullptr) {
-      return absl::InternalError(
-          "semantic: SetOperationItem has null scan");
+      return absl::InternalError("semantic: SetOperationItem has null scan");
     }
     auto part = MaterializeScanImpl(item->scan(), ctx);
     if (!part.ok()) return part.status();
@@ -562,8 +571,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(
       join.join_expr() == nullptr &&
       join.join_type() == ::googlesql::ResolvedJoinScan::INNER;
 
-  const ::googlesql::ResolvedScan* rscan =
-      StripBarrierScans(join.right_scan());
+  const ::googlesql::ResolvedScan* rscan = StripBarrierScans(join.right_scan());
 
   std::vector<ColumnBindings> out;
   for (const ColumnBindings& lrow : *left_or) {
@@ -667,7 +675,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScan(
 }
 
 absl::StatusOr<int64_t> EvalLimitOffsetInt64(
-    const ::googlesql::ResolvedExpr* expr, const EvalContext& ctx,
+    const ::googlesql::ResolvedExpr* expr,
+    const EvalContext& ctx,
     absl::string_view role) {
   if (expr == nullptr) {
     return absl::InvalidArgumentError(
@@ -677,9 +686,9 @@ absl::StatusOr<int64_t> EvalLimitOffsetInt64(
   if (!value_or.ok()) return value_or.status();
   const Value& value = *value_or;
   if (value.is_null()) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             absl::StrCat("semantic: LIMIT/OFFSET ", role,
-                                          " must not be NULL"));
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: LIMIT/OFFSET ", role, " must not be NULL"));
   }
   if (value.type_kind() != ::googlesql::TYPE_INT64) {
     return MakeSemanticError(
@@ -734,13 +743,14 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
   }
   switch (scan->node_kind()) {
     case ::googlesql::RESOLVED_TABLE_SCAN:
-      return MaterializeTableScan(*scan->GetAs<::googlesql::ResolvedTableScan>());
+      return MaterializeTableScan(
+          *scan->GetAs<::googlesql::ResolvedTableScan>());
     case ::googlesql::RESOLVED_SINGLE_ROW_SCAN:
       return MaterializeSingleRowScan(
           *scan->GetAs<::googlesql::ResolvedSingleRowScan>());
     case ::googlesql::RESOLVED_ARRAY_SCAN:
-      return MaterializeArrayScan(*scan->GetAs<::googlesql::ResolvedArrayScan>(),
-                                  ctx);
+      return MaterializeArrayScan(
+          *scan->GetAs<::googlesql::ResolvedArrayScan>(), ctx);
     case ::googlesql::RESOLVED_PROJECT_SCAN: {
       const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
       auto input = MaterializeScanImpl(project->input_scan(), ctx);
@@ -766,47 +776,45 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
       auto input = MaterializeScanImpl(order->input_scan(), ctx);
       if (!input.ok()) return input.status();
       std::vector<ColumnBindings> rows = *std::move(input);
-      std::stable_sort(rows.begin(), rows.end(),
-                       [&](const ColumnBindings& a, const ColumnBindings& b) {
-                         for (int i = 0; i < order->order_by_item_list_size();
-                              ++i) {
-                           const ::googlesql::ResolvedOrderByItem* item =
-                               order->order_by_item_list(i);
-                           if (item == nullptr || item->column_ref() == nullptr) {
-                             continue;
-                           }
-                           const int col_id =
-                               item->column_ref()->column().column_id();
-                           auto av = a.find(col_id);
-                           auto bv = b.find(col_id);
-                           Value va =
-                               av == a.end() ? Value() : av->second;
-                           Value vb =
-                               bv == b.end() ? Value() : bv->second;
-                           if (ValueEqual(va, vb)) continue;
-                           if (va.is_null() || vb.is_null()) {
-                             bool nulls_first;
-                             switch (item->null_order()) {
-                               case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-                                 nulls_first = true;
-                                 break;
-                               case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-                                 nulls_first = false;
-                                 break;
-                               default:
-                                 nulls_first = !item->is_descending();
-                                 break;
-                             }
-                             if (va.is_null() && vb.is_null()) continue;
-                             if (va.is_null()) return nulls_first;
-                             return !nulls_first;
-                           }
-                           bool less = ValueLess(va, vb);
-                           if (item->is_descending()) less = !less;
-                           return less;
-                         }
-                         return false;
-                       });
+      std::stable_sort(
+          rows.begin(),
+          rows.end(),
+          [&](const ColumnBindings& a, const ColumnBindings& b) {
+            for (int i = 0; i < order->order_by_item_list_size(); ++i) {
+              const ::googlesql::ResolvedOrderByItem* item =
+                  order->order_by_item_list(i);
+              if (item == nullptr || item->column_ref() == nullptr) {
+                continue;
+              }
+              const int col_id = item->column_ref()->column().column_id();
+              auto av = a.find(col_id);
+              auto bv = b.find(col_id);
+              Value va = av == a.end() ? Value() : av->second;
+              Value vb = bv == b.end() ? Value() : bv->second;
+              if (ValueEqual(va, vb)) continue;
+              if (va.is_null() || vb.is_null()) {
+                bool nulls_first;
+                switch (item->null_order()) {
+                  case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+                    nulls_first = true;
+                    break;
+                  case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+                    nulls_first = false;
+                    break;
+                  default:
+                    nulls_first = !item->is_descending();
+                    break;
+                }
+                if (va.is_null() && vb.is_null()) continue;
+                if (va.is_null()) return nulls_first;
+                return !nulls_first;
+              }
+              bool less = ValueLess(va, vb);
+              if (item->is_descending()) less = !less;
+              return less;
+            }
+            return false;
+          });
       return rows;
     }
     case ::googlesql::RESOLVED_WITH_SCAN: {
@@ -849,10 +857,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
       return MaterializeLimitOffsetScan(
           *scan->GetAs<::googlesql::ResolvedLimitOffsetScan>(), ctx);
     default:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: scan kind ", scan->node_kind_string(),
-                       " is not yet implemented"));
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               absl::StrCat("semantic: scan kind ",
+                                            scan->node_kind_string(),
+                                            " is not yet implemented"));
   }
 }
 
@@ -894,8 +902,7 @@ absl::StatusOr<const ::googlesql::ResolvedProjectScan*> FindOutputProjectScan(
       return FindOutputProjectScan(join->right_scan());
     }
     case ::googlesql::RESOLVED_SET_OPERATION_SCAN: {
-      const auto* set_op =
-          scan->GetAs<::googlesql::ResolvedSetOperationScan>();
+      const auto* set_op = scan->GetAs<::googlesql::ResolvedSetOperationScan>();
       for (int i = 0; i < set_op->input_item_list_size(); ++i) {
         const ::googlesql::ResolvedSetOperationItem* item =
             set_op->input_item_list(i);
@@ -932,14 +939,14 @@ absl::StatusOr<Value> EvalSubqueryExpr(
   auto rows_or = MaterializeScanImpl(node.subquery(), inner_ctx);
   if (!rows_or.ok()) return rows_or.status();
   const std::vector<ColumnBindings>& rows = *rows_or;
-  const ::googlesql::ResolvedScan* sub =
-      StripBarrierScans(node.subquery());
+  const ::googlesql::ResolvedScan* sub = StripBarrierScans(node.subquery());
   int value_col_id = -1;
   if (sub != nullptr && sub->column_list_size() > 0) {
     value_col_id = sub->column_list(0).column_id();
   }
 
-  auto value_from_row = [&](const ColumnBindings& row) -> absl::StatusOr<Value> {
+  auto value_from_row =
+      [&](const ColumnBindings& row) -> absl::StatusOr<Value> {
     if (value_col_id >= 0) {
       auto it = row.find(value_col_id);
       if (it != row.end()) return it->second;
@@ -992,9 +999,8 @@ absl::StatusOr<Value> EvalSubqueryExpr(
       return Value::Bool(false);
     }
     default:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: subquery type not yet implemented");
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               "semantic: subquery type not yet implemented");
   }
 }
 

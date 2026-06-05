@@ -12,11 +12,11 @@
 //     frame, declarations register fresh bindings in the innermost
 //     frame, and the innermost matching binding wins for `Set` /
 //     `Lookup`. Owned by
-//     `.cursor/plans/googlesqlite-14-dml-system.plan.md`.
+//     `.cursor/plans/local-exec-14-dml-system.plan.md`.
 //   * SQL UDF / TVF invocation. Each call binds the argument list
 //     into a fresh frame the body's `ResolvedArgumentRef` /
 //     `ResolvedRelationArgumentScan` nodes resolve against. Owned by
-//     `.cursor/plans/googlesqlite-15-specialized-stubs.plan.md`.
+//     `.cursor/plans/local-exec-15-specialized-stubs.plan.md`.
 //
 // Both contexts share the same primitive: a stack of frames keyed
 // on the analyzer-lowered identifier, with `Value` payloads. The

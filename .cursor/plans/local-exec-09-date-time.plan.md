@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-09-date-time
+name: local-exec-09-date-time
 overview: Implement date/time parse, format, diff, trunc, and current_* functions (~150 tests).
 todos:
   - id: gsql-09-date-time
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 09: Semantic Date / Time Functions
+# query port 09: Semantic Date / Time Functions
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (158 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-08-semantic-operators.plan.md`](googlesqlite-08-semantic-operators.plan.md)
+- [`local-exec-08-semantic-operators.plan.md`](local-exec-08-semantic-operators.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'parse_date' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemen...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'parse_datetime' is not yet implemented in the semantic executor","errors":[{"reason":"notImpl...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: DuckDB rejected transpiled SQL: Conversion Error: invalid timestamp field format: \"20100317\", ex...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'parse_date' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemen...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'parse_datetime' is not yet implemented in the semantic executor","errors":[{"reason":"notImpl...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: DuckDB rejected transpiled SQL: Conversion Error: invalid timestamp field format: \"20100317\", ex...`
 
 ## Primary files
 
@@ -53,7 +53,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 158 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~158.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~158.
 
 ## Failing tests
 
@@ -256,10 +256,10 @@ Not a semantic date/time bug; needs harness change (refresh `now` per subtest, o
 
 ### Blockers for parent gate
 
-1. **3 `CURRENT_*` failures** — googlesqlite harness / ordering (see above).
+1. **3 `CURRENT_*` failures** — query port harness / ordering (see above).
 2. **Verify regex** — document `TestQuery$/^` requirement in plan Verify section (updated above).
 3. **`functions.yaml` disposition rows** — still `status=planned` for many datetime builtins (parity checker / routing docs not flipped this session).
-4. **Do not run** `run_googlesqlite_emulator_tests.sh` until `CURRENT_*` harness is resolved or accepted as known flake.
+4. **Do not run** `run_query_port_tests.sh` until `CURRENT_*` harness is resolved or accepted as known flake.
 
 ### Incidental fixes discovered during verify
 

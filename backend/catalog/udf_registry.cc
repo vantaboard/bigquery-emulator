@@ -29,7 +29,8 @@ struct ProjectFunctions {
 };
 
 absl::Mutex mu;
-absl::flat_hash_map<std::string, ProjectFunctions> by_project ABSL_GUARDED_BY(mu);
+absl::flat_hash_map<std::string, ProjectFunctions> by_project
+    ABSL_GUARDED_BY(mu);
 
 }  // namespace
 
@@ -44,7 +45,8 @@ absl::Status RegisterProjectFunction(
         "udf_registry: project_id must be non-empty");
   }
   if (function == nullptr) {
-    return absl::InvalidArgumentError("udf_registry: function must be non-null");
+    return absl::InvalidArgumentError(
+        "udf_registry: function must be non-null");
   }
   absl::MutexLock lock(&mu);
   ProjectFunctions& bucket = by_project[std::string(project_id)];

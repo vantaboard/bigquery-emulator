@@ -128,7 +128,7 @@ The `setup` list is dispatched by which field is present in each step:
    with `{kind:"bigquery#tableDataInsertAllRequest", rows:[{json:{...}}, ...]}`.
    This is the canonical seeding path today because the coordinator
    currently routes `INSERT VALUES` to the `unsupported` route (see
-   `googlesqlite-14-dml-system.plan.md` for the landing plan). Each row map
+   `local-exec-14-dml-system.plan.md` for the landing plan). Each row map
    is wrapped in `{json: ...}` by the runner.
 4. `sql: <query>` — `POST /bigquery/v2/projects/<projectId>/queries`
    with `{query, useLegacySql:false}`. Use this for `MERGE`,
@@ -260,7 +260,7 @@ uploads the matrix as a non-blocking artifact.
 The fixture below seeds three rows via `tabledata.insertAll` and then
 asserts a filtered SELECT returns the single matching row. `INSERT` /
 `UPDATE` / `DELETE` are on the `unsupported` route today (see
-`googlesqlite-14-dml-system.plan.md`), so fixtures use `rows:` for seeding
+`local-exec-14-dml-system.plan.md`), so fixtures use `rows:` for seeding
 rather than DML `sql:` steps.
 
 ```yaml
@@ -468,15 +468,15 @@ fixtures should avoid them entirely until their landing plan
 ships:
 
 - **`INSERT VALUES` / `INSERT ... SELECT`** -- on the `unsupported`
-  route today; lands via `googlesqlite-14-dml-system.plan.md`. Use a
+  route today; lands via `local-exec-14-dml-system.plan.md`. Use a
   `rows:` setup step to seed table data via `tabledata.insertAll`
   instead.
 - **`UPDATE` / `DELETE`** -- on the `unsupported` route today;
-  lands via `googlesqlite-14-dml-system.plan.md`. `MERGE`'s easy branches
+  lands via `local-exec-14-dml-system.plan.md`. `MERGE`'s easy branches
   lower through the DuckDB fast path and work as a fixture `sql:`
   setup step.
 - **`SELECT 1` / scalar-only `SELECT`** -- on the `unsupported`
-  route today; lands via `googlesqlite-07-semantic-core-expr.plan.md`. Use a
+  route today; lands via `local-exec-07-semantic-core-expr.plan.md`. Use a
   real table scan even for trivial fixtures.
 
 See [`docs/ENGINE_POLICY.md`](../docs/ENGINE_POLICY.md) for the

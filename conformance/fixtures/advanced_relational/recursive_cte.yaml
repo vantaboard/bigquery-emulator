@@ -1,7 +1,7 @@
 # recursive_cte: BigQuery `WITH RECURSIVE` lowers to DuckDB
 #                `WITH RECURSIVE` natively.
 #
-# Pins `googlesqlite-13-advanced-relational.plan.md` Family 4. The
+# Pins `local-exec-13-advanced-relational.plan.md` Family 4. The
 # transpiler's `EmitWithScan` recognizes the analyzer's
 # `recursive()` flag on `ResolvedWithScan`, stages a per-CTE
 # context with stable anchor column names (`_cte_0`), and

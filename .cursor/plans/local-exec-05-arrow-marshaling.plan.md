@@ -1,6 +1,6 @@
 ---
-name: googlesqlite-05-arrow-marshaling
-overview: Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 googlesqlite tests.
+name: local-exec-05-arrow-marshaling
+overview: Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 query port tests.
 todos:
   - id: gsql-05-arrow-marshaling
     content: Fix arrow_to_bq column naming for window and anonymous columns
@@ -8,17 +8,17 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 05: Arrow → BigQuery Result Marshaling
+# query port 05: Arrow → BigQuery Result Marshaling
 
 ## Goal
 
-Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 googlesqlite tests.
+Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 query port tests.
 
 Baseline: `20260603T035812Z` (19 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-04-scan-emits.plan.md`](googlesqlite-04-scan-emits.plan.md)
+- [`local-exec-04-scan-emits.plan.md`](local-exec-04-scan-emits.plan.md)
 
 ## Notes
 
@@ -26,9 +26,9 @@ Some GROUPING SETS tests may still need plan 13 SQL lowering before rows match.
 
 ## Root cause
 
-- `googlesqlite_query_test.go:1368: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: INT64 column 'product_sum' backed by unsupported DuckDB type_id=16","errors":[{"reason":"n...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: INT64 column 'Q1' backed by unsupported DuckDB type_id=16","errors":[{"reason":"notImplemented","mes...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: FLOAT64 column 'total' backed by unsupported DuckDB type_id=19","errors":[{"reason":"notImplemented"...`
+- `query_port_test.go:1368: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: INT64 column 'product_sum' backed by unsupported DuckDB type_id=16","errors":[{"reason":"n...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: INT64 column 'Q1' backed by unsupported DuckDB type_id=16","errors":[{"reason":"notImplemented","mes...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"arrow_to_bq: FLOAT64 column 'total' backed by unsupported DuckDB type_id=19","errors":[{"reason":"notImplemented"...`
 
 ## Primary files
 
@@ -55,7 +55,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 19 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~19.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~19.
 
 ## Failing tests
 

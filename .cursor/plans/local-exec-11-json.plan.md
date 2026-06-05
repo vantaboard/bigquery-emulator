@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-11-json
+name: local-exec-11-json
 overview: Implement JSON extract/query/value/array functions (~42 tests).
 todos:
   - id: gsql-11-json
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 11: Semantic JSON Functions
+# query port 11: Semantic JSON Functions
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (42 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-10-string-hash-format.plan.md`](googlesqlite-10-string-hash-format.plan.md)
+- [`local-exec-10-string-hash-format.plan.md`](local-exec-10-string-hash-format.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'bool' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemented","...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'json_extract' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'json_extract_array' is not yet implemented in the semantic executor","errors":[{"reason":"not...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'bool' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemented","...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'json_extract' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function 'json_extract_array' is not yet implemented in the semantic executor","errors":[{"reason":"not...`
 
 ## Primary files
 
@@ -52,7 +52,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 42 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~42.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~42.
 
 ## Failing tests
 

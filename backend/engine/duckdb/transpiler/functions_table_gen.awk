@@ -22,7 +22,7 @@
 #     and forbidden for the other dispositions (no DuckDB function
 #     name to dispatch to)
 #   * `plan=<plan-file>` is mandatory for `unsupported` rows; the
-#     convention is to point at `googlesqlite-15-specialized-stubs.plan.md`
+#     convention is to point at `local-exec-15-specialized-stubs.plan.md`
 #   * `status=planned` is optional and only valid alongside
 #     dispositions whose runtime emit does not yet exist
 #     (`duckdb_udf`, `semantic_executor`, `control_op`)
@@ -157,16 +157,16 @@ BEGIN {
         exit 1
     }
     if (disposition == "unsupported" && length(plan) == 0) {
-        printf("functions_table_gen.awk: %s is unsupported but has no plan= pointer (expected googlesqlite-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
+        printf("functions_table_gen.awk: %s is unsupported but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
         exit 1
     }
     # Same posture-row contract for `local_stub`: every stub
     # function row must point at the owning policy plan so a reader
     # can trace why the stub was chosen and where the documented
-    # contract lives. `googlesqlite-15-specialized-stubs.plan.md` is the
+    # contract lives. `local-exec-15-specialized-stubs.plan.md` is the
     # canonical owner.
     if (disposition == "local_stub" && length(plan) == 0) {
-        printf("functions_table_gen.awk: %s is local_stub but has no plan= pointer (expected googlesqlite-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
+        printf("functions_table_gen.awk: %s is local_stub but has no plan= pointer (expected local-exec-15-specialized-stubs.plan.md)\n", key) > "/dev/stderr"
         exit 1
     }
     if (length(status) > 0 && !(disposition in plannable)) {

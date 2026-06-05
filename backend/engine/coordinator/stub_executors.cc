@@ -29,7 +29,7 @@ namespace {
 // failure back to the exact `functions.yaml` /
 // `node_dispositions.yaml` row that owns the posture. The link to
 // `docs/ENGINE_POLICY.md` is part of the contract from
-// `googlesqlite-15-specialized-stubs.plan.md`: a user who hits the
+// `local-exec-15-specialized-stubs.plan.md`: a user who hits the
 // envelope can read the policy document for the family-by-family
 // posture table without first having to find the plan file. The
 // plan file remains the source of truth (the policy doc links
@@ -82,14 +82,14 @@ std::string OffendingFamilyFor(const ::googlesql::ResolvedStatement& stmt) {
 }  // namespace
 
 // `SemanticExecutor` graduated out of this stub file when
-// `googlesqlite-07-semantic-core-expr.plan.md` landed. It now lives at
+// `local-exec-07-semantic-core-expr.plan.md` landed. It now lives at
 // `backend/engine/semantic/executor.{h,cc}` with the real
 // scalar-only SELECT / expression evaluator. The coordinator's
 // `semantic_executor_` member references the new package; this
 // file is intentionally silent on `kSemanticExecutor`.
 //
 // `ControlOpExecutor` graduated out of this stub file when
-// `googlesqlite-01-ddl-catalog.plan.md` landed. It now lives at
+// `local-exec-01-ddl-catalog.plan.md` landed. It now lives at
 // `backend/engine/control/control_op_executor.{h,cc}` with real
 // per-statement handlers (CREATE TABLE / CTAS / DROP TABLE /
 // ANALYZE) plus a focused-UNIMPLEMENTED dispatch table for the rest
@@ -112,7 +112,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> UnsupportedExecutor::ExecuteQuery(
                                "ExecuteQuery",
                                stmt.node_kind_string(),
                                OffendingFamilyFor(stmt),
-                               "googlesqlite-15-specialized-stubs.plan.md"));
+                               "local-exec-15-specialized-stubs.plan.md"));
 }
 
 absl::StatusOr<DmlStats> UnsupportedExecutor::ExecuteDml(
@@ -126,7 +126,7 @@ absl::StatusOr<DmlStats> UnsupportedExecutor::ExecuteDml(
                                "ExecuteDml",
                                stmt.node_kind_string(),
                                OffendingFamilyFor(stmt),
-                               "googlesqlite-15-specialized-stubs.plan.md"));
+                               "local-exec-15-specialized-stubs.plan.md"));
 }
 
 absl::Status UnsupportedExecutor::ExecuteDdl(
@@ -140,7 +140,7 @@ absl::Status UnsupportedExecutor::ExecuteDdl(
                                "ExecuteDdl",
                                stmt.node_kind_string(),
                                OffendingFamilyFor(stmt),
-                               "googlesqlite-15-specialized-stubs.plan.md"));
+                               "local-exec-15-specialized-stubs.plan.md"));
 }
 
 }  // namespace coordinator

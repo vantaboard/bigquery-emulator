@@ -23,10 +23,10 @@ const ::googlesql::ArrayType* StringArrayType() {
 }
 
 TEST(JsonFuncsTest, JsonExtractScalarUnquotesString) {
-  auto v = JsonExtractScalar(
-      {Value::String(R"({ "name" : "Jakob", "age" : "6" })"),
-       Value::String("$.name")},
-      /*return_type=*/nullptr);
+  auto v =
+      JsonExtractScalar({Value::String(R"({ "name" : "Jakob", "age" : "6" })"),
+                         Value::String("$.name")},
+                        /*return_type=*/nullptr);
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->string_value(), "Jakob");
 }
@@ -48,8 +48,7 @@ TEST(JsonFuncsTest, JsonExtractNullFieldReturnsNull) {
 }
 
 TEST(JsonFuncsTest, JsonExtractArraySingleArgRoot) {
-  auto v = JsonExtractArray({Value::String("[1,2,3]")},
-                            StringArrayType());
+  auto v = JsonExtractArray({Value::String("[1,2,3]")}, StringArrayType());
   ASSERT_TRUE(v.ok()) << v.status();
   ASSERT_EQ(v->num_elements(), 3);
   EXPECT_EQ(v->element(0).string_value(), "1");

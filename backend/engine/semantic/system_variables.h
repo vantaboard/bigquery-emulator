@@ -2,7 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_SYSTEM_VARIABLES_H_
 
 // BigQuery @@ system variable registration and per-project session
-// values for the semantic executor (googlesqlite plan 14).
+// values for the semantic executor (query port plan 14).
 
 #include <string>
 #include <vector>
@@ -26,11 +26,11 @@ absl::Status RegisterAnalyzerSystemVariables(
 
 // Read the current value for `name_path` (e.g. {"time_zone"}).
 // Returns UTC when unset (BigQuery default for tests).
-absl::StatusOr<Value> GetSystemVariable(absl::string_view project_id,
-                                        const std::vector<std::string>& name_path);
+absl::StatusOr<Value> GetSystemVariable(
+    absl::string_view project_id, const std::vector<std::string>& name_path);
 
 // Persist `value` for `name_path` on `project_id` (conn/session scope
-// is approximated by per-test project ids in googlesqlite e2e).
+// is approximated by per-test project ids in query port e2e).
 absl::Status SetSystemVariable(absl::string_view project_id,
                                const std::vector<std::string>& name_path,
                                Value value);

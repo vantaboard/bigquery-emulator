@@ -25,7 +25,7 @@ absl::StatusOr<Value> FormatTimestamp(const std::vector<Value>& args);
 absl::StatusOr<Value> FormatTime(const std::vector<Value>& args);
 
 absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
-                                           const std::vector<Value>& args);
+                                          const std::vector<Value>& args);
 absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
                                               const std::vector<Value>& args);
 absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
@@ -52,7 +52,7 @@ absl::StatusOr<Value> LastDay(const std::vector<Value>& args);
 absl::StatusOr<Value> MakeInterval(const std::vector<Value>& args);
 absl::StatusOr<Value> JustifyInterval(const std::vector<Value>& args);
 absl::StatusOr<Value> Extract(const std::vector<Value>& args,
-                               const ::googlesql::Type* return_type);
+                              const ::googlesql::Type* return_type);
 
 absl::StatusOr<Value> GenerateDateArray(const std::vector<Value>& args,
                                         const ::googlesql::Type* return_type);

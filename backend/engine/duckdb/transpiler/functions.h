@@ -36,9 +36,9 @@
 //   * `kDuckdbUdf` (planned: `entry->planned == true`) -- the
 //     wrapper has not yet landed; the transpiler returns `""` so
 //     the engine surfaces UNIMPLEMENTED.
-//     `googlesqlite-03-operator-disposition.plan.md` is the owning plan.
+//     `local-exec-03-operator-disposition.plan.md` is the owning plan.
 //   * `kSemanticExecutor` -- planned via
-//     `googlesqlite-09-date-time.plan.md`. Until that plan
+//     `local-exec-09-date-time.plan.md`. Until that plan
 //     lands the transpiler returns `""` so the engine surfaces
 //     UNIMPLEMENTED. `entry->planned` is true.
 //   * `kControlOp` -- not used by the function table today but
@@ -47,7 +47,7 @@
 //     locally (BigQuery-specific semantics or no DuckDB analog).
 //     The transpiler returns `""` and the engine surfaces
 //     UNIMPLEMENTED. `entry->plan` always points at
-//     `googlesqlite-15-specialized-stubs.plan.md`.
+//     `local-exec-15-specialized-stubs.plan.md`.
 //
 // `SAFE.<fn>` form is not represented here. The transpiler checks
 // `ResolvedFunctionCallBase::error_mode() == SAFE_ERROR_MODE` and
@@ -83,7 +83,7 @@ struct FnEntry {
   // row has no specific owning plan. Mandatory for
   // `kUnsupported` (the YAML generator rejects an unsupported row
   // without a plan pointer); points at
-  // `googlesqlite-15-specialized-stubs.plan.md` by convention.
+  // `local-exec-15-specialized-stubs.plan.md` by convention.
   std::string plan;
   // True when the owning plan has not yet landed an implementation
   // (the YAML row carried `status=planned`). The engine surfaces

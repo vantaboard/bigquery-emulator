@@ -487,7 +487,7 @@ absl::StatusOr<storage::TableId> NamePathToTableId(
       " segments"));
 }
 
-// Create the dataset directory if it does not exist yet. googlesqlite
+// Create the dataset directory if it does not exist yet. query port
 // port tests issue `CREATE TABLE ds.t` without a prior datasets.insert.
 absl::Status EnsureDatasetExists(storage::Storage& storage,
                                  absl::string_view project_id,
@@ -819,7 +819,7 @@ absl::Status RunDropTable(storage::Storage& storage,
         " is not implemented yet (only DROP TABLE is supported); the "
         "view / materialized-view drop paths land alongside the storage-"
         "side view-CRUD surface tracked by the same plan "
-        "(googlesqlite-01-ddl-catalog.plan.md)"));
+        "(local-exec-01-ddl-catalog.plan.md)"));
   }
   absl::StatusOr<storage::TableId> target =
       NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
@@ -841,7 +841,7 @@ absl::Status RunDropTable(storage::Storage& storage,
 // observable side-effect, which matches the BigQuery posture where
 // `ANALYZE` is a metadata hint the query optimizer is free to
 // ignore. The deeper "actually compute and persist statistics" path
-// is tracked by `googlesqlite-15-specialized-stubs.plan.md`.
+// is tracked by `local-exec-15-specialized-stubs.plan.md`.
 absl::Status RunAnalyze(storage::Storage& storage,
                         absl::string_view project_id,
                         const ::googlesql::ResolvedAnalyzeStmt* stmt) {
@@ -945,7 +945,7 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "control op executor: CREATE VIEW is not implemented yet; the "
           "Storage interface has no view-CRUD surface today (see "
           "backend/storage/storage.h). Tracked by "
-          "googlesqlite-01-ddl-catalog.plan.md follow-up: 'add Storage view "
+          "local-exec-01-ddl-catalog.plan.md follow-up: 'add Storage view "
           "CRUD + handler'.");
     case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
       return absl::UnimplementedError(
@@ -953,8 +953,8 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "implemented yet; the metadata side requires the same view-"
           "CRUD surface CREATE VIEW needs, and the full-refresh "
           "execution behavior is owned by "
-          "googlesqlite-15-specialized-stubs.plan.md per "
-          "googlesqlite-01-ddl-catalog.plan.md (better-than-silently-wrong).");
+          "local-exec-15-specialized-stubs.plan.md per "
+          "local-exec-01-ddl-catalog.plan.md (better-than-silently-wrong).");
     case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
       // Registered in `LocalCoordinatorEngine::ExecuteDdl` with pinned
       // `AnalyzerOutput` so UDF type pointers stay valid across RPCs.
@@ -963,19 +963,19 @@ absl::Status ControlOpExecutor::ExecuteDdl(
       return absl::UnimplementedError(
           "control op executor: CREATE TABLE FUNCTION registration is "
           "not implemented yet; tracked by "
-          "googlesqlite-15-specialized-stubs.plan.md.");
+          "local-exec-15-specialized-stubs.plan.md.");
     case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
       return absl::UnimplementedError(
           "control op executor: DROP FUNCTION is not implemented yet; "
           "needs the functions registry CREATE FUNCTION will land. "
-          "Tracked by googlesqlite-15-specialized-stubs.plan.md (and "
-          "googlesqlite-01-ddl-catalog.plan.md for the metadata side).");
+          "Tracked by local-exec-15-specialized-stubs.plan.md (and "
+          "local-exec-01-ddl-catalog.plan.md for the metadata side).");
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
       // LOAD DATA splits by URI scheme at implementation time:
       // `LOAD DATA LOCAL ...` belongs on the control-op route
       // (local filesystem reader; deferred to the follow-up below).
       // `LOAD DATA <gs://...>` (cloud-storage) is `unsupported`
-      // per `googlesqlite-15-specialized-stubs.plan.md` -- the emulator
+      // per `local-exec-15-specialized-stubs.plan.md` -- the emulator
       // deliberately does NOT model the BigQuery cloud-storage
       // ingest surface. `ResolvedAuxLoadDataStmt` carries no
       // `is_local` flag; the differentiation happens when the
@@ -990,16 +990,16 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           "ORC) for `LOAD DATA LOCAL <local-uri>` plus URI-scheme "
           "differentiation so cloud-storage `LOAD DATA <gs://...>` "
           "falls through to the unsupported route. "
-          "Tracked by googlesqlite-01-ddl-catalog.plan.md follow-up: 'add "
+          "Tracked by local-exec-01-ddl-catalog.plan.md follow-up: 'add "
           "LOAD DATA reader family'. Cloud-storage LOAD DATA stays "
-          "unsupported per googlesqlite-15-specialized-stubs.plan.md; see "
+          "unsupported per local-exec-15-specialized-stubs.plan.md; see "
           "docs/ENGINE_POLICY.md.");
     case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
       return absl::UnimplementedError(
           "control op executor: EXPORT DATA is not implemented yet; "
           "needs Arrow / Parquet / CSV / JSON writers and the "
           "fake-gcs-server / local-filesystem URI scheme dispatch. "
-          "Tracked by googlesqlite-01-ddl-catalog.plan.md follow-up: 'add "
+          "Tracked by local-exec-01-ddl-catalog.plan.md follow-up: 'add "
           "EXPORT DATA writer family'.");
     default:
       return absl::UnimplementedError(

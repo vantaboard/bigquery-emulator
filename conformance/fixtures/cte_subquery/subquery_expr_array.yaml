@@ -7,7 +7,7 @@
 # LIST whose element order matches the subquery's row order; an
 # explicit `ORDER BY` inside the subquery makes the order
 # observable on both engines. Route: `duckdb_native`
-# (`googlesqlite-02-withscan-cte.plan.md` Family 2).
+# (`local-exec-02-withscan-cte.plan.md` Family 2).
 #
 # Route-label assertion: deferred to plan 16.
 name: subquery_expr_array

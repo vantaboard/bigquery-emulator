@@ -41,7 +41,7 @@ struct NodeDispositionEntry {
   // `Disposition::kUnsupported` rows this is always non-empty (the
   // YAML generator rejects an unsupported row without a plan
   // pointer at build time); the convention is to point at
-  // `googlesqlite-15-specialized-stubs.plan.md`.
+  // `local-exec-15-specialized-stubs.plan.md`.
   absl::string_view plan;
   // True when the owning plan has not yet landed an implementation
   // (the YAML row carried `status=planned`). The engine surfaces

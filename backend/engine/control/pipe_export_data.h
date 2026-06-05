@@ -28,7 +28,7 @@
 // -------------------------------
 //
 // `control_op_executor.cc` is a lint-cap carve-out per the
-// `googlesqlite-13-advanced-relational.plan.md` "don'ts" section, so the
+// `local-exec-13-advanced-relational.plan.md` "don'ts" section, so the
 // pipe-DDL handlers live in this file (and `pipe_create_table.cc`)
 // instead. Both files live next to the executor so they share the
 // same Bazel package and dependency graph.
@@ -38,7 +38,7 @@
 //
 // `RunPipeExportData` returns `UNIMPLEMENTED` with a message that
 // names the deferred follow-up: the EXPORT DATA writer family
-// (`googlesqlite-01-ddl-catalog.plan.md` follow-up "add EXPORT DATA writer
+// (`local-exec-01-ddl-catalog.plan.md` follow-up "add EXPORT DATA writer
 // family"). This matches the existing `ResolvedExportDataStmt` row
 // in `ControlOpExecutor::ExecuteDdl`: `EXPORT DATA` cannot ship
 // until the local emulator grows Arrow / Parquet / CSV / JSON

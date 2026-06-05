@@ -121,7 +121,8 @@ absl::StatusOr<std::string> ParseIpv6ToBytes(absl::string_view ip) {
 
 absl::StatusOr<Value> NetIpFromString(const std::vector<Value>& args) {
   if (args.size() != 1) {
-    return absl::InvalidArgumentError("NET.IP_FROM_STRING expects one argument");
+    return absl::InvalidArgumentError(
+        "NET.IP_FROM_STRING expects one argument");
   }
   if (args[0].is_null()) return Value::NullBytes();
   if (args[0].type_kind() != ::googlesql::TYPE_STRING) {
@@ -129,8 +130,8 @@ absl::StatusOr<Value> NetIpFromString(const std::vector<Value>& args) {
   }
   std::string out;
   absl::Status error;
-  if (!::googlesql::functions::net::IPFromString(args[0].string_value(), &out,
-                                                   &error)) {
+  if (!::googlesql::functions::net::IPFromString(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::Bytes(std::move(out));
@@ -245,15 +246,15 @@ absl::StatusOr<Value> NetIpv4FromInt64(const std::vector<Value>& args) {
 absl::StatusOr<Value> NetUrlString(absl::string_view name,
                                    const std::vector<Value>& args,
                                    absl::Status (*fn)(absl::string_view,
-                                                      absl::string_view*, bool*)) {
+                                                      absl::string_view*,
+                                                      bool*)) {
   if (args.size() != 1) {
     return absl::InvalidArgumentError(
         absl::StrCat(name, " expects one STRING argument"));
   }
   if (args[0].is_null()) return Value::NullString();
   if (args[0].type_kind() != ::googlesql::TYPE_STRING) {
-    return absl::InvalidArgumentError(
-        absl::StrCat(name, " expects STRING"));
+    return absl::InvalidArgumentError(absl::StrCat(name, " expects STRING"));
   }
   absl::string_view out;
   bool is_null = false;
@@ -277,8 +278,8 @@ absl::StatusOr<Value> NetPublicSuffix(const std::vector<Value>& args) {
       NetUrlHasInvalidHost(args[0].string_value())) {
     return Value::NullString();
   }
-  return NetUrlString("NET.PUBLIC_SUFFIX", args,
-                      ::googlesql::functions::net::PublicSuffix);
+  return NetUrlString(
+      "NET.PUBLIC_SUFFIX", args, ::googlesql::functions::net::PublicSuffix);
 }
 
 absl::StatusOr<Value> NetRegDomain(const std::vector<Value>& args) {
@@ -287,8 +288,8 @@ absl::StatusOr<Value> NetRegDomain(const std::vector<Value>& args) {
       NetUrlHasInvalidHost(args[0].string_value())) {
     return Value::NullString();
   }
-  return NetUrlString("NET.REG_DOMAIN", args,
-                      ::googlesql::functions::net::RegDomain);
+  return NetUrlString(
+      "NET.REG_DOMAIN", args, ::googlesql::functions::net::RegDomain);
 }
 
 absl::StatusOr<Value> NetIpv4ToInt64(const std::vector<Value>& args) {
@@ -319,7 +320,8 @@ std::vector<RowValue> CollectAggregateInputs(
     const std::vector<std::vector<Value>>& input_column_values) {
   std::vector<RowValue> out;
   if (call.argument_list_size() == 0) return out;
-  const size_t nrows = input_column_values.empty() ? 0 : input_column_values[0].size();
+  const size_t nrows =
+      input_column_values.empty() ? 0 : input_column_values[0].size();
   out.reserve(nrows);
   for (size_t r = 0; r < nrows; ++r) {
     RowValue row;
@@ -336,7 +338,8 @@ std::vector<RowValue> CollectAggregateInputs(
 absl::StatusOr<Value> ApproxCountDistinct(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values) {
-  std::vector<RowValue> rows = CollectAggregateInputs(call, input_column_values);
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
   std::set<std::string> seen;
   for (const RowValue& row : rows) {
     if (row.is_null) continue;
@@ -386,7 +389,8 @@ absl::StatusOr<Value> ApproxQuantiles(
   const bool respect_nulls =
       call.null_handling_modifier() ==
       ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS;
-  std::vector<RowValue> rows = CollectAggregateInputs(call, input_column_values);
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
   SortedNumeric sorted = SortedNumericValues(rows, distinct);
   int64_t n = 2;
   if (input_column_values.size() > 1 && !input_column_values[1].empty() &&
@@ -396,7 +400,7 @@ absl::StatusOr<Value> ApproxQuantiles(
   }
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                         : nullptr;
+                                                       : nullptr;
   std::vector<Value> elements;
   elements.reserve(static_cast<size_t>(n) + 1);
   const std::vector<double>& vals = sorted.values;
@@ -407,37 +411,35 @@ absl::StatusOr<Value> ApproxQuantiles(
   } else {
     int64_t null_slots = 0;
     if (respect_nulls && sorted.have_null) {
-      null_slots = distinct ? 1 : static_cast<int64_t>(std::count_if(
-          rows.begin(), rows.end(),
-          [](const RowValue& row) { return row.is_null; }));
+      null_slots = distinct
+                       ? 1
+                       : static_cast<int64_t>(std::count_if(
+                             rows.begin(), rows.end(), [](const RowValue& row) {
+                               return row.is_null;
+                             }));
     }
-    const int64_t population =
-        null_slots + static_cast<int64_t>(vals.size());
+    const int64_t population = null_slots + static_cast<int64_t>(vals.size());
     for (int64_t i = 0; i <= n; ++i) {
       if (population <= 0) {
         elements.push_back(Value::NullInt64());
         continue;
       }
-      const double pos =
-          static_cast<double>(i) * static_cast<double>(population - 1) /
-          static_cast<double>(n);
-      const int64_t idx =
-          static_cast<int64_t>(pos < 0 ? 0
-                                        : std::min(pos, static_cast<double>(
-                                                           population - 1)));
+      const double pos = static_cast<double>(i) *
+                         static_cast<double>(population - 1) /
+                         static_cast<double>(n);
+      const int64_t idx = static_cast<int64_t>(
+          pos < 0 ? 0 : std::min(pos, static_cast<double>(population - 1)));
       if (idx < null_slots) {
         elements.push_back(Value::NullInt64());
         continue;
       }
-      const size_t val_idx =
-          static_cast<size_t>(idx - null_slots);
+      const size_t val_idx = static_cast<size_t>(idx - null_slots);
       if (vals.empty()) {
         elements.push_back(Value::NullInt64());
       } else {
         const size_t pick =
             std::min(val_idx, static_cast<size_t>(vals.size() - 1));
-        elements.push_back(
-            Value::Int64(static_cast<int64_t>(vals[pick])));
+        elements.push_back(Value::Int64(static_cast<int64_t>(vals[pick])));
       }
     }
   }
@@ -458,14 +460,16 @@ absl::StatusOr<Value> ApproxTopCount(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
     const ::googlesql::Type* return_type) {
-  std::vector<RowValue> rows = CollectAggregateInputs(call, input_column_values);
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
   std::map<std::string, TopCountEntry> counts;
   for (const RowValue& row : rows) {
     const std::string key = row.is_null ? "NULL" : row.v.DebugString();
     auto it = counts.find(key);
     if (it == counts.end()) {
-      counts.emplace(key, TopCountEntry{row.is_null ? Value::NullString() : row.v,
-                                        1, true});
+      counts.emplace(
+          key,
+          TopCountEntry{row.is_null ? Value::NullString() : row.v, 1, true});
     } else {
       it->second.sum += 1;
     }
@@ -477,8 +481,10 @@ absl::StatusOr<Value> ApproxTopCount(
   }
   std::vector<TopCountEntry> sorted;
   sorted.reserve(counts.size());
-  for (auto& kv : counts) sorted.push_back(std::move(kv.second));
-  std::sort(sorted.begin(), sorted.end(),
+  for (auto& kv : counts)
+    sorted.push_back(std::move(kv.second));
+  std::sort(sorted.begin(),
+            sorted.end(),
             [](const TopCountEntry& a, const TopCountEntry& b) {
               if (a.sum != b.sum) return a.sum > b.sum;
               return a.key.DebugString() < b.key.DebugString();
@@ -488,7 +494,7 @@ absl::StatusOr<Value> ApproxTopCount(
   }
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                         : nullptr;
+                                                       : nullptr;
   const ::googlesql::StructType* struct_type =
       arr_type != nullptr ? arr_type->element_type()->AsStruct() : nullptr;
   std::vector<Value> out_elems;
@@ -510,7 +516,8 @@ absl::StatusOr<Value> ApproxTopSum(
     const std::vector<std::vector<Value>>& input_column_values,
     const ::googlesql::Type* return_type) {
   if (input_column_values.size() < 2) {
-    return absl::InvalidArgumentError("APPROX_TOP_SUM expects value and weight");
+    return absl::InvalidArgumentError(
+        "APPROX_TOP_SUM expects value and weight");
   }
   const size_t nrows = input_column_values[0].size();
   std::map<std::string, TopCountEntry> sums;
@@ -520,9 +527,10 @@ absl::StatusOr<Value> ApproxTopSum(
     const std::string key = key_v.is_null() ? "NULL" : key_v.DebugString();
     auto it = sums.find(key);
     if (it == sums.end()) {
-      TopCountEntry entry{key_v.is_null() ? Value::NullString() : key_v, 0,
-                          false};
-      if (!weight_v.is_null() && weight_v.type_kind() == ::googlesql::TYPE_INT64) {
+      TopCountEntry entry{
+          key_v.is_null() ? Value::NullString() : key_v, 0, false};
+      if (!weight_v.is_null() &&
+          weight_v.type_kind() == ::googlesql::TYPE_INT64) {
         entry.sum = weight_v.int64_value();
         entry.weight_was_non_null = true;
       }
@@ -540,8 +548,10 @@ absl::StatusOr<Value> ApproxTopSum(
     k = input_column_values[2][0].int64_value();
   }
   std::vector<TopCountEntry> sorted;
-  for (auto& kv : sums) sorted.push_back(std::move(kv.second));
-  std::sort(sorted.begin(), sorted.end(),
+  for (auto& kv : sums)
+    sorted.push_back(std::move(kv.second));
+  std::sort(sorted.begin(),
+            sorted.end(),
             [](const TopCountEntry& a, const TopCountEntry& b) {
               if (a.sum != b.sum) return a.sum > b.sum;
               if (a.weight_was_non_null != b.weight_was_non_null) {
@@ -554,7 +564,7 @@ absl::StatusOr<Value> ApproxTopSum(
   }
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                         : nullptr;
+                                                       : nullptr;
   const ::googlesql::StructType* struct_type =
       arr_type != nullptr ? arr_type->element_type()->AsStruct() : nullptr;
   std::vector<Value> out_elems;
@@ -583,7 +593,7 @@ absl::StatusOr<Value> ArrayConcatAgg(
   }
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                         : nullptr;
+                                                       : nullptr;
   if (arr_type == nullptr) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "ARRAY_CONCAT_AGG requires ARRAY return type");
@@ -659,7 +669,7 @@ absl::StatusOr<Value> SumAggregate(
         if (v.is_null()) continue;
         if (v.type_kind() != ::googlesql::TYPE_INT64) {
           return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                 "semantic: SUM argument type mismatch");
+                                   "semantic: SUM argument type mismatch");
         }
         any_non_null = true;
         total += v.int64_value();
@@ -673,7 +683,7 @@ absl::StatusOr<Value> SumAggregate(
         if (v.is_null()) continue;
         if (v.type_kind() != ::googlesql::TYPE_DOUBLE) {
           return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                 "semantic: SUM argument type mismatch");
+                                   "semantic: SUM argument type mismatch");
         }
         any_non_null = true;
         total += v.double_value();

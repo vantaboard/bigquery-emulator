@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-13-advanced-relational
+name: local-exec-13-advanced-relational
 overview: Land GROUPING SETS / ROLLUP / CUBE / PIVOT / recursive CTE SQL (~3+ dedicated tests; overlaps plan 05).
 todos:
   - id: gsql-13-advanced-relational
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 13: Advanced Relational (GROUPING SETS, PIVOT, …)
+# query port 13: Advanced Relational (GROUPING SETS, PIVOT, …)
 
 ## Goal
 
@@ -18,7 +18,7 @@ Baseline: `20260603T035812Z` (3 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-12-arrays-generators.plan.md`](googlesqlite-12-arrays-generators.plan.md)
+- [`local-exec-12-arrays-generators.plan.md`](local-exec-12-arrays-generators.plan.md)
 
 ## Notes
 
@@ -26,9 +26,9 @@ Re-verify plan 05 failures after this plan lands.
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8071: [1]: (-want +got):`
-- `googlesqlite_query_test.go:8071: [2]: (-want +got):`
-- `googlesqlite_query_test.go:8071: [3]: (-want +got):`
+- `query_port_test.go:8071: [1]: (-want +got):`
+- `query_port_test.go:8071: [2]: (-want +got):`
+- `query_port_test.go:8071: [3]: (-want +got):`
 
 ## Primary files
 
@@ -54,7 +54,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 3 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~3.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~3.
 
 ## Failing tests
 

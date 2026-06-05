@@ -4,7 +4,7 @@
 // Per-project SQL UDF registrations that survive across
 // `jobs.query` RPCs within the same emulator process.
 //
-// BigQuery temp functions are session-scoped; the googlesqlite suite
+// BigQuery temp functions are session-scoped; the query port suite
 // issues `CREATE TEMP FUNCTION` in one request and calls the function
 // in the next. The analyzer catalog is constructed per query, so we
 // keep owned `googlesql::Function` objects (and the `AnalyzerOutput`

@@ -41,11 +41,15 @@ using ::googlesql::functions::TimestampScale;
 
 constexpr TimestampScale kMicros = TimestampScale::kMicroseconds;
 constexpr FormatDateTimestampOptions kFormatOpts{.expand_Q = true,
-                                                   .expand_J = true};
+                                                 .expand_J = true};
 
-absl::TimeZone DefaultTimeZone() { return absl::UTCTimeZone(); }
+absl::TimeZone DefaultTimeZone() {
+  return absl::UTCTimeZone();
+}
 
-absl::TimeZone LocalTimeZone() { return absl::LocalTimeZone(); }
+absl::TimeZone LocalTimeZone() {
+  return absl::LocalTimeZone();
+}
 
 std::optional<Value> NullIfAny(const std::vector<Value>& args,
                                const ::googlesql::Type* return_type) {
@@ -73,26 +77,23 @@ absl::StatusOr<DateTimestampPart> PartFromArg(const Value& v) {
     if (::googlesql::functions::DateTimestampPart_IsValid(part_int)) {
       return static_cast<DateTimestampPart>(part_int);
     }
-    return absl::InvalidArgumentError(
-        absl::StrCat("semantic: invalid DateTimestampPart enum value ",
-                     v.int64_value()));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "semantic: invalid DateTimestampPart enum value ", v.int64_value()));
   }
   if (v.type_kind() == ::googlesql::TYPE_STRING) {
     DateTimestampPart part = DateTimestampPart::YEAR;
     if (!::googlesql::functions::DateTimestampPart_Parse(v.string_value(),
-                                                           &part)) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("semantic: unknown interval part '", v.string_value(),
-                       "'"));
+                                                         &part)) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: unknown interval part '", v.string_value(), "'"));
     }
     return part;
   }
   if (v.type_kind() == ::googlesql::TYPE_ENUM) {
     const int part_int = v.enum_value();
     if (!::googlesql::functions::DateTimestampPart_IsValid(part_int)) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("semantic: invalid DateTimestampPart enum value ",
-                       part_int));
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: invalid DateTimestampPart enum value ", part_int));
     }
     return static_cast<DateTimestampPart>(part_int);
   }
@@ -108,9 +109,11 @@ absl::StatusOr<int64_t> CurrentUnixMicros() {
 absl::StatusOr<int32_t> CurrentDateValue() {
   int32_t date = 0;
   const int64_t now_micros = absl::ToUnixMicros(absl::Now());
-  if (!::googlesql::functions::ExtractFromTimestamp(
-          DateTimestampPart::DATE, now_micros, kMicros, DefaultTimeZone(),
-          &date)
+  if (!::googlesql::functions::ExtractFromTimestamp(DateTimestampPart::DATE,
+                                                    now_micros,
+                                                    kMicros,
+                                                    DefaultTimeZone(),
+                                                    &date)
            .ok()) {
     return absl::InternalError("semantic: failed to extract current DATE");
   }
@@ -119,8 +122,8 @@ absl::StatusOr<int32_t> CurrentDateValue() {
 
 absl::StatusOr<DatetimeValue> CurrentDatetimeValue() {
   DatetimeValue dt;
-  if (!::googlesql::functions::ConvertTimestampToDatetime(absl::Now(),
-                                                          LocalTimeZone(), &dt)
+  if (!::googlesql::functions::ConvertTimestampToDatetime(
+           absl::Now(), LocalTimeZone(), &dt)
            .ok()) {
     return absl::InternalError("semantic: failed to build current DATETIME");
   }
@@ -129,8 +132,8 @@ absl::StatusOr<DatetimeValue> CurrentDatetimeValue() {
 
 absl::StatusOr<TimeValue> CurrentTimeValue() {
   TimeValue t;
-  if (!::googlesql::functions::ConvertTimestampToTime(absl::Now(),
-                                                      LocalTimeZone(), &t)
+  if (!::googlesql::functions::ConvertTimestampToTime(
+           absl::Now(), LocalTimeZone(), &t)
            .ok()) {
     return absl::InternalError("semantic: failed to build current TIME");
   }
@@ -151,8 +154,8 @@ absl::StatusOr<Value> BuildDateArray(const std::vector<int64_t>& raw,
   return Value::Array(return_type->AsArray(), elems);
 }
 
-absl::StatusOr<Value> BuildTimestampArray(const std::vector<int64_t>& micros,
-                                          const ::googlesql::Type* return_type) {
+absl::StatusOr<Value> BuildTimestampArray(
+    const std::vector<int64_t>& micros, const ::googlesql::Type* return_type) {
   std::vector<Value> elems;
   elems.reserve(micros.size());
   for (int64_t t : micros) {
@@ -174,9 +177,11 @@ absl::StatusOr<Value> ParseDate(const std::vector<Value>& args) {
   }
   if (HasNull(args)) return Value::NullDate();
   int32_t date = 0;
-  if (auto s = ::googlesql::functions::ParseStringToDate(
-          args[0].string_value(), args[1].string_value(),
-          /*parse_version2=*/true, &date);
+  if (auto s =
+          ::googlesql::functions::ParseStringToDate(args[0].string_value(),
+                                                    args[1].string_value(),
+                                                    /*parse_version2=*/true,
+                                                    &date);
       !s.ok()) {
     return s;
   }
@@ -190,9 +195,12 @@ absl::StatusOr<Value> ParseDatetime(const std::vector<Value>& args) {
   }
   if (HasNull(args)) return Value::NullDatetime();
   DatetimeValue datetime;
-  if (auto s = ::googlesql::functions::ParseStringToDatetime(
-          args[0].string_value(), args[1].string_value(), kMicros,
-          /*parse_version2=*/true, &datetime);
+  if (auto s =
+          ::googlesql::functions::ParseStringToDatetime(args[0].string_value(),
+                                                        args[1].string_value(),
+                                                        kMicros,
+                                                        /*parse_version2=*/true,
+                                                        &datetime);
       !s.ok()) {
     return s;
   }
@@ -219,15 +227,21 @@ absl::StatusOr<Value> ParseTimestamp(const std::vector<Value>& args) {
   int64_t timestamp_micros = 0;
   if (timezone.has_value()) {
     if (auto s = ::googlesql::functions::ParseStringToTimestamp(
-            args[0].string_value(), args[1].string_value(), *timezone,
-            /*parse_version2=*/true, &timestamp_micros);
+            args[0].string_value(),
+            args[1].string_value(),
+            *timezone,
+            /*parse_version2=*/true,
+            &timestamp_micros);
         !s.ok()) {
       return s;
     }
   } else {
     if (auto s = ::googlesql::functions::ParseStringToTimestamp(
-            args[0].string_value(), args[1].string_value(), DefaultTimeZone(),
-            /*parse_version2=*/true, &timestamp_micros);
+            args[0].string_value(),
+            args[1].string_value(),
+            DefaultTimeZone(),
+            /*parse_version2=*/true,
+            &timestamp_micros);
         !s.ok()) {
       return s;
     }
@@ -290,14 +304,18 @@ absl::StatusOr<Value> FormatTimestamp(const std::vector<Value>& args) {
   std::string out;
   absl::TimeZone tz = DefaultTimeZone();
   if (args.size() == 3) {
-    if (auto s = ::googlesql::functions::MakeTimeZone(args[2].string_value(),
-                                                      &tz);
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[2].string_value(), &tz);
         !s.ok()) {
       return s;
     }
   }
   if (auto s = ::googlesql::functions::FormatTimestampToString(
-          args[0].string_value(), args[1].ToUnixMicros(), tz, kFormatOpts, &out);
+          args[0].string_value(),
+          args[1].ToUnixMicros(),
+          tz,
+          kFormatOpts,
+          &out);
       !s.ok()) {
     return s;
   }
@@ -355,8 +373,8 @@ absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
     auto part = PartFromArg(args[1]);
     if (!part.ok()) return part.status();
     int32_t out = 0;
-    if (auto s = ::googlesql::functions::TruncateDate(args[0].date_value(),
-                                                      *part, &out);
+    if (auto s = ::googlesql::functions::TruncateDate(
+            args[0].date_value(), *part, &out);
         !s.ok()) {
       return s;
     }
@@ -372,14 +390,14 @@ absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
   const int64_t interval = args[1].int64_value();
   int32_t out = 0;
   if (name == "date_add") {
-    if (auto s = ::googlesql::functions::AddDate(args[0].date_value(), *part,
-                                                 interval, &out);
+    if (auto s = ::googlesql::functions::AddDate(
+            args[0].date_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
   } else if (name == "date_sub") {
-    if (auto s = ::googlesql::functions::SubDate(args[0].date_value(), *part,
-                                                 interval, &out);
+    if (auto s = ::googlesql::functions::SubDate(
+            args[0].date_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
@@ -424,8 +442,8 @@ absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
     auto part = PartFromArg(args[1]);
     if (!part.ok()) return part.status();
     DatetimeValue out;
-    if (auto s = ::googlesql::functions::TruncateDatetime(args[0].datetime_value(),
-                                                          *part, &out);
+    if (auto s = ::googlesql::functions::TruncateDatetime(
+            args[0].datetime_value(), *part, &out);
         !s.ok()) {
       return s;
     }
@@ -441,14 +459,14 @@ absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
   const int64_t interval = args[1].int64_value();
   DatetimeValue out;
   if (name == "datetime_add") {
-    if (auto s = ::googlesql::functions::AddDatetime(args[0].datetime_value(),
-                                                     *part, interval, &out);
+    if (auto s = ::googlesql::functions::AddDatetime(
+            args[0].datetime_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
   } else if (name == "datetime_sub") {
-    if (auto s = ::googlesql::functions::SubDatetime(args[0].datetime_value(),
-                                                     *part, interval, &out);
+    if (auto s = ::googlesql::functions::SubDatetime(
+            args[0].datetime_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
@@ -504,8 +522,8 @@ absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
     auto t1 = to_micros(rhs);
     if (!t0.ok()) return t0.status();
     if (!t1.ok()) return t1.status();
-    if (auto s = ::googlesql::functions::TimestampDiff(*t0, *t1, kMicros, *part,
-                                                     &out);
+    if (auto s = ::googlesql::functions::TimestampDiff(
+            *t0, *t1, kMicros, *part, &out);
         !s.ok()) {
       return s;
     }
@@ -547,16 +565,22 @@ absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
   const int64_t interval = args[1].int64_value();
   int64_t out = 0;
   if (name == "timestamp_add") {
-    if (auto s = ::googlesql::functions::AddTimestamp(
-            args[0].ToUnixMicros(), kMicros, DefaultTimeZone(), *part, interval,
-            &out);
+    if (auto s = ::googlesql::functions::AddTimestamp(args[0].ToUnixMicros(),
+                                                      kMicros,
+                                                      DefaultTimeZone(),
+                                                      *part,
+                                                      interval,
+                                                      &out);
         !s.ok()) {
       return s;
     }
   } else if (name == "timestamp_sub") {
-    if (auto s = ::googlesql::functions::SubTimestamp(
-            args[0].ToUnixMicros(), kMicros, DefaultTimeZone(), *part, interval,
-            &out);
+    if (auto s = ::googlesql::functions::SubTimestamp(args[0].ToUnixMicros(),
+                                                      kMicros,
+                                                      DefaultTimeZone(),
+                                                      *part,
+                                                      interval,
+                                                      &out);
         !s.ok()) {
       return s;
     }
@@ -585,9 +609,8 @@ absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
     auto part = PartFromArg(args[2]);
     if (!part.ok()) return part.status();
     int64_t out = 0;
-    if (auto s = ::googlesql::functions::DiffTimes(args[0].time_value(),
-                                                   args[1].time_value(), *part,
-                                                   &out);
+    if (auto s = ::googlesql::functions::DiffTimes(
+            args[0].time_value(), args[1].time_value(), *part, &out);
         !s.ok()) {
       return s;
     }
@@ -602,8 +625,8 @@ absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
     auto part = PartFromArg(args[1]);
     if (!part.ok()) return part.status();
     TimeValue out;
-    if (auto s = ::googlesql::functions::TruncateTime(args[0].time_value(), *part,
-                                                    &out);
+    if (auto s = ::googlesql::functions::TruncateTime(
+            args[0].time_value(), *part, &out);
         !s.ok()) {
       return s;
     }
@@ -619,14 +642,14 @@ absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
   const int64_t interval = args[1].int64_value();
   TimeValue out;
   if (name == "time_add") {
-    if (auto s = ::googlesql::functions::AddTime(args[0].time_value(), *part,
-                                               interval, &out);
+    if (auto s = ::googlesql::functions::AddTime(
+            args[0].time_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
   } else if (name == "time_sub") {
-    if (auto s = ::googlesql::functions::SubTime(args[0].time_value(), *part,
-                                               interval, &out);
+    if (auto s = ::googlesql::functions::SubTime(
+            args[0].time_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
@@ -718,9 +741,9 @@ absl::StatusOr<Value> TimestampSeconds(const std::vector<Value>& args) {
   const int64_t v = args[0].int64_value();
   const int64_t micros = v * 1000000;
   if (!::googlesql::functions::IsValidTimestamp(micros, kMicros)) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             absl::StrCat("Input value ", v,
-                                          " cannot be converted into TIMESTAMP"));
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("Input value ", v, " cannot be converted into TIMESTAMP"));
   }
   return Value::TimestampFromUnixMicros(micros);
 }
@@ -734,9 +757,9 @@ absl::StatusOr<Value> TimestampMillis(const std::vector<Value>& args) {
   const int64_t v = args[0].int64_value();
   const int64_t micros = v * 1000;
   if (!::googlesql::functions::IsValidTimestamp(micros, kMicros)) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             absl::StrCat("Input value ", v,
-                                          " cannot be converted into TIMESTAMP"));
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("Input value ", v, " cannot be converted into TIMESTAMP"));
   }
   return Value::TimestampFromUnixMicros(micros);
 }
@@ -749,9 +772,9 @@ absl::StatusOr<Value> TimestampMicros(const std::vector<Value>& args) {
   if (args[0].is_null()) return Value::NullTimestamp();
   const int64_t v = args[0].int64_value();
   if (!::googlesql::functions::IsValidTimestamp(v, kMicros)) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             absl::StrCat("Input value ", v,
-                                          " cannot be converted into TIMESTAMP"));
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("Input value ", v, " cannot be converted into TIMESTAMP"));
   }
   return Value::TimestampFromUnixMicros(v);
 }
@@ -788,8 +811,8 @@ absl::StatusOr<Value> LastDay(const std::vector<Value>& args) {
   }
   int32_t date = 0;
   if (args[0].type_kind() == ::googlesql::TYPE_DATE) {
-    if (auto s =
-            ::googlesql::functions::LastDayOfDate(args[0].date_value(), part, &date);
+    if (auto s = ::googlesql::functions::LastDayOfDate(
+            args[0].date_value(), part, &date);
         !s.ok()) {
       return s;
     }
@@ -812,9 +835,12 @@ absl::StatusOr<Value> MakeInterval(const std::vector<Value>& args) {
         "semantic: MAKE_INTERVAL expects six arguments");
   }
   if (HasNull(args)) return Value::NullInterval();
-  auto iv = IntervalValue::FromYMDHMS(
-      args[0].int64_value(), args[1].int64_value(), args[2].int64_value(),
-      args[3].int64_value(), args[4].int64_value(), args[5].int64_value());
+  auto iv = IntervalValue::FromYMDHMS(args[0].int64_value(),
+                                      args[1].int64_value(),
+                                      args[2].int64_value(),
+                                      args[3].int64_value(),
+                                      args[4].int64_value(),
+                                      args[5].int64_value());
   if (!iv.ok()) return iv.status();
   return Value::Interval(*iv);
 }
@@ -831,7 +857,7 @@ absl::StatusOr<Value> JustifyInterval(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> Extract(const std::vector<Value>& args,
-                               const ::googlesql::Type* return_type) {
+                              const ::googlesql::Type* return_type) {
   (void)return_type;
   if (args.size() < 2 || args.size() > 3) {
     return absl::InvalidArgumentError(
@@ -852,8 +878,8 @@ absl::StatusOr<Value> Extract(const std::vector<Value>& args,
   int32_t value32 = 0;
   int64_t value64 = 0;
   if (v.type_kind() == ::googlesql::TYPE_DATE) {
-    if (auto s = ::googlesql::functions::ExtractFromDate(*part, v.date_value(),
-                                                         &value32);
+    if (auto s = ::googlesql::functions::ExtractFromDate(
+            *part, v.date_value(), &value32);
         !s.ok()) {
       return s;
     }
@@ -868,8 +894,8 @@ absl::StatusOr<Value> Extract(const std::vector<Value>& args,
     return Value::Int64(value32);
   }
   if (v.type_kind() == ::googlesql::TYPE_TIME) {
-    if (auto s =
-            ::googlesql::functions::ExtractFromTime(*part, v.time_value(), &value64);
+    if (auto s = ::googlesql::functions::ExtractFromTime(
+            *part, v.time_value(), &value64);
         !s.ok()) {
       return s;
     }
@@ -878,23 +904,22 @@ absl::StatusOr<Value> Extract(const std::vector<Value>& args,
   if (v.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
     absl::TimeZone tz = DefaultTimeZone();
     if (args.size() == 3) {
-      if (auto s = ::googlesql::functions::MakeTimeZone(args[2].string_value(),
-                                                        &tz);
+      if (auto s =
+              ::googlesql::functions::MakeTimeZone(args[2].string_value(), &tz);
           !s.ok()) {
         return s;
       }
     }
     int64_t value64 = 0;
-    if (auto s = ::googlesql::functions::ExtractFromTimestamp(*part, v.ToTime(), tz,
-                                                             &value64);
+    if (auto s = ::googlesql::functions::ExtractFromTimestamp(
+            *part, v.ToTime(), tz, &value64);
         !s.ok()) {
       return s;
     }
     return Value::Int64(value64);
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("semantic: EXTRACT unsupported type ",
-                   v.type()->DebugString()));
+  return absl::InvalidArgumentError(absl::StrCat(
+      "semantic: EXTRACT unsupported type ", v.type()->DebugString()));
 }
 
 absl::StatusOr<Value> GenerateDateArray(const std::vector<Value>& args,
@@ -941,8 +966,9 @@ absl::StatusOr<Value> GenerateTimestampArray(
   if (!step_unit.ok()) return step_unit.status();
   const TimestampIncrement inc{.unit = *step_unit, .value = step};
   std::vector<absl::Time> times;
-  if (auto s = ::googlesql::functions::GenerateArray<absl::Time, TimestampIncrement>(
-          args[0].ToTime(), args[1].ToTime(), inc, &times);
+  if (auto s =
+          ::googlesql::functions::GenerateArray<absl::Time, TimestampIncrement>(
+              args[0].ToTime(), args[1].ToTime(), inc, &times);
       !s.ok()) {
     return s;
   }
@@ -966,7 +992,8 @@ absl::StatusOr<Value> DatetimeConstructor(absl::string_view name,
             static_cast<int>(args[2].int64_value()),
             static_cast<int>(args[3].int64_value()),
             static_cast<int>(args[4].int64_value()),
-            static_cast<int>(args[5].int64_value()), &datetime);
+            static_cast<int>(args[5].int64_value()),
+            &datetime);
         !s.ok()) {
       return s;
     }
@@ -975,8 +1002,8 @@ absl::StatusOr<Value> DatetimeConstructor(absl::string_view name,
   if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP &&
       args[1].type_kind() == ::googlesql::TYPE_STRING) {
     absl::TimeZone tz;
-    if (auto s = ::googlesql::functions::MakeTimeZone(args[1].string_value(),
-                                                      &tz);
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
         !s.ok()) {
       return s;
     }
@@ -1011,7 +1038,8 @@ absl::StatusOr<Value> StringFunc(const std::vector<Value>& args) {
         "semantic: STRING(TIMESTAMP, STRING) signature not supported");
   }
   absl::TimeZone tz;
-  if (auto s = ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
+  if (auto s =
+          ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
       !s.ok()) {
     return s;
   }
@@ -1045,7 +1073,8 @@ absl::StatusOr<Value> TimeConstructor(const std::vector<Value>& args) {
     if (auto s = ::googlesql::functions::ConstructTime(
             static_cast<int>(args[0].int64_value()),
             static_cast<int>(args[1].int64_value()),
-            static_cast<int>(args[2].int64_value()), &t);
+            static_cast<int>(args[2].int64_value()),
+            &t);
         !s.ok()) {
       return s;
     }
@@ -1054,14 +1083,14 @@ absl::StatusOr<Value> TimeConstructor(const std::vector<Value>& args) {
   if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP &&
       args[1].type_kind() == ::googlesql::TYPE_STRING) {
     absl::TimeZone tz;
-    if (auto s = ::googlesql::functions::MakeTimeZone(args[1].string_value(),
-                                                      &tz);
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
         !s.ok()) {
       return s;
     }
     TimeValue t;
-    if (auto s = ::googlesql::functions::ConvertTimestampToTime(args[0].ToTime(),
-                                                                tz, &t);
+    if (auto s = ::googlesql::functions::ConvertTimestampToTime(
+            args[0].ToTime(), tz, &t);
         !s.ok()) {
       return s;
     }
@@ -1120,15 +1149,18 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
   if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_STRING &&
       args[1].type_kind() == ::googlesql::TYPE_STRING) {
     absl::TimeZone tz;
-    if (auto s = ::googlesql::functions::MakeTimeZone(args[1].string_value(),
-                                                      &tz);
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
         !s.ok()) {
       return s;
     }
     int64_t micros = 0;
     if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-            args[0].string_value(), tz, kMicros,
-            /*allow_tz_in_str=*/false, &micros);
+            args[0].string_value(),
+            tz,
+            kMicros,
+            /*allow_tz_in_str=*/false,
+            &micros);
         !s.ok()) {
       return s;
     }
@@ -1137,8 +1169,11 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
     int64_t micros = 0;
     if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-            args[0].string_value(), DefaultTimeZone(), kMicros,
-            /*allow_tz_in_str=*/true, &micros);
+            args[0].string_value(),
+            DefaultTimeZone(),
+            kMicros,
+            /*allow_tz_in_str=*/true,
+            &micros);
         !s.ok()) {
       return s;
     }

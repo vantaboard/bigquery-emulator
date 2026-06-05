@@ -6,7 +6,7 @@
 // Walks `ResolvedScan` trees (ProjectScan, WithScan, OrderByScan,
 // FilterScan, JoinScan, ArrayScan, SetOperationScan, ...) and
 // produces `ColumnBindings` rows the expression evaluator consumes.
-// Owned by `googlesqlite-07-semantic-core-expr.plan.md`.
+// Owned by `local-exec-07-semantic-core-expr.plan.md`.
 
 #include <string>
 #include <vector>

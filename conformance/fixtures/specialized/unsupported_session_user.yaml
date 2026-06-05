@@ -1,6 +1,6 @@
 # unsupported_session_user: SESSION_USER returns 501 with family-named envelope.
 #
-# `googlesqlite-15-specialized-stubs.plan.md` pins SESSION_USER to the
+# `local-exec-15-specialized-stubs.plan.md` pins SESSION_USER to the
 # `unsupported` posture: the function exists in the analyzer but
 # the emulator does not model authn/authz, so a SELECT calling it
 # surfaces `UNIMPLEMENTED` (HTTP 501 notImplemented). The error

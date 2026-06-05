@@ -278,7 +278,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     case ::googlesql::RESOLVED_REVOKE_STMT:
     case ::googlesql::RESOLVED_UNDROP_STMT:
       return StatementClass::kDdl;
-    // `googlesqlite-14-dml-system.plan.md` Family 5: ASSERT is
+    // `local-exec-14-dml-system.plan.md` Family 5: ASSERT is
     // a no-row-stream statement that surfaces a structured
     // `invalidQuery` envelope on failure (BigQuery's documented
     // behavior) and produces no observable output on success. The
@@ -301,7 +301,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
 // altogether for shapes BigQuery itself does not enumerate, e.g.
 // internal or non-BigQuery surfaces).
 //
-// Plan ownership: `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`
+// Plan ownership: `.cursor/plans/local-exec-01-ddl-catalog.plan.md`
 // "Item 5 (statementType)". Each handler in
 // `backend/engine/control/control_op_executor.cc` is the source of
 // truth for what the statement does; this helper is the source of
@@ -544,7 +544,7 @@ namespace {
 
 // Emit the trailing `statement_type` message every successful
 // `ExecuteQuery` reply now carries (per
-// `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Item 5). The gateway
+// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Item 5). The gateway
 // folds the value into BigQuery's
 // `Job.statistics.query.statementType` envelope. We never emit the
 // trailer when `statement_type` is empty (e.g. shapes BigQuery REST

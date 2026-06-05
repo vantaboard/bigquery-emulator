@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-03-operator-disposition
+name: local-exec-03-operator-disposition
 overview: Register internal comparison/arithmetic operators (`$equal`, `$less`, `$add`, …) in the disposition table.
 todos:
   - id: gsql-03-operator-disposition
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 03: Operator Dispositions
+# query port 03: Operator Dispositions
 
 ## Goal
 
@@ -18,12 +18,12 @@ Baseline: `20260603T035812Z` (4 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-01-ddl-catalog.plan.md`](googlesqlite-01-ddl-catalog.plan.md)
+- [`local-exec-01-ddl-catalog.plan.md`](local-exec-01-ddl-catalog.plan.md)
 
 ## Root cause
 
 - `I0000 00:00:1780459094.345209  399173 transpiler.cc:1836] duckdb transpiler: function '$add' has no disposition; surfacing UNIMPLEMENTED`
-- `googlesqlite_query_test.go:1131: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:OrderByScan, route: duckdb_...`
+- `query_port_test.go:1131: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"duckdb engine: transpiler does not yet cover this query shape (family: node:OrderByScan, route: duckdb_...`
 - `I0000 00:00:1780459094.342006  399173 transpiler.cc:1836] duckdb transpiler: function '$equal' has no disposition; surfacing UNIMPLEMENTED`
 
 ## Primary files
@@ -51,7 +51,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 4 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~4.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~4.
 
 ## Failing tests
 

@@ -56,8 +56,7 @@ absl::Status RegisterAnalyzerSystemVariables(
 }
 
 absl::StatusOr<Value> GetSystemVariable(
-    absl::string_view project_id,
-    const std::vector<std::string>& name_path) {
+    absl::string_view project_id, const std::vector<std::string>& name_path) {
   const std::string key = CanonicalName(name_path);
   if (key.empty()) {
     return absl::InvalidArgumentError(

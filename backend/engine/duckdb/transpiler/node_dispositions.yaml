@@ -30,12 +30,12 @@
 #                               (function-level) or
 #                               `backend/engine/control/stubs/`
 #                               (statement-level). Owned by
-#                               `googlesqlite-15-specialized-stubs.plan.md`.
+#                               `local-exec-15-specialized-stubs.plan.md`.
 #       * `unsupported`       - deliberately out of scope locally.
 #   - `plan=<plan-file>` (optional) names the
 #     `.cursor/plans/*.plan.md` file that owns the row. Mandatory for
 #     `unsupported` rows so a reader can trace why a route is closed
-#     (those rows all point at `googlesqlite-15-specialized-stubs.plan.md`).
+#     (those rows all point at `local-exec-15-specialized-stubs.plan.md`).
 #   - `status=planned` (optional) marks rows whose owning plan has
 #     not yet landed an implementation. The engine surfaces
 #     `UNIMPLEMENTED` for these until their owning plan ships.
@@ -56,14 +56,14 @@
 
 # --- Statements --------------------------------------------------------
 ResolvedQueryStmt: duckdb_native
-ResolvedExplainStmt: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedCreateTableStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedCreateTableAsSelectStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedCreateViewStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedCreateMaterializedViewStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedCreateProcedureStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
-ResolvedCreateFunctionStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedCreateTableFunctionStmt: control_op plan=googlesqlite-15-specialized-stubs.plan.md
+ResolvedExplainStmt: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedCreateTableStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateTableAsSelectStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateViewStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateMaterializedViewStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateProcedureStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedCreateFunctionStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedCreateTableFunctionStmt: control_op plan=local-exec-15-specialized-stubs.plan.md
 # `CREATE MODEL` (BigQuery ML) is `local_stub`: the statement
 # parses, analyzes, and the engine returns OK without materializing
 # a model. A subsequent `ML.PREDICT(<stub-model>)` call surfaces
@@ -75,20 +75,20 @@ ResolvedCreateTableFunctionStmt: control_op plan=googlesqlite-15-specialized-stu
 # pipe-DDL pre-dispatch pattern). The posture exists so client
 # libraries that probe BigQuery ML availability by issuing
 # `CREATE MODEL` do not fail at startup.
-ResolvedCreateModelStmt: local_stub plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedDropStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedDropFunctionStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedInsertStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedUpdateStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedDeleteStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedMergeStmt: duckdb_rewrite plan=googlesqlite-14-dml-system.plan.md
-ResolvedCallStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
-ResolvedAssignmentStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedExecuteImmediateStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
-ResolvedAnalyzeStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedAuxLoadDataStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedAssertStmt: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedExportDataStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md
+ResolvedCreateModelStmt: local_stub plan=local-exec-15-specialized-stubs.plan.md
+ResolvedDropStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedDropFunctionStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedInsertStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedUpdateStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedDeleteStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedMergeStmt: duckdb_rewrite plan=local-exec-14-dml-system.plan.md
+ResolvedCallStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedAssignmentStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedExecuteImmediateStmt: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
+ResolvedAnalyzeStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedAuxLoadDataStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedAssertStmt: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedExportDataStmt: control_op plan=local-exec-01-ddl-catalog.plan.md
 
 # --- Relational scans --------------------------------------------------
 ResolvedTableScan: duckdb_native
@@ -98,46 +98,46 @@ ResolvedFilterScan: duckdb_native
 ResolvedJoinScan: duckdb_native
 ResolvedArrayScan: duckdb_native
 ResolvedAggregateScan: duckdb_native
-ResolvedAnonymizedAggregateScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedDifferentialPrivacyAggregateScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedAggregationThresholdAggregateScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+ResolvedAnonymizedAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedDifferentialPrivacyAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedAggregationThresholdAggregateScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
 ResolvedSetOperationScan: duckdb_native
 ResolvedOrderByScan: duckdb_native
 ResolvedLimitOffsetScan: duckdb_native
 ResolvedAnalyticScan: duckdb_native
 ResolvedSampleScan: duckdb_native
-ResolvedWithScan: duckdb_native plan=googlesqlite-02-withscan-cte.plan.md
-ResolvedWithRefScan: duckdb_native plan=googlesqlite-02-withscan-cte.plan.md
-ResolvedRecursiveScan: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedRecursiveRefScan: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedPivotScan: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedUnpivotScan: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedMatchRecognizeScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md status=planned
-ResolvedGroupRowsScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedTVFScan: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md status=planned
-ResolvedRelationArgumentScan: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md status=planned
-ResolvedBarrierScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedPipeIfScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedPipeForkScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedPipeTeeScan: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedPipeExportDataScan: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedPipeCreateTableScan: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedPipeInsertScan: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
+ResolvedWithScan: duckdb_native plan=local-exec-02-withscan-cte.plan.md
+ResolvedWithRefScan: duckdb_native plan=local-exec-02-withscan-cte.plan.md
+ResolvedRecursiveScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedRecursiveRefScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedPivotScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedUnpivotScan: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedMatchRecognizeScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md status=planned
+ResolvedGroupRowsScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedTVFScan: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
+ResolvedRelationArgumentScan: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
+ResolvedBarrierScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedPipeIfScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedPipeForkScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedPipeTeeScan: semantic_executor plan=local-exec-13-advanced-relational.plan.md
+ResolvedPipeExportDataScan: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedPipeCreateTableScan: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedPipeInsertScan: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
 # `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
 # query (GQL) surface is deliberately out of scope locally; every
 # graph scan class enumerated in
 # `googlesql/resolved_ast/resolved_ast.h` is recorded here so the
 # parity checker can read them off this YAML directly instead of
 # inferring from a wildcard.
-ResolvedGraphTableScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphLinearScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphRefScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphCallScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphElementScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphNodeScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphEdgeScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGraphPathScan: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+ResolvedGraphTableScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphLinearScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphRefScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphCallScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphElementScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphNodeScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphEdgeScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGraphPathScan: unsupported plan=local-exec-15-specialized-stubs.plan.md
 
 # --- Expressions -------------------------------------------------------
 ResolvedLiteral: duckdb_native
@@ -149,41 +149,41 @@ ResolvedAnalyticFunctionCall: duckdb_native
 ResolvedCast: duckdb_native
 ResolvedMakeStruct: duckdb_rewrite
 ResolvedGetStructField: duckdb_rewrite
-ResolvedMakeProto: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGetProtoField: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedGetProtoOneof: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedReplaceField: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
+ResolvedMakeProto: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGetProtoField: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedGetProtoOneof: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedReplaceField: unsupported plan=local-exec-15-specialized-stubs.plan.md
 ResolvedGetJsonField: duckdb_rewrite
-ResolvedGetRowField: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedFlatten: semantic_executor plan=googlesqlite-12-arrays-generators.plan.md status=planned
-ResolvedFlattenedArg: semantic_executor plan=googlesqlite-12-arrays-generators.plan.md status=planned
-ResolvedSubqueryExpr: duckdb_native plan=googlesqlite-02-withscan-cte.plan.md
+ResolvedGetRowField: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedFlatten: semantic_executor plan=local-exec-12-arrays-generators.plan.md status=planned
+ResolvedFlattenedArg: semantic_executor plan=local-exec-12-arrays-generators.plan.md status=planned
+ResolvedSubqueryExpr: duckdb_native plan=local-exec-02-withscan-cte.plan.md
 ResolvedWithExpr: duckdb_native
-ResolvedInlineLambda: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
-ResolvedFilterField: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedFilterFieldArg: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedConstant: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedSystemVariable: semantic_executor plan=googlesqlite-14-dml-system.plan.md
-ResolvedSequence: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedArgumentRef: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedArgumentDef: semantic_executor plan=googlesqlite-15-specialized-stubs.plan.md status=planned
-ResolvedCatalogColumnRef: control_op plan=googlesqlite-01-ddl-catalog.plan.md
-ResolvedExpressionColumn: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
-ResolvedUpdateConstructor: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
+ResolvedInlineLambda: semantic_executor plan=local-exec-09-date-time.plan.md status=planned
+ResolvedFilterField: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedFilterFieldArg: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedConstant: semantic_executor plan=local-exec-15-specialized-stubs.plan.md
+ResolvedSystemVariable: semantic_executor plan=local-exec-14-dml-system.plan.md
+ResolvedSequence: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedArgumentRef: semantic_executor plan=local-exec-15-specialized-stubs.plan.md
+ResolvedArgumentDef: semantic_executor plan=local-exec-15-specialized-stubs.plan.md status=planned
+ResolvedCatalogColumnRef: control_op plan=local-exec-01-ddl-catalog.plan.md
+ResolvedExpressionColumn: unsupported plan=local-exec-15-specialized-stubs.plan.md
+ResolvedUpdateConstructor: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned
 
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
-ResolvedDeferredComputedColumn: semantic_executor plan=googlesqlite-13-advanced-relational.plan.md
+ResolvedDeferredComputedColumn: semantic_executor plan=local-exec-13-advanced-relational.plan.md
 ResolvedOrderByItem: duckdb_native
-ResolvedColumnHolder: semantic_executor plan=googlesqlite-12-arrays-generators.plan.md
+ResolvedColumnHolder: semantic_executor plan=local-exec-12-arrays-generators.plan.md
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row
 # from SHAPE_TRACKER.md, expanded to per-class rows for the parity
 # checker.
-ResolvedGroupingSet: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedRollup: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedCube: duckdb_rewrite plan=googlesqlite-13-advanced-relational.plan.md
-ResolvedAggregateHavingModifier: semantic_executor plan=googlesqlite-09-date-time.plan.md status=planned
+ResolvedGroupingSet: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedRollup: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedCube: duckdb_rewrite plan=local-exec-13-advanced-relational.plan.md
+ResolvedAggregateHavingModifier: semantic_executor plan=local-exec-09-date-time.plan.md status=planned
 # `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` row from
 # SHAPE_TRACKER.md, expanded to per-class rows.
 ResolvedWindowFrame: duckdb_native
@@ -191,4 +191,4 @@ ResolvedWindowFrameExpr: duckdb_native
 ResolvedAnalyticFunctionGroup: duckdb_native
 ResolvedSetOperationItem: duckdb_native
 ResolvedFunctionArgument: duckdb_native
-ResolvedReturningClause: semantic_executor plan=googlesqlite-14-dml-system.plan.md status=planned
+ResolvedReturningClause: semantic_executor plan=local-exec-14-dml-system.plan.md status=planned

@@ -54,8 +54,8 @@ cc_library(
 # `unsupported`). Each one returns UNIMPLEMENTED with a
 # disposition-aware message pointing at the downstream plan that
 # fills in the real behavior; this keeps the coordinator a complete
-# dispatcher while plans `googlesqlite-07-semantic-core-expr.plan.md`,
-# `googlesqlite-01-ddl-catalog.plan.md`, and `googlesqlite-15-specialized-stubs.plan.md`
+# dispatcher while plans `local-exec-07-semantic-core-expr.plan.md`,
+# `local-exec-01-ddl-catalog.plan.md`, and `local-exec-15-specialized-stubs.plan.md`
 # ship the real implementations.
 cc_library(
     name = "stub_executors",

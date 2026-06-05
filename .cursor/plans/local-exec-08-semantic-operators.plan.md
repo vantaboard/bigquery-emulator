@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-08-semantic-operators
+name: local-exec-08-semantic-operators
 overview: Implement `$like`, `$between`, `$in`, bitwise, and IS DISTINCT FROM operators (~30 tests).
 todos:
   - id: gsql-08-semantic-operators
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 08: Semantic Internal Operators
+# query port 08: Semantic Internal Operators
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (30 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-07-semantic-core-expr.plan.md`](googlesqlite-07-semantic-core-expr.plan.md)
+- [`local-exec-07-semantic-core-expr.plan.md`](local-exec-07-semantic-core-expr.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$between' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemente...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$bitwise_and' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$bitwise_not' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$between' is not yet implemented in the semantic executor","errors":[{"reason":"notImplemente...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$bitwise_and' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: function '$bitwise_not' is not yet implemented in the semantic executor","errors":[{"reason":"notImplem...`
 
 ## Primary files
 
@@ -52,7 +52,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 30 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~30.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~30.
 
 ## Failing tests
 

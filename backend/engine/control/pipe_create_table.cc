@@ -50,7 +50,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> RunPipeCreateTable(
       "syntactically-valid SELECT so the inner ResolvedCreateTableAsSelectStmt "
       "(whose `query` field is intentionally null in the pipe form) can be "
       "re-issued through the existing CREATE TABLE AS SELECT handler. "
-      "Tracked by googlesqlite-01-ddl-catalog.plan.md follow-up: 'pipe-form "
+      "Tracked by local-exec-01-ddl-catalog.plan.md follow-up: 'pipe-form "
       "CREATE "
       "TABLE adapter'.");
 }

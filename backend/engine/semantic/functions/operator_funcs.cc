@@ -33,7 +33,8 @@ bool SqlLikeMatch(absl::string_view value, absl::string_view pattern) {
   int64_t star_vi = -1;
   int64_t star_pi = -1;
   while (vi < value.size()) {
-    if (pi < pattern.size() && (pattern[pi] == value[vi] || pattern[pi] == '_')) {
+    if (pi < pattern.size() &&
+        (pattern[pi] == value[vi] || pattern[pi] == '_')) {
       if (pattern[pi] == '_') {
         ++vi;
         ++pi;
@@ -63,7 +64,9 @@ bool SqlLikeMatch(absl::string_view value, absl::string_view pattern) {
   return pi == pattern.size();
 }
 
-absl::StatusOr<Value> BoolOrNull(bool b) { return Value::Bool(b); }
+absl::StatusOr<Value> BoolOrNull(bool b) {
+  return Value::Bool(b);
+}
 
 absl::StatusOr<int64_t> RequireInt64(const Value& v, absl::string_view op) {
   if (v.type_kind() != ::googlesql::TYPE_INT64) {
@@ -79,27 +82,23 @@ absl::StatusOr<DateTimestampPart> PartFromArg(const Value& v) {
     if (::googlesql::functions::DateTimestampPart_IsValid(part_int)) {
       return static_cast<DateTimestampPart>(part_int);
     }
-    return absl::InvalidArgumentError(
-        absl::StrCat("semantic: invalid DateTimestampPart enum value ",
-                     v.int64_value()));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "semantic: invalid DateTimestampPart enum value ", v.int64_value()));
   }
   if (v.type_kind() == ::googlesql::TYPE_STRING) {
     DateTimestampPart part = DateTimestampPart::YEAR;
     if (!::googlesql::functions::DateTimestampPart_Parse(v.string_value(),
-                                                           &part)) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("semantic: unknown interval part '",
-                       v.string_value(),
-                       "'"));
+                                                         &part)) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: unknown interval part '", v.string_value(), "'"));
     }
     return part;
   }
   if (v.type_kind() == ::googlesql::TYPE_ENUM) {
     const int part_int = v.enum_value();
     if (!::googlesql::functions::DateTimestampPart_IsValid(part_int)) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("semantic: invalid DateTimestampPart enum value ",
-                       part_int));
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: invalid DateTimestampPart enum value ", part_int));
     }
     return static_cast<DateTimestampPart>(part_int);
   }
@@ -124,8 +123,7 @@ absl::StatusOr<Value> DispatchLike(absl::string_view name,
     return absl::InvalidArgumentError(
         "semantic: LIKE requires STRING arguments");
   }
-  bool matched =
-      SqlLikeMatch(args[0].string_value(), args[1].string_value());
+  bool matched = SqlLikeMatch(args[0].string_value(), args[1].string_value());
   if (name == "$not_like") {
     matched = !matched;
   }
@@ -148,9 +146,8 @@ absl::StatusOr<Value> DispatchBetween(absl::string_view name,
     return absl::InvalidArgumentError(
         "semantic: BETWEEN operands have mismatched types");
   }
-  bool in_range =
-      (low.LessThan(value) || low.Equals(value)) &&
-      (value.LessThan(high) || value.Equals(high));
+  bool in_range = (low.LessThan(value) || low.Equals(value)) &&
+                  (value.LessThan(high) || value.Equals(high));
   if (name == "$not_between") {
     in_range = !in_range;
   }
@@ -272,8 +269,8 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
     return Value::Int64(~(*v));
   }
   if (args.size() != 2) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: ", name, " expects exactly two arguments"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects exactly two arguments"));
   }
   if (args[0].is_null() || args[1].is_null()) {
     return Value::NullInt64();
@@ -353,12 +350,12 @@ absl::StatusOr<Value> DispatchInterval(const std::vector<Value>& args,
           "specifiers)");
     }
   } else {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: $interval could not interpret arguments (",
-        args[0].type()->DebugString(),
-        ", ",
-        args[1].type()->DebugString(),
-        ")"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: $interval could not interpret arguments (",
+                     args[0].type()->DebugString(),
+                     ", ",
+                     args[1].type()->DebugString(),
+                     ")"));
   }
   auto iv = IntervalValue::FromInteger(amount, part, /*allow_nanos=*/true);
   if (!iv.ok()) return iv.status();
@@ -377,8 +374,7 @@ absl::StatusOr<Value> JustifyDays(const std::vector<Value>& args) {
     return absl::InvalidArgumentError(
         "semantic: JUSTIFY_DAYS requires INTERVAL argument");
   }
-  return Value::Interval(
-      *::googlesql::JustifyDays(args[0].interval_value()));
+  return Value::Interval(*::googlesql::JustifyDays(args[0].interval_value()));
 }
 
 absl::StatusOr<Value> JustifyHours(const std::vector<Value>& args) {
@@ -393,8 +389,7 @@ absl::StatusOr<Value> JustifyHours(const std::vector<Value>& args) {
     return absl::InvalidArgumentError(
         "semantic: JUSTIFY_HOURS requires INTERVAL argument");
   }
-  return Value::Interval(
-      *::googlesql::JustifyHours(args[0].interval_value()));
+  return Value::Interval(*::googlesql::JustifyHours(args[0].interval_value()));
 }
 
 namespace {

@@ -27,14 +27,14 @@ import (
 
 // emulatorDB drives GoogleSQL statements against the in-process gateway
 // backed by emulator_main. It mirrors the database/sql surface the
-// googlesqlite query_test.go suite uses so the ported tests need minimal
+// query_port_test.go suite uses so the ported tests need minimal
 // edits beyond setup.
 type emulatorDB struct {
 	t         *testing.T
 	projectID string
 }
 
-// emulatorConn is a per-connection view of emulatorDB (googlesqlite tests
+// emulatorConn is a per-connection view of emulatorDB (query port tests
 // sometimes call db.Conn for statement isolation).
 type emulatorConn struct {
 	*emulatorDB
@@ -61,14 +61,14 @@ type emulatorResult struct {
 }
 
 // sharedEmulator is started once in TestMain and reused across the ported
-// googlesqlite query tests. Each subtest uses a unique project ID so catalog
+// query port tests. Each subtest uses a unique project ID so catalog
 // mutations do not collide under t.Parallel().
 var (
 	sharedEmulator   *emulatorEnv
 	sharedEmulatorMu sync.Mutex
 )
 
-func openGooglesqliteTestDB(t *testing.T) (*emulatorDB, context.Context) {
+func openQueryPortTestDB(t *testing.T) (*emulatorDB, context.Context) {
 	t.Helper()
 	if sharedEmulator == nil {
 		t.Fatal("shared emulator not started; TestMain missing?")
@@ -97,7 +97,7 @@ func (db *emulatorDB) jobsQueryURL() string {
 
 // projectIDForTest maps a subtest name to the BigQuery project id used on
 // jobs.query. TestQuery/* subtests share one project so CREATE FUNCTION in
-// create_function is visible to use_function (googlesqlite uses one session).
+// create_function is visible to use_function (query port uses one session).
 func projectIDForTest(testName string) string {
 	if strings.HasPrefix(testName, "TestQuery/") {
 		return sanitizeProjectID("TestQuery")
@@ -209,7 +209,7 @@ func (db *emulatorDB) query(ctx context.Context, query string, args ...any) (*em
 	return &emulatorRows{columns: cols, rows: out}, nil
 }
 
-const googlesqliteDefaultDatasetID = "_default"
+const queryPortDefaultDatasetID = "_default"
 
 // splitSQLStatements splits a script on semicolons outside of quoted
 // string / identifier literals (BigQuery multi-statement scripts).
@@ -299,7 +299,7 @@ func (db *emulatorDB) runSingleQuery(ctx context.Context, query string, argStart
 		"query":        sqlText,
 		"useLegacySql": false,
 		"defaultDataset": map[string]string{
-			"datasetId": googlesqliteDefaultDatasetID,
+			"datasetId": queryPortDefaultDatasetID,
 		},
 	}
 	if len(params) > 0 {
@@ -588,7 +588,7 @@ func arrayElementType(colType string) string {
 
 // decodeBytesWireCell normalizes BigQuery REST BYTES cells for database/sql
 // scanning. The engine may double-encode (base64 of DuckDB's `x{hex}`
-// text); unwrap to the canonical base64 form googlesqlite expects.
+// text); unwrap to the canonical base64 form query port expects.
 func decodeBytesWireCell(s string) (any, error) {
 	raw, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
@@ -628,7 +628,7 @@ func decodeScalarString(s, colType string) (any, error) {
 	case "BYTES":
 		return decodeBytesWireCell(s)
 	case "TIMESTAMP":
-		return timestampToGooglesqliteCanonical(s)
+		return timestampToQueryPortCanonical(s)
 	case "DATE", "DATETIME", "TIME", "STRING", "NUMERIC", "BIGNUMERIC", "GEOGRAPHY", "JSON", "":
 		return s, nil
 	default:
@@ -639,10 +639,10 @@ func decodeScalarString(s, colType string) (any, error) {
 	}
 }
 
-// timestampToGooglesqliteCanonical maps BigQuery REST RFC3339 timestamps to the
-// canonical form googlesqlite uses when scanning into any (see
+// timestampToQueryPortCanonical maps BigQuery REST RFC3339 timestamps to the
+// canonical form query port uses when scanning into any (see
 // createTimestampFormatFromTime in the ported tests).
-func timestampToGooglesqliteCanonical(s string) (string, error) {
+func timestampToQueryPortCanonical(s string) (string, error) {
 	if strings.HasSuffix(s, "+00") || strings.HasSuffix(s, "+00:00") {
 		// Already in legacy canonical form.
 		if strings.Contains(s, "T") {
@@ -887,7 +887,7 @@ func assignScanValue(dest any, src any) error {
 	case *[]byte:
 		switch v := src.(type) {
 		case string:
-			// googlesqlite/database/sql expect BYTES columns as base64 text
+			// query port/database/sql expect BYTES columns as base64 text
 			// in the destination slice (see TestParameterBindingTypes).
 			*d = []byte(v)
 			return nil

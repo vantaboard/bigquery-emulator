@@ -63,7 +63,7 @@ resource and observe consistent metadata. It does not cover:
 - Any of the BQML ML.* table-valued functions.
 
 Those land separately under
-[`googlesqlite-15-specialized-stubs.plan.md`](./googlesqlite-15-specialized-stubs.plan.md)
+[`local-exec-15-specialized-stubs.plan.md`](./local-exec-15-specialized-stubs.plan.md)
 when BQML moves out of `unsupported`. The metadata surface here is
 deliberately ahead of execution so the node sample can finish its
 fixture setup.
@@ -103,7 +103,7 @@ dataset.
 
 `CREATE MODEL` DDL needs to route through the control-op executor
 to `ModelInsert`. Confirm against
-[`googlesqlite-01-ddl-catalog.plan.md`](./googlesqlite-01-ddl-catalog.plan.md) — if
+[`local-exec-01-ddl-catalog.plan.md`](./local-exec-01-ddl-catalog.plan.md) — if
 the executor already exposes a `CreateModel` hook, wire to it; if
 not, add the hook here.
 
@@ -111,7 +111,7 @@ not, add the hook here.
 
 - `MODEL.PREDICT` and other ML.* TVFs return a documented
   bigquery-shaped `UNIMPLEMENTED` (per
-  [`googlesqlite-15-specialized-stubs.plan.md`](./googlesqlite-15-specialized-stubs.plan.md)).
+  [`local-exec-15-specialized-stubs.plan.md`](./local-exec-15-specialized-stubs.plan.md)).
 - Training jobs (`CREATE MODEL ... AS SELECT ...`) write a model
   resource with empty `trainingRuns[]` and a documented note that
   no training occurred — never silently approximate training.

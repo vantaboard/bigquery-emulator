@@ -1,6 +1,3 @@
-#include "backend/engine/semantic/eval_context.h"
-#include "backend/engine/semantic/functions/string_funcs.h"
-
 #include <cctype>
 #include <cstring>
 #include <memory>
@@ -13,6 +10,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/hash.h"
 #include "googlesql/public/functions/normalize_mode.pb.h"
@@ -93,15 +92,15 @@ std::string EncodeBase32(absl::string_view input) {
   return out;
 }
 
-bool DecodeBase32(absl::string_view input, std::string* out,
+bool DecodeBase32(absl::string_view input,
+                  std::string* out,
                   absl::Status* error) {
   static const char* kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   int buffer = 0;
   int bits = 0;
   for (char c : input) {
     if (c == '=') break;
-    const char* p =
-        std::strchr(kAlphabet, static_cast<char>(std::toupper(c)));
+    const char* p = std::strchr(kAlphabet, static_cast<char>(std::toupper(c)));
     if (p == nullptr) {
       *error = absl::InvalidArgumentError("semantic: invalid base32 input");
       return false;
@@ -141,15 +140,15 @@ absl::StatusOr<Value> Ascii(const std::vector<Value>& args) {
   int64_t out = 0;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
     if (args[0].bytes_value().empty()) return Value::Int64(0);
-    if (!::googlesql::functions::FirstByteOfBytesToASCII(args[0].bytes_value(),
-                                                         &out, &error)) {
+    if (!::googlesql::functions::FirstByteOfBytesToASCII(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
     return Value::Int64(out);
   }
   if (args[0].string_value().empty()) return Value::Int64(0);
-  if (!::googlesql::functions::FirstCharOfStringToASCII(args[0].string_value(),
-                                                        &out, &error)) {
+  if (!::googlesql::functions::FirstCharOfStringToASCII(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::Int64(out);
@@ -164,13 +163,13 @@ absl::StatusOr<Value> ByteLength(const std::vector<Value>& args) {
   absl::Status error;
   int64_t out = 0;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LengthBytes(args[0].bytes_value(), &out,
-                                             &error)) {
+    if (!::googlesql::functions::LengthBytes(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
   } else {
-    if (!::googlesql::functions::LengthBytes(args[0].string_value(), &out,
-                                             &error)) {
+    if (!::googlesql::functions::LengthBytes(
+            args[0].string_value(), &out, &error)) {
       return error;
     }
   }
@@ -185,13 +184,13 @@ absl::StatusOr<Value> Length(const std::vector<Value>& args) {
   absl::Status error;
   int64_t out = 0;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LengthBytes(args[0].bytes_value(), &out,
-                                             &error)) {
+    if (!::googlesql::functions::LengthBytes(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
   } else {
-    if (!::googlesql::functions::LengthUtf8(args[0].string_value(), &out,
-                                            &error)) {
+    if (!::googlesql::functions::LengthUtf8(
+            args[0].string_value(), &out, &error)) {
       return error;
     }
   }
@@ -217,8 +216,8 @@ absl::StatusOr<Value> Chr(const std::vector<Value>& args) {
   if (args[0].int64_value() == 0) return Value::String("");
   absl::Status error;
   std::string out;
-  if (!::googlesql::functions::CodePointToString(args[0].int64_value(), &out,
-                                                 &error)) {
+  if (!::googlesql::functions::CodePointToString(
+          args[0].int64_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -232,8 +231,8 @@ absl::StatusOr<Value> Unicode(const std::vector<Value>& args) {
   if (args[0].string_value().empty()) return Value::Int64(0);
   absl::Status error;
   int64_t out = 0;
-  if (!::googlesql::functions::FirstCharToCodePoint(args[0].string_value(),
-                                                    &out, &error)) {
+  if (!::googlesql::functions::FirstCharToCodePoint(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::Int64(out);
@@ -278,14 +277,14 @@ absl::StatusOr<Value> Lower(const std::vector<Value>& args) {
   absl::Status error;
   std::string out;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LowerBytes(args[0].bytes_value(), &out,
-                                            &error)) {
+    if (!::googlesql::functions::LowerBytes(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
     return Value::Bytes(std::move(out));
   }
-  if (!::googlesql::functions::LowerUtf8(args[0].string_value(), &out,
-                                         &error)) {
+  if (!::googlesql::functions::LowerUtf8(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -299,14 +298,14 @@ absl::StatusOr<Value> Upper(const std::vector<Value>& args) {
   absl::Status error;
   std::string out;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::UpperBytes(args[0].bytes_value(), &out,
-                                            &error)) {
+    if (!::googlesql::functions::UpperBytes(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
     return Value::Bytes(std::move(out));
   }
-  if (!::googlesql::functions::UpperUtf8(args[0].string_value(), &out,
-                                         &error)) {
+  if (!::googlesql::functions::UpperUtf8(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -315,8 +314,8 @@ absl::StatusOr<Value> Upper(const std::vector<Value>& args) {
 absl::StatusOr<Value> TrimFamily(absl::string_view name,
                                  const std::vector<Value>& args) {
   if (args.empty() || args.size() > 2) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: ", name, " expects one or two arguments"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects one or two arguments"));
   }
   if (args[0].is_null()) return Value::NullString();
   if (args.size() == 2 && args[1].is_null()) return Value::NullString();
@@ -329,55 +328,53 @@ absl::StatusOr<Value> TrimFamily(absl::string_view name,
                                "semantic: TRIM on BYTES without chars NYI");
     }
     if (name == "ltrim") {
-      if (!::googlesql::functions::LeftTrimSpacesUtf8(args[0].string_value(),
-                                                      &out, &error)) {
+      if (!::googlesql::functions::LeftTrimSpacesUtf8(
+              args[0].string_value(), &out, &error)) {
         return error;
       }
     } else if (name == "rtrim") {
-      if (!::googlesql::functions::RightTrimSpacesUtf8(args[0].string_value(),
-                                                       &out, &error)) {
+      if (!::googlesql::functions::RightTrimSpacesUtf8(
+              args[0].string_value(), &out, &error)) {
         return error;
       }
-    } else if (!::googlesql::functions::TrimSpacesUtf8(args[0].string_value(),
-                                                       &out, &error)) {
+    } else if (!::googlesql::functions::TrimSpacesUtf8(
+                   args[0].string_value(), &out, &error)) {
       return error;
     }
     return Value::String(std::string(out));
   }
   if (is_bytes) {
     if (name == "ltrim") {
-      if (!::googlesql::functions::LeftTrimBytes(args[0].bytes_value(),
-                                                 args[1].bytes_value(), &out,
-                                                 &error)) {
+      if (!::googlesql::functions::LeftTrimBytes(
+              args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
         return error;
       }
     } else if (name == "rtrim") {
-      if (!::googlesql::functions::RightTrimBytes(args[0].bytes_value(),
-                                                  args[1].bytes_value(), &out,
-                                                  &error)) {
+      if (!::googlesql::functions::RightTrimBytes(
+              args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
         return error;
       }
     } else if (!::googlesql::functions::TrimBytes(args[0].bytes_value(),
-                                                  args[1].bytes_value(), &out,
+                                                  args[1].bytes_value(),
+                                                  &out,
                                                   &error)) {
       return error;
     }
     return Value::Bytes(std::string(out));
   }
   if (name == "ltrim") {
-    if (!::googlesql::functions::LeftTrimUtf8(args[0].string_value(),
-                                              args[1].string_value(), &out,
-                                              &error)) {
+    if (!::googlesql::functions::LeftTrimUtf8(
+            args[0].string_value(), args[1].string_value(), &out, &error)) {
       return error;
     }
   } else if (name == "rtrim") {
-    if (!::googlesql::functions::RightTrimUtf8(args[0].string_value(),
-                                               args[1].string_value(), &out,
-                                               &error)) {
+    if (!::googlesql::functions::RightTrimUtf8(
+            args[0].string_value(), args[1].string_value(), &out, &error)) {
       return error;
     }
   } else if (!::googlesql::functions::TrimUtf8(args[0].string_value(),
-                                               args[1].string_value(), &out,
+                                               args[1].string_value(),
+                                               &out,
                                                &error)) {
     return error;
   }
@@ -408,16 +405,19 @@ absl::StatusOr<Value> Replace(const std::vector<Value>& args) {
   absl::Status error;
   std::string out;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::ReplaceBytes(
-            args[0].bytes_value(), args[1].bytes_value(), args[2].bytes_value(),
-            &out, &error)) {
+    if (!::googlesql::functions::ReplaceBytes(args[0].bytes_value(),
+                                              args[1].bytes_value(),
+                                              args[2].bytes_value(),
+                                              &out,
+                                              &error)) {
       return error;
     }
     return Value::Bytes(std::move(out));
   }
   if (!::googlesql::functions::ReplaceUtf8(args[0].string_value(),
                                            args[1].string_value(),
-                                           args[2].string_value(), &out,
+                                           args[2].string_value(),
+                                           &out,
                                            &error)) {
     return error;
   }
@@ -435,14 +435,14 @@ absl::StatusOr<Value> Reverse(const std::vector<Value>& args) {
   absl::Status error;
   std::string out;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::ReverseBytes(args[0].bytes_value(), &out,
-                                              &error)) {
+    if (!::googlesql::functions::ReverseBytes(
+            args[0].bytes_value(), &out, &error)) {
       return error;
     }
     return Value::Bytes(std::move(out));
   }
-  if (!::googlesql::functions::ReverseUtf8(args[0].string_value(), &out,
-                                           &error)) {
+  if (!::googlesql::functions::ReverseUtf8(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -457,13 +457,14 @@ absl::StatusOr<Value> StartsWith(const std::vector<Value>& args) {
   absl::Status error;
   bool out = false;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::StartsWithBytes(args[0].bytes_value(),
-                                                 args[1].bytes_value(), &out,
-                                                 &error)) {
+    if (!::googlesql::functions::StartsWithBytes(
+            args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
       return error;
     }
-  } else if (!::googlesql::functions::StartsWithUtf8(
-                 args[0].string_value(), args[1].string_value(), &out, &error)) {
+  } else if (!::googlesql::functions::StartsWithUtf8(args[0].string_value(),
+                                                     args[1].string_value(),
+                                                     &out,
+                                                     &error)) {
     return error;
   }
   return Value::Bool(out);
@@ -478,13 +479,13 @@ absl::StatusOr<Value> EndsWith(const std::vector<Value>& args) {
   absl::Status error;
   bool out = false;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::EndsWithBytes(args[0].bytes_value(),
-                                               args[1].bytes_value(), &out,
-                                               &error)) {
+    if (!::googlesql::functions::EndsWithBytes(
+            args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
       return error;
     }
   } else if (!::googlesql::functions::EndsWithUtf8(args[0].string_value(),
-                                                   args[1].string_value(), &out,
+                                                   args[1].string_value(),
+                                                   &out,
                                                    &error)) {
     return error;
   }
@@ -504,15 +505,14 @@ absl::StatusOr<Value> Left(const std::vector<Value>& args) {
   absl::Status error;
   absl::string_view out;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LeftBytes(args[0].bytes_value(),
-                                           args[1].int64_value(), &out,
-                                           &error)) {
+    if (!::googlesql::functions::LeftBytes(
+            args[0].bytes_value(), args[1].int64_value(), &out, &error)) {
       return error;
     }
     return Value::Bytes(std::string(out));
   }
-  if (!::googlesql::functions::LeftUtf8(args[0].string_value(),
-                                        args[1].int64_value(), &out, &error)) {
+  if (!::googlesql::functions::LeftUtf8(
+          args[0].string_value(), args[1].int64_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::string(out));
@@ -534,24 +534,30 @@ absl::StatusOr<Value> Substr(const std::vector<Value>& args) {
   const int64_t pos = args[1].int64_value();
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
     if (args.size() == 2) {
-      if (!::googlesql::functions::SubstrBytes(args[0].bytes_value(), pos, &out,
-                                               &error)) {
+      if (!::googlesql::functions::SubstrBytes(
+              args[0].bytes_value(), pos, &out, &error)) {
         return error;
       }
     } else if (!::googlesql::functions::SubstrWithLengthBytes(
-                   args[0].bytes_value(), pos, args[2].int64_value(), &out,
+                   args[0].bytes_value(),
+                   pos,
+                   args[2].int64_value(),
+                   &out,
                    &error)) {
       return error;
     }
     return Value::Bytes(std::string(out));
   }
   if (args.size() == 2) {
-    if (!::googlesql::functions::SubstrUtf8(args[0].string_value(), pos, &out,
-                                            &error)) {
+    if (!::googlesql::functions::SubstrUtf8(
+            args[0].string_value(), pos, &out, &error)) {
       return error;
     }
   } else if (!::googlesql::functions::SubstrWithLengthUtf8(
-                 args[0].string_value(), pos, args[2].int64_value(), &out,
+                 args[0].string_value(),
+                 pos,
+                 args[2].int64_value(),
+                 &out,
                  &error)) {
     return error;
   }
@@ -566,13 +572,13 @@ absl::StatusOr<Value> Strpos(const std::vector<Value>& args) {
   absl::Status error;
   int64_t out = 0;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::StrposBytes(args[0].bytes_value(),
-                                             args[1].bytes_value(), &out,
-                                             &error)) {
+    if (!::googlesql::functions::StrposBytes(
+            args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
       return error;
     }
   } else if (!::googlesql::functions::StrposUtf8(args[0].string_value(),
-                                                 args[1].string_value(), &out,
+                                                 args[1].string_value(),
+                                                 &out,
                                                  &error)) {
     return error;
   }
@@ -596,8 +602,8 @@ absl::StatusOr<Value> Split(const std::vector<Value>& args,
   absl::Status error;
   std::vector<std::string> parts;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::SplitBytes(args[0].bytes_value(), delim,
-                                            &parts, &error)) {
+    if (!::googlesql::functions::SplitBytes(
+            args[0].bytes_value(), delim, &parts, &error)) {
       return error;
     }
     std::vector<Value> elements;
@@ -607,8 +613,8 @@ absl::StatusOr<Value> Split(const std::vector<Value>& args,
     }
     return Value::Array(return_type->AsArray(), elements);
   }
-  if (!::googlesql::functions::SplitUtf8(args[0].string_value(), delim, &parts,
-                                         &error)) {
+  if (!::googlesql::functions::SplitUtf8(
+          args[0].string_value(), delim, &parts, &error)) {
     return error;
   }
   std::vector<Value> elements;
@@ -634,7 +640,8 @@ absl::StatusOr<Value> ToHex(const std::vector<Value>& args) {
 
 absl::StatusOr<Value> FromHex(const std::vector<Value>& args) {
   if (args.size() != 1) {
-    return absl::InvalidArgumentError("semantic: FROM_HEX expects one argument");
+    return absl::InvalidArgumentError(
+        "semantic: FROM_HEX expects one argument");
   }
   if (args[0].is_null()) return Value::NullBytes();
   absl::Status error;
@@ -647,7 +654,8 @@ absl::StatusOr<Value> FromHex(const std::vector<Value>& args) {
 
 absl::StatusOr<Value> ToBase64(const std::vector<Value>& args) {
   if (args.size() != 1) {
-    return absl::InvalidArgumentError("semantic: TO_BASE64 expects one argument");
+    return absl::InvalidArgumentError(
+        "semantic: TO_BASE64 expects one argument");
   }
   if (args[0].is_null()) return Value::NullString();
   absl::Status error;
@@ -666,8 +674,8 @@ absl::StatusOr<Value> FromBase64(const std::vector<Value>& args) {
   if (args[0].is_null()) return Value::NullBytes();
   absl::Status error;
   std::string out;
-  if (!::googlesql::functions::FromBase64(args[0].string_value(), &out,
-                                          &error)) {
+  if (!::googlesql::functions::FromBase64(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::Bytes(std::move(out));
@@ -675,7 +683,8 @@ absl::StatusOr<Value> FromBase64(const std::vector<Value>& args) {
 
 absl::StatusOr<Value> ToBase32(const std::vector<Value>& args) {
   if (args.size() != 1) {
-    return absl::InvalidArgumentError("semantic: TO_BASE32 expects one argument");
+    return absl::InvalidArgumentError(
+        "semantic: TO_BASE32 expects one argument");
   }
   if (args[0].is_null()) return Value::NullString();
   return Value::String(EncodeBase32(args[0].bytes_value()));
@@ -744,8 +753,8 @@ absl::StatusOr<Value> InitcapFunc(const std::vector<Value>& args) {
     }
   } else {
     absl::string_view delimiters = args[1].string_value();
-    if (!::googlesql::functions::InitialCapitalize(args[0].string_value(),
-                                                   delimiters, &out, &error)) {
+    if (!::googlesql::functions::InitialCapitalize(
+            args[0].string_value(), delimiters, &out, &error)) {
       return error;
     }
   }
@@ -773,8 +782,11 @@ absl::StatusOr<Value> NormalizeFunc(const std::vector<Value>& args) {
   }
   absl::Status error;
   std::string out;
-  if (!::googlesql::functions::Normalize(args[0].string_value(), mode,
-                                         /*is_casefold=*/false, &out, &error)) {
+  if (!::googlesql::functions::Normalize(args[0].string_value(),
+                                         mode,
+                                         /*is_casefold=*/false,
+                                         &out,
+                                         &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -802,8 +814,11 @@ absl::StatusOr<Value> NormalizeAndCasefoldFunc(const std::vector<Value>& args) {
   }
   absl::Status error;
   std::string out;
-  if (!::googlesql::functions::Normalize(args[0].string_value(), mode,
-                                         /*is_casefold=*/true, &out, &error)) {
+  if (!::googlesql::functions::Normalize(args[0].string_value(),
+                                         mode,
+                                         /*is_casefold=*/true,
+                                         &out,
+                                         &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -817,8 +832,8 @@ absl::StatusOr<Value> SafeConvertBytesToString(const std::vector<Value>& args) {
   if (args[0].is_null()) return Value::NullString();
   absl::Status error;
   std::string out;
-  if (!::googlesql::functions::SafeConvertBytes(args[0].bytes_value(), &out,
-                                                &error)) {
+  if (!::googlesql::functions::SafeConvertBytes(
+          args[0].bytes_value(), &out, &error)) {
     return error;
   }
   return Value::String(std::move(out));
@@ -887,8 +902,8 @@ absl::StatusOr<Value> ToCodePoints(const std::vector<Value>& args,
   absl::Status error;
   std::vector<int64_t> cps;
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::BytesToCodePoints(args[0].bytes_value(), &cps,
-                                                   &error)) {
+    if (!::googlesql::functions::BytesToCodePoints(
+            args[0].bytes_value(), &cps, &error)) {
       return error;
     }
   } else if (!::googlesql::functions::StringToCodePoints(
@@ -940,8 +955,8 @@ absl::StatusOr<Value> ParseNumericFunc(const std::vector<Value>& args) {
   if (args[0].is_null()) return Value::NullNumeric();
   NumericValue out;
   absl::Status error;
-  if (!::googlesql::functions::ParseNumeric(args[0].string_value(), &out,
-                                            &error)) {
+  if (!::googlesql::functions::ParseNumeric(
+          args[0].string_value(), &out, &error)) {
     return error;
   }
   return Value::Numeric(out);
@@ -969,7 +984,8 @@ std::optional<std::string> ExpandScientificNotation(absl::string_view input) {
   }
   std::string digits = mantissa.substr(0, dot);
   digits.append(mantissa.substr(dot + 1));
-  const int64_t decimal_places = static_cast<int64_t>(mantissa.size() - dot - 1);
+  const int64_t decimal_places =
+      static_cast<int64_t>(mantissa.size() - dot - 1);
   exponent -= decimal_places;
   if (exponent >= 0) {
     digits.append(static_cast<size_t>(exponent), '0');
@@ -1035,15 +1051,14 @@ absl::StatusOr<Value> ParseBignumeric(const std::vector<Value>& args,
       int64_t exponent = 0;
       if (absl::SimpleAtoi(input.substr(epos + 1), &exponent)) {
         const size_t dot = mantissa.find('.');
-        int64_t digits_before_dot = static_cast<int64_t>(dot == std::string::npos
-                                                             ? mantissa.size()
-                                                             : dot);
-        int64_t norm_exp = exponent + digits_before_dot -
-                           (dot == std::string::npos ? 0 : 1);
+        int64_t digits_before_dot = static_cast<int64_t>(
+            dot == std::string::npos ? mantissa.size() : dot);
+        int64_t norm_exp =
+            exponent + digits_before_dot - (dot == std::string::npos ? 0 : 1);
         std::string norm_mantissa =
-            dot == std::string::npos
-                ? mantissa
-                : absl::StrCat(mantissa.substr(0, dot), mantissa.substr(dot + 1));
+            dot == std::string::npos ? mantissa
+                                     : absl::StrCat(mantissa.substr(0, dot),
+                                                    mantissa.substr(dot + 1));
         while (norm_mantissa.size() > 1 && norm_mantissa[0] == '0') {
           norm_mantissa.erase(0, 1);
           --norm_exp;
@@ -1129,10 +1144,14 @@ absl::StatusOr<Value> RegexpExtract(const std::vector<Value>& args) {
   const auto unit = args[0].type_kind() == ::googlesql::TYPE_BYTES
                         ? RegExp::PositionUnit::kBytes
                         : RegExp::PositionUnit::kUtf8Chars;
-  if (!(*re)
-           ->Extract(AsStringOrBytes(args[0]), unit, position, occurrence,
-                     /*use_legacy_position_behavior=*/true, &out, &is_null,
-                     &error)) {
+  if (!(*re)->Extract(AsStringOrBytes(args[0]),
+                      unit,
+                      position,
+                      occurrence,
+                      /*use_legacy_position_behavior=*/true,
+                      &out,
+                      &is_null,
+                      &error)) {
     return error;
   }
   if (is_null) return Value::NullString();
@@ -1181,8 +1200,8 @@ absl::StatusOr<Value> RegexpReplace(const std::vector<Value>& args) {
   if (!re.ok()) return re.status();
   absl::Status error;
   std::string out;
-  if (!(*re)->Replace(AsStringOrBytes(args[0]), AsStringOrBytes(args[2]), &out,
-                      &error)) {
+  if (!(*re)->Replace(
+          AsStringOrBytes(args[0]), AsStringOrBytes(args[2]), &out, &error)) {
     return error;
   }
   return StringOrBytesFromView(args[0], out);
@@ -1224,8 +1243,8 @@ absl::StatusOr<int64_t> LengthOfValue(const Value& v) {
     if (!::googlesql::functions::LengthBytes(v.bytes_value(), &out, &error)) {
       return error;
     }
-  } else if (!::googlesql::functions::LengthUtf8(v.string_value(), &out,
-                                                   &error)) {
+  } else if (!::googlesql::functions::LengthUtf8(
+                 v.string_value(), &out, &error)) {
     return error;
   }
   return out;
@@ -1238,8 +1257,8 @@ absl::StatusOr<std::string> LeftOfValue(const Value& v, int64_t n) {
     if (!::googlesql::functions::LeftBytes(v.bytes_value(), n, &out, &error)) {
       return error;
     }
-  } else if (!::googlesql::functions::LeftUtf8(v.string_value(), n, &out,
-                                               &error)) {
+  } else if (!::googlesql::functions::LeftUtf8(
+                 v.string_value(), n, &out, &error)) {
     return error;
   }
   return std::string(out);
@@ -1287,10 +1306,10 @@ absl::StatusOr<Value> Lpad(const std::vector<Value>& args) {
     if (*plen >= pad_needed) break;
     padding.append(pad);
   }
-  auto trunc_pad = LeftOfValue(
-      args[0].type_kind() == ::googlesql::TYPE_BYTES ? Value::Bytes(padding)
-                                                     : Value::String(padding),
-      pad_needed);
+  auto trunc_pad = LeftOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
+                                   ? Value::Bytes(padding)
+                                   : Value::String(padding),
+                               pad_needed);
   if (!trunc_pad.ok()) return trunc_pad.status();
   return StringOrBytesFromView(
       args[0], absl::StrCat(*trunc_pad, AsStringOrBytes(args[0])));
@@ -1338,10 +1357,10 @@ absl::StatusOr<Value> Rpad(const std::vector<Value>& args) {
     if (*plen >= pad_needed) break;
     padding.append(pad);
   }
-  auto trunc_pad = LeftOfValue(
-      args[0].type_kind() == ::googlesql::TYPE_BYTES ? Value::Bytes(padding)
-                                                     : Value::String(padding),
-      pad_needed);
+  auto trunc_pad = LeftOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
+                                   ? Value::Bytes(padding)
+                                   : Value::String(padding),
+                               pad_needed);
   if (!trunc_pad.ok()) return trunc_pad.status();
   return StringOrBytesFromView(
       args[0], absl::StrCat(AsStringOrBytes(args[0]), *trunc_pad));
@@ -1358,8 +1377,10 @@ absl::StatusOr<Value> FormatString(const std::vector<Value>& args) {
   }
   std::string output;
   bool is_null = false;
-  if (auto status = StringFormatUtf8(args[0].string_value(), values,
-                                     ProductMode::PRODUCT_EXTERNAL, &output,
+  if (auto status = StringFormatUtf8(args[0].string_value(),
+                                     values,
+                                     ProductMode::PRODUCT_EXTERNAL,
+                                     &output,
                                      &is_null);
       !status.ok()) {
     return status;

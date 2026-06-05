@@ -2,7 +2,7 @@
 #
 # `SELECT 1 AS n` has no FROM clause, so the route classifier
 # promotes it to the local semantic executor (see
-# `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`). The output row
+# `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`). The output row
 # is shaped identically to what the DuckDB fast path would have
 # produced for the same query, so the conformance differ does not
 # branch on route. Plan 16

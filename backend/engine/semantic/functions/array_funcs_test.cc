@@ -2,11 +2,11 @@
 
 #include <vector>
 
-#include "gtest/gtest.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/value.h"
+#include "gtest/gtest.h"
 
 namespace bigquery_emulator {
 namespace backend {

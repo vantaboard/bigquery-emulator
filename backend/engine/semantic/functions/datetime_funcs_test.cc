@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "gtest/gtest.h"
 #include "googlesql/public/value.h"
+#include "gtest/gtest.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -15,21 +15,25 @@ namespace {
 using ::googlesql::Value;
 
 TEST(DatetimeFuncsTest, ParseDateBasic) {
-  std::vector<Value> args = {Value::String("%Y%m%d"), Value::String("20081225")};
+  std::vector<Value> args = {Value::String("%Y%m%d"),
+                             Value::String("20081225")};
   auto got = ParseDate(args);
   ASSERT_TRUE(got.ok());
   EXPECT_EQ(got->date_value(), 14238);
 }
 
 TEST(DatetimeFuncsTest, DateAddDay) {
-  auto base = ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-22")});
+  auto base =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-22")});
   ASSERT_TRUE(base.ok());
   std::vector<Value> args = {
-      *base, Value::Int64(1),
+      *base,
+      Value::Int64(1),
       Value::Int64(static_cast<int64_t>(::googlesql::functions::DAY))};
   auto got = DateAddSubDiffTrunc("date_add", args);
   ASSERT_TRUE(got.ok());
-  auto next = ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-23")});
+  auto next =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-23")});
   ASSERT_TRUE(next.ok());
   EXPECT_EQ(got->date_value(), next->date_value());
 }

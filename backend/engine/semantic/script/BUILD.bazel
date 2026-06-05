@@ -1,7 +1,7 @@
 # Bazel build for the script-level interpreter (procedural
 # scripting executor).
 #
-# `googlesqlite-14-dml-system.plan.md` adds a local interpreter
+# `local-exec-14-dml-system.plan.md` adds a local interpreter
 # for BigQuery scripting (DECLARE / SET, BEGIN..END, IF / WHILE /
 # LOOP / FOR, RAISE / EXCEPTION, ASSERT, EXECUTE IMMEDIATE, CALL,
 # CREATE PROCEDURE, system variables). Each statement family lives

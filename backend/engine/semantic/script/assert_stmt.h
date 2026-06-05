@@ -3,7 +3,7 @@
 
 // Handler for `ResolvedAssertStmt` (`ASSERT <expr> [AS '<msg>']`).
 //
-// Family 5 of `googlesqlite-14-dml-system.plan.md`. The
+// Family 5 of `local-exec-14-dml-system.plan.md`. The
 // statement evaluates `<expr>` (which the analyzer guarantees is
 // BOOL-typed) and surfaces a structured BigQuery-shaped error when
 // the expression is FALSE or NULL. BigQuery's documented behavior

@@ -35,7 +35,7 @@ The Storage Read API is partially implemented today:
 
 ## Dependencies
 
-- `googlesqlite-14-dml-system.plan.md` (Storage Write API shares the
+- `local-exec-14-dml-system.plan.md` (Storage Write API shares the
   storage-aware write path with DML and `tabledata.insertAll`).
 - `engine-router-foundation.plan.md` (so a Storage Write API
   append goes through the same coordinator that DML does).

@@ -1,5 +1,5 @@
 ---
-name: googlesqlite-12-arrays-generators
+name: local-exec-12-arrays-generators
 overview: Implement array generators, UNNEST paths, and array combinators (~20 tests).
 todos:
   - id: gsql-12-arrays-generators
@@ -8,7 +8,7 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 12: Semantic Arrays / Generators
+# query port 12: Semantic Arrays / Generators
 
 ## Goal
 
@@ -18,13 +18,13 @@ Baseline: `20260603T035812Z` (20 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-11-json.plan.md`](googlesqlite-11-json.plan.md)
+- [`local-exec-11-json.plan.md`](local-exec-11-json.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:8071: [0]: (-want +got):`
-- `googlesqlite_query_test.go:8064: unexpected row [[<nil> 1 -2 3 -2 1 <nil>]]. expected row num 0 but got next row`
-- `googlesqlite_query_test.go:8064: unexpected row [2 [1 <nil>]]. expected row num 0 but got next row`
+- `query_port_test.go:8071: [0]: (-want +got):`
+- `query_port_test.go:8064: unexpected row [[<nil> 1 -2 3 -2 1 <nil>]]. expected row num 0 but got next row`
+- `query_port_test.go:8064: unexpected row [2 [1 <nil>]]. expected row num 0 but got next row`
 
 ## Primary files
 
@@ -53,7 +53,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 20 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~20.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~20.
 
 ## Failing tests
 

@@ -1,6 +1,6 @@
 ---
-name: googlesqlite-07-semantic-core-expr
-overview: Extend semantic executor scan walk and expression kinds for ~22 googlesqlite tests.
+name: local-exec-07-semantic-core-expr
+overview: Extend semantic executor scan walk and expression kinds for ~22 query port tests.
 todos:
   - id: gsql-07-semantic-core-expr
     content: Semantic scan walk + SubqueryExpr/struct/array expr kinds
@@ -8,24 +8,24 @@ todos:
 isProject: false
 ---
 
-# googlesqlite 07: Semantic Core Expressions / Scan Walk
+# query port 07: Semantic Core Expressions / Scan Walk
 
 ## Goal
 
-Extend semantic executor scan walk and expression kinds for ~22 googlesqlite tests.
+Extend semantic executor scan walk and expression kinds for ~22 query port tests.
 
 Baseline: `20260603T035812Z` (27 failing tests in this bucket).
 
 ## Dependencies
 
-- [`googlesqlite-05-arrow-marshaling.plan.md`](googlesqlite-05-arrow-marshaling.plan.md)
-- [`googlesqlite-06-aggregate-modifiers.plan.md`](googlesqlite-06-aggregate-modifiers.plan.md)
+- [`local-exec-05-arrow-marshaling.plan.md`](local-exec-05-arrow-marshaling.plan.md)
+- [`local-exec-06-aggregate-modifiers.plan.md`](local-exec-06-aggregate-modifiers.plan.md)
 
 ## Root cause
 
-- `googlesqlite_query_test.go:1484: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"semantic: SELECT path expects a ProjectScan; got OrderByScan","errors":[{"reason":"notImplemented","mes...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: ResolvedExpr kind SubqueryExpr is not yet implemented","errors":[{"reason":"notImplemented","message":"...`
-- `googlesqlite_query_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: SELECT path expects a ProjectScan; got WithScan","errors":[{"reason":"notImplemented","message":"semant...`
+- `query_port_test.go:1484: rows.Err: jobs.query -> 501: {"error":{"code":501,"message":"semantic: SELECT path expects a ProjectScan; got OrderByScan","errors":[{"reason":"notImplemented","mes...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: ResolvedExpr kind SubqueryExpr is not yet implemented","errors":[{"reason":"notImplemented","message":"...`
+- `query_port_test.go:8045: jobs.query -> 501: {"error":{"code":501,"message":"semantic: SELECT path expects a ProjectScan; got WithScan","errors":[{"reason":"notImplemented","message":"semant...`
 
 ## Primary files
 
@@ -59,7 +59,7 @@ BIGQUERY_EMULATOR_BIN=./bin/emulator_main \
 ## Done when
 
 - All 27 tests listed below pass.
-- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~27.
+- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~27.
 
 ## Failing tests
 

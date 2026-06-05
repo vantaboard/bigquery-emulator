@@ -13,7 +13,7 @@
 #
 # A new statement-level stub family follows:
 #   1. Flip the matching `node_dispositions.yaml` row to `local_stub
-#      plan=googlesqlite-15-specialized-stubs.plan.md`.
+#      plan=local-exec-15-specialized-stubs.plan.md`.
 #   2. Add `<family>.{h,cc}` + a unit test here.
 #   3. Extend the pre-dispatch in
 #      `local_coordinator_engine.cc::ExecuteDdl` to route the new

@@ -1,6 +1,6 @@
 //go:build integration
 
-// Ported from github.com/goccy/googlesqlite/query_test.go — runs against emulator_main.
+// Ported from external query_test.go corpus — runs against emulator_main.
 
 package e2e
 
@@ -25,7 +25,7 @@ import (
 // Inputs and expected outputs come from
 // docs/third_party/googlesql-docs/query-syntax.md (set-operations section).
 func TestSetOperationsUnionIntersectExcept(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestSetOperationsUnionIntersectExcept(t *testing.T) {
 // 2430). Expected rows are sourced from the visual tables in those
 // examples.
 func TestJoinVariants(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestJoinVariants(t *testing.T) {
 // expected outputs come from query-syntax.md SELECT * EXCEPT / SELECT
 // * REPLACE examples.
 func TestSelectExceptAndReplace(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -223,7 +223,7 @@ func TestSelectExceptAndReplace(t *testing.T) {
 // This exercises the parameter-encoding pipeline in encoder.go and
 // the StmtExecContext path's args reshape.
 func TestParameterBindingTypes(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -298,7 +298,7 @@ func TestParameterBindingTypes(t *testing.T) {
 // formatter via WITH RECURSIVE. The example is from
 // docs/third_party/googlesql-docs/query-syntax.md WITH clause section.
 func TestWithRecursiveSelfReferential(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// Count 1..5 via WITH RECURSIVE — canonical doc example.
@@ -340,7 +340,7 @@ func TestWithRecursiveSelfReferential(t *testing.T) {
 // operators" + query-syntax.md). The values are simple integers so
 // the assertions stay tight.
 func TestExistsAndInSubquery(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// IN subquery: SELECT 2 IN (SELECT 1 UNION ALL SELECT 2) -> true.
@@ -375,7 +375,7 @@ func TestExistsAndInSubquery(t *testing.T) {
 // at docs/third_party/googlesql-docs/parameters.md (ARRAY parameter
 // expansion as `(?, ?, ...)`).
 func TestArrayUnnestRoundtrip(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// UNNEST([1,2,3]) — exercises ArrayScanNode.
@@ -409,7 +409,7 @@ func TestArrayUnnestRoundtrip(t *testing.T) {
 // frame specification (ROWS BETWEEN / RANGE BETWEEN / window_spec
 // shorthand).
 func TestWindowVariousFrames(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	cases := []struct {
@@ -499,7 +499,7 @@ func TestWindowVariousFrames(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "SELECT *
 // modifiers".
 func TestSelectStarReplace(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, "CREATE TABLE t (a INT64, b INT64, c INT64)"); err != nil {
@@ -537,7 +537,7 @@ func TestSelectStarReplace(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md JOIN
 // operations (INNER, LEFT, RIGHT, FULL, CROSS).
 func TestJoinVariantsExtra(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, `CREATE TABLE A (k INT64, v STRING);
@@ -582,7 +582,7 @@ func TestJoinVariantsExtra(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "UNNEST
 // operator with array_expression and WITH OFFSET".
 func TestUnnestWithOffset(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -616,7 +616,7 @@ func TestUnnestWithOffset(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "Recursive CTEs"
 // — example builds an integer ladder via UNION ALL.
 func TestRecursiveCTE(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -648,7 +648,7 @@ func TestRecursiveCTE(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "LIMIT clause"
 // + "OFFSET clause".
 func TestLimitOffset(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -676,7 +676,7 @@ func TestLimitOffset(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "ORDER BY
 // clause" — NULLS FIRST / NULLS LAST options.
 func TestOrderByDescAndNullsFirst(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -707,7 +707,7 @@ func TestOrderByDescAndNullsFirst(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "GROUP BY
 // clause" + "SELECT DISTINCT modifier".
 func TestSelectDistinctAndGroupBy(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// SELECT DISTINCT (analyzer lowers to GROUP BY).
@@ -751,7 +751,7 @@ func TestSelectDistinctAndGroupBy(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/conditional_expressions.md
 // "CASE expr WHEN".
 func TestCaseExpression(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	var got string
@@ -771,7 +771,7 @@ func TestCaseExpression(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/data-types.md "NUMERIC type"
 // — arithmetic uses exact precision; div-by-zero is an analyzer error.
 func TestNumericArithmetic(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	var got string
@@ -801,7 +801,7 @@ func TestNumericArithmetic(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/dml-syntax.md "UPDATE
 // statement".
 func TestUpdateSetWhere(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx,
@@ -842,7 +842,7 @@ func TestUpdateSetWhere(t *testing.T) {
 // partition: each row's partition has only one boolean so the
 // LOGICAL_OR matches the input directly.
 func TestWindowDistinctEmulationPath(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -887,7 +887,7 @@ func TestWindowDistinctEmulationPath(t *testing.T) {
 // hits the native sliding-frame path which still emits ORDER BY
 // markers and frame bounds.
 func TestWindowOrderedFrame(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// Running SUM with a sliding ROWS frame: cumulative sum over a
@@ -929,7 +929,7 @@ func TestWindowOrderedFrame(t *testing.T) {
 
 // TestArrayAggLimitOrderBy drives the bindLimit / bindOrderBy SQLite
 // UDFs through ARRAY_AGG(x ORDER BY ... LIMIT N). The formatter emits
-// `googlesqlite_limit(N)` and `googlesqlite_order_by(col, true|false)`
+// `test_limit(N)` and `test_order_by(col, true|false)`
 // as option markers that the SQLite aggregate sees as trailing args.
 //
 // Reference: docs/third_party/googlesql-docs/aggregate_functions.md
@@ -938,7 +938,7 @@ func TestWindowOrderedFrame(t *testing.T) {
 //
 // Expected output: a sorted array of the first two elements.
 func TestArrayAggLimitOrderBy(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// Use UNNEST so ARRAY_AGG receives unordered input; the inner
@@ -965,7 +965,7 @@ func TestArrayAggLimitOrderBy(t *testing.T) {
 // TestArrayAggOrderByDesc drives bindOrderBy with the descending flag.
 // Source: aggregate_functions.md ARRAY_AGG ORDER BY DESC grammar.
 func TestArrayAggOrderByDesc(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -992,7 +992,7 @@ func TestArrayAggOrderByDesc(t *testing.T) {
 // "STRING_AGG" — supports the same ORDER BY / LIMIT modifiers as
 // ARRAY_AGG.
 func TestStringAggOrderByLimit(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -1017,14 +1017,14 @@ func TestStringAggOrderByLimit(t *testing.T) {
 // ---- from scan_nodes_more_test.go ----
 
 // TestTableSample drives the SampleScanNode FormatSQL via TABLESAMPLE.
-// The googlesqlite formatter folds the sample scan back to its input
+// The query port formatter folds the sample scan back to its input
 // (we do not honour the probabilistic semantics), so the row count
 // matches the input rows.
 //
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "TABLESAMPLE"
 // section.
 func TestTableSample(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1070,7 +1070,7 @@ func TestTableSample(t *testing.T) {
 // clause" — fires after window functions, allowing predicates over
 // window-derived columns.
 func TestQualifyClause(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// 3 rows, ranked by x ASC. Keep only rows whose ROW_NUMBER() is 1.
@@ -1106,7 +1106,7 @@ func TestQualifyClause(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "SELECT clause"
 // expressions create computed columns.
 func TestComputedColumnsInProject(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// Two computed columns derived from the source x.
@@ -1148,7 +1148,7 @@ func TestComputedColumnsInProject(t *testing.T) {
 // for STRUCT" — `struct_value.field_name` lowers to a GetStructField
 // node.
 func TestGetStructField(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -1177,7 +1177,7 @@ func TestGetStructField(t *testing.T) {
 // the navigation_functions.md "LAG" / "LEAD" examples. Expected
 // values come straight from the LAG / LEAD definitions.
 func TestLagLeadFirstLast(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -1242,7 +1242,7 @@ func TestLagLeadFirstLast(t *testing.T) {
 // "ROWS vs. RANGE" — RANGE bounds are based on value rather than row
 // position.
 func TestRangeFrame(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -1288,7 +1288,7 @@ func TestRangeFrame(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/numbering_functions.md
 // "PERCENT_RANK", "CUME_DIST", "NTILE".
 func TestPercentRankCumeDistNtile(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -1334,7 +1334,7 @@ func TestPercentRankCumeDistNtile(t *testing.T) {
 // rows by GROUPING SETS section, lines 1170-1190 of that file).
 // Exercises GroupingSetNode + ColumnHolderNode in the formatter.
 func TestGroupingSets(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `WITH Products AS (
@@ -1382,7 +1382,7 @@ func TestGroupingSets(t *testing.T) {
 //
 // Source: query-syntax.md ROLLUP and CUBE sections.
 func TestRollupAndCube(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// ROLLUP(a, b) on a 2-row input with two distinct (a,b) pairs:
@@ -1436,7 +1436,7 @@ func TestRollupAndCube(t *testing.T) {
 // Source: docs/third_party/googlesql-docs/procedural-language.md
 // "@@time_zone" (system variable section).
 func TestSystemVariableTimeZone(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1463,7 +1463,7 @@ func TestSystemVariableTimeZone(t *testing.T) {
 // "ARRAY_TRANSFORM" reference. The expected output is the input
 // array with the lambda applied per element.
 func TestArrayTransformLambda(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx,
@@ -1495,7 +1495,7 @@ func TestArrayTransformLambda(t *testing.T) {
 // query-syntax.md PIVOT / UNPIVOT sections; the table shapes are
 // taken from the docs' examples.
 func TestPivotAndUnpivot(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// UNPIVOT — fold wide-form columns Q1,Q2 into long form.
@@ -1538,7 +1538,7 @@ func TestPivotAndUnpivot(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "PIVOT" and
 // "UNPIVOT" sections.
 func TestPivotAndUnpivotExtra(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx,
@@ -1589,7 +1589,7 @@ func TestPivotAndUnpivotExtra(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/query-syntax.md "UNNEST" with
 // STRUCT-typed elements.
 func TestArrayUnnestStruct(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `
@@ -1623,7 +1623,7 @@ func TestArrayUnnestStruct(t *testing.T) {
 // TestArrayConcatBetweenLiterals drives FunctionCallNode for
 // ARRAY_CONCAT — uses VARIADIC + non-trivial dispatch.
 func TestArrayConcatBetweenLiterals(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	var n int64
 	if err := db.QueryRowContext(ctx,
@@ -1640,7 +1640,7 @@ func TestArrayConcatBetweenLiterals(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/data-manipulation-language.md
 // "INSERT ... SELECT".
 func TestInsertWithSelect(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx,
 		`CREATE TABLE src (k INT64);
@@ -1664,7 +1664,7 @@ func TestInsertWithSelect(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/data-manipulation-language.md
 // "DELETE".
 func TestDeleteWithSubquery(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx,
 		`CREATE TABLE dt (k INT64);
@@ -1690,7 +1690,7 @@ func TestDeleteWithSubquery(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/expressions.md "Subqueries"
 // section.
 func TestSubqueryExpr(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	t.Run("scalar", func(t *testing.T) {
@@ -1745,7 +1745,7 @@ func TestSubqueryExpr(t *testing.T) {
 // TestSystemVariableSet drives SystemVariableNode read after a SET.
 // Reference: docs/third_party/googlesql-docs/system-variables.md.
 func TestSystemVariableSet(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1772,7 +1772,7 @@ func TestSystemVariableSet(t *testing.T) {
 // Reference: docs/third_party/googlesql-docs/aggregate_functions.md
 // "STRING_AGG" with ORDER BY.
 func TestAggregateModifiers(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	var got string
 	if err := db.QueryRowContext(ctx, `
@@ -1818,7 +1818,7 @@ func TestAnonymizedDPAggregate(t *testing.T) {
 // catalog-internal order, every row gets the _TABLE_SUFFIX synthetic
 // column.
 func TestWildcardTableScan(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1882,7 +1882,7 @@ func TestWildcardTableScan(t *testing.T) {
 // docs/specs/googlesql/information_schema/tables.md (and its
 // testdata YAML). The view returns one row per registered table.
 func TestInformationSchemaTables(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1932,7 +1932,7 @@ func TestInformationSchemaTables(t *testing.T) {
 // which surfaces one row per column with its name and data type.
 // Source: docs/specs/googlesql/information_schema/columns.md.
 func TestInformationSchemaColumns(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -1989,7 +1989,7 @@ func TestInformationSchemaColumns(t *testing.T) {
 // CREATE TABLE in a previously-unseen dataset adds a schema entry.
 // Source: docs/specs/googlesql/information_schema/schemata.md.
 func TestInformationSchemaSchemata(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -2041,7 +2041,7 @@ func TestInformationSchemaSchemata(t *testing.T) {
 // "INFORMATION_SCHEMA.COLUMNS" — ordinal_position is the
 // per-table column index (1-based).
 func TestInformationSchemaColumnsOrdinalPosition(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -2095,7 +2095,7 @@ func TestInformationSchemaColumnsOrdinalPosition(t *testing.T) {
 // column lists the canonical type name); ARRAY columns are formatted
 // "ARRAY<...>" with the inner type in brackets.
 func TestInformationSchemaColumnsArrayType(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -2126,7 +2126,7 @@ func TestInformationSchemaColumnsArrayType(t *testing.T) {
 // TestInformationSchemaColumnsStructType drives the STRUCT branch of
 // infoSchemaDataType.
 func TestInformationSchemaColumnsStructType(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -2158,7 +2158,7 @@ func TestInformationSchemaColumnsStructType(t *testing.T) {
 
 // TestStringAggOrderBy exercises STRING_AGG with an inline ORDER BY
 // clause, which triggers the formatter's emulation path that inserts
-// googlesqlite_order_by(col, asc) markers into the aggregate's
+// test_order_by(col, asc) markers into the aggregate's
 // argument list. Those markers route through bindOrderBy in
 // internal/function_bind.go.
 //
@@ -2169,7 +2169,7 @@ func TestInformationSchemaColumnsStructType(t *testing.T) {
 //	FROM UNNEST(["apple", "pear", "banana", "pear"]) AS fruit;
 //	-> "pear & pear & apple & banana"
 func TestStringAggOrderBy(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	var got string
@@ -2185,7 +2185,7 @@ func TestStringAggOrderBy(t *testing.T) {
 }
 
 // TestStringAggLimit exercises STRING_AGG ... LIMIT N which routes
-// through the formatter's googlesqlite_limit(N) marker — handled by
+// through the formatter's test_limit(N) marker — handled by
 // bindLimit in internal/function_bind.go.
 //
 // Authoritative source / expected value:
@@ -2195,7 +2195,7 @@ func TestStringAggOrderBy(t *testing.T) {
 //	FROM UNNEST(["apple", "pear", "banana", "pear"]) AS fruit;
 //	-> "apple & pear"
 func TestStringAggLimit(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	var got string
@@ -2223,7 +2223,7 @@ func TestStringAggLimit(t *testing.T) {
 //	FROM UNNEST(["apple", "pear", "banana", "pear"]) AS fruit;
 //	-> "pear & banana"
 func TestStringAggDistinctOrderByLimit(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	var got string
@@ -2244,7 +2244,7 @@ func TestStringAggDistinctOrderByLimit(t *testing.T) {
 // Authoritative source: docs/third_party/googlesql-docs/aggregate_functions.md
 // "ARRAY_AGG" section ARRAY_AGG(x ORDER BY x LIMIT N) example.
 func TestArrayAggOrderByLimit(t *testing.T) {
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 
 	// ARRAY_AGG returns an ARRAY<INT64> via the driver — scan into a
@@ -2268,7 +2268,7 @@ func TestArrayAggOrderByLimit(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	now := time.Now()
-	db, ctx := openGooglesqliteTestDB(t)
+	db, ctx := openQueryPortTestDB(t)
 	defer db.Close()
 	floatCmpOpt := cmp.Comparer(func(x, y float64) bool {
 		if x == y {
@@ -2285,7 +2285,7 @@ func TestQuery(t *testing.T) {
 		expectedRows [][]any
 		expectedErr  string
 	}{
-		// Regression test for https://github.com/goccy/googlesqlite/issues/191
+		// Regression test for upstream issue 191
 		{
 			name: "distinct union",
 			query: `WITH toks AS (SELECT true AS x, 1 AS y)
@@ -4327,7 +4327,7 @@ FROM finishers`,
 				{"Suzy Slane", createTimestampFormatFromString("2016-10-18 03:06:24+00"), "F35-39", "Desiree Berry"},
 			},
 		},
-		// Regression test for https://github.com/goccy/googlesqlite/issues/160
+		// Regression test for upstream issue 160
 		{
 			name: "window partitions are distinct from each other",
 			query: `
@@ -4483,7 +4483,7 @@ ORDER BY offset DESC;`,
 				{[]any{int64(1), int64(2), int64(3)}},
 			},
 		},
-		// Regression tests for goccy/googlesqlite#176
+		// Regression tests for upstream issue #176
 		{
 			name: "array scan left outer join",
 			query: `WITH produce AS (select 'lettuce' AS item UNION ALL SELECT 'banana')
@@ -4794,7 +4794,7 @@ FROM
 				},
 			},
 		},
-		// Regression test for goccy/googlesqlite#179
+		// Regression test for upstream issue #179
 		{
 			name: "null array scan",
 			query: `
@@ -5076,7 +5076,7 @@ FROM Produce WHERE Produce.category = 'vegetable' QUALIFY rank <= 3`,
 				{"cabbage", int64(3)},
 			},
 		},
-		// Regression test goccy/googlesqlite#123
+		// Regression test upstream issue #123
 		{
 			name: "qualify without group by / where / having",
 			query: `WITH toks AS (SELECT 1 AS x UNION ALL SELECT 2 AS x)
@@ -5085,7 +5085,7 @@ FROM Produce WHERE Produce.category = 'vegetable' QUALIFY rank <= 3`,
 				{int64(2)},
 			},
 		},
-		// Regression test goccy/googlesqlite#150
+		// Regression test upstream issue #150
 		{
 			name: "qualify group",
 			query: `
@@ -5099,7 +5099,7 @@ FROM Produce WHERE Produce.category = 'vegetable' QUALIFY rank <= 3`,
 			`,
 			expectedRows: [][]any{{"kale", int64(23)}},
 		},
-		// Regression test goccy/googlesqlite#147
+		// Regression test upstream issue #147
 		{
 			name: "subselect qualifier",
 			query: `
@@ -5136,7 +5136,7 @@ SELECT item FROM Produce WHERE Produce.category = 'vegetable' QUALIFY RANK() OVE
 			query:       `SELECT CAST("apple" AS INT64) AS not_a_number`,
 			expectedErr: `failed to analyze: INVALID_ARGUMENT: Could not cast literal "apple" to type INT64 [at 1:13]`,
 		},
-		// Regression test for goccy/googlesqlite#175
+		// Regression test for upstream issue #175
 		{
 			name:        "cast integer to datetime",
 			query:       `WITH toks AS (SELECT "20100317" AS dt) SELECT CAST(dt AS DATETIME) FROM toks;`,
@@ -5785,7 +5785,7 @@ WITH markdown AS (
 				{"<h1>Another heading</h1>"},
 			},
 		},
-		// Regression tests for goccy/googlesqlite#178
+		// Regression tests for upstream issue #178
 		{
 			name:  "regexp_replace quoted",
 			query: `SELECT REGEXP_REPLACE('"quote123"', r'["\d]', '')`,
@@ -6116,7 +6116,7 @@ WITH example AS (
 			expectedRows: [][]any{{"FOO", "BAR", "BAZ", nil}},
 		},
 
-		// Regression tests for goccy/googlesqlite#177
+		// Regression tests for upstream issue #177
 		{
 			name:         "least greatest between string",
 			query:        `SELECT LEAST("a", "b"), GREATEST("a", "b"), "b" BETWEEN "a" AND "c";`,
@@ -8133,7 +8133,7 @@ SELECT * FROM table2;
 }
 
 // createTimestampFormatFromTime renders a time.Time the way the
-// googlesqlite driver scans TIMESTAMP columns into Go any-typed
+// query port driver scans TIMESTAMP columns into Go any-typed
 // destinations: the BigQuery / GoogleSQL canonical UTC textual form
 // ("YYYY-MM-DD HH:MM:SS+00" for instant-second timestamps,
 // "YYYY-MM-DD HH:MM:SS.ffffff+00" when sub-second is non-zero).

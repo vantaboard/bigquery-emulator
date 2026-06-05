@@ -6,7 +6,7 @@
 // `RouteClassifier::Classify` picks the `kSemanticExecutor` route.
 //
 // Today's surface (per
-// `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`) is scalar-only
+// `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`) is scalar-only
 // SELECT: a `ResolvedQueryStmt` whose `query()` is a
 // `ResolvedProjectScan` over a `ResolvedSingleRowScan` (no FROM
 // clause). The executor walks the resolved AST, evaluates each
@@ -37,7 +37,7 @@ namespace semantic {
 // installs cleanly into the coordinator's per-route dispatch
 // table. Beyond the SELECT path the executor also owns the
 // storage-aware DML routes (`backend/engine/semantic/dml/`,
-// `.cursor/plans/googlesqlite-14-dml-system.plan.md`); `storage` is a
+// `.cursor/plans/local-exec-14-dml-system.plan.md`); `storage` is a
 // non-owning pointer passed through from the coordinator and used
 // by the DML path to mutate target tables. `storage` may be null
 // in unit tests that exercise only the SELECT path.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify googlesqlite emulator test failures and emit .cursor/plans/*.plan.md."""
+"""Classify query port emulator test failures and emit .cursor/plans/*.plan.md."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_JSON = (
     REPO_ROOT
-    / "gateway/e2e/testresults/googlesqlite-emulator-20260603T035812Z.json"
+    / "gateway/e2e/testresults/query-port-20260603T035812Z.json"
 )
 PLANS_DIR = REPO_ROOT / ".cursor/plans"
 
@@ -104,7 +104,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         plan_id="01",
         slug="ddl-catalog",
         title="DDL / Catalog / Gateway SQL",
-        goal="Fix unqualified DDL table names, dataset bootstrap, and catalog 404s blocking 14 googlesqlite tests.",
+        goal="Fix unqualified DDL table names, dataset bootstrap, and catalog 404s blocking 14 query port tests.",
         primary_files=[
             "gateway/e2e/emulator_sql.go",
             "backend/engine/control/control_op_executor.cc",
@@ -113,18 +113,18 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         implementation_steps=[
             "Teach `emulator_sql.go` to qualify bare `CREATE TABLE t` as `dataset.table` using the test project default dataset.",
             "Relax or branch `control_op_executor` DDL name parsing so single-segment names accepted when a default dataset is in scope.",
-            "Auto-create datasets referenced by googlesqlite tests before DDL runs (404 `Not found: Dataset …`).",
+            "Auto-create datasets referenced by query port tests before DDL runs (404 `Not found: Dataset …`).",
             "Return BigQuery-shaped success for `CREATE TABLE` / `CREATE TABLE AS` used in test setup.",
             "Add focused unit tests in `control_op_executor_test.cc` for one-segment vs three-segment names.",
         ],
         todo_id="gsql-01-ddl-catalog",
-        todo_content="Qualify DDL names and auto-create datasets for googlesqlite port tests",
+        todo_content="Qualify DDL names and auto-create datasets for query port tests",
     ),
     "02": PlanSpec(
         plan_id="02",
         slug="withscan-cte",
         title="WithScan / CTE Emit",
-        goal="Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 googlesqlite tests.",
+        goal="Implement DuckDB lowering for `ResolvedWithScan` / `ResolvedWithRefScan` to unblock ~58 query port tests.",
         primary_files=[
             "backend/engine/duckdb/transpiler/transpiler.cc",
             "backend/engine/duckdb/transpiler/transpiler.h",
@@ -137,7 +137,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Add conformance fixture asserting `duckdb_native` route for non-recursive CTE.",
             "Re-run plan verify regex; expect `TestJoinVariants` and CTE-heavy `TestQuery` rows to pass.",
         ],
-        dependencies=["googlesqlite-01-ddl-catalog.plan.md"],
+        dependencies=["local-exec-01-ddl-catalog.plan.md"],
         todo_id="gsql-02-withscan-cte",
         todo_content="Implement EmitWithScan/EmitWithRefScan in DuckDB transpiler",
     ),
@@ -157,7 +157,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Regenerate functions table if the repo uses `functions_table_gen.awk`.",
             "Verify `TestQualifyClause`, `TestComputedColumnsInProject`, `TestRecursiveCTE` no longer hit `has no disposition`.",
         ],
-        dependencies=["googlesqlite-01-ddl-catalog.plan.md"],
+        dependencies=["local-exec-01-ddl-catalog.plan.md"],
         todo_id="gsql-03-operator-disposition",
         todo_content="Add disposition rows for internal $-prefixed operators",
     ),
@@ -165,7 +165,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         plan_id="04",
         slug="scan-emits",
         title="Scan Emits (ProjectScan, OrderByScan, …)",
-        goal="Close missing DuckDB emit coverage for core scan nodes blocking ~56 googlesqlite tests.",
+        goal="Close missing DuckDB emit coverage for core scan nodes blocking ~56 query port tests.",
         primary_files=[
             "backend/engine/duckdb/transpiler/transpiler.cc",
             "backend/engine/duckdb/duckdb_executor.cc",
@@ -174,13 +174,13 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         implementation_steps=[
             "Implement or complete `EmitProjectScan` for SELECT-list / computed-column projections.",
             "Implement `EmitOrderByScan`, `EmitLimitOffsetScan`, and `EmitSetOperationScan` where still returning empty SQL.",
-            "Update 501 error strings to cite `googlesqlite-04-scan-emits.plan.md`.",
+            "Update 501 error strings to cite `local-exec-04-scan-emits.plan.md`.",
             "Add one conformance fixture per newly supported scan kind.",
             "Run plan verify regex against `TestQuery` ProjectScan failures.",
         ],
         dependencies=[
-            "googlesqlite-02-withscan-cte.plan.md",
-            "googlesqlite-03-operator-disposition.plan.md",
+            "local-exec-02-withscan-cte.plan.md",
+            "local-exec-03-operator-disposition.plan.md",
         ],
         todo_id="gsql-04-scan-emits",
         todo_content="Implement missing DuckDB scan emit methods",
@@ -189,7 +189,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         plan_id="05",
         slug="arrow-marshaling",
         title="Arrow → BigQuery Result Marshaling",
-        goal="Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 googlesqlite tests.",
+        goal="Fix `arrow_to_bq` failures for anonymous/window column names blocking ~19 query port tests.",
         primary_files=[
             "backend/engine/duckdb/arrow_to_bq.cc",
             "backend/engine/duckdb/duckdb_executor.cc",
@@ -201,7 +201,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Add regression tests for window frame queries that currently fail in `TestWindowVariousFrames`.",
             "Re-verify GROUPING SETS tests that fail with `product_sum` column marshaling errors.",
         ],
-        dependencies=["googlesqlite-04-scan-emits.plan.md"],
+        dependencies=["local-exec-04-scan-emits.plan.md"],
         blocked_by_notes="Some GROUPING SETS tests may still need plan 13 SQL lowering before rows match.",
         todo_id="gsql-05-arrow-marshaling",
         todo_content="Fix arrow_to_bq column naming for window and anonymous columns",
@@ -210,7 +210,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         plan_id="06",
         slug="aggregate-modifiers",
         title="Aggregate Modifiers (ORDER BY / LIMIT / HAVING)",
-        goal="Support BigQuery `array_agg` / `string_agg` modifiers blocking ~8 googlesqlite tests.",
+        goal="Support BigQuery `array_agg` / `string_agg` modifiers blocking ~8 query port tests.",
         primary_files=[
             "backend/engine/duckdb/transpiler/transpiler.cc",
             "backend/engine/duckdb/transpiler/functions.yaml",
@@ -221,7 +221,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Cover dedicated tests: `TestArrayAggLimitOrderBy`, `TestStringAggOrderByLimit`, `TestAggregateModifiers`.",
             "Mirror modifier behavior for matching `TestQuery/array_agg_*` and `TestQuery/string_agg_*` subtests.",
         ],
-        dependencies=["googlesqlite-04-scan-emits.plan.md"],
+        dependencies=["local-exec-04-scan-emits.plan.md"],
         todo_id="gsql-06-aggregate-modifiers",
         todo_content="Emit array_agg/string_agg with ORDER BY and LIMIT modifiers",
     ),
@@ -229,7 +229,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
         plan_id="07",
         slug="semantic-core-expr",
         title="Semantic Core Expressions / Scan Walk",
-        goal="Extend semantic executor scan walk and expression kinds for ~22 googlesqlite tests.",
+        goal="Extend semantic executor scan walk and expression kinds for ~22 query port tests.",
         primary_files=[
             "backend/engine/semantic/eval_expr.cc",
             "backend/engine/semantic/eval_expr.h",
@@ -242,8 +242,8 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Add semantic executor unit tests mirroring failing subtests.",
         ],
         dependencies=[
-            "googlesqlite-05-arrow-marshaling.plan.md",
-            "googlesqlite-06-aggregate-modifiers.plan.md",
+            "local-exec-05-arrow-marshaling.plan.md",
+            "local-exec-06-aggregate-modifiers.plan.md",
         ],
         todo_id="gsql-07-semantic-core-expr",
         todo_content="Semantic scan walk + SubqueryExpr/struct/array expr kinds",
@@ -265,7 +265,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Implement `round` with precision argument in semantic path.",
             "Verify all matching `TestQuery/*operator*` subtests in this bucket.",
         ],
-        dependencies=["googlesqlite-07-semantic-core-expr.plan.md"],
+        dependencies=["local-exec-07-semantic-core-expr.plan.md"],
         todo_id="gsql-08-semantic-operators",
         todo_content="Semantic evaluator for $-prefixed comparison/bitwise operators",
     ),
@@ -285,7 +285,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Phase D: interval helpers (`make_interval`, `justify_*`) and extract functions.",
             "Add focused C++ tests per phase; run plan verify regex after each phase.",
         ],
-        dependencies=["googlesqlite-08-semantic-operators.plan.md"],
+        dependencies=["local-exec-08-semantic-operators.plan.md"],
         todo_id="gsql-09-date-time",
         todo_content="Semantic date/time function registry (phased)",
     ),
@@ -304,7 +304,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Implement hash/encoding: `md5`, `sha1`, `sha256`, `sha512`, `to_base64`, `from_hex`, etc.",
             "Implement `format`, `least`/`greatest`, and remaining single-test string functions from failure list.",
         ],
-        dependencies=["googlesqlite-09-date-time.plan.md"],
+        dependencies=["local-exec-09-date-time.plan.md"],
         todo_id="gsql-10-string-hash-format",
         todo_content="Semantic string, regex, hash, and format functions",
     ),
@@ -323,7 +323,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Implement `parse_json`, `to_json`, `to_json_string`, and JSON type helpers (`json_bool`, `json_int64`, …).",
             "Match BigQuery NULL and empty-array edge cases from `TestQuery/json_*` subtests.",
         ],
-        dependencies=["googlesqlite-10-string-hash-format.plan.md"],
+        dependencies=["local-exec-10-string-hash-format.plan.md"],
         todo_id="gsql-11-json",
         todo_content="Semantic JSON function family",
     ),
@@ -343,7 +343,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Fix semantic UNNEST / `WITH OFFSET` paths (`TestUnnestWithOffset`, `TestArrayTransformLambda`).",
             "Verify array literal concat and struct-array tests from failure list.",
         ],
-        dependencies=["googlesqlite-11-json.plan.md"],
+        dependencies=["local-exec-11-json.plan.md"],
         todo_id="gsql-12-arrays-generators",
         todo_content="Semantic array generators and UNNEST paths",
     ),
@@ -362,7 +362,7 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Fix recursive CTE evaluation (`TestRecursiveCTE`, `TestWithRecursiveSelfReferential`).",
             "Re-run tests that failed on arrow marshaling for grouping aggregates after SQL is correct.",
         ],
-        dependencies=["googlesqlite-12-arrays-generators.plan.md"],
+        dependencies=["local-exec-12-arrays-generators.plan.md"],
         blocked_by_notes="Re-verify plan 05 failures after this plan lands.",
         todo_id="gsql-13-advanced-relational",
         todo_content="GROUPING SETS, PIVOT, recursive CTE lowering",
@@ -382,9 +382,9 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Support multi-statement scripts or sequential exec in `emulator_sql.go` for CREATE+INSERT patterns.",
             "Implement UPDATE/DELETE/INSERT paths used by dedicated DML tests.",
             "Recognize `@@time_zone` and related system variables (`TestSystemVariableSet`, `TestSystemVariableTimeZone`).",
-            "Expose information_schema tables for googlesqlite catalog introspection tests.",
+            "Expose information_schema tables for query port catalog introspection tests.",
         ],
-        dependencies=["googlesqlite-13-advanced-relational.plan.md"],
+        dependencies=["local-exec-13-advanced-relational.plan.md"],
         todo_id="gsql-14-dml-system",
         todo_content="DML executor, system variables, information_schema",
     ),
@@ -402,9 +402,9 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Replace legacy specialized-feature plan references in 501 messages with this plan.",
             "For each failing specialized family, choose local_impl vs local_stub vs unsupported per test expectation.",
             "Implement or stub `net.*` functions referenced by `TestQuery/net_*` subtests.",
-            "Wire CREATE FUNCTION / temp function tests to udf routing or explicit unsupported errors matching googlesqlite expectations.",
+            "Wire CREATE FUNCTION / temp function tests to udf routing or explicit unsupported errors matching query port expectations.",
         ],
-        dependencies=["googlesqlite-14-dml-system.plan.md"],
+        dependencies=["local-exec-14-dml-system.plan.md"],
         todo_id="gsql-15-specialized-stubs",
         todo_content="Specialized/NET/UDF policy and minimal implementations",
     ),
@@ -421,9 +421,9 @@ PLAN_SPECS: dict[str, PlanSpec] = {
             "Fix `sql.NullInt64` scanning: return NULL as sql.NullInt64 valid=false instead of bare int64.",
             "Fix LIMIT/OFFSET result delivery (`TestLimitOffset`).",
             "Fix EXISTS/IN/subquery tests returning empty result sets when rows expected.",
-            "Sweep any tests still failing after plans 01–15; re-baseline with `run_googlesqlite_emulator_tests.sh`.",
+            "Sweep any tests still failing after plans 01–15; re-baseline with `run_query_port_tests.sh`.",
         ],
-        dependencies=["googlesqlite-15-specialized-stubs.plan.md"],
+        dependencies=["local-exec-15-specialized-stubs.plan.md"],
         blocked_by_notes="Run last; some tests here may clear earlier once upstream plans land.",
         todo_id="gsql-16-result-fixes",
         todo_content="emulator_sql type mapping and empty-result semantic bugs",
@@ -536,7 +536,7 @@ def extract_root_causes(
             line = line.strip()
             if not line or line.startswith("==="):
                 continue
-            if "googlesqlite_query_test.go:" in line or "transpiler" in line:
+            if "query_port_test.go:" in line or "transpiler" in line:
                 msg = line
                 if len(msg) > 200:
                     msg = msg[:197] + "..."
@@ -576,7 +576,7 @@ def render_plan_markdown(
 
     lines: list[str] = [
         "---",
-        f"name: googlesqlite-{spec.plan_id}-{spec.slug}",
+        f"name: local-exec-{spec.plan_id}-{spec.slug}",
         f"overview: {yaml_quote(spec.goal)}",
         "todos:",
         "  - id: " + spec.todo_id,
@@ -585,7 +585,7 @@ def render_plan_markdown(
         "isProject: false",
         "---",
         "",
-        f"# googlesqlite {spec.plan_id}: {spec.title}",
+        f"# query port {spec.plan_id}: {spec.title}",
         "",
         "## Goal",
         "",
@@ -635,7 +635,7 @@ def render_plan_markdown(
         "## Done when",
         "",
         f"- All {test_count} tests listed below pass.",
-        f"- `./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh` fail count drops by ~{test_count}.",
+        f"- `./gateway/e2e/testresults/run_query_port_tests.sh` fail count drops by ~{test_count}.",
         "",
         "## Failing tests",
         "",
@@ -656,8 +656,8 @@ def render_index(
     order = [f"{i:02d}" for i in range(1, 17)]
     lines = [
         "---",
-        "name: googlesqlite-00-index",
-        'overview: "Sequential index for fixing 568 googlesqlite emulator port failures (baseline 20260603T035812Z)"',
+        "name: local-exec-00-index",
+        'overview: "Sequential index for fixing 568 query port emulator failures (baseline 20260603T035812Z)"',
         "todos:",
     ]
     for pid in order:
@@ -665,24 +665,24 @@ def render_index(
         n = len(buckets.get(pid, []))
         lines += [
             f"  - id: gsql-index-{pid}",
-            f"    content: {yaml_quote(f'Execute googlesqlite-{pid}-{spec.slug}.plan.md ({n} tests)')}",
+            f"    content: {yaml_quote(f'Execute local-exec-{pid}-{spec.slug}.plan.md ({n} tests)')}",
             "    status: pending",
         ]
     lines += ["isProject: false", "---", ""]
     lines += [
-        "# googlesqlite Emulator Conformance Index",
+        "# query port Emulator Conformance Index",
         "",
         "## Goal",
         "",
-        "Drive the ported googlesqlite query suite to green by executing plans "
+        "Drive the ported query port suite to green by executing plans "
         "01→16 in order. Each plan owns a failure theme from the baseline run.",
         "",
         "## Baseline",
         "",
         f"- Stamp: `{baseline_stamp}`",
         f"- pass={pass_count} fail={fail_count} skip={skip_count}",
-        "- Summary: [`gateway/e2e/testresults/googlesqlite-emulator-20260603T035812Z-summary.txt`](../../gateway/e2e/testresults/googlesqlite-emulator-20260603T035812Z-summary.txt)",
-        "- Re-run: [`gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh`](../../gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh)",
+        "- Summary: [`gateway/e2e/testresults/query-port-20260603T035812Z-summary.txt`](../../gateway/e2e/testresults/query-port-20260603T035812Z-summary.txt)",
+        "- Re-run: [`gateway/e2e/testresults/run_query_port_tests.sh`](../../gateway/e2e/testresults/run_query_port_tests.sh)",
         "",
         "## Execution order",
         "",
@@ -690,7 +690,7 @@ def render_index(
     for pid in order:
         spec = PLAN_SPECS[pid]
         n = len(buckets.get(pid, []))
-        fname = f"googlesqlite-{pid}-{spec.slug}.plan.md"
+        fname = f"local-exec-{pid}-{spec.slug}.plan.md"
         lines.append(
             f"{int(pid)}. [`{fname}`]({fname}) — {spec.title} (~{n} tests)"
         )
@@ -699,14 +699,14 @@ def render_index(
         "## Global verify",
         "",
         "```bash",
-        "./gateway/e2e/testresults/run_googlesqlite_emulator_tests.sh",
+        "./gateway/e2e/testresults/run_query_port_tests.sh",
         "```",
         "",
         "## Regenerate plan test lists",
         "",
         "```bash",
-        "python3 tools/googlesqlite/plan_from_testresults.py \\",
-        "  --json gateway/e2e/testresults/googlesqlite-emulator-latest.json \\",
+        "python3 tools/local_exec/plan_from_testresults.py \\",
+        "  --json gateway/e2e/testresults/query-port-latest.json \\",
         "  --emit-plans",
         "```",
         "",
@@ -783,7 +783,7 @@ def main() -> None:
     parser.add_argument(
         "--emit-plans",
         action="store_true",
-        help="Write .cursor/plans/googlesqlite-*.plan.md files",
+        help="Write .cursor/plans/local-exec-*.plan.md files",
     )
     parser.add_argument(
         "--plan",
@@ -820,11 +820,11 @@ def main() -> None:
         if not summary_path.exists():
             summary_path = (
                 REPO_ROOT
-                / "gateway/e2e/testresults/googlesqlite-emulator-20260603T035812Z-summary.txt"
+                / "gateway/e2e/testresults/query-port-20260603T035812Z-summary.txt"
             )
         pass_c, fail_c, skip_c = parse_summary_counts(summary_path)
 
-        index_path = PLANS_DIR / "googlesqlite-00-index.plan.md"
+        index_path = PLANS_DIR / "local-exec-00-index.plan.md"
         index_path.write_text(
             render_index(buckets, args.stamp, pass_c, fail_c, skip_c),
             encoding="utf-8",
@@ -833,7 +833,7 @@ def main() -> None:
 
         for pid, spec in PLAN_SPECS.items():
             tests = buckets.get(pid, [])
-            out_path = PLANS_DIR / f"googlesqlite-{pid}-{spec.slug}.plan.md"
+            out_path = PLANS_DIR / f"local-exec-{pid}-{spec.slug}.plan.md"
             out_path.write_text(
                 render_plan_markdown(spec, tests, outputs, args.stamp),
                 encoding="utf-8",
