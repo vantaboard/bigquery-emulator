@@ -173,18 +173,19 @@ func (s *MetadataStore) DeleteTablesInDataset(projectID, datasetID string) {
 // read.
 func stripEngineOwnedTableFields(t bqtypes.Table) bqtypes.Table {
 	return bqtypes.Table{
-		FriendlyName:           t.FriendlyName,
-		Description:            t.Description,
-		Labels:                 t.Labels,
-		ExpirationTime:         t.ExpirationTime,
-		RangePartitioning:      t.RangePartitioning,
-		TimePartitioning:       t.TimePartitioning,
-		Clustering:             t.Clustering,
-		DefaultCollation:       t.DefaultCollation,
-		Type:                   t.Type,
-		View:                   t.View,
-		MaterializedView:       t.MaterializedView,
-		RequirePartitionFilter: t.RequirePartitionFilter,
+		FriendlyName:              t.FriendlyName,
+		Description:               t.Description,
+		Labels:                    t.Labels,
+		ExpirationTime:            t.ExpirationTime,
+		RangePartitioning:         t.RangePartitioning,
+		TimePartitioning:          t.TimePartitioning,
+		Clustering:                t.Clustering,
+		DefaultCollation:          t.DefaultCollation,
+		Type:                      t.Type,
+		View:                      t.View,
+		MaterializedView:          t.MaterializedView,
+		RequirePartitionFilter:    t.RequirePartitionFilter,
+		ExternalDataConfiguration: t.ExternalDataConfiguration,
 	}
 }
 
@@ -243,6 +244,9 @@ func applyTableMetadataOverlay(base bqtypes.Table, overlay bqtypes.Table) bqtype
 	if overlay.RequirePartitionFilter != nil {
 		base.RequirePartitionFilter = overlay.RequirePartitionFilter
 	}
+	if overlay.ExternalDataConfiguration != nil {
+		base.ExternalDataConfiguration = overlay.ExternalDataConfiguration
+	}
 	return base
 }
 
@@ -287,6 +291,9 @@ func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
 	}
 	if patch.RequirePartitionFilter != nil {
 		base.RequirePartitionFilter = patch.RequirePartitionFilter
+	}
+	if patch.ExternalDataConfiguration != nil {
+		base.ExternalDataConfiguration = patch.ExternalDataConfiguration
 	}
 	return base
 }

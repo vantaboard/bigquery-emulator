@@ -1,0 +1,233 @@
+// Package external materializes BigQuery external tables into the
+// engine catalog by fetching GCS (fake-gcs) sources and bulk-inserting
+// parsed rows. Google Sheets sources return a structured unsupported
+// error per plan 07.
+package external
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/load"
+	"github.com/vantaboard/bigquery-emulator/gateway/seed"
+)
+
+// TempDatasetID is the internal dataset ephemeral tableDefinitions are
+// registered under when the query omits defaultDataset. The gateway
+// sets this as default_dataset_id on the engine QueryRequest so
+// unqualified table ids in SQL resolve.
+const TempDatasetID = "_bq_external_temp"
+
+// ErrGoogleSheetsUnsupported is returned when external config references
+// Google Sheets (sourceFormat or googleSheetsOptions).
+var ErrGoogleSheetsUnsupported = errors.New(
+	"google Sheets external tables are not supported by the BigQuery emulator; " +
+		"use GCS-backed external tables (CSV / NEWLINE_DELIMITED_JSON / PARQUET) instead")
+
+// Target names a catalog table to materialize.
+type Target struct {
+	ProjectID string
+	DatasetID string
+	TableID   string
+	// Schema from the enclosing Table resource; wins over config.Schema
+	// when both are set (permanent external table inserts).
+	Schema *bqtypes.TableSchema
+}
+
+// Materialize fetches external source bytes, parses them, and registers
+// the destination table with rows in the engine catalog (WRITE_TRUNCATE).
+func Materialize(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	target Target,
+	cfg *bqtypes.ExternalDataConfiguration,
+) error {
+	if catalog == nil {
+		return errors.New("external: nil CatalogClient")
+	}
+	if cfg == nil {
+		return errors.New("external: externalDataConfiguration is required")
+	}
+	if err := checkSupported(cfg); err != nil {
+		return err
+	}
+	if target.ProjectID == "" || target.DatasetID == "" || target.TableID == "" {
+		return errors.New("external: project, dataset, and table id are required")
+	}
+
+	schema := target.Schema
+	if schema == nil {
+		schema = cfg.Schema
+	}
+	skip := 0
+	if cfg.CsvOptions != nil {
+		skip = cfg.CsvOptions.SkipLeadingRows()
+	}
+
+	parsed, err := fetchAndParse(ctx, cfg, schema, skip)
+	if err != nil {
+		return err
+	}
+	return registerParsedRows(ctx, catalog, target, schema, parsed)
+}
+
+func registerParsedRows(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	target Target,
+	fallbackSchema *bqtypes.TableSchema,
+	parsed load.ParsedRows,
+) error {
+	protoSchema := schemaToProto(parsed.Schema)
+	if protoSchema == nil {
+		protoSchema = schemaToProto(fallbackSchema)
+	}
+	if protoSchema == nil || len(protoSchema.GetFields()) == 0 {
+		return errors.New("external table requires schema or autodetect=true for CSV")
+	}
+	if err := ensureDataset(ctx, catalog, target.ProjectID, target.DatasetID); err != nil {
+		return err
+	}
+	tableRef := &enginepb.TableRef{
+		ProjectId: target.ProjectID,
+		DatasetId: target.DatasetID,
+		TableId:   target.TableID,
+	}
+	if tableExists(ctx, catalog, tableRef) {
+		if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
+			return fmt.Errorf("external drop table: %w", err)
+		}
+	}
+	if _, err := catalog.RegisterTable(ctx, &enginepb.RegisterTableRequest{
+		Table:  tableRef,
+		Schema: protoSchema,
+	}); err != nil {
+		return fmt.Errorf("external register table: %w", err)
+	}
+	ref := seed.TableRef{
+		ProjectID: target.ProjectID,
+		DatasetID: target.DatasetID,
+		TableID:   target.TableID,
+	}
+	applier := seed.NewCatalogApplier(catalog)
+	if _, err := applier.InsertRows(ctx, ref, protoSchema, parsed.Rows); err != nil {
+		return fmt.Errorf("external insert rows: %w", err)
+	}
+	return nil
+}
+
+// PrepareTableDefinitions materializes every ephemeral external table in
+// defs. Returns the default dataset id the caller should forward to the
+// engine when the query omitted defaultDataset.
+func PrepareTableDefinitions(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	projectID string,
+	defs map[string]bqtypes.ExternalDataConfiguration,
+	defaultDataset string,
+) (string, error) {
+	if len(defs) == 0 {
+		return defaultDataset, nil
+	}
+	ds := defaultDataset
+	if ds == "" {
+		ds = TempDatasetID
+	}
+	for tableID, cfg := range defs {
+		cfgCopy := cfg
+		if err := Materialize(ctx, catalog, Target{
+			ProjectID: projectID,
+			DatasetID: ds,
+			TableID:   tableID,
+			Schema:    cfg.Schema,
+		}, &cfgCopy); err != nil {
+			return "", err
+		}
+	}
+	if defaultDataset == "" {
+		return TempDatasetID, nil
+	}
+	return defaultDataset, nil
+}
+
+func checkSupported(cfg *bqtypes.ExternalDataConfiguration) error {
+	if strings.EqualFold(strings.TrimSpace(cfg.SourceFormat), "GOOGLE_SHEETS") {
+		return ErrGoogleSheetsUnsupported
+	}
+	if cfg.GoogleSheetsOptions != nil {
+		return ErrGoogleSheetsUnsupported
+	}
+	for _, uri := range cfg.SourceURIs {
+		if strings.Contains(uri, "docs.google.com/spreadsheets") {
+			return ErrGoogleSheetsUnsupported
+		}
+	}
+	if len(cfg.SourceURIs) == 0 {
+		return errors.New("external table requires at least one sourceUri")
+	}
+	return nil
+}
+
+func fetchAndParse(
+	ctx context.Context,
+	cfg *bqtypes.ExternalDataConfiguration,
+	schema *bqtypes.TableSchema,
+	skipLeading int,
+) (load.ParsedRows, error) {
+	var parsed load.ParsedRows
+	for i, uri := range cfg.SourceURIs {
+		data, err := load.FetchSource(ctx, uri)
+		if err != nil {
+			return load.ParsedRows{}, err
+		}
+		chunk, err := load.ParseSource(cfg.SourceFormat, data, schema, skipLeading, cfg.Autodetect)
+		if err != nil {
+			return load.ParsedRows{}, err
+		}
+		if i == 0 {
+			parsed = chunk
+		} else {
+			parsed.Rows = append(parsed.Rows, chunk.Rows...)
+		}
+	}
+	return parsed, nil
+}
+
+func ensureDataset(ctx context.Context, catalog enginepb.CatalogClient, projectID, datasetID string) error {
+	applier := seed.NewCatalogApplier(catalog)
+	_, err := applier.EnsureDataset(ctx, projectID, datasetID, "US")
+	return err
+}
+
+func tableExists(ctx context.Context, catalog enginepb.CatalogClient, ref *enginepb.TableRef) bool {
+	_, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: ref})
+	return err == nil
+}
+
+func schemaToProto(s *bqtypes.TableSchema) *enginepb.TableSchema {
+	if s == nil {
+		return nil
+	}
+	out := &enginepb.TableSchema{Fields: make([]*enginepb.FieldSchema, 0, len(s.Fields))}
+	for i := range s.Fields {
+		out.Fields = append(out.Fields, fieldToProto(s.Fields[i]))
+	}
+	return out
+}
+
+func fieldToProto(f bqtypes.TableFieldSchema) *enginepb.FieldSchema {
+	out := &enginepb.FieldSchema{
+		Name:        f.Name,
+		Type:        f.Type,
+		Mode:        f.Mode,
+		Description: f.Description,
+	}
+	for i := range f.Fields {
+		out.Fields = append(out.Fields, fieldToProto(f.Fields[i]))
+	}
+	return out
+}

@@ -124,6 +124,11 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if req.DefaultDataset != nil {
 		defaultDataset = req.DefaultDataset.DatasetID
 	}
+	defaultDataset, extErr := prepareQueryExternalTables(
+		r.Context(), deps, projectID, req.TableDefinitions, defaultDataset)
+	if writeExternalTableError(w, extErr) {
+		return
+	}
 
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
@@ -184,9 +189,9 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	projectID := r.PathValue("projectId")
 
-	defaultDataset := ""
-	if req.DefaultDataset != nil {
-		defaultDataset = req.DefaultDataset.DatasetID
+	defaultDataset, ok := queryDefaultDatasetForExecute(deps, w, r, projectID, req)
+	if !ok {
+		return
 	}
 
 	engineReq := &enginepb.QueryRequest{

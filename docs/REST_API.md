@@ -60,6 +60,24 @@ omit the host and use `{x}` for path variables.
 | `tables.setIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy` | wired | [`gateway/handlers/tables.go::TableSetIamPolicy`][tables] |
 | `tables.testIamPermissions` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions` | wired | [`gateway/handlers/tables.go::TableTestIamPermissions`][tables] |
 
+**External tables (plan 07):** `tables.insert` accepts
+`externalDataConfiguration` (`sourceUris`, `sourceFormat`, `schema`,
+`csvOptions`, …). Supported GCS formats (`CSV`, `NEWLINE_DELIMITED_JSON`,
+`PARQUET`, …) are fetched via fake-gcs (`STORAGE_EMULATOR_HOST` /
+`FAKE_GCS_PORT`, same as LOAD jobs) and materialized into the engine
+catalog at insert time; `externalDataConfiguration` round-trips through
+the gateway [`MetadataStore`][metadata-store] on GET/PATCH/UPDATE.
+`type` defaults to `EXTERNAL`. Google Sheets (`GOOGLE_SHEETS` /
+`googleSheetsOptions`) returns **501** with a clear message.
+
+Query-time ephemeral external tables use `tableDefinitions` on
+`jobs.query` and `configuration.query` (jobs.insert). When the query
+omits `defaultDataset`, definitions are registered under internal dataset
+`_bq_external_temp` and that dataset is forwarded as
+`default_dataset_id` so unqualified table ids in SQL resolve.
+
+[metadata-store]: ../gateway/handlers/metadata_store.go
+
 ### Tabledata (`bigquery.tabledata.*`)
 
 | Method | Path | Status | Handler |
@@ -100,7 +118,7 @@ separate `tables.undelete` RPC.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `jobs.query` | `POST /bigquery/v2/projects/{projectId}/queries` | wired | [`gateway/handlers/queries.go::QueryRun`][queries] |
+| `jobs.query` | `POST /bigquery/v2/projects/{projectId}/queries` | done (incl. `tableDefinitions`) | [`gateway/handlers/queries.go::QueryRun`][queries] |
 | `jobs.getQueryResults` | `GET /bigquery/v2/projects/{projectId}/queries/{jobId}` | wired | [`gateway/handlers/queries.go::QueryGetResults`][queries] |
 
 ### Models (`bigquery.models.*`)

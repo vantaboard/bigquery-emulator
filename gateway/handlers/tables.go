@@ -31,6 +31,10 @@ const viewTableType = "VIEW"
 // definition (see QueryMaterializedViewIT).
 const materializedViewTableType = "MATERIALIZED_VIEW"
 
+// externalTableType is the BigQuery REST type string for GCS-backed
+// external tables (tables.insert with externalDataConfiguration).
+const externalTableType = "EXTERNAL"
+
 // tableIDFromPath returns the {projectId}/{datasetId}/{tableId}
 // triple captured by the route pattern. It strips any AIP-136 custom-
 // method suffix (e.g. ":getIamPolicy") from the tableId so the same
@@ -195,6 +199,12 @@ func TableList(deps Dependencies) http.HandlerFunc {
 			); ok && overlay.Labels != nil {
 				labels = overlay.Labels
 			}
+			tableType := defaultTableType
+			if overlay, ok := deps.Metadata.GetTable(
+				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
+			); ok && overlay.Type != "" {
+				tableType = overlay.Type
+			}
 			items = append(items, map[string]any{
 				"kind": tableKind,
 				"id": ref.GetProjectId() + ":" + ref.GetDatasetId() +
@@ -204,7 +214,7 @@ func TableList(deps Dependencies) http.HandlerFunc {
 					DatasetID: ref.GetDatasetId(),
 					TableID:   ref.GetTableId(),
 				},
-				"type":   defaultTableType,
+				"type":   tableType,
 				"labels": labels,
 			})
 		}
@@ -247,15 +257,18 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if !populateViewSchema(w, deps, r, projectID, &t) {
 			return
 		}
-		_, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
+		if t.ExternalDataConfiguration != nil {
+			if !insertExternalTable(w, r, deps, projectID, datasetID, tableID, &t) {
+				return
+			}
+		} else if _, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
 			Table: &enginepb.TableRef{
 				ProjectId: projectID,
 				DatasetId: datasetID,
 				TableId:   tableID,
 			},
 			Schema: schemaToProto(t.Schema),
-		})
-		if grpcToHTTPError(w, err) {
+		}); grpcToHTTPError(w, err) {
 			return
 		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)

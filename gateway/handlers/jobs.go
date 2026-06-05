@@ -370,9 +370,18 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	if cfg.Query.UseLegacySQL != nil {
 		useLegacy = *cfg.Query.UseLegacySQL
 	}
+	defaultDataset := defaultDatasetID(cfg.Query.DefaultDataset)
+	defaultDataset, extErr := prepareQueryExternalTables(
+		r.Context(), deps, projectID, cfg.Query.TableDefinitions, defaultDataset)
+	if extErr != nil {
+		start := time.Now().UTC()
+		finalizeFailedJob(deps, job, start, extErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
-		DefaultDatasetId: defaultDatasetID(cfg.Query.DefaultDataset),
+		DefaultDatasetId: defaultDataset,
 		Sql:              cfg.Query.Query,
 		UseLegacySql:     useLegacy,
 		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),
@@ -409,9 +418,18 @@ func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.
 	if cfg.Query.UseLegacySQL != nil {
 		useLegacy = *cfg.Query.UseLegacySQL
 	}
+	defaultDataset := defaultDatasetID(cfg.Query.DefaultDataset)
+	defaultDataset, extErr := prepareQueryExternalTables(
+		r.Context(), deps, projectID, cfg.Query.TableDefinitions, defaultDataset)
+	if extErr != nil {
+		start := time.Now().UTC()
+		finalizeFailedJob(deps, job, start, extErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
-		DefaultDatasetId: defaultDatasetID(cfg.Query.DefaultDataset),
+		DefaultDatasetId: defaultDataset,
 		Sql:              cfg.Query.Query,
 		UseLegacySql:     useLegacy,
 		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),

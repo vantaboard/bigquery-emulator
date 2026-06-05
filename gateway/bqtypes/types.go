@@ -8,6 +8,12 @@
 // expanded inline.
 package bqtypes
 
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+)
+
 // DatasetReference is a stable handle to a dataset.
 type DatasetReference struct {
 	ProjectID string `json:"projectId"`
@@ -131,6 +137,79 @@ type Table struct {
 	// infer the catalog schema when the client omits an explicit
 	// TableSchema (see QueryMaterializedViewIT).
 	MaterializedView *MaterializedViewDefinition `json:"materializedView,omitempty"`
+	// ExternalDataConfiguration describes a table backed by data
+	// outside the emulator catalog (GCS CSV/JSON/Parquet, ...).
+	// Persisted in the gateway MetadataStore and materialized into
+	// the engine catalog at insert/query time for supported formats.
+	ExternalDataConfiguration *ExternalDataConfiguration `json:"externalDataConfiguration,omitempty"`
+}
+
+// ExternalDataConfiguration mirrors the BigQuery REST external data
+// source object. See docs/bigquery/docs/reference/rest/v2/tables.md.
+type ExternalDataConfiguration struct {
+	SourceURIs          []string             `json:"sourceUris,omitempty"`
+	SourceFormat        string               `json:"sourceFormat,omitempty"`
+	Autodetect          bool                 `json:"autodetect,omitempty"`
+	Schema              *TableSchema         `json:"schema,omitempty"`
+	CsvOptions          *CsvOptions          `json:"csvOptions,omitempty"`
+	GoogleSheetsOptions *GoogleSheetsOptions `json:"googleSheetsOptions,omitempty"`
+	IgnoreUnknownValues bool                 `json:"ignoreUnknownValues,omitempty"`
+	MaxBadRecords       int                  `json:"maxBadRecords,omitempty"`
+	Compression         string               `json:"compression,omitempty"`
+}
+
+// CsvOptions is the csvOptions sub-object of ExternalDataConfiguration.
+type CsvOptions struct {
+	FieldDelimiter      string `json:"fieldDelimiter,omitempty"`
+	Quote               string `json:"quote,omitempty"`
+	Encoding            string `json:"encoding,omitempty"`
+	AllowJaggedRows     bool   `json:"allowJaggedRows,omitempty"`
+	AllowQuotedNewlines bool   `json:"allowQuotedNewlines,omitempty"`
+	skipLeadingRows     int
+}
+
+// SkipLeadingRows returns the number of leading CSV rows to skip.
+func (o *CsvOptions) SkipLeadingRows() int {
+	if o == nil {
+		return 0
+	}
+	return o.skipLeadingRows
+}
+
+// UnmarshalJSON accepts skipLeadingRows as JSON number or decimal string.
+func (o *CsvOptions) UnmarshalJSON(data []byte) error {
+	type alias CsvOptions
+	var raw struct {
+		alias
+		SkipLeadingRows any `json:"skipLeadingRows,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*o = CsvOptions(raw.alias)
+	if raw.SkipLeadingRows == nil {
+		return nil
+	}
+	switch v := raw.SkipLeadingRows.(type) {
+	case float64:
+		o.skipLeadingRows = int(v)
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("csvOptions.skipLeadingRows: %w", err)
+		}
+		o.skipLeadingRows = n
+	default:
+		return fmt.Errorf("csvOptions.skipLeadingRows: unsupported type %T", v)
+	}
+	return nil
+}
+
+// GoogleSheetsOptions is the googleSheetsOptions sub-object. The emulator
+// does not implement the Sheets API; presence of this block triggers 501.
+type GoogleSheetsOptions struct {
+	SkipLeadingRows int    `json:"skipLeadingRows,omitempty"`
+	Range           string `json:"range,omitempty"`
 }
 
 // ViewDefinition is the BigQuery REST view sub-object. See
@@ -220,6 +299,10 @@ type QueryRequest struct {
 	JobCreationMode    string               `json:"jobCreationMode,omitempty"`
 	JobTimeoutMs       string               `json:"jobTimeoutMs,omitempty"`
 	Reservation        string               `json:"reservation,omitempty"`
+	// TableDefinitions maps ephemeral external table ids to their
+	// ExternalDataConfiguration for this query (temporary external
+	// tables). Mirrors JobConfigurationQuery.tableDefinitions.
+	TableDefinitions map[string]ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
 }
 
 // QueryResponse is the body of POST /bigquery/v2/projects/{projectId}/queries.

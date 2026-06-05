@@ -107,11 +107,12 @@ type JobConfiguration struct {
 // modelled; the long tail (destination table, scheduling, encryption,
 // ...) is deferred until a handler reads them.
 type JobConfigurationQuery struct {
-	Query           string                    `json:"query"`
-	DefaultDataset  *bqtypes.DatasetReference `json:"defaultDataset,omitempty"`
-	UseLegacySQL    *bool                     `json:"useLegacySql,omitempty"`
-	ParameterMode   string                    `json:"parameterMode,omitempty"`
-	QueryParameters []bqtypes.QueryParameter  `json:"queryParameters,omitempty"`
+	Query            string                                       `json:"query"`
+	DefaultDataset   *bqtypes.DatasetReference                    `json:"defaultDataset,omitempty"`
+	UseLegacySQL     *bool                                        `json:"useLegacySql,omitempty"`
+	ParameterMode    string                                       `json:"parameterMode,omitempty"`
+	QueryParameters  []bqtypes.QueryParameter                     `json:"queryParameters,omitempty"`
+	TableDefinitions map[string]bqtypes.ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
 }
 
 // JobConfigurationLoad is the per-load slice of a JobConfiguration.
