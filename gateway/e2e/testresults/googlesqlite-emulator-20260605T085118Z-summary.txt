@@ -1,0 +1,14 @@
+pass=697 fail=8 skip=2
+
+Failed tests:
+  TestQuery/percentile_disc_with_respect_nulls
+  TestQuery/window_dense_rank_with_group
+  TestQuery/row_number_nest
+  TestQuery/window_partitions_are_distinct_from_each_other
+  TestQuery/parse_bignumeric
+  TestQuery/json_value_subscript_operator
+  TestQuery
+
+Skipped tests:
+  TestFilterFieldsProto
+  TestAnonymizedDPAggregate

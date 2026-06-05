@@ -19,7 +19,7 @@ import (
 // Exercises the full REST -> gRPC -> Query.ExecuteQuery -> semantic
 // executor path plus the gateway's per-process job registry that
 // backs the synchronous query API. After
-// `semantic-executor-core.plan.md` landed the route classifier
+// `googlesqlite-07-semantic-core-expr.plan.md` landed the route classifier
 // promotes scalar-only SELECT to the local semantic executor, so
 // `SELECT 1` returns the same wire envelope the DuckDB fast path
 // would have produced for the same query.

@@ -1,0 +1,26 @@
+pass=685 fail=20 skip=2
+
+Failed tests:
+  TestQuery/array_concat_agg
+  TestQuery/array_concat_agg_with_null_in_order_by
+  TestQuery/array_concat_agg_with_limt
+  TestQuery/string_agg_with_distinct
+  TestQuery/percentile_disc_with_respect_nulls
+  TestQuery/window_dense_rank_with_group
+  TestQuery/row_number_nest
+  TestQuery/window_partitions_are_distinct_from_each_other
+  TestQuery/group_by_rollup_with_one_column
+  TestQuery/cast_string_to_int64_-_leading_zeros
+  TestQuery/to_code_points_with_string_value
+  TestQuery/minimum_/_maximum_timestamp_value_uses_microsecond_precision_and_range
+  TestQuery/extract_from_timestamp
+  TestQuery/parse_bignumeric
+  TestQuery/json_value_subscript_operator
+  TestQuery/json_type
+  TestQuery/multiple_statements_with_named_params
+  TestQuery/multiple_statements_with_positional_params
+  TestQuery
+
+Skipped tests:
+  TestFilterFieldsProto
+  TestAnonymizedDPAggregate

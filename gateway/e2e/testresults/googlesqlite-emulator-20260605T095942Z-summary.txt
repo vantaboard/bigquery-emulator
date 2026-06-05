@@ -1,0 +1,10 @@
+pass=701 fail=4 skip=2
+
+Failed tests:
+  TestQuery/sum_with_window
+  TestQuery/sum_with_window_and_distinct
+  TestQuery
+
+Skipped tests:
+  TestFilterFieldsProto
+  TestAnonymizedDPAggregate

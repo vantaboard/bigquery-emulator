@@ -1,0 +1,13 @@
+pass=698 fail=7 skip=2
+
+Failed tests:
+  TestQuery/window_partitions_are_distinct_from_each_other
+  TestQuery/except#01
+  TestQuery/subquery_expr_with_scalar_type_at_WHERE
+  TestQuery/subquery_expr_with_scalar_type_at_HAVING
+  TestQuery/subquery_expr_with_in_type
+  TestQuery
+
+Skipped tests:
+  TestFilterFieldsProto
+  TestAnonymizedDPAggregate

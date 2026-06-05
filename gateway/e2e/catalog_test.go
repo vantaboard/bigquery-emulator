@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +117,10 @@ type emulatorEnv struct {
 	// the engine directly (plan 39 StorageRead integration) dial this
 	// address to open their own channel.
 	engineAddr string
+	// dataDir is the `--data_dir` passed when spawning emulator_main.
+	// The googlesqlite TestMain harness reuses it when restarting after
+	// an engine crash (503 EOF / connection refused).
+	dataDir string
 }
 
 func (e *emulatorEnv) URL() string { return e.httpServer.URL }
@@ -168,6 +174,67 @@ func startEmulator(t *testing.T) *emulatorEnv {
 	return startEmulatorWithFlags(t, emulatorFlags{dataDir: t.TempDir()})
 }
 
+// launchEmulator starts emulator_main and an in-process gateway. Used by
+// TestMain for the googlesqlite query port and by startEmulatorWithFlags.
+func launchEmulator(dataDir string) (*emulatorEnv, error) {
+	if runtime.GOOS == "windows" {
+		return nil, errors.New("emulator_main is a POSIX subprocess; Windows is not yet wired")
+	}
+	bin := emulatorBinaryPath()
+	if bin == "" {
+		return nil, errors.New("emulator_main binary not found; run `task emulator:build-engine` or set BIGQUERY_EMULATOR_BIN")
+	}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("listen: %w", err)
+	}
+	port := lis.Addr().(*net.TCPAddr).Port
+	_ = lis.Close()
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+
+	args := []string{"--host_port", addr}
+	if dataDir != "" {
+		args = append(args, "--data_dir", dataDir)
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("spawn %s: %w", bin, err)
+	}
+	client, err := engine.Dial(addr)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("Dial(%s): %w", addr, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), engineReadyTimeout)
+	defer cancel()
+	if err := client.WaitForReady(ctx); err != nil {
+		_ = client.Close()
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("WaitForReady: %w", err)
+	}
+	handler := gateway.NewServer(gateway.Options{}, client)
+	httpServer := httptest.NewServer(handler)
+	return &emulatorEnv{
+		httpServer: httpServer,
+		client:     client,
+		cmd:        cmd,
+		engineAddr: addr,
+		dataDir:    dataDir,
+	}, nil
+}
+
+// launchEmulatorForMain is launchEmulator with a dedicated data directory for
+// the googlesqlite query_test port (TestMain has no *testing.T).
+func launchEmulatorForMain() (*emulatorEnv, error) {
+	dir, err := os.MkdirTemp("", "googlesqlite-query-*")
+	if err != nil {
+		return nil, err
+	}
+	return launchEmulator(dir)
+}
+
 // startEmulatorWithFlags launches the engine subprocess with the
 // given flag overrides and wires up an in-process gateway HTTP server
 // dialed at it. The test is responsible for tearing it down via the
@@ -177,48 +244,12 @@ func startEmulatorWithFlags(t *testing.T, flags emulatorFlags) *emulatorEnv {
 	if runtime.GOOS == "windows" {
 		t.Skip("emulator_main is a POSIX subprocess; Windows is not yet wired")
 	}
-	bin := emulatorBinaryPath()
-	if bin == "" {
-		t.Skip("emulator_main binary not found; run `task emulator:build-engine` " +
-			"or set BIGQUERY_EMULATOR_BIN to enable the integration tests")
-	}
-
-	port := freeTCPPort(t)
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-
-	args := []string{"--host_port", addr}
-	if flags.dataDir != "" {
-		args = append(args, "--data_dir", flags.dataDir)
-	}
-
-	cmd := exec.Command(bin, args...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("spawn %s: %v", bin, err)
-	}
-
-	client, err := engine.Dial(addr)
+	env, err := launchEmulator(flags.dataDir)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		t.Fatalf("Dial(%s): %v", addr, err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), engineReadyTimeout)
-	defer cancel()
-	if err := client.WaitForReady(ctx); err != nil {
-		_ = client.Close()
-		_ = cmd.Process.Kill()
-		t.Fatalf("WaitForReady: %v", err)
-	}
-
-	handler := gateway.NewServer(gateway.Options{}, client)
-	httpServer := httptest.NewServer(handler)
-
-	env := &emulatorEnv{
-		httpServer: httpServer,
-		client:     client,
-		cmd:        cmd,
-		engineAddr: addr,
+		if strings.Contains(err.Error(), "not found") {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
 	}
 	t.Cleanup(env.tearDown)
 	return env
@@ -357,5 +388,34 @@ func TestTabledataRoundTrip(t *testing.T) {
 	}
 	if len(wantPairs) != 0 {
 		t.Errorf("missing rows: %v", wantPairs)
+	}
+}
+
+func TestSqlUdfCreateAndSelect(t *testing.T) {
+	env := startEmulator(t)
+	const projectID = "gsql-TestQuery"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	createSQL := `CREATE FUNCTION customfunc(
+  arr ARRAY<STRUCT<name STRING, val INT64>>
+) AS (
+  (SELECT SUM(IF(elem.name = "foo",elem.val,null)) FROM UNNEST(arr) AS elem)
+)`
+	status, body := doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":`+strconv.Quote(createSQL)+`,"useLegacySql":false,"defaultDataset":{"datasetId":"_default"}}`))
+	if status != http.StatusOK {
+		t.Fatalf("CREATE FUNCTION -> %d: %s", status, string(body))
+	}
+	selectSQL := `SELECT customfunc([
+  STRUCT<name STRING, val INT64>("foo", 10),
+  STRUCT<name STRING, val INT64>("bar", 40),
+  STRUCT<name STRING, val INT64>("foo", 20)
+])`
+	status, body = doJSON(t, http.MethodPost, base+"/queries",
+		[]byte(`{"query":`+strconv.Quote(selectSQL)+`,"useLegacySql":false,"defaultDataset":{"datasetId":"_default"}}`))
+	if status != http.StatusOK {
+		t.Fatalf("SELECT customfunc -> %d: %s", status, string(body))
+	}
+	if !strings.Contains(string(body), `"v":"30"`) && !strings.Contains(string(body), `"v":30`) {
+		t.Fatalf("expected row value 30 in response, got: %s", string(body))
 	}
 }
