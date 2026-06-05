@@ -256,8 +256,8 @@ absl::Status RejectUnsupportedDmlFeatures(
         SemanticErrorReason::kNotImplemented,
         absl::StrCat("semantic/dml: ",
                      kind,
-                     " RETURNING clause is owned by Family 7 of "
-                     "local-exec-14-dml-system.plan.md"));
+                     " RETURNING clause is not yet supported; see "
+                     "docs/ENGINE_POLICY.md"));
   }
   if (assert_rows != nullptr) {
     return MakeSemanticError(
@@ -273,7 +273,7 @@ absl::Status RejectUnsupportedDmlFeatures(
             "semantic/dml: ",
             kind,
             " WITH OFFSET requires correlated lateral evaluation owned by "
-            "Family 4 of local-exec-12-arrays-generators.plan.md"));
+            "deferred work tracked in docs/ENGINE_POLICY.md"));
   }
   if (generated_column_count > 0) {
     return MakeSemanticError(
@@ -483,7 +483,7 @@ absl::StatusOr<DmlStats> ExecuteDelete(
 // (`update_item->target() == ResolvedColumnRef` AND `set_value()`
 // is non-null AND the nested-update lists are empty); the deep-
 // STRUCT path (`SET s.a.b = ...`, where `target()` is a
-// `ResolvedGetStructField` chain) is owned by Family 4 of the
+// `ResolvedGetStructField` chain) is owned by the
 // plan. Each unsupported subshape surfaces a structured
 // `kNotImplemented`.
 absl::StatusOr<DmlStats> ExecuteUpdate(
@@ -530,7 +530,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "owned by Family 4 of local-exec-14-dml-system.plan.md");
+          "deferred; see docs/ENGINE_POLICY.md");
     }
     if (item->target() == nullptr) {
       return absl::InternalError(
@@ -541,8 +541,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
           SemanticErrorReason::kNotImplemented,
           absl::StrCat("semantic/dml: UPDATE SET target kind ",
                        item->target()->node_kind_string(),
-                       " (deep STRUCT mutation) is owned by Family 4 of "
-                       "local-exec-14-dml-system.plan.md"));
+                       " (deep STRUCT mutation) is not yet supported; see "
+                       "docs/ENGINE_POLICY.md"));
     }
     if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
       return absl::InternalError(
@@ -671,13 +671,13 @@ absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
       // Simple MERGE branches stay on the DuckDB fast path
       // (`duckdb_rewrite`); the harder matrix
       // (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences)
-      // is owned by Family 6 of the plan and deferred from this
+      // is owned by the plan and deferred from this
       // subagent.
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: MERGE harder branches (WHEN NOT MATCHED BY "
-          "SOURCE / multi-action) are owned by Family 6 of "
-          "local-exec-14-dml-system.plan.md (deferred)");
+          "SOURCE / multi-action) are not yet supported; see "
+          "docs/ENGINE_POLICY.md");
     case ::googlesql::RESOLVED_TRUNCATE_STMT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

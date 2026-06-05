@@ -123,7 +123,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
         "semantic: SELECT AS VALUE / VALUE TABLE shapes are owned by "
-        "local-exec-12-arrays-generators.plan.md");
+        "docs/ENGINE_POLICY.md");
   }
   const ::googlesql::ResolvedScan* query = query_stmt.query();
   if (query == nullptr) {

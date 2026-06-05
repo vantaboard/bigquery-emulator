@@ -278,7 +278,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     case ::googlesql::RESOLVED_REVOKE_STMT:
     case ::googlesql::RESOLVED_UNDROP_STMT:
       return StatementClass::kDdl;
-    // `local-exec-14-dml-system.plan.md` Family 5: ASSERT is
+    // `docs/ENGINE_POLICY.md` Family 5: ASSERT is
     // a no-row-stream statement that surfaces a structured
     // `invalidQuery` envelope on failure (BigQuery's documented
     // behavior) and produces no observable output on success. The
@@ -301,7 +301,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
 // altogether for shapes BigQuery itself does not enumerate, e.g.
 // internal or non-BigQuery surfaces).
 //
-// Plan ownership: `.cursor/plans/local-exec-01-ddl-catalog.plan.md`
+// Plan ownership: `docs/ENGINE_POLICY.md`
 // "Item 5 (statementType)". Each handler in
 // `backend/engine/control/control_op_executor.cc` is the source of
 // truth for what the statement does; this helper is the source of
@@ -473,7 +473,7 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // emulator does not yet have a cost model, so we emit zero — the
   // schema is the contractual return value of DryRun; the byte
   // estimate is informational. Plan
-  // `dryrun-gateway-e2e_w8f9a0b1.plan.md` will fold a per-table row-
+  // `docs/ENGINE_POLICY.md` will fold a per-table row-
   // count + per-column byte-width estimate in once the storage layer
   // exposes those.
   response->set_estimated_bytes_processed(static_cast<int64_t>(0));
@@ -544,7 +544,7 @@ namespace {
 
 // Emit the trailing `statement_type` message every successful
 // `ExecuteQuery` reply now carries (per
-// `.cursor/plans/local-exec-01-ddl-catalog.plan.md` Item 5). The gateway
+// `docs/ENGINE_POLICY.md` Item 5). The gateway
 // folds the value into BigQuery's
 // `Job.statistics.query.statementType` envelope. We never emit the
 // trailer when `statement_type` is empty (e.g. shapes BigQuery REST
@@ -566,7 +566,7 @@ namespace {
 
 // Emit the trailing `emulator_route` message that pairs with the
 // `statement_type` trailer (per
-// `.cursor/plans/conformance-routing-matrix.plan.md`). The value is
+// `docs/ENGINE_POLICY.md`). The value is
 // the canonical lowercase-snake spelling of the `Disposition` the
 // coordinator's `RouteClassifier` chose (see
 // `backend/engine/disposition.cc::DispositionToString`). Empty

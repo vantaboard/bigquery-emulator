@@ -2,7 +2,7 @@
 // return UNIMPLEMENTED with a disposition-aware message; the tests
 // pin the route name + plan pointer the message advertises so the
 // future conformance routing matrix (planned in
-// `conformance-routing-matrix.plan.md`) and any operator-facing log
+// `docs/ENGINE_POLICY.md`) and any operator-facing log
 // pipeline can grep on a stable surface.
 
 #include "backend/engine/coordinator/stub_executors.h"
@@ -92,9 +92,7 @@ TEST_F(StubExecutorsTest, UnsupportedExecuteQueryNamesRoute) {
   EXPECT_EQ(out.status().code(), absl::StatusCode::kUnimplemented);
   const std::string msg(out.status().message());
   EXPECT_NE(msg.find("unsupported"), std::string::npos) << msg;
-  EXPECT_NE(msg.find("local-exec-15-specialized-stubs.plan.md"),
-            std::string::npos)
-      << msg;
+  EXPECT_NE(msg.find("docs/ENGINE_POLICY.md"), std::string::npos) << msg;
 }
 
 TEST_F(StubExecutorsTest, UnsupportedReportsStatementKind) {
@@ -112,7 +110,7 @@ TEST_F(StubExecutorsTest, UnsupportedReportsStatementKind) {
 }
 
 TEST_F(StubExecutorsTest, UnsupportedMessageLinksEnginePolicyDoc) {
-  // `local-exec-15-specialized-stubs.plan.md` requires the unsupported
+  // `docs/ENGINE_POLICY.md` requires the unsupported
   // envelope to point a user at `docs/ENGINE_POLICY.md` so they
   // can find the family-by-family posture table without first
   // having to locate the plan file. The plan file remains the

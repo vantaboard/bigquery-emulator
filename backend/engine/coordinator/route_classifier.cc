@@ -121,7 +121,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   //   2. A scalar-only SELECT (no FROM, i.e. the inner query is a
   //      `ResolvedProjectScan` over a `ResolvedSingleRowScan`)
   //      routes to `semantic_executor` per
-  //      `.cursor/plans/local-exec-07-semantic-core-expr.plan.md`. DuckDB
+  //      `docs/ENGINE_POLICY.md`. DuckDB
   //      can render the SQL on its side, but the semantic
   //      executor's strict NULL / overflow / error contracts are
   //      what the gateway/e2e suite asserts on. Promoting at the
@@ -164,11 +164,10 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // marks the lateral / correlated join shape. BigQuery's lateral
   // evaluation order does not map cleanly onto DuckDB's
   // `LATERAL` / `unnest(...)` model, so the semantic executor owns
-  // the shape (`local-exec-12-arrays-generators.plan.md`).
+  // the shape (`docs/ENGINE_POLICY.md`).
   // `has_using()` / lateral `parameter_list_size > 0` stay in the
   // transpiler's empty-string defense-in-depth gate today; they
-  // are picked up by `local-exec-12-arrays-generators.plan.md` /
-  // `local-exec-02-withscan-cte.plan.md` when those plans ship.
+  // are picked up by the semantic executor when those handlers ship.
   absl::Status VisitResolvedJoinScan(
       const ::googlesql::ResolvedJoinScan* node) override {
     if (node != nullptr && node->is_lateral()) {
@@ -181,7 +180,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // Property-based promotion for `ResolvedArrayScan`: the YAML row is
   // `duckdb_native` because the standalone `UNNEST(<arr>) AS <col>`
   // shape lowers cleanly to DuckDB's `SELECT unnest(...)`. The
-  // divergent subset listed in `local-exec-12-arrays-generators.plan.md`
+  // divergent subset listed in `docs/ENGINE_POLICY.md`
   // promotes to the semantic executor because DuckDB's `LIST` model
   // does not match BigQuery's `ARRAY` model in those cases:
   //
@@ -194,7 +193,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   //     `array_zip_mode != nullptr`) -> multi-array zip. The
   //     PAD/STRICT/TRUNCATE modes are BigQuery-only.
   //   * `join_expr != nullptr` -> `LEFT JOIN UNNEST(<arr>) ON ...`,
-  //     a correlated array scan owned by Family 4 of this plan.
+  //     a correlated array scan owned by this plan.
   //   * `input_scan` is non-NULL and not a `ResolvedSingleRowScan`
   //     -> `FROM t, UNNEST(t.arr)`, a correlated lateral scan
   //     owned by Family 4.
@@ -203,9 +202,9 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // subagent per the plan's pragmatic posture; the classifier still
   // promotes them so the user surfaces a clean
   // `semantic-executor not-implemented` envelope instead of the
-  // transpiler's empty-string UNIMPLEMENTED. The owning plan rows
+  // transpiler's empty-string UNIMPLEMENTED. The policy rows
   // in `node_dispositions.yaml` continue to point at
-  // `local-exec-12-arrays-generators.plan.md` until a follow-up subagent
+  // `docs/ENGINE_POLICY.md` until a follow-up subagent
   // lands them.
   // Property-based promotion for `ResolvedSubqueryExpr`. The node
   // class disposition is `duckdb_native` (the transpiler's
@@ -218,7 +217,7 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // per-outer-row evaluation order on every shape. Promoting at
   // planning time hands the correlated shape to the semantic
   // executor (today's stub; the executor for correlated subqueries
-  // is `local-exec-02-withscan-cte.plan.md` Family 4, deferred to a
+  // Correlated subqueries defer to the semantic executor.
   // follow-up subagent) so we never silently approximate.
   //
   // LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE ALL also live on
@@ -272,11 +271,11 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
   // `"Resolved"` before the lookup.
   //
   // Rows with `status=planned` are deliberately NOT promoted (see
-  // the upstream `execution-disposition-registry.plan.md` contract
+  // the upstream `docs/ENGINE_POLICY.md` contract
   // -- planned rows surface their disposition for documentation /
   // ownership tracking, but the executor for that route is not
   // ready yet, so the classifier keeps them on the default
-  // `duckdb_native` route until the owning plan lands the real
+  // `duckdb_native` route until the policy lands the real
   // executor and removes the `planned` marker. The fast path will
   // surface UNIMPLEMENTED from the transpiler for shapes it cannot
   // lower; that is a fast-path bug, not a classifier bug).
@@ -346,10 +345,10 @@ class ClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       return;
     }
     // Same `planned`-row contract as `CheckNodeClass`: a function
-    // row whose owning plan has not yet landed the executor must
+    // row whose policy has not yet landed the executor must
     // not promote the route. The transpiler's existing
     // empty-string contract will surface UNIMPLEMENTED if DuckDB
-    // cannot lower the call. When the owning plan ships its
+    // cannot lower the call. When the policy ships its
     // executor it drops the `planned` marker and this branch
     // starts promoting again.
     if (entry->planned) return;
@@ -395,7 +394,7 @@ std::string ReasonFor(Disposition d,
           "query routes to the local-stub executor (specialized feature "
           "family promoted by ",
           offending_node,
-          "); see local-exec-15-specialized-stubs.plan.md");
+          "); see docs/ENGINE_POLICY.md");
     case Disposition::kUnsupported:
       return absl::StrCat(
           "query is unsupported (offending node: ", offending_node, ")");
@@ -427,7 +426,7 @@ RouteDecision RouteClassifier::Classify(
   // (which would break gateway/e2e tests that hit DDL / DML shapes
   // the registry promises to a future executor). The fast path
   // (DuckDB) keeps handling them via the visitor's default branch
-  // until the owning plan lands and drops `planned` from the YAML
+  // until the policy lands and drops `planned` from the YAML
   // row.
   if (root_entry != nullptr && !root_entry->planned) {
     if (root_entry->disposition == Disposition::kControlOp) {
@@ -466,7 +465,7 @@ RouteDecision RouteClassifier::Classify(
   // `ResolvedAlterTableStmt` via `DuckDbExecutor::ExecuteDdl`; the
   // registry's parity checker (`task lint:dispositions`) is
   // responsible for catching missing rows and they get added by the
-  // owning plans. Re-routing them to `kUnsupported` here would
+  // policys. Re-routing them to `kUnsupported` here would
   // break existing gateway/e2e tests (no silent approximation).
   // We fall through to the visitor walk; missing-from-registry
   // resolves to the default `kDuckdbNative` if no inner promotion

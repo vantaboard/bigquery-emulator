@@ -889,7 +889,7 @@ absl::StatusOr<Value> DispatchFunctionByName(
   }
   // Fall through to the per-family dispatch table for functions
   // whose `functions.yaml` row picks the `semantic_executor`
-  // disposition with `plan=local-exec-09-date-time.plan.md`.
+  // disposition with `plan=docs/ENGINE_POLICY.md`.
   // `functions::Dispatch` returns nullopt when the name is not
   // wired here; we surface NOT_IMPLEMENTED in that case so the
   // gateway envelope stays the same as for an unknown function.
@@ -897,7 +897,7 @@ absl::StatusOr<Value> DispatchFunctionByName(
     return *std::move(dispatched);
   }
   // Local-stub families (`local_stub` posture, e.g. KEYS.*).
-  // `local-exec-15-specialized-stubs.plan.md` picks the deterministic
+  // `docs/ENGINE_POLICY.md` picks the deterministic
   // BigQuery-shaped-placeholder posture for a handful of families;
   // the route classifier promotes the surrounding query to
   // `kLocalStub`, the coordinator dispatches it onto the semantic
@@ -1213,7 +1213,7 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       }
       // The semantic executor's CAST surface is intentionally
       // narrow today; the full table lives with
-      // `local-exec-09-date-time.plan.md`. We cover the
+      // `docs/ENGINE_POLICY.md`. We cover the
       // implicit-coercion casts the analyzer inserts inside scalar
       // arithmetic (INT64 -> FLOAT64 for `/`, ...).
       if (inner->is_null()) return NullOfType(target);
@@ -1365,8 +1365,8 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
             absl::StrCat("semantic: ResolvedColumnRef '",
                          ref.column().name(),
                          "' referenced without a row binding; correlated scans "
-                         "are owned by local-exec-12-arrays-generators.plan.md "
-                         "(Family 4 / local-exec-02-withscan-cte.plan.md)"));
+                         "require correlated scan support; see "
+                         "docs/ENGINE_POLICY.md"));
       }
       auto it = ctx.columns->find(ref.column().column_id());
       if (it == ctx.columns->end()) {

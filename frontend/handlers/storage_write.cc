@@ -254,7 +254,7 @@ std::string StorageWriteService::Rfc3339Now() const {
                      v1::WriteStream::Type_Name(requested),
                      " is not implemented in this emulator profile (plan 15 "
                      "lights up _default + COMMITTED only); see the deferred "
-                     "follow-up to storage-read-write-api-plan.plan.md"));
+                     "follow-up to docs/ENGINE_POLICY.md"));
   }
   if (requested != v1::WriteStream::COMMITTED) {
     return ::grpc::Status(
@@ -525,7 +525,7 @@ std::string StorageWriteService::Rfc3339Now() const {
       "StorageWrite.FinalizeWriteStream: not implemented in this emulator "
       "profile (plan 15 lights up _default + COMMITTED only; FinalizeWrite "
       "lands with the deferred BUFFERED / PENDING follow-up subagent of "
-      "storage-read-write-api-plan.plan.md)");
+      "docs/ENGINE_POLICY.md)");
 }
 
 ::grpc::Status StorageWriteService::BatchCommitWriteStreams(
@@ -537,7 +537,7 @@ std::string StorageWriteService::Rfc3339Now() const {
       "StorageWrite.BatchCommitWriteStreams: not implemented in this emulator "
       "profile (plan 15 lights up _default + COMMITTED only; BatchCommit "
       "lands with the deferred PENDING follow-up subagent of "
-      "storage-read-write-api-plan.plan.md)");
+      "docs/ENGINE_POLICY.md)");
 }
 
 ::grpc::Status StorageWriteService::FlushRows(
@@ -549,7 +549,7 @@ std::string StorageWriteService::Rfc3339Now() const {
       "StorageWrite.FlushRows: not implemented in this emulator "
       "profile (plan 15 lights up _default + COMMITTED only; FlushRows "
       "lands with the deferred BUFFERED follow-up subagent of "
-      "storage-read-write-api-plan.plan.md)");
+      "docs/ENGINE_POLICY.md)");
 }
 
 std::size_t StorageWriteService::StreamsForTesting() const {

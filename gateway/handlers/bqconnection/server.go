@@ -12,7 +12,7 @@
 //     records).
 //
 // Both are explicitly larger than the shallow-emulator port budget
-// per `.cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md`.
+// per `docs/ENGINE_POLICY.md`.
 // The surface-mapping table below documents which failing-IT each
 // go-googlesql `api/bqconnection/` symbol satisfies, so the
 // follow-up ports a one-to-one mapping rather than a free-form
@@ -63,7 +63,7 @@ func Register(_ *http.ServeMux) {}
 // existing gateway/handlers.NotImplemented helper would do; this
 // indirection keeps the package self-contained.
 func NotImplementedHTTP(w http.ResponseWriter, _ *http.Request) {
-	const body = `{"error":{"code":501,"message":"BigQuery Connection API is not yet implemented by the emulator. See .cursor/plans/java-its-shallow-emulators_b8c9d0e1.plan.md for the shallow-emulator intake table.","status":"notImplemented","errors":[{"reason":"notImplemented","message":"BigQuery Connection API is not yet implemented by the emulator.","domain":"global"}]}}`
+	const body = `{"error":{"code":501,"message":"BigQuery Connection API is not yet implemented by the emulator. See docs/ENGINE_POLICY.md and ROADMAP.md.","status":"notImplemented","errors":[{"reason":"notImplemented","message":"BigQuery Connection API is not yet implemented by the emulator.","domain":"global"}]}}`
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusNotImplemented)
 	_, _ = w.Write([]byte(body))

@@ -7,7 +7,7 @@
 // table and a `GoogleSqlCatalog`, then drives requests through
 // the public `Engine` interface the gateway sees.
 //
-// Plan: `.cursor/plans/engine-router-foundation.plan.md` "Tests"
+// Plan: `docs/ENGINE_POLICY.md` "Tests"
 // section requires:
 //
 //   1. Pure `duckdb_native` SELECT round-trips through the
@@ -224,7 +224,7 @@ TEST_F(LocalCoordinatorEngineTest,
   // `kUnsupported`, the coordinator dispatches to the
   // `UnsupportedExecutor` stub, and the stub returns UNIMPLEMENTED
   // with a disposition-aware message that names the route and
-  // points at the owning plan. This pins the dispatcher's
+  // points at the policy. This pins the dispatcher's
   // unsupported-route behavior against the gateway's stable
   // `notImplemented` contract.
   CreatePeopleTable();
@@ -236,8 +236,8 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
   EXPECT_TRUE(absl::StrContains(source.status().message(), "unsupported"))
       << source.status().message();
-  EXPECT_TRUE(absl::StrContains(source.status().message(),
-                                "local-exec-15-specialized-stubs.plan.md"))
+  EXPECT_TRUE(
+      absl::StrContains(source.status().message(), "docs/ENGINE_POLICY.md"))
       << source.status().message();
 }
 
@@ -400,7 +400,7 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDdlAlterTableAddColumnPadsRows) {
 
 TEST_F(LocalCoordinatorEngineTest, ExecuteQueryScalarSelectRoutesToSemantic) {
   // Scalar-only SELECT (no FROM) classifies to
-  // `kSemanticExecutor` after `local-exec-07-semantic-core-expr.plan.md`
+  // `kSemanticExecutor` after `docs/ENGINE_POLICY.md`
   // landed; the coordinator dispatches to the local
   // `semantic::SemanticExecutor`, which evaluates the expression
   // tree directly and returns a one-row Arrow batch matching the
@@ -475,7 +475,7 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
-// `local-exec-13-advanced-relational.plan.md` Family 6: the pipe-DDL
+// Pipe-operator DDL control-op routing tests.
 // forms (`FROM ... |> EXPORT DATA ...` and `FROM ... |> CREATE
 // TABLE ...`) arrive at the engine as a `ResolvedQueryStmt`
 // whose body is a `ResolvedPipeExportDataScan` /
