@@ -93,6 +93,57 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 	}
 }
 
+// TestTableInsertMaterializedViewInfersSchema asserts a REST insert with
+// materializedView.query but no schema dry-runs the query and registers
+// the inferred output columns (QueryMaterializedViewIT posture).
+func TestTableInsertMaterializedViewInfersSchema(t *testing.T) {
+	fakeCat := &fakeCatalogClient{}
+	fakeQuery := &fakeQueryClient{
+		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
+			return &enginepb.DryRunResponse{
+				Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{
+						{Name: "TimestampField", Type: sqlTypeTIMESTAMP},
+						{Name: "StringField", Type: sqlTypeSTRING},
+						{Name: "BooleanField", Type: sqlTypeBOOL},
+					},
+				},
+			}, nil
+		},
+	}
+	body := `{
+        "tableReference":{"tableId":"mv1"},
+        "materializedView":{"query":"SELECT 1 AS x"}
+    }`
+	req := newTableReq(http.MethodPost, "", body)
+	rec := httptest.NewRecorder()
+	TableInsert(Dependencies{Catalog: fakeCat, Query: fakeQuery})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fakeQuery.lastDryRun == nil {
+		t.Fatal("Query.DryRun was not called for materialized view insert")
+	}
+	if fakeCat.lastRegisterTable == nil {
+		t.Fatal("Catalog.RegisterTable was not called")
+	}
+	schema := fakeCat.lastRegisterTable.GetSchema()
+	if schema == nil || len(schema.Fields) != 3 {
+		t.Fatalf("inferred schema not registered: %+v", schema)
+	}
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Type != "MATERIALIZED_VIEW" {
+		t.Errorf("type = %q, want MATERIALIZED_VIEW", got.Type)
+	}
+	if got.MaterializedView == nil || got.MaterializedView.Query == "" {
+		t.Errorf("materializedView not round-tripped: %+v", got.MaterializedView)
+	}
+}
+
 // TestTableInsertRequiresTableID rejects a missing tableId before any
 // RPC is issued, mirroring the upstream documented requirement.
 func TestTableInsertRequiresTableID(t *testing.T) {

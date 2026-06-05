@@ -21,6 +21,11 @@ const tableListKind = "bigquery#tableList"
 // non-view, non-external tables the emulator's Catalog tracks today.
 const defaultTableType = "TABLE"
 
+// materializedViewTableType is the BigQuery REST type string for
+// materialized views created via tables.insert with a materializedView
+// definition (see QueryMaterializedViewIT).
+const materializedViewTableType = "MATERIALIZED_VIEW"
+
 // tableIDFromPath returns the {projectId}/{datasetId}/{tableId}
 // triple captured by the route pattern. It strips any AIP-136 custom-
 // method suffix (e.g. ":getIamPolicy") from the tableId so the same
@@ -231,6 +236,9 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 			NotImplemented(w, r)
 			return
 		}
+		if !populateMaterializedViewSchema(w, deps, r, projectID, &t) {
+			return
+		}
 		_, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
 			Table: &enginepb.TableRef{
 				ProjectId: projectID,
@@ -245,6 +253,62 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
+}
+
+// populateMaterializedViewSchema fills Type and Schema on REST MV inserts
+// when the client omits schema. Dry-running the MV query lets SELECT *
+// expand to analyzed columns instead of zero. Returns false when the
+// handler already wrote an error response.
+func populateMaterializedViewSchema(
+	w http.ResponseWriter,
+	deps Dependencies,
+	r *http.Request,
+	projectID string,
+	t *bqtypes.Table,
+) bool {
+	if t.MaterializedView == nil || t.MaterializedView.Query == "" {
+		return true
+	}
+	if t.Type == "" {
+		t.Type = materializedViewTableType
+	}
+	if t.Schema != nil && len(t.Schema.Fields) > 0 {
+		return true
+	}
+	inferred, inferErr := inferTableSchemaFromQuery(
+		deps, r, projectID, t.MaterializedView.Query)
+	if inferErr != nil {
+		if queryGRPCToHTTPError(w, inferErr) {
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, reasonInternalError,
+			"Could not infer materialized view schema: "+inferErr.Error())
+		return false
+	}
+	if inferred != nil {
+		t.Schema = inferred
+	}
+	return true
+}
+
+// inferTableSchemaFromQuery runs the MV definition query through the
+// engine DryRun RPC and returns the analyzed output schema as REST
+// TableSchema. Returns (nil, nil) when Query client is nil or sql is
+// empty so callers can still register a schema-less table.
+func inferTableSchemaFromQuery(deps Dependencies, r *http.Request,
+	projectID, sql string,
+) (*bqtypes.TableSchema, error) {
+	if deps.Query == nil || sql == "" {
+		return nil, nil
+	}
+	resp, err := deps.Query.DryRun(r.Context(), &enginepb.QueryRequest{
+		ProjectId: projectID,
+		Sql:       sql,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return schemaFromProto(resp.GetSchema()), nil
 }
 
 // TableGet implements `bigquery.tables.get`:

@@ -116,6 +116,17 @@ type Table struct {
 	// (typically `und:ci`). Mirrors Dataset.DefaultCollation;
 	// see that field's comment for the round-trip rationale.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
+	// MaterializedView holds the MV definition when Type is
+	// MATERIALIZED_VIEW. The query is analyzed at insert time to
+	// infer the catalog schema when the client omits an explicit
+	// TableSchema (see QueryMaterializedViewIT).
+	MaterializedView *MaterializedViewDefinition `json:"materializedView,omitempty"`
+}
+
+// MaterializedViewDefinition is the BigQuery REST materializedView
+// sub-object. See docs/bigquery/docs/reference/rest/v2/tables#MaterializedViewDefinition.
+type MaterializedViewDefinition struct {
+	Query string `json:"query,omitempty"`
 }
 
 // RangePartitioning describes BigQuery integer-range partitioning. The
