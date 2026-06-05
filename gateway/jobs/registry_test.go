@@ -161,3 +161,34 @@ func TestCompleteQueryJSONShape(t *testing.T) {
 		t.Errorf("statistics.totalBytesProcessed = %v, want %q", got, want)
 	}
 }
+
+// TestJobConfigurationLoadJSONRoundTrip pins load/copy/extract configuration
+// JSON through the registry Job envelope so client-library bodies decode.
+func TestJobConfigurationLoadJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := `{"configuration":{"jobType":"LOAD","load":{"sourceUris":["gs://b/f.csv"],"destinationTable":{"projectId":"p","datasetId":"d","tableId":"t"},"sourceFormat":"CSV","writeDisposition":"WRITE_TRUNCATE","autodetect":true,"schemaUpdateOptions":["ALLOW_FIELD_ADDITION"]}}}`
+	var posted Job
+	if err := json.Unmarshal([]byte(raw), &posted); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if posted.Configuration == nil || posted.Configuration.Load == nil {
+		t.Fatal("configuration.load missing after decode")
+	}
+	if len(posted.Configuration.Load.SourceURIs) != 1 {
+		t.Fatalf("sourceUris = %v, want one entry", posted.Configuration.Load.SourceURIs)
+	}
+	encoded, err := json.Marshal(posted)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		t.Fatalf("re-decode: %v", err)
+	}
+	cfg, _ := out["configuration"].(map[string]any)
+	load, _ := cfg["load"].(map[string]any)
+	if load["sourceFormat"] != "CSV" {
+		t.Errorf("sourceFormat = %v, want CSV", load["sourceFormat"])
+	}
+}

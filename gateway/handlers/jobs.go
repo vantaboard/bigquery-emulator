@@ -29,7 +29,12 @@ const jobCancelKind = "bigquery#jobCancelResponse"
 // upper-case (QUERY / LOAD / COPY / EXTRACT); we round-trip it as the
 // caller posts it but stamp it explicitly when the caller leaves it
 // empty so a subsequent `jobs.get` doesn't lose the discriminator.
-const jobConfigurationKindQuery = "QUERY"
+const (
+	jobConfigurationKindQuery   = "QUERY"
+	jobConfigurationKindLoad    = "LOAD"
+	jobConfigurationKindCopy    = "COPY"
+	jobConfigurationKindExtract = "EXTRACT"
+)
 
 // queryParamTrue is the wire literal BigQuery's REST surface uses for
 // boolean query parameters (e.g. `allUsers=true`, `deleteContents=true`).
@@ -93,8 +98,9 @@ func JobList(deps Dependencies) http.HandlerFunc {
 //	POST /bigquery/v2/projects/{projectId}/jobs
 //
 // The body is a Job resource with `configuration.{query|load|copy|
-// extract}`. Plan tp04 lands only the `configuration.query` slice; the
-// load / copy / extract / DDL branches stay 501 until plan tp08 ships.
+// extract}`. Query jobs execute synchronously through the engine;
+// load / copy / extract dispatch and round-trip configuration with
+// per-type statistics but defer byte-level work to plans tp08-04/05.
 //
 // For the query branch the handler:
 //
@@ -137,17 +143,28 @@ func JobInsert(deps Dependencies) http.HandlerFunc {
 			}
 		}
 		cfg := posted.Configuration
-		if cfg == nil || cfg.Query == nil {
+		if cfg == nil {
+			writeError(w, http.StatusBadRequest, reasonInvalid,
+				"Job configuration is required.")
+			return
+		}
+		switch {
+		case cfg.Query != nil:
+			if deps.Query == nil {
+				NotImplemented(w, r)
+				return
+			}
+			runSyncQueryInsert(deps, w, r, &posted, cfg)
+		case cfg.Load != nil:
+			runSyncLoadInsert(deps, w, r, &posted, cfg)
+		case cfg.Copy != nil:
+			runSyncCopyInsert(deps, w, r, &posted, cfg)
+		case cfg.Extract != nil:
+			runSyncExtractInsert(deps, w, r, &posted, cfg)
+		default:
 			writeError(w, http.StatusNotImplemented, reasonNotImplemented,
-				"jobs.insert: only configuration.query is implemented; "+
-					"load / copy / extract paths land in thirdparty-08.")
-			return
+				"jobs.insert: configuration must include query, load, copy, or extract.")
 		}
-		if deps.Query == nil {
-			NotImplemented(w, r)
-			return
-		}
-		runSyncQueryInsert(deps, w, r, &posted, cfg)
 	}
 }
 
@@ -364,6 +381,88 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, job)
 }
 
+// runSyncLoadInsert accepts a load-job body, registers it, and returns a
+// terminal Job. The data plane (GCS fetch, format parse, row ingest) lands
+// in thirdparty-04; until then the job completes with a structured error.
+func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
+	posted *jobs.Job, cfg *jobs.JobConfiguration,
+) {
+	projectID := r.PathValue("projectId")
+	job := newPendingJob(deps, projectID, posted, cfg)
+	start := time.Now().UTC()
+	finalizeDeferredDataPlaneJob(job, cfg, start, "load")
+	writeJSON(w, http.StatusOK, job)
+}
+
+// runSyncCopyInsert accepts a copy-job body. Row copy lands in thirdparty-05.
+func runSyncCopyInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
+	posted *jobs.Job, cfg *jobs.JobConfiguration,
+) {
+	projectID := r.PathValue("projectId")
+	job := newPendingJob(deps, projectID, posted, cfg)
+	start := time.Now().UTC()
+	finalizeDeferredDataPlaneJob(job, cfg, start, "copy")
+	writeJSON(w, http.StatusOK, job)
+}
+
+// runSyncExtractInsert accepts an extract-job body. GCS export lands in thirdparty-05.
+func runSyncExtractInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
+	posted *jobs.Job, cfg *jobs.JobConfiguration,
+) {
+	projectID := r.PathValue("projectId")
+	job := newPendingJob(deps, projectID, posted, cfg)
+	start := time.Now().UTC()
+	finalizeDeferredDataPlaneJob(job, cfg, start, "extract")
+	writeJSON(w, http.StatusOK, job)
+}
+
+// finalizeDeferredDataPlaneJob marks a tp08 foundation job DONE with an
+// errorResult naming the deferred data-plane plan and zeroed per-type
+// statistics counters. HTTP stays 200 per the jobs.insert contract;
+// clients inspect job.status.errorResult.
+func finalizeDeferredDataPlaneJob(job *jobs.Job, cfg *jobs.JobConfiguration, start time.Time, kind string) {
+	end := time.Now().UTC()
+	job.Status.State = jobs.JobStateDone
+	job.Status.ErrorResult = &bqtypes.ErrorProto{
+		Reason: reasonNotImplemented,
+		Message: "jobs.insert: " + kind + " job data plane not yet implemented; " +
+			"load / copy / extract execution lands in thirdparty-04/05.",
+	}
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	switch kind {
+	case "load":
+		inputFiles := "0"
+		if cfg.Load != nil {
+			inputFiles = strconv.Itoa(len(cfg.Load.SourceURIs))
+		}
+		job.Statistics.Load = &jobs.LoadStatistics{
+			InputFiles:     inputFiles,
+			InputFileBytes: "0",
+			OutputRows:     "0",
+			OutputBytes:    "0",
+			BadRecords:     "0",
+		}
+	case "copy":
+		job.Statistics.Copy = &jobs.CopyStatistics{
+			CopiedRows:         "0",
+			CopiedLogicalBytes: "0",
+		}
+	case "extract":
+		var counts []string
+		if cfg.Extract != nil && len(cfg.Extract.DestinationURIs) > 0 {
+			counts = make([]string, len(cfg.Extract.DestinationURIs))
+			for i := range counts {
+				counts[i] = "0"
+			}
+		}
+		job.Statistics.Extract = &jobs.ExtractStatistics{
+			DestinationURIFileCounts: counts,
+			InputBytes:               "0",
+		}
+	}
+}
+
 // runSyncQueryDryRunInsert handles jobs.insert with configuration.dryRun
 // set. It forwards the SQL to enginepb.Query.DryRun and returns a DONE
 // job whose statistics.totalBytesProcessed mirrors jobs.query dry-run.
@@ -411,7 +510,16 @@ func newPendingJob(deps Dependencies, projectID string, posted *jobs.Job, cfg *j
 		jobID = deps.Jobs.NewJobID()
 	}
 	if cfg.JobType == "" {
-		cfg.JobType = jobConfigurationKindQuery
+		switch {
+		case cfg.Load != nil:
+			cfg.JobType = jobConfigurationKindLoad
+		case cfg.Copy != nil:
+			cfg.JobType = jobConfigurationKindCopy
+		case cfg.Extract != nil:
+			cfg.JobType = jobConfigurationKindExtract
+		default:
+			cfg.JobType = jobConfigurationKindQuery
+		}
 	}
 	job := &jobs.Job{
 		Kind: jobs.JobKind,

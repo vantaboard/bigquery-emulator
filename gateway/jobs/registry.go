@@ -9,10 +9,10 @@
 //   - One process-local Registry per gateway. State is volatile;
 //     restarts wipe the table. Spanner-emulator does the same with
 //     its in-memory metadata catalog.
-//   - Jobs are minted by `jobs.query` (the sync query API) only.
-//     `jobs.insert` -- the metadata-only POST that creates query /
-//     load / copy / extract jobs asynchronously -- still returns the
-//     gateway-only NotImplemented stub.
+//   - Jobs are minted by `jobs.query` (the sync query API) and the
+//     sync slice of `jobs.insert` (query / load / copy / extract).
+//     Load / copy / extract insert paths dispatch and round-trip
+//     configuration but defer byte-level work to plans tp08-04/05.
 //   - Jobs are recorded as `DONE` straight away. The emulator runs
 //     each query synchronously, so a pending/running window never
 //     exists on the wire from the caller's perspective. Async
@@ -86,16 +86,18 @@ type Status struct {
 
 // JobConfiguration mirrors the subset of the upstream
 // `JobConfiguration` resource the gateway round-trips through the
-// registry today. Only the type discriminator (`Query`) is
-// interpreted; everything else round-trips opaquely so a subsequent
-// `jobs.get` can echo back the same shape the caller sent at
-// `jobs.insert` time. Load / copy / extract job variants land
-// alongside plan tp08.
+// registry. The per-type sub-objects (`Query`, `Load`, `Copy`,
+// `Extract`) are the dispatch discriminator at `jobs.insert` time;
+// everything else round-trips opaquely so a subsequent `jobs.get`
+// echoes back the same shape the caller posted.
 type JobConfiguration struct {
-	JobType string                 `json:"jobType,omitempty"` // QUERY | LOAD | COPY | EXTRACT
-	Query   *JobConfigurationQuery `json:"query,omitempty"`
-	Labels  map[string]string      `json:"labels,omitempty"`
-	DryRun  bool                   `json:"dryRun,omitempty"`
+	JobType string                   `json:"jobType,omitempty"` // QUERY | LOAD | COPY | EXTRACT
+	Query   *JobConfigurationQuery   `json:"query,omitempty"`
+	Load    *JobConfigurationLoad    `json:"load,omitempty"`
+	Copy    *JobConfigurationCopy    `json:"copy,omitempty"`
+	Extract *JobConfigurationExtract `json:"extract,omitempty"`
+	Labels  map[string]string        `json:"labels,omitempty"`
+	DryRun  bool                     `json:"dryRun,omitempty"`
 }
 
 // JobConfigurationQuery is the per-query slice of a JobConfiguration.
@@ -110,6 +112,35 @@ type JobConfigurationQuery struct {
 	QueryParameters []bqtypes.QueryParameter  `json:"queryParameters,omitempty"`
 }
 
+// JobConfigurationLoad is the per-load slice of a JobConfiguration.
+// Fields mirror the minimum upstream REST shape thirdparty samples
+// exercise; format readers and GCS byte I/O land in plan tp08-04.
+type JobConfigurationLoad struct {
+	SourceURIs          []string                `json:"sourceUris,omitempty"`
+	DestinationTable    *bqtypes.TableReference `json:"destinationTable,omitempty"`
+	SourceFormat        string                  `json:"sourceFormat,omitempty"`
+	WriteDisposition    string                  `json:"writeDisposition,omitempty"`
+	Schema              *bqtypes.TableSchema    `json:"schema,omitempty"`
+	Autodetect          bool                    `json:"autodetect,omitempty"`
+	SchemaUpdateOptions []string                `json:"schemaUpdateOptions,omitempty"`
+}
+
+// JobConfigurationCopy is the per-copy slice of a JobConfiguration.
+type JobConfigurationCopy struct {
+	SourceTable      *bqtypes.TableReference  `json:"sourceTable,omitempty"`
+	SourceTables     []bqtypes.TableReference `json:"sourceTables,omitempty"`
+	DestinationTable *bqtypes.TableReference  `json:"destinationTable,omitempty"`
+	WriteDisposition string                   `json:"writeDisposition,omitempty"`
+}
+
+// JobConfigurationExtract is the per-extract slice of a JobConfiguration.
+type JobConfigurationExtract struct {
+	SourceTable       *bqtypes.TableReference `json:"sourceTable,omitempty"`
+	DestinationURIs   []string                `json:"destinationUris,omitempty"`
+	DestinationFormat string                  `json:"destinationFormat,omitempty"`
+	Compression       string                  `json:"compression,omitempty"`
+}
+
 // Statistics mirrors the subset of `JobStatistics` the emulator
 // currently fills in. All four timestamp / byte fields are decimal
 // strings on the wire per
@@ -117,10 +148,34 @@ type JobConfigurationQuery struct {
 // even `totalBytesProcessed`, because BigQuery REST never emits
 // 64-bit integers as JSON numbers (clients use `string` decoders).
 type Statistics struct {
-	CreationTime        string `json:"creationTime,omitempty"`
-	StartTime           string `json:"startTime,omitempty"`
-	EndTime             string `json:"endTime,omitempty"`
-	TotalBytesProcessed string `json:"totalBytesProcessed,omitempty"`
+	CreationTime        string             `json:"creationTime,omitempty"`
+	StartTime           string             `json:"startTime,omitempty"`
+	EndTime             string             `json:"endTime,omitempty"`
+	TotalBytesProcessed string             `json:"totalBytesProcessed,omitempty"`
+	Load                *LoadStatistics    `json:"load,omitempty"`
+	Copy                *CopyStatistics    `json:"copy,omitempty"`
+	Extract             *ExtractStatistics `json:"extract,omitempty"`
+}
+
+// LoadStatistics mirrors upstream `JobStatistics3` (statistics.load).
+type LoadStatistics struct {
+	InputFiles     string `json:"inputFiles,omitempty"`
+	InputFileBytes string `json:"inputFileBytes,omitempty"`
+	OutputRows     string `json:"outputRows,omitempty"`
+	OutputBytes    string `json:"outputBytes,omitempty"`
+	BadRecords     string `json:"badRecords,omitempty"`
+}
+
+// CopyStatistics mirrors upstream `CopyJobStatistics` (statistics.copy).
+type CopyStatistics struct {
+	CopiedRows         string `json:"copiedRows,omitempty"`
+	CopiedLogicalBytes string `json:"copiedLogicalBytes,omitempty"`
+}
+
+// ExtractStatistics mirrors upstream `JobStatistics4` (statistics.extract).
+type ExtractStatistics struct {
+	DestinationURIFileCounts []string `json:"destinationUriFileCounts,omitempty"`
+	InputBytes               string   `json:"inputBytes,omitempty"`
 }
 
 // QueryResult is the cached result of a synchronous query, kept in
