@@ -63,12 +63,37 @@ patchBigQueryConstructorForEmulatorRegion();
 // When BIGQUERY_EMULATOR_HOST is set, skip entire Mocha files and individual
 // tests that require BQML, legacy SQL, or bigquery-public-data catalog
 // fixtures (see third_party/README.md and docs/ENGINE_POLICY.md).
-const EMULATOR_SKIP_FILES = /(?:^|[\\/])test[\\/](?:models|jobs)\.test\.js$/;
+const EMULATOR_SKIP_FILES =
+  /(?:^|[\\/])test[\\/](?:models|jobs)\.test\.js(?::\d+:\d+)?(?:\)|$)/;
 
 const EMULATOR_SKIP_TITLE_PATTERNS = [
   /legacy SQL/i,
   /different project/i,
 ];
+
+function stackRequestsEmulatorFileSkip(stack) {
+  return stack.split('\n').some(line => EMULATOR_SKIP_FILES.test(line));
+}
+
+function wrapDescribeForEmulatorSkips(originalDescribe) {
+  if (typeof originalDescribe !== 'function') {
+    return originalDescribe;
+  }
+  if (originalDescribe.__goGooglesqlEmulatorSkipPatched) {
+    return originalDescribe;
+  }
+  function describeWithEmulatorSkips(name, fn) {
+    const stack = new Error().stack || '';
+    if (stackRequestsEmulatorFileSkip(stack)) {
+      return originalDescribe.skip(name, fn);
+    }
+    return originalDescribe(name, fn);
+  }
+  describeWithEmulatorSkips.only = originalDescribe.only;
+  describeWithEmulatorSkips.skip = originalDescribe.skip;
+  describeWithEmulatorSkips.__goGooglesqlEmulatorSkipPatched = true;
+  return describeWithEmulatorSkips;
+}
 
 function patchDescribeForEmulatorSkips() {
   if (!process.env.BIGQUERY_EMULATOR_HOST) {
@@ -76,22 +101,15 @@ function patchDescribeForEmulatorSkips() {
   }
   // Ensure Mocha has installed the full describe API (only/skip) before
   // we wrap it — setup.js is --require'd before the runner attaches .only.
-  require('mocha');
-  const originalDescribe = global.describe;
+  const mocha = require('mocha');
+  const originalDescribe =
+    typeof global.describe === 'function' ? global.describe : mocha.describe;
   if (typeof originalDescribe !== 'function') {
     return;
   }
-  function describeWithEmulatorSkips(name, fn) {
-    const err = new Error();
-    const stack = err.stack || '';
-    if (EMULATOR_SKIP_FILES.test(stack)) {
-      return originalDescribe.skip(name, fn);
-    }
-    return originalDescribe(name, fn);
-  }
-  describeWithEmulatorSkips.only = originalDescribe.only;
-  describeWithEmulatorSkips.skip = originalDescribe.skip;
+  const describeWithEmulatorSkips = wrapDescribeForEmulatorSkips(originalDescribe);
   global.describe = describeWithEmulatorSkips;
+  mocha.describe = describeWithEmulatorSkips;
 }
 
 patchDescribeForEmulatorSkips();

@@ -28,8 +28,9 @@
 # `node-bigquery-tests` and `python-bigquery-tests` unconditionally
 # (their preflights are unconditional and the python `snippets` /
 # `system` sessions exercise `test_extract_table*` against fake-gcs),
-# and `python-bigquery-dataframes-tests` only when STORAGE_EMULATOR_HOST
-# is set (the GCS fixtures short-circuit otherwise). Both `emulator-up`
+# and `python-bigquery-dataframes-tests` when running the snippet-gate
+# (always brings up fake-gcs and defaults STORAGE_EMULATOR_HOST) or when
+# STORAGE_EMULATOR_HOST is explicitly set for the full dataframes suite. Both `emulator-up`
 # and `fake-gcs-up` are `run: once`, so Task dedupes the call within a
 # single `task thirdparty` run and each container only starts once. The
 # containers are left running between invocations (compose-keep-up
@@ -698,7 +699,12 @@ tasks:
           *) _st="http://${_st#//}" ;;
         esac
         export STORAGE_EMULATOR_HOST="$_st"
-        cd third_party/node-bigquery-tests && npm install && npm test
+        cd third_party/node-bigquery-tests && npm install
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+          npx mocha --timeout 200000 --no-parallel --require ./test/setup.js
+        else
+          npm test
+        fi
 
   # Live-IT Java snippets lane. Fans out across the snippet POMs listed in
   # JAVA_BQ_SAMPLE_PATHS; each one is a standalone Maven module that resolves
@@ -854,46 +860,10 @@ tasks:
         fi
         # When JAVA_BQ_ALLOW_FAILING_ITS is set, a module whose Maven verify fails
         # is OK if every failing Failsafe IT simple class name is on the list
-        # (expected gRPC UNIMPLEMENTED until shallow backends land).
-        _java_bq_failures_allowlisted() {
-          target="$1"
-          reports="${target}/target/failsafe-reports"
-          allow_raw="${JAVA_BQ_ALLOW_FAILING_ITS:-{{.JAVA_BQ_ALLOW_FAILING_ITS}}}"
-          if [ -z "${allow_raw//[[:space:],]/}" ]; then
-            return 1
-          fi
-          if [ ! -d "$reports" ]; then
-            return 1
-          fi
-          allow="$(printf '%s' "$allow_raw" | tr ',' ' ')"
-          failed_its=""
-          for f in "$reports"/TEST-*.xml; do
-            [ -f "$f" ] || continue
-            if grep -qE '<(failure|error)\b' "$f" 2>/dev/null; then
-              bn=$(basename "$f" .xml)
-              it_short="${bn##*.}"
-              failed_its="${failed_its} ${it_short}"
-            fi
-          done
-          failed_its="${failed_its# }"
-          if [ -z "$failed_its" ]; then
-            return 1
-          fi
-          for it in $failed_its; do
-            found=0
-            for a in $allow; do
-              a="${a#"${a%%[![:space:]]*}"}"
-              a="${a%"${a##*[![:space:]]}"}"
-              [ "$it" = "$a" ] && found=1 && break
-            done
-            if [ "$found" -eq 0 ]; then
-              echo "java-bigquery-tests: unexpected failing IT ${it} in ${target} (not in JAVA_BQ_ALLOW_FAILING_ITS)" >&2
-              return 1
-            fi
-          done
-          echo "java-bigquery-tests: ${target} failed only allowlisted ITs (${failed_its})" >&2
-          return 0
-        }
+        # (expected gRPC UNIMPLEMENTED until shallow backends land). The check
+        # runs in bash (not Task's mvdan/sh) because allowlist normalization
+        # uses bash-specific parameter expansion unsafe in mvdan/sh.
+        _java_bq_allow_csv="${JAVA_BQ_ALLOW_FAILING_ITS:-{{.JAVA_BQ_ALLOW_FAILING_ITS}}}"
         # Live-IT posture: do NOT stop the fan-out on the first per-module
         # failure. Until the shallow gRPC backends land
         # (`docs/ENGINE_POLICY.md`), the
@@ -927,7 +897,7 @@ tasks:
             fi
             rc=$?
             if [ "$rc" -ne 0 ]; then
-              if _java_bq_failures_allowlisted "$target"; then
+              if bash "${root}/scripts/java_bq_check_allowlisted_failures.sh" "$target" "$_java_bq_allow_csv"; then
                 echo "java-bigquery-tests: ${rel} mvn ${goals} allowed failures only"
               else
                 echo "java-bigquery-tests: ${rel} mvn ${goals} FAILED (exit=${rc})" >&2
@@ -949,13 +919,14 @@ tasks:
   # widen by setting DATAFRAME_SAMPLES_PYTEST_ARGS or running
   # `python-bigquery-dataframes-tests` directly.
   python-bigquery-dataframes-snippet-gate:
-    desc: Run bigframes emulator snippet tests known to pass; requires emulator + optional fake-gcs
-    env:
-      DATAFRAME_SAMPLES_PYTEST_ARGS: >-
-        -k 'test_bigquery_dataframes_set_options or test_bigquery_dataframes_load_data_from_bigquery or test_bigquery_dataframes_pandas_methods or test_performance_optimizations'
-        --tb=short
+    desc: Run bigframes emulator snippet tests known to pass; requires emulator + fake-gcs
     cmds:
-      - task: python-bigquery-dataframes-tests
+      - task: fake-gcs-up
+      - |
+        set -e
+        export STORAGE_EMULATOR_HOST="${STORAGE_EMULATOR_HOST:-http://127.0.0.1:4443}"
+        export DATAFRAME_SAMPLES_PYTEST_ARGS="-k '(test_bigquery_dataframes_set_options or test_bigquery_dataframes_pandas_methods or test_performance_optimizations or test_bigquery_dataframes_load_data_from_bigquery) and not job' --tb=short"
+        task thirdparty:python-bigquery-dataframes-tests
 
   python-bigquery-dataframes-tests:
     desc: Run python-bigquery-dataframes samples/snippets nox py (emulator or GCP; see third_party/README.md)
@@ -986,11 +957,8 @@ tasks:
       # Only spin up fake-gcs when the caller has opted in via
       # STORAGE_EMULATOR_HOST. Without it, conftest's GCS fixtures
       # short-circuit and the bigframes snippets that hit gs:// URIs
-      # are skipped — bringing up fake-gcs unconditionally would
-      # surprise callers who haven't seeded testdata/fake-gcs-data/.
-      # `task: fake-gcs-up` enforces the seed-data guard if invoked,
-      # which is the desired fail-fast behavior when the caller
-      # genuinely wants GCS coverage.
+      # are skipped. The snippet-gate task sets STORAGE_EMULATOR_HOST
+      # and calls fake-gcs-up before delegating here.
       - |
         set -e
         if [ -n "${STORAGE_EMULATOR_HOST:-}" ]; then
@@ -1072,20 +1040,23 @@ tasks:
           esac
         }
         _df_pytest_extra="${DATAFRAME_SAMPLES_PYTEST_ARGS:-}"
-        if command -v uv >/dev/null 2>&1; then
-          if [ -n "$_df_pytest_extra" ]; then
-            # shellcheck disable=SC2086
-            _df_run uvx --from 'nox[pbs]' nox -s py -p "$py" -- $_df_pytest_extra
-          else
-            _df_run uvx --from 'nox[pbs]' nox -s py -p "$py"
-          fi
+        if [ -n "$_df_pytest_extra" ]; then
+          # Parse quoted pytest args in bash so -k 'expr with or' stays one token.
+          _df_run bash -ec '
+            py="$1"
+            pytest_args="$2"
+            shift 2
+            eval "set -- $pytest_args"
+            if command -v uv >/dev/null 2>&1; then
+              uvx --from '"'"'nox[pbs]'"'"' nox -s py -p "$py" -- "$@"
+            else
+              nox -s py -p "$py" -- "$@"
+            fi
+          ' bash "$py" "$_df_pytest_extra"
+        elif command -v uv >/dev/null 2>&1; then
+          _df_run uvx --from 'nox[pbs]' nox -s py -p "$py"
         elif command -v nox >/dev/null 2>&1; then
-          if [ -n "$_df_pytest_extra" ]; then
-            # shellcheck disable=SC2086
-            _df_run nox -s py -p "$py" -- $_df_pytest_extra
-          else
-            _df_run nox -s py -p "$py"
-          fi
+          _df_run nox -s py -p "$py"
         else
           echo "Install uv (https://docs.astral.sh/uv/) for 'uvx --from nox[pbs] nox', or install 'nox[pbs]' on PATH." >&2
           exit 1
