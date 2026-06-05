@@ -61,6 +61,10 @@ type Dataset struct {
 	Access                   []map[string]any  `json:"access"`
 	Labels                   map[string]string `json:"labels"`
 	DefaultTableExpirationMs string            `json:"defaultTableExpirationMs,omitempty"`
+	// DefaultPartitionExpirationMs is inherited by new time-partitioned
+	// tables in the dataset. See
+	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
+	DefaultPartitionExpirationMs string `json:"defaultPartitionExpirationMs,omitempty"`
 	// DefaultCollation is BigQuery's per-dataset default text
 	// collation (typically `und:ci` for the case-insensitive lane
 	// the upstream node sample exercises). The emulator does not
@@ -116,11 +120,23 @@ type Table struct {
 	// (typically `und:ci`). Mirrors Dataset.DefaultCollation;
 	// see that field's comment for the round-trip rationale.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
+	// RequirePartitionFilter mirrors the table-level partition-filter
+	// requirement BigQuery REST exposes. Pointer semantics let PATCH
+	// bodies set `false` explicitly without conflating unset and false.
+	RequirePartitionFilter *bool `json:"requirePartitionFilter,omitempty"`
+	// View holds the view definition when Type is VIEW.
+	View *ViewDefinition `json:"view,omitempty"`
 	// MaterializedView holds the MV definition when Type is
 	// MATERIALIZED_VIEW. The query is analyzed at insert time to
 	// infer the catalog schema when the client omits an explicit
 	// TableSchema (see QueryMaterializedViewIT).
 	MaterializedView *MaterializedViewDefinition `json:"materializedView,omitempty"`
+}
+
+// ViewDefinition is the BigQuery REST view sub-object. See
+// docs/bigquery/docs/reference/rest/v2/tables#ViewDefinition.
+type ViewDefinition struct {
+	Query string `json:"query,omitempty"`
 }
 
 // MaterializedViewDefinition is the BigQuery REST materializedView

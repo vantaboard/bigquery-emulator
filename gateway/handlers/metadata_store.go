@@ -53,11 +53,9 @@ func datasetKey(projectID, datasetID string) string {
 
 // PutTable records the round-trippable metadata fields for a table.
 // Only the REST-only fields (labels, expirationTime, rangePartitioning,
-// clustering, defaultCollation, friendlyName, description) are kept;
-// engine-owned fields like Schema / NumRows fall through to the
-// engine's DescribeTable response on Get. Passing a zero bqtypes.Table
-// is fine — the next Get will return the zero value, which the handler
-// merges with the engine-side schema.
+// clustering, defaultCollation, friendlyName, description, view, type,
+// requirePartitionFilter) are kept; engine-owned fields like Schema /
+// NumRows fall through to the engine's DescribeTable response on Get.
 func (s *MetadataStore) PutTable(projectID, datasetID, tableID string, t bqtypes.Table) {
 	if s == nil {
 		return
@@ -65,6 +63,18 @@ func (s *MetadataStore) PutTable(projectID, datasetID, tableID string, t bqtypes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tables[tableKey(projectID, datasetID, tableID)] = stripEngineOwnedTableFields(t)
+}
+
+// MergeTable overlays sparse PATCH/UPDATE fields onto any cached entry.
+func (s *MetadataStore) MergeTable(projectID, datasetID, tableID string, patch bqtypes.Table) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := tableKey(projectID, datasetID, tableID)
+	existing := s.tables[key]
+	s.tables[key] = mergeTableMetadataOverlay(existing, stripEngineOwnedTableFields(patch))
 }
 
 // GetTable returns the cached REST-only metadata for the table and a
@@ -100,6 +110,18 @@ func (s *MetadataStore) PutDataset(projectID, datasetID string, ds bqtypes.Datas
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.datasets[datasetKey(projectID, datasetID)] = stripEngineOwnedDatasetFields(ds)
+}
+
+// MergeDataset overlays sparse PATCH/UPDATE fields onto any cached entry.
+func (s *MetadataStore) MergeDataset(projectID, datasetID string, patch bqtypes.Dataset) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := datasetKey(projectID, datasetID)
+	existing := s.datasets[key]
+	s.datasets[key] = mergeDatasetMetadataOverlay(existing, stripEngineOwnedDatasetFields(patch))
 }
 
 // GetDataset returns the cached REST-only metadata for the dataset.
@@ -151,27 +173,32 @@ func (s *MetadataStore) DeleteTablesInDataset(projectID, datasetID string) {
 // read.
 func stripEngineOwnedTableFields(t bqtypes.Table) bqtypes.Table {
 	return bqtypes.Table{
-		FriendlyName:      t.FriendlyName,
-		Description:       t.Description,
-		Labels:            t.Labels,
-		ExpirationTime:    t.ExpirationTime,
-		RangePartitioning: t.RangePartitioning,
-		TimePartitioning:  t.TimePartitioning,
-		Clustering:        t.Clustering,
-		DefaultCollation:  t.DefaultCollation,
+		FriendlyName:           t.FriendlyName,
+		Description:            t.Description,
+		Labels:                 t.Labels,
+		ExpirationTime:         t.ExpirationTime,
+		RangePartitioning:      t.RangePartitioning,
+		TimePartitioning:       t.TimePartitioning,
+		Clustering:             t.Clustering,
+		DefaultCollation:       t.DefaultCollation,
+		Type:                   t.Type,
+		View:                   t.View,
+		MaterializedView:       t.MaterializedView,
+		RequirePartitionFilter: t.RequirePartitionFilter,
 	}
 }
 
 // stripEngineOwnedDatasetFields is the dataset analogue.
 func stripEngineOwnedDatasetFields(ds bqtypes.Dataset) bqtypes.Dataset {
 	return bqtypes.Dataset{
-		FriendlyName:             ds.FriendlyName,
-		Description:              ds.Description,
-		Location:                 ds.Location,
-		Access:                   ds.Access,
-		Labels:                   ds.Labels,
-		DefaultTableExpirationMs: ds.DefaultTableExpirationMs,
-		DefaultCollation:         ds.DefaultCollation,
+		FriendlyName:                 ds.FriendlyName,
+		Description:                  ds.Description,
+		Location:                     ds.Location,
+		Access:                       ds.Access,
+		Labels:                       ds.Labels,
+		DefaultTableExpirationMs:     ds.DefaultTableExpirationMs,
+		DefaultPartitionExpirationMs: ds.DefaultPartitionExpirationMs,
+		DefaultCollation:             ds.DefaultCollation,
 	}
 }
 
@@ -204,6 +231,63 @@ func applyTableMetadataOverlay(base bqtypes.Table, overlay bqtypes.Table) bqtype
 	if overlay.DefaultCollation != "" {
 		base.DefaultCollation = overlay.DefaultCollation
 	}
+	if overlay.Type != "" {
+		base.Type = overlay.Type
+	}
+	if overlay.View != nil {
+		base.View = overlay.View
+	}
+	if overlay.MaterializedView != nil {
+		base.MaterializedView = overlay.MaterializedView
+	}
+	if overlay.RequirePartitionFilter != nil {
+		base.RequirePartitionFilter = overlay.RequirePartitionFilter
+	}
+	return base
+}
+
+// mergeTableMetadataOverlay merges sparse metadata updates onto a
+// cached table entry. Unlike applyTableMetadataOverlay (used at GET
+// time against engine-derived resources), this helper treats empty
+// strings and nil maps as "not provided" so PATCH bodies can carry
+// only the fields being changed.
+func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
+	if patch.FriendlyName != "" {
+		base.FriendlyName = patch.FriendlyName
+	}
+	if patch.Description != "" {
+		base.Description = patch.Description
+	}
+	if patch.Labels != nil {
+		base.Labels = patch.Labels
+	}
+	if patch.ExpirationTime != "" {
+		base.ExpirationTime = patch.ExpirationTime
+	}
+	if patch.RangePartitioning != nil {
+		base.RangePartitioning = patch.RangePartitioning
+	}
+	if patch.TimePartitioning != nil {
+		base.TimePartitioning = patch.TimePartitioning
+	}
+	if patch.Clustering != nil {
+		base.Clustering = patch.Clustering
+	}
+	if patch.DefaultCollation != "" {
+		base.DefaultCollation = patch.DefaultCollation
+	}
+	if patch.Type != "" {
+		base.Type = patch.Type
+	}
+	if patch.View != nil {
+		base.View = patch.View
+	}
+	if patch.MaterializedView != nil {
+		base.MaterializedView = patch.MaterializedView
+	}
+	if patch.RequirePartitionFilter != nil {
+		base.RequirePartitionFilter = patch.RequirePartitionFilter
+	}
 	return base
 }
 
@@ -227,8 +311,40 @@ func applyDatasetMetadataOverlay(base bqtypes.Dataset, overlay bqtypes.Dataset) 
 	if overlay.DefaultTableExpirationMs != "" {
 		base.DefaultTableExpirationMs = overlay.DefaultTableExpirationMs
 	}
+	if overlay.DefaultPartitionExpirationMs != "" {
+		base.DefaultPartitionExpirationMs = overlay.DefaultPartitionExpirationMs
+	}
 	if overlay.DefaultCollation != "" {
 		base.DefaultCollation = overlay.DefaultCollation
+	}
+	return base
+}
+
+// mergeDatasetMetadataOverlay merges sparse dataset metadata updates.
+func mergeDatasetMetadataOverlay(base, patch bqtypes.Dataset) bqtypes.Dataset {
+	if patch.FriendlyName != "" {
+		base.FriendlyName = patch.FriendlyName
+	}
+	if patch.Description != "" {
+		base.Description = patch.Description
+	}
+	if patch.Location != "" {
+		base.Location = patch.Location
+	}
+	if patch.Access != nil {
+		base.Access = patch.Access
+	}
+	if patch.Labels != nil {
+		base.Labels = patch.Labels
+	}
+	if patch.DefaultTableExpirationMs != "" {
+		base.DefaultTableExpirationMs = patch.DefaultTableExpirationMs
+	}
+	if patch.DefaultPartitionExpirationMs != "" {
+		base.DefaultPartitionExpirationMs = patch.DefaultPartitionExpirationMs
+	}
+	if patch.DefaultCollation != "" {
+		base.DefaultCollation = patch.DefaultCollation
 	}
 	return base
 }

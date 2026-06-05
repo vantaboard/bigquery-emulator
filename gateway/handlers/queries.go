@@ -140,10 +140,20 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	out := bqtypes.QueryResponse{
 		Kind:                queryResponseKind,
 		Schema:              schemaFromProto(resp.GetSchema()),
-		TotalBytesProcessed: strconv.FormatInt(resp.GetEstimatedBytesProcessed(), 10),
+		TotalBytesProcessed: formatDryRunBytes(resp.GetEstimatedBytesProcessed()),
 		JobComplete:         true,
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// formatDryRunBytes renders estimated bytes as the decimal string
+// BigQuery REST always emits, defaulting to "0" when the engine omits
+// a value.
+func formatDryRunBytes(estimated int64) string {
+	if estimated < 0 {
+		return "0"
+	}
+	return strconv.FormatInt(estimated, 10)
 }
 
 // runQueryExecute handles the dryRun=false branch of QueryRun. It
@@ -256,15 +266,26 @@ func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.Que
 		return nil
 	}
 	out := make(map[string]*enginepb.QueryParameter, len(in))
+	positionalIdx := 0
 	for _, p := range in {
 		if p.ParameterType == nil {
 			continue
 		}
+		name := p.Name
+		if name == "" {
+			name = "p" + strconv.Itoa(positionalIdx)
+			positionalIdx++
+		}
 		var value string
 		if p.ParameterValue != nil {
-			value = p.ParameterValue.Value
+			if len(p.ParameterValue.ArrayValues) > 0 ||
+				len(p.ParameterValue.StructValues) > 0 {
+				value = p.ParameterValue.ValueJSON()
+			} else {
+				value = p.ParameterValue.Value
+			}
 		}
-		out[p.Name] = &enginepb.QueryParameter{
+		out[name] = &enginepb.QueryParameter{
 			TypeKind:  p.ParameterType.Type,
 			ValueJson: value,
 		}
@@ -507,7 +528,7 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		emulatorRoute = result.EmulatorRoute
 	}
 
-	pageRows := paginateResults(allRows, r.URL.Query())
+	pageRows, pageToken := paginateResults(allRows, r.URL.Query())
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
 		Kind:                getQueryResultsKind,
@@ -516,6 +537,7 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		JobComplete:         true,
 		TotalRows:           strconv.FormatUint(uint64(len(allRows)), 10),
 		Rows:                pageRows,
+		PageToken:           pageToken,
 		TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
 		Location:            jobRef.Location,
 	}
@@ -556,24 +578,36 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 	return out
 }
 
-// paginateResults applies the registry's single-page pagination
-// rules (startIndex + maxResults) to the cached row slice. A non-
-// empty pageToken is a stale value from a prior emulator run (the
-// registry never mints one) so it short-circuits to a terminal
-// empty page; clients polling for pageToken see the same shape
-// they would after consuming all rows.
-func paginateResults(allRows []bqtypes.Row, q url.Values) []bqtypes.Row {
-	if q.Get("pageToken") != "" {
-		return nil
-	}
-	start := parseUintQuery(q, "startIndex", 0)
-	limit := parseUintQuery(q, "maxResults", uint64(len(allRows)))
+// defaultQueryResultsPageSize mirrors BigQuery's documented default
+// `maxResults` for jobs.getQueryResults when the caller omits it.
+const defaultQueryResultsPageSize uint64 = 10000
+
+// paginateResults slices cached query rows using startIndex,
+// maxResults, and pageToken. pageToken (when set) is a decimal string
+// encoding the next start row index, matching tabledata.list.
+func paginateResults(allRows []bqtypes.Row, q url.Values) ([]bqtypes.Row, string) {
 	total := uint64(len(allRows))
-	if start > total {
-		start = total
+	start := parseUintQuery(q, "startIndex", 0)
+	if tok := q.Get("pageToken"); tok != "" {
+		if off, err := strconv.ParseUint(tok, 10, 64); err == nil {
+			start = off
+		} else {
+			return nil, ""
+		}
+	}
+	limit := defaultQueryResultsPageSize
+	if q.Get("maxResults") != "" {
+		limit = parseUintQuery(q, "maxResults", defaultQueryResultsPageSize)
+	}
+	if start >= total {
+		return nil, ""
 	}
 	end := min(start+limit, total)
-	return allRows[start:end]
+	var nextToken string
+	if end < total {
+		nextToken = strconv.FormatUint(end, 10)
+	}
+	return allRows[start:end], nextToken
 }
 
 // parseUintQuery returns the named query parameter as a uint64,

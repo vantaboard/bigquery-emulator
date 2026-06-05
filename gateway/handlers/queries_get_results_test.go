@@ -80,7 +80,7 @@ func TestQueryGetResultsRespectsStartIndexAndMaxResults(t *testing.T) {
 		},
 	}
 	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
-	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false}`
+	body := testQuerySelectIDName
 
 	got := runQueryAndGetResults(t, deps, body, "?startIndex=1&maxResults=10")
 	if got.TotalRows != "2" {
@@ -107,20 +107,54 @@ func TestQueryGetResultsRespectsStartIndexAndMaxResults(t *testing.T) {
 	}
 }
 
-// TestQueryGetResultsPageTokenReturnsEmptyPage documents the
-// single-page-only behavior: the emulator never mints pageTokens, so
-// any non-empty token yields an empty terminal page. Polling clients
-// see jobComplete=true and exit cleanly instead of looping forever.
-func TestQueryGetResultsPageTokenReturnsEmptyPage(t *testing.T) {
+// TestQueryGetResultsPageTokenPaginatesRows asserts pageToken cursoring
+// over cached rows: the first page is truncated by maxResults and emits
+// a token; the follow-up request replays the trailing slice.
+func TestQueryGetResultsPageTokenPaginatesRows(t *testing.T) {
 	fake := &fakeQueryClient{
 		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
 			return twoRowExecuteStream(), nil
 		},
 	}
 	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
-	body := `{"query":"SELECT id, name FROM ds.t","useLegacySql":false}`
+	body := testQuerySelectIDName
 
-	got := runQueryAndGetResults(t, deps, body, "?pageToken=stale")
+	page1 := runQueryAndGetResults(t, deps, body, "?maxResults=1")
+	if len(page1.Rows) != 1 {
+		t.Fatalf("page1 rows = %d, want 1", len(page1.Rows))
+	}
+	if page1.PageToken == "" {
+		t.Fatal("page1 missing pageToken")
+	}
+	if v := page1.Rows[0].F[0].V; v != "1" {
+		t.Errorf("page1 rows[0].f[0].v = %v, want %q", v, "1")
+	}
+
+	page2 := runQueryAndGetResults(t, deps, body, "?maxResults=1&pageToken="+page1.PageToken)
+	if len(page2.Rows) != 1 {
+		t.Fatalf("page2 rows = %d, want 1", len(page2.Rows))
+	}
+	if page2.PageToken != "" {
+		t.Errorf("page2 pageToken = %q, want empty terminal page", page2.PageToken)
+	}
+	if v := page2.Rows[0].F[0].V; v != "2" {
+		t.Errorf("page2 rows[0].f[0].v = %v, want %q", v, "2")
+	}
+}
+
+// TestQueryGetResultsPageTokenPastEndReturnsEmptyPage documents that an
+// out-of-range pageToken yields a terminal empty page with
+// jobComplete=true so client auto-pagination loops exit cleanly.
+func TestQueryGetResultsPageTokenPastEndReturnsEmptyPage(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := testQuerySelectIDName
+
+	got := runQueryAndGetResults(t, deps, body, "?pageToken=99")
 	if !got.JobComplete {
 		t.Error("jobComplete = false, want true even with a stale pageToken")
 	}

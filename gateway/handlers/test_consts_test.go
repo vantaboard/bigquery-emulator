@@ -42,3 +42,7 @@ const (
 // query / jobs handler regression tests. Promoted to a constant so
 // goconst stops counting the repeated literal across files.
 const testSQLSelectOne = "SELECT 1"
+
+// testQuerySelectIDName is the standard two-column SELECT fixture used
+// by getQueryResults pagination regression tests.
+const testQuerySelectIDName = `{"query":"SELECT id, name FROM ds.t","useLegacySql":false}`

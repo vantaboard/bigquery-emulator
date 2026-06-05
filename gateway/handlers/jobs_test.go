@@ -424,6 +424,36 @@ func TestJobInsertSyncQueryRegisters(t *testing.T) {
 	}
 }
 
+// TestJobInsertDryRunTotalBytesProcessed pins jobs.insert with
+// configuration.dryRun=true: the returned Job must carry
+// statistics.totalBytesProcessed as a decimal string.
+func TestJobInsertDryRunTotalBytesProcessed(t *testing.T) {
+	t.Parallel()
+	fake := &fakeQueryClient{
+		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
+			return &enginepb.DryRunResponse{EstimatedBytesProcessed: 8192}, nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"configuration":{"dryRun":true,"query":{"query":"SELECT 1","useLegacySql":false}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.State != jobs.JobStateDone {
+		t.Errorf("status.state = %q, want %q", got.Status.State, jobs.JobStateDone)
+	}
+	if got.Statistics.TotalBytesProcessed != "8192" {
+		t.Errorf("statistics.totalBytesProcessed = %q, want %q",
+			got.Statistics.TotalBytesProcessed, "8192")
+	}
+}
+
 // TestJobInsertSyncQueryCapturesEngineError pins the
 // "errors-as-status" contract: an engine analysis failure must NOT
 // surface as a 4xx -- it lands on `Status.ErrorResult` so the client

@@ -429,6 +429,22 @@ func TestDatasetMetadataDefaultCollationRoundTrip(t *testing.T) {
 	})
 }
 
+// TestDatasetMetadataDefaultPartitionExpirationRoundTrip pins the
+// dataset-level default partition expiration the python sample updates.
+func TestDatasetMetadataDefaultPartitionExpirationRoundTrip(t *testing.T) {
+	const ms = "7776000000"
+	runDatasetMetadataRoundTrip(
+		t,
+		`{"defaultPartitionExpirationMs":"`+ms+`"}`,
+		func(t *testing.T, got bqtypes.Dataset) {
+			if got.DefaultPartitionExpirationMs != ms {
+				t.Errorf("defaultPartitionExpirationMs = %q, want %q",
+					got.DefaultPartitionExpirationMs, ms)
+			}
+		},
+	)
+}
+
 // TestDatasetDeleteEvictsMetadata asserts DELETE clears the
 // MetadataStore so a subsequent Insert against the same ID does not
 // surface stale labels. With deleteContents=true the dataset's table

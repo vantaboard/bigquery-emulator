@@ -21,6 +21,10 @@ const tableListKind = "bigquery#tableList"
 // non-view, non-external tables the emulator's Catalog tracks today.
 const defaultTableType = "TABLE"
 
+// viewTableType is the BigQuery REST type string for views created
+// via tables.insert with a view definition.
+const viewTableType = "VIEW"
+
 // materializedViewTableType is the BigQuery REST type string for
 // materialized views created via tables.insert with a materializedView
 // definition (see QueryMaterializedViewIT).
@@ -239,6 +243,9 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if !populateMaterializedViewSchema(w, deps, r, projectID, &t) {
 			return
 		}
+		if !populateViewSchema(w, deps, r, projectID, &t) {
+			return
+		}
 		_, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
 			Table: &enginepb.TableRef{
 				ProjectId: projectID,
@@ -283,6 +290,40 @@ func populateMaterializedViewSchema(
 		}
 		writeError(w, http.StatusInternalServerError, reasonInternalError,
 			"Could not infer materialized view schema: "+inferErr.Error())
+		return false
+	}
+	if inferred != nil {
+		t.Schema = inferred
+	}
+	return true
+}
+
+// populateViewSchema fills Type and Schema on REST view inserts when
+// the client omits schema. Dry-running the view query lets SELECT *
+// expand to analyzed columns instead of zero.
+func populateViewSchema(
+	w http.ResponseWriter,
+	deps Dependencies,
+	r *http.Request,
+	projectID string,
+	t *bqtypes.Table,
+) bool {
+	if t.View == nil || t.View.Query == "" {
+		return true
+	}
+	if t.Type == "" {
+		t.Type = viewTableType
+	}
+	if t.Schema != nil && len(t.Schema.Fields) > 0 {
+		return true
+	}
+	inferred, inferErr := inferTableSchemaFromQuery(deps, r, projectID, t.View.Query)
+	if inferErr != nil {
+		if queryGRPCToHTTPError(w, inferErr) {
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, reasonInternalError,
+			"Could not infer view schema: "+inferErr.Error())
 		return false
 	}
 	if inferred != nil {
@@ -340,6 +381,9 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}
+		if t.NumRows == "" {
+			t.NumRows = "0"
+		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -380,7 +424,10 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
+		deps.Metadata.MergeTable(projectID, datasetID, tableID, t)
+		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
+			t = applyTableMetadataOverlay(t, overlay)
+		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }

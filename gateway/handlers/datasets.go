@@ -260,7 +260,10 @@ func DatasetPatch(deps Dependencies) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		deps.Metadata.PutDataset(projectID, datasetID, ds)
+		deps.Metadata.MergeDataset(projectID, datasetID, ds)
+		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok {
+			ds = applyDatasetMetadataOverlay(ds, overlay)
+		}
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }

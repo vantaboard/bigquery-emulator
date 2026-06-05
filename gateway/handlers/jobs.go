@@ -327,6 +327,10 @@ func writeJobNotFound(w http.ResponseWriter, projectID, jobID, location string) 
 func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	posted *jobs.Job, cfg *jobs.JobConfiguration,
 ) {
+	if cfg.DryRun {
+		runSyncQueryDryRunInsert(deps, w, r, posted, cfg)
+		return
+	}
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
 
@@ -357,6 +361,42 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, r)
+	writeJSON(w, http.StatusOK, job)
+}
+
+// runSyncQueryDryRunInsert handles jobs.insert with configuration.dryRun
+// set. It forwards the SQL to enginepb.Query.DryRun and returns a DONE
+// job whose statistics.totalBytesProcessed mirrors jobs.query dry-run.
+func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
+	posted *jobs.Job, cfg *jobs.JobConfiguration,
+) {
+	projectID := r.PathValue("projectId")
+	job := newPendingJob(deps, projectID, posted, cfg)
+
+	useLegacy := false
+	if cfg.Query.UseLegacySQL != nil {
+		useLegacy = *cfg.Query.UseLegacySQL
+	}
+	engineReq := &enginepb.QueryRequest{
+		ProjectId:        projectID,
+		DefaultDatasetId: defaultDatasetID(cfg.Query.DefaultDataset),
+		Sql:              cfg.Query.Query,
+		UseLegacySql:     useLegacy,
+		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),
+	}
+
+	start := time.Now().UTC()
+	resp, err := deps.Query.DryRun(r.Context(), engineReq)
+	end := time.Now().UTC()
+	if err != nil {
+		finalizeFailedJob(deps, job, start, err)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	job.Status.State = jobs.JobStateDone
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	job.Statistics.TotalBytesProcessed = formatDryRunBytes(resp.GetEstimatedBytesProcessed())
 	writeJSON(w, http.StatusOK, job)
 }
 
