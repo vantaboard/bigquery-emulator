@@ -1,7 +1,7 @@
 # ddl_create_table_round_trip: CREATE TABLE landed by the
 # control-op executor.
 #
-# Per `.cursor/plans/control-op-executor.plan.md`, CREATE TABLE
+# Per `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`, CREATE TABLE
 # leaves the DuckDB SQL evaluator entirely and routes through
 # `backend/engine/control/control_op_executor.cc::RunCreateTable`,
 # which mutates `Storage` directly. The follow-up SELECT verifies

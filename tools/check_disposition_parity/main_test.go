@@ -42,7 +42,7 @@ func TestRunDetectsDriftedFixture(t *testing.T) {
 	sp := filepath.Join(dir, "SHAPE_TRACKER.md")
 	if err := os.WriteFile(yp, []byte(`# fixture
 ResolvedQueryStmt: semantic_executor
-ResolvedExplainStmt: unsupported plan=specialized-feature-policy.plan.md
+ResolvedExplainStmt: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
 `), 0o600); err != nil {
 		t.Fatalf("write yaml: %v", err)
 	}

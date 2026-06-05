@@ -9,7 +9,7 @@
 # multi-CTE composition cannot silently squeak through.
 #
 # Route: `duckdb_native` via
-# `cte-subquery-routing.plan.md::EmitWithScan` /
+# `googlesqlite-02-withscan-cte.plan.md::EmitWithScan` /
 # `EmitWithRefScan`. Route-label assertion deferred to plan 16.
 name: with_scan_multiple_ctes
 description: |

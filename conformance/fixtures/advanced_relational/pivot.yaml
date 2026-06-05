@@ -1,6 +1,6 @@
 # pivot: BigQuery PIVOT lowers to DuckDB conditional aggregation.
 #
-# Pins `advanced-relational-routing.plan.md` Family 3. The engine
+# Pins `googlesqlite-13-advanced-relational.plan.md` Family 3. The engine
 # disables `REWRITE_PIVOT` so the analyzer hands the route classifier
 # a raw `ResolvedPivotScan`; the disposition table routes it through
 # `duckdb_rewrite`; the transpiler's `EmitPivotScan` lowers each

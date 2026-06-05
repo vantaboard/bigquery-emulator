@@ -10,7 +10,7 @@
 #
 # This fixture exercises the scalar-SET path; the deep-STRUCT
 # subfamily (`SET s.a.b = ...`) is owned by Family 4 of
-# `dml-local-executor.plan.md` and surfaces a structured
+# `googlesqlite-14-dml-system.plan.md` and surfaces a structured
 # `kNotImplemented` until that family ships.
 #
 # Per-handler unit coverage:

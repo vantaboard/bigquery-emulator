@@ -19,11 +19,11 @@ const (
 func TestParseYAMLValid(t *testing.T) {
 	src := `# comment line
 ResolvedQueryStmt: duckdb_native
-ResolvedCreateTableStmt: control_op plan=control-op-executor.plan.md status=planned
+ResolvedCreateTableStmt: control_op plan=googlesqlite-01-ddl-catalog.plan.md status=planned
 # blank below
 ` +
 		"\n" +
-		`ResolvedExplainStmt: unsupported plan=specialized-feature-policy.plan.md
+		`ResolvedExplainStmt: unsupported plan=googlesqlite-15-specialized-stubs.plan.md
 `
 	rows, err := parseYAML(src)
 	if err != nil {

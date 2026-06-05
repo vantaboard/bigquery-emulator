@@ -47,11 +47,11 @@ const (
 
 	// RouteLocalStub is the deterministic BigQuery-shaped stub
 	// route for specialized features (KEYS.NEW_KEYSET, CREATE
-	// MODEL, ...). See `.cursor/plans/specialized-feature-policy.plan.md`.
+	// MODEL, ...). See `.cursor/plans/googlesqlite-15-specialized-stubs.plan.md`.
 	RouteLocalStub = "local_stub"
 
 	// RouteUnsupported surfaces a BigQuery-shaped `UNIMPLEMENTED`.
-	// See `.cursor/plans/specialized-feature-policy.plan.md` for
+	// See `.cursor/plans/googlesqlite-15-specialized-stubs.plan.md` for
 	// the unsupported families list.
 	RouteUnsupported = "unsupported"
 )

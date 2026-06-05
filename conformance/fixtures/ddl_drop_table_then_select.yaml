@@ -3,7 +3,7 @@
 # DROP TABLE routes to the control-op executor. After the DROP, a
 # SELECT against the same name should fail at analysis time with
 # HTTP 400 + a "Table not found" message. See
-# `.cursor/plans/control-op-executor.plan.md`.
+# `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`.
 name: ddl_drop_table_then_select
 description: |
   CREATE TABLE -> DROP TABLE -> SELECT FROM the dropped table returns

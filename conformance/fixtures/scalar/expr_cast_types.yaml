@@ -7,7 +7,7 @@
 # (truncation), STRING -> BOOL. The semantic executor evaluates each
 # CAST against `Value`-level coercion. SAFE_CAST + the format /
 # time-zone / extended-cast cases stay deferred under
-# `.cursor/plans/semantic-functions-compliance.plan.md`.
+# `.cursor/plans/googlesqlite-09-date-time.plan.md`.
 # Rehomed from `fastpath/` to `scalar/` by plan 17 to match the
 # route the harness actually observes.
 name: expr_cast_types

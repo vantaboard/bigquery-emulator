@@ -4,7 +4,7 @@
 # Pins BigQuery's `<lhs> IN (<subquery>)` contract: the LHS
 # membership-tests against the rows returned by the subquery. The
 # emit is `(<lhs> IN (<inner>))`. Route: `duckdb_native`
-# (`cte-subquery-routing.plan.md` Family 2).
+# (`googlesqlite-02-withscan-cte.plan.md` Family 2).
 #
 # Edge case pinned: the LHS appears in both matching and
 # non-matching rows so the boolean result is exercised on both

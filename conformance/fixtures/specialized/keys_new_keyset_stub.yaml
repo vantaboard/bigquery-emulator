@@ -1,6 +1,6 @@
 # keys_new_keyset_stub: KEYS.NEW_KEYSET local-stub round-trip.
 #
-# `specialized-feature-policy.plan.md` pins KEYS.NEW_KEYSET to the
+# `googlesqlite-15-specialized-stubs.plan.md` pins KEYS.NEW_KEYSET to the
 # `local_stub` posture: the function is accepted at parse / analyzer
 # time and returns a deterministic BigQuery-shaped sentinel BYTES
 # value so a client-library startup probe that issues
