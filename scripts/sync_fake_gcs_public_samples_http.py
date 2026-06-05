@@ -93,6 +93,11 @@ def main() -> int:
     # cloud-samples-data — single files
     for name in (
         "bigquery/us-states/us-states.csv",
+        "bigquery/us-states/us-states-by-date.csv",
+        "bigquery/us-states/us-states.json",
+        "bigquery/us-states/us-states.avro",
+        "bigquery/us-states/us-states.orc",
+        "bigquery/us-states/us-states.parquet",
         "bigquery/sample-transactions/transactions.csv",
         "vertex-ai/bigframe/df.csv",
         "bigquery/ml/onnx/pipeline_rf.onnx",

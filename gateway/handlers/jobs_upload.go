@@ -30,7 +30,7 @@ func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request
 	}
 	result, err := load.Execute(r.Context(), deps.Catalog, cfg.Load, projectID)
 	if err != nil {
-		finalizeFailedJob(deps, job, start, err)
+		finalizeFailedDataPlaneJob(job, start, err)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -52,7 +52,7 @@ func runSyncCopyInsert(deps Dependencies, w http.ResponseWriter, r *http.Request
 	}
 	result, err := copy.Execute(r.Context(), deps.Catalog, deps.Query, deps.Snapshots, cfg.Copy, projectID)
 	if err != nil {
-		finalizeFailedJob(deps, job, start, err)
+		finalizeFailedDataPlaneJob(job, start, err)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -74,7 +74,7 @@ func runSyncExtractInsert(deps Dependencies, w http.ResponseWriter, r *http.Requ
 	}
 	result, err := extract.Execute(r.Context(), deps.Catalog, cfg.Extract, projectID)
 	if err != nil {
-		finalizeFailedJob(deps, job, start, err)
+		finalizeFailedDataPlaneJob(job, start, err)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -324,7 +324,7 @@ func runUploadedLoadJob(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	}
 	result, err := load.ExecuteFromBytes(r.Context(), deps.Catalog, cfg.Load, projectID, media)
 	if err != nil {
-		finalizeFailedJob(deps, job, start, err)
+		finalizeFailedDataPlaneJob(job, start, err)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}

@@ -18,6 +18,7 @@ const (
 	fieldTypeBoolean  = "BOOLEAN"
 	fieldTypeRecord   = "RECORD"
 	fieldModeRequired = "REQUIRED"
+	fieldModeRepeated = "REPEATED"
 	writeAppend       = "WRITE_APPEND"
 )
 

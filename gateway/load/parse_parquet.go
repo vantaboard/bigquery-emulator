@@ -97,7 +97,7 @@ func parquetFieldToBQ(f parquet.Field) bqtypes.TableFieldSchema {
 		mode = fieldModeRequired
 	}
 	if f.Repeated() {
-		mode = "REPEATED"
+		mode = fieldModeRepeated
 	}
 	nested := f.Fields()
 	if len(nested) > 0 && typ == fieldTypeRecord {

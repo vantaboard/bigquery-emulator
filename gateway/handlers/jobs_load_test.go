@@ -162,6 +162,63 @@ func TestJobInsertUploadResumableCSV(t *testing.T) {
 	}
 }
 
+func TestJobInsertLoadAvroFromFixture(t *testing.T) {
+	t.Parallel()
+	cat := &fakeCatalogClient{}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg}
+	avroPath, err := filepath.Abs(filepath.Join("..", "load", "testdata", "us-states.avro"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"configuration":{"load":{"sourceUris":["file://` + avroPath + `"],` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"states"},` +
+		`"sourceFormat":"AVRO","autodetect":true}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult != nil {
+		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
+	}
+	if got.Statistics.Load == nil || got.Statistics.Load.OutputRows != "50" {
+		t.Fatalf("statistics.load = %#v", got.Statistics.Load)
+	}
+}
+
+func TestJobInsertLoadParseErrorSurfacesInvalidReason(t *testing.T) {
+	t.Parallel()
+	cat := &fakeCatalogClient{}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg}
+	body := `{"configuration":{"load":{"sourceUris":["file:///dev/null"],` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"t"},` +
+		`"sourceFormat":"AVRO","autodetect":true}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult == nil {
+		t.Fatal("expected errorResult on AVRO parse failure")
+	}
+	if got.Status.ErrorResult.Reason != "invalid" {
+		t.Fatalf("reason = %q, want invalid", got.Status.ErrorResult.Reason)
+	}
+	if got.Status.ErrorResult.Message == "" {
+		t.Fatal("expected non-empty error message")
+	}
+}
+
 func TestJobInsertLoadSchemaUpdateAllowFieldAddition(t *testing.T) {
 	t.Parallel()
 	existingSchema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{

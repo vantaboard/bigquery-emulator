@@ -2,6 +2,7 @@ package load
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/parquet-go/parquet-go"
@@ -41,19 +42,58 @@ func TestParseParquetRoundTrip(t *testing.T) {
 	}
 }
 
-func TestParseAvroDeferredError(t *testing.T) {
+func TestParseAvroUSStatesFixture(t *testing.T) {
 	t.Parallel()
-	_, err := ParseSource("AVRO", []byte("not-avro"), nil, 0, true)
-	if err == nil {
-		t.Fatal("expected AVRO deferral error")
+	data, err := os.ReadFile("testdata/us-states.avro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseSource("AVRO", data, nil, 0, true)
+	if err != nil {
+		t.Fatalf("ParseSource: %v", err)
+	}
+	if len(got.Rows) != 50 {
+		t.Fatalf("rows = %d, want 50", len(got.Rows))
+	}
+	if got.Rows[0]["name"] != testStateName || got.Rows[0]["post_abbr"] != testStateCode {
+		t.Fatalf("row = %#v", got.Rows[0])
+	}
+	if len(got.Schema.Fields) < 2 {
+		t.Fatalf("schema = %#v", got.Schema.Fields)
 	}
 }
 
-func TestParseORCDeferredError(t *testing.T) {
+func TestParseORCUSStatesFixture(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("testdata/us-states.orc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseSource("ORC", data, nil, 0, true)
+	if err != nil {
+		t.Fatalf("ParseSource: %v", err)
+	}
+	if len(got.Rows) != 50 {
+		t.Fatalf("rows = %d, want 50", len(got.Rows))
+	}
+	if got.Rows[0]["name"] != testStateName || got.Rows[0]["post_abbr"] != testStateCode {
+		t.Fatalf("row = %#v", got.Rows[0])
+	}
+}
+
+func TestParseAvroInvalidData(t *testing.T) {
+	t.Parallel()
+	_, err := ParseSource("AVRO", []byte("not-avro"), nil, 0, true)
+	if err == nil {
+		t.Fatal("expected AVRO parse error")
+	}
+}
+
+func TestParseORCInvalidData(t *testing.T) {
 	t.Parallel()
 	_, err := ParseSource("ORC", []byte("not-orc"), nil, 0, true)
 	if err == nil {
-		t.Fatal("expected ORC deferral error")
+		t.Fatal("expected ORC parse error")
 	}
 }
 

@@ -4,6 +4,9 @@ go 1.26.0
 
 require (
 	github.com/google/go-cmp v0.7.0
+	github.com/linkedin/goavro/v2 v2.15.0
+	github.com/parquet-go/parquet-go v0.30.1
+	github.com/scritchley/orc v0.0.0-20210513144143-06dddf1ad665
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -11,11 +14,12 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect
-	github.com/parquet-go/parquet-go v0.30.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	golang.org/x/net v0.51.0 // indirect

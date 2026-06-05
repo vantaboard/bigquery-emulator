@@ -24,6 +24,11 @@ echo "Syncing into ${DEST}"
 mkdir -p "${DEST}/cloud-samples-data/bigquery/us-states"
 gcloud storage cp \
 	"gs://cloud-samples-data/bigquery/us-states/us-states.csv" \
+	"gs://cloud-samples-data/bigquery/us-states/us-states-by-date.csv" \
+	"gs://cloud-samples-data/bigquery/us-states/us-states.json" \
+	"gs://cloud-samples-data/bigquery/us-states/us-states.avro" \
+	"gs://cloud-samples-data/bigquery/us-states/us-states.orc" \
+	"gs://cloud-samples-data/bigquery/us-states/us-states.parquet" \
 	"${DEST}/cloud-samples-data/bigquery/us-states/"
 
 mkdir -p "${DEST}/cloud-samples-data/bigquery/sample-transactions"

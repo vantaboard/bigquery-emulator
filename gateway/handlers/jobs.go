@@ -527,10 +527,21 @@ func newPendingJob(deps Dependencies, projectID string, posted *jobs.Job, cfg *j
 // the full list compose it from `errorResult` + any execution-time
 // warnings (none today; the emulator runs jobs to completion).
 func finalizeFailedJob(_ Dependencies, job *jobs.Job, start time.Time, err error) {
+	finalizeFailedJobWithReason(job, start, err, reasonInvalidQuery)
+}
+
+// finalizeFailedDataPlaneJob records load/copy/extract failures on the
+// Job status envelope using reason "invalid" so Node/Python clients
+// surface the parser/fetch message instead of a generic transport error.
+func finalizeFailedDataPlaneJob(job *jobs.Job, start time.Time, err error) {
+	finalizeFailedJobWithReason(job, start, err, reasonInvalid)
+}
+
+func finalizeFailedJobWithReason(job *jobs.Job, start time.Time, err error, reason string) {
 	end := time.Now().UTC()
 	job.Status.State = jobs.JobStateDone
 	job.Status.ErrorResult = &bqtypes.ErrorProto{
-		Reason:  reasonInvalidQuery,
+		Reason:  reason,
 		Message: bqStyleMessage(err.Error()),
 	}
 	job.Statistics.StartTime = millisString(start)
