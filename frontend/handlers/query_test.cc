@@ -258,7 +258,7 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   // Four messages: schema, one row, then the trailing
   // `statement_type` + `emulator_route` pair the gateway folds into
   // `Job.statistics.query.{statementType,emulatorRoute}`. See
-  // `.cursor/plans/control-op-executor.plan.md` Item 5 and
+  // `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Item 5 and
   // `.cursor/plans/conformance-routing-matrix.plan.md`.
   ASSERT_EQ(messages.size(), 4u);
 
@@ -276,7 +276,7 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   EXPECT_EQ(messages[2].cells_size(), 0);
   EXPECT_EQ(messages[2].statement_type(), "SELECT");
   // `SELECT 1` has no FROM clause -> semantic executor (see
-  // `.cursor/plans/semantic-executor-core.plan.md`).
+  // `.cursor/plans/googlesqlite-07-semantic-core-expr.plan.md`).
   EXPECT_EQ(messages[3].emulator_route(), "semantic_executor");
 }
 
@@ -445,7 +445,7 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
   EXPECT_EQ(messages[1].statement_type(), "INSERT");
   // INSERT against a user table routes through the semantic
-  // executor's DML path (plan 9 / `dml-local-executor.plan.md`).
+  // executor's DML path (plan 9 / `googlesqlite-14-dml-system.plan.md`).
   EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
 
   // Storage round-trip: the rows actually landed.
@@ -470,7 +470,7 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   // `Job.statistics.query.statementType` and the `emulator_route`
   // trailer the gateway folds into
   // `Job.statistics.query.emulatorRoute` (loopback-only). See
-  // `.cursor/plans/control-op-executor.plan.md` Item 5 and
+  // `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Item 5 and
   // `.cursor/plans/conformance-routing-matrix.plan.md`.
   ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
   v1::QueryRequest req =
@@ -488,6 +488,38 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   ASSERT_EQ(sch->columns.size(), 2u);
   EXPECT_EQ(sch->columns[0].name, "id");
   EXPECT_EQ(sch->columns[1].name, "name");
+}
+
+TEST_F(QueryServiceTest, ExecuteQuerySqlUdfCreateThenCall) {
+  const char* kCreate = R"(CREATE FUNCTION customfunc(
+  arr ARRAY<STRUCT<name STRING, val INT64>>
+) AS (
+  (SELECT SUM(IF(elem.name = "foo",elem.val,null)) FROM UNNEST(arr) AS elem)
+))";
+  MessageCollector create_collector;
+  ::grpc::Status create_status = StreamQueryResults(storage_.get(),
+                                                    MakeRequest(kCreate),
+                                                    create_collector.Writer(),
+                                                    engine_.get());
+  ASSERT_TRUE(create_status.ok()) << create_status.error_message();
+
+  const char* kSelect = R"(SELECT customfunc([
+  STRUCT<name STRING, val INT64>("foo", 10),
+  STRUCT<name STRING, val INT64>("bar", 40),
+  STRUCT<name STRING, val INT64>("foo", 20)
+]))";
+  MessageCollector select_collector;
+  ::grpc::Status select_status = StreamQueryResults(storage_.get(),
+                                                    MakeRequest(kSelect),
+                                                    select_collector.Writer(),
+                                                    engine_.get());
+  ASSERT_TRUE(select_status.ok()) << select_status.error_message();
+  const auto& messages = select_collector.messages();
+  ASSERT_GE(messages.size(), 2u);
+  ASSERT_TRUE(messages[0].has_schema());
+  ASSERT_FALSE(messages[1].has_schema());
+  ASSERT_EQ(messages[1].cells_size(), 1);
+  EXPECT_EQ(messages[1].cells(0).string_value(), "30");
 }
 
 TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {

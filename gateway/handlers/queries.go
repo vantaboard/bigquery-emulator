@@ -247,7 +247,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 // requires either a proto change (move from `map` to `repeated`)
 // or a synthetic key encoding; both are deferred to the
 // gateway-parameters follow-up plan referenced from
-// `semantic-executor-core.plan.md`'s deliberately-deferred list.
+// `googlesqlite-07-semantic-core-expr.plan.md`'s deliberately-deferred list.
 //
 // Values with a missing `parameterType` are skipped because the
 // engine cannot decode them without a type tag.

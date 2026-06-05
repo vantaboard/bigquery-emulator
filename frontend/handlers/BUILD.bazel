@@ -32,6 +32,7 @@ cc_library(
     hdrs = ["query.h"],
     deps = [
         "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:udf_registry",
         # `backend/engine` carries the required `Engine*` parameter on
         # `QueryService` and `StreamQueryResults`; the wire path in
         # `binaries/emulator_main/main.cc` threads in a
@@ -43,6 +44,8 @@ cc_library(
         # `.cursor/plans/conformance-routing-matrix.plan.md`).
         "//backend/engine:disposition",
         "//backend/engine/coordinator:route_classifier",
+        "//backend/engine/coordinator:local_coordinator_engine",
+        "//backend/engine/semantic:system_variables",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",

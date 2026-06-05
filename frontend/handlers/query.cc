@@ -1,5 +1,6 @@
 #include "frontend/handlers/query.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -8,12 +9,18 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/system_variables.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -130,8 +137,10 @@ void ValueToCell(const backend::storage::Value& value, v1::Cell* out) {
       out->set_string_value(absl::StrCat(value.float64_value()));
       return;
     case Kind::kString:
-    case Kind::kBytes:
       out->set_string_value(value.string_value());
+      return;
+    case Kind::kBytes:
+      out->set_string_value(absl::Base64Escape(value.string_value()));
       return;
     case Kind::kArray: {
       auto* arr = out->mutable_array();
@@ -170,6 +179,23 @@ backend::engine::QueryRequest ProtoToEngineRequest(
     parameter.value_json = kv.second.value_json();
     engine_request.parameters.push_back(std::move(parameter));
   }
+  // Proto map iteration order is undefined; sort positional keys (p0, p1,
+  // ...) so `?` placeholders bind in SQL order.
+  std::sort(engine_request.parameters.begin(),
+            engine_request.parameters.end(),
+            [](const backend::engine::QueryParameter& a,
+               const backend::engine::QueryParameter& b) {
+              auto pos = [](absl::string_view name) -> int {
+                if (!absl::StartsWith(name, "p")) return -1;
+                int idx = -1;
+                if (absl::SimpleAtoi(name.substr(1), &idx)) return idx;
+                return -1;
+              };
+              const int pa = pos(a.name);
+              const int pb = pos(b.name);
+              if (pa >= 0 && pb >= 0) return pa < pb;
+              return a.name < b.name;
+            });
   return engine_request;
 }
 
@@ -252,7 +278,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     case ::googlesql::RESOLVED_REVOKE_STMT:
     case ::googlesql::RESOLVED_UNDROP_STMT:
       return StatementClass::kDdl;
-    // `procedural-scripting-executor.plan.md` Family 5: ASSERT is
+    // `googlesqlite-14-dml-system.plan.md` Family 5: ASSERT is
     // a no-row-stream statement that surfaces a structured
     // `invalidQuery` envelope on failure (BigQuery's documented
     // behavior) and produces no observable output on success. The
@@ -260,6 +286,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     // every other no-row-stream statement uses; the semantic
     // executor owns the predicate evaluation.
     case ::googlesql::RESOLVED_ASSERT_STMT:
+    case ::googlesql::RESOLVED_ASSIGNMENT_STMT:
       return StatementClass::kDdl;
     default:
       return StatementClass::kOther;
@@ -274,7 +301,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
 // altogether for shapes BigQuery itself does not enumerate, e.g.
 // internal or non-BigQuery surfaces).
 //
-// Plan ownership: `.cursor/plans/control-op-executor.plan.md`
+// Plan ownership: `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md`
 // "Item 5 (statementType)". Each handler in
 // `backend/engine/control/control_op_executor.cc` is the source of
 // truth for what the statement does; this helper is the source of
@@ -391,8 +418,11 @@ QueryService::QueryService(backend::storage::Storage* storage,
 
   ::googlesql::TypeFactory type_factory;
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
-  backend::catalog::GoogleSqlCatalog catalog(
-      request->project_id(), storage_, &type_factory, options.language());
+  backend::catalog::GoogleSqlCatalog catalog(request->project_id(),
+                                             storage_,
+                                             &type_factory,
+                                             options.language(),
+                                             request->default_dataset_id());
 
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
@@ -514,7 +544,7 @@ namespace {
 
 // Emit the trailing `statement_type` message every successful
 // `ExecuteQuery` reply now carries (per
-// `.cursor/plans/control-op-executor.plan.md` Item 5). The gateway
+// `.cursor/plans/googlesqlite-01-ddl-catalog.plan.md` Item 5). The gateway
 // folds the value into BigQuery's
 // `Job.statistics.query.statementType` envelope. We never emit the
 // trailer when `statement_type` is empty (e.g. shapes BigQuery REST
@@ -699,12 +729,33 @@ namespace {
   // pointers reach back into the catalog's type allocations. We
   // therefore pin both the type factory and the catalog as locals
   // here for the duration of the stream.
-  ::googlesql::TypeFactory type_factory;
+  ::googlesql::TypeFactory stack_type_factory;
+  ::googlesql::TypeFactory* type_factory = &stack_type_factory;
+  if (::googlesql::TypeFactory* reg_factory =
+          backend::catalog::LookupProjectTypeFactory(request.project_id());
+      reg_factory != nullptr) {
+    type_factory = reg_factory;
+  }
   ::googlesql::AnalyzerOptions analyzer_options = MakeAnalyzerOptions();
   backend::catalog::GoogleSqlCatalog catalog(request.project_id(),
                                              storage,
-                                             &type_factory,
-                                             analyzer_options.language());
+                                             type_factory,
+                                             analyzer_options.language(),
+                                             request.default_dataset_id());
+
+  backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+  if (absl::Status param_status =
+          backend::engine::coordinator::PopulateAnalyzerParameters(
+              engine_request, analyzer_options);
+      !param_status.ok()) {
+    return AnalyzeStatusToGrpc(param_status);
+  }
+  if (absl::Status sys_status =
+          backend::engine::semantic::RegisterAnalyzerSystemVariables(
+              type_factory, analyzer_options);
+      !sys_status.ok()) {
+    return AnalyzeStatusToGrpc(sys_status);
+  }
 
   // Pre-classify the statement so we can pick the right engine entry
   // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
@@ -718,7 +769,7 @@ namespace {
       ::googlesql::AnalyzeStatement(request.sql(),
                                     analyzer_options,
                                     &catalog,
-                                    &type_factory,
+                                    type_factory,
                                     &classify_output);
   if (!classify_status.ok()) return AnalyzeStatusToGrpc(classify_status);
   if (classify_output == nullptr ||
@@ -741,7 +792,6 @@ namespace {
         ::grpc::StatusCode::FAILED_PRECONDITION,
         "QueryService::ExecuteQuery: engine backend is not configured");
   }
-  backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
   const absl::string_view statement_type = StatementTypeFor(*stmt);
   // Classify the route here, alongside the statement-type lookup, so
   // every successful reply carries the canonical disposition string
