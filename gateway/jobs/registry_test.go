@@ -192,3 +192,14 @@ func TestJobConfigurationLoadJSONRoundTrip(t *testing.T) {
 		t.Errorf("sourceFormat = %v, want CSV", load["sourceFormat"])
 	}
 }
+
+func TestJobConfigurationQueryWriteDispositionArray(t *testing.T) {
+	t.Parallel()
+	var cfg JobConfigurationQuery
+	if err := json.Unmarshal([]byte(`{"writeDisposition":["WRITE_APPEND"]}`), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.WriteDisposition != "WRITE_APPEND" {
+		t.Fatalf("writeDisposition = %q, want WRITE_APPEND", cfg.WriteDisposition)
+	}
+}

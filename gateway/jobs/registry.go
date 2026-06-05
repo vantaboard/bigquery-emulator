@@ -120,6 +120,29 @@ type JobConfigurationQuery struct {
 	ConnectionProperties []bqtypes.ConnectionProperty                 `json:"connectionProperties,omitempty"`
 }
 
+// UnmarshalJSON accepts writeDisposition as a JSON string or a
+// one-element string array (node relaxColumnQueryAppend sample).
+func (c *JobConfigurationQuery) UnmarshalJSON(data []byte) error {
+	type alias JobConfigurationQuery
+	var raw struct {
+		alias
+		WriteDisposition json.RawMessage `json:"writeDisposition,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = JobConfigurationQuery(raw.alias)
+	if len(raw.WriteDisposition) == 0 {
+		return nil
+	}
+	wd, err := bqtypes.UnmarshalWriteDisposition(raw.WriteDisposition)
+	if err != nil {
+		return err
+	}
+	c.WriteDisposition = wd
+	return nil
+}
+
 // JobConfigurationLoad is the per-load slice of a JobConfiguration.
 // Fields mirror the minimum upstream REST shape thirdparty samples
 // exercise; format readers and GCS byte I/O land in plan tp08-04.
@@ -143,17 +166,24 @@ func (c *JobConfigurationLoad) SkipLeadingRows() int {
 }
 
 // UnmarshalJSON accepts skipLeadingRows as JSON number or decimal string,
-// matching the official Python/Node client wire shape.
+// matching the official Python/Node client wire shape. writeDisposition
+// may also be posted as a one-element string array.
 func (c *JobConfigurationLoad) UnmarshalJSON(data []byte) error {
 	type alias JobConfigurationLoad
 	var raw struct {
 		alias
-		SkipLeadingRows any `json:"skipLeadingRows,omitempty"`
+		SkipLeadingRows  any             `json:"skipLeadingRows,omitempty"`
+		WriteDisposition json.RawMessage `json:"writeDisposition,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	*c = JobConfigurationLoad(raw.alias)
+	if wd, err := bqtypes.UnmarshalWriteDisposition(raw.WriteDisposition); err != nil {
+		return err
+	} else if wd != "" {
+		c.WriteDisposition = wd
+	}
 	if raw.SkipLeadingRows == nil {
 		return nil
 	}
@@ -169,6 +199,26 @@ func (c *JobConfigurationLoad) UnmarshalJSON(data []byte) error {
 	default:
 		return fmt.Errorf("skipLeadingRows: unsupported type %T", v)
 	}
+	return nil
+}
+
+// UnmarshalJSON accepts writeDisposition as a string or a
+// one-element string array.
+func (c *JobConfigurationCopy) UnmarshalJSON(data []byte) error {
+	type alias JobConfigurationCopy
+	var raw struct {
+		alias
+		WriteDisposition json.RawMessage `json:"writeDisposition,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = JobConfigurationCopy(raw.alias)
+	wd, err := bqtypes.UnmarshalWriteDisposition(raw.WriteDisposition)
+	if err != nil {
+		return err
+	}
+	c.WriteDisposition = wd
 	return nil
 }
 

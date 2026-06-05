@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,29 +26,6 @@ func datasetIDFromPath(r *http.Request) (projectID, datasetID string) {
 	projectID = r.PathValue("projectId")
 	datasetID, _ = splitColonOp(r.PathValue("datasetId"))
 	return projectID, datasetID
-}
-
-// decodeDatasetBody reads and unmarshals a Dataset JSON body. An empty
-// body is treated as an empty Dataset so handlers can choose whether
-// to require fields explicitly. Any decode failure is reported with a
-// BigQuery-shaped 400 envelope and the returned bool is false.
-func decodeDatasetBody(w http.ResponseWriter, r *http.Request) (bqtypes.Dataset, bool) {
-	var ds bqtypes.Dataset
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid",
-			"Could not read dataset request body: "+err.Error())
-		return ds, false
-	}
-	if len(body) == 0 {
-		return ds, true
-	}
-	if err := json.Unmarshal(body, &ds); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid",
-			"Could not parse dataset request body as JSON: "+err.Error())
-		return ds, false
-	}
-	return ds, true
 }
 
 // nowMillis is the BigQuery REST representation of a timestamp: a
@@ -92,7 +67,7 @@ func datasetResource(projectID, datasetID string, ds bqtypes.Dataset) bqtypes.Da
 		ds.Access = []map[string]any{}
 	}
 	if ds.Labels == nil {
-		ds.Labels = map[string]string{}
+		ds.Labels = bqtypes.ResourceLabels{}
 	}
 	if ds.Location == "" {
 		ds.Location = "US"
@@ -139,7 +114,7 @@ func DatasetList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetDatasets()))
 		for _, ref := range resp.GetDatasets() {
-			labels := map[string]string{}
+			labels := bqtypes.ResourceLabels{}
 			if overlay, ok := deps.Metadata.GetDataset(
 				ref.GetProjectId(), ref.GetDatasetId(),
 			); ok && overlay.Labels != nil {
@@ -182,6 +157,10 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 		if datasetID == "" {
 			writeError(w, http.StatusBadRequest, "invalid",
 				"datasetReference.datasetId is required")
+			return
+		}
+		if err := validateDatasetLocation(r, ds.Location); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid", err.Error())
 			return
 		}
 		if deps.Catalog == nil {

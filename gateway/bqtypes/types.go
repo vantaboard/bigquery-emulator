@@ -14,6 +14,13 @@ import (
 	"strconv"
 )
 
+// labelsWireState is populated by Dataset/Table UnmarshalJSON when the body
+// carries an explicit labels field (including label-delete null values).
+type labelsWireState struct {
+	present bool
+	delete  []string
+}
+
 // DatasetReference is a stable handle to a dataset.
 type DatasetReference struct {
 	ProjectID string `json:"projectId"`
@@ -55,18 +62,18 @@ type JobReference struct {
 // created dataset; the resource builder defaults a nil map to `{}` to
 // match. Same for Table.Labels below.
 type Dataset struct {
-	Kind                     string            `json:"kind,omitempty"` // bigquery#dataset
-	ID                       string            `json:"id,omitempty"`
-	DatasetReference         DatasetReference  `json:"datasetReference"`
-	FriendlyName             string            `json:"friendlyName,omitempty"`
-	Description              string            `json:"description,omitempty"`
-	Location                 string            `json:"location,omitempty"`
-	Etag                     string            `json:"etag,omitempty"`
-	CreationTime             string            `json:"creationTime,omitempty"`
-	LastModifiedTime         string            `json:"lastModifiedTime,omitempty"`
-	Access                   []map[string]any  `json:"access"`
-	Labels                   map[string]string `json:"labels"`
-	DefaultTableExpirationMs string            `json:"defaultTableExpirationMs,omitempty"`
+	Kind                     string           `json:"kind,omitempty"` // bigquery#dataset
+	ID                       string           `json:"id,omitempty"`
+	DatasetReference         DatasetReference `json:"datasetReference"`
+	FriendlyName             string           `json:"friendlyName,omitempty"`
+	Description              string           `json:"description,omitempty"`
+	Location                 string           `json:"location,omitempty"`
+	Etag                     string           `json:"etag,omitempty"`
+	CreationTime             string           `json:"creationTime,omitempty"`
+	LastModifiedTime         string           `json:"lastModifiedTime,omitempty"`
+	Access                   []map[string]any `json:"access"`
+	Labels                   ResourceLabels   `json:"labels"`
+	DefaultTableExpirationMs string           `json:"defaultTableExpirationMs,omitempty"`
 	// DefaultPartitionExpirationMs is inherited by new time-partitioned
 	// tables in the dataset. See
 	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
@@ -79,6 +86,41 @@ type Dataset struct {
 	// shape they expect. See
 	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
+
+	labelsWire labelsWireState `json:"-"`
+}
+
+// LabelsPatchPresent reports whether a decoded request body explicitly set labels.
+func (d Dataset) LabelsPatchPresent() bool {
+	return d.labelsWire.present
+}
+
+// LabelsToDelete returns label keys cleared via JSON null in the request body.
+func (d Dataset) LabelsToDelete() []string {
+	return d.labelsWire.delete
+}
+
+// UnmarshalJSON accepts labels values of JSON null (label delete) and the
+// usual string map entries client libraries send on datasets.patch.
+func (d *Dataset) UnmarshalJSON(data []byte) error {
+	type alias Dataset
+	var raw struct {
+		alias
+		Labels json.RawMessage `json:"labels,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*d = Dataset(raw.alias)
+	patch, err := parseLabelsJSON(raw.Labels)
+	if err != nil {
+		return err
+	}
+	if patch.present {
+		d.Labels = ResourceLabels(patch.values)
+		d.labelsWire = labelsWireState{present: true, delete: patch.delete}
+	}
+	return nil
 }
 
 // Table is the BigQuery Table resource (subset).
@@ -88,26 +130,26 @@ type Dataset struct {
 // upstream `getTableLabels` sample's `Object.entries(table.metadata.labels)`
 // returns an empty iterator instead of erroring.
 type Table struct {
-	Kind             string            `json:"kind,omitempty"` // bigquery#table
-	ID               string            `json:"id,omitempty"`
-	TableReference   TableReference    `json:"tableReference"`
-	FriendlyName     string            `json:"friendlyName,omitempty"`
-	Description      string            `json:"description,omitempty"`
-	Schema           *TableSchema      `json:"schema,omitempty"`
-	Type             string            `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
-	NumRows          string            `json:"numRows,omitempty"`
-	NumBytes         string            `json:"numBytes,omitempty"`
-	CreationTime     string            `json:"creationTime,omitempty"`
-	LastModifiedTime string            `json:"lastModifiedTime,omitempty"`
-	Etag             string            `json:"etag,omitempty"`
-	Labels           map[string]string `json:"labels"`
+	Kind             string         `json:"kind,omitempty"` // bigquery#table
+	ID               string         `json:"id,omitempty"`
+	TableReference   TableReference `json:"tableReference"`
+	FriendlyName     string         `json:"friendlyName,omitempty"`
+	Description      string         `json:"description,omitempty"`
+	Schema           *TableSchema   `json:"schema,omitempty"`
+	Type             string         `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
+	NumRows          string         `json:"numRows,omitempty"`
+	NumBytes         string         `json:"numBytes,omitempty"`
+	CreationTime     string         `json:"creationTime,omitempty"`
+	LastModifiedTime string         `json:"lastModifiedTime,omitempty"`
+	Etag             string         `json:"etag,omitempty"`
+	Labels           ResourceLabels `json:"labels"`
 	// ExpirationTime is the wall-clock time at which the table
 	// expires, encoded as a decimal string of milliseconds since
 	// epoch -- BigQuery REST always serializes int64 timestamps
 	// as strings to dodge JavaScript's 53-bit integer ceiling.
 	// `omitempty` is intentional: live BigQuery omits the field
 	// when the table has no expiration.
-	ExpirationTime string `json:"expirationTime,omitempty"`
+	ExpirationTime MillisTimestamp `json:"expirationTime,omitempty"`
 	// RangePartitioning is the integer-range partitioning spec
 	// (`{field, range:{start,end,interval}}`) the upstream node
 	// `createTableRangePartitioned` sample sets and the matching
@@ -146,6 +188,49 @@ type Table struct {
 	// Persisted in the gateway MetadataStore and materialized into
 	// the engine catalog at insert/query time for supported formats.
 	ExternalDataConfiguration *ExternalDataConfiguration `json:"externalDataConfiguration,omitempty"`
+
+	labelsWire labelsWireState `json:"-"`
+}
+
+// LabelsPatchPresent reports whether a decoded request body explicitly set labels.
+func (t Table) LabelsPatchPresent() bool {
+	return t.labelsWire.present
+}
+
+// LabelsToDelete returns label keys cleared via JSON null in the request body.
+func (t Table) LabelsToDelete() []string {
+	return t.labelsWire.delete
+}
+
+// UnmarshalJSON accepts expirationTime as a decimal string or JSON number and
+// labels values of JSON null (label delete).
+func (t *Table) UnmarshalJSON(data []byte) error {
+	type alias Table
+	var raw struct {
+		alias
+		ExpirationTime json.RawMessage `json:"expirationTime,omitempty"`
+		Labels         json.RawMessage `json:"labels,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*t = Table(raw.alias)
+	if raw.ExpirationTime != nil {
+		var ts MillisTimestamp
+		if err := json.Unmarshal(raw.ExpirationTime, &ts); err != nil {
+			return fmt.Errorf("expirationTime: %w", err)
+		}
+		t.ExpirationTime = ts
+	}
+	patch, err := parseLabelsJSON(raw.Labels)
+	if err != nil {
+		return err
+	}
+	if patch.present {
+		t.Labels = ResourceLabels(patch.values)
+		t.labelsWire = labelsWireState{present: true, delete: patch.delete}
+	}
+	return nil
 }
 
 // ExternalDataConfiguration mirrors the BigQuery REST external data

@@ -413,7 +413,7 @@ func TestTableMetadataLabelsRoundTrip(t *testing.T) {
 // `updateTableExpiration` sample's setMetadata + getMetadata flow.
 func TestTableMetadataExpirationTimeRoundTrip(t *testing.T) {
 	runTableMetadataRoundTrip(t, `{"expirationTime":"1234567890"}`, func(t *testing.T, got bqtypes.Table) {
-		if got.ExpirationTime != "1234567890" {
+		if got.ExpirationTime.String() != "1234567890" {
 			t.Errorf("expirationTime = %q, want %q", got.ExpirationTime, "1234567890")
 		}
 	})

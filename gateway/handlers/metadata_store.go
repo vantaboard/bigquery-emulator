@@ -262,7 +262,11 @@ func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
 	if patch.Description != "" {
 		base.Description = patch.Description
 	}
-	if patch.Labels != nil {
+	if patch.LabelsPatchPresent() {
+		base.Labels = bqtypes.ApplyLabelsPatch(
+			base.Labels, true, patch.Labels, patch.LabelsToDelete(),
+		)
+	} else if patch.Labels != nil {
 		base.Labels = patch.Labels
 	}
 	if patch.ExpirationTime != "" {
@@ -341,7 +345,11 @@ func mergeDatasetMetadataOverlay(base, patch bqtypes.Dataset) bqtypes.Dataset {
 	if patch.Access != nil {
 		base.Access = patch.Access
 	}
-	if patch.Labels != nil {
+	if patch.LabelsPatchPresent() {
+		base.Labels = bqtypes.ApplyLabelsPatch(
+			base.Labels, true, patch.Labels, patch.LabelsToDelete(),
+		)
+	} else if patch.Labels != nil {
 		base.Labels = patch.Labels
 	}
 	if patch.DefaultTableExpirationMs != "" {

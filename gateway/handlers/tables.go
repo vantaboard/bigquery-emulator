@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -46,28 +44,6 @@ func tableIDFromPath(r *http.Request) (projectID, datasetID, tableID string) {
 	return projectID, datasetID, tableID
 }
 
-// decodeTableBody reads and unmarshals a Table JSON body. An empty
-// body is treated as an empty Table so handlers can choose whether to
-// require fields explicitly.
-func decodeTableBody(w http.ResponseWriter, r *http.Request) (bqtypes.Table, bool) {
-	var t bqtypes.Table
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid",
-			"Could not read table request body: "+err.Error())
-		return t, false
-	}
-	if len(body) == 0 {
-		return t, true
-	}
-	if err := json.Unmarshal(body, &t); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid",
-			"Could not parse table request body as JSON: "+err.Error())
-		return t, false
-	}
-	return t, true
-}
-
 // tableResource builds a Table resource for a successful response.
 // Preserves any caller-supplied Schema/FriendlyName/Description that
 // the engine does not need to know about, and stamps the bookkeeping
@@ -95,7 +71,7 @@ func tableResource(projectID, datasetID, tableID string, t bqtypes.Table) bqtype
 	}
 	t.LastModifiedTime = nowMillis()
 	if t.Labels == nil {
-		t.Labels = map[string]string{}
+		t.Labels = bqtypes.ResourceLabels{}
 	}
 	if t.Location == "" {
 		t.Location = "US"
@@ -196,7 +172,7 @@ func TableList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetTables()))
 		for _, ref := range resp.GetTables() {
-			labels := map[string]string{}
+			labels := bqtypes.ResourceLabels{}
 			if overlay, ok := deps.Metadata.GetTable(
 				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
 			); ok && overlay.Labels != nil {
