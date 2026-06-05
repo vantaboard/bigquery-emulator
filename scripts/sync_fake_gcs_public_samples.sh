@@ -36,6 +36,11 @@ gcloud storage cp \
 	"gs://cloud-samples-data/bigquery/sample-transactions/transactions.csv" \
 	"${DEST}/cloud-samples-data/bigquery/sample-transactions/"
 
+mkdir -p "${DEST}/cloud-samples-data/bigquery"
+gcloud storage cp --recursive \
+	"gs://cloud-samples-data/bigquery/hive-partitioning-samples" \
+	"${DEST}/cloud-samples-data/bigquery/"
+
 mkdir -p "${DEST}/cloud-samples-data/vertex-ai/bigframe"
 gcloud storage cp \
 	"gs://cloud-samples-data/vertex-ai/bigframe/df.csv" \

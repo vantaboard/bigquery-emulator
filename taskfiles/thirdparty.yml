@@ -759,6 +759,10 @@ tasks:
           exit 1
         fi
       - task: emulator-up
+      # Hive / GCS external-table ITs list gs:// via STORAGE_EMULATOR_HOST
+      # inside the gateway container. Recreate after emulator-up so the
+      # env var points at fake-gcs-server, not 127.0.0.1:4443.
+      - task: fake-gcs-up
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"

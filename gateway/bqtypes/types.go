@@ -236,15 +236,25 @@ func (t *Table) UnmarshalJSON(data []byte) error {
 // ExternalDataConfiguration mirrors the BigQuery REST external data
 // source object. See docs/bigquery/docs/reference/rest/v2/tables.md.
 type ExternalDataConfiguration struct {
-	SourceURIs          []string             `json:"sourceUris,omitempty"`
-	SourceFormat        string               `json:"sourceFormat,omitempty"`
-	Autodetect          bool                 `json:"autodetect,omitempty"`
-	Schema              *TableSchema         `json:"schema,omitempty"`
-	CsvOptions          *CsvOptions          `json:"csvOptions,omitempty"`
-	GoogleSheetsOptions *GoogleSheetsOptions `json:"googleSheetsOptions,omitempty"`
-	IgnoreUnknownValues bool                 `json:"ignoreUnknownValues,omitempty"`
-	MaxBadRecords       int                  `json:"maxBadRecords,omitempty"`
-	Compression         string               `json:"compression,omitempty"`
+	SourceURIs              []string                 `json:"sourceUris,omitempty"`
+	SourceFormat            string                   `json:"sourceFormat,omitempty"`
+	Autodetect              bool                     `json:"autodetect,omitempty"`
+	Schema                  *TableSchema             `json:"schema,omitempty"`
+	CsvOptions              *CsvOptions              `json:"csvOptions,omitempty"`
+	GoogleSheetsOptions     *GoogleSheetsOptions     `json:"googleSheetsOptions,omitempty"`
+	HivePartitioningOptions *HivePartitioningOptions `json:"hivePartitioningOptions,omitempty"`
+	IgnoreUnknownValues     bool                     `json:"ignoreUnknownValues,omitempty"`
+	MaxBadRecords           int                      `json:"maxBadRecords,omitempty"`
+	Compression             string                   `json:"compression,omitempty"`
+}
+
+// HivePartitioningOptions mirrors the BigQuery REST hivePartitioningOptions
+// object. See docs/bigquery/docs/reference/rest/v2/tables.md.
+type HivePartitioningOptions struct {
+	Mode                   string   `json:"mode,omitempty"`
+	SourceURIPrefix        string   `json:"sourceUriPrefix,omitempty"`
+	RequirePartitionFilter bool     `json:"requirePartitionFilter,omitempty"`
+	Fields                 []string `json:"fields,omitempty"`
 }
 
 // CsvOptions is the csvOptions sub-object of ExternalDataConfiguration.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -16,8 +17,10 @@ import (
 )
 
 const (
-	testExtColType   = "STRING"
-	testExtTableName = "us_states"
+	testExtColType      = "STRING"
+	testExtTableName    = "us_states"
+	testExtSourceFormat = "CSV"
+	testExtProjectID    = "dev"
 )
 
 type materializeFakeCatalog struct {
@@ -116,7 +119,7 @@ func TestExternalMaterializeCSVFromFakeGCS(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &bqtypes.ExternalDataConfiguration{
-		SourceFormat: "CSV",
+		SourceFormat: testExtSourceFormat,
 		SourceURIs:   []string{"gs://cloud-samples-data/bigquery/us-states/us-states.csv"},
 		CsvOptions:   &csvOpts,
 		Schema: &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
@@ -125,7 +128,7 @@ func TestExternalMaterializeCSVFromFakeGCS(t *testing.T) {
 		}},
 	}
 	if err := Materialize(ctx, fake, Target{
-		ProjectID: "dev",
+		ProjectID: testExtProjectID,
 		DatasetID: "ds",
 		TableID:   testExtTableName,
 	}, cfg); err != nil {
@@ -149,12 +152,71 @@ func TestExternalGoogleSheetsUnsupported(t *testing.T) {
 		SourceURIs:   []string{"https://docs.google.com/spreadsheets/d/abc/edit"},
 	}
 	err := Materialize(context.Background(), fake, Target{
-		ProjectID: "dev",
+		ProjectID: testExtProjectID,
 		DatasetID: "ds",
 		TableID:   "sheet",
 	}, cfg)
 	if !errors.Is(err, ErrGoogleSheetsUnsupported) {
 		t.Fatalf("err = %v, want ErrGoogleSheetsUnsupported", err)
+	}
+}
+
+func TestExternalMaterializeHivePartitionedCSV(t *testing.T) {
+	const (
+		listBody = `{
+		  "items": [
+		    {"name": "hive/customlayout/pkey=foo/data.csv"},
+		    {"name": "hive/customlayout/pkey=bar/data.csv"}
+		  ]
+		}`
+		csvFoo = "id,val\n1,alpha\n"
+		csvBar = "id,val\n2,beta\n"
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/storage/v1/b/bkt/o" && r.Method == http.MethodGet && r.URL.Query().Get("alt") == "":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(listBody))
+		case strings.HasSuffix(r.URL.Path, "/hive/customlayout/pkey=foo/data.csv"):
+			_, _ = w.Write([]byte(csvFoo))
+		case strings.HasSuffix(r.URL.Path, "/hive/customlayout/pkey=bar/data.csv"):
+			_, _ = w.Write([]byte(csvBar))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("STORAGE_EMULATOR_HOST", srv.Listener.Addr().String())
+
+	fake := &materializeFakeCatalog{}
+	cfg := &bqtypes.ExternalDataConfiguration{
+		SourceFormat: testExtSourceFormat,
+		SourceURIs:   []string{"gs://bkt/hive/customlayout/*"},
+		Autodetect:   true,
+		HivePartitioningOptions: &bqtypes.HivePartitioningOptions{
+			Mode:            hiveModeCustom,
+			SourceURIPrefix: "gs://bkt/hive/customlayout/{pkey:STRING}/",
+		},
+	}
+	if err := Materialize(context.Background(), fake, Target{
+		ProjectID: testExtProjectID,
+		DatasetID: "ds",
+		TableID:   "hive_tbl",
+	}, cfg); err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	if fake.lastInsertRows == nil || len(fake.lastInsertRows.GetRows()) != 4 {
+		t.Fatalf("insert rows = %d, want 4", len(fake.lastInsertRows.GetRows()))
+	}
+	fields := fake.lastRegisterTable.GetSchema().GetFields()
+	var hasPkey bool
+	for _, f := range fields {
+		if f.GetName() == "pkey" {
+			hasPkey = true
+		}
+	}
+	if !hasPkey {
+		t.Fatalf("schema fields = %#v, want pkey partition column", fields)
 	}
 }
 
@@ -173,7 +235,7 @@ func TestExternalPrepareTableDefinitionsSetsTempDataset(t *testing.T) {
 	}
 	defs := map[string]bqtypes.ExternalDataConfiguration{
 		testExtTableName: {
-			SourceFormat: "CSV",
+			SourceFormat: testExtSourceFormat,
 			SourceURIs:   []string{"gs://bkt/obj.csv"},
 			Schema: &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
 				{Name: "name", Type: testExtColType},
@@ -182,7 +244,7 @@ func TestExternalPrepareTableDefinitionsSetsTempDataset(t *testing.T) {
 			CsvOptions: &skipOpts,
 		},
 	}
-	ds, err := PrepareTableDefinitions(context.Background(), fake, "dev", defs, "")
+	ds, err := PrepareTableDefinitions(context.Background(), fake, testExtProjectID, defs, "")
 	if err != nil {
 		t.Fatalf("PrepareTableDefinitions: %v", err)
 	}

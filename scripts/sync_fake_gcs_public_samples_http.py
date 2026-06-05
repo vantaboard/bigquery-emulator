@@ -104,6 +104,13 @@ def main() -> int:
     ):
         _sync_file("cloud-samples-data", name, dest_root)
 
+    print("gs://cloud-samples-data/bigquery/hive-partitioning-samples/")
+    _sync_prefix(
+        "cloud-samples-data",
+        "bigquery/hive-partitioning-samples/",
+        dest_root,
+    )
+
     # cymbal-pets prefixes
     for prefix in (
         "bigquery/tutorials/cymbal-pets/images/",
