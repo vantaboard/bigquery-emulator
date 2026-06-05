@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -381,7 +382,17 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}
-		if t.NumRows == "" {
+		if rowsResp, listErr := deps.Catalog.ListRows(r.Context(), &enginepb.ListRowsRequest{
+			Table: &enginepb.TableRef{
+				ProjectId: projectID,
+				DatasetId: datasetID,
+				TableId:   tableID,
+			},
+			StartIndex: 0,
+			MaxResults: 0,
+		}); listErr == nil {
+			t.NumRows = strconv.FormatInt(rowsResp.GetTotalRows(), 10)
+		} else if t.NumRows == "" {
 			t.NumRows = "0"
 		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))

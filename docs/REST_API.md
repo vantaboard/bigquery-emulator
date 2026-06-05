@@ -72,7 +72,7 @@ omit the host and use `{x}` for path variables.
 | Method | Path | Status | Handler |
 |---|---|---|---|
 | `jobs.list` | `GET /bigquery/v2/projects/{projectId}/jobs` | wired | [`gateway/handlers/jobs.go::JobList`][jobs] |
-| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | wired (query done; load/copy/extract partial) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
+| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | wired (query done; LOAD CSV/JSON partial; copy/extract stub) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
 | `jobs.insert` (media upload) | `POST /upload/bigquery/v2/projects/{projectId}/jobs` | wired | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
 | `jobs.get` | `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` | wired | [`gateway/handlers/jobs.go::JobGet`][jobs] |
 | `jobs.cancel` | `POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel` | wired | [`gateway/handlers/jobs.go::JobCancel`][jobs] |

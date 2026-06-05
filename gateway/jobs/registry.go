@@ -27,6 +27,8 @@
 package jobs
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -123,6 +125,45 @@ type JobConfigurationLoad struct {
 	Schema              *bqtypes.TableSchema    `json:"schema,omitempty"`
 	Autodetect          bool                    `json:"autodetect,omitempty"`
 	SchemaUpdateOptions []string                `json:"schemaUpdateOptions,omitempty"`
+	skipLeadingRows     int                     // set via UnmarshalJSON; REST sends int or string
+}
+
+// SkipLeadingRows returns the number of leading CSV rows to skip.
+func (c *JobConfigurationLoad) SkipLeadingRows() int {
+	if c == nil {
+		return 0
+	}
+	return c.skipLeadingRows
+}
+
+// UnmarshalJSON accepts skipLeadingRows as JSON number or decimal string,
+// matching the official Python/Node client wire shape.
+func (c *JobConfigurationLoad) UnmarshalJSON(data []byte) error {
+	type alias JobConfigurationLoad
+	var raw struct {
+		alias
+		SkipLeadingRows any `json:"skipLeadingRows,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*c = JobConfigurationLoad(raw.alias)
+	if raw.SkipLeadingRows == nil {
+		return nil
+	}
+	switch v := raw.SkipLeadingRows.(type) {
+	case float64:
+		c.skipLeadingRows = int(v)
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("skipLeadingRows: %w", err)
+		}
+		c.skipLeadingRows = n
+	default:
+		return fmt.Errorf("skipLeadingRows: unsupported type %T", v)
+	}
+	return nil
 }
 
 // JobConfigurationCopy is the per-copy slice of a JobConfiguration.

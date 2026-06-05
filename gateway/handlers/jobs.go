@@ -11,6 +11,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 )
 
@@ -381,16 +382,26 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, job)
 }
 
-// runSyncLoadInsert accepts a load-job body, registers it, and returns a
-// terminal Job. The data plane (GCS fetch, format parse, row ingest) lands
-// in thirdparty-04; until then the job completes with a structured error.
+// runSyncLoadInsert accepts a load-job body, fetches source bytes, parses
+// CSV/JSON, and bulk-inserts into the destination table.
 func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	posted *jobs.Job, cfg *jobs.JobConfiguration,
 ) {
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
 	start := time.Now().UTC()
-	finalizeDeferredDataPlaneJob(job, cfg, start, "load")
+	if deps.Catalog == nil {
+		finalizeDeferredDataPlaneJob(job, cfg, start, "load")
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	result, err := load.Execute(r.Context(), deps.Catalog, cfg.Load, projectID)
+	if err != nil {
+		finalizeFailedJob(deps, job, start, err)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	finalizeSuccessfulLoadJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -414,6 +425,17 @@ func runSyncExtractInsert(deps Dependencies, w http.ResponseWriter, r *http.Requ
 	start := time.Now().UTC()
 	finalizeDeferredDataPlaneJob(job, cfg, start, "extract")
 	writeJSON(w, http.StatusOK, job)
+}
+
+// finalizeSuccessfulLoadJob marks a LOAD job DONE with statistics.load and
+// no errorResult.
+func finalizeSuccessfulLoadJob(job *jobs.Job, start time.Time, result load.Result) {
+	end := time.Now().UTC()
+	job.Status.State = jobs.JobStateDone
+	job.Status.ErrorResult = nil
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	job.Statistics.Load = load.FormatStatistics(result)
 }
 
 // finalizeDeferredDataPlaneJob marks a tp08 foundation job DONE with an
