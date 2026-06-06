@@ -600,12 +600,13 @@ tasks:
         # default to `dev` so the emulator-pointed Client picks up the same
         # default project the gateway uses. Only mutates the child nox env.
         export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
+        export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
         # Repo-owned pytest plugin skips ML/geography/public-data/legacy
         # families when the emulator is targeted (emulator_pytest_skip.py).
         _py_emulator_skip_plugin=()
         if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
           export PYTHONPATH="${root}/third_party/python-bigquery-tests${PYTHONPATH:+:${PYTHONPATH}}"
-          _py_emulator_skip_plugin=(-p emulator_pytest_skip)
+          _py_emulator_skip_plugin=(-p emulator_bootstrap -p emulator_pytest_skip)
         fi
         # Wall-clock cap so a dead emulator / hung RPC does not block indefinitely (GNU coreutils timeout(1)).
         _py_samples_to="${PYTHON_SAMPLES_CMD_TIMEOUT:-30m}"

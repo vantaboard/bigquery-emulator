@@ -96,6 +96,7 @@ func (s *ReadServer) ReadRows(
 	}
 
 	batchSchema := s.sessionSchema(req.GetReadStream())
+	sentSchema := false
 	for {
 		page, recvErr := engineStream.Recv()
 		if errors.Is(recvErr, io.EOF) {
@@ -120,6 +121,14 @@ func (s *ReadServer) ReadRows(
 				ArrowRecordBatch: batch,
 			},
 			RowCount: batch.GetRowCount(),
+		}
+		if !sentSchema {
+			arrowSchema, schemaErr := serializeArrowSchema(schema)
+			if schemaErr != nil {
+				return status.Errorf(codes.Internal, "encode Arrow schema: %v", schemaErr)
+			}
+			resp.Schema = &storagepb.ReadRowsResponse_ArrowSchema{ArrowSchema: arrowSchema}
+			sentSchema = true
 		}
 		if err := stream.Send(resp); err != nil {
 			return err

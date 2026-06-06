@@ -329,6 +329,9 @@ def snippets(session):
     else:
         extras = "[all]"
     session.install("-e", f".{extras}", "-c", constraints_path)
+    # load_table_dataframe sample imports pytz directly; not always
+    # pulled in by the pandas extra on every Python version.
+    session.install("pytz", "-c", constraints_path)
     session.run("python", "-m", "pip", "freeze")
 
     # Run py.test against the snippets tests.
