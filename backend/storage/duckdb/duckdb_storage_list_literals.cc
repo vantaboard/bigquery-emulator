@@ -131,6 +131,68 @@ absl::StatusOr<Value> ParseDuckDBListVarchar(
   return Value::Array(std::move(elements));
 }
 
+absl::StatusOr<Value> ParseDuckDBStructVarchar(
+    absl::string_view text, const schema::ColumnSchema& column) {
+  absl::string_view body = TrimAsciiSpace(text);
+  if (body.empty() || body == "NULL") {
+    return Value::Null();
+  }
+  if (body.size() < 2 || body.front() != '{' || body.back() != '}') {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "ParseDuckDBStructVarchar: expected `{...}` got `", body, "`"));
+  }
+  body = TrimAsciiSpace(body.substr(1, body.size() - 2));
+  std::vector<Value> fields(column.fields.size(), Value::Null());
+  while (!body.empty()) {
+    body = TrimAsciiSpace(body);
+    if (body.empty()) {
+      break;
+    }
+    if (body.front() != '\'') {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "ParseDuckDBStructVarchar: expected quoted field name in `",
+          body,
+          "`"));
+    }
+    auto key_or = ParseQuotedStringToken(&body);
+    if (!key_or.ok()) {
+      return key_or.status();
+    }
+    body = TrimAsciiSpace(body);
+    if (body.empty() || body.front() != ':') {
+      return absl::InvalidArgumentError(
+          "ParseDuckDBStructVarchar: expected ':' after field name");
+    }
+    body.remove_prefix(1);
+    body = TrimAsciiSpace(body);
+    std::string raw_value;
+    if (!body.empty() && body.front() == '\'') {
+      auto parsed = ParseQuotedStringToken(&body);
+      if (!parsed.ok()) {
+        return parsed.status();
+      }
+      raw_value = std::move(*parsed);
+    } else {
+      const size_t next = body.find(", '");
+      raw_value = std::string(TrimAsciiSpace(
+          next == absl::string_view::npos ? body : body.substr(0, next)));
+      body = next == absl::string_view::npos ? absl::string_view{}
+                                             : body.substr(next + 2);
+    }
+    for (size_t i = 0; i < column.fields.size(); ++i) {
+      if (column.fields[i].name == *key_or) {
+        fields[i] = Value::String(raw_value);
+        break;
+      }
+    }
+    body = TrimAsciiSpace(body);
+    if (!body.empty() && body.front() == ',') {
+      body.remove_prefix(1);
+    }
+  }
+  return Value::Struct(std::move(fields));
+}
+
 }  // namespace internal
 }  // namespace duckdb
 }  // namespace storage

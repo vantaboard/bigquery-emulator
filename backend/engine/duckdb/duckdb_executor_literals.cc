@@ -91,6 +91,15 @@ std::string RenderFloatLiteral(const storage::Value& cell) {
 // before recursing.
 absl::StatusOr<std::string> RenderStructLiteral(
     const storage::Value& cell, const schema::ColumnSchema& column) {
+  // Parquet round-trip via DuckDBStorage::ReadCell materializes STRUCT
+  // columns as VARCHAR; pass the literal through when it already looks
+  // like `{'field': value, ...}`.
+  if (cell.kind() == storage::Value::Kind::kString) {
+    absl::string_view text = absl::StripAsciiWhitespace(cell.string_value());
+    if (!text.empty() && text.front() == '{') {
+      return std::string(text);
+    }
+  }
   if (cell.kind() != storage::Value::Kind::kStruct) {
     return absl::InvalidArgumentError(
         absl::StrCat("DuckDBEngine: column '",

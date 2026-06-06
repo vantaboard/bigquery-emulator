@@ -56,8 +56,26 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
     return *parsed;
   }
   if (::duckdb_value_is_null(result, col, row)) return Value::Null();
-  if (column.type == schema::ColumnType::kArray ||
-      column.type == schema::ColumnType::kStruct) {
+  if (column.type == schema::ColumnType::kStruct) {
+    auto* str = ::duckdb_value_varchar(result, col, row);
+    const std::string text = str == nullptr ? std::string("") : str;
+    if (str != nullptr) {
+      ::duckdb_free(str);
+    }
+    if (text.empty()) {
+      return Value::Null();
+    }
+    auto parsed = internal::ParseDuckDBStructVarchar(text, column);
+    if (!parsed.ok()) {
+      return absl::InternalError(
+          absl::StrCat("ReadCell: failed to decode STRUCT column `",
+                       column.name,
+                       "`: ",
+                       parsed.status().message()));
+    }
+    return *parsed;
+  }
+  if (column.type == schema::ColumnType::kArray) {
     auto* str = ::duckdb_value_varchar(result, col, row);
     Value out = Value::String(str == nullptr ? std::string("") : str);
     if (str != nullptr) ::duckdb_free(str);

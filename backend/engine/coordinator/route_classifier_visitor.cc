@@ -111,9 +111,20 @@ absl::Status RouteClassifierVisitor::VisitResolvedJoinScan(
 
 absl::Status RouteClassifierVisitor::VisitResolvedSubqueryExpr(
     const ::googlesql::ResolvedSubqueryExpr* node) {
-  if (node != nullptr && node->parameter_list_size() > 0) {
-    MaybePromote(Disposition::kSemanticExecutor,
-                 "ResolvedSubqueryExpr(correlated)");
+  if (node != nullptr) {
+    if (node->parameter_list_size() > 0) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedSubqueryExpr(correlated)");
+    }
+    // `x IN UNNEST(@arr)` lowers to an IN subquery over a standalone
+    // ArrayScan; the DuckDB transpiler does not cover that filter shape
+    // yet, but the semantic executor's EvalSubqueryExpr(IN) path does.
+    if (node->subquery_type() == ::googlesql::ResolvedSubqueryExpr::IN &&
+        node->subquery() != nullptr &&
+        node->subquery()->node_kind() == ::googlesql::RESOLVED_ARRAY_SCAN) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedSubqueryExpr(IN_UNNEST)");
+    }
   }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedSubqueryExpr(node);
 }

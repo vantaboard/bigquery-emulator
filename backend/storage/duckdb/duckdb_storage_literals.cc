@@ -4,6 +4,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
@@ -93,6 +94,12 @@ std::string RenderFloatLiteral(const Value& cell) {
 // `duckdb_executor.cc::RenderStructLiteral` (see follow-up de-dup task).
 absl::StatusOr<std::string> RenderStructLiteral(
     const Value& cell, const schema::ColumnSchema& column) {
+  if (cell.kind() == Value::Kind::kString) {
+    absl::string_view text = absl::StripAsciiWhitespace(cell.string_value());
+    if (!text.empty() && text.front() == '{') {
+      return std::string(text);
+    }
+  }
   if (cell.kind() != Value::Kind::kStruct) {
     return absl::InvalidArgumentError(
         absl::StrCat("AppendRows: column '",
@@ -200,7 +207,7 @@ absl::StatusOr<std::string> RenderCellLiteral(
     element.mode = schema::ColumnMode::kNullable;
     const auto& elems = cell.array_value();
     const std::string duckdb_list_type =
-        schema::ColumnSchemaToDuckDBType(element);
+        schema::ColumnSchemaToDuckDBType(column);
     if (elems.empty()) {
       return absl::StrCat("CAST([] AS ", duckdb_list_type, ")");
     }
@@ -272,7 +279,21 @@ std::string RenderColumnSelectExpr(const schema::ColumnSchema& column) {
   if (column.mode == schema::ColumnMode::kRepeated) {
     return absl::StrCat("CAST(", ident, " AS VARCHAR) AS ", ident);
   }
-  return ident;
+  // Parquet-backed tables often store TIMESTAMP/DATETIME columns as
+  // native Arrow/DuckDB temporal types. The C API's
+  // `duckdb_value_varchar` returns an empty string for those cells,
+  // so project them through VARCHAR in the SELECT list (same pattern
+  // as REPEATED LIST columns).
+  switch (column.type) {
+    case schema::ColumnType::kDate:
+    case schema::ColumnType::kTime:
+    case schema::ColumnType::kDatetime:
+    case schema::ColumnType::kTimestamp:
+    case schema::ColumnType::kStruct:
+      return absl::StrCat("CAST(", ident, " AS VARCHAR) AS ", ident);
+    default:
+      return ident;
+  }
 }
 
 std::string RenderColumnIdentList(const schema::TableSchema& schema) {

@@ -111,6 +111,11 @@ absl::Status SnapshotTempTableToParquet(absl::string_view tag,
 absl::StatusOr<Value> ParseDuckDBListVarchar(
     absl::string_view text, const schema::ColumnSchema& element);
 
+// Parses DuckDB's VARCHAR rendering of a STRUCT (`{'k': v, ...}`) into
+// `Value::Struct` using `column.fields` for names and child types.
+absl::StatusOr<Value> ParseDuckDBStructVarchar(
+    absl::string_view text, const schema::ColumnSchema& column);
+
 absl::StatusOr<Value> ReadCell(::duckdb_result* result,
                                idx_t col,
                                idx_t row,
