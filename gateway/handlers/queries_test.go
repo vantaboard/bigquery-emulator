@@ -15,10 +15,38 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// TestQueryRunRejectsLegacySQL asserts that an explicit
-// `useLegacySql=true` produces a BigQuery-shaped 400 with
-// `reason: invalidQuery`, per docs/REST_API.md "SQL dialect".
-func TestQueryRunRejectsLegacySQL(t *testing.T) {
+// TestQueryRunTranslatesLegacySQLBracketRefs asserts bracket-style
+// legacy table refs are rewritten before the engine RPC and that
+// use_legacy_sql is cleared on the forwarded request.
+func TestQueryRunTranslatesLegacySQLBracketRefs(t *testing.T) {
+	fake := &fakeQueryClient{
+		dryRunFn: func(_ context.Context, req *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
+			if req.GetUseLegacySql() {
+				t.Error("use_legacy_sql forwarded = true; want false after translation")
+			}
+			want := "SELECT word FROM `bigquery-public-data.samples.shakespeare` LIMIT 10"
+			if got := req.GetSql(); got != want {
+				t.Errorf("sql forwarded = %q, want %q", got, want)
+			}
+			return &enginepb.DryRunResponse{EstimatedBytesProcessed: 1}, nil
+		},
+	}
+	body := `{"query":"SELECT word FROM [bigquery-public-data:samples.shakespeare] LIMIT 10","dryRun":true,"useLegacySql":true}`
+	rec := runQueryWithDeps(t, testProjectID, Dependencies{Query: fake}, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastDryRun == nil {
+		t.Fatal("Query.DryRun was not called")
+	}
+}
+
+// TestQueryRunAcceptsLegacySQLTruePlainQuery asserts plain GoogleSQL
+// with useLegacySql=true passes the dialect gate (no bracket rewrite
+// needed). The engine is not wired here, so the handler degrades to
+// the structured 501 stub instead of panicking on a nil client.
+func TestQueryRunAcceptsLegacySQLTruePlainQuery(t *testing.T) {
 	body, err := json.Marshal(map[string]any{
 		"query":        "SELECT 1",
 		"useLegacySql": true,
@@ -29,25 +57,9 @@ func TestQueryRunRejectsLegacySQL(t *testing.T) {
 
 	rec := runQuery(t, string(body))
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-	var env errorEnvelope
-	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if env.Error.Code != http.StatusBadRequest {
-		t.Fatalf("error.code = %d, want %d", env.Error.Code, http.StatusBadRequest)
-	}
-	if env.Error.Status != reasonInvalidQuery {
-		t.Fatalf("error.status = %q, want %q", env.Error.Status, reasonInvalidQuery)
-	}
-	if len(env.Error.Errors) == 0 {
-		t.Fatal("error.errors is empty; BigQuery clients expect a detail")
-	}
-	if env.Error.Errors[0].Reason != reasonInvalidQuery {
-		t.Fatalf("error.errors[0].reason = %q, want %q",
-			env.Error.Errors[0].Reason, reasonInvalidQuery)
+	if rec.Code != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want %d (useLegacySql=true plain SQL should reach engine stub)",
+			rec.Code, http.StatusNotImplemented)
 	}
 }
 

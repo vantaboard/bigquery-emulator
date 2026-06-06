@@ -398,11 +398,18 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	}
 	sql := expandQueryParamsInSQL(cfg.Query.Query, cfg.Query.QueryParameters)
 	bindParams := stripExpandedPositionalArrayParams(cfg.Query.Query, cfg.Query.QueryParameters)
+	sql, sqlErr := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
+	if sqlErr != nil {
+		start := time.Now().UTC()
+		finalizeFailedJob(deps, job, start, sqlErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
-		UseLegacySql:     useLegacy,
+		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(bindParams),
 	}
 
@@ -483,11 +490,18 @@ func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	sql, sqlErr := query.PrepareEngineSQL(useLegacy, cfg.Query.Query, projectID, defaultDataset)
+	if sqlErr != nil {
+		start := time.Now().UTC()
+		finalizeFailedJob(deps, job, start, sqlErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
-		Sql:              cfg.Query.Query,
-		UseLegacySql:     useLegacy,
+		Sql:              sql,
+		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),
 	}
 

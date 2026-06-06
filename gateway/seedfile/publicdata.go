@@ -29,6 +29,7 @@ var SeededPublicTables = []string{
 	PublicDataProject + ".github_repos.commits",
 	PublicDataProject + ".stackoverflow.posts_questions",
 	PublicDataProject + ".ml_datasets.penguins",
+	PublicDataProject + ".utility_us.country_code_iso",
 }
 
 var publicTableRefRE = regexp.MustCompile(

@@ -155,6 +155,16 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// writeLegacySQLError maps gateway/query legacy translation failures to
+// BigQuery invalidQuery responses. Returns true when err was written.
+func writeLegacySQLError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	writeError(w, http.StatusBadRequest, reasonInvalidQuery, err.Error())
+	return true
+}
+
 func writeError(w http.ResponseWriter, status int, reason, msg string) {
 	writeJSON(w, status, errorEnvelope{
 		Error: errorBody{

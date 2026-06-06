@@ -46,11 +46,10 @@ const queryResponseKind = "bigquery#queryResponse"
 //     `jobs.get`.
 //
 // SQL dialect: BigQuery's `useLegacySql` field defaults to true on the
-// wire. The emulator only supports GoogleSQL because the engine pairs
-// GoogleSQL's analyzer with the DuckDB transpiler. Queries that
-// explicitly set `useLegacySql=true` are rejected with HTTP 400 +
-// `reason: invalidQuery`; unset and `useLegacySql=false` are both
-// treated as GoogleSQL.
+// wire. The emulator executes GoogleSQL via the engine; limited legacy
+// bracket table references (`[project:dataset.table]`) are transpiled
+// in gateway/query before forwarding. Unset and `useLegacySql=false`
+// are both treated as GoogleSQL.
 //
 // Idempotency: `requestId` provides 15-minute idempotency for matching
 // requests, per the upstream docs.
@@ -77,17 +76,6 @@ func QueryRun(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
-		// Reject legacy SQL up front. The emulator only supports
-		// GoogleSQL because the engine pairs GoogleSQL's analyzer
-		// with the DuckDB transpiler; see docs/REST_API.md "SQL
-		// dialect".
-		if req.UseLegacySQL != nil && *req.UseLegacySQL {
-			writeError(w, http.StatusBadRequest, "invalidQuery",
-				"useLegacySql=true is not supported by the BigQuery emulator. "+
-					"Set useLegacySql=false (GoogleSQL); see docs/REST_API.md.")
-			return
-		}
-
 		if req.DryRun {
 			runQueryDryRun(deps, w, r, &req)
 			return
@@ -131,11 +119,16 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	useLegacy := req.UseLegacySQL != nil && *req.UseLegacySQL
+	sql, sqlErr := query.PrepareEngineSQL(useLegacy, req.Query, projectID, defaultDataset)
+	if writeLegacySQLError(w, sqlErr) {
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
-		Sql:              req.Query,
-		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
+		Sql:              sql,
+		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(req.Parameters),
 	}
 
@@ -203,13 +196,18 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	useLegacy := req.UseLegacySQL != nil && *req.UseLegacySQL
 	sql := expandQueryParamsInSQL(req.Query, req.Parameters)
 	bindParams := stripExpandedPositionalArrayParams(req.Query, req.Parameters)
+	sql, sqlErr := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
+	if writeLegacySQLError(w, sqlErr) {
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
-		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
+		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(bindParams),
 	}
 

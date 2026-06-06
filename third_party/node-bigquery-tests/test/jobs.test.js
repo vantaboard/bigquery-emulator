@@ -29,6 +29,10 @@ const bigquery = new BigQuery();
 let jobId;
 
 describe('Jobs', () => {
+  beforeEach(async function () {
+    this.currentTest.retries(2);
+  });
+
   before(async () => {
     const query = `SELECT name
         FROM \`bigquery-public-data.usa_names.usa_1910_2013\`
@@ -38,9 +42,6 @@ describe('Jobs', () => {
     const queryOptions = {
       query: query,
     };
-    beforeEach(async function () {
-      this.currentTest.retries(2);
-    });
 
     const [job] = await bigquery.createQueryJob(queryOptions);
     jobId = job.metadata.jobReference.jobId;

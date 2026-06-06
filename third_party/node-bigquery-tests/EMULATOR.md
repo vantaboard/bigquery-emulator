@@ -46,12 +46,10 @@ The parent repo’s task is **`task thirdparty:node-bigquery-tests`** (same as *
 
 When **`BIGQUERY_EMULATOR_HOST`** is set, **`test/setup.js`** also:
 
-- Skips entire **`models.test.js`** (BQML) and **`jobs.test.js`** (unseeded
-  `utility_us.country_code_iso` plus job-listing noise). **`queries.test.js`**
-  public-data cases (`usa_names`, `shakespeare`, `stackoverflow`) run when the
-  gateway loads `testdata/public-data/bigquery-public-data.yaml` at startup.
-- Skips individual tests whose titles match legacy SQL or cross-project
-  public-dataset listing.
+- Skips entire **`models.test.js`** (BQML / `google_analytics_sample`). All
+  other Mocha files run when the gateway loads
+  `testdata/public-data/bigquery-public-data.yaml` at startup (including
+  `jobs.test.js`, legacy SQL queries, and cross-project public-dataset listing).
 
 **CI / narrow checks:** from this directory you can run **`npx mocha test/clients.test.js --timeout 200000 --require ./test/setup.js`** after **`npm install`** for lightweight client setup checks (see **Smoke test** above).
 

@@ -279,19 +279,24 @@ subset of the table in the upstream
 ## SQL dialect
 
 BigQuery's wire field `useLegacySql` defaults to `true` (legacy SQL).
-The emulator only supports GoogleSQL because the engine is GoogleSQL's
-own analyzer feeding the local execution coordinator. The
-[`jobs.query`](../gateway/handlers/queries.go) handler:
+The emulator executes GoogleSQL via the engine (GoogleSQL's analyzer
+feeding the local execution coordinator). When `useLegacySql=true`,
+the gateway transpiles a **narrow** subset of legacy SQL used by
+thirdparty samples—bracket table references such as
+`[project:dataset.table]` and `[dataset.table]`—into GoogleSQL
+backtick form before forwarding; `use_legacy_sql` is always cleared on
+the engine RPC. Full legacy SQL dialect (functions, `#legacy`, JOIN
+variants, etc.) is not supported; unsupported constructs return HTTP
+400 with `reason: invalidQuery`.
 
-- Treats `useLegacySql` unset or `false` as GoogleSQL (the supported
+- Treats `useLegacySql` unset or `false` as GoogleSQL (the common
   case).
-- Rejects `useLegacySql=true` with HTTP 400 and `reason: invalidQuery`
-  before any engine work, returning the standard
-  [error envelope](#error-envelope).
+- Translates bracket table refs when `useLegacySql=true`, then runs
+  GoogleSQL on the engine.
 
-Document this clearly to clients that default to legacy via older Go
-client library versions: pass `option.WithEndpoint(...)` together with
-explicitly setting `Query.UseLegacySQL = false`.
+Clients that default to legacy via older library versions may still set
+`useLegacySql=true` for bracket-style samples; for new queries prefer
+`useLegacySql=false` (GoogleSQL).
 
 ## Type wire encoding
 

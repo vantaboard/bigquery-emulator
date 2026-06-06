@@ -38,8 +38,8 @@ func TestPublicDataFixtureLoads(t *testing.T) {
 	if f.DefaultLocation != "US" {
 		t.Errorf("location=%q, want US", f.DefaultLocation)
 	}
-	if len(f.Datasets) != 5 {
-		t.Fatalf("datasets=%d, want 5", len(f.Datasets))
+	if len(f.Datasets) != 6 {
+		t.Fatalf("datasets=%d, want 6", len(f.Datasets))
 	}
 	wantTables := map[string]int{
 		"usa_names":     2,
@@ -47,6 +47,7 @@ func TestPublicDataFixtureLoads(t *testing.T) {
 		"github_repos":  1,
 		"stackoverflow": 1,
 		"ml_datasets":   1,
+		"utility_us":    1,
 	}
 	for _, ds := range f.Datasets {
 		if ds.ProjectID != PublicDataProject {
@@ -83,6 +84,7 @@ func TestPublicDataFixtureApply(t *testing.T) {
 		PublicDataProject + ".github_repos",
 		PublicDataProject + ".stackoverflow",
 		PublicDataProject + ".ml_datasets",
+		PublicDataProject + ".utility_us",
 	}
 	if !reflect.DeepEqual(app.datasets, wantDatasets) {
 		t.Errorf("datasets=%v, want %v", app.datasets, wantDatasets)
@@ -143,6 +145,11 @@ func TestPublicDataRefsFullySeeded(t *testing.T) {
 		{
 			name: "legacy colon syntax",
 			sql:  "SELECT word FROM [bigquery-public-data:samples.shakespeare]",
+			want: true,
+		},
+		{
+			name: "utility_us country_code_iso",
+			sql:  "SELECT country_name FROM `bigquery-public-data.utility_us.country_code_iso`",
 			want: true,
 		},
 	}

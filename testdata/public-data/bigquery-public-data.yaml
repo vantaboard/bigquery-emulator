@@ -530,4 +530,21 @@ datasets:
           - {species: "Gentoo penguin (Pygoscelis papua)", island: Biscoe, culmen_length_mm: 50.0, culmen_depth_mm: 15.3, flipper_length_mm: 220, body_mass_g: 5700, sex: MALE}
           - {species: "Chinstrap penguin (Pygoscelis antarctica)", island: Dream, culmen_length_mm: 46.8, culmen_depth_mm: 17.5, flipper_length_mm: 190, body_mass_g: 3550, sex: FEMALE}
           - {species: "Chinstrap penguin (Pygoscelis antarctica)", island: Dream, culmen_length_mm: 45.4, culmen_depth_mm: 18.9, flipper_length_mm: 188, body_mass_g: 3525, sex: MALE}
+  - id: utility_us
+    project_id: bigquery-public-data
+    tables:
+      - id: country_code_iso
+        schema:
+          - {name: country_name, type: STRING}
+        rows:
+          - {country_name: United States}
+          - {country_name: Canada}
+          - {country_name: Mexico}
+          - {country_name: Brazil}
+          - {country_name: United Kingdom}
+          - {country_name: France}
+          - {country_name: Germany}
+          - {country_name: Japan}
+          - {country_name: Australia}
+          - {country_name: India}
 

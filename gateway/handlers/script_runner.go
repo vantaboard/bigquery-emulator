@@ -12,6 +12,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
+	"github.com/vantaboard/bigquery-emulator/gateway/query"
 )
 
 // isMultiStatementScript reports whether sql is a DECLARE/SET script the
@@ -159,11 +160,15 @@ func executeScriptStatement(
 	projectID, defaultDataset, sql string,
 	useLegacy bool,
 ) (*enginepb.TableSchema, []bqtypes.Row, string, string, error) {
+	sql, err := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
-		UseLegacySql:     useLegacy,
+		UseLegacySql:     false,
 	}
 	stream, err := deps.Query.ExecuteQuery(ctx, engineReq)
 	if err != nil {

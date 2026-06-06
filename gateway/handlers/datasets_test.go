@@ -422,6 +422,49 @@ func TestDatasetListSurfacesEngineEntries(t *testing.T) {
 	}
 }
 
+// TestDatasetListForwardsPublicDataProject asserts list requests for
+// bigquery-public-data forward the URL project id to Catalog.ListDatasets
+// so cross-project dataset listing samples see seeded public datasets.
+func TestDatasetListForwardsPublicDataProject(t *testing.T) {
+	const publicProject = "bigquery-public-data"
+	fake := &fakeCatalogClient{
+		listDatasetsFn: func(_ context.Context, in *enginepb.ListDatasetsRequest) (*enginepb.ListDatasetsResponse, error) {
+			if got := in.GetProjectId(); got != publicProject {
+				t.Errorf("project_id forwarded = %q, want %q", got, publicProject)
+			}
+			return &enginepb.ListDatasetsResponse{
+				Datasets: []*enginepb.DatasetRef{
+					{ProjectId: publicProject, DatasetId: "usa_names"},
+				},
+			}, nil
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet,
+		"/bigquery/v2/projects/"+publicProject+"/datasets", nil)
+	req.SetPathValue("projectId", publicProject)
+	rec := httptest.NewRecorder()
+	DatasetList(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastListDatasets == nil {
+		t.Fatal("Catalog.ListDatasets was not called")
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	items, _ := doc["datasets"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("datasets entries = %d, want 1; body=%s", len(items), rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	if first["id"] != publicProject+":usa_names" {
+		t.Errorf("first entry id = %v, want %q", first["id"], publicProject+":usa_names")
+	}
+}
+
 // runDatasetMetadataRoundTrip drives the Insert -> Patch -> Get cycle
 // a node `dataset.setMetadata` + `dataset.getMetadata` sample
 // exercises, asserting the cached REST-only field comes back on the
