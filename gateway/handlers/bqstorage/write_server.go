@@ -14,6 +14,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -57,6 +58,7 @@ func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer
 		return err
 	}
 
+	var cachedProtoDesc *descriptorpb.DescriptorProto
 	for {
 		req, recvErr := stream.Recv()
 		if errors.Is(recvErr, io.EOF) {
@@ -65,7 +67,7 @@ func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer
 		if recvErr != nil {
 			return recvErr
 		}
-		engineReq, convErr := publicAppendRequestToEngine(req)
+		engineReq, convErr := s.publicAppendRequestToEngine(ctx, req, &cachedProtoDesc)
 		if convErr != nil {
 			return status.Errorf(codes.InvalidArgument, "decode AppendRows: %v", convErr)
 		}
@@ -147,7 +149,11 @@ func (s *WriteServer) FlushRows(
 	return &storagepb.FlushRowsResponse{Offset: resp.GetOffset()}, nil
 }
 
-func publicAppendRequestToEngine(req *storagepb.AppendRowsRequest) (*enginepb.AppendRowsRequest, error) {
+func (s *WriteServer) publicAppendRequestToEngine(
+	ctx context.Context,
+	req *storagepb.AppendRowsRequest,
+	cachedProtoDesc **descriptorpb.DescriptorProto,
+) (*enginepb.AppendRowsRequest, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "nil AppendRowsRequest")
 	}
@@ -160,7 +166,13 @@ func publicAppendRequestToEngine(req *storagepb.AppendRowsRequest) (*enginepb.Ap
 	}
 	switch rows := req.GetRows().(type) {
 	case *storagepb.AppendRowsRequest_ProtoRows:
-		engineRows, err := protoDataToEngineRows(rows.ProtoRows)
+		engineRows, err := protoDataToEngineRows(
+			ctx,
+			s.engine,
+			req.GetWriteStream(),
+			rows.ProtoRows,
+			cachedProtoDesc,
+		)
 		if err != nil {
 			return nil, err
 		}

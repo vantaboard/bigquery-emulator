@@ -18,24 +18,24 @@ Baseline: `.logs/thirdparty-20260605-112926.log`
 | 07-external-tables | 1 | PARTIAL | 05ad37f | GCS external CSV; Sheets 501 |
 | 08-advanced-query-params | 1 | PARTIAL | 5e582b1 | TIMESTAMP/STRUCT/positional; schema jobs |
 | 09-public-data-seed | 1 | PARTIAL | a99a901 | usa_names/shakespeare/stackoverflow seeded |
-| 10-storage-grpc | 1 | PARTIAL | fb36866 | BUFFERED flush engine path; Java ITs still allowlisted |
-| 11-bigframes-gate | 1 | PARTIAL | f1f41cc | 2/4 snippet gate pass; OrderByScan + sessionInfo remain |
+| 10-storage-grpc | 2 | PASS | — | Public bqstorage shim; Java WriteBuffered + StorageArrow ITs green |
+| 11-bigframes-gate | 2 | PASS | — | 4/4 snippet gate; join id-alias + sessionInfo |
 
 ## Final aggregator
 
-Log (green-plan pass, partial): `.logs/thirdparty-20260605-193107.log` (`THIRDPARTY_REBUILD=1`; hung after node suite — java/dataframes not recorded)
+Log (exit 0): `THIRDPARTY_REBUILD=1 THIRDPARTY_FRESH_VOLUME=1 task thirdparty` — 2026-06-06 session (~11 min wall; all suites green).
 
-| Suite | Baseline (160518) | Green pass (193107) | Status |
-|-------|-------------------|---------------------|--------|
-| golang-bigquery-tests | OK | OK | PASS |
-| python-bigquery-tests | 22 failed | **10 failed**, 56 passed, 11 skipped (Sheets skipped) | FAILED (Δ −12) |
-| node-bigquery-tests | 18 failing | **14 failing**, 85 passing | FAILED (Δ −4) |
-| java-bigquery-tests | OK | *(not run — aggregator hung)* | — |
-| dataframes-snippet-gate | 3/4 | *(not run)* | — |
+| Suite | Baseline (160518) | Prior partial (193107) | Current (2026-06-06) | Status |
+|-------|-------------------|------------------------|----------------------|--------|
+| golang-bigquery-tests | OK | OK | OK | PASS |
+| python-bigquery-tests | 22 failed | 10 failed, 56 pass | **66 passed**, 11 skipped | PASS |
+| node-bigquery-tests | 18 failing | 14 failing, 85 pass | **99 passed**, 14 pending, 0 failing | PASS |
+| java-bigquery-tests | OK (allowlist) | — | OK (`WriteBufferedStreamIT`, `StorageArrowSampleIT` off allowlist) | PASS |
+| dataframes-snippet-gate | 3/4 | — | **4/4** selected | PASS |
 
-Prior log: `.logs/thirdparty-20260605-160518.log` (exit 201)
+Prior logs: `.logs/thirdparty-20260605-160518.log` (exit 201), `.logs/thirdparty-20260605-193107.log` (partial hang)
 
-**Overall:** DEFERRED — green-plan Phases 1–4 landed in tree (uncommitted); python improved 22→10; node 18→14; exit 0 blocked on query transpiler (OrderBy/LimitOffset), insert types, collation wire on GET, browse-rows timeout, DECLARE scripts, dry-run bytes, engine rebuild in docker for C++ fixes.
+**Overall:** **EXIT 0** — storage gRPC shim + public-data read cross-project + row_restriction double quotes + JsonStreamWriter client wiring + join id-alias transpiler fixes; `JAVA_BQ_ALLOW_FAILING_ITS` shrunk to Connection/DataTransfer only.
 
 ## Unblock lane
 
@@ -60,7 +60,7 @@ Index: [unblock-00-index.plan.md](unblock-00-index.plan.md)
 
 ## Remaining blockers (honest partial parity)
 
-- **Storage (08):** Public `BigQueryWrite`/`BigQueryRead` gRPC shim + Arrow IPC for `performance_optimizations` and Java storage ITs
-- **Python (22):** Truncate/resumable load URIs, query destination/params, copy/extract, Sheets external (501 by design)
-- **Node (18):** Query transpiler gaps, wire shapes (labels/collation), browse rows, Firestore backup load
-- **LOAD:** Truncate write disposition + resumable upload `Location` header (relative URL → MissingSchema)
+- **Java Connection + DataTransfer ITs:** Still on `JAVA_BQ_ALLOW_FAILING_ITS` (not required for exit 0)
+- **Google Sheets external tables:** 501 by design; python samples skipped via `emulator_pytest_skip.py`
+- **Node 14 pending tests:** Intentionally out-of-scope / skipped — not failures
+- **Storage deferred:** `BatchCommitWriteStreams`, Avro read, `SplitReadStream` (no current IT requires them)

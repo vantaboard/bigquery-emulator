@@ -219,20 +219,20 @@ contract (`proto/storage_read.proto`, `proto/storage_write.proto`).
 Official client libraries dial the **public** service names
 (`google.cloud.bigquery.storage.v1.BigQueryRead` /
 `BigQueryWrite`) and wire formats (Arrow/Avro read pages, proto-descriptor
-row encoding for `JsonStreamWriter`). A Go gateway shim that registers the
-public services and adapts to the engine contract is **not yet wired**
-(`gateway/handlers/bqstorage/` remains a skeleton). Until that shim lands,
-Java `WriteBufferedStreamIT` / `StorageArrowSampleIT` and other third-party
-Storage ITs stay on `JAVA_BQ_ALLOW_FAILING_ITS` even when the engine handler
-progresses.
+row encoding for `JsonStreamWriter`). The Go gateway shim in
+`gateway/handlers/bqstorage/` registers those public services on
+`:9060` and adapts to the engine's internal contract. Java
+`WriteBufferedStreamIT` and `StorageArrowSampleIT` pass against the
+local emulator; Connection + DataTransfer ITs remain allowlisted.
 
-| Surface | Engine posture (plan 10 partial) | Blocker for public client ITs |
-|---|---|---|
-| Storage Write `COMMITTED` / `_default` | `CreateWriteStream`, bidi `AppendRows`, `GetWriteStream` commit through `DuckDBStorage::AppendRows` | Public `BigQueryWrite` gRPC registration + proto-descriptor decode |
-| Storage Write `BUFFERED` | `CreateWriteStream`, buffered `AppendRows`, `FlushRows`, `FinalizeWriteStream` (happy path) | Same shim; `JsonStreamWriter` uses public protos |
-| Storage Write `PENDING` | `UNIMPLEMENTED` (`BatchCommitWriteStreams` deferred) | — |
-| Storage Read `DataRow` pages | `CreateReadSession`, streaming `ReadRows` with projection + `row_restriction` | Public `BigQueryRead` registration |
-| Storage Read Arrow/Avro | `UNIMPLEMENTED` on internal proto (no `ArrowRecordBatch` field) | Arrow schema + IPC record batches for `StorageArrowSampleIT` |
+| Surface | Posture |
+|---|---|
+| Storage Write `COMMITTED` / `_default` | Engine `AppendRows` commit path; shim decodes public proto rows |
+| Storage Write `BUFFERED` | Engine buffered hold + `FlushRows` / `FinalizeWriteStream`; shim caches proto descriptors and reuses the emulator `BigQueryWriteClient` in samples |
+| Storage Write `PENDING` | `UNIMPLEMENTED` (`BatchCommitWriteStreams` deferred) |
+| Storage Read sessions | `CreateReadSession` with projection + `row_restriction` (single-quoted or double-quoted string literals); public-data tables readable with a caller-scoped parent project |
+| Storage Read Arrow | Arrow schema + IPC record batches via gateway shim |
+| Storage Read Avro | Not implemented |
 
 Set `BIGQUERY_STORAGE_GRPC_ENDPOINT` (default `localhost:9060` in
 `task thirdparty:*`) to reach the engine listener. ManagedWriter /

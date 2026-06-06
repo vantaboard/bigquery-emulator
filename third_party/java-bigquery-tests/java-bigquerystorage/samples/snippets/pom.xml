@@ -163,6 +163,9 @@
           </execution>
         </executions>
         <configuration>
+          <!-- Apache Arrow read path (StorageArrowSampleIT) needs direct
+               java.nio.Buffer access on Java 17+. -->
+          <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
           <includes>
             <include>**/WriteBufferedStreamIT.java</include>
             <!--

@@ -17,10 +17,7 @@ task thirdparty:java-bigquery-tests   # mvn -B verify on every JAVA_BQ_SAMPLE_PA
 
 `snippets/pom.xml` binds `maven-failsafe-plugin` 3.2.5 to the
 `integration-test` + `verify` goals with a `<includes>` allowlist that
-names exactly the live-IT-track-targeted classes for this module.
-After the missing-tests follow-up
-(`ROADMAP.md`) the
-allowlist covers **2** classes:
+names exactly the live-IT-track-targeted classes for this module:
 
 | Sample ID | IT |
 |-----------|----|
@@ -29,25 +26,11 @@ allowlist covers **2** classes:
 
 ## Expected status
 
-Both ITs currently **FAIL** with
-`io.grpc.StatusRuntimeException: UNIMPLEMENTED`:
-
-- `WriteBufferedStreamIT` (row 7 of the shallow-emulator verdict
-  table) — the gzip middleware unblocked the `@Before`
-  `POST /datasets` REST call; the test now reaches
-  `BigQueryWrite.CreateWriteStream` which the
-  `gateway/handlers/bqstorage/` skeleton does not implement.
-- `StorageArrowSampleIT` (added by the missing-tests follow-up) —
-  the snippet calls `BigQueryRead.CreateReadSession`; the same
-  shallow-emulator skeleton package has no Read-path implementation
-  (the shallow-emulator port explicitly deferred the Read path; see
-  the shallow-emulator "Side-quests deferred" notes).
-
-The gRPC-server follow-up will port the streaming Write API
-(`write*.go`) and a minimal Read path (`read*.go`) from
-go-googlesql to land the matching gRPC backends. The
-shallow-emulator skeleton's `doc.go` carries the per-IT mapping so
-the re-port has a one-to-one target.
+Both ITs **PASS** against the local emulator when
+`BIGQUERY_EMULATOR_HOST` and `BIGQUERY_STORAGE_GRPC_ENDPOINT` are set
+(as `task thirdparty:java-bigquery-tests` does). The gateway shim in
+`gateway/handlers/bqstorage/` registers public `BigQueryRead` /
+`BigQueryWrite` on `:9060` and adapts to the engine handlers.
 
 ## Emulator wiring (BqStorageOpts)
 
@@ -56,10 +39,19 @@ The snippet drivers route through
 / `BqStorageOpts.newWriteClient()` to construct the gapic clients; the
 helper reads `BIGQUERY_STORAGE_GRPC_ENDPOINT` first, falls back to
 `BIGQUERY_EMULATOR_HOST` (stripping the scheme), and forces plaintext +
-`NoCredentialsProvider` when either is set. `WriteBufferedStreamIT`
-additionally uses a `BIGQUERY_EMULATOR_HOST`-aware `BigQuery` client
-for the `@Before` dataset/table fixture; `StorageArrowSampleIT` reads
-from `bigquery-public-data` and does not need a fixture.
+`NoCredentialsProvider` when either is set.
+
+`WriteBufferedStream` passes the same `BigQueryWriteClient` into
+`JsonStreamWriter.newBuilder(..., client)` so append batches stay on the
+emulator endpoint. `WriteBufferedStreamIT` additionally uses a
+`BIGQUERY_EMULATOR_HOST`-aware `BigQuery` client for the `@Before`
+dataset/table fixture. `StorageArrowSampleIT` reads
+`bigquery-public-data.usa_names.usa_1910_current` (seeded in
+`testdata/public-data/bigquery-public-data.yaml`, including the Zayvion
+WA row and enough WA rows for the >1KiB Arrow TSV assertion).
+
+Failsafe sets `--add-opens=java.base/java.nio=ALL-UNNAMED` for the
+Apache Arrow read path on Java 17+.
 
 ## Pointers
 
@@ -67,11 +59,7 @@ from `bigquery-public-data` and does not need a fixture.
   [`third_party/README.md`](../../README.md) (Java section).
 - Sibling EMULATOR.md (core BigQuery wiring):
   [`java-bigquery/samples/EMULATOR.md`](../../java-bigquery/samples/EMULATOR.md).
-- Shallow-emulator `bqstorage` skeleton package (and its per-IT
-  mapping):
+- Gateway shim package:
   [`gateway/handlers/bqstorage/`](../../../../gateway/handlers/bqstorage/).
 - Local Task: [`taskfiles/thirdparty.yml`](../../../taskfiles/thirdparty.yml)
   (`thirdparty:java-bigquery-tests`).
-- Per-IT verdict baselines (failing-IT inventory / shallow-emulator
-  port / missing-tests follow-up):
-  [`ROADMAP.md`](../../../../ROADMAP.md).

@@ -80,7 +80,8 @@ public class WriteBufferedStream {
       // For more information about JsonStreamWriter, see:
       // https://cloud.google.com/java/docs/reference/google-cloud-bigquerystorage/latest/com.google.cloud.bigquery.storage.v1.JsonStreamWriter
       try (JsonStreamWriter writer =
-          JsonStreamWriter.newBuilder(writeStream.getName(), writeStream.getTableSchema())
+          JsonStreamWriter.newBuilder(
+                  writeStream.getName(), writeStream.getTableSchema(), client)
               .setRetrySettings(retrySettings)
               .build()) {
         // Write two batches to the stream, each with 10 JSON records.

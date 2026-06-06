@@ -1,10 +1,13 @@
 package bqstorage
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -14,7 +17,11 @@ import (
 )
 
 func protoDataToEngineRows(
+	ctx context.Context,
+	engineClient *engine.Client,
+	writeStream string,
 	data *storagepb.AppendRowsRequest_ProtoData,
+	cachedDesc **descriptorpb.DescriptorProto,
 ) ([]*enginepb.DataRow, error) {
 	if data == nil {
 		return nil, nil
@@ -23,9 +30,10 @@ func protoDataToEngineRows(
 	if rows == nil || len(rows.GetSerializedRows()) == 0 {
 		return nil, nil
 	}
-	desc := data.GetWriterSchema().GetProtoDescriptor()
-	if desc == nil {
-		return nil, errors.New("proto_rows missing writer_schema.proto_descriptor")
+
+	desc, err := resolveProtoDescriptor(ctx, engineClient, writeStream, data, cachedDesc)
+	if err != nil {
+		return nil, err
 	}
 	msgDesc, err := messageDescriptor(desc)
 	if err != nil {
@@ -44,6 +52,90 @@ func protoDataToEngineRows(
 		out = append(out, row)
 	}
 	return out, nil
+}
+
+func resolveProtoDescriptor(
+	ctx context.Context,
+	engineClient *engine.Client,
+	writeStream string,
+	data *storagepb.AppendRowsRequest_ProtoData,
+	cachedDesc **descriptorpb.DescriptorProto,
+) (*descriptorpb.DescriptorProto, error) {
+	if cachedDesc == nil {
+		return nil, errors.New("proto_rows missing writer_schema.proto_descriptor")
+	}
+	if desc := data.GetWriterSchema().GetProtoDescriptor(); desc != nil {
+		*cachedDesc = desc
+		return desc, nil
+	}
+	if *cachedDesc != nil {
+		return *cachedDesc, nil
+	}
+	if engineClient == nil || engineClient.StorageWrite == nil || writeStream == "" {
+		return nil, errors.New("proto_rows missing writer_schema.proto_descriptor")
+	}
+	stream, err := engineClient.StorageWrite.GetWriteStream(ctx, &enginepb.GetWriteStreamRequest{
+		Name: writeStream,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("proto_rows missing writer_schema.proto_descriptor (GetWriteStream: %w)", err)
+	}
+	desc := descriptorFromEngineTableSchema(stream.GetSchema())
+	if desc == nil {
+		return nil, errors.New("proto_rows missing writer_schema.proto_descriptor")
+	}
+	*cachedDesc = desc
+	return desc, nil
+}
+
+func descriptorFromEngineTableSchema(schema *enginepb.TableSchema) *descriptorpb.DescriptorProto {
+	if schema == nil || len(schema.GetFields()) == 0 {
+		return nil
+	}
+	desc := &descriptorpb.DescriptorProto{Name: new("Row")}
+	for i, field := range schema.GetFields() {
+		if field == nil {
+			continue
+		}
+		desc.Field = append(desc.Field, &descriptorpb.FieldDescriptorProto{
+			Name:   new(field.GetName()),
+			Number: new(int32(i + 1)),
+			Label:  engineModeToProtoLabel(field.GetMode()),
+			Type:   engineTypeToProtoType(field.GetType()),
+		})
+	}
+	if len(desc.Field) == 0 {
+		return nil
+	}
+	return desc
+}
+
+func engineModeToProtoLabel(mode string) *descriptorpb.FieldDescriptorProto_Label {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case "REQUIRED":
+		return descriptorpb.FieldDescriptorProto_LABEL_REQUIRED.Enum()
+	case "REPEATED":
+		return descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
+	default:
+		return descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()
+	}
+}
+
+func engineTypeToProtoType(t string) *descriptorpb.FieldDescriptorProto_Type {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case "BOOL":
+		return descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+	case "INT64":
+		return descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
+	case "FLOAT64", "DOUBLE":
+		return descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+	case "BYTES":
+		return descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum()
+	case "TIMESTAMP", "DATETIME", "DATE", "TIME":
+		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+	default:
+		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+	}
 }
 
 func messageDescriptor(desc *descriptorpb.DescriptorProto) (protoreflect.MessageDescriptor, error) {
