@@ -182,6 +182,44 @@ tasks:
           --fixtures "{{.FIXTURES}}" \
           $OUTPUT_FILE_FLAG
 
+  bqutils-sync:
+    desc: |
+      Regenerate bigquery-utils UDF conformance fixtures from upstream
+      (or BIGQUERY_UTILS_LOCAL). Writes to
+      conformance/thirdparty-fixtures/bigquery_utils/known_failing/.
+      Honors BIGQUERY_UTILS_REF, BIGQUERY_UTILS_REPO,
+      BIGQUERY_UTILS_LOCAL, BIGQUERY_UTILS_KEEP; pass --dry-run via CLI_ARGS.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        chmod +x scripts/sync_bigquery_utils_udfs.sh
+        # shellcheck disable=SC2086
+        ./scripts/sync_bigquery_utils_udfs.sh ${CLI_ARGS:-}
+
+  bqutils:
+    desc: |
+      Run the passing bigquery-utils UDF conformance lane (non-gating).
+      Requires bin/emulator_main (task emulator:build-engine:bazel).
+      Honors EMULATOR_BIN (default ./bin/emulator_main).
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086
+        go run ./conformance/cmd/runner \
+          --fixtures conformance/thirdparty-fixtures/bigquery_utils/passing \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --profile duckdb \
+          $OUTPUT_FILE_FLAG
+
   update-baselines:
     desc: |
       Rewrite the expected: block of one or more fixtures with the engine's actual output. Pass FIXTURE=path or default to FIXTURES (the whole directory). Honors PROFILE. Read the diff before committing.
