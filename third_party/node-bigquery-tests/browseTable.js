@@ -60,25 +60,27 @@ async function main(
     // Wait for the job to finish.
     await job.getQueryResults(queryResultsOptions);
 
-    function manualPaginationCallback(err, rows, nextQuery) {
-      rows.forEach(row => {
-        console.log(`name: ${row.name}, ${row.total_people} total people`);
-      });
-
-      if (nextQuery) {
-        // More results exist.
-        destinationTable.getRows(nextQuery, manualPaginationCallback);
-      }
-    }
-
     // For all options, see https://cloud.google.com/bigquery/docs/reference/v2/tabledata/list
-    const getRowsOptions = {
+    // Manual pagination via pageToken (avoids callback hangs and empty-object nextQuery loops).
+    let listOptions = {
       autoPaginate: false,
       maxResults: 20,
     };
-
-    // Retrieve all rows.
-    destinationTable.getRows(getRowsOptions, manualPaginationCallback);
+    for (;;) {
+      const [rows, , apiResponse] = await destinationTable.getRows(listOptions);
+      rows.forEach(row => {
+        console.log(`name: ${row.name}, ${row.total_people} total people`);
+      });
+      const pageToken = apiResponse && apiResponse.pageToken;
+      if (!pageToken) {
+        break;
+      }
+      listOptions = {
+        autoPaginate: false,
+        maxResults: 20,
+        pageToken,
+      };
+    }
   }
   await browseTable();
   // [END bigquery_browse_table]

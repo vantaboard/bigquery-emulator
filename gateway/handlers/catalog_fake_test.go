@@ -38,6 +38,7 @@ type fakeCatalogClient struct {
 	lastDropDataset     *enginepb.DropDatasetRequest
 	lastListDatasets    *enginepb.ListDatasetsRequest
 	lastRegisterTable   *enginepb.RegisterTableRequest
+	registeredTableIDs  []string
 	lastDropTable       *enginepb.DropTableRequest
 	lastListTables      *enginepb.ListTablesRequest
 	lastDescribeTable   *enginepb.DescribeTableRequest
@@ -91,6 +92,9 @@ func (f *fakeCatalogClient) RegisterTable(
 	_ ...grpc.CallOption,
 ) (*enginepb.RegisterTableResponse, error) {
 	f.lastRegisterTable = in
+	if in.GetTable() != nil {
+		f.registeredTableIDs = append(f.registeredTableIDs, in.GetTable().GetTableId())
+	}
 	if f.registerTableFn != nil {
 		return f.registerTableFn(ctx, in)
 	}

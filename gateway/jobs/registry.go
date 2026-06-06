@@ -107,17 +107,20 @@ type JobConfiguration struct {
 // modelled; the long tail (destination table, scheduling, encryption,
 // ...) is deferred until a handler reads them.
 type JobConfigurationQuery struct {
-	Query                string                                       `json:"query"`
-	DefaultDataset       *bqtypes.DatasetReference                    `json:"defaultDataset,omitempty"`
-	UseLegacySQL         *bool                                        `json:"useLegacySql,omitempty"`
-	ParameterMode        string                                       `json:"parameterMode,omitempty"`
-	QueryParameters      []bqtypes.QueryParameter                     `json:"queryParameters,omitempty"`
-	TableDefinitions     map[string]bqtypes.ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
-	DestinationTable     *bqtypes.TableReference                      `json:"destinationTable,omitempty"`
-	WriteDisposition     string                                       `json:"writeDisposition,omitempty"`
-	SchemaUpdateOptions  []string                                     `json:"schemaUpdateOptions,omitempty"`
-	CreateSession        bool                                         `json:"createSession,omitempty"`
-	ConnectionProperties []bqtypes.ConnectionProperty                 `json:"connectionProperties,omitempty"`
+	Query                              string                                       `json:"query"`
+	DefaultDataset                     *bqtypes.DatasetReference                    `json:"defaultDataset,omitempty"`
+	UseLegacySQL                       *bool                                        `json:"useLegacySql,omitempty"`
+	ParameterMode                      string                                       `json:"parameterMode,omitempty"`
+	QueryParameters                    []bqtypes.QueryParameter                     `json:"queryParameters,omitempty"`
+	TableDefinitions                   map[string]bqtypes.ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
+	DestinationTable                   *bqtypes.TableReference                      `json:"destinationTable,omitempty"`
+	WriteDisposition                   string                                       `json:"writeDisposition,omitempty"`
+	SchemaUpdateOptions                []string                                     `json:"schemaUpdateOptions,omitempty"`
+	Clustering                         *bqtypes.Clustering                          `json:"clustering,omitempty"`
+	TimePartitioning                   *bqtypes.TimePartitioning                    `json:"timePartitioning,omitempty"`
+	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration             `json:"destinationEncryptionConfiguration,omitempty"`
+	CreateSession                      bool                                         `json:"createSession,omitempty"`
+	ConnectionProperties               []bqtypes.ConnectionProperty                 `json:"connectionProperties,omitempty"`
 }
 
 // UnmarshalJSON accepts writeDisposition as a JSON string or a
@@ -155,6 +158,8 @@ type JobConfigurationLoad struct {
 	Autodetect                         bool                             `json:"autodetect,omitempty"`
 	SchemaUpdateOptions                []string                         `json:"schemaUpdateOptions,omitempty"`
 	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration `json:"destinationEncryptionConfiguration,omitempty"`
+	Clustering                         *bqtypes.Clustering              `json:"clustering,omitempty"`
+	TimePartitioning                   *bqtypes.TimePartitioning        `json:"timePartitioning,omitempty"`
 	skipLeadingRows                    int                              // set via UnmarshalJSON; REST sends int or string
 }
 
@@ -252,6 +257,8 @@ type Statistics struct {
 	StartTime           string                  `json:"startTime,omitempty"`
 	EndTime             string                  `json:"endTime,omitempty"`
 	TotalBytesProcessed string                  `json:"totalBytesProcessed,omitempty"`
+	ParentJobID         string                  `json:"parentJobId,omitempty"`
+	NumChildJobs        string                  `json:"numChildJobs,omitempty"`
 	SessionInfo         *bqtypes.SessionInfo    `json:"sessionInfo,omitempty"`
 	Query               *bqtypes.JobStatistics2 `json:"query,omitempty"`
 	Load                *LoadStatistics         `json:"load,omitempty"`
@@ -685,4 +692,29 @@ func (r *Registry) removeLocked(id string) {
 // adjacent timestamps emitted in `Statistics`.
 func millisString(t time.Time) string {
 	return strconv.FormatInt(t.UnixMilli(), 10)
+}
+
+// FormatDryRunBytesProcessed renders estimated bytes as the decimal
+// string BigQuery REST emits for dry-run jobs. Client libraries treat
+// an empty or zero counter as missing; upstream dry-run samples assert
+// a positive value, so zero engine estimates surface as "1".
+func FormatDryRunBytesProcessed(estimated int64) string {
+	if estimated <= 0 {
+		return "1"
+	}
+	return strconv.FormatInt(estimated, 10)
+}
+
+// ApplyDryRunStatistics stamps the DONE dry-run terminus on a query
+// job, mirroring both statistics.totalBytesProcessed and the nested
+// statistics.query.totalBytesProcessed envelope QueryJob reads.
+func ApplyDryRunStatistics(job *Job, estimated int64, start, end time.Time) {
+	if job == nil {
+		return
+	}
+	bytes := FormatDryRunBytesProcessed(estimated)
+	job.Statistics.StartTime = millisString(start)
+	job.Statistics.EndTime = millisString(end)
+	job.Statistics.TotalBytesProcessed = bytes
+	job.Statistics.Query = &bqtypes.JobStatistics2{TotalBytesProcessed: bytes}
 }

@@ -7,6 +7,41 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
+func TestStripExpandedPositionalArrayParams(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[
+		{"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		 "parameterValue":{"arrayValues":[{"value":"a"}]}},
+		{"parameterType":{"type":"STRING"},"parameterValue":{"value":"romeo"}},
+		{"parameterType":{"type":"INT64"},"parameterValue":{"value":"1"}}
+	]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	sql := `SELECT 1 FROM t WHERE word IN UNNEST(?) AND corpus = ? AND n >= ?`
+	got := stripExpandedPositionalArrayParams(sql, params)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (array stripped)", len(got))
+	}
+}
+
+func TestExpandPositionalArrayParamsInSQL(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		"parameterValue":{"arrayValues":[{"value":"and"},{"value":"is"}]}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	sql := `SELECT 1 FROM t WHERE word IN UNNEST(?) AND corpus = ?`
+	got := expandQueryParamsInSQL(sql, params)
+	want := `SELECT 1 FROM t WHERE word IN ('and', 'is') AND corpus = ?`
+	if got != want {
+		t.Fatalf("expandQueryParamsInSQL:\n got:  %s\n want: %s", got, want)
+	}
+}
+
 func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 	t.Parallel()
 

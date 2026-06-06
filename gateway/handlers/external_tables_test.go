@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -177,8 +178,10 @@ func TestExternalQueryTableDefinitionsMaterializes(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if fake.lastRegisterTable == nil || fake.lastRegisterTable.GetTable().GetTableId() != "us_states" {
-		t.Fatal("expected ephemeral external table registered before query")
+	found := slices.Contains(fake.registeredTableIDs, "us_states")
+	if !found {
+		t.Fatalf("expected ephemeral external table us_states registered, got %v",
+			fake.registeredTableIDs)
 	}
 }
 

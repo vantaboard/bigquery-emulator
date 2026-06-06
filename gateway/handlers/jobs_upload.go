@@ -110,11 +110,15 @@ func finalizeSuccessfulLoadJob(job *jobs.Job, start time.Time, result load.Resul
 	job.Statistics.Load = load.FormatStatistics(result)
 }
 
-// persistLoadTableMetadata stashes REST-only destination metadata (CMEK
-// kmsKeyName) so tables.get round-trips what the load job supplied.
+// persistLoadTableMetadata stashes REST-only destination metadata (CMEK,
+// clustering, time partitioning) so tables.get round-trips what the load
+// job supplied.
 func persistLoadTableMetadata(deps Dependencies, cfg *jobs.JobConfigurationLoad, projectID string) {
-	if deps.Metadata == nil || cfg == nil || cfg.DestinationTable == nil ||
-		cfg.DestinationEncryptionConfiguration == nil {
+	if deps.Metadata == nil || cfg == nil || cfg.DestinationTable == nil {
+		return
+	}
+	if cfg.DestinationEncryptionConfiguration == nil &&
+		cfg.Clustering == nil && cfg.TimePartitioning == nil {
 		return
 	}
 	destProject := cfg.DestinationTable.ProjectID
@@ -124,6 +128,8 @@ func persistLoadTableMetadata(deps Dependencies, cfg *jobs.JobConfigurationLoad,
 	deps.Metadata.MergeTable(destProject, cfg.DestinationTable.DatasetID,
 		cfg.DestinationTable.TableID, bqtypes.Table{
 			EncryptionConfiguration: cfg.DestinationEncryptionConfiguration,
+			Clustering:              cfg.Clustering,
+			TimePartitioning:        cfg.TimePartitioning,
 		})
 }
 

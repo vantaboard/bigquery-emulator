@@ -367,6 +367,10 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		runSyncQueryDryRunInsert(deps, w, r, posted, cfg)
 		return
 	}
+	if isMultiStatementScript(cfg.Query.Query) {
+		runSyncScriptQueryInsert(deps, w, r, posted, cfg)
+		return
+	}
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
 
@@ -392,12 +396,14 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	sql := expandQueryParamsInSQL(cfg.Query.Query, cfg.Query.QueryParameters)
+	bindParams := stripExpandedPositionalArrayParams(cfg.Query.Query, cfg.Query.QueryParameters)
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
-		Sql:              cfg.Query.Query,
+		Sql:              sql,
 		UseLegacySql:     useLegacy,
-		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),
+		Parameters:       parametersToEngineMap(bindParams),
 	}
 
 	start := time.Now().UTC()
@@ -419,6 +425,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	query.PersistDestinationMetadata(deps.Metadata, cfg.Query, projectID)
 	var ddlTarget *bqtypes.RoutineReference
 	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
 		ddlTarget = routines.RegisterFromDDL(
@@ -493,11 +500,7 @@ func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.
 		return
 	}
 	job.Status.State = jobs.JobStateDone
-	job.Statistics.StartTime = millisString(start)
-	job.Statistics.EndTime = millisString(end)
-	bytes := formatDryRunBytes(resp.GetEstimatedBytesProcessed())
-	job.Statistics.TotalBytesProcessed = bytes
-	job.Statistics.Query = &bqtypes.JobStatistics2{TotalBytesProcessed: bytes}
+	jobs.ApplyDryRunStatistics(job, resp.GetEstimatedBytesProcessed(), start, end)
 	writeJSON(w, http.StatusOK, job)
 }
 

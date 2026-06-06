@@ -68,6 +68,26 @@ func TestQueryGetResultsReturnsCachedRows(t *testing.T) {
 	}
 }
 
+func TestQueryGetResultsMaxResultsZeroOmitsPageToken(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"SELECT id FROM ds.t","useLegacySql":false}`
+	resp := runQueryAndGetResults(t, deps, body, "?maxResults=0")
+	if resp.PageToken != "" {
+		t.Fatalf("pageToken = %q, want empty when maxResults=0", resp.PageToken)
+	}
+	if len(resp.Rows) != 0 {
+		t.Fatalf("rows = %d, want 0", len(resp.Rows))
+	}
+	if !resp.JobComplete {
+		t.Fatal("jobComplete = false, want true")
+	}
+}
+
 // TestQueryGetResultsRespectsStartIndexAndMaxResults pins the
 // pagination knobs: startIndex skips the leading row, maxResults
 // caps the trailing one. totalRows still reports the full count

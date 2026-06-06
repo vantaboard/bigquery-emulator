@@ -13,6 +13,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
+	"github.com/vantaboard/bigquery-emulator/gateway/query"
 	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 )
 
@@ -153,13 +154,9 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 }
 
 // formatDryRunBytes renders estimated bytes as the decimal string
-// BigQuery REST always emits, defaulting to "0" when the engine omits
-// a value.
+// BigQuery REST always emits for dry-run responses.
 func formatDryRunBytes(estimated int64) string {
-	if estimated < 0 {
-		return "0"
-	}
-	return strconv.FormatInt(estimated, 10)
+	return jobs.FormatDryRunBytesProcessed(estimated)
 }
 
 // runQueryExecute handles the dryRun=false branch of QueryRun. It
@@ -201,12 +198,19 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	if isMultiStatementScript(req.Query) {
+		runQueryScriptExecute(deps, w, r, req, defaultDataset)
+		return
+	}
+
+	sql := expandQueryParamsInSQL(req.Query, req.Parameters)
+	bindParams := stripExpandedPositionalArrayParams(req.Query, req.Parameters)
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
-		Sql:              req.Query,
+		Sql:              sql,
 		UseLegacySql:     req.UseLegacySQL != nil && *req.UseLegacySQL,
-		Parameters:       parametersToEngineMap(req.Parameters),
+		Parameters:       parametersToEngineMap(bindParams),
 	}
 
 	start := time.Now().UTC()
@@ -227,6 +231,11 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// bytes-processed yet, so we stamp 0; the long-running-jobs
 	// follow-up wires the real metric.
 	restSchema := schemaFromProto(schema)
+	if err := query.AppendResultsFromQueryRequest(
+		r.Context(), deps.Catalog, req, projectID, restSchema, rows); err != nil {
+		writeError(w, http.StatusBadRequest, reasonInvalidQuery, err.Error())
+		return
+	}
 	restDmlStats := dmlStatsFromProto(dmlStats)
 	var ddlTarget *bqtypes.RoutineReference
 	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
@@ -245,6 +254,20 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		projectID, req.Location, req.CreateSession, req.ConnProperties)
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
+	if deps.Catalog != nil && len(rows) > 0 &&
+		(statementType == "" || statementType == "SELECT") {
+		if dest, err := query.MaterializeImplicitDestination(
+			r.Context(), deps.Catalog, projectID, defaultDataset,
+			job.JobReference.JobID, restSchema, rows); err == nil {
+			job.Configuration = &jobs.JobConfiguration{
+				JobType: jobConfigurationKindQuery,
+				Query: &jobs.JobConfigurationQuery{
+					Query:            req.Query,
+					DestinationTable: dest,
+				},
+			}
+		}
+	}
 	stampJobSessionInfo(job, sessionInfo)
 	// Surface the `emulatorRoute` debug field only to loopback
 	// callers so external BigQuery client libraries pointed at the
@@ -628,6 +651,11 @@ func paginateResults(allRows []bqtypes.Row, q url.Values) ([]bqtypes.Row, string
 	limit := defaultQueryResultsPageSize
 	if q.Get("maxResults") != "" {
 		limit = parseUintQuery(q, "maxResults", defaultQueryResultsPageSize)
+	}
+	// maxResults=0 means "wait for completion, return zero rows" (browseTable
+	// sample). Never mint a pageToken in that case or Node polls forever.
+	if limit == 0 {
+		return nil, ""
 	}
 	if start >= total {
 		return nil, ""

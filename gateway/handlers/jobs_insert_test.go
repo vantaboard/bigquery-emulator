@@ -97,6 +97,10 @@ func TestJobInsertDryRunTotalBytesProcessed(t *testing.T) {
 		t.Errorf("statistics.totalBytesProcessed = %q, want %q",
 			got.Statistics.TotalBytesProcessed, "8192")
 	}
+	if got.Statistics.Query == nil || got.Statistics.Query.TotalBytesProcessed != "8192" {
+		t.Errorf("statistics.query.totalBytesProcessed = %#v, want %q",
+			got.Statistics.Query, "8192")
+	}
 }
 
 // TestJobInsertSyncQueryCapturesEngineError pins the
