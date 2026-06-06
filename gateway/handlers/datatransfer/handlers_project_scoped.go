@@ -34,6 +34,7 @@ const emulatorDefaultTransferLocation = "us"
 func (h *Handler) handleListConfigsProjectScoped(w http.ResponseWriter, r *http.Request) {
 	project := r.PathValue("projectId")
 	locPrefix := "projects/" + project + "/locations/"
+	dsFilter := parseDataSourceIDsFilter(r.URL.Query())
 
 	h.mu.Lock()
 	var keys []string
@@ -44,8 +45,18 @@ func (h *Handler) handleListConfigsProjectScoped(w http.ResponseWriter, r *http.
 	}
 	h.mu.Unlock()
 	sort.Strings(keys)
-	start, end := pageWindow(len(keys), r.URL.Query().Get("pageSize"), r.URL.Query().Get("pageToken"))
-	pageKeys := keys[start:end]
+
+	h.mu.Lock()
+	filtered := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if c, ok := h.configs[k]; ok && configMatchesDataSourceFilter(c, dsFilter) {
+			filtered = append(filtered, k)
+		}
+	}
+	h.mu.Unlock()
+
+	start, end := pageWindow(len(filtered), r.URL.Query().Get("pageSize"), r.URL.Query().Get("pageToken"))
+	pageKeys := filtered[start:end]
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -56,31 +67,57 @@ func (h *Handler) handleListConfigsProjectScoped(w http.ResponseWriter, r *http.
 		}
 	}
 	resp := listConfigsResponse{TransferConfigs: out}
-	if end < len(keys) {
+	if end < len(filtered) {
 		resp.NextPageToken = strconv.Itoa(end)
 	}
 	writeJSON(h.logger(), w, http.StatusOK, resp)
 }
 
-// normalizeTransferConfigInput projects a bare `destinationDatasetId`
-// onto the proto-shaped `destinationDataset.datasetReference` so the
-// in-memory record carries both forms (gapic clients consume one or
-// the other depending on transport).
+// normalizeTransferConfigInput normalizes the destination oneof gapic
+// REST clients send (`destinationDatasetId` and/or nested
+// `destinationDataset.datasetReference`) so the in-memory record
+// carries both wire forms.
 func normalizeTransferConfigInput(projectID string, in *transferConfigResource) {
-	did := strings.TrimSpace(in.DestinationDatasetID)
-	if did == "" || in.DestinationDataset != nil {
+	if in == nil {
 		return
 	}
-	in.DestinationDataset = &struct {
-		DatasetReference *struct {
+	if strings.TrimSpace(in.DestinationDatasetID) == "" &&
+		in.DestinationDataset != nil &&
+		in.DestinationDataset.DatasetReference != nil {
+		in.DestinationDatasetID = strings.TrimSpace(
+			in.DestinationDataset.DatasetReference.DatasetID)
+	}
+	did := strings.TrimSpace(in.DestinationDatasetID)
+	if did == "" {
+		return
+	}
+	if in.DestinationDataset == nil {
+		in.DestinationDataset = &struct {
+			DatasetReference *struct {
+				ProjectID string `json:"projectId,omitempty"`
+				DatasetID string `json:"datasetId,omitempty"`
+			} `json:"datasetReference,omitempty"`
+		}{
+			DatasetReference: &struct {
+				ProjectID string `json:"projectId,omitempty"`
+				DatasetID string `json:"datasetId,omitempty"`
+			}{ProjectID: projectID, DatasetID: did},
+		}
+		return
+	}
+	if in.DestinationDataset.DatasetReference == nil {
+		in.DestinationDataset.DatasetReference = &struct {
 			ProjectID string `json:"projectId,omitempty"`
 			DatasetID string `json:"datasetId,omitempty"`
-		} `json:"datasetReference,omitempty"`
-	}{
-		DatasetReference: &struct {
-			ProjectID string `json:"projectId,omitempty"`
-			DatasetID string `json:"datasetId,omitempty"`
-		}{ProjectID: projectID, DatasetID: did},
+		}{ProjectID: projectID, DatasetID: did}
+		return
+	}
+	ref := in.DestinationDataset.DatasetReference
+	if strings.TrimSpace(ref.DatasetID) == "" {
+		ref.DatasetID = did
+	}
+	if strings.TrimSpace(ref.ProjectID) == "" {
+		ref.ProjectID = projectID
 	}
 }
 

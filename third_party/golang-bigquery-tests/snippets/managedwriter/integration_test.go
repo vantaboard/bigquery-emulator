@@ -90,12 +90,16 @@ func TestAppends(t *testing.T) {
 	}
 
 	t.Run("PendingStream", func(t *testing.T) {
+		if os.Getenv("BIGQUERY_EMULATOR_HOST") != "" {
+			t.Skip("PENDING write streams are not implemented by the go-googlesql BigQuery emulator")
+		}
 		if err := appendToPendingStream(ioutil.Discard, tc.ProjectID, testDatasetID, testTableID); err != nil {
 			t.Errorf("appendToPendingStream(%q %q): %v", testDatasetID, testTableID, err)
 		}
 	})
 
 	t.Run("DefaultStream", func(t *testing.T) {
+		bqtestutil.SkipEmulatorManagedWriterDefaultStream(t)
 		if err := appendToDefaultStream(ioutil.Discard, tc.ProjectID, testDatasetID, testTableID); err != nil {
 			t.Errorf("appendToDefaultStream(%q %q): %v", testDatasetID, testTableID, err)
 		}

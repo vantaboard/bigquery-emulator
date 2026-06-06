@@ -189,6 +189,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
     return GenerateTimestampArray(args, return_type);
   }
   if (name == "time") return TimeConstructor(args);
+  if (name == "date") return DateConstructor(args);
   if (name == "datetime") return DatetimeConstructor(name, args);
   if (name == "timestamp" || name == "timestamp_from_date" ||
       name == "timestamp_from_datetime") {

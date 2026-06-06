@@ -17,12 +17,17 @@ import (
 // ReadServer implements the public BigQueryRead gRPC service by adapting
 // requests to the engine's internal StorageRead contract and encoding row
 // pages as Arrow IPC record batches.
+type readSessionState struct {
+	schema     *enginepb.TableSchema
+	dataFormat storagepb.DataFormat
+}
+
 type ReadServer struct {
 	storagepb.UnimplementedBigQueryReadServer
 	engine *engine.Client
 
 	mu       sync.RWMutex
-	sessions map[string]*enginepb.TableSchema
+	sessions map[string]*readSessionState
 }
 
 func (s *ReadServer) requireEngine() error {
@@ -32,19 +37,26 @@ func (s *ReadServer) requireEngine() error {
 	return nil
 }
 
-func (s *ReadServer) rememberSession(name string, schema *enginepb.TableSchema) {
+func (s *ReadServer) rememberSession(
+	name string,
+	schema *enginepb.TableSchema,
+	dataFormat storagepb.DataFormat,
+) {
 	if name == "" || schema == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.sessions == nil {
-		s.sessions = make(map[string]*enginepb.TableSchema)
+		s.sessions = make(map[string]*readSessionState)
 	}
-	s.sessions[name] = schema
+	s.sessions[name] = &readSessionState{
+		schema:     schema,
+		dataFormat: dataFormat,
+	}
 }
 
-func (s *ReadServer) sessionSchema(streamName string) *enginepb.TableSchema {
+func (s *ReadServer) sessionState(streamName string) *readSessionState {
 	sessionName := streamName
 	if i := strings.LastIndex(streamName, "/streams/"); i >= 0 {
 		sessionName = streamName[:i]
@@ -65,17 +77,11 @@ func (s *ReadServer) CreateReadSession(
 	if rs := req.GetReadSession(); rs != nil && rs.GetDataFormat() != storagepb.DataFormat_DATA_FORMAT_UNSPECIFIED {
 		dataFormat = rs.GetDataFormat()
 	}
-	if dataFormat == storagepb.DataFormat_AVRO {
-		return nil, status.Error(
-			codes.Unimplemented,
-			"Avro ReadRows encoding is not implemented by the emulator storage shim",
-		)
-	}
 	session, err := s.engine.StorageRead.CreateReadSession(ctx, engineCreateReadSessionRequest(req))
 	if err != nil {
 		return nil, err
 	}
-	s.rememberSession(session.GetName(), session.GetSchema())
+	s.rememberSession(session.GetName(), session.GetSchema(), dataFormat)
 	return publicReadSessionFromEngine(session, dataFormat)
 }
 
@@ -95,7 +101,11 @@ func (s *ReadServer) ReadRows(
 		return err
 	}
 
-	batchSchema := s.sessionSchema(req.GetReadStream())
+	state := s.sessionState(req.GetReadStream())
+	dataFormat := storagepb.DataFormat_ARROW
+	if state != nil && state.dataFormat != storagepb.DataFormat_DATA_FORMAT_UNSPECIFIED {
+		dataFormat = state.dataFormat
+	}
 	sentSchema := false
 	for {
 		page, recvErr := engineStream.Recv()
@@ -108,31 +118,66 @@ func (s *ReadServer) ReadRows(
 		if len(page.GetRows()) == 0 {
 			continue
 		}
-		schema := batchSchema
+		schema := (*enginepb.TableSchema)(nil)
+		if state != nil {
+			schema = state.schema
+		}
 		if schema == nil {
 			schema = inferSchemaFromRow(page.GetRows()[0])
 		}
-		batch, err := rowsToArrowBatch(schema, page.GetRows())
+		resp, err := readRowsResponseForFormat(dataFormat, schema, page.GetRows())
 		if err != nil {
-			return status.Errorf(codes.Internal, "encode Arrow batch: %v", err)
-		}
-		resp := &storagepb.ReadRowsResponse{
-			Rows: &storagepb.ReadRowsResponse_ArrowRecordBatch{
-				ArrowRecordBatch: batch,
-			},
-			RowCount: batch.GetRowCount(),
+			return status.Errorf(codes.Internal, "encode ReadRows batch: %v", err)
 		}
 		if !sentSchema {
-			arrowSchema, schemaErr := serializeArrowSchema(schema)
-			if schemaErr != nil {
-				return status.Errorf(codes.Internal, "encode Arrow schema: %v", schemaErr)
+			switch dataFormat {
+			case storagepb.DataFormat_AVRO:
+				avroSchema, schemaErr := serializeAvroSchema(schema)
+				if schemaErr != nil {
+					return status.Errorf(codes.Internal, "encode Avro schema: %v", schemaErr)
+				}
+				resp.Schema = &storagepb.ReadRowsResponse_AvroSchema{AvroSchema: avroSchema}
+			default:
+				arrowSchema, schemaErr := serializeArrowSchema(schema)
+				if schemaErr != nil {
+					return status.Errorf(codes.Internal, "encode Arrow schema: %v", schemaErr)
+				}
+				resp.Schema = &storagepb.ReadRowsResponse_ArrowSchema{ArrowSchema: arrowSchema}
 			}
-			resp.Schema = &storagepb.ReadRowsResponse_ArrowSchema{ArrowSchema: arrowSchema}
 			sentSchema = true
 		}
 		if err := stream.Send(resp); err != nil {
 			return err
 		}
+	}
+}
+
+func readRowsResponseForFormat(
+	dataFormat storagepb.DataFormat,
+	schema *enginepb.TableSchema,
+	rows []*enginepb.DataRow,
+) (*storagepb.ReadRowsResponse, error) {
+	switch dataFormat {
+	case storagepb.DataFormat_AVRO:
+		batch, err := rowsToAvroBatch(schema, rows)
+		if err != nil {
+			return nil, err
+		}
+		return &storagepb.ReadRowsResponse{
+			Rows:     &storagepb.ReadRowsResponse_AvroRows{AvroRows: batch},
+			RowCount: batch.GetRowCount(),
+		}, nil
+	default:
+		batch, err := rowsToArrowBatch(schema, rows)
+		if err != nil {
+			return nil, err
+		}
+		return &storagepb.ReadRowsResponse{
+			Rows: &storagepb.ReadRowsResponse_ArrowRecordBatch{
+				ArrowRecordBatch: batch,
+			},
+			RowCount: batch.GetRowCount(),
+		}, nil
 	}
 }
 

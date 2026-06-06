@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -574,13 +575,27 @@ func TableDelete(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// localStubIamPolicyEtag is the deterministic etag returned by the
+// emulator's metadata-only table IAM stub (no real ACL store).
+const localStubIamPolicyEtag = "BwWWja0YfJA="
+
+func localStubEmptyIamPolicy() map[string]any {
+	return map[string]any{
+		"version":  1,
+		"bindings": []any{},
+		"etag":     localStubIamPolicyEtag,
+	}
+}
+
 // TableGetIamPolicy implements `bigquery.tables.getIamPolicy`:
 //
 //	POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy
 //
 // Reached via TableCustomMethodPOST after parsing the trailing :op.
 func TableGetIamPolicy(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, localStubEmptyIamPolicy())
+	}
 }
 
 // TableSetIamPolicy implements `bigquery.tables.setIamPolicy`:
@@ -589,7 +604,24 @@ func TableGetIamPolicy(_ Dependencies) http.HandlerFunc {
 //
 // Reached via TableCustomMethodPOST after parsing the trailing :op.
 func TableSetIamPolicy(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Policy map[string]any `json:"policy"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		pol := req.Policy
+		if pol == nil {
+			pol = localStubEmptyIamPolicy()
+		} else {
+			if _, ok := pol["bindings"]; !ok {
+				pol["bindings"] = []any{}
+			}
+			if _, ok := pol["etag"]; !ok {
+				pol["etag"] = localStubIamPolicyEtag
+			}
+		}
+		writeJSON(w, http.StatusOK, pol)
+	}
 }
 
 // TableTestIamPermissions implements `bigquery.tables.testIamPermissions`:

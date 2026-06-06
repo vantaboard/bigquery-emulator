@@ -340,6 +340,37 @@ TEST_F(ControlOpExecutorTest, CreateTableAsSelectMaterializesSourceRows) {
   EXPECT_EQ(seen, want);
 }
 
+TEST_F(ControlOpExecutorTest, CreateTableAsSelectUnnestNarrowsToOutputSchema) {
+  // Regression for TestCopiesAndExtracts / generateTableCTAS: UNNEST
+  // ordinality adds `__bq_input_rn` to the inner scan emit; without the
+  // outer projection narrow the drained DuckDB table has one extra
+  // column and `arrow_to_bq` rejects the schema mismatch.
+  absl::Status s = RunDdl(
+      "CREATE TABLE ds.unnest_copy AS "
+      "SELECT 2000 + r AS year, IF(r > 1, 'foo', 'bar') AS token "
+      "FROM UNNEST(GENERATE_ARRAY(0, 2)) AS r");
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto schema = storage_->GetSchema({"proj-test", "ds", "unnest_copy"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 2u);
+  ASSERT_EQ(schema->columns[0].name, "year");
+  ASSERT_EQ(schema->columns[1].name, "token");
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "unnest_copy"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  storage::Row row;
+  int rows = 0;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    ++rows;
+  }
+  EXPECT_EQ(rows, 3);
+}
+
 // --- ANALYZE -------------------------------------------------------------
 
 TEST_F(ControlOpExecutorTest, AnalyzeKnownTableIsNoOpSuccess) {

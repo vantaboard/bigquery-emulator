@@ -155,6 +155,11 @@ std::string Transpiler::EmitFunctionCall(
                         args[2],
                         " AS INTEGER))");
   }
+  // BigQuery TIMESTAMP(string) is a cast; DuckDB's TIMESTAMP() is not a
+  // unary string parser (syntax error at string literal).
+  if (name == "timestamp" && args.size() == 1) {
+    return absl::StrCat("CAST(", args[0], " AS TIMESTAMPTZ)");
+  }
   if (name == "generate_array") {
     if (args.size() == 2) {
       return absl::StrCat("list_transform(generate_series(",

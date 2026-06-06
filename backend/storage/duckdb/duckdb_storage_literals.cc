@@ -1,15 +1,20 @@
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 #include <string>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/datetime.pb.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/row_restriction.h"
@@ -55,6 +60,44 @@ std::string RenderBlobLiteral(absl::string_view bytes) {
 // Forward declaration for the recursive cell renderer.
 absl::StatusOr<std::string> RenderCellLiteral(
     const Value& cell, const schema::ColumnSchema& column);
+
+namespace {
+
+const ::googlesql::functions::FormatDateTimestampOptions kAppendFormatOpts{
+    .expand_Q = true, .expand_J = true};
+
+std::optional<std::string> TryFormatPackedDateString(absl::string_view s) {
+  if (s.empty()) return std::nullopt;
+  for (char c : s) {
+    if (!absl::ascii_isdigit(static_cast<unsigned char>(c))) {
+      return std::nullopt;
+    }
+  }
+  int32_t packed = 0;
+  if (!absl::SimpleAtoi(s, &packed)) return std::nullopt;
+  std::string out;
+  if (!::googlesql::functions::FormatDateToString(
+           "%F", packed, kAppendFormatOpts, &out)
+           .ok()) {
+    return std::nullopt;
+  }
+  return out;
+}
+
+std::optional<std::string> TryFormatMicrosTimestampString(absl::string_view s) {
+  if (s.empty()) return std::nullopt;
+  for (char c : s) {
+    if (!absl::ascii_isdigit(static_cast<unsigned char>(c))) {
+      return std::nullopt;
+    }
+  }
+  int64_t micros = 0;
+  if (!absl::SimpleAtoi(s, &micros)) return std::nullopt;
+  const absl::Time t = absl::FromUnixMicros(micros);
+  return absl::FormatTime("%E4S", t, absl::UTCTimeZone());
+}
+
+}  // namespace
 
 // Renders a single non-repeated scalar value as a DuckDB SQL literal,
 // excluding the NULL case (the caller short-circuits that before
@@ -155,18 +198,26 @@ absl::StatusOr<std::string> RenderScalarLiteral(
           "'", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kBytes:
       return RenderBlobLiteral(cell.string_value());
-    case schema::ColumnType::kDate:
-      return absl::StrCat(
-          "DATE '", EscapeStringLiteralInner(cell.string_value()), "'");
+    case schema::ColumnType::kDate: {
+      std::string iso = cell.string_value();
+      if (auto packed = TryFormatPackedDateString(iso); packed.has_value()) {
+        iso = *packed;
+      }
+      return absl::StrCat("DATE '", EscapeStringLiteralInner(iso), "'");
+    }
     case schema::ColumnType::kTime:
       return absl::StrCat(
           "TIME '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kDatetime:
       return absl::StrCat(
           "TIMESTAMP '", EscapeStringLiteralInner(cell.string_value()), "'");
-    case schema::ColumnType::kTimestamp:
-      return absl::StrCat(
-          "TIMESTAMPTZ '", EscapeStringLiteralInner(cell.string_value()), "'");
+    case schema::ColumnType::kTimestamp: {
+      std::string ts = cell.string_value();
+      if (auto micros = TryFormatMicrosTimestampString(ts); micros.has_value()) {
+        ts = *micros;
+      }
+      return absl::StrCat("TIMESTAMPTZ '", EscapeStringLiteralInner(ts), "'");
+    }
     case schema::ColumnType::kNumeric:
     case schema::ColumnType::kBignumeric:
       // Stored as a textual decimal in our Value union; let DuckDB

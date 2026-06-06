@@ -26,6 +26,7 @@ import (
 	"cloud.google.com/go/bigquery/v2/apiv2/bigquerypb"
 	"cloud.google.com/go/bigquery/v2/apiv2_client"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/bqopts"
+	rootbqtestutil "github.com/GoogleCloudPlatform/golang-samples/bigquery/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/internal/testutil"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -34,6 +35,7 @@ const testTimeout = 30 * time.Second
 const testLocation = "us-west1"
 
 func TestModelSnippets(t *testing.T) {
+	rootbqtestutil.SkipEmulatorBQML(t)
 	tc := testutil.SystemTest(t)
 	names := []string{"gRPC", "REST"}
 

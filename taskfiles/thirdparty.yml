@@ -28,7 +28,9 @@
 # `node-bigquery-tests` and `python-bigquery-tests` unconditionally
 # (their preflights are unconditional and the python `snippets` /
 # `system` sessions exercise `test_extract_table*` against fake-gcs),
-# and `python-bigquery-dataframes-tests` when running the snippet-gate
+# `golang-bigquery-tests` when BIGQUERY_EMULATOR_HOST is set (GCS load
+# samples and extract jobs), and `python-bigquery-dataframes-tests` when
+# running the snippet-gate
 # (always brings up fake-gcs and defaults STORAGE_EMULATOR_HOST) or when
 # STORAGE_EMULATOR_HOST is explicitly set for the full dataframes suite. Both `emulator-up`
 # and `fake-gcs-up` are `run: once`, so Task dedupes the call within a
@@ -385,30 +387,69 @@ tasks:
 
   # third_party/golang-bigquery-tests is a fully vendored Go module
   # (see go.mod). When BIGQUERY_EMULATOR_HOST is unset the suite
-  # mostly compiles + skips system tests; with the emulator + gRPC
-  # endpoints exported it runs against the gateway. See
+  # mostly compiles + skips system tests (PR compile lane). With the
+  # emulator set, the task mirrors node/python/java: brings up
+  # fake-gcs, exports GOLANG_SAMPLES_* + gRPC ports, preflights GCS
+  # fixtures, and prints a pass/skip/fail summary. See
   # third_party/README.md for the env-var matrix.
   golang-bigquery-tests:
     desc: Run vendored golang-bigquery-tests go test (bqopts + BIGQUERY_EMULATOR_HOST; see third_party/README.md)
     cmds:
       - |
-        set -eo pipefail
+        set -euo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
+        echo "thirdparty:golang-bigquery-tests: THIRDPARTY_FRESH_VOLUME=${THIRDPARTY_FRESH_VOLUME:-0}"
         if [ ! -f third_party/golang-bigquery-tests/go.mod ]; then
           echo "third_party/golang-bigquery-tests missing" >&2
           exit 1
         fi
-        # Compile/skip lane: when BIGQUERY_EMULATOR_HOST is unset the
-        # suite's system tests skip and no emulator process is needed.
-        # Live docker lanes export the host and call emulator-up.
-        # Host-gateway lanes (workflow_dispatch live job) set
-        # THIRDPARTY_SKIP_EMULATOR_UP=1 so compose is not started.
-        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ] && [ "${THIRDPARTY_SKIP_EMULATOR_UP:-0}" != "1" ]; then
+        _live=0
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+          _live=1
+        fi
+        # Live docker lanes call emulator-up + fake-gcs-up. Host-gateway
+        # lanes (workflow_dispatch live job) set THIRDPARTY_SKIP_EMULATOR_UP=1
+        # so compose is not started. Compile-only CI clears
+        # BIGQUERY_EMULATOR_HOST so neither container is touched.
+        if [ "$_live" = "1" ] && [ "${THIRDPARTY_SKIP_EMULATOR_UP:-0}" != "1" ]; then
           task thirdparty:emulator-up
+          task thirdparty:fake-gcs-up
+        fi
+        if [ "$_live" = "1" ]; then
+          # Go cloud storage reads STORAGE_EMULATOR_HOST as host:port (no scheme).
+          _st="${STORAGE_EMULATOR_HOST:-127.0.0.1:4443}"
+          _st="${_st#http://}"
+          _st="${_st#https://}"
+          _st="${_st#//}"
+          export STORAGE_EMULATOR_HOST="$_st"
+          bash scripts/preflight_node_samples_gcs.sh
+          export GOLANG_SAMPLES_PROJECT_ID="${GOLANG_SAMPLES_PROJECT_ID:-dev}"
+          export GOLANG_SAMPLES_E2E_TEST="${GOLANG_SAMPLES_E2E_TEST:-1}"
+          export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
+          export GCLOUD_PROJECT="${GCLOUD_PROJECT:-dev}"
+          export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
+          export BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT="${BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT:-localhost:9060}"
+          echo "thirdparty:golang-bigquery-tests: live mode (project=${GOLANG_SAMPLES_PROJECT_ID} grpc=${BIGQUERY_STORAGE_GRPC_ENDPOINT} gcs=${STORAGE_EMULATOR_HOST})"
+        else
+          echo "thirdparty:golang-bigquery-tests: compile-only (BIGQUERY_EMULATOR_HOST unset; integration tests skip)"
         fi
         cd "$root/third_party/golang-bigquery-tests"
-        go test ./... -count=1 {{.GO_TEST_FLAGS}}
+        _log="$(mktemp)"
+        trap 'rm -f "$_log"' EXIT
+        set +e
+        go test ./... -count=1 -v {{.GO_TEST_FLAGS}} >"$_log" 2>&1
+        _rc=$?
+        set -e
+        cat "$_log"
+        _pass="$(rg -c '^--- PASS: ' "$_log" 2>/dev/null || true)"
+        _skip="$(rg -c '^--- SKIP: ' "$_log" 2>/dev/null || true)"
+        _fail="$(rg -c '^--- FAIL: ' "$_log" 2>/dev/null || true)"
+        _pass="${_pass:-0}"
+        _skip="${_skip:-0}"
+        _fail="${_fail:-0}"
+        echo "thirdparty:golang-bigquery-tests summary: pass=${_pass} skip=${_skip} fail=${_fail}"
+        exit "$_rc"
 
   # The vendored python-bigquery-tests tree mirrors upstream's layout
   # (LICENSE, samples/, tests/data) but the upstream `*.py` source —

@@ -1,8 +1,6 @@
 package bqstorage
 
 import (
-	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -64,7 +62,11 @@ func publicReadSessionFromEngine(
 		out.Schema = &storagepb.ReadSession_ArrowSchema{ArrowSchema: arrowSchema}
 		out.DataFormat = storagepb.DataFormat_ARROW
 	case storagepb.DataFormat_AVRO:
-		// Avro encoding is not implemented in the engine shim yet.
+		avroSchema, err := serializeAvroSchema(in.GetSchema())
+		if err != nil {
+			return nil, err
+		}
+		out.Schema = &storagepb.ReadSession_AvroSchema{AvroSchema: avroSchema}
 		out.DataFormat = storagepb.DataFormat_AVRO
 	default:
 		out.DataFormat = storagepb.DataFormat_ARROW
@@ -194,35 +196,4 @@ func engineWriteStreamFromPublic(in *storagepb.WriteStream) *enginepb.WriteStrea
 	return &enginepb.WriteStream{
 		Type: publicWriteTypeToEngine(in.GetType()),
 	}
-}
-
-func protoValueToCell(v any) *enginepb.Cell {
-	switch x := v.(type) {
-	case nil:
-		return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
-	case string:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: x}}
-	case bool:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatBool(x)}}
-	case int32:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatInt(int64(x), 10)}}
-	case int64:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatInt(x, 10)}}
-	case uint32:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatUint(uint64(x), 10)}}
-	case uint64:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatUint(x, 10)}}
-	case float32:
-		return &enginepb.Cell{
-			Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatFloat(float64(x), 'g', -1, 32)},
-		}
-	case float64:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatFloat(x, 'g', -1, 64)}}
-	default:
-		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: fmtAny(x)}}
-	}
-}
-
-func fmtAny(v any) string {
-	return fmt.Sprint(v)
 }

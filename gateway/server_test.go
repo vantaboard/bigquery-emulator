@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // Shared synthetic REST paths used by the route-table smoke test.
@@ -100,7 +102,7 @@ func assertRouteReachable(t *testing.T, srv http.Handler, method, path string) {
 // docs/REST_API.md when adding new routes to bqV2RouteCases or
 // otherRouteCases.
 func TestRouteTable(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 
 	for _, tc := range bqV2RouteCases {
 		// `/bigquery/v2` prefix: the form gcloud, bq, and clients
@@ -129,7 +131,7 @@ func TestRouteTable(t *testing.T) {
 // prefix and the bare form are covered because clients pointed at
 // BIGQUERY_EMULATOR_HOST hit the bare form.
 func TestUnknownColonOpReturns404(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 	bareCases := []string{
 		"/projects/p/datasets/d:nosuchop",
 		"/projects/p/datasets/d/tables/t:nosuchop",
@@ -151,7 +153,7 @@ func TestUnknownColonOpReturns404(t *testing.T) {
 // registered. There is no such endpoint in the public BigQuery API,
 // in either the prefixed or the bare form.
 func TestRemovedProjectGetIs404(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 	for _, path := range []string{"/bigquery/v2/projects/p", "/projects/p"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
@@ -167,7 +169,7 @@ func TestRemovedProjectGetIs404(t *testing.T) {
 // BigQuery client always sends a bearer token, so a 401 here would
 // force every client to special-case the emulator.
 func TestBearerTokenIsNotRejected(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 
 	cases := []struct {
 		name  string
@@ -198,7 +200,7 @@ func TestBearerTokenIsNotRejected(t *testing.T) {
 // real document (kind=discovery#restDescription) rather than the 501
 // stub it used to. This is the route library clients hit at startup.
 func TestDiscoveryReturnsOK(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodGet, "/discovery/v1/apis/bigquery/v2/rest", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/grpcserver"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // engineReadyTimeout bounds how long Gateway.Run will wait for the engine
@@ -205,8 +206,10 @@ func (g *Gateway) Run() error {
 		}
 	}
 
+	deps := handlers.BuildDependencies(g.engineClient)
+
 	if g.opts.StorageGRPCAddress != "" {
-		grpcSrv, err := grpcserver.Start(g.opts.StorageGRPCAddress, g.engineClient)
+		grpcSrv, err := grpcserver.Start(g.opts.StorageGRPCAddress, g.engineClient, deps)
 		if err != nil {
 			g.stopEngine()
 			return fmt.Errorf("start storage grpc: %w", err)
@@ -223,7 +226,7 @@ func (g *Gateway) Run() error {
 
 	srv := &http.Server{
 		Addr:              g.opts.HTTPAddress,
-		Handler:           NewServer(g.opts, g.engineClient),
+		Handler:           NewServer(g.opts, deps, g.engineClient),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

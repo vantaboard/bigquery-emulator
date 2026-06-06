@@ -32,7 +32,7 @@ readonly MIN_US_STATES_CSV_BYTES="${MIN_US_STATES_CSV_BYTES:-400}"
 
 tmp="$(mktemp)"
 err="$(mktemp)"
-trap 'rm -f "$tmp" "$err"' EXIT
+trap 'rm -f "$tmp" "$err" "$hive_tmp" "$hive_err"' EXIT
 
 # curl -w '%{size_download}' writes "0" even when the connection is refused or
 # DNS fails, so an empty $size never fires; capture the exit code separately
@@ -95,3 +95,38 @@ if ! grep -q 'Washington,WA' "$tmp" 2>/dev/null; then
 fi
 
 echo "preflight: fake-gcs us-states.csv ok (${size} bytes, Washington,WA present)"
+
+# Hive-partitioning samples (autolayout parquet) used by external-table and load samples.
+hive_fixture="${root}/testdata/fake-gcs-data/cloud-samples-data/bigquery/hive-partitioning-samples/autolayout/dt=2020-11-15/file1.parquet"
+hive_url="${base}/storage/v1/b/cloud-samples-data/o/bigquery%2Fhive-partitioning-samples%2Fautolayout%2Fdt%3D2020-11-15%2Ffile1.parquet?alt=media"
+readonly MIN_HIVE_PARQUET_BYTES="${MIN_HIVE_PARQUET_BYTES:-100}"
+
+hive_tmp="$(mktemp)"
+hive_err="$(mktemp)"
+
+set +e
+hive_size="$(curl -fsS -o "$hive_tmp" --connect-timeout 3 --max-time 30 \
+  -w '%{size_download}' "$hive_url" 2>"$hive_err")"
+hive_curl_rc=$?
+set -e
+
+if [[ "$hive_curl_rc" -ne 0 && ! -s "$hive_tmp" ]]; then
+  echo "preflight: could not reach hive-partitioning sample at ${hive_url} (curl rc=${hive_curl_rc})." >&2
+  echo "  Re-seed: task testdata:fake-gcs-sync && docker compose --profile thirdparty up -d --force-recreate fake-gcs-server" >&2
+  exit 1
+fi
+if [[ -z "$hive_size" || "$hive_size" == "0" || "$hive_size" -lt "$MIN_HIVE_PARQUET_BYTES" ]]; then
+  echo "preflight: ${hive_url} body is only ${hive_size:-0} bytes (expected >= ${MIN_HIVE_PARQUET_BYTES})." >&2
+  if [[ -f "$hive_fixture" ]]; then
+    host_bytes="$(wc -c <"$hive_fixture" | tr -d ' ')"
+    echo "  On-disk fixture ${hive_fixture} is ${host_bytes} bytes — fake-gcs may be serving stale data." >&2
+  fi
+  echo "  Re-seed: task testdata:fake-gcs-sync && docker compose --profile thirdparty up -d --force-recreate fake-gcs-server" >&2
+  exit 1
+fi
+if [[ "$(head -c 4 "$hive_tmp")" != $'PAR1' ]]; then
+  echo "preflight: ${hive_url} does not look like parquet (missing PAR1 magic)." >&2
+  exit 1
+fi
+
+echo "preflight: fake-gcs hive-partitioning autolayout parquet ok (${hive_size} bytes)"

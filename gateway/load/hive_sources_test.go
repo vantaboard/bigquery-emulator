@@ -1,4 +1,4 @@
-package external
+package load
 
 import "testing"
 
@@ -16,7 +16,7 @@ func TestParseHiveCustomPrefix(t *testing.T) {
 	if prefix != "hive/customlayout/" {
 		t.Fatalf("prefix = %q, want hive/customlayout/", prefix)
 	}
-	if len(fields) != 1 || fields[0].Name != "pkey" || fields[0].Type != defaultHivePartitionFieldType {
+	if len(fields) != 1 || fields[0].Name != "pkey" || fields[0].Type != "STRING" {
 		t.Fatalf("fields = %#v", fields)
 	}
 }

@@ -1,12 +1,13 @@
-package external
+package load
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
-	"github.com/vantaboard/bigquery-emulator/gateway/load"
+	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 )
 
 const (
@@ -21,10 +22,81 @@ type hivePartitionField struct {
 	Type string
 }
 
-func applyHivePartitions(
-	rows []map[string]any,
-	partitionValues map[string]string,
-) {
+func parseHiveURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
+	parseSchema *bqtypes.TableSchema,
+) (ParsedRows, int64, int, error) {
+	ext := &bqtypes.ExternalDataConfiguration{
+		SourceURIs:              cfg.SourceURIs,
+		SourceFormat:            cfg.SourceFormat,
+		Schema:                  parseSchema,
+		Autodetect:              cfg.Autodetect,
+		HivePartitioningOptions: cfg.HivePartitioningOptions,
+	}
+	parsed, totalBytes, inputFiles, err := parseExternalGCS(ctx, ext, parseSchema, cfg.SkipLeadingRows())
+	return parsed, totalBytes, inputFiles, err
+}
+
+// ParseExternalGCS fetches GCS objects (including wildcards) and applies hive
+// partition columns when configured. Shared by load jobs and external tables.
+func ParseExternalGCS(
+	ctx context.Context,
+	cfg *bqtypes.ExternalDataConfiguration,
+	schema *bqtypes.TableSchema,
+	skipLeading int,
+) (ParsedRows, int64, int, error) {
+	return parseExternalGCS(ctx, cfg, schema, skipLeading)
+}
+
+func parseExternalGCS(
+	ctx context.Context,
+	cfg *bqtypes.ExternalDataConfiguration,
+	schema *bqtypes.TableSchema,
+	skipLeading int,
+) (ParsedRows, int64, int, error) {
+	uris, err := ExpandSourceURIs(ctx, cfg.SourceURIs)
+	if err != nil {
+		return ParsedRows{}, 0, 0, err
+	}
+
+	var partitionFields []hivePartitionField
+	if cfg.HivePartitioningOptions != nil {
+		partitionFields, err = resolveHivePartitionFields(cfg.HivePartitioningOptions)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+	}
+
+	var parsed ParsedRows
+	var totalBytes int64
+	for i, uri := range uris {
+		data, err := FetchSource(ctx, uri)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+		totalBytes += int64(len(data))
+		chunk, err := ParseSource(cfg.SourceFormat, data, schema, skipLeading, cfg.Autodetect)
+		if err != nil {
+			return ParsedRows{}, 0, 0, err
+		}
+		if cfg.HivePartitioningOptions != nil {
+			partitionValues, partErr := extractHivePartitions(uri, cfg.HivePartitioningOptions)
+			if partErr != nil {
+				return ParsedRows{}, 0, 0, partErr
+			}
+			applyHivePartitions(chunk.Rows, partitionValues)
+			if len(partitionFields) == 0 && len(partitionValues) > 0 {
+				partitionFields = partitionFieldsFromValues(partitionValues, cfg.HivePartitioningOptions)
+			}
+		}
+		parsed = mergeParsedChunk(parsed, chunk, i == 0)
+	}
+	if cfg.HivePartitioningOptions != nil && len(partitionFields) > 0 {
+		parsed.Schema = mergeHiveSchema(parsed.Schema, partitionFields)
+	}
+	return parsed, totalBytes, len(uris), nil
+}
+
+func applyHivePartitions(rows []map[string]any, partitionValues map[string]string) {
 	for _, row := range rows {
 		for k, v := range partitionValues {
 			row[k] = v
@@ -32,10 +104,7 @@ func applyHivePartitions(
 	}
 }
 
-func mergeHiveSchema(
-	dataSchema *bqtypes.TableSchema,
-	partitionFields []hivePartitionField,
-) *bqtypes.TableSchema {
+func mergeHiveSchema(dataSchema *bqtypes.TableSchema, partitionFields []hivePartitionField) *bqtypes.TableSchema {
 	if len(partitionFields) == 0 {
 		return dataSchema
 	}
@@ -61,9 +130,7 @@ func mergeHiveSchema(
 	return out
 }
 
-func resolveHivePartitionFields(
-	opts *bqtypes.HivePartitioningOptions,
-) ([]hivePartitionField, error) {
+func resolveHivePartitionFields(opts *bqtypes.HivePartitioningOptions) ([]hivePartitionField, error) {
 	if opts == nil {
 		return nil, nil
 	}
@@ -82,10 +149,7 @@ func resolveHivePartitionFields(
 	}
 }
 
-func extractHivePartitions(
-	objectURI string,
-	opts *bqtypes.HivePartitioningOptions,
-) (map[string]string, error) {
+func extractHivePartitions(objectURI string, opts *bqtypes.HivePartitioningOptions) (map[string]string, error) {
 	if opts == nil {
 		return nil, nil
 	}
@@ -126,8 +190,6 @@ func parseHiveCustomPrefix(template string) (bucket, pathPrefix string, fields [
 			}
 			fields = append(fields, hivePartitionField{Name: parts[0], Type: parts[1]})
 			i += close + 1
-			// Trailing slash after a placeholder separates the partition
-			// segment from the object name; it is not part of the fixed prefix.
 			if i < len(pathTemplate) && pathTemplate[i] == '/' {
 				i++
 			}
@@ -147,11 +209,11 @@ func extractCustomPartitions(objectURI, sourceURIPrefix string) (map[string]stri
 	if len(fields) == 0 {
 		return nil, errors.New("CUSTOM hive mode requires partition fields in sourceUriPrefix")
 	}
-	objPath, err := load.ObjectPathFromURI(objectURI)
+	objPath, err := ObjectPathFromURI(objectURI)
 	if err != nil {
 		return nil, err
 	}
-	objBucket, err := load.BucketFromURI(objectURI)
+	objBucket, err := BucketFromURI(objectURI)
 	if err != nil {
 		return nil, err
 	}
@@ -172,11 +234,10 @@ func extractCustomPartitions(objectURI, sourceURIPrefix string) (map[string]stri
 		seg := partSegments[i]
 		before, after, ok := strings.Cut(seg, "=")
 		if ok {
-			key, val := before, after
-			if key != field.Name {
+			if before != field.Name {
 				return nil, fmt.Errorf("partition segment %q, want key %q", seg, field.Name)
 			}
-			out[field.Name] = val
+			out[field.Name] = after
 		} else {
 			out[field.Name] = seg
 		}
@@ -185,14 +246,14 @@ func extractCustomPartitions(objectURI, sourceURIPrefix string) (map[string]stri
 }
 
 func extractAutoPartitions(objectURI, sourceURIPrefix string) (map[string]string, error) {
-	prefixPath, err := load.ObjectPathFromURI(sourceURIPrefix)
+	prefixPath, err := ObjectPathFromURI(sourceURIPrefix)
 	if err != nil {
 		return nil, err
 	}
 	if !strings.HasSuffix(prefixPath, "/") {
 		prefixPath += "/"
 	}
-	objPath, err := load.ObjectPathFromURI(objectURI)
+	objPath, err := ObjectPathFromURI(objectURI)
 	if err != nil {
 		return nil, err
 	}
@@ -214,4 +275,32 @@ func extractAutoPartitions(objectURI, sourceURIPrefix string) (map[string]string
 		out[before] = after
 	}
 	return out, nil
+}
+
+func partitionFieldsFromValues(
+	values map[string]string,
+	opts *bqtypes.HivePartitioningOptions,
+) []hivePartitionField {
+	if len(values) == 0 {
+		return nil
+	}
+	fieldType := defaultHivePartitionFieldType
+	if strings.EqualFold(strings.TrimSpace(opts.Mode), hiveModeStrings) {
+		fieldType = defaultHivePartitionFieldType
+	}
+	order := opts.Fields
+	if len(order) == 0 {
+		order = make([]string, 0, len(values))
+		for name := range values {
+			order = append(order, name)
+		}
+	}
+	out := make([]hivePartitionField, 0, len(order))
+	for _, name := range order {
+		if _, ok := values[name]; !ok {
+			continue
+		}
+		out = append(out, hivePartitionField{Name: name, Type: fieldType})
+	}
+	return out
 }

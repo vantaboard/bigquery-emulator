@@ -51,7 +51,7 @@ func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Rou
 			DatasetID: dID,
 			RoutineID: rID,
 		},
-		RoutineType:      routineType,
+		RoutineType:      bqtypes.RoutineType(routineType),
 		Language:         routineLanguageSQL,
 		Arguments:        args,
 		ReturnType:       returnType,
@@ -249,7 +249,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 		}
 		total := len("ARRAY<") + consumed
 		return &bqtypes.StandardSqlDataType{
-			TypeKind:         sqlTypeArray,
+			TypeKind:         bqtypes.SqlTypeKind(sqlTypeArray),
 			ArrayElementType: elem,
 		}, total, true
 	case strings.HasPrefix(upper, "STRUCT<"):
@@ -263,7 +263,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 		}
 		total := len("STRUCT<") + consumed
 		return &bqtypes.StandardSqlDataType{
-			TypeKind: sqlTypeStruct,
+			TypeKind: bqtypes.SqlTypeKind(sqlTypeStruct),
 			StructType: &bqtypes.StandardSqlStructType{
 				Fields: fields,
 			},
@@ -278,7 +278,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 			return nil, 0, false
 		}
 		return &bqtypes.StandardSqlDataType{
-			TypeKind: strings.ToUpper(s[:end]),
+			TypeKind: bqtypes.SqlTypeKind(strings.ToUpper(s[:end])),
 		}, end, true
 	}
 }

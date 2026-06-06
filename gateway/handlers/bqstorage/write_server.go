@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
@@ -38,6 +39,15 @@ func (s *WriteServer) CreateWriteStream(
 	if err := s.requireEngine(); err != nil {
 		return nil, err
 	}
+	streamType := storagepb.WriteStream_COMMITTED
+	if ws := req.GetWriteStream(); ws != nil &&
+		ws.GetType() != storagepb.WriteStream_TYPE_UNSPECIFIED {
+		streamType = ws.GetType()
+	}
+	if streamType == storagepb.WriteStream_COMMITTED ||
+		streamType == storagepb.WriteStream_TYPE_UNSPECIFIED {
+		return s.defaultWriteStream(ctx, req.GetParent())
+	}
 	stream, err := s.engine.StorageWrite.CreateWriteStream(ctx, &enginepb.CreateWriteStreamRequest{
 		Parent:      req.GetParent(),
 		WriteStream: engineWriteStreamFromPublic(req.GetWriteStream()),
@@ -46,6 +56,41 @@ func (s *WriteServer) CreateWriteStream(
 		return nil, err
 	}
 	return publicWriteStreamFromEngine(stream), nil
+}
+
+func defaultWriteStreamName(parent string) string {
+	return strings.TrimRight(parent, "/") + "/streams/_default"
+}
+
+func (s *WriteServer) defaultWriteStream(
+	ctx context.Context,
+	parent string,
+) (*storagepb.WriteStream, error) {
+	name := defaultWriteStreamName(parent)
+	existing, err := s.engine.StorageWrite.GetWriteStream(ctx, &enginepb.GetWriteStreamRequest{
+		Name: name,
+	})
+	if err == nil {
+		out := publicWriteStreamFromEngine(existing)
+		out.Name = name
+		out.Type = storagepb.WriteStream_COMMITTED
+		return out, nil
+	}
+	// Mint schema metadata via CreateWriteStream; the engine registers the
+	// reserved _default stream lazily on the first AppendRows.
+	probe, err := s.engine.StorageWrite.CreateWriteStream(ctx, &enginepb.CreateWriteStreamRequest{
+		Parent: parent,
+		WriteStream: &enginepb.WriteStream{
+			Type: enginepb.WriteStream_COMMITTED,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := publicWriteStreamFromEngine(probe)
+	out.Name = name
+	out.Type = storagepb.WriteStream_COMMITTED
+	return out, nil
 }
 
 func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer) error {
@@ -94,10 +139,14 @@ func (s *WriteServer) GetWriteStream(
 	stream, err := s.engine.StorageWrite.GetWriteStream(ctx, &enginepb.GetWriteStreamRequest{
 		Name: req.GetName(),
 	})
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return publicWriteStreamFromEngine(stream), nil
 	}
-	return publicWriteStreamFromEngine(stream), nil
+	if before, ok := strings.CutSuffix(req.GetName(), "/streams/_default"); ok {
+		parent := before
+		return s.defaultWriteStream(ctx, parent)
+	}
+	return nil, err
 }
 
 func (s *WriteServer) FinalizeWriteStream(

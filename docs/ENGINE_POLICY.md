@@ -232,11 +232,26 @@ local emulator; Connection + DataTransfer ITs remain allowlisted.
 | Storage Write `PENDING` | `UNIMPLEMENTED` (`BatchCommitWriteStreams` deferred) |
 | Storage Read sessions | `CreateReadSession` with projection + `row_restriction` (single-quoted or double-quoted string literals); public-data tables readable with a caller-scoped parent project |
 | Storage Read Arrow | Arrow schema + IPC record batches via gateway shim |
-| Storage Read Avro | Not implemented |
+| Storage Read Avro | Arrow read from engine, Avro OCF encoding in gateway shim (`gateway/handlers/bqstorage/avro.go`) |
 
 Set `BIGQUERY_STORAGE_GRPC_ENDPOINT` (default `localhost:9060` in
-`task thirdparty:*`) to reach the engine listener. ManagedWriter /
+`task thirdparty:*`) to reach the gateway gRPC listener. ManagedWriter /
 Storage Read subtests skip when it is unset.
+
+The same `:9060` listener multiplexes additional public BigQuery gRPC
+services the Go sample suites exercise:
+
+| Public service | Posture |
+|---|---|
+| `google.cloud.bigquery.storage.v1.BigQueryRead` / `BigQueryWrite` | Gateway shim → engine internal Storage Read/Write |
+| `google.cloud.bigquery.connection.v1.ConnectionService` | Shallow list/create/get stubs (`gateway/handlers/bqconnection/`) |
+| `google.cloud.bigquery.reservation.v1.ReservationService` | Empty list stubs (`gateway/handlers/bqreservation/`) |
+| `google.cloud.bigquery.analyticshub.v1.AnalyticsHubService` | In-memory exchange/listing CRUD (`gateway/handlers/bqanalyticshub/`) |
+| `google.cloud.bigquery.v2.*` (Dataset/Table/Job/Project/Routine) | Thin gRPC adapters over existing REST/catalog handlers (`gateway/handlers/bqv2grpc/`) |
+
+Set `BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT` to the same host:port when
+samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
+`BIGQUERY_STORAGE_GRPC_ENDPOINT` via `bqopts.BigQueryV2GRPCClientOptions()`.
 
 ## Google Sheets external tables
 

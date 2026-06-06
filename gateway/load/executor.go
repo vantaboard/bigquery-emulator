@@ -125,6 +125,9 @@ func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte,
 func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 	parseSchema *bqtypes.TableSchema,
 ) (ParsedRows, int64, int, error) {
+	if cfg.HivePartitioningOptions != nil {
+		return parseHiveURISources(ctx, cfg, parseSchema)
+	}
 	sourceFormat := strings.ToUpper(strings.TrimSpace(cfg.SourceFormat))
 	if sourceFormat == "" {
 		sourceFormat = inferSourceFormatFromURIs(cfg.SourceURIs)
@@ -134,9 +137,13 @@ func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 		cfgCopy.SourceFormat = sourceFormat
 		return parseDatastoreBackupSources(ctx, &cfgCopy, parseSchema)
 	}
+	uris, err := ExpandSourceURIs(ctx, cfg.SourceURIs)
+	if err != nil {
+		return ParsedRows{}, 0, 0, err
+	}
 	var parsed ParsedRows
 	var totalBytes int64
-	for i, uri := range cfg.SourceURIs {
+	for i, uri := range uris {
 		data, err := FetchSource(ctx, uri)
 		if err != nil {
 			return ParsedRows{}, 0, 0, err
@@ -148,7 +155,7 @@ func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 		}
 		parsed = mergeParsedChunk(parsed, chunk, i == 0)
 	}
-	return parsed, totalBytes, len(cfg.SourceURIs), nil
+	return parsed, totalBytes, len(uris), nil
 }
 
 func inferSourceFormatFromURIs(uris []string) string {

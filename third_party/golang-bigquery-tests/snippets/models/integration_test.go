@@ -25,11 +25,13 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/bqopts"
+	rootbqtestutil "github.com/GoogleCloudPlatform/golang-samples/bigquery/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/snippets/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/internal/testutil"
 )
 
 func TestModels(t *testing.T) {
+	rootbqtestutil.SkipEmulatorBQML(t)
 	tc := testutil.EndToEndTest(t)
 	ctx := context.Background()
 

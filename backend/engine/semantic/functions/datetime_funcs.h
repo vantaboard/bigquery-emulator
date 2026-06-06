@@ -60,11 +60,17 @@ absl::StatusOr<Value> GenerateTimestampArray(
     const std::vector<Value>& args, const ::googlesql::Type* return_type);
 
 absl::StatusOr<Value> TimeConstructor(const std::vector<Value>& args);
+absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args);
 absl::StatusOr<Value> DatetimeConstructor(absl::string_view name,
                                           const std::vector<Value>& args);
 absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
                                            const std::vector<Value>& args);
 absl::StatusOr<Value> StringFunc(const std::vector<Value>& args);
+
+// When `v` is TYPE_STRING in ISO `%Y-%m-%d` form, writes the DATE Value
+// to `out` and returns true. Used by BETWEEN when a CSV-loaded DATE
+// column surfaces as STRING.
+bool TryParseIsoDateString(const Value& v, Value* out);
 
 }  // namespace functions
 }  // namespace semantic

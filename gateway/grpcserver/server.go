@@ -11,7 +11,7 @@ import (
 	"net"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
-	"github.com/vantaboard/bigquery-emulator/gateway/handlers/bqstorage"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -22,9 +22,10 @@ type Server struct {
 	lis net.Listener
 }
 
-// Start binds address and registers the public BigQuery Storage services.
+// Start binds address and registers every public gRPC surface the gateway
+// exposes (Storage, Connection, Reservation, Analytics Hub, BigQuery v2).
 // eng may be nil in gateway-only mode; storage RPCs then return UNAVAILABLE.
-func Start(address string, eng *engine.Client) (*Server, error) {
+func Start(address string, eng *engine.Client, deps handlers.Dependencies) (*Server, error) {
 	if address == "" {
 		return nil, errors.New("grpcserver: empty address")
 	}
@@ -33,7 +34,7 @@ func Start(address string, eng *engine.Client) (*Server, error) {
 		return nil, fmt.Errorf("grpcserver: listen %s: %w", address, err)
 	}
 	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
-	bqstorage.RegisterGRPC(srv, eng)
+	RegisterAll(srv, eng, deps)
 	return &Server{srv: srv, lis: lis}, nil
 }
 

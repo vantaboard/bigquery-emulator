@@ -677,7 +677,7 @@ type RoutineReference struct {
 //
 //nolint:revive // wire name uses Sql, not SQL
 type StandardSqlDataType struct {
-	TypeKind         string                 `json:"typeKind"`
+	TypeKind         SqlTypeKind            `json:"typeKind"`
 	ArrayElementType *StandardSqlDataType   `json:"arrayElementType,omitempty"`
 	StructType       *StandardSqlStructType `json:"structType,omitempty"`
 	RangeElementType *StandardSqlDataType   `json:"rangeElementType,omitempty"`
@@ -698,7 +698,6 @@ type StandardSqlField struct {
 	Type StandardSqlDataType `json:"type"`
 }
 
-// StandardSqlTableType is the return-table type for table-valued functions.
 //
 //nolint:revive // wire name uses Sql, not SQL
 type StandardSqlTableType struct {
@@ -713,15 +712,58 @@ type RoutineArgument struct {
 	DataType     *StandardSqlDataType `json:"dataType,omitempty"`
 }
 
+// RoutineType is the fine-grained routine kind on the wire. Gapic v2
+// REST may send the enum as a string ("SCALAR_FUNCTION") or as a
+// numeric proto enum (1 = SCALAR_FUNCTION, 2 = PROCEDURE, …).
+type RoutineType string
+
+func routineTypeFromNumeric(n int) (RoutineType, bool) {
+	switch n {
+	case 1:
+		return "SCALAR_FUNCTION", true
+	case 2:
+		return "PROCEDURE", true
+	case 3:
+		return "TABLE_VALUED_FUNCTION", true
+	default:
+		return "", false
+	}
+}
+
+// UnmarshalJSON accepts string enum names or numeric gapic v2 values.
+func (t *RoutineType) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*t = ""
+		return nil
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch v := raw.(type) {
+	case string:
+		*t = RoutineType(v)
+		return nil
+	case float64:
+		if rt, ok := routineTypeFromNumeric(int(v)); ok {
+			*t = rt
+			return nil
+		}
+		return fmt.Errorf("bqtypes: unknown routineType enum value %d", int(v))
+	default:
+		return fmt.Errorf("bqtypes: routineType must be string or number, got %T", raw)
+	}
+}
+
 // Routine is the BigQuery Routine resource (subset).
 // See docs/bigquery/docs/reference/rest/v2/routines.md.
 type Routine struct {
 	Etag             string                `json:"etag,omitempty"`
 	RoutineReference RoutineReference      `json:"routineReference"`
-	RoutineType      string                `json:"routineType,omitempty"`
+	RoutineType      RoutineType           `json:"routineType,omitempty"`
 	CreationTime     string                `json:"creationTime,omitempty"`
 	LastModifiedTime string                `json:"lastModifiedTime,omitempty"`
-	Language         string                `json:"language,omitempty"`
+	Language         RoutineLanguage       `json:"language,omitempty"`
 	Arguments        []RoutineArgument     `json:"arguments,omitempty"`
 	ReturnType       *StandardSqlDataType  `json:"returnType,omitempty"`
 	ReturnTableType  *StandardSqlTableType `json:"returnTableType,omitempty"`

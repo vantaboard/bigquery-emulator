@@ -1,8 +1,15 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 // BigQuery Migration v2alpha REST shell.
@@ -16,14 +23,10 @@ import (
 // `BIGQUERY_EMULATOR_HOST` so this gateway can serve both surfaces
 // from the same listener.
 //
-// This shell is intentionally *not* proto-backed: the engine has no
-// migration workflow state to drive (no AST translator, no LRO store,
-// no subtask catalog), and pulling in
-// cloud.google.com/go/bigquery/migration would add a heavyweight
-// transitive dependency for a surface no in-tree test exercises yet.
-// When workflow execution lands the wire shape stays the same — list
-// already returns the documented `migrationWorkflows`/`nextPageToken`
-// envelope, get returns the standard 404, create/start return 501.
+// This shell keeps workflow metadata in an in-process sync.Map store
+// (no AST translator, no LRO store, no subtask catalog). Create
+// returns a DRAFT workflow; :start transitions it to RUNNING so
+// client startup probes get structurally-valid responses.
 //
 // Routes registered (for both `v2alpha` and `v2`):
 //   GET    /{ver}/projects/{projectId}/locations/{location}/workflows
@@ -34,70 +37,172 @@ import (
 //          (dispatched on trailing :start via MigrationWorkflowCustomMethodPOST,
 //          because net/http's mux can't match `{workflowId}:start` directly.)
 
-// MigrationWorkflowList implements `migration.workflows.list`. Returns
-// the BigQuery-shaped empty page so client libraries that probe at
-// startup get a structurally-valid response.
+const (
+	migrationWorkflowStateDraft   = "DRAFT"
+	migrationWorkflowStateRunning = "RUNNING"
+)
+
+var migrationWorkflowStore sync.Map // canonical name -> *migrationWorkflowResource
+
+type migrationWorkflowResource struct {
+	Name           string `json:"name"`
+	DisplayName    string `json:"displayName,omitempty"`
+	State          string `json:"state,omitempty"`
+	CreateTime     string `json:"createTime,omitempty"`
+	LastUpdateTime string `json:"lastUpdateTime,omitempty"`
+}
+
+func migrationWorkflowParent(r *http.Request) string {
+	return "projects/" + r.PathValue("projectId") +
+		"/locations/" + r.PathValue("location")
+}
+
+func migrationWorkflowNow() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
+}
+
+func migrationWorkflowMintID() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
+func migrationWorkflowByName(name string) (*migrationWorkflowResource, bool) {
+	v, ok := migrationWorkflowStore.Load(name)
+	if !ok {
+		return nil, false
+	}
+	wf, ok := v.(*migrationWorkflowResource)
+	return wf, ok && wf != nil
+}
+
+// MigrationWorkflowList implements `migration.workflows.list`.
 func MigrationWorkflowList(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		prefix := migrationWorkflowParent(r) + "/workflows/"
+		var out []migrationWorkflowResource
+		migrationWorkflowStore.Range(func(key, value any) bool {
+			name, _ := key.(string)
+			if !strings.HasPrefix(name, prefix) {
+				return true
+			}
+			wf, _ := value.(*migrationWorkflowResource)
+			if wf != nil {
+				out = append(out, *wf)
+			}
+			return true
+		})
+		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+		workflows := make([]any, len(out))
+		for i := range out {
+			workflows[i] = out[i]
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"migrationWorkflows": []any{},
+			"migrationWorkflows": workflows,
 		})
 	}
 }
 
 // MigrationWorkflowCreate implements `migration.workflows.create`.
-// The emulator has no translator yet, so the handler returns 501
-// (rather than echoing a fake DRAFT workflow back), keeping the
-// contract honest for callers that read the response.
 func MigrationWorkflowCreate(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, reasonInvalid, "invalid body")
+			return
+		}
+		_ = r.Body.Close()
+		var in migrationWorkflowResource
+		if len(strings.TrimSpace(string(body))) > 0 {
+			if err := json.Unmarshal(body, &in); err != nil {
+				writeError(w, http.StatusBadRequest, reasonInvalid,
+					"invalid json: "+err.Error())
+				return
+			}
+		}
+		id := migrationWorkflowMintID()
+		name := migrationWorkflowParent(r) + "/workflows/" + id
+		now := migrationWorkflowNow()
+		rec := migrationWorkflowResource{
+			Name:           name,
+			DisplayName:    in.DisplayName,
+			State:          migrationWorkflowStateDraft,
+			CreateTime:     now,
+			LastUpdateTime: now,
+		}
+		migrationWorkflowStore.Store(name, &rec)
+		writeJSON(w, http.StatusOK, rec)
+	}
 }
 
-// MigrationWorkflowGet implements `migration.workflows.get`. Returns
-// 404 with the BigQuery-shaped error envelope: by definition any
-// workflowId is unknown because there is no workflow store yet.
+// MigrationWorkflowGet implements `migration.workflows.get`.
 func MigrationWorkflowGet(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "notFound",
-			"Not found: MigrationWorkflow "+migrationWorkflowName(r))
+		name := migrationWorkflowName(r)
+		wf, ok := migrationWorkflowByName(name)
+		if !ok {
+			writeError(w, http.StatusNotFound, reasonNotFound,
+				"Not found: MigrationWorkflow "+name)
+			return
+		}
+		writeJSON(w, http.StatusOK, *wf)
 	}
 }
 
 // MigrationWorkflowDelete implements `migration.workflows.delete`.
-// Returns 404 (no store), matching the Get behavior so a
-// list-get-delete loop is consistent.
 func MigrationWorkflowDelete(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "notFound",
-			"Not found: MigrationWorkflow "+migrationWorkflowName(r))
+		name := migrationWorkflowName(r)
+		if _, ok := migrationWorkflowByName(name); !ok {
+			writeError(w, http.StatusNotFound, reasonNotFound,
+				"Not found: MigrationWorkflow "+name)
+			return
+		}
+		migrationWorkflowStore.Delete(name)
+		writeJSON(w, http.StatusOK, struct{}{})
 	}
 }
 
 // MigrationWorkflowCustomMethodPOST dispatches the AIP-136 ":start"
-// custom method that hangs off a workflow resource. Same pattern as
-// DatasetCustomMethodPOST: register the parent path and parse the
-// trailing `:op` from the captured wildcard. Today the only
-// recognized op is `:start`, returned as 501 because there is no LRO
-// store yet.
+// custom method that hangs off a workflow resource.
 func MigrationWorkflowCustomMethodPOST(_ Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, op := splitColonOp(r.PathValue("workflowId"))
 		switch op {
 		case "start":
-			NotImplemented(w, r)
+			name := migrationWorkflowName(r)
+			wf, ok := migrationWorkflowByName(name)
+			if !ok {
+				writeError(w, http.StatusNotFound, reasonNotFound,
+					"Not found: MigrationWorkflow "+name)
+				return
+			}
+			switch wf.State {
+			case migrationWorkflowStateDraft:
+				wf.State = migrationWorkflowStateRunning
+				wf.LastUpdateTime = migrationWorkflowNow()
+				migrationWorkflowStore.Store(name, wf)
+			case migrationWorkflowStateRunning:
+				// no-op
+			default:
+				writeError(w, http.StatusBadRequest, reasonFailedPrecondition,
+					"MigrationWorkflow "+name+" is not in DRAFT or RUNNING state")
+				return
+			}
+			writeJSON(w, http.StatusOK, struct{}{})
 		case "":
-			writeError(w, http.StatusMethodNotAllowed, "invalid",
+			writeError(w, http.StatusMethodNotAllowed, reasonInvalid,
 				"POST is not allowed on a workflow resource. "+
 					"Use POST .../workflows to create or :start to start.")
 		default:
-			writeError(w, http.StatusNotFound, "notFound",
+			writeError(w, http.StatusNotFound, reasonNotFound,
 				"Unknown migration workflow custom method ':"+op+"'.")
 		}
 	}
 }
 
 // migrationWorkflowName reconstructs the canonical resource name from
-// the path captures so the 404 envelopes match upstream error text.
+// the path captures so error envelopes match upstream error text.
 func migrationWorkflowName(r *http.Request) string {
 	wid, _ := splitColonOp(r.PathValue("workflowId"))
 	return "projects/" + r.PathValue("projectId") +

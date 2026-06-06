@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
@@ -165,11 +166,98 @@ func dynamicMessageToDataRow(msg protoreflect.Message) (*enginepb.DataRow, error
 	cells := make([]*enginepb.Cell, 0, fields.Len())
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
-		if !msg.Has(fd) {
-			cells = append(cells, &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}})
-			continue
+		cell, err := fieldDescriptorToCell(msg, fd)
+		if err != nil {
+			return nil, err
 		}
-		cells = append(cells, protoValueToCell(msg.Get(fd).Interface()))
+		cells = append(cells, cell)
 	}
 	return &enginepb.DataRow{Cells: cells}, nil
+}
+
+func fieldDescriptorToCell(msg protoreflect.Message, fd protoreflect.FieldDescriptor) (*enginepb.Cell, error) {
+	if fd.IsList() {
+		if !msg.Has(fd) {
+			return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: &enginepb.Array{}}}, nil
+		}
+		list := msg.Get(fd).List()
+		elems := make([]*enginepb.Cell, list.Len())
+		for i := 0; i < list.Len(); i++ {
+			elem, err := protoreflectValueToCell(list.Get(i), fd)
+			if err != nil {
+				return nil, err
+			}
+			elems[i] = elem
+		}
+		return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: &enginepb.Array{Elements: elems}}}, nil
+	}
+	if fd.Kind() == protoreflect.MessageKind {
+		if !msg.Has(fd) {
+			return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}, nil
+		}
+		return messageToStructCell(msg.Get(fd).Message())
+	}
+	if !msg.Has(fd) {
+		return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}, nil
+	}
+	return protoreflectValueToCell(msg.Get(fd), fd)
+}
+
+func messageToStructCell(msg protoreflect.Message) (*enginepb.Cell, error) {
+	fields := msg.Descriptor().Fields()
+	fieldCells := make([]*enginepb.Cell, fields.Len())
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		cell, err := fieldDescriptorToCell(msg, fd)
+		if err != nil {
+			return nil, err
+		}
+		fieldCells[i] = cell
+	}
+	return &enginepb.Cell{
+		Value: &enginepb.Cell_StructValue{
+			StructValue: &enginepb.Struct{Fields: fieldCells},
+		},
+	}, nil
+}
+
+func protoreflectValueToCell(v protoreflect.Value, fd protoreflect.FieldDescriptor) (*enginepb.Cell, error) {
+	switch fd.Kind() {
+	case protoreflect.MessageKind:
+		return messageToStructCell(v.Message())
+	case protoreflect.BoolKind:
+		return &enginepb.Cell{
+			Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatBool(v.Bool())},
+		}, nil
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		return int64Cell(int64(v.Int())), nil
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		return int64Cell(v.Int()), nil
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		return int64Cell(int64(v.Uint())), nil
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return int64Cell(int64(v.Uint())), nil
+	case protoreflect.FloatKind:
+		return &enginepb.Cell{
+			Value: &enginepb.Cell_StringValue{
+				StringValue: strconv.FormatFloat(float64(v.Float()), 'g', -1, 32),
+			},
+		}, nil
+	case protoreflect.DoubleKind:
+		return &enginepb.Cell{
+			Value: &enginepb.Cell_StringValue{
+				StringValue: strconv.FormatFloat(v.Float(), 'g', -1, 64),
+			},
+		}, nil
+	case protoreflect.StringKind:
+		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: v.String()}}, nil
+	case protoreflect.BytesKind:
+		return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: string(v.Bytes())}}, nil
+	default:
+		return nil, fmt.Errorf("unsupported proto field kind %v", fd.Kind())
+	}
+}
+
+func int64Cell(n int64) *enginepb.Cell {
+	return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatInt(n, 10)}}
 }

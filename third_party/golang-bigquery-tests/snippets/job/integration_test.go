@@ -27,6 +27,7 @@ import (
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/storage"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/bqopts"
+	rootbqtestutil "github.com/GoogleCloudPlatform/golang-samples/bigquery/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/snippets/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/internal/testutil"
 	"google.golang.org/api/iterator"
@@ -170,6 +171,7 @@ func TestCopiesAndExtracts(t *testing.T) {
 			}
 		})
 		t.Run("exportModel", func(t *testing.T) {
+			rootbqtestutil.SkipEmulatorBQML(t)
 			t.Parallel()
 			gcsURI := fmt.Sprintf("gs://%s/%s", bucket, "model")
 			if err := exportModel(tc.ProjectID, testDatasetID, model.ModelID, gcsURI); err != nil {

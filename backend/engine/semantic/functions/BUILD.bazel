@@ -83,6 +83,7 @@ cc_library(
     srcs = ["operator_funcs.cc"],
     hdrs = ["operator_funcs.h"],
     deps = [
+        ":datetime_funcs",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status",

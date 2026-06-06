@@ -19,6 +19,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // engineReadyTimeout matches the gateway package's startup probe
@@ -178,7 +179,7 @@ func launchEmulator(dataDir string) (*emulatorEnv, error) {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("WaitForReady: %w", err)
 	}
-	handler := gateway.NewServer(gateway.Options{}, client)
+	handler := gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client)
 	httpServer := httptest.NewServer(handler)
 	return &emulatorEnv{
 		httpServer: httpServer,

@@ -178,80 +178,8 @@ func fetchAndParse(
 	schema *bqtypes.TableSchema,
 	skipLeading int,
 ) (load.ParsedRows, error) {
-	uris, err := load.ExpandSourceURIs(ctx, cfg.SourceURIs)
-	if err != nil {
-		return load.ParsedRows{}, err
-	}
-
-	var partitionFields []hivePartitionField
-	if cfg.HivePartitioningOptions != nil {
-		partitionFields, err = resolveHivePartitionFields(cfg.HivePartitioningOptions)
-		if err != nil {
-			return load.ParsedRows{}, err
-		}
-	}
-
-	var parsed load.ParsedRows
-	for i, uri := range uris {
-		data, err := load.FetchSource(ctx, uri)
-		if err != nil {
-			return load.ParsedRows{}, err
-		}
-		chunk, err := load.ParseSource(cfg.SourceFormat, data, schema, skipLeading, cfg.Autodetect)
-		if err != nil {
-			return load.ParsedRows{}, err
-		}
-		if cfg.HivePartitioningOptions != nil {
-			partitionValues, partErr := extractHivePartitions(uri, cfg.HivePartitioningOptions)
-			if partErr != nil {
-				return load.ParsedRows{}, partErr
-			}
-			applyHivePartitions(chunk.Rows, partitionValues)
-			if len(partitionFields) == 0 && len(partitionValues) > 0 {
-				partitionFields = partitionFieldsFromValues(partitionValues, cfg.HivePartitioningOptions)
-			}
-		}
-		if i == 0 {
-			parsed = chunk
-		} else {
-			if parsed.Schema == nil {
-				parsed.Schema = chunk.Schema
-			}
-			parsed.Rows = append(parsed.Rows, chunk.Rows...)
-		}
-	}
-	if cfg.HivePartitioningOptions != nil && len(partitionFields) > 0 {
-		parsed.Schema = mergeHiveSchema(parsed.Schema, partitionFields)
-	}
-	return parsed, nil
-}
-
-func partitionFieldsFromValues(
-	values map[string]string,
-	opts *bqtypes.HivePartitioningOptions,
-) []hivePartitionField {
-	if len(values) == 0 {
-		return nil
-	}
-	fieldType := defaultHivePartitionFieldType
-	if strings.EqualFold(strings.TrimSpace(opts.Mode), hiveModeStrings) {
-		fieldType = defaultHivePartitionFieldType
-	}
-	order := opts.Fields
-	if len(order) == 0 {
-		order = make([]string, 0, len(values))
-		for name := range values {
-			order = append(order, name)
-		}
-	}
-	out := make([]hivePartitionField, 0, len(order))
-	for _, name := range order {
-		if _, ok := values[name]; !ok {
-			continue
-		}
-		out = append(out, hivePartitionField{Name: name, Type: fieldType})
-	}
-	return out
+	parsed, _, _, err := load.ParseExternalGCS(ctx, cfg, schema, skipLeading)
+	return parsed, err
 }
 
 func ensureDataset(ctx context.Context, catalog enginepb.CatalogClient, projectID, datasetID string) error {

@@ -142,7 +142,7 @@ func TestImportSnippets(t *testing.T) {
 		})
 		t.Run("importAvroTruncate", func(t *testing.T) {
 			t.Parallel()
-			tableID := "bigquery_load_table_gcs_orc_truncate"
+			tableID := "bigquery_load_table_gcs_avro_truncate"
 			if err := importAvroTruncate(tc.ProjectID, testDatasetID, tableID); err != nil {
 				t.Errorf("importAvroTruncate(%q): %v", testDatasetID, err)
 			}

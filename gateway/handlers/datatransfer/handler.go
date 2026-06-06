@@ -42,6 +42,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -338,10 +339,33 @@ func (h *Handler) handleGetDataSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.logger(), w, http.StatusOK, out)
 }
 
+func parseDataSourceIDsFilter(q map[string][]string) []string {
+	ids := q["dataSourceIds"]
+	if len(ids) == 0 {
+		ids = q["dataSourceIds[]"]
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if s := strings.TrimSpace(id); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func configMatchesDataSourceFilter(cfg *transferConfigResource, filter []string) bool {
+	if len(filter) == 0 || cfg == nil {
+		return true
+	}
+	ds := strings.TrimSpace(cfg.DataSourceID)
+	return slices.Contains(filter, ds)
+}
+
 func (h *Handler) handleListConfigs(w http.ResponseWriter, r *http.Request) {
 	project := r.PathValue("projectId")
 	location := r.PathValue("location")
 	prefix := fmt.Sprintf("projects/%s/locations/%s/transferConfigs/", project, location)
+	dsFilter := parseDataSourceIDsFilter(r.URL.Query())
 
 	h.mu.Lock()
 	var keys []string
@@ -352,8 +376,18 @@ func (h *Handler) handleListConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 	h.mu.Unlock()
 	sort.Strings(keys)
-	start, end := pageWindow(len(keys), r.URL.Query().Get("pageSize"), r.URL.Query().Get("pageToken"))
-	pageKeys := keys[start:end]
+
+	h.mu.Lock()
+	filtered := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if c, ok := h.configs[k]; ok && configMatchesDataSourceFilter(c, dsFilter) {
+			filtered = append(filtered, k)
+		}
+	}
+	h.mu.Unlock()
+
+	start, end := pageWindow(len(filtered), r.URL.Query().Get("pageSize"), r.URL.Query().Get("pageToken"))
+	pageKeys := filtered[start:end]
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -364,7 +398,7 @@ func (h *Handler) handleListConfigs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp := listConfigsResponse{TransferConfigs: out}
-	if end < len(keys) {
+	if end < len(filtered) {
 		resp.NextPageToken = strconv.Itoa(end)
 	}
 	writeJSON(h.logger(), w, http.StatusOK, resp)
@@ -442,13 +476,12 @@ func (h *Handler) maybeSeedInitialScheduledQueryRun(project, location, configID 
 	if strings.TrimSpace(cfg.DataSourceID) != dataSourceScheduledQuery {
 		return
 	}
-	if h.Runner == nil || cfg.DisableAutoScheduling || strings.TrimSpace(cfg.Schedule) == "" {
-		return
-	}
 	run := h.newTransferRun(project, location, configID, cfg)
-	if stop, _, msg := h.maybeExecuteScheduledQueryOnRun(project, location, cfg, run); stop {
-		run.State = transferStateFailed
-		run.Errors = []any{transferRunErrorPayload(msg)}
+	if h.Runner != nil && !cfg.DisableAutoScheduling && strings.TrimSpace(cfg.Schedule) != "" {
+		if stop, _, msg := h.maybeExecuteScheduledQueryOnRun(project, location, cfg, run); stop {
+			run.State = transferStateFailed
+			run.Errors = []any{transferRunErrorPayload(msg)}
+		}
 	}
 	h.runs[run.Name] = run
 }

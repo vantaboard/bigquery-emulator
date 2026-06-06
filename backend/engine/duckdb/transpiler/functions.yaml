@@ -372,6 +372,8 @@ current_time: duckdb_native duckdb_name=CURRENT_TIME
 current_datetime: duckdb_native duckdb_name=GET_CURRENT_TIMESTAMP
 # BigQuery DATE(expr) truncates TIMESTAMP / DATETIME to DATE.
 date: duckdb_native duckdb_name=DATE
+# BigQuery TIMESTAMP(string) / TIMESTAMP(datetime[, tz]) constructors.
+timestamp: duckdb_native duckdb_name=TIMESTAMP
 # BQ DATE_ADD / DATE_SUB / DATETIME_ADD / DATETIME_SUB /
 # TIMESTAMP_ADD / TIMESTAMP_SUB all diverge from DuckDB's
 # `<value> + INTERVAL N PART` arithmetic on the MONTH-END SNAP

@@ -160,6 +160,7 @@ type JobConfigurationLoad struct {
 	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration `json:"destinationEncryptionConfiguration,omitempty"`
 	Clustering                         *bqtypes.Clustering              `json:"clustering,omitempty"`
 	TimePartitioning                   *bqtypes.TimePartitioning        `json:"timePartitioning,omitempty"`
+	HivePartitioningOptions            *bqtypes.HivePartitioningOptions `json:"hivePartitioningOptions,omitempty"`
 	skipLeadingRows                    int                              // set via UnmarshalJSON; REST sends int or string
 }
 

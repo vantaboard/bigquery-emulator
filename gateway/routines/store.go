@@ -105,7 +105,7 @@ func (s *Store) List(projectID, datasetID, filter string) []bqtypes.Routine {
 	out := make([]bqtypes.Routine, 0, len(keys))
 	for _, k := range keys {
 		rt := s.routines[k]
-		if wantType != "" && rt.RoutineType != wantType {
+		if wantType != "" && string(rt.RoutineType) != wantType {
 			continue
 		}
 		out = append(out, cloneRoutine(rt))

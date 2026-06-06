@@ -18,6 +18,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // engineReadyTimeout matches the value the production gateway uses;
@@ -166,7 +167,7 @@ func startConnected(ctx context.Context, opts HarnessOptions) (*EmulatorEnv, err
 		return nil, fmt.Errorf("connected engine not ready at %s: %w",
 			opts.ConnectAddress, err)
 	}
-	handler := gateway.NewServer(gateway.Options{}, client)
+	handler := gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client)
 	srv := httptest.NewServer(handler)
 	return &EmulatorEnv{
 		BaseURL:    srv.URL,
@@ -211,7 +212,7 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 		return nil, err
 	}
 
-	srv = httptest.NewServer(gateway.NewServer(gateway.Options{}, client))
+	srv = httptest.NewServer(gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client))
 	return &EmulatorEnv{
 		BaseURL:    srv.URL,
 		httpServer: srv,

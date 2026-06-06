@@ -45,6 +45,25 @@ TEST(DatetimeFuncsTest, FormatDatePercentF) {
   EXPECT_EQ(got->string_value(), "2008-12-25");
 }
 
+TEST(DatetimeFuncsTest, DateConstructorFromIsoString) {
+  auto got = DateConstructor({Value::String("1800-01-01")});
+  ASSERT_TRUE(got.ok()) << got.status();
+  auto roundtrip =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("1800-01-01")});
+  ASSERT_TRUE(roundtrip.ok());
+  EXPECT_EQ(got->date_value(), roundtrip->date_value());
+}
+
+TEST(DatetimeFuncsTest, DateConstructorFromYmdInts) {
+  auto got = DateConstructor(
+      {Value::Int64(2020), Value::Int64(9), Value::Int64(22)});
+  ASSERT_TRUE(got.ok()) << got.status();
+  auto roundtrip =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-22")});
+  ASSERT_TRUE(roundtrip.ok());
+  EXPECT_EQ(got->date_value(), roundtrip->date_value());
+}
+
 }  // namespace
 }  // namespace functions
 }  // namespace semantic

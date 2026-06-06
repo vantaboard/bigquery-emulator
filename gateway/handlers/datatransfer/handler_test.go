@@ -146,6 +146,75 @@ func postPatch(t *testing.T, mux *http.ServeMux, path, body string) map[string]a
 	return decodeMap(t, rec)
 }
 
+// TestDataTransferGoSampleListFilterAndSucceededRun mirrors the Go
+// sample integration flow: project-scoped create with
+// destinationDatasetId + schedule, list with dataSourceIds filter,
+// and a seeded SUCCEEDED transfer run for waitTransferRun.
+func TestDataTransferGoSampleListFilterAndSucceededRun(t *testing.T) {
+	mux := newTestMux(t)
+	body := `{"displayName":"Your Scheduled Query Name","dataSourceId":"scheduled_query",` +
+		`"destinationDatasetId":"ds1","schedule":"every 24 hours",` +
+		`"params":{"destination_table_name_template":"my_destination_table_{run_date}",` +
+		`"write_disposition":"WRITE_TRUNCATE","partitioning_field":"","query":"SELECT 1"}}`
+	rec := postJSON(t, mux, "/v1/projects/p1/transferConfigs", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	created := decodeMap(t, rec)
+	name, _ := created["name"].(string)
+	if name == "" {
+		t.Fatalf("create: empty name")
+	}
+	if got, _ := created["destinationDatasetId"].(string); got != "ds1" {
+		t.Errorf("destinationDatasetId = %q, want ds1", got)
+	}
+
+	listReq := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/projects/p1/transferConfigs?dataSourceIds=scheduled_query",
+		nil,
+	)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list: status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	listBody := decodeMap(t, listRec)
+	cfgs, _ := listBody["transferConfigs"].([]any)
+	if len(cfgs) != 1 {
+		t.Fatalf("list filtered: %d configs, want 1", len(cfgs))
+	}
+
+	otherReq := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/projects/p1/transferConfigs?dataSourceIds=amazon_s3",
+		nil,
+	)
+	otherRec := httptest.NewRecorder()
+	mux.ServeHTTP(otherRec, otherReq)
+	otherBody := decodeMap(t, otherRec)
+	otherCfgs, _ := otherBody["transferConfigs"].([]any)
+	if len(otherCfgs) != 0 {
+		t.Errorf("list amazon_s3 filter: %d configs, want 0", len(otherCfgs))
+	}
+
+	runsReq := httptest.NewRequest(http.MethodGet, "/v1/"+name+"/runs", nil)
+	runsRec := httptest.NewRecorder()
+	mux.ServeHTTP(runsRec, runsReq)
+	if runsRec.Code != http.StatusOK {
+		t.Fatalf("list runs: status=%d body=%s", runsRec.Code, runsRec.Body.String())
+	}
+	runsBody := decodeMap(t, runsRec)
+	runs, _ := runsBody["transferRuns"].([]any)
+	if len(runs) != 1 {
+		t.Fatalf("transferRuns = %d, want 1", len(runs))
+	}
+	run, _ := runs[0].(map[string]any)
+	if got := run["state"]; got != "SUCCEEDED" {
+		t.Errorf("run state = %v, want SUCCEEDED", got)
+	}
+}
+
 // TestDataTransferProjectScopedCreateRoutesToUS pins the gapic
 // project-scoped path: POST /v1/projects/{p}/transferConfigs (no
 // /locations/) lands the config at /locations/us/.

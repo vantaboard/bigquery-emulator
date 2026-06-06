@@ -147,10 +147,10 @@ conformance-harness state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 | **BigQuery Connection** | Set `BIGQUERY_STORAGE_GRPC_ENDPOINT`. Metadata-only (no live federated data sources; IAM methods are unimplemented). |
 | **BigQuery Migration** (v2alpha REST) | Partial: workflow create/get/list/delete/start on the emulator HTTP port. Use `bqopts.MigrationRESTClientOptions()`. gRPC `NewClient` is not emulated. |
 | **Reservation** | When `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set, Reservation gRPC is multiplexed on that listener. If only HTTP is set, the test skips. |
-| **ManagedWriter / Storage Read** | Skipped unless `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set; uses `bqopts.StorageGRPCClientOptions()`. |
-| **GCS sample loads** (`gs://cloud-samples-data/...`) | Skipped when `BIGQUERY_EMULATOR_HOST` is set and `STORAGE_EMULATOR_HOST` is unset. When both are set, tests expect the compose-mounted fake-gcs objects. |
+| **ManagedWriter / Storage Read** | Skipped unless `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set; uses `bqopts.StorageGRPCClientOptions()`. `PendingStream` and `DefaultStream` subtests skip on the emulator (PENDING streams and full proto-type matrix not fully implemented). |
+| **GCS sample loads** (`gs://cloud-samples-data/...`) | Skipped when `BIGQUERY_EMULATOR_HOST` is set and `STORAGE_EMULATOR_HOST` is unset. When both are set, tests expect the compose-mounted fake-gcs objects (including `bigquery/hive-partitioning-samples/customlayout/*`). |
 | **Legacy SQL** | This emulator rejects `useLegacySql=true` with HTTP 400 (see `docs/REST_API.md`); samples that rely on legacy syntax fail rather than skip. Adjust the sample set accordingly. |
-| **CREATE MODEL / ML** + **routine DDL** | Skipped or fails (tracked under SQL gaps in `ROADMAP.md`). Python samples use `emulator_pytest_skip.py`; Node skips `models.test.js` via `test/setup.js`. |
+| **CREATE MODEL / ML** + **routine DDL** | Skipped via `bqtestutil.SkipEmulatorBQML()` in Go model/export samples (mirrors Python `emulator_pytest_skip.py` / Node `models.test.js` skip). |
 | **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The Docker image and `gateway_main --seed-data-file` load minimal fixtures from [`testdata/public-data/bigquery-public-data.yaml`](../testdata/public-data/bigquery-public-data.yaml) (`usa_names`, `samples.shakespeare`, `utility_us.country_code_iso`, `stackoverflow.posts_questions`, etc.). Python skips samples that reference other public tables (`emulator_pytest_skip.py`); Node runs all Mocha files except `models.test.js` (BQML). |
 
 ### Emulator stderr (benign vs actionable)

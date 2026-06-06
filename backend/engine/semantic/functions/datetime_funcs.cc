@@ -200,6 +200,72 @@ absl::StatusOr<Value> GenerateTimestampArray(
   return BuildTimestampArray(raw, return_type);
 }
 
+absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args) {
+  if (HasNull(args)) return Value::NullDate();
+  if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
+    int32_t date = 0;
+    if (auto s = ::googlesql::functions::ParseStringToDate(
+            "%Y-%m-%d", args[0].string_value(), /*parse_version2=*/true,
+            &date);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(date);
+  }
+  if (args.size() == 3 && args[0].type_kind() == ::googlesql::TYPE_INT64 &&
+      args[1].type_kind() == ::googlesql::TYPE_INT64 &&
+      args[2].type_kind() == ::googlesql::TYPE_INT64) {
+    int32_t date = 0;
+    if (auto s = ::googlesql::functions::ConstructDate(
+            static_cast<int>(args[0].int64_value()),
+            static_cast<int>(args[1].int64_value()),
+            static_cast<int>(args[2].int64_value()),
+            &date);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(date);
+  }
+  if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_DATETIME) {
+    int32_t date = 0;
+    if (auto s = ::googlesql::functions::ExtractFromDatetime(
+            DateTimestampPart::DATE, args[0].datetime_value(), &date);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(date);
+  }
+  if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+    int32_t date = 0;
+    if (auto s = ::googlesql::functions::ExtractFromTimestamp(
+            DateTimestampPart::DATE, args[0].ToUnixMicros(), kMicros,
+            DefaultTimeZone(), &date);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(date);
+  }
+  if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      args[1].type_kind() == ::googlesql::TYPE_STRING) {
+    absl::TimeZone tz;
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
+        !s.ok()) {
+      return s;
+    }
+    int32_t date = 0;
+    if (auto s = ::googlesql::functions::ExtractFromTimestamp(
+            DateTimestampPart::DATE, args[0].ToUnixMicros(), kMicros, tz,
+            &date);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Date(date);
+  }
+  return absl::InvalidArgumentError(
+      "semantic: DATE constructor signature not supported");
+}
+
 absl::StatusOr<Value> DatetimeConstructor(absl::string_view name,
                                           const std::vector<Value>& args) {
   (void)name;
@@ -401,6 +467,20 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
   }
   return absl::InvalidArgumentError(
       "semantic: TIMESTAMP constructor signature not supported");
+}
+
+bool TryParseIsoDateString(const Value& v, Value* out) {
+  if (out == nullptr || v.type_kind() != ::googlesql::TYPE_STRING) {
+    return false;
+  }
+  int32_t date = 0;
+  if (auto s = ::googlesql::functions::ParseStringToDate(
+          "%Y-%m-%d", v.string_value(), /*parse_version2=*/true, &date);
+      !s.ok()) {
+    return false;
+  }
+  *out = Value::Date(date);
+  return true;
 }
 
 }  // namespace functions

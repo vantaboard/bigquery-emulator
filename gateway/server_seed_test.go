@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
 
 // TestSeedRoutes_GatedByFlag pins the documented opt-in: the
@@ -12,7 +14,7 @@ import (
 // did not pass --enable-seed-api. The default Server should return
 // the catch-all 404 envelope on those paths.
 func TestSeedRoutes_GatedByFlag(t *testing.T) {
-	srv := NewServer(Options{}, nil)
+	srv := NewServer(Options{}, handlers.BuildDependencies(nil), nil)
 	for _, path := range []string{
 		"/api/emulator/seed",
 		"/api/emulator/seed/operations/op-x",
@@ -35,7 +37,7 @@ func TestSeedRoutes_GatedByFlag(t *testing.T) {
 // engine.Client) the handler degrades to 501 per the documented
 // contract; that is what we assert here.
 func TestSeedRoutes_RegisteredWhenEnabled(t *testing.T) {
-	srv := NewServer(Options{EnableSeedAPI: true}, nil)
+	srv := NewServer(Options{EnableSeedAPI: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/emulator/seed",
 		strings.NewReader(`{"source":{"project":"p"}}`))
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -55,7 +57,7 @@ func TestSeedRoutes_RegisteredWhenEnabled(t *testing.T) {
 // integration at the server level: a non-loopback POST hits 403
 // before the handler tries to construct an operation.
 func TestSeedRoutes_RemoteCallerDeniedWithoutAllow(t *testing.T) {
-	srv := NewServer(Options{EnableSeedAPI: true}, nil)
+	srv := NewServer(Options{EnableSeedAPI: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/emulator/seed",
 		strings.NewReader(`{"source":{"project":"p"}}`))
 	req.RemoteAddr = "10.0.0.5:1234"
@@ -70,7 +72,7 @@ func TestSeedRoutes_RemoteCallerDeniedWithoutAllow(t *testing.T) {
 // SeedAPIAllowRemote=true the same LAN caller goes past the
 // loopback gate (and lands on 501 because there's no runner).
 func TestSeedRoutes_AllowRemoteFlag(t *testing.T) {
-	srv := NewServer(Options{EnableSeedAPI: true, SeedAPIAllowRemote: true}, nil)
+	srv := NewServer(Options{EnableSeedAPI: true, SeedAPIAllowRemote: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/emulator/seed",
 		strings.NewReader(`{"source":{"project":"p"}}`))
 	req.RemoteAddr = "10.0.0.5:1234"

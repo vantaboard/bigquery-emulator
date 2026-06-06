@@ -202,6 +202,33 @@ ORDER BY `bfuid_col_2` ASC NULLS LAST
   ASSERT_FALSE(sql.empty()) << "full bigframes stats query must transpile";
 }
 
+TEST_F(TranspilerTest, TranspileClusteredTableSampleQuery) {
+  // golang-samples queryClusteredTable: global aggregates + filter +
+  // named parameter. Regression for transpiler coverage on the
+  // FilterScan -> AggregateScan -> QueryStmt shape used by clustered
+  // table docs (COUNT(1), SUM(NUMERIC), COUNT(DISTINCT), TIMESTAMP).
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ASSERT_TRUE(
+      options.AddQueryParameter("wallet", type_factory_->get_string()).ok());
+  const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(R"sql(
+SELECT
+  COUNT(1) AS transactions,
+  SUM(amount) AS total_paid,
+  COUNT(DISTINCT destination) AS distinct_recipients
+FROM transactions
+WHERE timestamp > TIMESTAMP('2015-01-01')
+  AND origin = @wallet
+)sql",
+                                                             options);
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "queryClusteredTable sample must transpile";
+  EXPECT_NE(sql.find("COUNT(1)"), std::string::npos);
+  EXPECT_NE(sql.find("SUM(\"amount\")"), std::string::npos);
+  EXPECT_NE(sql.find("COUNT(DISTINCT"), std::string::npos);
+}
+
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

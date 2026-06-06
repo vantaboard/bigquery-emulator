@@ -194,7 +194,7 @@ func TestExternalMaterializeHivePartitionedCSV(t *testing.T) {
 		SourceURIs:   []string{"gs://bkt/hive/customlayout/*"},
 		Autodetect:   true,
 		HivePartitioningOptions: &bqtypes.HivePartitioningOptions{
-			Mode:            hiveModeCustom,
+			Mode:            "CUSTOM",
 			SourceURIPrefix: "gs://bkt/hive/customlayout/{pkey:STRING}/",
 		},
 	}

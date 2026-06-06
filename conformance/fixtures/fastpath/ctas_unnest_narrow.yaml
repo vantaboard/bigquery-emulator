@@ -1,0 +1,33 @@
+# ctas_unnest_narrow: CTAS must project to column_definition_list only.
+#
+# Regression for control-op CTAS that wraps the transpiled inner scan
+# with an outer SELECT keyed on the CTAS output schema. UNNEST adds
+# an ordinality helper column to the inner emit; without the narrow
+# step DuckDB materializes 3 columns while the analyzer schema has 2
+# and arrow_to_bq rejects the drain (TestCopiesAndExtracts /
+# generateTableCTAS).
+name: ctas_unnest_narrow
+description: |
+  CREATE TABLE AS SELECT over UNNEST(GENERATE_ARRAY) must persist
+  only the declared output columns (year, token), not the UNNEST
+  helper column.
+project_id: proj-fastpath-ctas-unnest
+dataset_id: ds_fastpath_ctas_unnest
+setup:
+  - dataset: ds_fastpath_ctas_unnest
+  - sql: |
+      CREATE TABLE ds_fastpath_ctas_unnest.out AS
+      SELECT
+        2000 + r AS year,
+        IF(r > 1, 'foo', 'bar') AS token
+      FROM UNNEST(GENERATE_ARRAY(0, 2)) AS r
+query: |
+  SELECT year, token
+    FROM ds_fastpath_ctas_unnest.out
+   ORDER BY year
+expected:
+  route: duckdb_native
+  rows:
+    - {year: "2000", token: "bar"}
+    - {year: "2001", token: "bar"}
+    - {year: "2002", token: "foo"}

@@ -10,6 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/datetime_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/datetime.pb.h"
 #include "googlesql/public/interval_value.h"
@@ -139,15 +140,31 @@ absl::StatusOr<Value> DispatchBetween(absl::string_view name,
   if (args[0].is_null() || args[1].is_null() || args[2].is_null()) {
     return Value::NullBool();
   }
-  const Value& value = args[0];
-  const Value& low = args[1];
-  const Value& high = args[2];
+  Value value = args[0];
+  Value low = args[1];
+  Value high = args[2];
   if (!value.type()->Equals(low.type()) || !value.type()->Equals(high.type())) {
-    return absl::InvalidArgumentError(
-        "semantic: BETWEEN operands have mismatched types");
+    // CSV-loaded DATE columns often surface as STRING in the semantic
+    // executor while DATE('...') bounds are TYPE_DATE.
+    if (value.type_kind() == ::googlesql::TYPE_STRING &&
+        low.type_kind() == ::googlesql::TYPE_DATE &&
+        high.type_kind() == ::googlesql::TYPE_DATE) {
+      Value parsed;
+      if (TryParseIsoDateString(value, &parsed)) {
+        value = parsed;
+      }
+    }
+    if (!value.type()->Equals(low.type()) ||
+        !value.type()->Equals(high.type())) {
+      return absl::InvalidArgumentError(
+          "semantic: BETWEEN operands have mismatched types");
+    }
   }
-  bool in_range = (low.LessThan(value) || low.Equals(value)) &&
-                  (value.LessThan(high) || value.Equals(high));
+  const Value& cmp_value = value;
+  const Value& cmp_low = low;
+  const Value& cmp_high = high;
+  bool in_range = (cmp_low.LessThan(cmp_value) || cmp_low.Equals(cmp_value)) &&
+                  (cmp_value.LessThan(cmp_high) || cmp_value.Equals(cmp_high));
   if (name == "$not_between") {
     in_range = !in_range;
   }
