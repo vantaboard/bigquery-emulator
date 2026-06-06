@@ -232,6 +232,76 @@ datasets:
           - {name: name, type: STRING}
           - {name: number, type: INT64}
         rows:
+          # StorageArrowSampleIT filters state = "WA" and expects >1KiB of
+          # Arrow TSV output plus the Zayvion row from the public sample.
+          - {state: WA, gender: M, year: 1920, name: Zayvion, number: 42}
+          - {state: WA, gender: M, year: 1910, name: James, number: 1000}
+          - {state: WA, gender: M, year: 1910, name: SampleWA, number: 1}
+          - {state: WA, gender: F, year: 1911, name: wa_seed_01, number: 101}
+          - {state: WA, gender: M, year: 1912, name: wa_seed_02, number: 102}
+          - {state: WA, gender: F, year: 1913, name: wa_seed_03, number: 103}
+          - {state: WA, gender: M, year: 1914, name: wa_seed_04, number: 104}
+          - {state: WA, gender: F, year: 1915, name: wa_seed_05, number: 105}
+          - {state: WA, gender: M, year: 1916, name: wa_seed_06, number: 106}
+          - {state: WA, gender: F, year: 1917, name: wa_seed_07, number: 107}
+          - {state: WA, gender: M, year: 1918, name: wa_seed_08, number: 108}
+          - {state: WA, gender: F, year: 1919, name: wa_seed_09, number: 109}
+          - {state: WA, gender: M, year: 1920, name: wa_seed_10, number: 110}
+          - {state: WA, gender: F, year: 1921, name: wa_seed_11, number: 111}
+          - {state: WA, gender: M, year: 1922, name: wa_seed_12, number: 112}
+          - {state: WA, gender: F, year: 1923, name: wa_seed_13, number: 113}
+          - {state: WA, gender: M, year: 1924, name: wa_seed_14, number: 114}
+          - {state: WA, gender: F, year: 1925, name: wa_seed_15, number: 115}
+          - {state: WA, gender: M, year: 1926, name: wa_seed_16, number: 116}
+          - {state: WA, gender: F, year: 1927, name: wa_seed_17, number: 117}
+          - {state: WA, gender: M, year: 1928, name: wa_seed_18, number: 118}
+          - {state: WA, gender: F, year: 1929, name: wa_seed_19, number: 119}
+          - {state: WA, gender: M, year: 1930, name: wa_seed_20, number: 120}
+          - {state: WA, gender: F, year: 1931, name: wa_seed_21, number: 121}
+          - {state: WA, gender: M, year: 1932, name: wa_seed_22, number: 122}
+          - {state: WA, gender: F, year: 1933, name: wa_seed_23, number: 123}
+          - {state: WA, gender: M, year: 1934, name: wa_seed_24, number: 124}
+          - {state: WA, gender: F, year: 1935, name: wa_seed_25, number: 125}
+          - {state: WA, gender: M, year: 1936, name: wa_seed_26, number: 126}
+          - {state: WA, gender: F, year: 1937, name: wa_seed_27, number: 127}
+          - {state: WA, gender: M, year: 1938, name: wa_seed_28, number: 128}
+          - {state: WA, gender: F, year: 1939, name: wa_seed_29, number: 129}
+          - {state: WA, gender: M, year: 1940, name: wa_seed_30, number: 130}
+          - {state: WA, gender: F, year: 1941, name: wa_seed_31, number: 131}
+          - {state: WA, gender: M, year: 1942, name: wa_seed_32, number: 132}
+          - {state: WA, gender: F, year: 1943, name: wa_seed_33, number: 133}
+          - {state: WA, gender: M, year: 1944, name: wa_seed_34, number: 134}
+          - {state: WA, gender: F, year: 1945, name: wa_seed_35, number: 135}
+          - {state: WA, gender: M, year: 1946, name: wa_seed_36, number: 136}
+          - {state: WA, gender: F, year: 1947, name: wa_seed_37, number: 137}
+          - {state: WA, gender: M, year: 1948, name: wa_seed_38, number: 138}
+          - {state: WA, gender: F, year: 1949, name: wa_seed_39, number: 139}
+          - {state: WA, gender: M, year: 1950, name: wa_seed_40, number: 140}
+          - {state: WA, gender: F, year: 1951, name: wa_seed_41, number: 141}
+          - {state: WA, gender: M, year: 1952, name: wa_seed_42, number: 142}
+          - {state: WA, gender: F, year: 1953, name: wa_seed_43, number: 143}
+          - {state: WA, gender: M, year: 1954, name: wa_seed_44, number: 144}
+          - {state: WA, gender: F, year: 1955, name: wa_seed_45, number: 145}
+          - {state: WA, gender: M, year: 1956, name: wa_seed_46, number: 146}
+          - {state: WA, gender: F, year: 1957, name: wa_seed_47, number: 147}
+          - {state: WA, gender: M, year: 1958, name: wa_seed_48, number: 148}
+          - {state: WA, gender: F, year: 1959, name: wa_seed_49, number: 149}
+          - {state: WA, gender: M, year: 1960, name: wa_seed_50, number: 150}
+          - {state: WA, gender: F, year: 1961, name: wa_seed_extended_01, number: 201}
+          - {state: WA, gender: M, year: 1962, name: wa_seed_extended_02, number: 202}
+          - {state: WA, gender: F, year: 1963, name: wa_seed_extended_03, number: 203}
+          - {state: WA, gender: M, year: 1964, name: wa_seed_extended_04, number: 204}
+          - {state: WA, gender: F, year: 1965, name: wa_seed_extended_05, number: 205}
+          - {state: WA, gender: M, year: 1966, name: wa_seed_extended_06, number: 206}
+          - {state: WA, gender: F, year: 1967, name: wa_seed_extended_07, number: 207}
+          - {state: WA, gender: M, year: 1968, name: wa_seed_extended_08, number: 208}
+          - {state: WA, gender: F, year: 1969, name: wa_seed_extended_09, number: 209}
+          - {state: WA, gender: M, year: 1970, name: wa_seed_extended_10, number: 210}
+          - {state: WA, gender: F, year: 1971, name: wa_seed_extended_11, number: 211}
+          - {state: WA, gender: M, year: 1972, name: wa_seed_extended_12, number: 212}
+          - {state: WA, gender: F, year: 1973, name: wa_seed_extended_13, number: 213}
+          - {state: WA, gender: M, year: 1974, name: wa_seed_extended_14, number: 214}
+          - {state: WA, gender: F, year: 1975, name: wa_seed_extended_15, number: 215}
           - {state: TX, gender: M, year: 1920, name: James, number: 120}
           - {state: TX, gender: F, year: 1920, name: Mary, number: 95}
           - {state: TX, gender: M, year: 1921, name: Robert, number: 88}

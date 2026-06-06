@@ -13,6 +13,11 @@ namespace bigquery_emulator {
 namespace frontend {
 namespace internal {
 
+// Bundled thirdparty samples read bigquery-public-data tables through a
+// caller-scoped parent project (e.g. projects/dev). BigQuery allows that
+// shape for public datasets; the emulator seeds the same project id.
+inline constexpr char kPublicDataProject[] = "bigquery-public-data";
+
 bool SchemasEqualByShape(const backend::schema::TableSchema& a,
                          const backend::schema::TableSchema& b);
 

@@ -31,29 +31,33 @@ absl::string_view Trim(absl::string_view s) {
   return s;
 }
 
-// Splits `s` on the first '=' that does not sit inside a single-quote
-// string literal. Returns false (and leaves `lhs`/`rhs` untouched) if
-// no such '=' exists or if the '=' is at the start / end. The split
-// honors the SQL escape sequence `''` so `name = 'O''Reilly'` parses
-// as `name` / `'O''Reilly'`.
+// Splits `s` on the first '=' that does not sit inside a string
+// literal. Returns false (and leaves `lhs`/`rhs` untouched) if no
+// such '=' exists or if the '=' is at the start / end. The split
+// honors SQL `''` escapes in single-quoted literals and doubled `"`
+// in double-quoted literals (BigQuery Storage clients often emit
+// `state = "WA"`).
 bool SplitOnTopLevelEquals(absl::string_view s,
                            absl::string_view* lhs,
                            absl::string_view* rhs) {
   bool in_string = false;
+  char string_delim = '\0';
   for (std::size_t i = 0; i < s.size(); ++i) {
     const char c = s[i];
     if (in_string) {
-      if (c == '\'') {
-        if (i + 1 < s.size() && s[i + 1] == '\'') {
+      if (c == string_delim) {
+        if (i + 1 < s.size() && s[i + 1] == string_delim) {
           ++i;
           continue;
         }
         in_string = false;
+        string_delim = '\0';
       }
       continue;
     }
-    if (c == '\'') {
+    if (c == '\'' || c == '"') {
       in_string = true;
+      string_delim = c;
       continue;
     }
     if (c == '=') {
@@ -130,26 +134,35 @@ absl::Status ExtractIdentifier(absl::string_view s, std::string* name) {
   return absl::OkStatus();
 }
 
-// Parses a single-quoted string literal, honoring the SQL `''` escape
-// for an embedded apostrophe. Rejects anything that does not look
-// like a complete `'...'` token.
+// Parses a single- or double-quoted string literal, honoring the SQL
+// `''` / `""` escape for an embedded quote. Rejects anything that
+// does not look like a complete quoted token.
 absl::Status ParseStringLiteral(absl::string_view s, std::string* out) {
-  if (s.size() < 2 || s.front() != '\'' || s.back() != '\'') {
+  if (s.size() < 2) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "row_restriction: malformed string literal (expected '...'): ", s));
+        "row_restriction: malformed string literal (expected '...' or "
+        "\"...\"): ",
+        s));
+  }
+  const char delim = s.front();
+  if ((delim != '\'' && delim != '"') || s.back() != delim) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "row_restriction: malformed string literal (expected '...' or "
+        "\"...\"): ",
+        s));
   }
   std::string acc;
   acc.reserve(s.size());
   for (std::size_t i = 1; i + 1 < s.size(); ++i) {
     const char c = s[i];
-    if (c == '\'') {
-      if (i + 2 < s.size() && s[i + 1] == '\'') {
-        acc.push_back('\'');
+    if (c == delim) {
+      if (i + 2 < s.size() && s[i + 1] == delim) {
+        acc.push_back(delim);
         ++i;
         continue;
       }
-      return absl::InvalidArgumentError(
-          "row_restriction: unescaped apostrophe inside string literal");
+      return absl::InvalidArgumentError(absl::StrCat(
+          "row_restriction: unescaped quote inside string literal: ", s));
     }
     acc.push_back(c);
   }

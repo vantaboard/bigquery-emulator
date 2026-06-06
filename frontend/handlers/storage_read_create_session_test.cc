@@ -1,5 +1,6 @@
 // Direct (no gRPC socket) tests for `StorageReadService::CreateReadSession`.
 
+#include "frontend/handlers/storage_read_internal.h"
 #include "frontend/handlers/storage_read_test_fixture.h"
 #include "grpcpp/grpcpp.h"
 
@@ -206,6 +207,32 @@ TEST_F(StorageReadServiceTest,
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
       << status.error_message();
   EXPECT_EQ(service_->SessionsForTesting(), 0u);
+}
+
+TEST_F(StorageReadServiceTest,
+       CreateReadSessionAllowsPublicDataTableWithCallerParent) {
+  backend::schema::TableSchema schema;
+  backend::schema::ColumnSchema name;
+  name.name = "name";
+  name.type = backend::schema::ColumnType::kString;
+  schema.columns.push_back(name);
+  ASSERT_TRUE(
+      storage_->CreateDataset({internal::kPublicDataProject, "usa_names"}, "US")
+          .ok());
+  ASSERT_TRUE(
+      storage_
+          ->CreateTable({internal::kPublicDataProject, "usa_names", "names"},
+                        schema)
+          .ok());
+
+  v1::CreateReadSessionRequest req;
+  req.set_parent("projects/dev");
+  req.mutable_read_session()->set_table(
+      "projects/bigquery-public-data/datasets/usa_names/tables/names");
+  v1::ReadSession resp;
+  ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  EXPECT_EQ(service_->SessionsForTesting(), 1u);
 }
 
 TEST_F(StorageReadServiceTest, CreateReadSessionMissingTableIsNotFound) {

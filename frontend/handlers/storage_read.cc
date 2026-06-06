@@ -119,8 +119,11 @@ std::string StorageReadService::StreamIdForSession(
   // Enforce parent / table project consistency so a caller pinning
   // parent=projects/A and read_session.table=projects/B/... does not
   // get a session that bridges projects. BigQuery returns
-  // INVALID_ARGUMENT on the same shape.
-  if (table_id.project_id != project_id) {
+  // INVALID_ARGUMENT on the same shape, except reads of bundled
+  // bigquery-public-data tables (thirdparty samples pin parent to
+  // the caller project while the table path stays public-data).
+  if (table_id.project_id != project_id &&
+      table_id.project_id != internal::kPublicDataProject) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageRead.CreateReadSession: parent project (",

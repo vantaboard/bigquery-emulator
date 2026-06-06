@@ -100,6 +100,21 @@ TEST(ParseRowRestriction, ParsesStringEqualityWithEscapedQuote) {
   EXPECT_EQ(pred.string_value, "O'Reilly");
 }
 
+TEST(ParseRowRestriction, ParsesDoubleQuotedStringEquality) {
+  schema::TableSchema s;
+  schema::ColumnSchema state;
+  state.name = "state";
+  state.type = schema::ColumnType::kString;
+  state.mode = schema::ColumnMode::kNullable;
+  s.columns = {state};
+
+  EqualityPredicate pred;
+  ASSERT_TRUE(ParseRowRestriction(R"(state = "WA")", s, &pred).ok());
+  EXPECT_EQ(pred.column, "state");
+  EXPECT_EQ(pred.kind, EqualityPredicate::Kind::kString);
+  EXPECT_EQ(pred.string_value, "WA");
+}
+
 TEST(ParseRowRestriction, ParsesBacktickQuotedColumn) {
   EqualityPredicate pred;
   ASSERT_TRUE(ParseRowRestriction("`id` = 42", PeopleSchema(), &pred).ok());
