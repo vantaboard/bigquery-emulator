@@ -43,11 +43,42 @@ func TestParseCSVAutodetectUsesHeaderRow(t *testing.T) {
 	}
 }
 
-func TestParseDatastoreBackupRejected(t *testing.T) {
+func TestParseDatastoreBackupJSONEntities(t *testing.T) {
 	t.Parallel()
-	_, err := ParseSource("DATASTORE_BACKUP", []byte("not-a-backup"), nil, 0, false)
-	if err == nil {
-		t.Fatal("expected error for DATASTORE_BACKUP")
+	data := []byte(
+		`{"entities":[{"properties":{"name":{"stringValue":"Alabama"},"post_abbr":{"stringValue":"AL"},"year":{"integerValue":"2019"}}}]}`,
+	)
+	got, err := ParseSource("DATASTORE_BACKUP", data, nil, 0, true)
+	if err != nil {
+		t.Fatalf("ParseSource: %v", err)
+	}
+	if len(got.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(got.Rows))
+	}
+	if got.Rows[0]["name"] != "Alabama" {
+		t.Fatalf("name = %#v", got.Rows[0]["name"])
+	}
+}
+
+func TestParseCSVTimestampDatetime(t *testing.T) {
+	t.Parallel()
+	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
+		{Name: "release_date", Type: "TIMESTAMP"},
+		{Name: "dvd_release", Type: "DATETIME"},
+	}}
+	data := []byte("release_date,dvd_release\n2012-03-04T05:06:07+00:00,2012-03-04T05:06:07\n")
+	got, err := ParseSource("CSV", data, schema, 1, false)
+	if err != nil {
+		t.Fatalf("ParseSource: %v", err)
+	}
+	if len(got.Rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(got.Rows))
+	}
+	if _, ok := got.Rows[0]["release_date"].(string); !ok {
+		t.Fatalf("release_date = %#v, want RFC3339 string", got.Rows[0]["release_date"])
+	}
+	if _, ok := got.Rows[0]["dvd_release"].(string); !ok {
+		t.Fatalf("dvd_release = %#v, want datetime string", got.Rows[0]["dvd_release"])
 	}
 }
 

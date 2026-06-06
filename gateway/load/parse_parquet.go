@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/parquet-go/parquet-go"
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -60,6 +61,13 @@ func normalizeParquetRow(row map[string]any) map[string]any {
 
 func parquetValueToAny(v any) any {
 	switch val := v.(type) {
+	case time.Time:
+		return val.UTC().Format(time.RFC3339Nano)
+	case *time.Time:
+		if val == nil {
+			return nil
+		}
+		return val.UTC().Format(time.RFC3339Nano)
 	case map[string]any:
 		out := make(map[string]any, len(val))
 		for k, sub := range val {
@@ -72,6 +80,15 @@ func parquetValueToAny(v any) any {
 			out[i] = parquetValueToAny(sub)
 		}
 		return out
+	case int64:
+		// Pandas/pyarrow often stores TIMESTAMP columns as INT64
+		// microseconds since Unix epoch in Parquet.
+		if val > 1_000_000_000_000 && val < 100_000_000_000_000_000 {
+			return time.UnixMicro(val).UTC().Format(time.RFC3339Nano)
+		}
+		return val
+	case int:
+		return val
 	default:
 		return val
 	}
@@ -117,13 +134,18 @@ func parquetNodeTypeToBQ(f parquet.Field) string {
 	switch f.Type().String() {
 	case fieldTypeBoolean:
 		return fieldTypeBoolean
-	case "INT32", "INT64", "UINT32", "UINT64", "INT96":
+	case "INT32", "INT64", "UINT32", "UINT64":
 		return fieldTypeInteger
+	case "INT96", "TIMESTAMP":
+		return "TIMESTAMP"
 	case "FLOAT", "DOUBLE":
 		return fieldTypeFloat
 	case "BYTE_ARRAY", "FIXED_LEN_BYTE_ARRAY":
 		return fieldTypeString
 	default:
+		if lt := f.Type().LogicalType(); lt != nil && lt.String() == "TIMESTAMP" {
+			return "TIMESTAMP"
+		}
 		return fieldTypeString
 	}
 }

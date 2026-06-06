@@ -127,6 +127,9 @@ func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
 		if !ok {
 			return cell
 		}
+		if strings.TrimSpace(s) == "" {
+			return Cell{V: nil}
+		}
 		if micros, err := TimestampStringToMicros(s); err == nil {
 			return Cell{V: micros}
 		}

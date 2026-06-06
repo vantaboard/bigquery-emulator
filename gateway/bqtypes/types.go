@@ -434,6 +434,7 @@ type TableFieldSchema struct {
 	Type        string             `json:"type"`           // STRING, INT64, FLOAT64, BOOL, TIMESTAMP, ...
 	Mode        string             `json:"mode,omitempty"` // NULLABLE, REQUIRED, REPEATED
 	Description string             `json:"description,omitempty"`
+	Collation   string             `json:"collation,omitempty"`
 	PolicyTags  *PolicyTagList     `json:"policyTags,omitempty"`
 	Fields      []TableFieldSchema `json:"fields,omitempty"` // for STRUCT/RECORD
 }
@@ -472,6 +473,11 @@ type QueryRequest struct {
 	// ExternalDataConfiguration for this query (temporary external
 	// tables). Mirrors JobConfigurationQuery.tableDefinitions.
 	TableDefinitions map[string]ExternalDataConfiguration `json:"tableDefinitions,omitempty"`
+	// DestinationTable mirrors JobConfigurationQuery.destinationTable for
+	// synchronous jobs.query calls that materialize results to a table.
+	DestinationTable    *TableReference `json:"destinationTable,omitempty"`
+	WriteDisposition    string          `json:"writeDisposition,omitempty"`
+	SchemaUpdateOptions []string        `json:"schemaUpdateOptions,omitempty"`
 }
 
 // QueryResponse is the body of POST /bigquery/v2/projects/{projectId}/queries.

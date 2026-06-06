@@ -23,16 +23,15 @@ func extractPolicyFields(fields []TableFieldSchema) []TableFieldSchema {
 	out := make([]TableFieldSchema, 0, len(fields))
 	for _, f := range fields {
 		nested := extractPolicyFields(f.Fields)
-		if f.PolicyTags != nil && len(f.PolicyTags.Names) > 0 {
+		if f.PolicyTags != nil && len(f.PolicyTags.Names) > 0 ||
+			f.Collation != "" || len(nested) > 0 {
 			out = append(out, TableFieldSchema{
 				Name:       f.Name,
+				Collation:  f.Collation,
 				PolicyTags: f.PolicyTags,
 				Fields:     nested,
 			})
 			continue
-		}
-		if len(nested) > 0 {
-			out = append(out, TableFieldSchema{Name: f.Name, Fields: nested})
 		}
 	}
 	return out
@@ -70,9 +69,27 @@ func mergeFieldPolicyTags(base, overlay []TableFieldSchema) []TableFieldSchema {
 		if ov.PolicyTags != nil {
 			out[i].PolicyTags = ov.PolicyTags
 		}
+		if ov.Collation != "" {
+			out[i].Collation = ov.Collation
+		}
 		if len(f.Fields) > 0 || len(ov.Fields) > 0 {
 			out[i].Fields = mergeFieldPolicyTags(f.Fields, ov.Fields)
 		}
 	}
+	for _, ov := range overlay {
+		if _, ok := indexFieldByName(base, ov.Name); ok {
+			continue
+		}
+		out = append(out, ov)
+	}
 	return out
+}
+
+func indexFieldByName(fields []TableFieldSchema, name string) (TableFieldSchema, bool) {
+	for _, f := range fields {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return TableFieldSchema{}, false
 }

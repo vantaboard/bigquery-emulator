@@ -193,7 +193,7 @@ func TestTableGetUsesDescribeTable(t *testing.T) {
 	if tbl.Schema == nil || len(tbl.Schema.Fields) != 1 {
 		t.Fatalf("schema not round-tripped: %+v", tbl.Schema)
 	}
-	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != sqlTypeINT64 {
+	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != "INTEGER" {
 		t.Errorf("schema field round-trip mismatch: %+v", tbl.Schema.Fields[0])
 	}
 }

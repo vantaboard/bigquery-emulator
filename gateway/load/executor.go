@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -124,6 +125,15 @@ func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte,
 func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 	parseSchema *bqtypes.TableSchema,
 ) (ParsedRows, int64, int, error) {
+	sourceFormat := strings.ToUpper(strings.TrimSpace(cfg.SourceFormat))
+	if sourceFormat == "" {
+		sourceFormat = inferSourceFormatFromURIs(cfg.SourceURIs)
+	}
+	if sourceFormat == "DATASTORE_BACKUP" {
+		cfgCopy := *cfg
+		cfgCopy.SourceFormat = sourceFormat
+		return parseDatastoreBackupSources(ctx, &cfgCopy, parseSchema)
+	}
 	var parsed ParsedRows
 	var totalBytes int64
 	for i, uri := range cfg.SourceURIs {
@@ -132,13 +142,22 @@ func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 			return ParsedRows{}, 0, 0, err
 		}
 		totalBytes += int64(len(data))
-		chunk, err := ParseSource(cfg.SourceFormat, data, parseSchema, cfg.SkipLeadingRows(), cfg.Autodetect)
+		chunk, err := ParseSource(sourceFormat, data, parseSchema, cfg.SkipLeadingRows(), cfg.Autodetect)
 		if err != nil {
 			return ParsedRows{}, 0, 0, err
 		}
 		parsed = mergeParsedChunk(parsed, chunk, i == 0)
 	}
 	return parsed, totalBytes, len(cfg.SourceURIs), nil
+}
+
+func inferSourceFormatFromURIs(uris []string) string {
+	for _, uri := range uris {
+		if strings.HasSuffix(uri, ".export_metadata") {
+			return "DATASTORE_BACKUP"
+		}
+	}
+	return ""
 }
 
 func mergeParsedChunk(acc, chunk ParsedRows, first bool) ParsedRows {

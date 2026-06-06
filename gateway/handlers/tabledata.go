@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -70,6 +71,37 @@ func decodeInsertAllBody(w http.ResponseWriter, r *http.Request) (bqtypes.TableD
 // side because the catalog/storage path only requires the bytes to
 // come back out shape-preserved. Typing tightens later via the
 // resolved AST.
+func jsonCellForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
+	if f != nil && isJSONStructFieldType(f.GetType()) {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return jsonToCell(v)
+		}
+		st := &enginepb.Struct{Fields: make([]*enginepb.Cell, 0, len(f.GetFields()))}
+		for _, sub := range f.GetFields() {
+			subV, ok := m[sub.GetName()]
+			if !ok {
+				st.Fields = append(st.Fields, &enginepb.Cell{
+					Value: &enginepb.Cell_NullValue{NullValue: true},
+				})
+				continue
+			}
+			st.Fields = append(st.Fields, jsonCellForField(sub, subV))
+		}
+		return &enginepb.Cell{Value: &enginepb.Cell_StructValue{StructValue: st}}
+	}
+	return jsonToCell(v)
+}
+
+func isJSONStructFieldType(t string) bool {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case "STRUCT", "RECORD":
+		return true
+	default:
+		return false
+	}
+}
+
 func jsonToCell(v any) *enginepb.Cell {
 	if v == nil {
 		return &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
@@ -146,49 +178,7 @@ func jsonRowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.
 			})
 			continue
 		}
-		out.Cells = append(out.Cells, jsonToCell(v))
-	}
-	return out
-}
-
-// cellToJSON is the inverse of jsonToCell for tabledata.list output.
-// BigQuery's REST surface emits everything as JSON strings inside the
-// `v` field of the f/v shape, so we map proto Cell variants straight
-// to their string representation; arrays and structs recurse into
-// the same shape so nested data round-trips.
-func cellToJSON(c *enginepb.Cell) any {
-	if c == nil {
-		return nil
-	}
-	switch v := c.GetValue().(type) {
-	case *enginepb.Cell_StringValue:
-		return v.StringValue
-	case *enginepb.Cell_NullValue:
-		return nil
-	case *enginepb.Cell_Array:
-		out := make([]bqtypes.Cell, 0, len(v.Array.GetElements()))
-		for _, el := range v.Array.GetElements() {
-			out = append(out, bqtypes.Cell{V: cellToJSON(el)})
-		}
-		return out
-	case *enginepb.Cell_StructValue:
-		out := make([]bqtypes.Cell, 0, len(v.StructValue.GetFields()))
-		for _, f := range v.StructValue.GetFields() {
-			out = append(out, bqtypes.Cell{V: cellToJSON(f)})
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-// dataRowToBQRow lowers a proto DataRow into the f/v shape BigQuery
-// REST clients consume. Cells line up positionally with the table's
-// schema; the gateway never reorders them.
-func dataRowToBQRow(row *enginepb.DataRow) bqtypes.Row {
-	out := bqtypes.Row{F: make([]bqtypes.Cell, 0, len(row.GetCells()))}
-	for _, c := range row.GetCells() {
-		out.F = append(out.F, bqtypes.Cell{V: cellToJSON(c)})
+		out.Cells = append(out.Cells, jsonCellForField(f, v))
 	}
 	return out
 }
@@ -304,6 +294,18 @@ func TableDataList(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		desc, err := deps.Catalog.DescribeTable(r.Context(), &enginepb.DescribeTableRequest{
+			Table: &enginepb.TableRef{
+				ProjectId: projectID,
+				DatasetId: datasetID,
+				TableId:   tableID,
+			},
+		})
+		if grpcToHTTPError(w, err) {
+			return
+		}
+		schema := desc.GetSchema()
+
 		resp, err := deps.Catalog.ListRows(r.Context(), &enginepb.ListRowsRequest{
 			Table: &enginepb.TableRef{
 				ProjectId: projectID,
@@ -326,7 +328,7 @@ func TableDataList(deps Dependencies) http.HandlerFunc {
 		}
 		out.Rows = make([]bqtypes.Row, 0, len(resp.GetRows()))
 		for _, row := range resp.GetRows() {
-			out.Rows = append(out.Rows, dataRowToBQRow(row))
+			out.Rows = append(out.Rows, bqtypes.CellsToRowForSchema(row.GetCells(), schema))
 		}
 		writeJSON(w, http.StatusOK, out)
 	}

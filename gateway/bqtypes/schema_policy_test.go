@@ -40,3 +40,22 @@ func TestExtractSchemaPolicyOverlay(t *testing.T) {
 		t.Fatalf("overlay field should omit engine type, got %q", overlay.Fields[0].Type)
 	}
 }
+
+func TestExtractSchemaPolicyOverlayCollation(t *testing.T) {
+	t.Parallel()
+	full := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
+		{Name: "name", Type: "STRING", Collation: "und:ci"},
+		{Name: "nums", Type: "INTEGER"},
+	}}
+	overlay := bqtypes.ExtractSchemaPolicyOverlay(full)
+	if overlay == nil || len(overlay.Fields) != 1 {
+		t.Fatalf("overlay = %#v", overlay)
+	}
+	if overlay.Fields[0].Collation != "und:ci" {
+		t.Fatalf("collation = %q, want und:ci", overlay.Fields[0].Collation)
+	}
+	merged := bqtypes.MergeSchemaPolicyTags(full, overlay)
+	if merged.Fields[0].Collation != "und:ci" {
+		t.Fatalf("merged collation = %q", merged.Fields[0].Collation)
+	}
+}

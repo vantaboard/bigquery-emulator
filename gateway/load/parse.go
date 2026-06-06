@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
@@ -45,8 +46,7 @@ func ParseSource(format string, data []byte, schema *bqtypes.TableSchema,
 	case "ORC":
 		return parseORC(data, schema, autodetect)
 	case "DATASTORE_BACKUP":
-		return ParsedRows{}, errors.New(
-			"DATASTORE_BACKUP load is not supported by the emulator; use CSV, JSON, Avro, ORC, or Parquet")
+		return parseDatastoreEntityBytes(data, schema)
 	default:
 		return ParsedRows{}, fmt.Errorf("unsupported sourceFormat %q", format)
 	}
@@ -163,8 +163,40 @@ func coerceCSVCell(raw string, fieldType string) any {
 		case "false", "f", "0", "no":
 			return false
 		}
+	case "TIMESTAMP":
+		if ts, ok := parseCSVDateTime(raw, true); ok {
+			return ts
+		}
+	case "DATETIME":
+		if ts, ok := parseCSVDateTime(raw, false); ok {
+			return ts
+		}
 	}
 	return raw
+}
+
+// parseCSVDateTime parses RFC3339/RFC3339Nano timestamps from CSV cells.
+// TIMESTAMP values keep timezone information; DATETIME values are normalized
+// to a UTC wall-clock string without a zone suffix.
+func parseCSVDateTime(raw string, keepZone bool) (string, bool) {
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999 UTC",
+		"2006-01-02 15:04:05 UTC",
+		"2006-01-02 15:04:05.999999",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if ts, err := time.Parse(layout, raw); err == nil {
+			if keepZone {
+				return ts.UTC().Format(time.RFC3339Nano), true
+			}
+			return ts.UTC().Format("2006-01-02T15:04:05.999999"), true
+		}
+	}
+	return "", false
 }
 
 func parseNDJSON(data []byte, schema *bqtypes.TableSchema, autodetect bool) (ParsedRows, error) {

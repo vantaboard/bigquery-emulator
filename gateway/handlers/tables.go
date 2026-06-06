@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
 
 // tableKind is the value the BigQuery REST API returns for the `kind`
@@ -123,9 +126,13 @@ func schemaFromProto(s *enginepb.TableSchema) *bqtypes.TableSchema {
 }
 
 func fieldFromProto(f *enginepb.FieldSchema) bqtypes.TableFieldSchema {
+	fieldType := normalizeRESTFieldType(f.GetType())
+	if strings.EqualFold(fieldType, "STRUCT") {
+		fieldType = "RECORD"
+	}
 	out := bqtypes.TableFieldSchema{
-		Name:        f.GetName(),
-		Type:        f.GetType(),
+		Name:        normalizeRESTFieldName(f.GetName()),
+		Type:        fieldType,
 		Mode:        f.GetMode(),
 		Description: f.GetDescription(),
 	}
@@ -133,6 +140,50 @@ func fieldFromProto(f *enginepb.FieldSchema) bqtypes.TableFieldSchema {
 		out.Fields = append(out.Fields, fieldFromProto(sub))
 	}
 	return out
+}
+
+// normalizeRESTFieldName maps analyzer-synthesized column names ($col1, …)
+// to the f0_, f1_, … aliases the Node client expects for anonymous SELECT
+// outputs (queryParamsTimestamps sample reads row.f0_).
+func normalizeRESTFieldName(name string) string {
+	if len(name) >= 5 && strings.HasPrefix(name, "$col") {
+		if n, err := strconv.Atoi(name[4:]); err == nil && n > 0 {
+			return "f" + strconv.Itoa(n-1) + "_"
+		}
+	}
+	return name
+}
+
+func normalizeRESTFieldType(t string) string {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case "INT64":
+		return "INTEGER"
+	case "FLOAT64":
+		return "FLOAT"
+	case "BOOL":
+		return "BOOLEAN"
+	default:
+		return t
+	}
+}
+
+func normalizeRESTTableSchema(s *bqtypes.TableSchema) *bqtypes.TableSchema {
+	if s == nil {
+		return nil
+	}
+	out := *s
+	out.Fields = make([]bqtypes.TableFieldSchema, len(s.Fields))
+	for i, f := range s.Fields {
+		out.Fields[i] = f
+		out.Fields[i].Type = normalizeRESTFieldType(f.Type)
+		if len(f.Fields) > 0 {
+			nested := &bqtypes.TableSchema{Fields: f.Fields}
+			if norm := normalizeRESTTableSchema(nested); norm != nil {
+				out.Fields[i].Fields = norm.Fields
+			}
+		}
+	}
+	return &out
 }
 
 // TableList implements `bigquery.tables.list`:
@@ -250,6 +301,9 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		}); grpcToHTTPError(w, err) {
 			return
 		}
+		if t.DefaultCollation != "" {
+			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
+		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		created := nowMillis()
 		if deps.Snapshots != nil {
@@ -257,7 +311,11 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 				deps.Snapshots.RecordCreation(projectID, datasetID, tableID, ms)
 			}
 		}
-		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
+		out := t
+		if out.DefaultCollation != "" {
+			out.Schema = bqtypes.ApplyDefaultCollationToStringFields(out.Schema, out.DefaultCollation)
+		}
+		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, out))
 	}
 }
 
@@ -376,12 +434,15 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 		if grpcToHTTPError(w, err) {
 			return
 		}
-		t := bqtypes.Table{Schema: schemaFromProto(resp.GetSchema())}
+		t := bqtypes.Table{Schema: normalizeRESTTableSchema(schemaFromProto(resp.GetSchema()))}
 		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok && overlay.Location != "" {
 			t.Location = overlay.Location
 		}
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
+		}
+		if t.DefaultCollation != "" {
+			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
 		}
 		if deps.Snapshots != nil {
 			if ct, ok := deps.Snapshots.CreationTimeMs(projectID, datasetID, tableID); ok {
@@ -442,6 +503,7 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		deps.Metadata.MergeTable(projectID, datasetID, tableID, t)
+		syncPatchedTableSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}
@@ -450,6 +512,37 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
+}
+
+// syncPatchedTableSchema registers schema fields added via tables.patch
+// (setMetadata) so tables.get returns engine-backed column types instead
+// of overlay-only stubs.
+func syncPatchedTableSchema(
+	ctx context.Context,
+	deps Dependencies,
+	projectID, datasetID, tableID string,
+	patchSchema *bqtypes.TableSchema,
+) {
+	if deps.Catalog == nil || patchSchema == nil || len(patchSchema.Fields) == 0 {
+		return
+	}
+	tableRef := &enginepb.TableRef{
+		ProjectId: projectID,
+		DatasetId: datasetID,
+		TableId:   tableID,
+	}
+	desc, err := deps.Catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+	if err != nil {
+		return
+	}
+	existing := schemaFromProto(desc.GetSchema())
+	_, changed := load.MergeSchemasForAppend(existing, patchSchema,
+		[]string{"ALLOW_FIELD_ADDITION"})
+	if !changed {
+		return
+	}
+	_, _ = load.ApplySchemaUpdate(ctx, deps.Catalog, tableRef, patchSchema,
+		[]string{"ALLOW_FIELD_ADDITION"})
 }
 
 // TableDelete implements `bigquery.tables.delete`:
