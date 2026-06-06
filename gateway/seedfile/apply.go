@@ -124,9 +124,13 @@ func fieldsToProto(fields []FieldSchema) *enginepb.TableSchema {
 }
 
 func fieldToProto(f FieldSchema) *enginepb.FieldSchema {
+	fieldType := f.Type
+	if strings.EqualFold(fieldType, "RECORD") {
+		fieldType = "STRUCT"
+	}
 	pf := &enginepb.FieldSchema{
 		Name:        f.Name,
-		Type:        f.Type,
+		Type:        fieldType,
 		Mode:        f.Mode,
 		Description: f.Description,
 	}

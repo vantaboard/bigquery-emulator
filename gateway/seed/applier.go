@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
@@ -167,9 +168,41 @@ func rowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.Data
 			out.Cells = append(out.Cells, nullCell())
 			continue
 		}
-		out.Cells = append(out.Cells, ValueToCell(v))
+		out.Cells = append(out.Cells, cellFromJSONForField(f, v))
 	}
 	return out
+}
+
+func cellFromJSONForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
+	if f == nil {
+		return ValueToCell(v)
+	}
+	if isStructFieldType(f.GetType()) {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return ValueToCell(v)
+		}
+		st := &enginepb.Struct{Fields: make([]*enginepb.Cell, 0, len(f.GetFields()))}
+		for _, sub := range f.GetFields() {
+			subV, ok := m[sub.GetName()]
+			if !ok {
+				st.Fields = append(st.Fields, nullCell())
+				continue
+			}
+			st.Fields = append(st.Fields, cellFromJSONForField(sub, subV))
+		}
+		return &enginepb.Cell{Value: &enginepb.Cell_StructValue{StructValue: st}}
+	}
+	return ValueToCell(v)
+}
+
+func isStructFieldType(t string) bool {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case "STRUCT", "RECORD":
+		return true
+	default:
+		return false
+	}
 }
 
 func nullCell() *enginepb.Cell {

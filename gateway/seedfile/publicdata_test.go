@@ -38,12 +38,13 @@ func TestPublicDataFixtureLoads(t *testing.T) {
 	if f.DefaultLocation != "US" {
 		t.Errorf("location=%q, want US", f.DefaultLocation)
 	}
-	if len(f.Datasets) != 4 {
-		t.Fatalf("datasets=%d, want 4", len(f.Datasets))
+	if len(f.Datasets) != 5 {
+		t.Fatalf("datasets=%d, want 5", len(f.Datasets))
 	}
 	wantTables := map[string]int{
 		"usa_names":     2,
 		"samples":       1,
+		"github_repos":  1,
 		"stackoverflow": 1,
 		"ml_datasets":   1,
 	}
@@ -79,6 +80,7 @@ func TestPublicDataFixtureApply(t *testing.T) {
 	wantDatasets := []string{
 		PublicDataProject + ".usa_names",
 		PublicDataProject + ".samples",
+		PublicDataProject + ".github_repos",
 		PublicDataProject + ".stackoverflow",
 		PublicDataProject + ".ml_datasets",
 	}
@@ -111,6 +113,11 @@ func TestPublicDataRefsFullySeeded(t *testing.T) {
 		{
 			name: "shakespeare only",
 			sql:  "SELECT corpus FROM `bigquery-public-data.samples.shakespeare`",
+			want: true,
+		},
+		{
+			name: "github_repos commits",
+			sql:  "SELECT commit FROM `bigquery-public-data.github_repos.commits`",
 			want: true,
 		},
 		{

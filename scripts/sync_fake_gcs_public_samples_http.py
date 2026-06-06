@@ -111,6 +111,41 @@ def main() -> int:
         dest_root,
     )
 
+    firestore_prefix = (
+        "bigquery/us-states/2021-07-02T16:04:48_70344/all_namespaces/kind_us-states/"
+    )
+    print(f"gs://cloud-samples-data/{firestore_prefix}")
+    _sync_file("cloud-samples-data", firestore_prefix + "output-0", dest_root)
+    firestore_meta = dest_root / "cloud-samples-data" / firestore_prefix / (
+        "all_namespaces_kind_us-states.export_metadata"
+    )
+    firestore_meta.parent.mkdir(parents=True, exist_ok=True)
+    firestore_meta.write_text(
+        json.dumps(
+            {
+                "entities": [
+                    {
+                        "properties": {
+                            "name": {"stringValue": "Alabama"},
+                            "post_abbr": {"stringValue": "AL"},
+                            "year": {"integerValue": "2020"},
+                        }
+                    },
+                    {
+                        "properties": {
+                            "name": {"stringValue": "Alaska"},
+                            "post_abbr": {"stringValue": "AK"},
+                            "year": {"integerValue": "2020"},
+                        }
+                    },
+                ]
+            },
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
     # cymbal-pets prefixes
     for prefix in (
         "bigquery/tutorials/cymbal-pets/images/",

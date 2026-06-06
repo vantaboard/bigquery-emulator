@@ -22,6 +22,17 @@ fi
 echo "Syncing into ${DEST}"
 
 mkdir -p "${DEST}/cloud-samples-data/bigquery/us-states"
+mkdir -p "${DEST}/cloud-samples-data/bigquery/us-states/2021-07-02T16:04:48_70344/all_namespaces/kind_us-states"
+FIRESTORE_DIR="${DEST}/cloud-samples-data/bigquery/us-states/2021-07-02T16:04:48_70344/all_namespaces/kind_us-states"
+gcloud storage cp \
+	"gs://cloud-samples-data/bigquery/us-states/2021-07-02T16:04:48_70344/all_namespaces/kind_us-states/output-0" \
+	"${FIRESTORE_DIR}/" \
+	2>/dev/null || true
+# JSON entities fixture: the gateway parser reads inline entities from
+# export_metadata (binary LevelDB metadata from GCS yields 0 rows).
+cat >"${FIRESTORE_DIR}/all_namespaces_kind_us-states.export_metadata" <<'EOF'
+{"entities":[{"properties":{"name":{"stringValue":"Alabama"},"post_abbr":{"stringValue":"AL"},"year":{"integerValue":"2020"}}},{"properties":{"name":{"stringValue":"Alaska"},"post_abbr":{"stringValue":"AK"},"year":{"integerValue":"2020"}}}]}
+EOF
 gcloud storage cp \
 	"gs://cloud-samples-data/bigquery/us-states/us-states.csv" \
 	"gs://cloud-samples-data/bigquery/us-states/us-states-by-date.csv" \

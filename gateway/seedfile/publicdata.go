@@ -26,6 +26,7 @@ var SeededPublicTables = []string{
 	PublicDataProject + ".usa_names.usa_1910_2013",
 	PublicDataProject + ".usa_names.usa_1910_current",
 	PublicDataProject + ".samples.shakespeare",
+	PublicDataProject + ".github_repos.commits",
 	PublicDataProject + ".stackoverflow.posts_questions",
 	PublicDataProject + ".ml_datasets.penguins",
 }

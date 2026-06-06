@@ -15,12 +15,13 @@ datasets:
           - {name: number, type: INT64}
         rows:
           # Pagination sample expects James aggregate count 4942431.
-          - {state: US, gender: M, year: 1910, name: James, number: 4942431}
+          - {state: US, gender: M, year: 1910, name: James, number: 4941431}
+          - {state: WA, gender: M, year: 1910, name: James, number: 1000}
           - {state: WA, gender: M, year: 1910, name: SampleWA, number: 1}
           - {state: WI, gender: M, year: 1910, name: SampleWI, number: 1}
           - {state: WV, gender: M, year: 1910, name: SampleWV, number: 1}
           - {state: WY, gender: M, year: 1910, name: SampleWY, number: 1}
-          - {state: TX, gender: M, year: 1920, name: James, number: 120}
+          - {state: TX, gender: M, year: 1910, name: SampleTX, number: 1}
           - {state: TX, gender: F, year: 1920, name: Mary, number: 95}
           - {state: TX, gender: M, year: 1921, name: Robert, number: 88}
           - {state: CA, gender: M, year: 1920, name: John, number: 60}
@@ -122,6 +123,107 @@ datasets:
           - {state: TX, gender: M, year: 1932, name: Charles94, number: 104}
           - {state: TX, gender: F, year: 1933, name: Margaret95, number: 105}
           - {state: TX, gender: M, year: 1910, name: Joseph96, number: 106}
+          # query_script sample: ARRAY_AGG top 100 names for year 2000.
+          - {state: US, gender: M, year: 2000, name: the, number: 1000000}
+          - {state: US, gender: M, year: 2000, name: king, number: 999999}
+          - {state: US, gender: F, year: 2000, name: love, number: 999998}
+          - {state: US, gender: M, year: 2000, name: y2k01, number: 999997}
+          - {state: US, gender: F, year: 2000, name: y2k02, number: 999996}
+          - {state: US, gender: M, year: 2000, name: y2k03, number: 999995}
+          - {state: US, gender: F, year: 2000, name: and, number: 999994}
+          - {state: US, gender: M, year: 2000, name: but, number: 999993}
+          - {state: US, gender: F, year: 2000, name: for, number: 999992}
+          - {state: US, gender: M, year: 2000, name: with, number: 999991}
+          - {state: US, gender: F, year: 2000, name: not, number: 999990}
+          - {state: US, gender: M, year: 2000, name: you, number: 999989}
+          - {state: US, gender: F, year: 2000, name: all, number: 999988}
+          - {state: US, gender: M, year: 2000, name: would, number: 999987}
+          - {state: US, gender: F, year: 2000, name: there, number: 999986}
+          - {state: US, gender: M, year: 2000, name: their, number: 999985}
+          - {state: US, gender: F, year: 2000, name: what, number: 999984}
+          - {state: US, gender: M, year: 2000, name: so, number: 999983}
+          - {state: US, gender: F, year: 2000, name: up, number: 999982}
+          - {state: US, gender: M, year: 2000, name: out, number: 999981}
+          - {state: US, gender: F, year: 2000, name: if, number: 999980}
+          - {state: US, gender: M, year: 2000, name: about, number: 999979}
+          - {state: US, gender: F, year: 2000, name: who, number: 999978}
+          - {state: US, gender: M, year: 2000, name: get, number: 999977}
+          - {state: US, gender: F, year: 2000, name: which, number: 999976}
+          - {state: US, gender: M, year: 2000, name: go, number: 999975}
+          - {state: US, gender: F, year: 2000, name: me, number: 999974}
+          - {state: US, gender: M, year: 2000, name: when, number: 999973}
+          - {state: US, gender: F, year: 2000, name: make, number: 999972}
+          - {state: US, gender: M, year: 2000, name: can, number: 999971}
+          - {state: US, gender: F, year: 2000, name: like, number: 999970}
+          - {state: US, gender: M, year: 2000, name: time, number: 999969}
+          - {state: US, gender: F, year: 2000, name: no, number: 999968}
+          - {state: US, gender: M, year: 2000, name: just, number: 999967}
+          - {state: US, gender: F, year: 2000, name: him, number: 999966}
+          - {state: US, gender: M, year: 2000, name: know, number: 999965}
+          - {state: US, gender: F, year: 2000, name: take, number: 999964}
+          - {state: US, gender: M, year: 2000, name: into, number: 999963}
+          - {state: US, gender: F, year: 2000, name: year, number: 999962}
+          - {state: US, gender: M, year: 2000, name: your, number: 999961}
+          - {state: US, gender: F, year: 2000, name: good, number: 999960}
+          - {state: US, gender: M, year: 2000, name: some, number: 999959}
+          - {state: US, gender: F, year: 2000, name: could, number: 999958}
+          - {state: US, gender: M, year: 2000, name: them, number: 999957}
+          - {state: US, gender: F, year: 2000, name: see, number: 999956}
+          - {state: US, gender: M, year: 2000, name: other, number: 999955}
+          - {state: US, gender: F, year: 2000, name: than, number: 999954}
+          - {state: US, gender: M, year: 2000, name: then, number: 999953}
+          - {state: US, gender: F, year: 2000, name: now, number: 999952}
+          - {state: US, gender: M, year: 2000, name: look, number: 999951}
+          - {state: US, gender: F, year: 2000, name: only, number: 999950}
+          - {state: US, gender: M, year: 2000, name: come, number: 999949}
+          - {state: US, gender: F, year: 2000, name: its, number: 999948}
+          - {state: US, gender: M, year: 2000, name: over, number: 999947}
+          - {state: US, gender: F, year: 2000, name: think, number: 999946}
+          - {state: US, gender: M, year: 2000, name: also, number: 999945}
+          - {state: US, gender: F, year: 2000, name: y2k54, number: 999944}
+          - {state: US, gender: M, year: 2000, name: y2k55, number: 999943}
+          - {state: US, gender: F, year: 2000, name: y2k56, number: 999942}
+          - {state: US, gender: M, year: 2000, name: y2k57, number: 999941}
+          - {state: US, gender: F, year: 2000, name: y2k58, number: 999940}
+          - {state: US, gender: M, year: 2000, name: y2k59, number: 999939}
+          - {state: US, gender: F, year: 2000, name: y2k60, number: 999938}
+          - {state: US, gender: M, year: 2000, name: y2k61, number: 999937}
+          - {state: US, gender: F, year: 2000, name: y2k62, number: 999936}
+          - {state: US, gender: M, year: 2000, name: y2k63, number: 999935}
+          - {state: US, gender: F, year: 2000, name: y2k64, number: 999934}
+          - {state: US, gender: M, year: 2000, name: y2k65, number: 999933}
+          - {state: US, gender: F, year: 2000, name: y2k66, number: 999932}
+          - {state: US, gender: M, year: 2000, name: y2k67, number: 999931}
+          - {state: US, gender: F, year: 2000, name: y2k68, number: 999930}
+          - {state: US, gender: M, year: 2000, name: y2k69, number: 999929}
+          - {state: US, gender: F, year: 2000, name: y2k70, number: 999928}
+          - {state: US, gender: M, year: 2000, name: y2k71, number: 999927}
+          - {state: US, gender: F, year: 2000, name: y2k72, number: 999926}
+          - {state: US, gender: M, year: 2000, name: y2k73, number: 999925}
+          - {state: US, gender: F, year: 2000, name: y2k74, number: 999924}
+          - {state: US, gender: M, year: 2000, name: y2k75, number: 999923}
+          - {state: US, gender: F, year: 2000, name: y2k76, number: 999922}
+          - {state: US, gender: M, year: 2000, name: y2k77, number: 999921}
+          - {state: US, gender: F, year: 2000, name: y2k78, number: 999920}
+          - {state: US, gender: M, year: 2000, name: y2k79, number: 999919}
+          - {state: US, gender: F, year: 2000, name: y2k80, number: 999918}
+          - {state: US, gender: M, year: 2000, name: y2k81, number: 999917}
+          - {state: US, gender: F, year: 2000, name: y2k82, number: 999916}
+          - {state: US, gender: M, year: 2000, name: y2k83, number: 999915}
+          - {state: US, gender: F, year: 2000, name: y2k84, number: 999914}
+          - {state: US, gender: M, year: 2000, name: y2k85, number: 999913}
+          - {state: US, gender: F, year: 2000, name: y2k86, number: 999912}
+          - {state: US, gender: M, year: 2000, name: y2k87, number: 999911}
+          - {state: US, gender: F, year: 2000, name: y2k88, number: 999910}
+          - {state: US, gender: M, year: 2000, name: y2k89, number: 999909}
+          - {state: US, gender: F, year: 2000, name: y2k90, number: 999908}
+          - {state: US, gender: M, year: 2000, name: y2k91, number: 999907}
+          - {state: US, gender: F, year: 2000, name: y2k92, number: 999906}
+          - {state: US, gender: M, year: 2000, name: y2k93, number: 999905}
+          - {state: US, gender: F, year: 2000, name: y2k94, number: 999904}
+          - {state: US, gender: M, year: 2000, name: y2k95, number: 999903}
+          - {state: US, gender: F, year: 2000, name: y2k96, number: 999902}
+          - {state: US, gender: M, year: 2000, name: y2k97, number: 999901}
       - id: usa_1910_current
         schema:
           - {name: state, type: STRING}
@@ -247,6 +349,86 @@ datasets:
           - {word: love, word_count: 150, corpus: romeoandjuliet, corpus_date: 1597}
           # Named-param samples filter romeoandjuliet with word_count >= 250.
           - {word: the, word_count: 300, corpus: romeoandjuliet, corpus_date: 1597}
+          # Positional-param types sample: IN UNNEST(?) on romeoandjuliet.
+          - {word: and, word_count: 260, corpus: romeoandjuliet, corpus_date: 1597}
+          - {word: is, word_count: 255, corpus: romeoandjuliet, corpus_date: 1597}
+          - {word: moon, word_count: 275, corpus: romeoandjuliet, corpus_date: 1597}
+          - {word: and, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: but, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: for, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: with, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: not, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: you, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: all, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: would, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: there, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: their, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: what, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: so, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: up, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: out, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: if, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: about, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: who, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: get, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: which, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: go, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: me, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: when, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: make, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: can, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: like, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: time, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: no, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: just, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: him, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: know, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: take, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: into, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: year, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: your, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: good, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: some, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: could, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: them, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: see, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: other, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: than, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: then, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: now, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: look, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: only, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: come, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: its, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: over, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: think, word_count: 10, corpus: hamlet, corpus_date: 1599}
+          - {word: also, word_count: 10, corpus: hamlet, corpus_date: 1599}
+  - id: github_repos
+    project_id: bigquery-public-data
+    tables:
+      - id: commits
+        schema:
+          - {name: commit, type: STRING}
+          - name: author
+            type: RECORD
+            fields:
+              - {name: name, type: STRING}
+              - {name: email, type: STRING}
+          - name: committer
+            type: RECORD
+            fields:
+              - {name: name, type: STRING}
+              - {name: email, type: STRING}
+          - {name: repo_name, type: STRING}
+        rows:
+          - commit: abc123
+            author: {name: Alice Author, email: alice@example.com}
+            committer: {name: Bob Committer, email: bob@example.com}
+            repo_name: bigquery-emulator
+          - commit: def456
+            author: {name: Carol Author, email: carol@example.com}
+            committer: {name: Dan Committer, email: dan@example.com}
+            repo_name: nodejs-bigquery
   - id: stackoverflow
     project_id: bigquery-public-data
     tables:
