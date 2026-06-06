@@ -28,6 +28,21 @@ namespace scan_eval_internal {
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
 
+void PopulateColumnNameBindings(
+    const ::googlesql::ResolvedScan* scan,
+    const ColumnBindings& row,
+    absl::flat_hash_map<std::string, ::googlesql::Value>& out) {
+  out.clear();
+  if (scan == nullptr) return;
+  for (int i = 0; i < scan->column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = scan->column_list(i);
+    auto it = row.find(col.column_id());
+    if (it == row.end()) continue;
+    out[std::string(col.name())] = it->second;
+    out[absl::StrCat(col.table_name(), ".", col.name())] = it->second;
+  }
+}
+
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
     const std::vector<ColumnBindings>& input_rows,

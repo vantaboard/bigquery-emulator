@@ -313,8 +313,12 @@ absl::Status PopulateParameterOptions(const QueryRequest& request,
   if (request.parameters.empty()) return absl::OkStatus();
   bool has_named = false;
   bool has_positional = false;
+  // Positional parameters arrive with an empty name after
+  // `ProtoToEngineRequest` strips synthetic `pN` keys. Explicit REST
+  // named parameters may legally use `p0`/`p1` labels; treat any
+  // non-empty name as named so analyzer mode matches `@p0` SQL.
   for (const QueryParameter& p : request.parameters) {
-    if (semantic::IsPositionalParameterName(p.name)) {
+    if (p.name.empty()) {
       has_positional = true;
     } else {
       has_named = true;
@@ -330,7 +334,7 @@ absl::Status PopulateParameterOptions(const QueryRequest& request,
   for (const QueryParameter& p : request.parameters) {
     auto type_or = ParameterTypeForQueryParameter(p, type_factory);
     if (!type_or.ok()) return type_or.status();
-    if (semantic::IsPositionalParameterName(p.name)) {
+    if (p.name.empty()) {
       absl::Status s = options.AddPositionalQueryParameter(*type_or);
       if (!s.ok()) return s;
     } else {

@@ -143,6 +143,82 @@ std::string Transpiler::EmitQueryStmt(
   return sql;
 }
 
+std::string Transpiler::EmitCtasSelect(
+    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt) {
+  if (stmt == nullptr || stmt->query() == nullptr) return "";
+  output_order_items_.clear();
+  input_has_rn_column_ = false;
+  input_rn_ordering_ = false;
+  output_includes_input_rn_ = false;
+  query_output_column_names_.clear();
+  query_output_column_names_.reserve(stmt->column_definition_list_size());
+  for (const auto& def : stmt->column_definition_list()) {
+    if (def != nullptr) {
+      query_output_column_names_.push_back(def->name());
+    }
+  }
+  std::string inner = EmitScan(stmt->query());
+  if (inner.empty()) return "";
+  std::vector<std::string> outputs;
+  outputs.reserve(stmt->column_definition_list_size());
+  std::vector<std::string> outer_refs;
+  outer_refs.reserve(stmt->column_definition_list_size());
+  for (const auto& def : stmt->column_definition_list()) {
+    if (def == nullptr) return "";
+    auto oc = ::googlesql::MakeResolvedOutputColumn(def->name(), def->column());
+    std::string emitted = EmitOutputColumn(oc.get());
+    if (emitted.empty()) return "";
+    outputs.push_back(std::move(emitted));
+    outer_refs.push_back(internal::QuoteIdent(def->name()));
+  }
+  if (outputs.empty()) return "";
+  std::string sql = absl::StrCat(
+      "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
+  query_output_column_names_.clear();
+  return sql;
+}
+
+std::string Transpiler::EmitInsertSelect(
+    const ::googlesql::ResolvedInsertStmt* stmt) {
+  if (stmt == nullptr || stmt->query() == nullptr) return "";
+  output_order_items_.clear();
+  input_has_rn_column_ = false;
+  input_rn_ordering_ = false;
+  output_includes_input_rn_ = false;
+  query_output_column_names_.clear();
+  query_output_column_names_.reserve(stmt->query_output_column_list_size());
+  for (int i = 0; i < stmt->query_output_column_list_size(); ++i) {
+    query_output_column_names_.push_back(
+        stmt->query_output_column_list(i).name());
+  }
+  std::string inner = EmitScan(stmt->query());
+  if (inner.empty()) return "";
+  std::vector<std::string> outputs;
+  outputs.reserve(stmt->query_output_column_list_size());
+  for (int i = 0; i < stmt->query_output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = stmt->query_output_column_list(i);
+    auto oc = ::googlesql::MakeResolvedOutputColumn(col.name(), col);
+    std::string emitted = EmitOutputColumn(oc.get());
+    if (emitted.empty()) return "";
+    outputs.push_back(std::move(emitted));
+  }
+  if (outputs.empty()) return "";
+  std::string sql = absl::StrCat(
+      "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
+  if (!output_order_items_.empty()) {
+    absl::StrAppend(
+        &sql, " ORDER BY ", absl::StrJoin(output_order_items_, ", "));
+    output_order_items_.clear();
+    input_rn_ordering_ = false;
+  } else if (input_rn_ordering_) {
+    absl::StrAppend(
+        &sql, " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol));
+    input_rn_ordering_ = false;
+  }
+  query_output_column_names_.clear();
+  return sql;
+}
+
 // Scans ---------------------------------------------------------------------
 
 std::string Transpiler::EmitProjectScan(

@@ -40,20 +40,8 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
   for (const QueryParameter& p : request.parameters) {
     auto value = ParseParameterValue(p.value_json, p.type_kind, p.type_json);
     if (!value.ok()) return value.status();
-    if (IsPositionalParameterName(p.name)) {
-      if (p.name.empty()) {
-        bindings.by_position.push_back(*std::move(value));
-      } else {
-        const int idx = SyntheticPositionalParameterIndex(p.name);
-        if (idx < 0) {
-          return absl::InvalidArgumentError(absl::StrCat(
-              "script: invalid synthetic positional parameter '", p.name, "'"));
-        }
-        if (bindings.by_position.size() <= static_cast<size_t>(idx)) {
-          bindings.by_position.resize(static_cast<size_t>(idx) + 1);
-        }
-        bindings.by_position[static_cast<size_t>(idx)] = *std::move(value);
-      }
+    if (p.name.empty()) {
+      bindings.by_position.push_back(*std::move(value));
       any_positional = true;
     } else {
       bindings.by_name[absl::AsciiStrToLower(p.name)] = *std::move(value);

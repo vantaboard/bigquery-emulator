@@ -4,13 +4,16 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
@@ -20,6 +23,88 @@ namespace semantic {
 
 using scan_eval_internal::MaterializeScanImpl;
 using scan_eval_internal::StripBarrierScans;
+
+namespace {
+
+void BindCorrelatedSubqueryColumns(
+    const ::googlesql::ResolvedSubqueryExpr& node,
+    const EvalContext& ctx,
+    ColumnBindings& bindings) {
+  if (ctx.columns == nullptr || node.parameter_list_size() == 0) {
+    return;
+  }
+  absl::flat_hash_map<std::string, ::googlesql::Value> outer_by_key;
+  auto lookup_outer_value =
+      [&](const ::googlesql::ResolvedColumn& col) -> const ::googlesql::Value* {
+    if (ctx.columns != nullptr) {
+      auto it = ctx.columns->find(col.column_id());
+      if (it != ctx.columns->end()) return &it->second;
+    }
+    if (ctx.columns_by_name != nullptr) {
+      const std::string qualified =
+          absl::StrCat(col.table_name(), ".", col.name());
+      auto it = ctx.columns_by_name->find(qualified);
+      if (it != ctx.columns_by_name->end()) return &it->second;
+      it = ctx.columns_by_name->find(col.name());
+      if (it != ctx.columns_by_name->end()) return &it->second;
+    }
+    return nullptr;
+  };
+  for (int i = 0; i < node.parameter_list_size(); ++i) {
+    const auto* param = node.parameter_list(i);
+    if (param == nullptr) continue;
+    const ::googlesql::ResolvedColumn& outer_col = param->column();
+    const ::googlesql::Value* val = lookup_outer_value(outer_col);
+    if (val == nullptr) continue;
+    const std::string qualified =
+        absl::StrCat(outer_col.table_name(), ".", outer_col.name());
+    outer_by_key[qualified] = *val;
+    outer_by_key[std::string(outer_col.name())] = *val;
+    bindings[outer_col.column_id()] = *val;
+  }
+
+  struct CorrelatedBinder : public ::googlesql::ResolvedASTVisitor {
+    const absl::flat_hash_map<std::string, ::googlesql::Value>& outer;
+    ColumnBindings& bind;
+
+    CorrelatedBinder(
+        const absl::flat_hash_map<std::string, ::googlesql::Value>& outer_in,
+        ColumnBindings& bind_in)
+        : outer(outer_in), bind(bind_in) {}
+
+    absl::Status DefaultVisit(const ::googlesql::ResolvedNode* n) override {
+      return ::googlesql::ResolvedASTVisitor::DefaultVisit(n);
+    }
+
+    absl::Status VisitResolvedColumnRef(
+        const ::googlesql::ResolvedColumnRef* ref) override {
+      if (ref == nullptr) {
+        return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
+      }
+      const int col_id = ref->column().column_id();
+      if (bind.contains(col_id)) {
+        return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
+      }
+      const std::string qualified =
+          absl::StrCat(ref->column().table_name(), ".", ref->column().name());
+      auto it = outer.find(qualified);
+      if (it == outer.end()) {
+        it = outer.find(std::string(ref->column().name()));
+      }
+      if (it != outer.end()) {
+        bind.emplace(col_id, it->second);
+      }
+      return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
+    }
+  };
+
+  if (node.subquery() != nullptr) {
+    CorrelatedBinder binder{outer_by_key, bindings};
+    (void)node.subquery()->Accept(&binder);
+  }
+}
+
+}  // namespace
 
 absl::StatusOr<const ::googlesql::ResolvedProjectScan*> FindOutputProjectScan(
     const ::googlesql::ResolvedScan* scan) {
@@ -89,7 +174,9 @@ absl::StatusOr<Value> EvalSubqueryExpr(
   if (ctx.columns != nullptr) {
     outer_bind = *ctx.columns;
   }
+  BindCorrelatedSubqueryColumns(node, ctx, outer_bind);
   inner_ctx.columns = &outer_bind;
+  inner_ctx.columns_by_name = ctx.columns_by_name;
 
   auto rows_or = MaterializeScanImpl(node.subquery(), inner_ctx);
   if (!rows_or.ok()) return rows_or.status();

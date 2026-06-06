@@ -198,7 +198,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 
 	useLegacy := req.UseLegacySQL != nil && *req.UseLegacySQL
 	sql := expandQueryParamsInSQL(req.Query, req.Parameters)
-	bindParams := stripExpandedPositionalArrayParams(req.Query, req.Parameters)
+	bindParams := stripExpandedArrayParams(req.Query, sql, req.Parameters)
 	sql, sqlErr := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
 	if writeLegacySQLError(w, sqlErr) {
 		return
@@ -285,7 +285,11 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, out)
 }
 
-// parametersToEngineMap converts the REST `queryParameters` list
+// positionalParameterMapKey is the proto map key for a positional
+// query parameter (REST entries with an empty `name`). The key must
+// not collide with legitimate named parameters such as `@p0`.
+const positionalParameterMapKeyPrefix = "__pos_"
+
 // into the engine's `map<string, QueryParameter>` proto field
 // (defined in `proto/emulator.proto`). The gateway's wire payload
 // is a list of `QueryParameter` objects, each carrying `name`,
@@ -311,7 +315,7 @@ func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.Que
 		}
 		name := p.Name
 		if name == "" {
-			name = "p" + strconv.Itoa(positionalIdx)
+			name = positionalParameterMapKeyPrefix + strconv.Itoa(positionalIdx)
 			positionalIdx++
 		}
 		typeKind, typeJSON := bqtypes.ParameterTypeWire(p.ParameterType)

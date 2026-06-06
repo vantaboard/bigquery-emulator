@@ -28,6 +28,8 @@ struct EvalContext {
   absl::string_view project_id;
   const ParameterBindings* parameters = nullptr;
   const ColumnBindings* columns = nullptr;
+  const absl::flat_hash_map<std::string, ::googlesql::Value>* columns_by_name =
+      nullptr;
   const FrameStack* arguments = nullptr;
   const absl::flat_hash_map<std::string, CteTable>* with_tables = nullptr;
   mutable std::optional<std::string> bignumeric_render_override;

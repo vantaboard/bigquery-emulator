@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/eval_expr.h"
@@ -27,6 +28,10 @@ int CompareArrayAggOrderKey(const ::googlesql::ResolvedOrderByItem& item,
                             const Value& vb);
 absl::StatusOr<bool> EvalBoolExpr(const ::googlesql::ResolvedExpr* expr,
                                   EvalContext& ctx);
+void PopulateColumnNameBindings(
+    const ::googlesql::ResolvedScan* scan,
+    const ColumnBindings& row,
+    absl::flat_hash_map<std::string, ::googlesql::Value>& out);
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
     const std::vector<ColumnBindings>& input_rows,
@@ -59,6 +64,8 @@ absl::StatusOr<Value> EvalArrayAgg(
     EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
+    const ::googlesql::ResolvedAnalyticScan& analytic, EvalContext& ctx);
 
 }  // namespace scan_eval_internal
 }  // namespace semantic

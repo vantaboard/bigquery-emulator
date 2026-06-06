@@ -42,27 +42,35 @@ func expandArrayParamsInSQL(sql string, params []bqtypes.QueryParameter) string 
 		}
 		list := strings.Join(quoted, ", ")
 		name := p.Name
+		out = strings.ReplaceAll(out, "NOT IN UNNEST(@"+name+")", "NOT IN ("+list+")")
+		out = strings.ReplaceAll(out, "NOT IN UNNEST(`"+name+"`)", "NOT IN ("+list+")")
 		out = strings.ReplaceAll(out, "IN UNNEST(@"+name+")", "IN ("+list+")")
 		out = strings.ReplaceAll(out, "IN UNNEST(`"+name+"`)", "IN ("+list+")")
 	}
 	return out
 }
 
-// stripExpandedPositionalArrayParams removes positional ARRAY parameters
-// that expandQueryParamsInSQL inlined via IN UNNEST(?) so engine binding
-// indices stay aligned with the remaining ? placeholders.
-func stripExpandedPositionalArrayParams(sql string, params []bqtypes.QueryParameter) []bqtypes.QueryParameter {
+// stripExpandedArrayParams removes ARRAY parameters that expandQueryParamsInSQL
+// inlined via IN/NOT IN UNNEST so the engine is not asked to bind them.
+func stripExpandedArrayParams(
+	originalSQL, expandedSQL string,
+	params []bqtypes.QueryParameter,
+) []bqtypes.QueryParameter {
 	if len(params) == 0 {
 		return params
 	}
-	remaining := sql
 	out := make([]bqtypes.QueryParameter, 0, len(params))
+	remaining := originalSQL
 	for _, p := range params {
-		if p.Name != "" || p.ParameterType == nil {
+		if p.ParameterType == nil ||
+			strings.ToUpper(strings.TrimSpace(p.ParameterType.Type)) != sqlTypeARRAY {
 			out = append(out, p)
 			continue
 		}
-		if strings.ToUpper(strings.TrimSpace(p.ParameterType.Type)) != "ARRAY" {
+		if p.Name != "" {
+			if namedArrayParamWasExpanded(originalSQL, expandedSQL, p.Name) {
+				continue
+			}
 			out = append(out, p)
 			continue
 		}
@@ -75,9 +83,29 @@ func stripExpandedPositionalArrayParams(sql string, params []bqtypes.QueryParame
 			continue
 		}
 		remaining = strings.Replace(remaining, "IN UNNEST(?)", "IN (__expanded__)", 1)
-		continue
 	}
 	return out
+}
+
+func namedArrayParamWasExpanded(originalSQL, expandedSQL, name string) bool {
+	for _, pattern := range []string{
+		"IN UNNEST(@" + name + ")",
+		"NOT IN UNNEST(@" + name + ")",
+		"IN UNNEST(`" + name + "`)",
+		"NOT IN UNNEST(`" + name + "`)",
+	} {
+		if strings.Contains(originalSQL, pattern) && !strings.Contains(expandedSQL, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripExpandedPositionalArrayParams removes positional ARRAY parameters
+// that expandQueryParamsInSQL inlined via IN UNNEST(?) so engine binding
+// indices stay aligned with the remaining ? placeholders.
+func stripExpandedPositionalArrayParams(sql string, params []bqtypes.QueryParameter) []bqtypes.QueryParameter {
+	return stripExpandedArrayParams(sql, expandQueryParamsInSQL(sql, params), params)
 }
 
 func expandPositionalArrayParamsInSQL(sql string, params []bqtypes.QueryParameter) string {

@@ -42,6 +42,35 @@ func TestExpandPositionalArrayParamsInSQL(t *testing.T) {
 	}
 }
 
+func TestExpandNamedArrayParamsNotInUnnest(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"name":"p0",
+		"parameterType":{"type":"` + sqlTypeARRAY + `","arrayType":{"type":"` + sqlTypeSTRING + `"}},
+		"parameterValue":{"arrayValues":[{"value":"voided"},{"value":"refunded"}]}
+	},{
+		"name":"p1",
+		"parameterType":{"type":"` + sqlTypeINT64 + `"},
+		"parameterValue":{"value":"1"}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	sql := `SELECT 1 FROM t WHERE status NOT IN UNNEST(@p0) AND n >= @p1`
+	expanded := expandQueryParamsInSQL(sql, params)
+	want := `SELECT 1 FROM t WHERE status NOT IN ('voided', 'refunded') AND n >= @p1`
+	if expanded != want {
+		t.Fatalf("expandQueryParamsInSQL:\n got:  %s\n want: %s", expanded, want)
+	}
+	got := stripExpandedArrayParams(sql, expanded, params)
+	if len(got) != 1 {
+		t.Fatalf("stripExpandedArrayParams len = %d, want 1 (array stripped)", len(got))
+	}
+	if got[0].Name != "p1" {
+		t.Fatalf("remaining param = %q, want p1", got[0].Name)
+	}
+}
+
 func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 	t.Parallel()
 
@@ -68,9 +97,9 @@ func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 		p.GetValueJson() != "romeoandjuliet" {
 		t.Errorf("corpus = %+v", p)
 	}
-	if p := got["p0"]; p == nil || p.GetTypeKind() != sqlTypeINT64 ||
+	if p := got["__pos_0"]; p == nil || p.GetTypeKind() != sqlTypeINT64 ||
 		p.GetValueJson() != "250" {
-		t.Errorf("p0 = %+v, want INT64/250", p)
+		t.Errorf("__pos_0 = %+v, want INT64/250", p)
 	}
 }
 

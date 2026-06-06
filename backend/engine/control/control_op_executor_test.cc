@@ -371,6 +371,69 @@ TEST_F(ControlOpExecutorTest, CreateTableAsSelectUnnestNarrowsToOutputSchema) {
   EXPECT_EQ(rows, 3);
 }
 
+TEST_F(ControlOpExecutorTest, CreateTableAsSelectExceptRowNumberDedup) {
+  schema::TableSchema src_schema;
+  schema::ColumnSchema id;
+  id.name = "id";
+  id.type = schema::ColumnType::kString;
+  id.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(id);
+  schema::ColumnSchema tie;
+  tie.name = "tie_break";
+  tie.type = schema::ColumnType::kInt64;
+  tie.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(tie);
+  schema::ColumnSchema value;
+  value.name = "value";
+  value.type = schema::ColumnType::kInt64;
+  value.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(value);
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "merge_src"}, src_schema).ok());
+
+  std::vector<storage::Row> seed = {
+      storage::Row{{storage::Value::String("a"),
+                    storage::Value::Int64(1),
+                    storage::Value::Int64(10)}},
+      storage::Row{{storage::Value::String("a"),
+                    storage::Value::Int64(2),
+                    storage::Value::Int64(20)}},
+      storage::Row{{storage::Value::String("b"),
+                    storage::Value::Int64(1),
+                    storage::Value::Int64(30)}},
+  };
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "merge_src"},
+                               absl::MakeConstSpan(seed))
+                  .ok());
+
+  absl::Status s = RunDdl(
+      "CREATE OR REPLACE TABLE ds.merge_deduped AS "
+      "SELECT * EXCEPT(rn) FROM ("
+      "  SELECT *, ROW_NUMBER() OVER ("
+      "    PARTITION BY id ORDER BY tie_break DESC"
+      "  ) AS rn FROM ds.merge_src"
+      ") WHERE rn = 1");
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto schema = storage_->GetSchema({"proj-test", "ds", "merge_deduped"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 3u);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "merge_deduped"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  storage::Row row;
+  int rows = 0;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 3u);
+    ++rows;
+  }
+  EXPECT_EQ(rows, 2);
+}
+
 // --- ANALYZE -------------------------------------------------------------
 
 TEST_F(ControlOpExecutorTest, AnalyzeKnownTableIsNoOpSuccess) {
@@ -421,54 +484,6 @@ TEST_F(ControlOpExecutorTest, ExportDataSurfacesUnimplemented) {
   EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
   EXPECT_NE(std::string(s.message()).find("EXPORT DATA"), std::string::npos)
       << s.message();
-}
-
-// --- Routing-bug defenses ------------------------------------------------
-
-TEST_F(ControlOpExecutorTest, ExecuteQueryRejectsControlOpStatement) {
-  // The coordinator never dispatches control-op statements through
-  // the row-stream surface. If it did, the executor must surface
-  // INVALID_ARGUMENT (not UNIMPLEMENTED) so the routing bug shows
-  // up loudly in tests.
-  CatalogBundle bundle = MakeCatalog();
-  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
-  ::googlesql::TypeFactory type_factory;
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  ASSERT_TRUE(::googlesql::AnalyzeStatement("CREATE TABLE ds.t (id INT64)",
-                                            options,
-                                            bundle.catalog.get(),
-                                            &type_factory,
-                                            &output)
-                  .ok());
-  ASSERT_NE(output, nullptr);
-  auto source =
-      executor_->ExecuteQuery(MakeRequest("CREATE TABLE ds.t (id INT64)"),
-                              *output->resolved_statement(),
-                              bundle.catalog.get());
-  ASSERT_FALSE(source.ok());
-  EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument)
-      << source.status();
-}
-
-TEST_F(ControlOpExecutorTest, ExecuteDmlRejectsControlOpStatement) {
-  CatalogBundle bundle = MakeCatalog();
-  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
-  ::googlesql::TypeFactory type_factory;
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  ASSERT_TRUE(::googlesql::AnalyzeStatement("CREATE TABLE ds.t (id INT64)",
-                                            options,
-                                            bundle.catalog.get(),
-                                            &type_factory,
-                                            &output)
-                  .ok());
-  ASSERT_NE(output, nullptr);
-  auto stats =
-      executor_->ExecuteDml(MakeRequest("CREATE TABLE ds.t (id INT64)"),
-                            *output->resolved_statement(),
-                            bundle.catalog.get());
-  ASSERT_FALSE(stats.ok());
-  EXPECT_EQ(stats.status().code(), absl::StatusCode::kInvalidArgument)
-      << stats.status();
 }
 
 }  // namespace

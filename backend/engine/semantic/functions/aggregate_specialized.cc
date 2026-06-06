@@ -390,6 +390,47 @@ absl::StatusOr<Value> SumAggregate(
   }
 }
 
+absl::StatusOr<Value> CountAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  const bool distinct = call.distinct();
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
+  if (distinct) {
+    std::set<std::string> seen;
+    int64_t count = 0;
+    for (const RowValue& row : rows) {
+      if (row.is_null) continue;
+      if (seen.insert(row.v.DebugString()).second) {
+        ++count;
+      }
+    }
+    return Value::Int64(count);
+  }
+  int64_t count = 0;
+  for (const RowValue& row : rows) {
+    if (!row.is_null) {
+      ++count;
+    }
+  }
+  return Value::Int64(count);
+}
+
+absl::StatusOr<Value> CountIfAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
+  int64_t count = 0;
+  for (const RowValue& row : rows) {
+    if (row.is_null) continue;
+    if (row.v.type_kind() == ::googlesql::TYPE_BOOL && row.v.bool_value()) {
+      ++count;
+    }
+  }
+  return Value::Int64(count);
+}
+
 absl::StatusOr<Value> EvalAggregateCall(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values) {
@@ -403,6 +444,12 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "sum") {
     return SumAggregate(call, input_column_values);
+  }
+  if (name == "count") {
+    return CountAggregate(call, input_column_values);
+  }
+  if (name == "countif") {
+    return CountIfAggregate(call, input_column_values);
   }
   if (name == "approx_count_distinct") {
     return ApproxCountDistinct(call, input_column_values);

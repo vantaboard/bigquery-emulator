@@ -241,6 +241,24 @@ TEST_F(RouteClassifierTest, StandaloneUnnestStaysOnFastPath) {
   RouteDecision d = classifier_.Classify(*stmt);
   EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
 }
+
+TEST_F(RouteClassifierTest, InsertSelectQualifyRoutesToDuckdbNative) {
+  const auto* stmt = Analyze(
+      "INSERT INTO people (id, name) "
+      "SELECT * FROM people "
+      "QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) = 1");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+}
+
+TEST_F(RouteClassifierTest, InsertValuesStaysOnSemanticExecutor) {
+  const auto* stmt = Analyze("INSERT INTO people (id, name) VALUES (1, 'a')");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedInsertStmt");
+}
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

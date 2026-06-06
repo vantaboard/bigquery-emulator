@@ -131,9 +131,24 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
       auto input = MaterializeScanImpl(filter->input_scan(), ctx);
       if (!input.ok()) return input.status();
       std::vector<ColumnBindings> out;
+      absl::flat_hash_map<std::string, ::googlesql::Value> by_name;
       for (const ColumnBindings& row : *input) {
+        ColumnBindings merged;
+        if (ctx.columns != nullptr) {
+          merged = *ctx.columns;
+        }
+        for (const auto& [col_id, val] : row) {
+          merged[col_id] = val;
+        }
         EvalContext row_ctx = ctx;
-        row_ctx.columns = &row;
+        row_ctx.columns = &merged;
+        PopulateColumnNameBindings(filter->input_scan(), merged, by_name);
+        if (ctx.columns_by_name != nullptr) {
+          for (const auto& [name, val] : *ctx.columns_by_name) {
+            by_name[name] = val;
+          }
+        }
+        row_ctx.columns_by_name = &by_name;
         auto ok = EvalBoolExpr(filter->filter_expr(), row_ctx);
         if (!ok.ok()) return ok.status();
         if (*ok) out.push_back(row);
@@ -196,7 +211,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
           return absl::InternalError("semantic: malformed WithEntry");
         }
         const ::googlesql::ResolvedScan* sub = entry->with_subquery();
-        auto rows = MaterializeScanImpl(sub, ctx);
+        EvalContext entry_ctx = ctx;
+        entry_ctx.with_tables = &tables;
+        auto rows = MaterializeScanImpl(sub, entry_ctx);
         if (!rows.ok()) return rows.status();
         CteTable table;
         table.rows = *std::move(rows);
@@ -222,6 +239,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_AGGREGATE_SCAN:
       return MaterializeAggregateScan(
           *scan->GetAs<::googlesql::ResolvedAggregateScan>(), ctx);
+    case ::googlesql::RESOLVED_ANALYTIC_SCAN:
+      return MaterializeAnalyticScan(
+          *scan->GetAs<::googlesql::ResolvedAnalyticScan>(), ctx);
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return MaterializeLimitOffsetScan(
           *scan->GetAs<::googlesql::ResolvedLimitOffsetScan>(), ctx);

@@ -42,6 +42,7 @@ cc_library(
     srcs = [
         "duckdb_executor_ddl.cc",
         "duckdb_executor_dml.cc",
+        "duckdb_executor_insert_select.cc",
         "duckdb_executor_literals.cc",
         "duckdb_executor_query.cc",
     ],

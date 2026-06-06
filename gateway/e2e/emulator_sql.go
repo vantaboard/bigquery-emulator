@@ -427,6 +427,17 @@ func argToParameter(arg any) (map[string]any, map[string]any, error) {
 		return map[string]any{"type": "STRING"}, map[string]any{"value": v}, nil
 	case []byte:
 		return map[string]any{"type": "BYTES"}, map[string]any{"value": base64.StdEncoding.EncodeToString(v)}, nil
+	case []string:
+		vals := make([]map[string]any, 0, len(v))
+		for _, s := range v {
+			vals = append(vals, map[string]any{"value": s})
+		}
+		return map[string]any{
+				"type":      "ARRAY",
+				"arrayType": map[string]any{"type": "STRING"},
+			}, map[string]any{
+				"arrayValues": vals,
+			}, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported query arg type %T", arg)
 	}

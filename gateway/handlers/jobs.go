@@ -396,7 +396,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	sql := expandQueryParamsInSQL(cfg.Query.Query, cfg.Query.QueryParameters)
-	bindParams := stripExpandedPositionalArrayParams(cfg.Query.Query, cfg.Query.QueryParameters)
+	bindParams := stripExpandedArrayParams(cfg.Query.Query, sql, cfg.Query.QueryParameters)
 	sql, sqlErr := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
 	if sqlErr != nil {
 		start := time.Now().UTC()

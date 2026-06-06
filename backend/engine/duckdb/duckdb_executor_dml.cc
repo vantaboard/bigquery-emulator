@@ -14,7 +14,9 @@
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
+#include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
@@ -222,6 +224,16 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
   if (storage_ == nullptr) {
     return absl::FailedPreconditionError(
         "DuckDbExecutor::ExecuteDml: storage backend is not configured");
+  }
+
+  if (stmt.node_kind() == ::googlesql::RESOLVED_INSERT_STMT) {
+    const auto* insert_stmt = stmt.GetAs<::googlesql::ResolvedInsertStmt>();
+    if (insert_stmt->query() == nullptr) {
+      return absl::UnimplementedError(
+          "duckdb engine: INSERT VALUES routes to semantic_executor; see "
+          "docs/ENGINE_POLICY.md");
+    }
+    return internal::RunInsertSelect(request, storage_, *insert_stmt);
   }
 
   if (stmt.node_kind() != ::googlesql::RESOLVED_MERGE_STMT) {

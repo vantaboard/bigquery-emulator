@@ -393,36 +393,76 @@ LEFT OUTER JOIN (
   EXPECT_EQ(row.cells[1].string_value(), "John");
 }
 
-TEST_F(DuckDbExecutorTest,
-       ExecuteDdlRejectsCreateTableAfterControlOpMigration) {
-  // CREATE TABLE / CTAS / DROP TABLE / ANALYZE moved to
-  // `backend/engine/control/control_op_executor.cc` when
-  // `docs/ENGINE_POLICY.md` landed. The coordinator's
-  // `RouteClassifier` dispatches them to the `ControlOpExecutor`
-  // directly; the DuckDB executor's `ExecuteDdl` only handles
-  // `ALTER TABLE`. Defensively, calling the DuckDB executor with a
-  // CREATE TABLE statement (the routing-bug case) must surface
-  // UNIMPLEMENTED with a message that names the new owning
-  // package, so a routing regression shows up loudly instead of
-  // silently re-running the legacy code path.
+TEST_F(DuckDbExecutorTest, ExecuteDmlInsertSelectQualifyDedupesRows) {
+  schema::TableSchema src_schema;
+  schema::ColumnSchema id;
+  id.name = "id";
+  id.type = schema::ColumnType::kString;
+  id.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(id);
+  schema::ColumnSchema tie;
+  tie.name = "tie_break";
+  tie.type = schema::ColumnType::kInt64;
+  tie.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(tie);
+  schema::ColumnSchema value;
+  value.name = "value";
+  value.type = schema::ColumnType::kInt64;
+  value.mode = schema::ColumnMode::kRequired;
+  src_schema.columns.push_back(value);
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "ins_src"}, src_schema).ok());
+  schema::TableSchema dst_schema = src_schema;
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "ins_dst"}, dst_schema).ok());
+
+  std::vector<storage::Row> seed = {
+      storage::Row{{storage::Value::String("a"),
+                    storage::Value::Int64(1),
+                    storage::Value::Int64(10)}},
+      storage::Row{{storage::Value::String("a"),
+                    storage::Value::Int64(2),
+                    storage::Value::Int64(20)}},
+      storage::Row{{storage::Value::String("b"),
+                    storage::Value::Int64(1),
+                    storage::Value::Int64(30)}},
+  };
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "ins_src"},
+                               absl::MakeConstSpan(seed))
+                  .ok());
+
+  const std::string sql =
+      "INSERT INTO ds.ins_dst (id, tie_break, value) "
+      "SELECT * FROM ds.ins_src "
+      "QUALIFY ROW_NUMBER() OVER ("
+      "  PARTITION BY id ORDER BY tie_break DESC"
+      ") = 1";
   CatalogBundle bundle = MakeCatalog();
-  auto analyzed = Analyze("CREATE TABLE ds.t (id INT64, name STRING)",
-                          bundle.catalog.get(),
-                          /*all_statements=*/true);
+  auto analyzed = Analyze(sql, bundle.catalog.get(), /*all_statements=*/true);
   ASSERT_TRUE(analyzed.ok()) << analyzed.status();
   const ::googlesql::ResolvedStatement* stmt =
       (*analyzed)->resolved_statement();
   ASSERT_NE(stmt, nullptr);
 
-  absl::Status s = executor_->ExecuteDdl(
-      MakeRequest("CREATE TABLE ds.t (id INT64, name STRING)"),
-      *stmt,
-      bundle.catalog.get());
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("ControlOpExecutor"),
-            std::string::npos)
-      << s.message();
+  auto stats =
+      executor_->ExecuteDml(MakeRequest(sql), *stmt, bundle.catalog.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->inserted_row_count, 2);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "ins_dst"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  storage::Row row;
+  int rows = 0;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 3u);
+    ++rows;
+  }
+  EXPECT_EQ(rows, 2);
 }
 
 }  // namespace

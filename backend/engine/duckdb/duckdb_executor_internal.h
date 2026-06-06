@@ -88,6 +88,11 @@ absl::StatusOr<std::vector<storage::Row>> ReadBackTable(
 DmlStats DiffByPrimaryKey(absl::Span<const storage::Row> before,
                           absl::Span<const storage::Row> after);
 
+absl::StatusOr<DmlStats> RunInsertSelect(
+    const QueryRequest& request,
+    storage::Storage* storage,
+    const ::googlesql::ResolvedInsertStmt& insert);
+
 absl::Status RunAlterTableAddColumn(
     storage::Storage& storage,
     absl::string_view project_id,

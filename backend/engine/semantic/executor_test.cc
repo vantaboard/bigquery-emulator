@@ -328,6 +328,45 @@ TEST_F(SemanticExecutorTest, DdlSurfacesNotImplemented) {
   EXPECT_EQ(out.code(), absl::StatusCode::kUnimplemented);
 }
 
+TEST_F(SemanticExecutorTest, ChainedCteReferencesPriorEntry) {
+  const std::string sql =
+      "WITH base AS (SELECT 1 AS n UNION ALL SELECT 2 AS n), "
+      "     doubled AS (SELECT n * 2 AS m FROM base) "
+      "SELECT SUM(m) AS total FROM doubled";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  EXPECT_EQ(row.cells[0].int64_value(), 6);
+}
+
+TEST_F(SemanticExecutorTest, ChainedCteWithRowNumberAnalyticScan) {
+  const std::string sql =
+      "WITH base AS (SELECT 1 AS id UNION ALL SELECT 1 AS id), "
+      "     ranked AS ("
+      "       SELECT id, ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) AS rn "
+      "       FROM base"
+      "     ) "
+      "SELECT COUNT(*) AS c FROM ranked WHERE rn = 1";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  EXPECT_EQ(row.cells[0].int64_value(), 1);
+}
+
 }  // namespace
 }  // namespace semantic
 }  // namespace engine

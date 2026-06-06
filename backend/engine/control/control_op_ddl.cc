@@ -189,29 +189,10 @@ absl::StatusOr<std::string> BuildDuckdbCtasSql(
         "ControlOpExecutor::ExecuteDdl: CTAS has null query scan");
   }
   duckdb::transpiler::Transpiler transpiler;
-  std::string inner_sql = transpiler.TranspileScan(stmt->query());
-  if (inner_sql.empty()) {
+  std::string select_sql = transpiler.EmitCtasSelect(stmt);
+  if (select_sql.empty()) {
     return absl::UnimplementedError(
         "control op executor: CTAS query scan did not transpile to DuckDB SQL");
-  }
-  // Mirror `DuckDbExecutor::ExecuteQuery` / `EmitQueryStmt`: the inner
-  // scan emit may retain helper columns (e.g. UNNEST ordinality's
-  // `__bq_input_rn`) or extra pass-through columns the analyzer kept
-  // on the underlying scan. Wrap with an outer projection keyed on the
-  // CTAS `column_definition_list` so DuckDB materializes exactly the
-  // BigQuery schema we drain back into storage.
-  std::vector<std::string> output_cols;
-  output_cols.reserve(stmt->column_definition_list_size());
-  for (const auto& def : stmt->column_definition_list()) {
-    if (def == nullptr) continue;
-    output_cols.push_back(QuoteIdent(def->name()));
-  }
-  std::string select_sql;
-  if (output_cols.empty()) {
-    select_sql = std::move(inner_sql);
-  } else {
-    select_sql = absl::StrCat(
-        "SELECT ", absl::StrJoin(output_cols, ", "), " FROM (", inner_sql, ")");
   }
   if (!transpiler.parameter_order().empty()) {
     auto substituted = SubstituteDuckdbParameters(

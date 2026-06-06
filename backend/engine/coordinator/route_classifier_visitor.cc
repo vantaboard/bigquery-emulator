@@ -155,6 +155,43 @@ absl::Status RouteClassifierVisitor::VisitResolvedArrayScan(
   return ::googlesql::ResolvedASTVisitor::VisitResolvedArrayScan(node);
 }
 
+absl::Status RouteClassifierVisitor::VisitResolvedInsertStmt(
+    const ::googlesql::ResolvedInsertStmt* node) {
+  bool duckdb_insert_select = false;
+  if (node != nullptr && node->query() != nullptr) {
+    RouteClassifierVisitor inner;
+    absl::Status inner_walk = node->query()->Accept(&inner);
+    if (!inner_walk.ok()) return inner_walk;
+    const Disposition inner_d = inner.disposition();
+    if (inner_d == Disposition::kDuckdbNative ||
+        inner_d == Disposition::kDuckdbRewrite ||
+        inner_d == Disposition::kDuckdbUdf) {
+      MaybePromote(inner_d, "ResolvedInsertStmt(SELECT)");
+      duckdb_insert_select = true;
+    }
+  }
+  if (node != nullptr && !duckdb_insert_select) {
+    CheckNodeClass(node);
+  }
+  if (node == nullptr) return absl::OkStatus();
+  if (node->table_scan() != nullptr) {
+    absl::Status s = node->table_scan()->Accept(this);
+    if (!s.ok()) return s;
+  }
+  if (!duckdb_insert_select && node->query() != nullptr) {
+    absl::Status s = node->query()->Accept(this);
+    if (!s.ok()) return s;
+  }
+  for (int i = 0; i < node->row_list_size(); ++i) {
+    const ::googlesql::ResolvedInsertRow* row = node->row_list(i);
+    if (row != nullptr) {
+      absl::Status s = row->Accept(this);
+      if (!s.ok()) return s;
+    }
+  }
+  return absl::OkStatus();
+}
+
 void RouteClassifierVisitor::CheckNodeClass(
     const ::googlesql::ResolvedNode* node) {
   std::string class_name = absl::StrCat("Resolved", node->node_kind_string());

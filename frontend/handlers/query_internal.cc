@@ -18,7 +18,24 @@
 
 namespace bigquery_emulator {
 namespace frontend {
+namespace {
+
+constexpr absl::string_view kGatewayPositionalParameterPrefix = "__pos_";
+
+int GatewayPositionalParameterIndex(absl::string_view name) {
+  if (!absl::StartsWith(name, kGatewayPositionalParameterPrefix)) {
+    return -1;
+  }
+  name.remove_prefix(kGatewayPositionalParameterPrefix.size());
+  int idx = -1;
+  if (!absl::SimpleAtoi(name, &idx) || idx < 0) return -1;
+  return idx;
+}
+
+}  // namespace
+
 namespace internal {
+
 ::grpc::Status AnalyzeStatusToGrpc(const absl::Status& status) {
   if (status.ok()) return ::grpc::Status::OK;
   ::grpc::StatusCode code = ::grpc::StatusCode::INTERNAL;
@@ -148,20 +165,13 @@ backend::engine::QueryRequest ProtoToEngineRequest(
             engine_request.parameters.end(),
             [](const backend::engine::QueryParameter& a,
                const backend::engine::QueryParameter& b) {
-              auto pos = [](absl::string_view name) -> int {
-                if (!absl::StartsWith(name, "p")) return -1;
-                int idx = -1;
-                if (absl::SimpleAtoi(name.substr(1), &idx)) return idx;
-                return -1;
-              };
-              const int pa = pos(a.name);
-              const int pb = pos(b.name);
+              const int pa = GatewayPositionalParameterIndex(a.name);
+              const int pb = GatewayPositionalParameterIndex(b.name);
               if (pa >= 0 && pb >= 0) return pa < pb;
               return a.name < b.name;
             });
   for (auto& parameter : engine_request.parameters) {
-    if (backend::engine::semantic::IsSyntheticPositionalParameterName(
-            parameter.name)) {
+    if (GatewayPositionalParameterIndex(parameter.name) >= 0) {
       parameter.name.clear();
     }
   }

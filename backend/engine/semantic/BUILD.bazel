@@ -154,6 +154,7 @@ cc_library(
         "scan_eval.cc",
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
+        "scan_eval_analytic.cc",
         "scan_eval_scan_impl.cc",
     ],
     hdrs = [

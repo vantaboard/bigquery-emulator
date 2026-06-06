@@ -45,6 +45,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedSubqueryExpr* node) override;
   absl::Status VisitResolvedArrayScan(
       const ::googlesql::ResolvedArrayScan* node) override;
+  absl::Status VisitResolvedInsertStmt(
+      const ::googlesql::ResolvedInsertStmt* node) override;
 
   static bool IsScalarOnlySelect(const ::googlesql::ResolvedQueryStmt* node);
 

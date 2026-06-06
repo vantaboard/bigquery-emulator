@@ -71,6 +71,29 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(row.cells[0].int64_value(), 42);
 }
 
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryNamedParameterP0LabelBindsViaCoordinator) {
+  CatalogBundle bundle = MakeCatalog();
+  QueryRequest req = MakeRequest("SELECT @p0 + @p1");
+  QueryParameter p0;
+  p0.name = "p0";
+  p0.type_kind = "INT64";
+  p0.value_json = "40";
+  QueryParameter p1;
+  p1.name = "p1";
+  p1.type_kind = "INT64";
+  p1.value_json = "2";
+  req.parameters.push_back(p0);
+  req.parameters.push_back(p1);
+  auto source = engine_->ExecuteQuery(req, bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  EXPECT_EQ(row.cells[0].int64_value(), 42);
+}
+
 TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsLegacySql) {
   CatalogBundle bundle = MakeCatalog();
   QueryRequest req = MakeRequest("SELECT 1");
@@ -159,6 +182,33 @@ TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   ASSERT_EQ(row.cells.size(), 1u);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 30);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       CorrelatedSubqueryWithTableAliasRoutesToSemanticAndFilters) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source =
+      engine_->ExecuteQuery(MakeRequest("SELECT id FROM ds.people profiles "
+                                        "WHERE (SELECT COUNT(*) FROM ds.people "
+                                        "AS o WHERE o.id = profiles.id) "
+                                        ">= 1 "
+                                        "ORDER BY id"),
+                            bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  std::vector<int64_t> ids;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 1u);
+    ids.push_back(row.cells[0].int64_value());
+  }
+  ASSERT_EQ(ids.size(), 3u);
+  EXPECT_EQ(ids[0], 1);
+  EXPECT_EQ(ids[1], 2);
+  EXPECT_EQ(ids[2], 3);
 }
 }  // namespace
 }  // namespace coordinator
