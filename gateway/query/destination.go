@@ -85,62 +85,96 @@ func AppendResults(ctx context.Context, catalog enginepb.CatalogClient,
 	}
 
 	if len(rows) == 0 {
-		switch wd {
-		case writeTruncate, writeEmpty:
-			return load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
-				wd, protoResult)
-		case writeAppend:
-			if len(cfg.SchemaUpdateOptions) == 0 {
-				return nil
-			}
-			if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
-				writeAppend, protoResult); err != nil {
-				return fmt.Errorf("ensure query destination table: %w", err)
-			}
-			if _, err := load.ApplySchemaUpdate(
-				ctx,
-				catalog,
-				tableRef,
-				resultSchema,
-				cfg.SchemaUpdateOptions,
-			); err != nil {
-				return err
-			}
-			return nil
-		default:
+		return appendEmptyQueryDestination(ctx, catalog, cfg, wd, destProject, destDataset, destTable,
+			tableRef, resultSchema, protoResult)
+	}
+	protoSchema, err := resolveDestinationProtoSchema(ctx, catalog, cfg, wd, destProject, destDataset,
+		destTable, tableRef, resultSchema, protoResult)
+	if err != nil {
+		return err
+	}
+	return insertDestinationRows(ctx, catalog, destProject, destDataset, destTable, protoSchema,
+		resultSchema, rows)
+}
+
+func appendEmptyQueryDestination(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	cfg *jobs.JobConfigurationQuery,
+	wd, destProject, destDataset, destTable string,
+	tableRef *enginepb.TableRef,
+	resultSchema *bqtypes.TableSchema,
+	protoResult *enginepb.TableSchema,
+) error {
+	switch wd {
+	case writeTruncate, writeEmpty:
+		return load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
+			wd, protoResult)
+	case writeAppend:
+		if len(cfg.SchemaUpdateOptions) == 0 {
 			return nil
 		}
+		if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
+			writeAppend, protoResult); err != nil {
+			return fmt.Errorf("ensure query destination table: %w", err)
+		}
+		if _, err := load.ApplySchemaUpdate(ctx, catalog, tableRef, resultSchema, cfg.SchemaUpdateOptions); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return nil
 	}
+}
 
+func resolveDestinationProtoSchema(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	cfg *jobs.JobConfigurationQuery,
+	wd, destProject, destDataset, destTable string,
+	tableRef *enginepb.TableRef,
+	resultSchema *bqtypes.TableSchema,
+	protoResult *enginepb.TableSchema,
+) (*enginepb.TableSchema, error) {
 	var protoSchema *enginepb.TableSchema
 	switch wd {
 	case writeAppend:
 		if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
 			writeAppend, protoResult); err != nil {
-			return fmt.Errorf("ensure query destination table: %w", err)
+			return nil, fmt.Errorf("ensure query destination table: %w", err)
 		}
 		var err error
 		protoSchema, err = load.ApplySchemaUpdate(ctx, catalog, tableRef, resultSchema, cfg.SchemaUpdateOptions)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	case writeTruncate, writeEmpty:
 		if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
 			wd, protoResult); err != nil {
-			return fmt.Errorf("ensure query destination table: %w", err)
+			return nil, fmt.Errorf("ensure query destination table: %w", err)
 		}
 		protoSchema = protoResult
 	default:
-		return fmt.Errorf("query destination writeDisposition %q is not supported", wd)
+		return nil, fmt.Errorf("query destination writeDisposition %q is not supported", wd)
 	}
 	if protoSchema == nil {
 		desc, derr := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
 		if derr != nil {
-			return fmt.Errorf("describe destination table: %w", derr)
+			return nil, fmt.Errorf("describe destination table: %w", derr)
 		}
 		protoSchema = desc.GetSchema()
 	}
+	return protoSchema, nil
+}
 
+func insertDestinationRows(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	destProject, destDataset, destTable string,
+	protoSchema *enginepb.TableSchema,
+	resultSchema *bqtypes.TableSchema,
+	rows []bqtypes.Row,
+) error {
 	ref := seed.TableRef{ProjectID: destProject, DatasetID: destDataset, TableID: destTable}
 	applier := seed.NewCatalogApplier(catalog)
 	rowMaps := restRowsToMaps(resultSchema, rows)

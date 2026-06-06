@@ -5,11 +5,11 @@ import (
 	"fmt"
 )
 
-// SqlTypeKind is StandardSqlDataType.typeKind on the wire. Gapic v2 REST
+// SQLTypeKind is StandardSqlDataType.typeKind on the wire. Gapic v2 REST
 // may send the enum as a string ("INT64") or as a numeric proto enum (2).
-type SqlTypeKind string
+type SQLTypeKind string
 
-func sqlTypeKindFromNumeric(n int) (SqlTypeKind, bool) {
+func sqlTypeKindFromNumeric(n int) (SQLTypeKind, bool) {
 	switch n {
 	case 2:
 		return "INT64", true
@@ -49,8 +49,8 @@ func sqlTypeKindFromNumeric(n int) (SqlTypeKind, bool) {
 }
 
 // UnmarshalJSON accepts string enum names or numeric gapic v2 values.
-func (t *SqlTypeKind) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+func (t *SQLTypeKind) UnmarshalJSON(data []byte) error {
+	if string(data) == jsonNullLiteral {
 		*t = ""
 		return nil
 	}
@@ -60,7 +60,7 @@ func (t *SqlTypeKind) UnmarshalJSON(data []byte) error {
 	}
 	switch v := raw.(type) {
 	case string:
-		*t = SqlTypeKind(v)
+		*t = SQLTypeKind(v)
 		return nil
 	case float64:
 		if tk, ok := sqlTypeKindFromNumeric(int(v)); ok {

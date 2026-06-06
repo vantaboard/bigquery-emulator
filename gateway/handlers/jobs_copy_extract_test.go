@@ -19,7 +19,7 @@ import (
 func TestJobInsertCopySingleSource(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "id", Type: "INTEGER"},
+		{Name: "id", Type: sqlTypeINTEGER},
 		{Name: "name", Type: sqlTypeSTRING},
 	}}
 	srcRows := []*enginepb.DataRow{
@@ -69,7 +69,7 @@ func TestJobInsertCopySingleSource(t *testing.T) {
 func TestJobInsertCopyMultipleSources(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "id", Type: "INTEGER"},
+		{Name: "id", Type: sqlTypeINTEGER},
 	}}
 	row := func(v string) *enginepb.DataRow {
 		return &enginepb.DataRow{Cells: []*enginepb.Cell{

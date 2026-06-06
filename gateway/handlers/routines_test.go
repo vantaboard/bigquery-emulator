@@ -48,10 +48,10 @@ func sampleRoutineBody(routineID, body string) string {
 		Arguments: []bqtypes.RoutineArgument{{
 			Name: "x",
 			DataType: &bqtypes.StandardSqlDataType{
-				TypeKind: "INT64",
+				TypeKind: sqlTypeINT64,
 			},
 		}},
-		ReturnType: &bqtypes.StandardSqlDataType{TypeKind: "INT64"},
+		ReturnType: &bqtypes.StandardSqlDataType{TypeKind: sqlTypeINT64},
 	}
 	b, _ := json.Marshal(rt)
 	return string(b)

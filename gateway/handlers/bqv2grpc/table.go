@@ -48,7 +48,7 @@ func (s *TableServer) ListTables(
 	items := make([]*bigquerypb.ListFormatTable, 0, len(resp.GetTables()))
 	for _, ref := range resp.GetTables() {
 		labels := map[string]string{}
-		tableType := "TABLE"
+		tableType := tableTypeTable
 		if overlay, ok := s.deps.Metadata.GetTable(
 			ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
 		); ok {
@@ -65,7 +65,7 @@ func (s *TableServer) ListTables(
 	return &bigquerypb.TableList{
 		Kind:       "bigquery#tableList",
 		Tables:     items,
-		TotalItems: wrapperspb.Int32(int32(len(items))),
+		TotalItems: wrapperspb.Int32(int32FromInt(len(items))),
 	}, nil
 }
 

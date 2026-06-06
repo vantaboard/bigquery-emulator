@@ -12,18 +12,6 @@ const (
 	testTableID   = "t1"
 )
 
-// Common BigQuery-wire SQL type spellings asserted by the JSON-shape
-// regression tests.
-const (
-	sqlTypeINT64     = "INT64"
-	sqlTypeFLOAT64   = "FLOAT64"
-	sqlTypeSTRING    = "STRING"
-	sqlTypeTIMESTAMP = "TIMESTAMP"
-	sqlTypeBOOL      = "BOOL"
-	sqlModeNullable  = "NULLABLE"
-	sqlModeRequired  = "REQUIRED"
-)
-
 // Common synthetic field name used by handler regression tests when
 // the column itself has no significance beyond "the second column".
 const testColumnName = "name"

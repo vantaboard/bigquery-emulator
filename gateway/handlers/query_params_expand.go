@@ -23,7 +23,7 @@ func expandArrayParamsInSQL(sql string, params []bqtypes.QueryParameter) string 
 	out := sql
 	for _, p := range params {
 		if p.Name == "" || p.ParameterType == nil ||
-			strings.ToUpper(p.ParameterType.Type) != "ARRAY" {
+			strings.ToUpper(p.ParameterType.Type) != sqlTypeARRAY {
 			continue
 		}
 		if p.ParameterValue == nil || len(p.ParameterValue.ArrayValues) == 0 {

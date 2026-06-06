@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -106,6 +107,15 @@ func (s *ReadServer) ReadRows(
 	if state != nil && state.dataFormat != storagepb.DataFormat_DATA_FORMAT_UNSPECIFIED {
 		dataFormat = state.dataFormat
 	}
+	return s.pumpEngineReadRows(engineStream, stream, state, dataFormat)
+}
+
+func (s *ReadServer) pumpEngineReadRows(
+	engineStream enginepb.StorageRead_ReadRowsClient,
+	stream storagepb.BigQueryRead_ReadRowsServer,
+	state *readSessionState,
+	dataFormat storagepb.DataFormat,
+) error {
 	sentSchema := false
 	for {
 		page, recvErr := engineStream.Recv()
@@ -130,19 +140,8 @@ func (s *ReadServer) ReadRows(
 			return status.Errorf(codes.Internal, "encode ReadRows batch: %v", err)
 		}
 		if !sentSchema {
-			switch dataFormat {
-			case storagepb.DataFormat_AVRO:
-				avroSchema, schemaErr := serializeAvroSchema(schema)
-				if schemaErr != nil {
-					return status.Errorf(codes.Internal, "encode Avro schema: %v", schemaErr)
-				}
-				resp.Schema = &storagepb.ReadRowsResponse_AvroSchema{AvroSchema: avroSchema}
-			default:
-				arrowSchema, schemaErr := serializeArrowSchema(schema)
-				if schemaErr != nil {
-					return status.Errorf(codes.Internal, "encode Arrow schema: %v", schemaErr)
-				}
-				resp.Schema = &storagepb.ReadRowsResponse_ArrowSchema{ArrowSchema: arrowSchema}
+			if err := attachReadRowsSchema(resp, dataFormat, schema); err != nil {
+				return err
 			}
 			sentSchema = true
 		}
@@ -150,6 +149,28 @@ func (s *ReadServer) ReadRows(
 			return err
 		}
 	}
+}
+
+func attachReadRowsSchema(
+	resp *storagepb.ReadRowsResponse,
+	dataFormat storagepb.DataFormat,
+	schema *enginepb.TableSchema,
+) error {
+	switch dataFormat {
+	case storagepb.DataFormat_AVRO:
+		avroSchema, schemaErr := serializeAvroSchema(schema)
+		if schemaErr != nil {
+			return status.Errorf(codes.Internal, "encode Avro schema: %v", schemaErr)
+		}
+		resp.Schema = &storagepb.ReadRowsResponse_AvroSchema{AvroSchema: avroSchema}
+	default:
+		arrowSchema, schemaErr := serializeArrowSchema(schema)
+		if schemaErr != nil {
+			return status.Errorf(codes.Internal, "encode Arrow schema: %v", schemaErr)
+		}
+		resp.Schema = &storagepb.ReadRowsResponse_ArrowSchema{ArrowSchema: arrowSchema}
+	}
+	return nil
 }
 
 func readRowsResponseForFormat(
@@ -163,20 +184,22 @@ func readRowsResponseForFormat(
 		if err != nil {
 			return nil, err
 		}
+		rowCount := int64(len(rows))
 		return &storagepb.ReadRowsResponse{
 			Rows:     &storagepb.ReadRowsResponse_AvroRows{AvroRows: batch},
-			RowCount: batch.GetRowCount(),
+			RowCount: rowCount,
 		}, nil
 	default:
 		batch, err := rowsToArrowBatch(schema, rows)
 		if err != nil {
 			return nil, err
 		}
+		rowCount := int64(len(rows))
 		return &storagepb.ReadRowsResponse{
 			Rows: &storagepb.ReadRowsResponse_ArrowRecordBatch{
 				ArrowRecordBatch: batch,
 			},
-			RowCount: batch.GetRowCount(),
+			RowCount: rowCount,
 		}, nil
 	}
 }
@@ -196,17 +219,13 @@ func inferSchemaFromRow(row *enginepb.DataRow) *enginepb.TableSchema {
 	for i := range row.GetCells() {
 		schema.Fields = append(schema.Fields, &enginepb.FieldSchema{
 			Name: columnName(i),
-			Type: "STRING",
-			Mode: "NULLABLE",
+			Type: bqTypeSTRING,
+			Mode: bqModeNullable,
 		})
 	}
 	return schema
 }
 
 func columnName(i int) string {
-	const prefix = "col_"
-	if i < 10 {
-		return prefix + string(rune('0'+i))
-	}
-	return prefix + "x"
+	return "col_" + strconv.Itoa(i)
 }

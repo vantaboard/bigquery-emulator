@@ -44,9 +44,9 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 	body := `{
         "tableReference":{"tableId":"t1"},
         "schema":{"fields":[
-            {"name":"id","type":"INT64","mode":"REQUIRED"},
-            {"name":"meta","type":"RECORD","mode":"NULLABLE","fields":[
-                {"name":"k","type":"STRING"}
+            {"name":"id","type":"` + sqlTypeINT64 + `","mode":"` + sqlModeRequired + `"},
+            {"name":"meta","type":"RECORD","mode":"` + sqlModeNullable + `","fields":[
+                {"name":"k","type":"` + sqlTypeSTRING + `"}
             ]}
         ]}
     }`
@@ -193,7 +193,7 @@ func TestTableGetUsesDescribeTable(t *testing.T) {
 	if tbl.Schema == nil || len(tbl.Schema.Fields) != 1 {
 		t.Fatalf("schema not round-tripped: %+v", tbl.Schema)
 	}
-	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != "INTEGER" {
+	if tbl.Schema.Fields[0].Name != "id" || tbl.Schema.Fields[0].Type != sqlTypeINTEGER {
 		t.Errorf("schema field round-trip mismatch: %+v", tbl.Schema.Fields[0])
 	}
 }

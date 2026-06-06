@@ -29,7 +29,7 @@ func TestJobInsertLoadFromLocalCSV(t *testing.T) {
 	body := `{"configuration":{"load":{"sourceUris":["file://` + csvPath + `"],` +
 		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"states"},` +
 		`"sourceFormat":"CSV","skipLeadingRows":"1",` +
-		`"schema":{"fields":[{"name":"name","type":"STRING"},{"name":"post_abbr","type":"STRING"}]}}}}`
+		`"schema":{"fields":[{"name":"name","type":"` + sqlTypeSTRING + `"},{"name":"post_abbr","type":"` + sqlTypeSTRING + `"}]}}}}`
 
 	rec := runJobInsert(t, deps, body)
 	if rec.Code != http.StatusOK {
@@ -222,8 +222,8 @@ func TestJobInsertLoadParseErrorSurfacesInvalidReason(t *testing.T) {
 func TestJobInsertLoadSchemaUpdateAllowFieldAddition(t *testing.T) {
 	t.Parallel()
 	existingSchema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "Name", Type: "STRING"},
-		{Name: "Age", Type: "INTEGER"},
+		{Name: "Name", Type: sqlTypeSTRING},
+		{Name: "Age", Type: sqlTypeINTEGER},
 	}}
 	cat := &fakeCatalogClient{
 		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
@@ -245,7 +245,7 @@ func TestJobInsertLoadSchemaUpdateAllowFieldAddition(t *testing.T) {
 		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"t"},` +
 		`"sourceFormat":"CSV","skipLeadingRows":"1","writeDisposition":"WRITE_APPEND",` +
 		`"schemaUpdateOptions":["ALLOW_FIELD_ADDITION"],` +
-		`"schema":{"fields":[{"name":"Name","type":"STRING"},{"name":"Age","type":"INTEGER"},{"name":"IsMagic","type":"BOOLEAN"}]}}}}`
+		`"schema":{"fields":[{"name":"Name","type":"` + sqlTypeSTRING + `"},{"name":"Age","type":"` + sqlTypeINTEGER + `"},{"name":"IsMagic","type":"BOOLEAN"}]}}}}`
 
 	rec := runJobInsert(t, deps, body)
 	if rec.Code != http.StatusOK {

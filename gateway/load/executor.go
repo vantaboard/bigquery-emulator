@@ -132,7 +132,7 @@ func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
 	if sourceFormat == "" {
 		sourceFormat = inferSourceFormatFromURIs(cfg.SourceURIs)
 	}
-	if sourceFormat == "DATASTORE_BACKUP" {
+	if sourceFormat == sourceFormatDatastoreBackup {
 		cfgCopy := *cfg
 		cfgCopy.SourceFormat = sourceFormat
 		return parseDatastoreBackupSources(ctx, &cfgCopy, parseSchema)

@@ -28,7 +28,7 @@ func routineLanguageFromNumeric(n int) (RoutineLanguage, bool) {
 
 // UnmarshalJSON accepts string enum names or numeric gapic v2 values.
 func (l *RoutineLanguage) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+	if string(data) == jsonNullLiteral {
 		*l = ""
 		return nil
 	}

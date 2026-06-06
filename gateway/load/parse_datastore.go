@@ -136,18 +136,28 @@ func unwrapDatastoreValue(v any) any {
 		"stringValue", "integerValue", "doubleValue", "booleanValue",
 		"timestampValue", "nullValue",
 	} {
-		if raw, ok := m[key]; ok {
-			if key == "integerValue" {
-				if s, ok := raw.(string); ok {
-					if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-						return int(n)
-					}
-				}
-			}
-			return raw
+		raw, ok := m[key]
+		if !ok {
+			continue
 		}
+		if key == "integerValue" {
+			return unwrapDatastoreInteger(raw)
+		}
+		return raw
 	}
 	return v
+}
+
+func unwrapDatastoreInteger(raw any) any {
+	s, ok := raw.(string)
+	if !ok {
+		return raw
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return raw
+	}
+	return int(n)
 }
 
 func parseDatastoreEntityBytes(data []byte, schema *bqtypes.TableSchema) (ParsedRows, error) {
@@ -187,7 +197,7 @@ func scanDatastoreEntities(data []byte) []map[string]any {
 			continue
 		}
 		if name != "" {
-			row := map[string]any{"name": name}
+			row := map[string]any{datastorePropName: name}
 			if abbr != "" {
 				row["post_abbr"] = abbr
 			}
@@ -202,8 +212,10 @@ func scanDatastoreEntities(data []byte) []map[string]any {
 }
 
 func readDatastoreStringProp(data []byte, start int, prop string) (string, int) {
-	marker := []byte{0x1a, byte(len(prop))}
-	marker = append(marker, prop...)
+	marker := datastorePropMarker(prop)
+	if marker == nil {
+		return "", -1
+	}
 	idx := bytes.Index(data[start:], marker)
 	if idx < 0 {
 		return "", -1
@@ -228,8 +240,10 @@ func readDatastoreStringProp(data []byte, start int, prop string) (string, int) 
 }
 
 func readDatastoreVarintProp(data []byte, start int, prop string) (int64, int) {
-	marker := []byte{0x1a, byte(len(prop))}
-	marker = append(marker, prop...)
+	marker := datastorePropMarker(prop)
+	if marker == nil {
+		return 0, -1
+	}
 	idx := bytes.Index(data[start:], marker)
 	if idx < 0 {
 		return 0, -1
@@ -249,7 +263,7 @@ func readDatastoreVarintProp(data []byte, start int, prop string) (int64, int) {
 		pos++
 		val |= uint64(b&0x7f) << shift
 		if b < 0x80 {
-			return int64(val), pos
+			return uint64ToSignedInt64(val), pos
 		}
 		shift += 7
 	}

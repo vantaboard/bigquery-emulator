@@ -249,7 +249,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 		}
 		total := len("ARRAY<") + consumed
 		return &bqtypes.StandardSqlDataType{
-			TypeKind:         bqtypes.SqlTypeKind(sqlTypeArray),
+			TypeKind:         bqtypes.SQLTypeKind(sqlTypeArray),
 			ArrayElementType: elem,
 		}, total, true
 	case strings.HasPrefix(upper, "STRUCT<"):
@@ -263,7 +263,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 		}
 		total := len("STRUCT<") + consumed
 		return &bqtypes.StandardSqlDataType{
-			TypeKind: bqtypes.SqlTypeKind(sqlTypeStruct),
+			TypeKind: bqtypes.SQLTypeKind(sqlTypeStruct),
 			StructType: &bqtypes.StandardSqlStructType{
 				Fields: fields,
 			},
@@ -278,7 +278,7 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 			return nil, 0, false
 		}
 		return &bqtypes.StandardSqlDataType{
-			TypeKind: bqtypes.SqlTypeKind(strings.ToUpper(s[:end])),
+			TypeKind: bqtypes.SQLTypeKind(strings.ToUpper(s[:end])),
 		}, end, true
 	}
 }

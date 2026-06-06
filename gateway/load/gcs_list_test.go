@@ -11,9 +11,9 @@ import (
 func TestExpandSourceURIsWildcard(t *testing.T) {
 	const listBody = `{
 	  "items": [
-	    {"name": "data/customlayout/"},
-	    {"name": "data/customlayout/pkey=foo/file.csv"},
-	    {"name": "data/customlayout/pkey=bar/file.csv"}
+	    {"` + gcsObjectKeyName + `": "data/customlayout/"},
+	    {"` + gcsObjectKeyName + `": "data/customlayout/pkey=foo/file.csv"},
+	    {"` + gcsObjectKeyName + `": "data/customlayout/pkey=bar/file.csv"}
 	  ]
 	}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +45,7 @@ func TestListGCSObjectsPaginates(t *testing.T) {
 		}
 		page++
 		resp := map[string]any{
-			"items": []map[string]string{{"name": "pfx/a"}},
+			"items": []map[string]string{{gcsObjectKeyName: "pfx/a"}},
 		}
 		if page == 1 {
 			resp["nextPageToken"] = "tok"

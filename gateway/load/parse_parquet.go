@@ -136,15 +136,15 @@ func parquetNodeTypeToBQ(f parquet.Field) string {
 		return fieldTypeBoolean
 	case "INT32", "INT64", "UINT32", "UINT64":
 		return fieldTypeInteger
-	case "INT96", "TIMESTAMP":
-		return "TIMESTAMP"
+	case "INT96", fieldTypeTimestamp:
+		return fieldTypeTimestamp
 	case "FLOAT", "DOUBLE":
 		return fieldTypeFloat
 	case "BYTE_ARRAY", "FIXED_LEN_BYTE_ARRAY":
 		return fieldTypeString
 	default:
-		if lt := f.Type().LogicalType(); lt != nil && lt.String() == "TIMESTAMP" {
-			return "TIMESTAMP"
+		if lt := f.Type().LogicalType(); lt != nil && lt.String() == fieldTypeTimestamp {
+			return fieldTypeTimestamp
 		}
 		return fieldTypeString
 	}

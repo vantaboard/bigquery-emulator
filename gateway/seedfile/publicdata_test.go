@@ -96,64 +96,65 @@ func TestPublicDataFixtureApply(t *testing.T) {
 	}
 }
 
+var publicDataSeedCases = []struct {
+	name string
+	sql  string
+	want bool
+}{
+	{
+		name: "usa_names only",
+		sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_2013`",
+		want: true,
+	},
+	{
+		name: "usa_1910_current",
+		sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_current`",
+		want: true,
+	},
+	{
+		name: "shakespeare only",
+		sql:  "SELECT corpus FROM `bigquery-public-data.samples.shakespeare`",
+		want: true,
+	},
+	{
+		name: "github_repos commits",
+		sql:  "SELECT commit FROM `bigquery-public-data.github_repos.commits`",
+		want: true,
+	},
+	{
+		name: "stackoverflow only",
+		sql:  "SELECT id FROM `bigquery-public-data.stackoverflow.posts_questions`",
+		want: true,
+	},
+	{
+		name: "penguins only",
+		sql:  "SELECT species FROM `bigquery-public-data.ml_datasets.penguins`",
+		want: true,
+	},
+	{
+		name: "unseeded natality",
+		sql:  "SELECT * FROM `bigquery-public-data.samples.natality`",
+		want: false,
+	},
+	{
+		name: "mixed seeded and unseeded",
+		sql:  "FROM `bigquery-public-data.usa_names.usa_1910_2013` JOIN `bigquery-public-data.samples.natality`",
+		want: false,
+	},
+	{
+		name: "legacy colon syntax",
+		sql:  "SELECT word FROM [bigquery-public-data:samples.shakespeare]",
+		want: true,
+	},
+	{
+		name: "utility_us country_code_iso",
+		sql:  "SELECT country_name FROM `bigquery-public-data.utility_us.country_code_iso`",
+		want: true,
+	},
+}
+
 func TestPublicDataRefsFullySeeded(t *testing.T) {
-	cases := []struct {
-		name string
-		sql  string
-		want bool
-	}{
-		{
-			name: "usa_names only",
-			sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_2013`",
-			want: true,
-		},
-		{
-			name: "usa_1910_current",
-			sql:  "SELECT name FROM `bigquery-public-data.usa_names.usa_1910_current`",
-			want: true,
-		},
-		{
-			name: "shakespeare only",
-			sql:  "SELECT corpus FROM `bigquery-public-data.samples.shakespeare`",
-			want: true,
-		},
-		{
-			name: "github_repos commits",
-			sql:  "SELECT commit FROM `bigquery-public-data.github_repos.commits`",
-			want: true,
-		},
-		{
-			name: "stackoverflow only",
-			sql:  "SELECT id FROM `bigquery-public-data.stackoverflow.posts_questions`",
-			want: true,
-		},
-		{
-			name: "penguins only",
-			sql:  "SELECT species FROM `bigquery-public-data.ml_datasets.penguins`",
-			want: true,
-		},
-		{
-			name: "unseeded natality",
-			sql:  "SELECT * FROM `bigquery-public-data.samples.natality`",
-			want: false,
-		},
-		{
-			name: "mixed seeded and unseeded",
-			sql:  "FROM `bigquery-public-data.usa_names.usa_1910_2013` JOIN `bigquery-public-data.samples.natality`",
-			want: false,
-		},
-		{
-			name: "legacy colon syntax",
-			sql:  "SELECT word FROM [bigquery-public-data:samples.shakespeare]",
-			want: true,
-		},
-		{
-			name: "utility_us country_code_iso",
-			sql:  "SELECT country_name FROM `bigquery-public-data.utility_us.country_code_iso`",
-			want: true,
-		},
-	}
-	for _, tc := range cases {
+	for _, tc := range publicDataSeedCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := PublicDataRefsFullySeeded(tc.sql); got != tc.want {
 				t.Errorf("PublicDataRefsFullySeeded()=%v, want %v", got, tc.want)

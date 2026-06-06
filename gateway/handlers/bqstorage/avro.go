@@ -33,9 +33,9 @@ func avroSchemaJSONFromEngine(schema *enginepb.TableSchema) (string, error) {
 		fields = append(fields, avroField)
 	}
 	root := map[string]any{
-		"type":   "record",
-		"name":   avroRecordName,
-		"fields": fields,
+		avroKeyType: avroTypeRecord,
+		avroKeyName: avroRecordName,
+		"fields":    fields,
 	}
 	b, err := json.Marshal(root)
 	if err != nil {
@@ -49,58 +49,58 @@ func engineFieldToAvroField(f *enginepb.FieldSchema) (map[string]any, error) {
 		return nil, errors.New("nil field schema")
 	}
 	typ := bqTypeToAvroType(f.GetType())
-	if strings.ToUpper(f.GetMode()) != "REQUIRED" {
+	if strings.ToUpper(f.GetMode()) != bqModeRequired {
 		typ = []any{"null", typ}
 	}
 	return map[string]any{
-		"name": f.GetName(),
-		"type": typ,
+		avroKeyName: f.GetName(),
+		avroKeyType: typ,
 	}, nil
 }
 
 func bqTypeToAvroType(t string) any {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "BOOL":
+	case bqTypeBOOL:
 		return "boolean"
-	case "INT64", "INTEGER":
-		return "long"
-	case "FLOAT64", "FLOAT":
+	case bqTypeINT64, bqTypeINTEGER:
+		return avroTypeLong
+	case bqTypeFLOAT64, bqTypeFLOAT:
 		return "double"
-	case "BYTES":
-		return "bytes"
-	case "STRING":
-		return "string"
-	case "DATE":
-		return map[string]any{"type": "int", "logicalType": "date"}
-	case "DATETIME":
-		return map[string]any{"type": "string", "logicalType": "datetime"}
-	case "TIMESTAMP":
-		return map[string]any{"type": "long", "logicalType": "timestamp-micros"}
-	case "TIME":
-		return map[string]any{"type": "long", "logicalType": "time-micros"}
-	case "NUMERIC":
+	case bqTypeBYTES:
+		return avroTypeBytes
+	case bqTypeSTRING:
+		return avroTypeString
+	case bqTypeDATE:
+		return map[string]any{avroKeyType: "int", avroKeyLogicalType: "date"}
+	case bqTypeDATETIME:
+		return map[string]any{avroKeyType: avroTypeString, avroKeyLogicalType: "datetime"}
+	case bqTypeTIMESTAMP:
+		return map[string]any{avroKeyType: avroTypeLong, avroKeyLogicalType: "timestamp-micros"}
+	case bqTypeTIME:
+		return map[string]any{avroKeyType: avroTypeLong, avroKeyLogicalType: "time-micros"}
+	case bqTypeNUMERIC:
 		return map[string]any{
-			"type":        "bytes",
-			"logicalType": "decimal",
-			"precision":   38,
-			"scale":       9,
+			avroKeyType:        avroTypeBytes,
+			avroKeyLogicalType: "decimal",
+			"precision":        38,
+			"scale":            9,
 		}
-	case "BIGNUMERIC":
+	case bqTypeBIGNUMERIC:
 		return map[string]any{
-			"type":        "bytes",
-			"logicalType": "decimal",
-			"precision":   77,
-			"scale":       38,
+			avroKeyType:        avroTypeBytes,
+			avroKeyLogicalType: "decimal",
+			"precision":        77,
+			"scale":            38,
 		}
-	case "GEOGRAPHY":
-		return map[string]any{"type": "string", "sqlType": "GEOGRAPHY"}
-	case "JSON":
-		return map[string]any{"type": "string", "sqlType": "JSON"}
-	case "STRUCT", "RECORD":
+	case bqTypeGEOGRAPHY:
+		return map[string]any{avroKeyType: avroTypeString, "sqlType": bqTypeGEOGRAPHY}
+	case bqTypeJSON:
+		return map[string]any{avroKeyType: avroTypeString, "sqlType": bqTypeJSON}
+	case bqTypeSTRUCT, bqTypeRECORD:
 		// Nested structs are lowered to string cells in the engine shim today.
-		return "string"
+		return avroTypeString
 	default:
-		return "string"
+		return avroTypeString
 	}
 }
 
@@ -155,7 +155,7 @@ func engineRowToAvroNative(
 }
 
 func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell) (any, error) {
-	nullable := strings.ToUpper(field.GetMode()) != "REQUIRED"
+	nullable := strings.ToUpper(field.GetMode()) != bqModeRequired
 	nullCell := cell == nil || cell.GetNullValue()
 	if nullCell {
 		if nullable {
@@ -169,22 +169,22 @@ func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell) (any, er
 	var val any
 	var err error
 	switch typ {
-	case "BOOL":
+	case bqTypeBOOL:
 		val, err = strconv.ParseBool(raw)
-	case "INT64", "INTEGER":
+	case bqTypeINT64, bqTypeINTEGER:
 		val, err = strconv.ParseInt(raw, 10, 64)
-	case "FLOAT64", "FLOAT":
+	case bqTypeFLOAT64, bqTypeFLOAT:
 		val, err = strconv.ParseFloat(raw, 64)
-	case "TIMESTAMP":
+	case bqTypeTIMESTAMP:
 		micros, tsErr := timestampCellToMicros(raw)
 		if tsErr != nil {
 			err = tsErr
 		} else {
 			val = micros
 		}
-	case "DATE":
+	case bqTypeDATE:
 		val, err = dateStringToDays(raw)
-	case "BYTES":
+	case bqTypeBYTES:
 		val = []byte(raw)
 	default:
 		val = raw
@@ -209,17 +209,17 @@ func dateStringToDays(s string) (int32, error) {
 
 func unionNative(bqType string, val any) map[string]any {
 	switch strings.ToUpper(strings.TrimSpace(bqType)) {
-	case "BOOL":
+	case bqTypeBOOL:
 		return map[string]any{"boolean": val}
-	case "INT64", "INTEGER", "TIMESTAMP":
-		return map[string]any{"long": val}
-	case "FLOAT64", "FLOAT":
+	case bqTypeINT64, bqTypeINTEGER, bqTypeTIMESTAMP:
+		return map[string]any{avroTypeLong: val}
+	case bqTypeFLOAT64, bqTypeFLOAT:
 		return map[string]any{"double": val}
-	case "BYTES", "NUMERIC", "BIGNUMERIC":
-		return map[string]any{"bytes": val}
-	case "DATE":
+	case bqTypeBYTES, bqTypeNUMERIC, bqTypeBIGNUMERIC:
+		return map[string]any{avroTypeBytes: val}
+	case bqTypeDATE:
 		return map[string]any{"int": val}
 	default:
-		return map[string]any{"string": val}
+		return map[string]any{avroTypeString: val}
 	}
 }

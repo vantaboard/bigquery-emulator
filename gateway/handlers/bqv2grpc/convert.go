@@ -105,7 +105,7 @@ func tableFromREST(projectID, datasetID, tableID string, t bqtypes.Table) *bigqu
 		t.Labels = bqtypes.ResourceLabels{}
 	}
 	if t.Type == "" {
-		t.Type = "TABLE"
+		t.Type = tableTypeTable
 	}
 	if t.Location == "" {
 		t.Location = "US"
@@ -129,7 +129,7 @@ func tableFromREST(projectID, datasetID, tableID string, t bqtypes.Table) *bigqu
 		Type:             t.Type,
 		Labels:           map[string]string(t.Labels),
 		CreationTime:     ct,
-		LastModifiedTime: uint64(lmt),
+		LastModifiedTime: uint64FromNonNegativeInt64(lmt),
 		Etag:             t.Etag,
 		Location:         t.Location,
 		Schema:           schemaToProto(t.Schema),
@@ -161,7 +161,7 @@ func tableToREST(t *bigquerypb.Table) bqtypes.Table {
 		Type:             t.GetType(),
 		Etag:             t.GetEtag(),
 		CreationTime:     formatMillis(t.GetCreationTime()),
-		LastModifiedTime: formatMillis(int64(t.GetLastModifiedTime())),
+		LastModifiedTime: formatMillis(int64FromUint64(t.GetLastModifiedTime())),
 		NumRows:          formatUInt64(t.GetNumRows().GetValue()),
 		NumBytes:         formatInt64(t.GetNumBytes().GetValue()),
 		Location:         t.GetLocation(),

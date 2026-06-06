@@ -63,7 +63,7 @@ func TestParseDatastoreBackupJSONEntities(t *testing.T) {
 func TestParseCSVTimestampDatetime(t *testing.T) {
 	t.Parallel()
 	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "release_date", Type: "TIMESTAMP"},
+		{Name: "release_date", Type: fieldTypeTimestamp},
 		{Name: "dvd_release", Type: "DATETIME"},
 	}}
 	data := []byte("release_date,dvd_release\n2012-03-04T05:06:07+00:00,2012-03-04T05:06:07\n")

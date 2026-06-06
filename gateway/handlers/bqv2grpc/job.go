@@ -35,8 +35,8 @@ func (s *JobServer) ListJobs(
 		MaxResults:      int(req.GetMaxResults().GetValue()),
 		PageToken:       req.GetPageToken(),
 		ParentJobID:     req.GetParentJobId(),
-		MinCreationTime: int64(req.GetMinCreationTime()),
-		MaxCreationTime: int64(req.GetMaxCreationTime().GetValue()),
+		MinCreationTime: int64FromUint64(req.GetMinCreationTime()),
+		MaxCreationTime: int64FromUint64(req.GetMaxCreationTime().GetValue()),
 		StateFilter:     stateFiltersFromProto(req.GetStateFilter()),
 	}
 	items, nextPageToken := s.deps.Jobs.ListByProject(req.GetProjectId(), opts)

@@ -11,17 +11,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
-// StandardSqlDataType TypeKind spellings asserted by the wire-shape
-// regression tests. Promoted from inline literals so goconst stops
-// flagging the repeats and the wire spelling stays a single source of
-// truth.
-const (
-	typeKindINT64     = "INT64"
-	typeKindFLOAT64   = "FLOAT64"
-	typeKindSTRING    = "STRING"
-	typeKindTIMESTAMP = "TIMESTAMP"
-)
-
 // stringCell wraps a raw engine string-typed cell. It is the most
 // common shape: the engine has already serialized the value per
 // StandardSqlDataType.TypeKind.
@@ -288,7 +277,7 @@ func TestTimestampStringToMicros(t *testing.T) {
 func TestWireCellsToRowForSchemaTimestamp(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{
-		Fields: []*enginepb.FieldSchema{{Name: "ts", Type: "TIMESTAMP"}},
+		Fields: []*enginepb.FieldSchema{{Name: "ts", Type: typeKindTIMESTAMP}},
 	}
 	got := bqtypes.CellsToRowForSchema(
 		[]*enginepb.Cell{stringCell("2026-06-05 20:26:43.220623+00")},

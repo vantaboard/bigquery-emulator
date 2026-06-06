@@ -210,11 +210,8 @@ absl::StatusOr<std::string> BuildDuckdbCtasSql(
   if (output_cols.empty()) {
     select_sql = std::move(inner_sql);
   } else {
-    select_sql = absl::StrCat("SELECT ",
-                              absl::StrJoin(output_cols, ", "),
-                              " FROM (",
-                              inner_sql,
-                              ")");
+    select_sql = absl::StrCat(
+        "SELECT ", absl::StrJoin(output_cols, ", "), " FROM (", inner_sql, ")");
   }
   if (!transpiler.parameter_order().empty()) {
     auto substituted = SubstituteDuckdbParameters(

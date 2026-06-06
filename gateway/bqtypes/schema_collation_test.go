@@ -9,13 +9,13 @@ import (
 func TestApplyDefaultCollationToStringFields(t *testing.T) {
 	schema := &bqtypes.TableSchema{
 		Fields: []bqtypes.TableFieldSchema{
-			{Name: "name", Type: "STRING"},
-			{Name: "nums", Type: "INTEGER"},
+			{Name: "name", Type: schemaTypeSTRING},
+			{Name: "nums", Type: schemaTypeINTEGER},
 		},
 	}
-	got := bqtypes.ApplyDefaultCollationToStringFields(schema, "und:ci")
-	if got.Fields[0].Collation != "und:ci" {
-		t.Fatalf("STRING field collation = %q, want und:ci", got.Fields[0].Collation)
+	got := bqtypes.ApplyDefaultCollationToStringFields(schema, collationUndCI)
+	if got.Fields[0].Collation != collationUndCI {
+		t.Fatalf("STRING field collation = %q, want %s", got.Fields[0].Collation, collationUndCI)
 	}
 	if got.Fields[1].Collation != "" {
 		t.Fatalf("INTEGER field collation = %q, want empty", got.Fields[1].Collation)

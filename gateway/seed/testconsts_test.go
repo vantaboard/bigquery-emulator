@@ -12,6 +12,7 @@ package seed
 const (
 	bqTypeInt64    = "INT64"
 	bqTypeString   = "STRING"
+	bqModeRequired = "REQUIRED"
 	colName        = "name"
 	rowValueAda    = "ada"
 	tableKindTable = "TABLE"

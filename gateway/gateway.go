@@ -208,20 +208,9 @@ func (g *Gateway) Run() error {
 
 	deps := handlers.BuildDependencies(g.engineClient)
 
-	if g.opts.StorageGRPCAddress != "" {
-		grpcSrv, err := grpcserver.Start(g.opts.StorageGRPCAddress, g.engineClient, deps)
-		if err != nil {
-			g.stopEngine()
-			return fmt.Errorf("start storage grpc: %w", err)
-		}
-		g.storageGRPC = grpcSrv
-		go func() {
-			if err := grpcSrv.Serve(); err != nil {
-				g.logger.WarnContext(ctx, "storage grpc server exited", slog.Any("err", err))
-			}
-		}()
-		g.logger.InfoContext(ctx, "storage grpc listening",
-			slog.String("addr", g.opts.StorageGRPCAddress))
+	if err := g.startStorageGRPC(ctx, deps); err != nil {
+		g.stopEngine()
+		return fmt.Errorf("start storage grpc: %w", err)
 	}
 
 	srv := &http.Server{
@@ -232,19 +221,7 @@ func (g *Gateway) Run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		g.logger.InfoContext(ctx, "gateway listening",
-			slog.String("addr", g.opts.HTTPAddress))
-		switch {
-		case g.opts.EngineBinary != "":
-			g.logger.InfoContext(ctx, "engine grpc expected",
-				slog.String("addr", g.opts.EngineAddress))
-			if g.opts.StorageGRPCAddress != "" {
-				g.logger.InfoContext(ctx, "public storage grpc expected",
-					slog.String("addr", g.opts.StorageGRPCAddress))
-			}
-		default:
-			g.logger.InfoContext(ctx, "engine subprocess disabled; query routes will return Unimplemented")
-		}
+		g.logStartupExpectations(ctx)
 		err := srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
@@ -256,21 +233,7 @@ func (g *Gateway) Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	select {
-	case err := <-errCh:
-		g.stopStorageGRPC()
-		g.stopEngine()
-		return err
-	case sig := <-sigCh:
-		g.logger.InfoContext(ctx, "shutting down on signal",
-			slog.String("signal", sig.String()))
-		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-		g.stopStorageGRPC()
-		g.stopEngine()
-		return nil
-	}
+	return g.waitForShutdown(ctx, srv, errCh, sigCh)
 }
 
 // startEngine spawns the C++ engine subprocess if one is configured and

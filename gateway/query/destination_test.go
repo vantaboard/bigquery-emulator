@@ -39,7 +39,7 @@ func (c *recordingCatalog) DescribeTable(
 	in *enginepb.DescribeTableRequest,
 	_ ...grpc.CallOption,
 ) (*enginepb.DescribeTableResponse, error) {
-	if in.GetTable().GetTableId() == "dest" {
+	if in.GetTable().GetTableId() == testDestTableID {
 		return nil, status.Error(codes.NotFound, "table not found")
 	}
 	return &enginepb.DescribeTableResponse{}, nil
@@ -66,17 +66,17 @@ func TestAppendResultsDefaultWriteTruncate(t *testing.T) {
 	t.Parallel()
 	cat := &recordingCatalog{}
 	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "name", Type: "STRING"},
+		{Name: "name", Type: schemaTypeSTRING},
 	}}
 	rows := []bqtypes.Row{{F: []bqtypes.Cell{{V: "alice"}}}}
 	cfg := &jobs.JobConfigurationQuery{
 		DestinationTable: &bqtypes.TableReference{
-			ProjectID: "dev",
+			ProjectID: testProjectDev,
 			DatasetID: "ds",
-			TableID:   "dest",
+			TableID:   testDestTableID,
 		},
 	}
-	if err := query.AppendResults(context.Background(), cat, cfg, "dev", schema, rows); err != nil {
+	if err := query.AppendResults(context.Background(), cat, cfg, testProjectDev, schema, rows); err != nil {
 		t.Fatalf("AppendResults: %v", err)
 	}
 	if cat.inserted != 1 {
@@ -88,13 +88,13 @@ func TestAppendResultsWriteTruncateCreatesEmptyTable(t *testing.T) {
 	t.Parallel()
 	cat := &recordingCatalog{}
 	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "commit", Type: "STRING"},
+		{Name: "commit", Type: schemaTypeSTRING},
 	}}
 	cfg := &jobs.JobConfigurationQuery{
-		DestinationTable: &bqtypes.TableReference{ProjectID: "dev", DatasetID: "ds", TableID: "dest"},
+		DestinationTable: &bqtypes.TableReference{ProjectID: testProjectDev, DatasetID: "ds", TableID: testDestTableID},
 		WriteDisposition: "WRITE_TRUNCATE",
 	}
-	if err := query.AppendResults(context.Background(), cat, cfg, "dev", schema, nil); err != nil {
+	if err := query.AppendResults(context.Background(), cat, cfg, testProjectDev, schema, nil); err != nil {
 		t.Fatalf("AppendResults: %v", err)
 	}
 }
@@ -102,12 +102,12 @@ func TestAppendResultsWriteTruncateCreatesEmptyTable(t *testing.T) {
 func TestRestRowsToMapsStructColumns(t *testing.T) {
 	t.Parallel()
 	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "commit", Type: "STRING"},
+		{Name: "commit", Type: schemaTypeSTRING},
 		{
 			Name: "author", Type: "RECORD",
 			Fields: []bqtypes.TableFieldSchema{
-				{Name: "name", Type: "STRING"},
-				{Name: "email", Type: "STRING"},
+				{Name: "name", Type: schemaTypeSTRING},
+				{Name: "email", Type: schemaTypeSTRING},
 			},
 		},
 	}}
@@ -118,10 +118,10 @@ func TestRestRowsToMapsStructColumns(t *testing.T) {
 		},
 	}}
 	cfg := &jobs.JobConfigurationQuery{
-		DestinationTable: &bqtypes.TableReference{ProjectID: "dev", DatasetID: "ds", TableID: "dest"},
+		DestinationTable: &bqtypes.TableReference{ProjectID: testProjectDev, DatasetID: "ds", TableID: testDestTableID},
 	}
 	cat := &structInsertCatalog{}
-	if err := query.AppendResults(context.Background(), cat, cfg, "dev", schema, rows); err != nil {
+	if err := query.AppendResults(context.Background(), cat, cfg, testProjectDev, schema, rows); err != nil {
 		t.Fatalf("AppendResults: %v", err)
 	}
 	if cat.structCells != 1 {
@@ -158,10 +158,10 @@ func TestAppendResultsWriteTruncateRecreates(t *testing.T) {
 	}}
 	rows := []bqtypes.Row{{F: []bqtypes.Cell{{V: float64(42)}}}}
 	cfg := &jobs.JobConfigurationQuery{
-		DestinationTable: &bqtypes.TableReference{ProjectID: "dev", DatasetID: "ds", TableID: "browse"},
+		DestinationTable: &bqtypes.TableReference{ProjectID: testProjectDev, DatasetID: "ds", TableID: "browse"},
 		WriteDisposition: "WRITE_TRUNCATE",
 	}
-	if err := query.AppendResults(context.Background(), cat, cfg, "dev", schema, rows); err != nil {
+	if err := query.AppendResults(context.Background(), cat, cfg, testProjectDev, schema, rows); err != nil {
 		t.Fatalf("AppendResults: %v", err)
 	}
 	if cat.inserted != 1 {

@@ -10,6 +10,7 @@ cc_library(
         "duckdb_storage.cc",
         "duckdb_storage_catalog.cc",
         "duckdb_storage_literals.cc",
+        "duckdb_storage_sql_render.cc",
         "duckdb_storage_list_literals.cc",
         "duckdb_storage_meta.cc",
         "duckdb_storage_rows.cc",

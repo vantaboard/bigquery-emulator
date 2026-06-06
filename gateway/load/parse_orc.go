@@ -111,7 +111,7 @@ func orcTypeStringToBQ(typeStr string) (typ, mode string, nested []bqtypes.Table
 	case "binary":
 		return "BYTES", "", nil
 	case "date", "timestamp":
-		return "TIMESTAMP", "", nil
+		return fieldTypeTimestamp, "", nil
 	case "decimal":
 		return "NUMERIC", "", nil
 	default:

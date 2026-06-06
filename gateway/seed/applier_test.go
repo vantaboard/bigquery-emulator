@@ -81,8 +81,8 @@ func TestCatalogApplier_EnsureTable_Schema(t *testing.T) {
 	fake := &fakeCatalogClient{}
 	a := NewCatalogApplier(fake)
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "id", Type: bqTypeInt64, Mode: "REQUIRED"},
-		{Name: "address", Type: "STRUCT", Fields: []*enginepb.FieldSchema{
+		{Name: "id", Type: bqTypeInt64, Mode: bqModeRequired},
+		{Name: "address", Type: bqTypeStruct, Fields: []*enginepb.FieldSchema{
 			{Name: "city", Type: bqTypeString},
 		}},
 	}}
@@ -101,7 +101,7 @@ func TestCatalogApplier_EnsureTable_Schema(t *testing.T) {
 	if len(gotFields) != 2 {
 		t.Fatalf("len(fields)=%d, want 2", len(gotFields))
 	}
-	if gotFields[1].GetType() != "STRUCT" || len(gotFields[1].GetFields()) != 1 {
+	if gotFields[1].GetType() != bqTypeStruct || len(gotFields[1].GetFields()) != 1 {
 		t.Errorf("nested struct not forwarded: %+v", gotFields[1])
 	}
 }

@@ -58,34 +58,30 @@ func TestQueryParameterValueValueJSON(t *testing.T) {
 	}
 }
 
-const (
-	testParamTypeARRAY  = "ARRAY"
-	testParamTypeSTRING = "STRING"
-)
-
 func TestParameterTypeWireArray(t *testing.T) {
 	t.Parallel()
 
 	kind, typeJSON := bqtypes.ParameterTypeWire(&bqtypes.QueryParameterType{
-		Type:      testParamTypeARRAY,
-		ArrayType: &bqtypes.QueryParameterType{Type: testParamTypeSTRING},
+		Type:      typeKindARRAY,
+		ArrayType: &bqtypes.QueryParameterType{Type: schemaTypeSTRING},
 	})
-	if kind != testParamTypeARRAY || typeJSON != testParamTypeSTRING {
-		t.Errorf("ARRAY<STRING> = (%q, %q), want (ARRAY, STRING)", kind, typeJSON)
+	if kind != typeKindARRAY || typeJSON != schemaTypeSTRING {
+		t.Errorf("ARRAY<STRING> = (%q, %q), want (%s, %s)", kind, typeJSON, typeKindARRAY, schemaTypeSTRING)
 	}
 
 	kind, typeJSON = bqtypes.ParameterTypeWire(&bqtypes.QueryParameterType{
-		Type: testParamTypeARRAY,
+		Type: typeKindARRAY,
 		ArrayType: &bqtypes.QueryParameterType{
-			Type: "STRUCT",
+			Type: schemaTypeSTRUCT,
 			StructTypes: []bqtypes.QueryParameterStructType{
-				{Name: "x", Type: bqtypes.QueryParameterType{Type: "INT64"}},
-				{Name: "y", Type: bqtypes.QueryParameterType{Type: testParamTypeSTRING}},
+				{Name: "x", Type: bqtypes.QueryParameterType{Type: typeKindINT64}},
+				{Name: "y", Type: bqtypes.QueryParameterType{Type: schemaTypeSTRING}},
 			},
 		},
 	})
-	if kind != testParamTypeARRAY || typeJSON != "STRUCT:x:INT64,y:STRING" {
-		t.Errorf("ARRAY<STRUCT> = (%q, %q), want (ARRAY, STRUCT:x:INT64,y:STRING)",
-			kind, typeJSON)
+	wantStructTypeJSON := schemaTypeSTRUCT + ":x:" + typeKindINT64 + ",y:" + schemaTypeSTRING
+	if kind != typeKindARRAY || typeJSON != wantStructTypeJSON {
+		t.Errorf("ARRAY<STRUCT> = (%q, %q), want (%s, %s)",
+			kind, typeJSON, typeKindARRAY, wantStructTypeJSON)
 	}
 }

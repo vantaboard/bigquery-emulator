@@ -198,7 +198,7 @@ func cellFromJSONForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
 
 func isStructFieldType(t string) bool {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "STRUCT", "RECORD":
+	case bqTypeStruct, bqTypeRecord:
 		return true
 	default:
 		return false

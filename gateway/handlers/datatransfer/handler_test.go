@@ -151,7 +151,11 @@ func postPatch(t *testing.T, mux *http.ServeMux, path, body string) map[string]a
 // destinationDatasetId + schedule, list with dataSourceIds filter,
 // and a seeded SUCCEEDED transfer run for waitTransferRun.
 func TestDataTransferGoSampleListFilterAndSucceededRun(t *testing.T) {
-	mux := newTestMux(t)
+	exerciseGoSampleTransferFlow(t, newTestMux(t))
+}
+
+func exerciseGoSampleTransferFlow(t *testing.T, mux *http.ServeMux) {
+	t.Helper()
 	body := `{"displayName":"Your Scheduled Query Name","dataSourceId":"scheduled_query",` +
 		`"destinationDatasetId":"ds1","schedule":"every 24 hours",` +
 		`"params":{"destination_table_name_template":"my_destination_table_{run_date}",` +
@@ -169,6 +173,12 @@ func TestDataTransferGoSampleListFilterAndSucceededRun(t *testing.T) {
 		t.Errorf("destinationDatasetId = %q, want ds1", got)
 	}
 
+	assertTransferConfigListFilters(t, mux)
+	assertSucceededTransferRun(t, mux, name)
+}
+
+func assertTransferConfigListFilters(t *testing.T, mux *http.ServeMux) {
+	t.Helper()
 	listReq := httptest.NewRequest(
 		http.MethodGet,
 		"/v1/projects/p1/transferConfigs?dataSourceIds=scheduled_query",
@@ -197,8 +207,11 @@ func TestDataTransferGoSampleListFilterAndSucceededRun(t *testing.T) {
 	if len(otherCfgs) != 0 {
 		t.Errorf("list amazon_s3 filter: %d configs, want 0", len(otherCfgs))
 	}
+}
 
-	runsReq := httptest.NewRequest(http.MethodGet, "/v1/"+name+"/runs", nil)
+func assertSucceededTransferRun(t *testing.T, mux *http.ServeMux, configName string) {
+	t.Helper()
+	runsReq := httptest.NewRequest(http.MethodGet, "/v1/"+configName+"/runs", nil)
 	runsRec := httptest.NewRecorder()
 	mux.ServeHTTP(runsRec, runsReq)
 	if runsRec.Code != http.StatusOK {

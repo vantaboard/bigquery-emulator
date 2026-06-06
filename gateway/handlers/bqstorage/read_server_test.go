@@ -15,7 +15,7 @@ func TestCreateReadSessionRequiresEngine(t *testing.T) {
 	_, err := srv.CreateReadSession(context.Background(), &storagepb.CreateReadSessionRequest{
 		Parent: "projects/p",
 		ReadSession: &storagepb.ReadSession{
-			Table: "projects/p/datasets/d/tables/t",
+			Table: testTableResource,
 		},
 	})
 	if status.Code(err) != codes.Unavailable {
@@ -26,11 +26,11 @@ func TestCreateReadSessionRequiresEngine(t *testing.T) {
 func TestPublicReadSessionFromEngineArrow(t *testing.T) {
 	session, err := publicReadSessionFromEngine(&enginepb.ReadSession{
 		Name:  "projects/p/locations/-/sessions/s1",
-		Table: "projects/p/datasets/d/tables/t",
+		Table: testTableResource,
 		Schema: &enginepb.TableSchema{
 			Fields: []*enginepb.FieldSchema{
-				{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-				{Name: "name", Type: "STRING", Mode: "NULLABLE"},
+				{Name: "id", Type: bqTypeINT64, Mode: bqModeRequired},
+				{Name: "name", Type: bqTypeSTRING, Mode: bqModeNullable},
 			},
 		},
 		Streams: []*enginepb.ReadStream{{Name: "projects/p/locations/-/sessions/s1/streams/0"}},

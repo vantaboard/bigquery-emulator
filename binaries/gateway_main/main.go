@@ -105,16 +105,16 @@ func main() {
 		}
 		log.Fatal(err)
 	}
-
-	// Short-circuit before any side effect (engine subprocess lookup,
-	// socket bind, log setup). `--version` must work in stripped
-	// environments where the engine binary is missing and the gateway
-	// has no permission to bind a port.
 	if cfg.VersionRequested {
 		printVersion(os.Stdout)
 		return
 	}
+	if err := runGateway(cfg); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func runGateway(cfg Config) error {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	httpAddr, storageGRPCAddr, engineAddr, engineArgs := cfg.ToOptions(cfg.EngineBinary)
@@ -150,17 +150,9 @@ func main() {
 
 	gw := gateway.New(opts).
 		WithPreStartHook(func(o gateway.Options) error {
-			// Materialize an initial-data template into the
-			// engine's data directory before the engine
-			// boots, so the C++ side sees a populated tree
-			// on startup instead of an empty data_dir.
 			return storagetmpl.MaybeMaterialize(o.InitialDataDir, o.DataDir)
 		}).
 		WithPostEngineHook(func(o gateway.Options, ec *engine.Client) error {
-			// Apply YAML seed files after the engine reports
-			// SERVING so the new datasets / tables / rows
-			// land via the same CatalogClient surface the
-			// REST handlers use.
 			if len(o.SeedFiles) == 0 || ec == nil {
 				return nil
 			}
@@ -168,7 +160,5 @@ func main() {
 				seed.NewCatalogApplier(ec.Catalog),
 				gateway.DefaultsFromOptions(o))
 		})
-	if err := gw.Run(); err != nil {
-		log.Fatal(err)
-	}
+	return gw.Run()
 }

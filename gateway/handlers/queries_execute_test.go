@@ -71,7 +71,7 @@ func assertExecuteSchema(t *testing.T, resp bqtypes.QueryResponse) {
 	if resp.Schema == nil || len(resp.Schema.Fields) != 2 {
 		t.Fatalf("schema not propagated: %+v", resp.Schema)
 	}
-	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != "INTEGER" {
+	if resp.Schema.Fields[0].Name != "id" || resp.Schema.Fields[0].Type != sqlTypeINTEGER {
 		t.Errorf("schema field[0] mismatch: %+v", resp.Schema.Fields[0])
 	}
 	if resp.Schema.Fields[1].Name != testColumnName || resp.Schema.Fields[1].Type != sqlTypeSTRING {

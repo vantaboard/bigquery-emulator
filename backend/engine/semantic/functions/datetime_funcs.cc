@@ -205,8 +205,7 @@ absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args) {
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
     int32_t date = 0;
     if (auto s = ::googlesql::functions::ParseStringToDate(
-            "%Y-%m-%d", args[0].string_value(), /*parse_version2=*/true,
-            &date);
+            "%Y-%m-%d", args[0].string_value(), /*parse_version2=*/true, &date);
         !s.ok()) {
       return s;
     }
@@ -238,8 +237,11 @@ absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args) {
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_TIMESTAMP) {
     int32_t date = 0;
     if (auto s = ::googlesql::functions::ExtractFromTimestamp(
-            DateTimestampPart::DATE, args[0].ToUnixMicros(), kMicros,
-            DefaultTimeZone(), &date);
+            DateTimestampPart::DATE,
+            args[0].ToUnixMicros(),
+            kMicros,
+            DefaultTimeZone(),
+            &date);
         !s.ok()) {
       return s;
     }
@@ -255,7 +257,10 @@ absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args) {
     }
     int32_t date = 0;
     if (auto s = ::googlesql::functions::ExtractFromTimestamp(
-            DateTimestampPart::DATE, args[0].ToUnixMicros(), kMicros, tz,
+            DateTimestampPart::DATE,
+            args[0].ToUnixMicros(),
+            kMicros,
+            tz,
             &date);
         !s.ok()) {
       return s;

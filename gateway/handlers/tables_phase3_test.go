@@ -30,7 +30,7 @@ func TestJobInsertLoadPersistsCMEKMetadata(t *testing.T) {
 	deps := Dependencies{Catalog: cat, Jobs: reg, Metadata: meta}
 	body := `{"configuration":{"load":{"sourceUris":["file://` + csvPath + `"],` +
 		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"t"},` +
-		`"sourceFormat":"CSV","schema":{"fields":[{"name":"x","type":"STRING"}]},` +
+		`"sourceFormat":"CSV","schema":{"fields":[{"name":"x","type":"` + sqlTypeSTRING + `"}]},` +
 		`"destinationEncryptionConfiguration":{"kmsKeyName":"` + kmsKey + `"}}}}`
 
 	rec := runJobInsert(t, deps, body)
@@ -65,16 +65,16 @@ func TestTableUpdatePolicyTagsRoundTrip(t *testing.T) {
 		Catalog: &fakeCatalogClient{
 			describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
 				return &enginepb.DescribeTableResponse{Schema: &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-					{Name: "Name", Type: "STRING"},
-					{Name: "Age", Type: "INTEGER"},
+					{Name: "Name", Type: sqlTypeSTRING},
+					{Name: "Age", Type: sqlTypeINTEGER},
 				}}}, nil
 			},
 		},
 		Metadata: meta,
 	}
 	patchBody := `{"schema":{"fields":[` +
-		`{"name":"Name","type":"STRING"},` +
-		`{"name":"Age","type":"INTEGER","policyTags":{"names":["` + tag + `"]}}` +
+		`{"name":"Name","type":"` + sqlTypeSTRING + `"},` +
+		`{"name":"Age","type":"` + sqlTypeINTEGER + `","policyTags":{"names":["` + tag + `"]}}` +
 		`]}}`
 	reqPatch := httptest.NewRequest(http.MethodPatch,
 		"http://example/bigquery/v2/projects/dev/datasets/ds/tables/t",

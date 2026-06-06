@@ -102,33 +102,33 @@ func engineFieldToPublic(f *enginepb.FieldSchema) *storagepb.TableFieldSchema {
 
 func engineTypeToPublic(t string) storagepb.TableFieldSchema_Type {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "STRING":
+	case bqTypeSTRING:
 		return storagepb.TableFieldSchema_STRING
-	case "BYTES":
+	case bqTypeBYTES:
 		return storagepb.TableFieldSchema_BYTES
-	case "INT64":
+	case bqTypeINT64:
 		return storagepb.TableFieldSchema_INT64
-	case "FLOAT64":
+	case bqTypeFLOAT64:
 		return storagepb.TableFieldSchema_DOUBLE
-	case "BOOL":
+	case bqTypeBOOL:
 		return storagepb.TableFieldSchema_BOOL
-	case "TIMESTAMP":
+	case bqTypeTIMESTAMP:
 		return storagepb.TableFieldSchema_TIMESTAMP
-	case "DATE":
+	case bqTypeDATE:
 		return storagepb.TableFieldSchema_DATE
-	case "TIME":
+	case bqTypeTIME:
 		return storagepb.TableFieldSchema_TIME
-	case "DATETIME":
+	case bqTypeDATETIME:
 		return storagepb.TableFieldSchema_DATETIME
-	case "NUMERIC":
+	case bqTypeNUMERIC:
 		return storagepb.TableFieldSchema_NUMERIC
-	case "BIGNUMERIC":
+	case bqTypeBIGNUMERIC:
 		return storagepb.TableFieldSchema_BIGNUMERIC
-	case "JSON":
+	case bqTypeJSON:
 		return storagepb.TableFieldSchema_JSON
-	case "GEOGRAPHY":
+	case bqTypeGEOGRAPHY:
 		return storagepb.TableFieldSchema_GEOGRAPHY
-	case "STRUCT", "RECORD":
+	case bqTypeSTRUCT, bqTypeRECORD:
 		return storagepb.TableFieldSchema_STRUCT
 	default:
 		return storagepb.TableFieldSchema_STRING
@@ -137,7 +137,7 @@ func engineTypeToPublic(t string) storagepb.TableFieldSchema_Type {
 
 func engineModeToPublic(m string) storagepb.TableFieldSchema_Mode {
 	switch strings.ToUpper(strings.TrimSpace(m)) {
-	case "REQUIRED":
+	case bqModeRequired:
 		return storagepb.TableFieldSchema_REQUIRED
 	case "REPEATED":
 		return storagepb.TableFieldSchema_REPEATED

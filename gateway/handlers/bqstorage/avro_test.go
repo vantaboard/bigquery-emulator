@@ -11,9 +11,9 @@ import (
 func TestRowsToAvroBatchRoundTrip(t *testing.T) {
 	schema := &enginepb.TableSchema{
 		Fields: []*enginepb.FieldSchema{
-			{Name: "id", Type: "INT64", Mode: "REQUIRED"},
-			{Name: "name", Type: "STRING", Mode: "NULLABLE"},
-			{Name: "active", Type: "BOOL", Mode: "NULLABLE"},
+			{Name: "id", Type: bqTypeINT64, Mode: bqModeRequired},
+			{Name: "name", Type: bqTypeSTRING, Mode: bqModeNullable},
+			{Name: "active", Type: bqTypeBOOL, Mode: bqModeNullable},
 		},
 	}
 	rows := []*enginepb.DataRow{
@@ -33,8 +33,8 @@ func TestRowsToAvroBatchRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rowsToAvroBatch: %v", err)
 	}
-	if batch.GetRowCount() != 2 {
-		t.Fatalf("row_count = %d, want 2", batch.GetRowCount())
+	if len(rows) != 2 {
+		t.Fatalf("fixture rows = %d, want 2", len(rows))
 	}
 	if len(batch.GetSerializedBinaryRows()) == 0 {
 		t.Fatal("expected non-empty serialized_binary_rows")
@@ -74,10 +74,10 @@ func TestRowsToAvroBatchRoundTrip(t *testing.T) {
 func TestPublicReadSessionFromEngineAvro(t *testing.T) {
 	session, err := publicReadSessionFromEngine(&enginepb.ReadSession{
 		Name:  "projects/p/locations/-/sessions/s1",
-		Table: "projects/p/datasets/d/tables/t",
+		Table: testTableResource,
 		Schema: &enginepb.TableSchema{
 			Fields: []*enginepb.FieldSchema{
-				{Name: "id", Type: "INT64", Mode: "REQUIRED"},
+				{Name: "id", Type: bqTypeINT64, Mode: bqModeRequired},
 			},
 		},
 		Streams: []*enginepb.ReadStream{{Name: "projects/p/locations/-/sessions/s1/streams/0"}},

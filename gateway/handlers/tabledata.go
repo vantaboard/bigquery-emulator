@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -274,64 +276,70 @@ func TableDataList(deps Dependencies) http.HandlerFunc {
 			NotImplemented(w, r)
 			return
 		}
-
-		q := r.URL.Query()
-		startIndex, ok := parsePositiveInt64(w, q.Get("startIndex"), "startIndex", 0)
+		startIndex, maxResults, ok := tableDataListPaging(w, r.URL.Query())
 		if !ok {
 			return
 		}
-		// pageToken (when set) overrides startIndex; matches the way
-		// BigQuery clients page forward through tabledata results.
-		if tok := q.Get("pageToken"); tok != "" {
-			tokIdx, okTok := parsePositiveInt64(w, tok, "pageToken", 0)
-			if !okTok {
-				return
-			}
-			startIndex = tokIdx
-		}
-		maxResults, ok := parsePositiveInt64(w, q.Get("maxResults"), "maxResults", tableDataListDefaultMaxResults)
-		if !ok {
-			return
-		}
-
-		desc, err := deps.Catalog.DescribeTable(r.Context(), &enginepb.DescribeTableRequest{
-			Table: &enginepb.TableRef{
-				ProjectId: projectID,
-				DatasetId: datasetID,
-				TableId:   tableID,
-			},
-		})
+		out, err := buildTableDataList(r.Context(), deps, projectID, datasetID, tableID, startIndex, maxResults)
 		if grpcToHTTPError(w, err) {
 			return
-		}
-		schema := desc.GetSchema()
-
-		resp, err := deps.Catalog.ListRows(r.Context(), &enginepb.ListRowsRequest{
-			Table: &enginepb.TableRef{
-				ProjectId: projectID,
-				DatasetId: datasetID,
-				TableId:   tableID,
-			},
-			StartIndex: startIndex,
-			MaxResults: maxResults,
-		})
-		if grpcToHTTPError(w, err) {
-			return
-		}
-
-		out := bqtypes.TableDataList{
-			Kind:      tableDataListKind,
-			TotalRows: strconv.FormatInt(resp.GetTotalRows(), 10),
-		}
-		if resp.GetNextStartIndex() < resp.GetTotalRows() {
-			out.PageToken = strconv.FormatInt(resp.GetNextStartIndex(), 10)
-		}
-		out.Rows = make([]bqtypes.Row, 0, len(resp.GetRows()))
-		for _, row := range resp.GetRows() {
-			out.Rows = append(out.Rows, bqtypes.CellsToRowForSchema(row.GetCells(), schema))
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+func tableDataListPaging(w http.ResponseWriter, q url.Values) (startIndex, maxResults int64, ok bool) {
+	startIndex, ok = parsePositiveInt64(w, q.Get("startIndex"), "startIndex", 0)
+	if !ok {
+		return 0, 0, false
+	}
+	if tok := q.Get("pageToken"); tok != "" {
+		tokIdx, okTok := parsePositiveInt64(w, tok, "pageToken", 0)
+		if !okTok {
+			return 0, 0, false
+		}
+		startIndex = tokIdx
+	}
+	maxResults, ok = parsePositiveInt64(w, q.Get("maxResults"), "maxResults", tableDataListDefaultMaxResults)
+	return startIndex, maxResults, ok
+}
+
+func buildTableDataList(
+	ctx context.Context,
+	deps Dependencies,
+	projectID, datasetID, tableID string,
+	startIndex, maxResults int64,
+) (bqtypes.TableDataList, error) {
+	table := &enginepb.TableRef{
+		ProjectId: projectID,
+		DatasetId: datasetID,
+		TableId:   tableID,
+	}
+	desc, err := deps.Catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: table})
+	if err != nil {
+		return bqtypes.TableDataList{}, err
+	}
+	schema := desc.GetSchema()
+	resp, err := deps.Catalog.ListRows(ctx, &enginepb.ListRowsRequest{
+		Table:      table,
+		StartIndex: startIndex,
+		MaxResults: maxResults,
+	})
+	if err != nil {
+		return bqtypes.TableDataList{}, err
+	}
+	out := bqtypes.TableDataList{
+		Kind:      tableDataListKind,
+		TotalRows: strconv.FormatInt(resp.GetTotalRows(), 10),
+	}
+	if resp.GetNextStartIndex() < resp.GetTotalRows() {
+		out.PageToken = strconv.FormatInt(resp.GetNextStartIndex(), 10)
+	}
+	out.Rows = make([]bqtypes.Row, 0, len(resp.GetRows()))
+	for _, row := range resp.GetRows() {
+		out.Rows = append(out.Rows, bqtypes.CellsToRowForSchema(row.GetCells(), schema))
+	}
+	return out, nil
 }
 
 // parsePositiveInt64 parses an unsigned decimal string from a query

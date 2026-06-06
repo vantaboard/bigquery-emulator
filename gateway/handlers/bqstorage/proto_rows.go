@@ -113,7 +113,7 @@ func descriptorFromEngineTableSchema(schema *enginepb.TableSchema) *descriptorpb
 
 func engineModeToProtoLabel(mode string) *descriptorpb.FieldDescriptorProto_Label {
 	switch strings.ToUpper(strings.TrimSpace(mode)) {
-	case "REQUIRED":
+	case bqModeRequired:
 		return descriptorpb.FieldDescriptorProto_LABEL_REQUIRED.Enum()
 	case "REPEATED":
 		return descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
@@ -124,15 +124,15 @@ func engineModeToProtoLabel(mode string) *descriptorpb.FieldDescriptorProto_Labe
 
 func engineTypeToProtoType(t string) *descriptorpb.FieldDescriptorProto_Type {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "BOOL":
+	case bqTypeBOOL:
 		return descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
-	case "INT64":
+	case bqTypeINT64:
 		return descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
-	case "FLOAT64", "DOUBLE":
+	case bqTypeFLOAT64, "DOUBLE":
 		return descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
-	case "BYTES":
+	case bqTypeBYTES:
 		return descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum()
-	case "TIMESTAMP", "DATETIME", "DATE", "TIME":
+	case bqTypeTIMESTAMP, bqTypeDATETIME, bqTypeDATE, bqTypeTIME:
 		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
 	default:
 		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
@@ -229,14 +229,12 @@ func protoreflectValueToCell(v protoreflect.Value, fd protoreflect.FieldDescript
 		return &enginepb.Cell{
 			Value: &enginepb.Cell_StringValue{StringValue: strconv.FormatBool(v.Bool())},
 		}, nil
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		return int64Cell(int64(v.Int())), nil
-	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
+		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		return int64Cell(v.Int()), nil
-	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		return int64Cell(int64(v.Uint())), nil
-	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		return int64Cell(int64(v.Uint())), nil
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind,
+		protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return int64Cell(uint64ToSignedInt64(v.Uint())), nil
 	case protoreflect.FloatKind:
 		return &enginepb.Cell{
 			Value: &enginepb.Cell_StringValue{

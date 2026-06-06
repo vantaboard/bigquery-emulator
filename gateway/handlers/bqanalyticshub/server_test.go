@@ -44,10 +44,16 @@ func startTestServer(t *testing.T) (analyticshubpb.AnalyticsHubServiceClient, fu
 func TestAnalyticsHubExchangeLifecycle(t *testing.T) {
 	client, cleanup := startTestServer(t)
 	defer cleanup()
-	ctx := context.Background()
-	parent := "projects/p/locations/US"
-	exchangeID := "EmulatorDataExchange"
+	exerciseAnalyticsHubExchange(t, client, context.Background(), "projects/p/locations/US", "EmulatorDataExchange")
+}
 
+func exerciseAnalyticsHubExchange(
+	t *testing.T,
+	client analyticshubpb.AnalyticsHubServiceClient,
+	ctx context.Context,
+	parent, exchangeID string,
+) {
+	t.Helper()
 	exchange, err := client.CreateDataExchange(ctx, &analyticshubpb.CreateDataExchangeRequest{
 		Parent:         parent,
 		DataExchangeId: exchangeID,
@@ -81,6 +87,22 @@ func TestAnalyticsHubExchangeLifecycle(t *testing.T) {
 		t.Fatalf("displayName = %q", got.GetDisplayName())
 	}
 
+	createAnalyticsHubListing(t, client, ctx, parent, exchangeID)
+
+	if _, err := client.DeleteDataExchange(ctx, &analyticshubpb.DeleteDataExchangeRequest{
+		Name: parent + "/dataExchanges/" + exchangeID,
+	}); err != nil {
+		t.Fatalf("DeleteDataExchange: %v", err)
+	}
+}
+
+func createAnalyticsHubListing(
+	t *testing.T,
+	client analyticshubpb.AnalyticsHubServiceClient,
+	ctx context.Context,
+	parent, exchangeID string,
+) {
+	t.Helper()
 	listing, err := client.CreateListing(ctx, &analyticshubpb.CreateListingRequest{
 		Parent:    parent + "/dataExchanges/" + exchangeID,
 		ListingId: "EmulatorListing",
@@ -98,11 +120,5 @@ func TestAnalyticsHubExchangeLifecycle(t *testing.T) {
 	}
 	if listing.GetName() == "" {
 		t.Fatal("expected non-empty listing name")
-	}
-
-	if _, err := client.DeleteDataExchange(ctx, &analyticshubpb.DeleteDataExchangeRequest{
-		Name: parent + "/dataExchanges/" + exchangeID,
-	}); err != nil {
-		t.Fatalf("DeleteDataExchange: %v", err)
 	}
 }

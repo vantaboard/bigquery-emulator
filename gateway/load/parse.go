@@ -45,7 +45,7 @@ func ParseSource(format string, data []byte, schema *bqtypes.TableSchema,
 		return parseAvro(data, schema, autodetect)
 	case "ORC":
 		return parseORC(data, schema, autodetect)
-	case "DATASTORE_BACKUP":
+	case sourceFormatDatastoreBackup:
 		return parseDatastoreEntityBytes(data, schema)
 	default:
 		return ParsedRows{}, fmt.Errorf("unsupported sourceFormat %q", format)
@@ -163,7 +163,7 @@ func coerceCSVCell(raw string, fieldType string) any {
 		case "false", "f", "0", "no":
 			return false
 		}
-	case "TIMESTAMP":
+	case fieldTypeTimestamp:
 		if ts, ok := parseCSVDateTime(raw, true); ok {
 			return ts
 		}

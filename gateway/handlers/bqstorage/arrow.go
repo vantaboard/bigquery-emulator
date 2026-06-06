@@ -15,50 +15,43 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
-func arrowSchemaFromEngine(schema *enginepb.TableSchema) (*arrow.Schema, error) {
+func arrowSchemaFromEngine(schema *enginepb.TableSchema) *arrow.Schema {
 	if schema == nil || len(schema.GetFields()) == 0 {
-		return arrow.NewSchema(nil, nil), nil
+		return arrow.NewSchema(nil, nil)
 	}
 	fields := make([]arrow.Field, 0, len(schema.GetFields()))
 	for _, f := range schema.GetFields() {
-		dt, err := arrowTypeForBQ(f.GetType())
-		if err != nil {
-			return nil, err
-		}
 		fields = append(fields, arrow.Field{
 			Name:     f.GetName(),
-			Type:     dt,
-			Nullable: strings.ToUpper(f.GetMode()) != "REQUIRED",
+			Type:     arrowTypeForBQ(f.GetType()),
+			Nullable: strings.ToUpper(f.GetMode()) != bqModeRequired,
 		})
 	}
-	return arrow.NewSchema(fields, nil), nil
+	return arrow.NewSchema(fields, nil)
 }
 
-func arrowTypeForBQ(t string) (arrow.DataType, error) {
+func arrowTypeForBQ(t string) arrow.DataType {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "INT64", "INTEGER":
-		return arrow.PrimitiveTypes.Int64, nil
-	case "FLOAT64", "FLOAT":
-		return arrow.PrimitiveTypes.Float64, nil
-	case "BOOL":
-		return arrow.FixedWidthTypes.Boolean, nil
-	case "TIMESTAMP":
-		return &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "UTC"}, nil
-	case "DATETIME":
-		return &arrow.TimestampType{Unit: arrow.Microsecond}, nil
-	case "STRING", "JSON", "GEOGRAPHY", "DATE", "TIME",
-		"BYTES", "NUMERIC", "BIGNUMERIC", "STRUCT", "RECORD":
-		return arrow.BinaryTypes.String, nil
+	case bqTypeINT64, bqTypeINTEGER:
+		return arrow.PrimitiveTypes.Int64
+	case bqTypeFLOAT64, bqTypeFLOAT:
+		return arrow.PrimitiveTypes.Float64
+	case bqTypeBOOL:
+		return arrow.FixedWidthTypes.Boolean
+	case bqTypeTIMESTAMP:
+		return &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "UTC"}
+	case bqTypeDATETIME:
+		return &arrow.TimestampType{Unit: arrow.Microsecond}
+	case bqTypeSTRING, bqTypeJSON, bqTypeGEOGRAPHY, bqTypeDATE, bqTypeTIME,
+		bqTypeBYTES, bqTypeNUMERIC, bqTypeBIGNUMERIC, bqTypeSTRUCT, bqTypeRECORD:
+		return arrow.BinaryTypes.String
 	default:
-		return arrow.BinaryTypes.String, nil
+		return arrow.BinaryTypes.String
 	}
 }
 
 func serializeArrowSchema(schema *enginepb.TableSchema) (*storagepb.ArrowSchema, error) {
-	as, err := arrowSchemaFromEngine(schema)
-	if err != nil {
-		return nil, err
-	}
+	as := arrowSchemaFromEngine(schema)
 	schemaBytes, err := serializeArrowIPCSchema(as)
 	if err != nil {
 		return nil, err
@@ -70,17 +63,14 @@ func rowsToArrowBatch(
 	schema *enginepb.TableSchema,
 	rows []*enginepb.DataRow,
 ) (*storagepb.ArrowRecordBatch, error) {
-	as, err := arrowSchemaFromEngine(schema)
-	if err != nil {
-		return nil, err
-	}
+	as := arrowSchemaFromEngine(schema)
 	mem := memory.NewGoAllocator()
 	b := array.NewRecordBuilder(mem, as)
 	defer b.Release()
 
 	for colIdx, field := range schema.GetFields() {
-		if err := appendColumnValues(b.Field(colIdx), field.GetType(), rows, colIdx); err != nil {
-			return nil, err
+		if appendErr := appendColumnValues(b.Field(colIdx), field.GetType(), rows, colIdx); appendErr != nil {
+			return nil, appendErr
 		}
 	}
 
@@ -104,80 +94,109 @@ func appendColumnValues(
 	colIdx int,
 ) error {
 	switch strings.ToUpper(strings.TrimSpace(bqType)) {
-	case "INT64", "INTEGER":
-		ib := builder.(*array.Int64Builder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				ib.AppendNull()
-				continue
-			}
-			v, err := strconv.ParseInt(row.GetCells()[colIdx].GetStringValue(), 10, 64)
-			if err != nil {
-				return fmt.Errorf("column %d INT64 parse: %w", colIdx, err)
-			}
-			ib.Append(v)
-		}
-	case "FLOAT64", "FLOAT":
-		fb := builder.(*array.Float64Builder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				fb.AppendNull()
-				continue
-			}
-			v, err := strconv.ParseFloat(row.GetCells()[colIdx].GetStringValue(), 64)
-			if err != nil {
-				return fmt.Errorf("column %d FLOAT64 parse: %w", colIdx, err)
-			}
-			fb.Append(v)
-		}
-	case "BOOL":
-		bb := builder.(*array.BooleanBuilder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				bb.AppendNull()
-				continue
-			}
-			v, err := strconv.ParseBool(row.GetCells()[colIdx].GetStringValue())
-			if err != nil {
-				return fmt.Errorf("column %d BOOL parse: %w", colIdx, err)
-			}
-			bb.Append(v)
-		}
-	case "TIMESTAMP":
-		tb := builder.(*array.TimestampBuilder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				tb.AppendNull()
-				continue
-			}
-			micros, err := timestampCellToMicros(row.GetCells()[colIdx].GetStringValue())
-			if err != nil {
-				return fmt.Errorf("column %d TIMESTAMP parse: %w", colIdx, err)
-			}
-			tb.Append(arrow.Timestamp(micros))
-		}
-	case "DATETIME":
-		tb := builder.(*array.TimestampBuilder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				tb.AppendNull()
-				continue
-			}
-			micros, err := datetimeCellToMicros(row.GetCells()[colIdx].GetStringValue())
-			if err != nil {
-				return fmt.Errorf("column %d DATETIME parse: %w", colIdx, err)
-			}
-			tb.Append(arrow.Timestamp(micros))
-		}
+	case bqTypeINT64, bqTypeINTEGER:
+		return appendInt64Column(builder, rows, colIdx)
+	case bqTypeFLOAT64, bqTypeFLOAT:
+		return appendFloat64Column(builder, rows, colIdx)
+	case bqTypeBOOL:
+		return appendBoolColumn(builder, rows, colIdx)
+	case bqTypeTIMESTAMP:
+		return appendTimestampColumn(builder, rows, colIdx)
+	case bqTypeDATETIME:
+		return appendDatetimeColumn(builder, rows, colIdx)
 	default:
-		sb := builder.(*array.StringBuilder)
-		for _, row := range rows {
-			if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-				sb.AppendNull()
-				continue
-			}
-			sb.Append(row.GetCells()[colIdx].GetStringValue())
+		return appendStringColumn(builder, rows, colIdx)
+	}
+}
+
+func appendInt64Column(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	ib := builder.(*array.Int64Builder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			ib.AppendNull()
+			continue
 		}
+		v, err := strconv.ParseInt(row.GetCells()[colIdx].GetStringValue(), 10, 64)
+		if err != nil {
+			return fmt.Errorf("column %d INT64 parse: %w", colIdx, err)
+		}
+		ib.Append(v)
+	}
+	return nil
+}
+
+func appendFloat64Column(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	fb := builder.(*array.Float64Builder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			fb.AppendNull()
+			continue
+		}
+		v, err := strconv.ParseFloat(row.GetCells()[colIdx].GetStringValue(), 64)
+		if err != nil {
+			return fmt.Errorf("column %d FLOAT64 parse: %w", colIdx, err)
+		}
+		fb.Append(v)
+	}
+	return nil
+}
+
+func appendBoolColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	bb := builder.(*array.BooleanBuilder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			bb.AppendNull()
+			continue
+		}
+		v, err := strconv.ParseBool(row.GetCells()[colIdx].GetStringValue())
+		if err != nil {
+			return fmt.Errorf("column %d BOOL parse: %w", colIdx, err)
+		}
+		bb.Append(v)
+	}
+	return nil
+}
+
+func appendTimestampColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	tb := builder.(*array.TimestampBuilder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			tb.AppendNull()
+			continue
+		}
+		micros, err := timestampCellToMicros(row.GetCells()[colIdx].GetStringValue())
+		if err != nil {
+			return fmt.Errorf("column %d TIMESTAMP parse: %w", colIdx, err)
+		}
+		tb.Append(arrow.Timestamp(micros))
+	}
+	return nil
+}
+
+func appendDatetimeColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	tb := builder.(*array.TimestampBuilder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			tb.AppendNull()
+			continue
+		}
+		micros, err := datetimeCellToMicros(row.GetCells()[colIdx].GetStringValue())
+		if err != nil {
+			return fmt.Errorf("column %d DATETIME parse: %w", colIdx, err)
+		}
+		tb.Append(arrow.Timestamp(micros))
+	}
+	return nil
+}
+
+func appendStringColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
+	sb := builder.(*array.StringBuilder)
+	for _, row := range rows {
+		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
+			sb.AppendNull()
+			continue
+		}
+		sb.Append(row.GetCells()[colIdx].GetStringValue())
 	}
 	return nil
 }

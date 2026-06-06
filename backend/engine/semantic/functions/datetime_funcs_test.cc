@@ -55,8 +55,8 @@ TEST(DatetimeFuncsTest, DateConstructorFromIsoString) {
 }
 
 TEST(DatetimeFuncsTest, DateConstructorFromYmdInts) {
-  auto got = DateConstructor(
-      {Value::Int64(2020), Value::Int64(9), Value::Int64(22)});
+  auto got =
+      DateConstructor({Value::Int64(2020), Value::Int64(9), Value::Int64(22)});
   ASSERT_TRUE(got.ok()) << got.status();
   auto roundtrip =
       ParseDate({Value::String("%Y-%m-%d"), Value::String("2020-09-22")});

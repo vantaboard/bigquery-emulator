@@ -59,7 +59,7 @@ func mergeFieldPolicyTags(base, overlay []TableFieldSchema) []TableFieldSchema {
 	for _, f := range overlay {
 		byName[f.Name] = f
 	}
-	out := make([]TableFieldSchema, len(base))
+	out := append([]TableFieldSchema(nil), base...)
 	for i, f := range base {
 		out[i] = f
 		ov, ok := byName[f.Name]

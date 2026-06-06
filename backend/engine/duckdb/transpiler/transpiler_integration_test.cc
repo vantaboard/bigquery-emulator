@@ -219,7 +219,7 @@ FROM transactions
 WHERE timestamp > TIMESTAMP('2015-01-01')
   AND origin = @wallet
 )sql",
-                                                             options);
+                                                           options);
   ASSERT_NE(stmt, nullptr);
   TestTranspiler t;
   std::string sql = t.Transpile(stmt);

@@ -85,35 +85,35 @@ func (c *multiSourceCatalog) InsertRows(
 func TestExecuteMultiSourceCopy(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "id", Type: "INTEGER"},
+		{Name: "id", Type: schemaTypeINTEGER},
 	}}
 	cat := &multiSourceCatalog{
 		tables: map[string]*enginepb.TableSchema{
-			"src1": schema,
-			"src2": schema,
+			testTableSrc1: schema,
+			testTableSrc2: schema,
 		},
 		rows: map[string][]*enginepb.DataRow{
-			"src1": {{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "1"}}}}},
-			"src2": {{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "2"}}}}},
+			testTableSrc1: {{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "1"}}}}},
+			testTableSrc2: {{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "2"}}}}},
 		},
 	}
 	cfg := &jobs.JobConfigurationCopy{
 		SourceTables: []bqtypes.TableReference{
-			{ProjectID: "dev", DatasetID: "ds", TableID: "src1"},
-			{ProjectID: "dev", DatasetID: "ds", TableID: "src2"},
+			{ProjectID: testProjectDev, DatasetID: "ds", TableID: testTableSrc1},
+			{ProjectID: testProjectDev, DatasetID: "ds", TableID: testTableSrc2},
 		},
-		DestinationTable: &bqtypes.TableReference{ProjectID: "dev", DatasetID: "ds", TableID: "dest"},
+		DestinationTable: &bqtypes.TableReference{ProjectID: testProjectDev, DatasetID: "ds", TableID: testDestTableID},
 		WriteDisposition: "WRITE_EMPTY",
 	}
-	result, err := copy.Execute(context.Background(), cat, nil, nil, cfg, "dev")
+	result, err := copy.Execute(context.Background(), cat, nil, nil, cfg, testProjectDev)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if result.CopiedRows != 2 {
 		t.Fatalf("CopiedRows = %d, want 2", result.CopiedRows)
 	}
-	if len(cat.rows["dest"]) != 2 {
-		t.Fatalf("dest rows = %d, want 2", len(cat.rows["dest"]))
+	if len(cat.rows[testDestTableID]) != 2 {
+		t.Fatalf("dest rows = %d, want 2", len(cat.rows[testDestTableID]))
 	}
 }
 
@@ -122,13 +122,17 @@ func TestExecuteCopyCreateNeverRequiresDestination(t *testing.T) {
 	cat := &multiSourceCatalog{tables: map[string]*enginepb.TableSchema{}, rows: map[string][]*enginepb.DataRow{}}
 	cfg := &jobs.JobConfigurationCopy{
 		SourceTables: []bqtypes.TableReference{
-			{ProjectID: "dev", DatasetID: "ds", TableID: "src1"},
+			{ProjectID: testProjectDev, DatasetID: "ds", TableID: testTableSrc1},
 		},
-		DestinationTable:  &bqtypes.TableReference{ProjectID: "dev", DatasetID: "ds", TableID: "dest"},
+		DestinationTable: &bqtypes.TableReference{
+			ProjectID: testProjectDev,
+			DatasetID: "ds",
+			TableID:   testDestTableID,
+		},
 		CreateDisposition: "CREATE_NEVER",
 		WriteDisposition:  "WRITE_TRUNCATE",
 	}
-	_, err := copy.Execute(context.Background(), cat, nil, nil, cfg, "dev")
+	_, err := copy.Execute(context.Background(), cat, nil, nil, cfg, testProjectDev)
 	if err == nil {
 		t.Fatal("expected error when destination missing with CREATE_NEVER")
 	}

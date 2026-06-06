@@ -10,10 +10,10 @@ import (
 func TestStripExpandedPositionalArrayParams(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[
-		{"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		{"parameterType":{"type":"` + sqlTypeARRAY + `","arrayType":{"type":"` + sqlTypeSTRING + `"}},
 		 "parameterValue":{"arrayValues":[{"value":"a"}]}},
-		{"parameterType":{"type":"STRING"},"parameterValue":{"value":"romeo"}},
-		{"parameterType":{"type":"INT64"},"parameterValue":{"value":"1"}}
+		{"parameterType":{"type":"` + sqlTypeSTRING + `"},"parameterValue":{"value":"romeo"}},
+		{"parameterType":{"type":"` + sqlTypeINT64 + `"},"parameterValue":{"value":"1"}}
 	]`))
 	if err != nil {
 		t.Fatalf("ParseQueryParameters: %v", err)
@@ -28,7 +28,7 @@ func TestStripExpandedPositionalArrayParams(t *testing.T) {
 func TestExpandPositionalArrayParamsInSQL(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{
-		"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		"parameterType":{"type":"` + sqlTypeARRAY + `","arrayType":{"type":"` + sqlTypeSTRING + `"}},
 		"parameterValue":{"arrayValues":[{"value":"and"},{"value":"is"}]}
 	}]`))
 	if err != nil {
@@ -48,11 +48,11 @@ func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 	params, err := bqtypes.ParseQueryParameters([]byte(`[
 		{
 			"name":"corpus",
-			"parameterType":{"type":"STRING"},
+			"parameterType":{"type":"` + sqlTypeSTRING + `"},
 			"parameterValue":{"value":"romeoandjuliet"}
 		},
 		{
-			"parameterType":{"type":"INT64"},
+			"parameterType":{"type":"` + sqlTypeINT64 + `"},
 			"parameterValue":{"value":250}
 		}
 	]`))
@@ -78,7 +78,7 @@ func TestParametersToEngineMapTimestamp(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{
 		"name":"ts_value",
-		"parameterType":{"type":"TIMESTAMP"},
+		"parameterType":{"type":"` + sqlTypeTIMESTAMP + `"},
 		"parameterValue":{"value":"2016-12-07T08:00:00+00:00"}
 	}]`))
 	if err != nil {
@@ -86,7 +86,7 @@ func TestParametersToEngineMapTimestamp(t *testing.T) {
 	}
 	got := parametersToEngineMap(params)
 	p := got["ts_value"]
-	if p == nil || p.GetTypeKind() != "TIMESTAMP" ||
+	if p == nil || p.GetTypeKind() != sqlTypeTIMESTAMP ||
 		p.GetValueJson() != "2016-12-07T08:00:00+00:00" {
 		t.Fatalf("ts_value = %+v", p)
 	}
@@ -96,7 +96,7 @@ func TestParametersToEngineMapArray(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{
 		"name":"states",
-		"parameterType":{"type":"ARRAY","arrayType":{"type":"STRING"}},
+		"parameterType":{"type":"` + sqlTypeARRAY + `","arrayType":{"type":"` + sqlTypeSTRING + `"}},
 		"parameterValue":{"arrayValues":[
 			{"value":"WA"},
 			{"value":"WI"},
@@ -109,11 +109,11 @@ func TestParametersToEngineMapArray(t *testing.T) {
 	}
 	got := parametersToEngineMap(params)
 	p := got["states"]
-	if p == nil || p.GetTypeKind() != "ARRAY" {
+	if p == nil || p.GetTypeKind() != sqlTypeARRAY {
 		t.Fatalf("states = %+v", p)
 	}
-	if p.GetTypeJson() != "STRING" {
-		t.Errorf("TypeJson = %q, want STRING", p.GetTypeJson())
+	if p.GetTypeJson() != sqlTypeSTRING {
+		t.Errorf("TypeJson = %q, want %s", p.GetTypeJson(), sqlTypeSTRING)
 	}
 	if p.GetValueJson() != `["WA","WI","WV","WY"]` {
 		t.Errorf("ValueJson = %q, want [\"WA\",\"WI\",\"WV\",\"WY\"]", p.GetValueJson())
@@ -125,8 +125,8 @@ func TestParametersToEngineMapStruct(t *testing.T) {
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{
 		"name":"struct_value",
 		"parameterType":{"type":"STRUCT","structTypes":[
-			{"name":"x","type":{"type":"INT64"}},
-			{"name":"y","type":{"type":"STRING"}}
+			{"name":"x","type":{"type":"` + sqlTypeINT64 + `"}},
+			{"name":"y","type":{"type":"` + sqlTypeSTRING + `"}}
 		]},
 		"parameterValue":{"structValues":{
 			"x":{"value":"1"},
@@ -141,8 +141,8 @@ func TestParametersToEngineMapStruct(t *testing.T) {
 	if p == nil || p.GetTypeKind() != "STRUCT" {
 		t.Fatalf("struct_value = %+v", p)
 	}
-	if p.GetTypeJson() != "x:INT64,y:STRING" {
-		t.Errorf("TypeJson = %q, want x:INT64,y:STRING", p.GetTypeJson())
+	if p.GetTypeJson() != "x:"+sqlTypeINT64+",y:"+sqlTypeSTRING {
+		t.Errorf("TypeJson = %q, want x:%s,y:%s", p.GetTypeJson(), sqlTypeINT64, sqlTypeSTRING)
 	}
 	if p.GetValueJson() != `[1,"foo"]` {
 		t.Errorf("ValueJson = %q, want [1,\"foo\"]", p.GetValueJson())
