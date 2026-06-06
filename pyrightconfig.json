@@ -1,0 +1,22 @@
+{
+    "include": [
+        "tools",
+        "scripts",
+        ".github/scripts"
+    ],
+    "exclude": [
+        "third_party/**",
+        "backend/**",
+        "bazel-*/**",
+        "bin/**",
+        "build/**",
+        "dist/**",
+        "out/**",
+        "tmp/**",
+        ".cache/**",
+        "**/.nox/**",
+        "**/.venv/**",
+        "**/site-packages/**"
+    ],
+    "pythonVersion": "3.11"
+}
