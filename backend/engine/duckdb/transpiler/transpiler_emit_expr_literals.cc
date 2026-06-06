@@ -113,6 +113,9 @@ std::string Transpiler::EmitColumnRef(
   // whether the column flows straight from a table scan or through
   // a wrapping FilterScan / ProjectScan.
   if (node == nullptr) return "";
+  if (join_output_uses_id_aliases_) {
+    return internal::JoinColumnIdAlias(node->column().column_id());
+  }
   return internal::QuoteIdent(node->column().name());
 }
 

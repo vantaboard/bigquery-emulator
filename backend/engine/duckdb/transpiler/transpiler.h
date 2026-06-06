@@ -378,6 +378,10 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   };
   std::vector<RecursiveCteContext> recursive_cte_stack_;
 
+  // Set when the immediately-wrapped scan emit is a JOIN that projects
+  // analyzer columns under `__bq_j_<column_id>` aliases.
+  bool join_output_uses_id_aliases_ = false;
+
   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST
   // ordinality or an explicit row_number() stamp).
   bool input_has_rn_column_ = false;

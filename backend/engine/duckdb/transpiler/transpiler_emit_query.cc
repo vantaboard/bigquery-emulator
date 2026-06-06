@@ -200,6 +200,8 @@ std::string Transpiler::EmitProjectScan(
 
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
+  const bool input_id_aliases = join_output_uses_id_aliases_;
+  join_output_uses_id_aliases_ = false;
 
   std::vector<std::string> projections;
   projections.reserve(node->column_list_size());
@@ -232,8 +234,16 @@ std::string Transpiler::EmitProjectScan(
         }
       }
       if (shadowed_by_computed) continue;
-      projections.push_back(internal::QuoteIdent(col.name()));
+      if (input_id_aliases) {
+        projections.push_back(internal::JoinColumnIdAlias(col.column_id()));
+      } else {
+        projections.push_back(internal::QuoteIdent(col.name()));
+      }
     }
+  }
+
+  if (input_id_aliases) {
+    join_output_uses_id_aliases_ = true;
   }
 
   for (const std::string& item : output_order_items_) {

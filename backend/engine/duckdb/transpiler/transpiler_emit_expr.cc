@@ -380,7 +380,10 @@ std::string Transpiler::EmitOutputColumn(
   // case (`SELECT id FROM people` -> the output name and the
   // physical column name both resolve to `"id"`).
   if (node == nullptr) return "";
-  std::string col = internal::QuoteIdent(node->column().name());
+  std::string col =
+      join_output_uses_id_aliases_
+          ? internal::JoinColumnIdAlias(node->column().column_id())
+          : internal::QuoteIdent(node->column().name());
   if (node->name() == node->column().name()) {
     return col;
   }

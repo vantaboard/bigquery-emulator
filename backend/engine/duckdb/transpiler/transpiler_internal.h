@@ -60,6 +60,10 @@ inline std::string WrapArrayAggRespectNulls(absl::string_view body,
 }
 
 inline constexpr const char kBqInputRnCol[] = "__bq_input_rn";
+
+inline std::string JoinColumnIdAlias(int column_id) {
+  return QuoteIdent(absl::StrCat("__bq_j_", column_id));
+}
 inline constexpr const char kBqPctCoalesceCol[] = "__bq_pct_coalesce";
 inline constexpr char kBqPctNullSentinel[] = "'!__BQ_NULL__!'";
 inline constexpr const char kBqUnionOrdCol[] = "__bq_union_ord";

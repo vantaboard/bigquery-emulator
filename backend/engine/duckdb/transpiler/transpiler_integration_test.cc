@@ -145,6 +145,37 @@ TEST_F(TranspilerTest, TranspileRowNumberOverFarmFingerprint) {
   EXPECT_NE(sql.find("ROW_NUMBER"), std::string::npos);
 }
 
+TEST_F(TranspilerTest, TranspileBigframesCacheJoinCoalesceOn) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT a.level_0, b.bfuid_col_2 FROM "
+      "(SELECT 0 AS level_0, 'John' AS column_0) a "
+      "LEFT OUTER JOIN "
+      "(SELECT 0 AS bfuid_col_1, 'group_1' AS bfuid_col_2) b "
+      "ON COALESCE(a.level_0, 0) = COALESCE(b.bfuid_col_1, 0) "
+      "AND COALESCE(a.level_0, 1) = COALESCE(b.bfuid_col_1, 1)");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  ASSERT_FALSE(t.Transpile(stmt).empty())
+      << "bigframes cache COALESCE join ON must transpile";
+}
+
+TEST_F(TranspilerTest, TranspileUnnestJoinPreservesInputRn) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT a.level_0, b.column_0 FROM "
+      "(SELECT * FROM UNNEST(ARRAY<STRUCT<level_0 INT64, column_0 STRING>>"
+      "[STRUCT(0, 'John')]) AS level_0) a "
+      "LEFT OUTER JOIN "
+      "(SELECT * FROM UNNEST(ARRAY<STRUCT<level_0 INT64, column_0 STRING>>"
+      "[STRUCT(0, 'group_1')]) AS level_0) b "
+      "ON COALESCE(a.level_0, 0) = COALESCE(b.level_0, 0)");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "UNNEST join must transpile";
+  EXPECT_NE(sql.find("\"__bq_input_rn\""), std::string::npos)
+      << "join must preserve UNNEST ordinality column: " << sql;
+}
+
 TEST_F(TranspilerTest, TranspileBigframesMeanStatsFullAggregates) {
   const ::googlesql::ResolvedStatement* stmt = Analyze(R"sql(
 SELECT `bfuid_col_2`, `count`, `min`, `max`, `std`, `mean`, `var`, `sum` FROM (

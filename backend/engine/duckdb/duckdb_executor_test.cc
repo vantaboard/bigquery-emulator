@@ -28,6 +28,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
@@ -329,6 +330,67 @@ TEST_F(DuckDbExecutorTest, ExecuteQueryRejectsNonQueryStatement) {
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument)
       << source.status();
+}
+
+TEST_F(DuckDbExecutorTest, ExecuteBigframesCacheJoinShape) {
+  // Regression for bigframes `cache()` join SQL: output schema column
+  // `bfuid_col_4` must stay INT64 (amount=3), not pick up STRING
+  // `column_0` ('John') from a misaligned DuckDB chunk.
+  static constexpr char kSql[] = R"sql(
+SELECT `level_0`, `column_0`, `bfuid_col_2`, `bfuid_col_4`, `column_1`, `bfuid_col_14` AS `bfuid_col_15`, `bfuid_col_10` AS `bfuid_col_16`, `bfuid_col_13` AS `bfuid_col_17`, `bfuid_col_9` AS `bfuid_col_18`, `bfuid_col_11` AS `bfuid_col_19` FROM (SELECT
+  `t11`.`level_0`, `t11`.`column_0`, `t11`.`bfuid_col_2`, `t11`.`bfuid_col_9`, `t11`.`bfuid_col_10`, `t11`.`bfuid_col_11`,
+  `t6`.`bfuid_col_3`, `t6`.`bfuid_col_4`, `t6`.`column_1`, `t6`.`bfuid_col_13`, `t6`.`bfuid_col_14`
+FROM (
+  SELECT * FROM (
+    SELECT `t7`.`level_0`, `t7`.`column_0`, `t8`.`bfuid_col_2`, `t7`.`bfuid_col_5` AS `bfuid_col_9`, `t8`.`bfuid_col_7` AS `bfuid_col_10`, `t8`.`bfuid_col_8` AS `bfuid_col_11`
+    FROM (SELECT * FROM (SELECT * FROM UNNEST(ARRAY<STRUCT<`level_0` INT64, `column_0` STRING, `bfuid_col_5` INT64>>[STRUCT(0, 'John', 0)]) AS `level_0`) AS `t1`) AS `t7`
+    LEFT OUTER JOIN (
+      SELECT `t2`.`level_0` AS `bfuid_col_1`, `t2`.`column_0` AS `bfuid_col_2`, `t2`.`bfuid_col_6` AS `bfuid_col_7`, TRUE AS `bfuid_col_8`
+      FROM (SELECT * FROM UNNEST(ARRAY<STRUCT<`level_0` INT64, `column_0` STRING, `bfuid_col_6` INT64>>[STRUCT(0, 'group_1', 0)]) AS `level_0`) AS `t2`
+    ) AS `t8` ON COALESCE(`t7`.`level_0`, 0) = COALESCE(`t8`.`bfuid_col_1`, 0) AND COALESCE(`t7`.`level_0`, 1) = COALESCE(`t8`.`bfuid_col_1`, 1)
+  ) AS `t9`
+) AS `t11`
+LEFT OUTER JOIN (
+  SELECT `t0`.`level_0` AS `bfuid_col_3`, `t0`.`column_0` AS `bfuid_col_4`, `t0`.`column_1`, `t0`.`bfuid_col_12` AS `bfuid_col_13`, TRUE AS `bfuid_col_14`
+  FROM (SELECT * FROM UNNEST(ARRAY<STRUCT<`level_0` INT64, `column_0` INT64, `column_1` BOOLEAN, `bfuid_col_12` INT64>>[STRUCT(0, 3, TRUE, 0)]) AS `level_0`) AS `t0`
+) AS `t6` ON COALESCE(`t11`.`level_0`, 0) = COALESCE(`t6`.`bfuid_col_3`, 0) AND COALESCE(`t11`.`level_0`, 1) = COALESCE(`t6`.`bfuid_col_3`, 1)) AS `t`
+)sql";
+  const std::string sql(kSql);
+  CatalogBundle bundle = MakeCatalog();
+  auto analyzed = Analyze(sql, bundle.catalog.get(), /*all_statements=*/false);
+  ASSERT_TRUE(analyzed.ok()) << analyzed.status();
+  const ::googlesql::ResolvedStatement* stmt =
+      (*analyzed)->resolved_statement();
+  ASSERT_NE(stmt, nullptr);
+
+  const auto* query_stmt = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
+  ASSERT_NE(query_stmt, nullptr);
+  transpiler::Transpiler transpiler;
+  std::string transpiled = transpiler.Transpile(query_stmt);
+  ASSERT_FALSE(transpiled.empty()) << "bigframes cache join must transpile";
+
+  absl::StatusOr<std::unique_ptr<RowSource>> source =
+      executor_->ExecuteQuery(MakeRequest(sql), *stmt, bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  const schema::TableSchema& out_schema = (*source)->schema();
+  ASSERT_EQ(out_schema.columns.size(), 10u);
+  int bfuid_col_4_idx = -1;
+  for (size_t i = 0; i < out_schema.columns.size(); ++i) {
+    if (out_schema.columns[i].name == "bfuid_col_4") {
+      bfuid_col_4_idx = static_cast<int>(i);
+      break;
+    }
+  }
+  ASSERT_EQ(bfuid_col_4_idx, 3) << "bfuid_col_4 schema position drift";
+
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status() << "\nSQL:\n" << transpiled;
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 10u);
+  EXPECT_EQ(row.cells[static_cast<size_t>(bfuid_col_4_idx)].int64_value(), 3);
+  EXPECT_EQ(row.cells[1].string_value(), "John");
 }
 
 TEST_F(DuckDbExecutorTest,

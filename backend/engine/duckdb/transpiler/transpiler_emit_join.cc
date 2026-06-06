@@ -110,27 +110,100 @@ static void AppendScanColumnIds(const ::googlesql::ResolvedScan* scan,
 static std::string EmitJoinQualifiedColumnRef(
     const ::googlesql::ResolvedColumnRef* node,
     const absl::flat_hash_set<int>& left_ids,
-    const absl::flat_hash_set<int>& right_ids) {
+    const absl::flat_hash_set<int>& right_ids,
+    bool left_id_aliases,
+    bool right_id_aliases) {
   if (node == nullptr) return "";
   const int col_id = node->column().column_id();
   const std::string quoted = internal::QuoteIdent(node->column().name());
   if (left_ids.contains(col_id)) {
+    if (left_id_aliases) {
+      return absl::StrCat("__bq_l.", internal::JoinColumnIdAlias(col_id));
+    }
     return absl::StrCat("__bq_l.", quoted);
   }
   if (right_ids.contains(col_id)) {
+    if (right_id_aliases) {
+      return absl::StrCat("__bq_r.", internal::JoinColumnIdAlias(col_id));
+    }
     return absl::StrCat("__bq_r.", quoted);
   }
   return quoted;
 }
 
+static void AppendJoinInternalColumns(bool left_sql_has_rn,
+                                      bool right_sql_has_rn,
+                                      std::vector<std::string>* projections) {
+  if (projections == nullptr) return;
+  const std::string quoted = internal::QuoteIdent(internal::kBqInputRnCol);
+  for (const std::string& projection : *projections) {
+    if (projection.find(quoted) != std::string::npos) return;
+  }
+  const char* side = nullptr;
+  if (left_sql_has_rn) {
+    side = "__bq_l";
+  } else if (right_sql_has_rn) {
+    side = "__bq_r";
+  } else {
+    return;
+  }
+  projections->push_back(
+      absl::StrCat(side,
+                   ".",
+                   quoted,
+                   " AS ",
+                   internal::QuoteIdent(internal::kBqInputRnCol)));
+}
+
+static std::string EmitJoinOutputProjections(
+    const ::googlesql::ResolvedJoinScan* node,
+    const absl::flat_hash_set<int>& left_ids,
+    const absl::flat_hash_set<int>& right_ids,
+    bool left_id_aliases,
+    bool right_id_aliases,
+    bool left_sql_has_rn,
+    bool right_sql_has_rn) {
+  if (node == nullptr) return "";
+  std::vector<std::string> projections;
+  projections.reserve(node->column_list_size() + 1);
+  for (int i = 0; i < node->column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = node->column_list(i);
+    const int col_id = col.column_id();
+    const std::string quoted = internal::QuoteIdent(col.name());
+    std::string ref;
+    if (left_ids.contains(col_id)) {
+      ref = left_id_aliases
+                ? absl::StrCat("__bq_l.", internal::JoinColumnIdAlias(col_id))
+                : absl::StrCat("__bq_l.", quoted);
+    } else if (right_ids.contains(col_id)) {
+      ref = right_id_aliases
+                ? absl::StrCat("__bq_r.", internal::JoinColumnIdAlias(col_id))
+                : absl::StrCat("__bq_r.", quoted);
+    } else {
+      return "";
+    }
+    projections.push_back(
+        absl::StrCat(ref, " AS ", internal::JoinColumnIdAlias(col_id)));
+  }
+  AppendJoinInternalColumns(left_sql_has_rn, right_sql_has_rn, &projections);
+  if (projections.empty()) return "";
+  return absl::StrJoin(projections, ", ");
+}
+
 static std::string EmitJoinQualifiedExpr(
     const ::googlesql::ResolvedExpr* expr,
     const absl::flat_hash_set<int>& left_ids,
-    const absl::flat_hash_set<int>& right_ids) {
+    const absl::flat_hash_set<int>& right_ids,
+    bool left_id_aliases,
+    bool right_id_aliases) {
   if (expr == nullptr) return "";
   if (expr->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
     return EmitJoinQualifiedColumnRef(
-        expr->GetAs<::googlesql::ResolvedColumnRef>(), left_ids, right_ids);
+        expr->GetAs<::googlesql::ResolvedColumnRef>(),
+        left_ids,
+        right_ids,
+        left_id_aliases,
+        right_id_aliases);
   }
   if (expr->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
     const auto* call = expr->GetAs<::googlesql::ResolvedFunctionCall>();
@@ -139,8 +212,11 @@ static std::string EmitJoinQualifiedExpr(
     std::vector<std::string> args;
     args.reserve(call->argument_list_size());
     for (int i = 0; i < call->argument_list_size(); ++i) {
-      std::string arg =
-          EmitJoinQualifiedExpr(call->argument_list(i), left_ids, right_ids);
+      std::string arg = EmitJoinQualifiedExpr(call->argument_list(i),
+                                              left_ids,
+                                              right_ids,
+                                              left_id_aliases,
+                                              right_id_aliases);
       if (arg.empty()) return "";
       args.push_back(std::move(arg));
     }
@@ -149,6 +225,11 @@ static std::string EmitJoinQualifiedExpr(
     }
     if (fn == "$and" && !args.empty()) {
       return absl::StrCat("(", absl::StrJoin(args, " AND "), ")");
+    }
+    // bigframes join ordering keys use COALESCE(lhs, sentinel) =
+    // COALESCE(rhs, sentinel) in LEFT OUTER JOIN ON clauses.
+    if (fn == "coalesce" && args.size() >= 2) {
+      return absl::StrCat("COALESCE(", absl::StrJoin(args, ", "), ")");
     }
     return "";
   }
@@ -214,8 +295,15 @@ std::string Transpiler::EmitJoinScan(
   }
   std::string left = EmitScan(node->left_scan());
   if (left.empty()) return "";
+  const bool left_id_aliases = join_output_uses_id_aliases_;
+  join_output_uses_id_aliases_ = false;
   std::string right = EmitScan(node->right_scan());
   if (right.empty()) return "";
+  const bool right_id_aliases = join_output_uses_id_aliases_;
+  join_output_uses_id_aliases_ = false;
+  const std::string rn_quoted = internal::QuoteIdent(internal::kBqInputRnCol);
+  const bool left_sql_has_rn = left.find(rn_quoted) != std::string::npos;
+  const bool right_sql_has_rn = right.find(rn_quoted) != std::string::npos;
 
   const char* join_kw = nullptr;
   switch (node->join_type()) {
@@ -265,16 +353,49 @@ std::string Transpiler::EmitJoinScan(
     if (node->join_type() != ::googlesql::ResolvedJoinScan::INNER) {
       return "";
     }
-    return absl::StrCat("SELECT * FROM (", left, ") CROSS JOIN (", right, ")");
+    absl::flat_hash_set<int> left_ids;
+    absl::flat_hash_set<int> right_ids;
+    AppendScanColumnIds(node->left_scan(), &left_ids);
+    AppendScanColumnIds(node->right_scan(), &right_ids);
+    std::string projections = EmitJoinOutputProjections(node,
+                                                        left_ids,
+                                                        right_ids,
+                                                        left_id_aliases,
+                                                        right_id_aliases,
+                                                        left_sql_has_rn,
+                                                        right_sql_has_rn);
+    if (projections.empty()) return "";
+    join_output_uses_id_aliases_ = true;
+    return absl::StrCat("SELECT ",
+                        projections,
+                        " FROM (",
+                        left,
+                        ") AS __bq_l CROSS JOIN (",
+                        right,
+                        ") AS __bq_r");
   }
   absl::flat_hash_set<int> left_ids;
   absl::flat_hash_set<int> right_ids;
   AppendScanColumnIds(node->left_scan(), &left_ids);
   AppendScanColumnIds(node->right_scan(), &right_ids);
-  std::string on =
-      EmitJoinQualifiedExpr(node->join_expr(), left_ids, right_ids);
+  std::string projections = EmitJoinOutputProjections(node,
+                                                      left_ids,
+                                                      right_ids,
+                                                      left_id_aliases,
+                                                      right_id_aliases,
+                                                      left_sql_has_rn,
+                                                      right_sql_has_rn);
+  if (projections.empty()) return "";
+  std::string on = EmitJoinQualifiedExpr(node->join_expr(),
+                                         left_ids,
+                                         right_ids,
+                                         left_id_aliases,
+                                         right_id_aliases);
   if (on.empty()) return "";
-  return absl::StrCat("SELECT * FROM (",
+  join_output_uses_id_aliases_ = true;
+  return absl::StrCat("SELECT ",
+                      projections,
+                      " FROM (",
                       left,
                       ") AS __bq_l ",
                       join_kw,

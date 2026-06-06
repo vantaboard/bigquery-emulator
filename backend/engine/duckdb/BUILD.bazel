@@ -83,6 +83,7 @@ cc_test(
     srcs = ["duckdb_executor_test.cc"],
     deps = [
         ":duckdb_executor",
+        "//backend/engine/duckdb/transpiler",
         "//backend/catalog:googlesql_catalog",
         "//backend/engine",
         "//backend/schema",

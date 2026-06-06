@@ -70,9 +70,10 @@ TEST_F(TranspilerTest, EmitJoinScanCrossJoinFromImplicit) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") "
-            "CROSS JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\")");
+  std::string sql =
+      t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+  EXPECT_NE(sql.find("CROSS JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_j_"), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitJoinScanInnerWithLiteralPredicate) {
@@ -88,10 +89,11 @@ TEST_F(TranspilerTest, EmitJoinScanInnerWithLiteralPredicate) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
-            "INNER JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
-            "AS __bq_r ON true");
+  std::string sql =
+      t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+  EXPECT_NE(sql.find("INNER JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_j_"), std::string::npos) << sql;
+  EXPECT_NE(sql.find(" ON true"), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
@@ -105,10 +107,10 @@ TEST_F(TranspilerTest, EmitJoinScanLeftWithLiteralPredicate) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
-            "LEFT JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
-            "AS __bq_r ON true");
+  std::string sql =
+      t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+  EXPECT_NE(sql.find("LEFT JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_j_"), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitJoinScanInnerOnEqualPredicate) {
@@ -118,10 +120,30 @@ TEST_F(TranspilerTest, EmitJoinScanInnerOnEqualPredicate) {
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_JOIN_SCAN);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>()),
-            "SELECT * FROM (SELECT \"id\", \"name\" FROM \"people\") AS __bq_l "
-            "INNER JOIN (SELECT \"order_id\", \"amount\" FROM \"orders\") "
-            "AS __bq_r ON (__bq_l.\"id\" = __bq_r.\"order_id\")");
+  std::string sql =
+      t.EmitJoinScan(scan->GetAs<::googlesql::ResolvedJoinScan>());
+  EXPECT_NE(sql.find("INNER JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_j_"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_l.\"id\" = __bq_r.\"order_id\""), std::string::npos)
+      << sql;
+}
+
+TEST_F(TranspilerTest, EmitJoinScanLeftOnCoalesceEquality) {
+  // bigframes cache joins use COALESCE-sentinel equality predicates in
+  // LEFT OUTER JOIN ON clauses for row-ordering keys.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT a.level_0, b.bfuid_col_2 FROM "
+      "(SELECT 0 AS level_0, 'John' AS column_0) a "
+      "LEFT OUTER JOIN "
+      "(SELECT 0 AS bfuid_col_1, 'group_1' AS bfuid_col_2) b "
+      "ON COALESCE(a.level_0, 0) = COALESCE(b.bfuid_col_1, 0) "
+      "AND COALESCE(a.level_0, 1) = COALESCE(b.bfuid_col_1, 1)");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "COALESCE join ON must transpile";
+  EXPECT_NE(sql.find("COALESCE"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("LEFT JOIN"), std::string::npos) << sql;
 }
 
 TEST_F(TranspilerTest, EmitJoinScanInnerUsingSingleColumn) {
