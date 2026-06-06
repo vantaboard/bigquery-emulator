@@ -14,6 +14,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 	"github.com/vantaboard/bigquery-emulator/gateway/query"
+	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 )
 
 // jobListKind is the value the BigQuery REST API returns for the
@@ -387,7 +388,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		end := start
 		sessionInfo := sessionStore(&deps).Resolve(
 			projectID, posted.JobReference.Location, false, cfg.Query.ConnectionProperties)
-		finalizeDoneJob(deps, job, start, end, nil, nil, nil, "", "", sessionInfo, r)
+		finalizeDoneJob(deps, job, start, end, nil, nil, nil, "", "", nil, sessionInfo, r)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -418,11 +419,38 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	var ddlTarget *bqtypes.RoutineReference
+	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
+		ddlTarget = routines.RegisterFromDDL(
+			routineStore(&deps), projectID, defaultDataset, cfg.Query.Query)
+	}
+	if cfg.Query.DestinationTable == nil && deps.Catalog != nil && len(rows) > 0 &&
+		(statementType == "" || statementType == "SELECT") {
+		if dest, err := query.MaterializeImplicitDestination(
+			r.Context(), deps.Catalog, projectID, defaultDataset,
+			job.JobReference.JobID, restSchema, rows); err == nil {
+			cfg.Query.DestinationTable = dest
+			job.Configuration.Query.DestinationTable = dest
+		}
+	}
 	end := time.Now().UTC()
 	sessionInfo := sessionStore(&deps).Resolve(
 		projectID, posted.JobReference.Location,
 		queryJobCreateSession(cfg), queryJobConnectionProperties(cfg))
-	finalizeDoneJob(deps, job, start, end, schema, dmlStats, rows, statementType, emulatorRoute, sessionInfo, r)
+	finalizeDoneJob(
+		deps,
+		job,
+		start,
+		end,
+		schema,
+		dmlStats,
+		rows,
+		statementType,
+		emulatorRoute,
+		ddlTarget,
+		sessionInfo,
+		r,
+	)
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -467,7 +495,9 @@ func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.
 	job.Status.State = jobs.JobStateDone
 	job.Statistics.StartTime = millisString(start)
 	job.Statistics.EndTime = millisString(end)
-	job.Statistics.TotalBytesProcessed = formatDryRunBytes(resp.GetEstimatedBytesProcessed())
+	bytes := formatDryRunBytes(resp.GetEstimatedBytesProcessed())
+	job.Statistics.TotalBytesProcessed = bytes
+	job.Statistics.Query = &bqtypes.JobStatistics2{TotalBytesProcessed: bytes}
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -555,7 +585,8 @@ func finalizeFailedJobWithReason(job *jobs.Job, start time.Time, err error, reas
 // `QueryRun` does: only loopback callers see the debug field.
 func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 	schema *enginepb.TableSchema, dmlStats *enginepb.DmlStats, rows []bqtypes.Row,
-	statementType, emulatorRoute string, sessionInfo *bqtypes.SessionInfo, r *http.Request,
+	statementType, emulatorRoute string, ddlTarget *bqtypes.RoutineReference,
+	sessionInfo *bqtypes.SessionInfo, r *http.Request,
 ) {
 	job.Status.State = jobs.JobStateDone
 	job.Statistics.StartTime = millisString(start)
@@ -569,12 +600,20 @@ func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
 	}
+	if statementType != "" || visibleRoute != "" || ddlTarget != nil {
+		job.Statistics.Query = &bqtypes.JobStatistics2{
+			StatementType:    statementType,
+			EmulatorRoute:    visibleRoute,
+			DdlTargetRoutine: ddlTarget,
+		}
+	}
 	job.Result = &jobs.QueryResult{
-		Schema:        restSchema,
-		Rows:          rows,
-		DmlStats:      restDmlStats,
-		StatementType: statementType,
-		EmulatorRoute: visibleRoute,
+		Schema:           restSchema,
+		Rows:             rows,
+		DmlStats:         restDmlStats,
+		StatementType:    statementType,
+		EmulatorRoute:    visibleRoute,
+		DdlTargetRoutine: ddlTarget,
 	}
 }
 

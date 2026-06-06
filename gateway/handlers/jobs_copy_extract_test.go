@@ -66,6 +66,57 @@ func TestJobInsertCopySingleSource(t *testing.T) {
 	}
 }
 
+func TestJobInsertCopyMultipleSources(t *testing.T) {
+	t.Parallel()
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{Name: "id", Type: "INTEGER"},
+	}}
+	row := func(v string) *enginepb.DataRow {
+		return &enginepb.DataRow{Cells: []*enginepb.Cell{
+			{Value: &enginepb.Cell_StringValue{StringValue: v}},
+		}}
+	}
+	cat := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, in *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			if in.GetTable().GetTableId() == "dest" {
+				return nil, status.Error(codes.NotFound, "table not found")
+			}
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+		listRowsFn: func(_ context.Context, in *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			switch in.GetTable().GetTableId() {
+			case "src1":
+				return &enginepb.ListRowsResponse{TotalRows: 1, Rows: []*enginepb.DataRow{row("1")}}, nil
+			case "src2":
+				return &enginepb.ListRowsResponse{TotalRows: 1, Rows: []*enginepb.DataRow{row("2")}}, nil
+			default:
+				return &enginepb.ListRowsResponse{TotalRows: 0}, nil
+			}
+		},
+	}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg, Snapshots: snapshots.NewStore()}
+	body := `{"configuration":{"copy":{"sourceTables":[` +
+		`{"projectId":"dev","datasetId":"ds","tableId":"src1"},` +
+		`{"projectId":"dev","datasetId":"ds","tableId":"src2"}],` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"dest"}}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult != nil {
+		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
+	}
+	if got.Statistics.Copy == nil || got.Statistics.Copy.CopiedRows != "2" {
+		t.Fatalf("statistics.copy = %#v", got.Statistics.Copy)
+	}
+}
+
 func TestJobInsertCopyFromSnapshotUndelete(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{

@@ -279,20 +279,24 @@ func applyEnvFallbacks(cfg *Config, getenv envLookup) {
 	}
 }
 
+func (c Config) engineInternalGRPCPort() int {
+	// The public BigQuery Storage shim binds --grpc-port; the engine
+	// subprocess listens on the next port so both can coexist.
+	return c.GRPCPort + 1
+}
+
 // ToOptions projects the parsed CLI config onto the gateway.Options
-// struct the rest of the gateway consumes. The projection includes
-// the engine-side flags as a `--key value` slice that gateway.Run
-// appends after `--host_port`, so the gateway never needs to know
-// the engine flag dialect itself.
-//
-// httpAddress and engineAddress are computed up front so callers
-// (main(), tests) can log them before launching the gateway.
-func (c Config) ToOptions(engineBinary string) (httpAddr, engineAddr string, engineArgs []string) {
+// addresses the runtime consumes. storageGRPCAddr is where client
+// libraries dial BIGQUERY_STORAGE_GRPC_ENDPOINT; engineAddr is the
+// internal bigquery_emulator.v1 listener the gateway dials.
+func (c Config) ToOptions(engineBinary string) (httpAddr, storageGRPCAddr, engineAddr string, engineArgs []string) {
 	httpAddr = c.ListenHost + ":" + strconv.Itoa(c.HTTPPort)
-	engineAddr = c.ListenHost + ":" + strconv.Itoa(c.GRPCPort)
+	storageGRPCAddr = c.ListenHost + ":" + strconv.Itoa(c.GRPCPort)
+	if engineBinary != "" {
+		engineAddr = c.ListenHost + ":" + strconv.Itoa(c.engineInternalGRPCPort())
+	}
 	engineArgs = c.engineCLIArgs()
-	_ = engineBinary
-	return httpAddr, engineAddr, engineArgs
+	return httpAddr, storageGRPCAddr, engineAddr, engineArgs
 }
 
 // engineCLIArgs renders the engine pass-through flags as a flat

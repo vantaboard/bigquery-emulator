@@ -25,6 +25,32 @@ func TestParseCSVWithSchemaAndSkipHeader(t *testing.T) {
 	}
 }
 
+func TestParseCSVAutodetectUsesHeaderRow(t *testing.T) {
+	t.Parallel()
+	data := []byte("full_name,age\nPhred Phlyntstone,32\nWylma Phlyntstone,29\n")
+	got, err := ParseSource("CSV", data, nil, 1, true)
+	if err != nil {
+		t.Fatalf("ParseSource: %v", err)
+	}
+	if got.Schema.Fields[0].Name != "full_name" || got.Schema.Fields[1].Name != "age" {
+		t.Fatalf("schema = %#v", got.Schema.Fields)
+	}
+	if got.Schema.Fields[1].Type != fieldTypeInteger {
+		t.Fatalf("age type = %q, want %q", got.Schema.Fields[1].Type, fieldTypeInteger)
+	}
+	if age, ok := got.Rows[1]["age"].(int); !ok || age != 29 {
+		t.Fatalf("row1 age = %#v", got.Rows[1]["age"])
+	}
+}
+
+func TestParseDatastoreBackupRejected(t *testing.T) {
+	t.Parallel()
+	_, err := ParseSource("DATASTORE_BACKUP", []byte("not-a-backup"), nil, 0, false)
+	if err == nil {
+		t.Fatal("expected error for DATASTORE_BACKUP")
+	}
+}
+
 func TestParseNDJSONAutodetect(t *testing.T) {
 	t.Parallel()
 	data := []byte(`{"id":"1","name":"a"}

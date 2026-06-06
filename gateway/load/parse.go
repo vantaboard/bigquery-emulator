@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -43,6 +44,9 @@ func ParseSource(format string, data []byte, schema *bqtypes.TableSchema,
 		return parseAvro(data, schema, autodetect)
 	case "ORC":
 		return parseORC(data, schema, autodetect)
+	case "DATASTORE_BACKUP":
+		return ParsedRows{}, errors.New(
+			"DATASTORE_BACKUP load is not supported by the emulator; use CSV, JSON, Avro, ORC, or Parquet")
 	default:
 		return ParsedRows{}, fmt.Errorf("unsupported sourceFormat %q", format)
 	}
@@ -66,15 +70,20 @@ func parseCSV(data []byte, schema *bqtypes.TableSchema, skipLeading int, autodet
 		if len(dataRows) == 0 {
 			return ParsedRows{}, nil
 		}
-		width := len(dataRows[0])
-		fields := make([]bqtypes.TableFieldSchema, width)
-		for i := range fields {
-			fields[i] = bqtypes.TableFieldSchema{
-				Name: fmt.Sprintf("string_field_%d", i),
-				Type: fieldTypeString,
+		if autodetect && skipLeading > 0 {
+			header := all[skipLeading-1]
+			schema = inferSchemaFromCSVHeader(header, dataRows)
+		} else {
+			width := len(dataRows[0])
+			fields := make([]bqtypes.TableFieldSchema, width)
+			for i := range fields {
+				fields[i] = bqtypes.TableFieldSchema{
+					Name: fmt.Sprintf("string_field_%d", i),
+					Type: fieldTypeString,
+				}
 			}
+			schema = &bqtypes.TableSchema{Fields: fields}
 		}
-		schema = &bqtypes.TableSchema{Fields: fields}
 	}
 	fields := schema.Fields
 	out := make([]map[string]any, 0, len(dataRows))
@@ -82,7 +91,7 @@ func parseCSV(data []byte, schema *bqtypes.TableSchema, skipLeading int, autodet
 		row := make(map[string]any, len(fields))
 		for i, f := range fields {
 			if i < len(rec) {
-				row[f.Name] = rec[i]
+				row[f.Name] = coerceCSVCell(rec[i], f.Type)
 			} else {
 				row[f.Name] = nil
 			}
@@ -90,6 +99,72 @@ func parseCSV(data []byte, schema *bqtypes.TableSchema, skipLeading int, autodet
 		out = append(out, row)
 	}
 	return ParsedRows{Schema: schema, Rows: out}, nil
+}
+
+func inferSchemaFromCSVHeader(header []string, dataRows [][]string) *bqtypes.TableSchema {
+	fields := make([]bqtypes.TableFieldSchema, len(header))
+	for i, name := range header {
+		fields[i] = bqtypes.TableFieldSchema{
+			Name: strings.TrimSpace(name),
+			Type: inferCSVColumnType(columnValues(dataRows, i)),
+		}
+	}
+	return &bqtypes.TableSchema{Fields: fields}
+}
+
+func columnValues(rows [][]string, col int) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if col < len(row) {
+			out = append(out, strings.TrimSpace(row[col]))
+		}
+	}
+	return out
+}
+
+func inferCSVColumnType(values []string) string {
+	if len(values) == 0 {
+		return fieldTypeString
+	}
+	allInt := true
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		if _, err := strconv.ParseInt(v, 10, 64); err != nil {
+			allInt = false
+			break
+		}
+	}
+	if allInt {
+		return fieldTypeInteger
+	}
+	return fieldTypeString
+}
+
+func coerceCSVCell(raw string, fieldType string) any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
+	case fieldTypeInteger, "INT64":
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return int(n)
+		}
+	case fieldTypeFloat, "FLOAT64":
+		if f, err := strconv.ParseFloat(raw, 64); err == nil {
+			return f
+		}
+	case fieldTypeBoolean, "BOOL":
+		switch strings.ToLower(raw) {
+		case "true", "t", "1", "yes":
+			return true
+		case "false", "f", "0", "no":
+			return false
+		}
+	}
+	return raw
 }
 
 func parseNDJSON(data []byte, schema *bqtypes.TableSchema, autodetect bool) (ParsedRows, error) {

@@ -56,12 +56,18 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 	datasetID := cfg.DestinationTable.DatasetID
 	tableID := cfg.DestinationTable.TableID
 
-	parsed, totalBytes, inputFiles, err := parseLoadSources(ctx, cfg, inline)
+	parseSchema := cfg.Schema
+	if parseSchema == nil || len(parseSchema.Fields) == 0 {
+		if !cfg.Autodetect {
+			parseSchema = existingDestinationSchema(ctx, catalog, projectID, datasetID, tableID)
+		}
+	}
+	parsed, totalBytes, inputFiles, err := parseLoadSources(ctx, cfg, inline, parseSchema)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if err = ensureDataset(ctx, catalog, projectID, datasetID); err != nil {
+	if err = EnsureDataset(ctx, catalog, projectID, datasetID); err != nil {
 		return Result{}, err
 	}
 	protoSchema, err := resolveDestinationSchema(ctx, catalog, cfg, projectID, datasetID, tableID, parsed.Schema)
@@ -69,7 +75,7 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 		return Result{}, err
 	}
 	if protoSchema == nil {
-		protoSchema = schemaToProto(parsed.Schema)
+		protoSchema = SchemaToProto(parsed.Schema)
 	}
 	if err = applyWriteDisposition(ctx, catalog, cfg, projectID, datasetID, tableID, protoSchema); err != nil {
 		return Result{}, err
@@ -91,19 +97,22 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 }
 
 func parseLoadSources(ctx context.Context, cfg *jobs.JobConfigurationLoad, inline [][]byte,
+	parseSchema *bqtypes.TableSchema,
 ) (parsed ParsedRows, totalBytes int64, inputFiles int, err error) {
 	if len(inline) > 0 {
-		return parseInlineSources(cfg, inline)
+		return parseInlineSources(cfg, inline, parseSchema)
 	}
-	return parseURISources(ctx, cfg)
+	return parseURISources(ctx, cfg, parseSchema)
 }
 
-func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte) (ParsedRows, int64, int, error) {
+func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte,
+	parseSchema *bqtypes.TableSchema,
+) (ParsedRows, int64, int, error) {
 	var parsed ParsedRows
 	var totalBytes int64
 	for i, data := range inline {
 		totalBytes += int64(len(data))
-		chunk, err := ParseSource(cfg.SourceFormat, data, cfg.Schema, cfg.SkipLeadingRows(), cfg.Autodetect)
+		chunk, err := ParseSource(cfg.SourceFormat, data, parseSchema, cfg.SkipLeadingRows(), cfg.Autodetect)
 		if err != nil {
 			return ParsedRows{}, 0, 0, err
 		}
@@ -112,7 +121,9 @@ func parseInlineSources(cfg *jobs.JobConfigurationLoad, inline [][]byte) (Parsed
 	return parsed, totalBytes, len(inline), nil
 }
 
-func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad) (ParsedRows, int64, int, error) {
+func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad,
+	parseSchema *bqtypes.TableSchema,
+) (ParsedRows, int64, int, error) {
 	var parsed ParsedRows
 	var totalBytes int64
 	for i, uri := range cfg.SourceURIs {
@@ -121,7 +132,7 @@ func parseURISources(ctx context.Context, cfg *jobs.JobConfigurationLoad) (Parse
 			return ParsedRows{}, 0, 0, err
 		}
 		totalBytes += int64(len(data))
-		chunk, err := ParseSource(cfg.SourceFormat, data, cfg.Schema, cfg.SkipLeadingRows(), cfg.Autodetect)
+		chunk, err := ParseSource(cfg.SourceFormat, data, parseSchema, cfg.SkipLeadingRows(), cfg.Autodetect)
 		if err != nil {
 			return ParsedRows{}, 0, 0, err
 		}
@@ -138,7 +149,24 @@ func mergeParsedChunk(acc, chunk ParsedRows, first bool) ParsedRows {
 	return acc
 }
 
-func ensureDataset(ctx context.Context, catalog enginepb.CatalogClient, projectID, datasetID string) error {
+// EnsureDestinationTable applies write-disposition semantics for a
+// destination table ref, registering the schema when missing.
+func EnsureDestinationTable(ctx context.Context, catalog enginepb.CatalogClient,
+	projectID, datasetID, tableID, writeDisposition string, schema *enginepb.TableSchema,
+) error {
+	cfg := &jobs.JobConfigurationLoad{
+		DestinationTable: &bqtypes.TableReference{
+			ProjectID: projectID,
+			DatasetID: datasetID,
+			TableID:   tableID,
+		},
+		WriteDisposition: writeDisposition,
+	}
+	return applyWriteDisposition(ctx, catalog, cfg, projectID, datasetID, tableID, schema)
+}
+
+// EnsureDataset registers the dataset when missing.
+func EnsureDataset(ctx context.Context, catalog enginepb.CatalogClient, projectID, datasetID string) error {
 	applier := seed.NewCatalogApplier(catalog)
 	_, err := applier.EnsureDataset(ctx, projectID, datasetID, "US")
 	return err
@@ -199,7 +227,8 @@ func tableExists(ctx context.Context, catalog enginepb.CatalogClient, ref *engin
 	return err == nil
 }
 
-func schemaToProto(s *bqtypes.TableSchema) *enginepb.TableSchema {
+// SchemaToProto converts a REST TableSchema to engine proto form.
+func SchemaToProto(s *bqtypes.TableSchema) *enginepb.TableSchema {
 	if s == nil {
 		return nil
 	}

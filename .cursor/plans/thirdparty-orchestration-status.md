@@ -23,17 +23,19 @@ Baseline: `.logs/thirdparty-20260605-112926.log`
 
 ## Final aggregator
 
-Log: `.logs/thirdparty-20260605-160518.log` (exit 201, `THIRDPARTY_REBUILD=1`, post-unblock lane)
+Log (green-plan pass, partial): `.logs/thirdparty-20260605-193107.log` (`THIRDPARTY_REBUILD=1`; hung after node suite — java/dataframes not recorded)
 
-| Suite | Baseline (134407) | Final (160518) | Status |
-|-------|-------------------|----------------|--------|
+| Suite | Baseline (160518) | Green pass (193107) | Status |
+|-------|-------------------|---------------------|--------|
 | golang-bigquery-tests | OK | OK | PASS |
-| python-bigquery-tests | 34 failed | 22 failed (`test_client_query_total_rows` PASS; truncate/resumable + query params remain) | FAILED (Δ −12) |
-| node-bigquery-tests | 45 failing | 18 failing (no `Already Exists`) | FAILED (Δ −27) |
-| java-bigquery-tests | snippets IT fail | OK (`CreateTableExternalHivePartitionedIT` green) | PASS |
-| dataframes-snippet-gate | 2 pass / 2 fail | 3 pass / 1 fail (`performance_optimizations` needs storage read) | PARTIAL |
+| python-bigquery-tests | 22 failed | **10 failed**, 56 passed, 11 skipped (Sheets skipped) | FAILED (Δ −12) |
+| node-bigquery-tests | 18 failing | **14 failing**, 85 passing | FAILED (Δ −4) |
+| java-bigquery-tests | OK | *(not run — aggregator hung)* | — |
+| dataframes-snippet-gate | 3/4 | *(not run)* | — |
 
-**Overall:** DEFERRED partial parity — unblock lane 01–09 landed; storage gRPC (08) and residual python/node failures block exit 0.
+Prior log: `.logs/thirdparty-20260605-160518.log` (exit 201)
+
+**Overall:** DEFERRED — green-plan Phases 1–4 landed in tree (uncommitted); python improved 22→10; node 18→14; exit 0 blocked on query transpiler (OrderBy/LimitOffset), insert types, collation wire on GET, browse-rows timeout, DECLARE scripts, dry-run bytes, engine rebuild in docker for C++ fixes.
 
 ## Unblock lane
 

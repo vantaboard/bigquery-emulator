@@ -65,4 +65,4 @@ tasks:
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        rm -f gateway/enginepb/emulator.pb.go gateway/enginepb/emulator_grpc.pb.go gateway/enginepb/storage_read.pb.go gateway/enginepb/storage_read_grpc.pb.go
+        rm -f gateway/enginepb/emulator.pb.go gateway/enginepb/emulator_grpc.pb.go gateway/enginepb/storage_read.pb.go gateway/enginepb/storage_read_grpc.pb.go gateway/enginepb/storage_write.pb.go gateway/enginepb/storage_write_grpc.pb.go

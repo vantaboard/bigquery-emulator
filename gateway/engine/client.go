@@ -33,15 +33,18 @@ import (
 // shutdown.
 //
 // Catalog and Query are the two business-logic clients defined in
-// proto/emulator.proto; Health is the standard grpc.health.v1 probe the
-// engine wires up via grpc::EnableDefaultHealthCheckService (see
-// frontend/server/server.cc).
+// proto/emulator.proto; StorageRead and StorageWrite are the internal
+// storage contracts the public bqstorage shim adapts. Health is the
+// standard grpc.health.v1 probe the engine wires up via
+// grpc::EnableDefaultHealthCheckService (see frontend/server/server.cc).
 type Client struct {
 	conn *grpc.ClientConn
 
-	Catalog enginepb.CatalogClient
-	Query   enginepb.QueryClient
-	Health  healthpb.HealthClient
+	Catalog      enginepb.CatalogClient
+	Query        enginepb.QueryClient
+	StorageRead  enginepb.StorageReadClient
+	StorageWrite enginepb.StorageWriteClient
+	Health       healthpb.HealthClient
 }
 
 // Dial opens a gRPC channel to the engine listening at address (typically
@@ -66,10 +69,12 @@ func Dial(address string) (*Client, error) {
 		return nil, fmt.Errorf("engine: dial %s: %w", address, err)
 	}
 	return &Client{
-		conn:    conn,
-		Catalog: enginepb.NewCatalogClient(conn),
-		Query:   enginepb.NewQueryClient(conn),
-		Health:  healthpb.NewHealthClient(conn),
+		conn:         conn,
+		Catalog:      enginepb.NewCatalogClient(conn),
+		Query:        enginepb.NewQueryClient(conn),
+		StorageRead:  enginepb.NewStorageReadClient(conn),
+		StorageWrite: enginepb.NewStorageWriteClient(conn),
+		Health:       healthpb.NewHealthClient(conn),
 	}, nil
 }
 

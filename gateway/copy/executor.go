@@ -22,6 +22,7 @@ const (
 	writeTruncate = "WRITE_TRUNCATE"
 	writeEmpty    = "WRITE_EMPTY"
 	writeAppend   = "WRITE_APPEND"
+	createNever   = "CREATE_NEVER"
 )
 
 // Result captures copy-job statistics.
@@ -60,6 +61,11 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 			wd = writeEmpty
 		}
 	}
+	cd := cfg.CreateDisposition
+
+	if err := checkCreateDisposition(ctx, catalog, cd, destProject, destDataset, destTable); err != nil {
+		return Result{}, err
+	}
 
 	if hasSnapshotSource(sources) {
 		return executeCatalogCopy(ctx, catalog, snapStore, sources, destProject, destDataset, destTable, wd)
@@ -74,11 +80,26 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 			destDataset,
 			destTable,
 			wd,
+			cd,
 		); err == nil {
 			return result, nil
 		}
 	}
 	return executeCatalogCopy(ctx, catalog, snapStore, sources, destProject, destDataset, destTable, wd)
+}
+
+func checkCreateDisposition(ctx context.Context, catalog enginepb.CatalogClient,
+	cd, projectID, datasetID, tableID string,
+) error {
+	if cd != createNever {
+		return nil
+	}
+	ref := &enginepb.TableRef{ProjectId: projectID, DatasetId: datasetID, TableId: tableID}
+	if !tableExists(ctx, catalog, ref) {
+		return status.Error(codes.NotFound,
+			fmt.Sprintf("Not found: Table %s:%s.%s", projectID, datasetID, tableID))
+	}
+	return nil
 }
 
 func sourceRefs(cfg *jobs.JobConfigurationCopy, defaultProject string) []bqtypes.TableReference {
@@ -112,8 +133,15 @@ func hasSnapshotSource(refs []bqtypes.TableReference) bool {
 }
 
 func executeSQLCopy(ctx context.Context, catalog enginepb.CatalogClient, query enginepb.QueryClient,
-	sources []bqtypes.TableReference, destProject, destDataset, destTable, wd string,
+	sources []bqtypes.TableReference, destProject, destDataset, destTable, wd, cd string,
 ) (Result, error) {
+	if cd == createNever {
+		ref := &enginepb.TableRef{ProjectId: destProject, DatasetId: destDataset, TableId: destTable}
+		if !tableExists(ctx, catalog, ref) {
+			return Result{}, status.Error(codes.NotFound,
+				fmt.Sprintf("Not found: Table %s:%s.%s", destProject, destDataset, destTable))
+		}
+	}
 	sql, err := buildCopySQL(sources, destDataset, destTable, wd)
 	if err != nil {
 		return Result{}, err
@@ -176,6 +204,8 @@ func executeCatalogCopy(ctx context.Context, catalog enginepb.CatalogClient, sna
 		}
 		if mergedSchema == nil {
 			mergedSchema = schema
+		} else if !schemasCompatible(mergedSchema, schema) {
+			return Result{}, errors.New("source tables must have identical schemas for multi-source copy")
 		}
 		mergedRows = append(mergedRows, rows...)
 		totalBytes += estimateRowBytes(rows)
@@ -335,6 +365,24 @@ func applyWriteDisposition(ctx context.Context, catalog enginepb.CatalogClient,
 func tableExists(ctx context.Context, catalog enginepb.CatalogClient, ref *enginepb.TableRef) bool {
 	_, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: ref})
 	return err == nil
+}
+
+func schemasCompatible(a, b *enginepb.TableSchema) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	af, bf := a.GetFields(), b.GetFields()
+	if len(af) != len(bf) {
+		return false
+	}
+	for i := range af {
+		if af[i].GetName() != bf[i].GetName() ||
+			af[i].GetType() != bf[i].GetType() ||
+			af[i].GetMode() != bf[i].GetMode() {
+			return false
+		}
+	}
+	return true
 }
 
 func countDestinationRows(ctx context.Context, catalog enginepb.CatalogClient,

@@ -238,6 +238,14 @@ Set `BIGQUERY_STORAGE_GRPC_ENDPOINT` (default `localhost:9060` in
 `task thirdparty:*`) to reach the engine listener. ManagedWriter /
 Storage Read subtests skip when it is unset.
 
+## Google Sheets external tables
+
+The emulator does not call the Google Sheets API. Python thirdparty
+samples `test_query_external_sheets_*` are skipped via
+`third_party/python-bigquery-tests/emulator_pytest_skip.py` when
+`BIGQUERY_EMULATOR_HOST` is set. GCS-backed external tables remain in
+scope.
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).

@@ -34,6 +34,7 @@ func runSyncLoadInsert(deps Dependencies, w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	persistLoadTableMetadata(deps, cfg.Load, projectID)
 	finalizeSuccessfulLoadJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
 }
@@ -107,6 +108,23 @@ func finalizeSuccessfulLoadJob(job *jobs.Job, start time.Time, result load.Resul
 	job.Statistics.StartTime = millisString(start)
 	job.Statistics.EndTime = millisString(end)
 	job.Statistics.Load = load.FormatStatistics(result)
+}
+
+// persistLoadTableMetadata stashes REST-only destination metadata (CMEK
+// kmsKeyName) so tables.get round-trips what the load job supplied.
+func persistLoadTableMetadata(deps Dependencies, cfg *jobs.JobConfigurationLoad, projectID string) {
+	if deps.Metadata == nil || cfg == nil || cfg.DestinationTable == nil ||
+		cfg.DestinationEncryptionConfiguration == nil {
+		return
+	}
+	destProject := cfg.DestinationTable.ProjectID
+	if destProject == "" {
+		destProject = projectID
+	}
+	deps.Metadata.MergeTable(destProject, cfg.DestinationTable.DatasetID,
+		cfg.DestinationTable.TableID, bqtypes.Table{
+			EncryptionConfiguration: cfg.DestinationEncryptionConfiguration,
+		})
 }
 
 func finalizeDeferredDataPlaneJob(job *jobs.Job, cfg *jobs.JobConfiguration, start time.Time, kind string) {
@@ -200,7 +218,8 @@ func handleResumableLoadUploadInit(store *load.UploadStore, w http.ResponseWrite
 		}
 	}
 	uploadID := store.CreateSession(projectID, body, total)
-	w.Header().Set("Location", load.SessionLocation(projectID, uploadID))
+	w.Header().Set("Location", load.AbsoluteSessionLocation(
+		requestEmulatorBaseURL(r), projectID, uploadID))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -328,6 +347,7 @@ func runUploadedLoadJob(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	persistLoadTableMetadata(deps, cfg.Load, projectID)
 	finalizeSuccessfulLoadJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
 }

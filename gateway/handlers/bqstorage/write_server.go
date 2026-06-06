@@ -1,59 +1,201 @@
-// Package bqstorage is the shallow-emulator skeleton for the
-// BigQuery Storage Write API surface (gRPC, exposed at the storage
-// gRPC port per docker-compose.yml). The gRPC layer is intentionally
-// NOT registered in this skeleton because doing so would require:
-//
-//  1. Adding `cloud.google.com/go/bigquery/storage/apiv1/storagepb`
-//     (~30 generated proto files for the streaming Write API) and the
-//     associated proto-descriptor + arrow-decode helpers go-googlesql
-//     keeps in `api/bqstorage/proto_descriptor_normalize.go`,
-//     `proto_rows*.go`, etc. (~20 files, ~3 KLOC).
-//  2. Hooking AppendRows into this repo's `backend/storage/` for row
-//     materialization. The existing tabledata insertAll path is the
-//     natural integration point; that surface does not yet expose
-//     a streaming-friendly entry from the Go gateway.
-//
-// Both are well outside the shallow-emulator port budget per
-// `docs/ENGINE_POLICY.md`. The
-// surface-mapping table below records which failing-IT each
-// go-googlesql `api/bqstorage/` symbol satisfies.
-//
-// Failing-IT → go-googlesql source mapping (shallow-emulator intake table):
-//
-//	WriteBufferedStreamIT
-//	  → BigQueryWrite.CreateWriteStream
-//	      ⇒ api/bqstorage/write_streams.go: (s *WriteServer).CreateWriteStream
-//	  → BigQueryWrite.AppendRows (bidirectional stream)
-//	      ⇒ api/bqstorage/write_append.go: (s *WriteServer).AppendRows
-//	      ⇒ api/bqstorage/proto_descriptor_normalize.go (schema reconciliation)
-//	      ⇒ api/bqstorage/proto_rows.go (row materialization)
-//	      ⇒ api/bqstorage/proto_rows_coercion.go (BQ-type coercion)
-//	      ⇒ api/bqstorage/proto_rows_repeated_list.go (REPEATED handling)
-//	      ⇒ api/bqstorage/write_quota.go (quota stub: ~quota messaging only)
-//	  → BigQueryWrite.FinalizeWriteStream
-//	      ⇒ api/bqstorage/write_streams.go: (s *WriteServer).FinalizeWriteStream
-//	  → BigQueryWrite.BatchCommitWriteStreams
-//	      ⇒ api/bqstorage/write_streams.go: (s *WriteServer).BatchCommitWriteStreams
-//
-// Out of scope for the shallow-emulator port (deferred to the
-// Storage Read follow-up): the entire `api/bqstorage/read*.go`
-// family, plus `avro_arrow.go`, `tableschema.go`, `read_partition*.go`,
-// `read_projection.go`, `read_rows.go`,
-// `read_session_contract_test.go`, `read_source.go`,
-// `read_view_parquet.go`. The emulator's existing
-// `proto/storage_read.proto` surface
-// (`gateway/enginepb/storage_read*.go`) covers the limited Storage
-// Read surface today; the gRPC-server follow-up will fold in any
-// remaining gaps.
+// Package bqstorage is the public BigQuery Storage gRPC shim. It registers
+// google.cloud.bigquery.storage.v1.BigQueryRead / BigQueryWrite on the
+// gateway listener and adapts RPCs to the engine's internal
+// bigquery_emulator.v1.StorageRead / StorageWrite contracts.
 package bqstorage
 
 import (
-	"net/http"
+	"context"
+	"errors"
+	"io"
+
+	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/engine"
+	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// Register is the symbolic entry point the gateway will call once
-// the BigQueryWrite gRPC surface lands. Until then the gateway has
-// no Write API listener; clients dialed at the storage gRPC port
-// receive a clean UNIMPLEMENTED from the (existing) Storage Read
-// listener for any unmapped method name.
-func Register(_ *http.ServeMux) {}
+// WriteServer implements the public BigQueryWrite gRPC service.
+type WriteServer struct {
+	storagepb.UnimplementedBigQueryWriteServer
+	engine *engine.Client
+}
+
+func (s *WriteServer) requireEngine() error {
+	if s == nil || s.engine == nil || s.engine.StorageWrite == nil {
+		return status.Error(codes.Unavailable, "BigQuery Storage Write API requires a running engine subprocess")
+	}
+	return nil
+}
+
+func (s *WriteServer) CreateWriteStream(
+	ctx context.Context,
+	req *storagepb.CreateWriteStreamRequest,
+) (*storagepb.WriteStream, error) {
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	stream, err := s.engine.StorageWrite.CreateWriteStream(ctx, &enginepb.CreateWriteStreamRequest{
+		Parent:      req.GetParent(),
+		WriteStream: engineWriteStreamFromPublic(req.GetWriteStream()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return publicWriteStreamFromEngine(stream), nil
+}
+
+func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer) error {
+	if err := s.requireEngine(); err != nil {
+		return err
+	}
+	ctx := stream.Context()
+	engineStream, err := s.engine.StorageWrite.AppendRows(ctx)
+	if err != nil {
+		return err
+	}
+
+	for {
+		req, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
+			return nil
+		}
+		if recvErr != nil {
+			return recvErr
+		}
+		engineReq, convErr := publicAppendRequestToEngine(req)
+		if convErr != nil {
+			return status.Errorf(codes.InvalidArgument, "decode AppendRows: %v", convErr)
+		}
+		if err := engineStream.Send(engineReq); err != nil {
+			return err
+		}
+		engineResp, err := engineStream.Recv()
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(publicAppendResponseFromEngine(req.GetWriteStream(), engineResp)); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *WriteServer) GetWriteStream(
+	ctx context.Context,
+	req *storagepb.GetWriteStreamRequest,
+) (*storagepb.WriteStream, error) {
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	stream, err := s.engine.StorageWrite.GetWriteStream(ctx, &enginepb.GetWriteStreamRequest{
+		Name: req.GetName(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return publicWriteStreamFromEngine(stream), nil
+}
+
+func (s *WriteServer) FinalizeWriteStream(
+	ctx context.Context,
+	req *storagepb.FinalizeWriteStreamRequest,
+) (*storagepb.FinalizeWriteStreamResponse, error) {
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	resp, err := s.engine.StorageWrite.FinalizeWriteStream(ctx, &enginepb.FinalizeWriteStreamRequest{
+		Name: req.GetName(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &storagepb.FinalizeWriteStreamResponse{
+		RowCount: resp.GetRowCount(),
+	}, nil
+}
+
+func (s *WriteServer) BatchCommitWriteStreams(
+	context.Context,
+	*storagepb.BatchCommitWriteStreamsRequest,
+) (*storagepb.BatchCommitWriteStreamsResponse, error) {
+	return nil, status.Error(
+		codes.Unimplemented,
+		"BatchCommitWriteStreams is not implemented by the emulator storage shim",
+	)
+}
+
+func (s *WriteServer) FlushRows(
+	ctx context.Context,
+	req *storagepb.FlushRowsRequest,
+) (*storagepb.FlushRowsResponse, error) {
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	offset := int64(0)
+	if req.GetOffset() != nil {
+		offset = req.GetOffset().GetValue()
+	}
+	resp, err := s.engine.StorageWrite.FlushRows(ctx, &enginepb.FlushRowsRequest{
+		WriteStream: req.GetWriteStream(),
+		Offset:      offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &storagepb.FlushRowsResponse{Offset: resp.GetOffset()}, nil
+}
+
+func publicAppendRequestToEngine(req *storagepb.AppendRowsRequest) (*enginepb.AppendRowsRequest, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "nil AppendRowsRequest")
+	}
+	out := &enginepb.AppendRowsRequest{
+		WriteStream: req.GetWriteStream(),
+		TraceId:     req.GetTraceId(),
+	}
+	if req.GetOffset() != nil {
+		out.Offset = req.GetOffset().GetValue()
+	}
+	switch rows := req.GetRows().(type) {
+	case *storagepb.AppendRowsRequest_ProtoRows:
+		engineRows, err := protoDataToEngineRows(rows.ProtoRows)
+		if err != nil {
+			return nil, err
+		}
+		out.ProtoRows = &enginepb.AppendRowsRequest_ProtoData{Rows: engineRows}
+	case *storagepb.AppendRowsRequest_ArrowRows:
+		return nil, status.Error(
+			codes.Unimplemented,
+			"Arrow AppendRows is not implemented by the emulator storage shim",
+		)
+	default:
+		return out, nil
+	}
+	return out, nil
+}
+
+func publicAppendResponseFromEngine(
+	writeStream string,
+	in *enginepb.AppendRowsResponse,
+) *storagepb.AppendRowsResponse {
+	if in == nil {
+		return &storagepb.AppendRowsResponse{WriteStream: writeStream}
+	}
+	out := &storagepb.AppendRowsResponse{WriteStream: writeStream}
+	if msg := in.GetErrorMessage(); msg != "" {
+		out.Response = &storagepb.AppendRowsResponse_Error{
+			Error: status.New(codes.InvalidArgument, msg).Proto(),
+		}
+		return out
+	}
+	result := &storagepb.AppendRowsResponse_AppendResult{}
+	if ar := in.GetAppendResult(); ar != nil {
+		result.Offset = wrapperspb.Int64(ar.GetOffset())
+	}
+	out.Response = &storagepb.AppendRowsResponse_AppendResult_{
+		AppendResult: result,
+	}
+	return out
+}

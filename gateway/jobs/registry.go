@@ -147,14 +147,15 @@ func (c *JobConfigurationQuery) UnmarshalJSON(data []byte) error {
 // Fields mirror the minimum upstream REST shape thirdparty samples
 // exercise; format readers and GCS byte I/O land in plan tp08-04.
 type JobConfigurationLoad struct {
-	SourceURIs          []string                `json:"sourceUris,omitempty"`
-	DestinationTable    *bqtypes.TableReference `json:"destinationTable,omitempty"`
-	SourceFormat        string                  `json:"sourceFormat,omitempty"`
-	WriteDisposition    string                  `json:"writeDisposition,omitempty"`
-	Schema              *bqtypes.TableSchema    `json:"schema,omitempty"`
-	Autodetect          bool                    `json:"autodetect,omitempty"`
-	SchemaUpdateOptions []string                `json:"schemaUpdateOptions,omitempty"`
-	skipLeadingRows     int                     // set via UnmarshalJSON; REST sends int or string
+	SourceURIs                         []string                         `json:"sourceUris,omitempty"`
+	DestinationTable                   *bqtypes.TableReference          `json:"destinationTable,omitempty"`
+	SourceFormat                       string                           `json:"sourceFormat,omitempty"`
+	WriteDisposition                   string                           `json:"writeDisposition,omitempty"`
+	Schema                             *bqtypes.TableSchema             `json:"schema,omitempty"`
+	Autodetect                         bool                             `json:"autodetect,omitempty"`
+	SchemaUpdateOptions                []string                         `json:"schemaUpdateOptions,omitempty"`
+	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration `json:"destinationEncryptionConfiguration,omitempty"`
+	skipLeadingRows                    int                              // set via UnmarshalJSON; REST sends int or string
 }
 
 // SkipLeadingRows returns the number of leading CSV rows to skip.
@@ -224,11 +225,12 @@ func (c *JobConfigurationCopy) UnmarshalJSON(data []byte) error {
 
 // JobConfigurationCopy is the per-copy slice of a JobConfiguration.
 type JobConfigurationCopy struct {
-	SourceTable       *bqtypes.TableReference  `json:"sourceTable,omitempty"`
-	SourceTables      []bqtypes.TableReference `json:"sourceTables,omitempty"`
-	DestinationTable  *bqtypes.TableReference  `json:"destinationTable,omitempty"`
-	WriteDisposition  string                   `json:"writeDisposition,omitempty"`
-	CreateDisposition string                   `json:"createDisposition,omitempty"`
+	SourceTable                        *bqtypes.TableReference          `json:"sourceTable,omitempty"`
+	SourceTables                       []bqtypes.TableReference         `json:"sourceTables,omitempty"`
+	DestinationTable                   *bqtypes.TableReference          `json:"destinationTable,omitempty"`
+	WriteDisposition                   string                           `json:"writeDisposition,omitempty"`
+	CreateDisposition                  string                           `json:"createDisposition,omitempty"`
+	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration `json:"destinationEncryptionConfiguration,omitempty"`
 }
 
 // JobConfigurationExtract is the per-extract slice of a JobConfiguration.
@@ -246,14 +248,15 @@ type JobConfigurationExtract struct {
 // even `totalBytesProcessed`, because BigQuery REST never emits
 // 64-bit integers as JSON numbers (clients use `string` decoders).
 type Statistics struct {
-	CreationTime        string               `json:"creationTime,omitempty"`
-	StartTime           string               `json:"startTime,omitempty"`
-	EndTime             string               `json:"endTime,omitempty"`
-	TotalBytesProcessed string               `json:"totalBytesProcessed,omitempty"`
-	SessionInfo         *bqtypes.SessionInfo `json:"sessionInfo,omitempty"`
-	Load                *LoadStatistics      `json:"load,omitempty"`
-	Copy                *CopyStatistics      `json:"copy,omitempty"`
-	Extract             *ExtractStatistics   `json:"extract,omitempty"`
+	CreationTime        string                  `json:"creationTime,omitempty"`
+	StartTime           string                  `json:"startTime,omitempty"`
+	EndTime             string                  `json:"endTime,omitempty"`
+	TotalBytesProcessed string                  `json:"totalBytesProcessed,omitempty"`
+	SessionInfo         *bqtypes.SessionInfo    `json:"sessionInfo,omitempty"`
+	Query               *bqtypes.JobStatistics2 `json:"query,omitempty"`
+	Load                *LoadStatistics         `json:"load,omitempty"`
+	Copy                *CopyStatistics         `json:"copy,omitempty"`
+	Extract             *ExtractStatistics      `json:"extract,omitempty"`
 }
 
 // LoadStatistics mirrors upstream `JobStatistics3` (statistics.load).

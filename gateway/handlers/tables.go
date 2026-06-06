@@ -445,6 +445,9 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}
+		if t.LabelsPatchPresent() && len(t.Labels) == 0 {
+			t.SetOmitEmptyLabelsOnWire(true)
+		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }

@@ -14,6 +14,12 @@ datasets:
           - {name: name, type: STRING}
           - {name: number, type: INT64}
         rows:
+          # Pagination sample expects James aggregate count 4942431.
+          - {state: US, gender: M, year: 1910, name: James, number: 4942431}
+          - {state: WA, gender: M, year: 1910, name: SampleWA, number: 1}
+          - {state: WI, gender: M, year: 1910, name: SampleWI, number: 1}
+          - {state: WV, gender: M, year: 1910, name: SampleWV, number: 1}
+          - {state: WY, gender: M, year: 1910, name: SampleWY, number: 1}
           - {state: TX, gender: M, year: 1920, name: James, number: 120}
           - {state: TX, gender: F, year: 1920, name: Mary, number: 95}
           - {state: TX, gender: M, year: 1921, name: Robert, number: 88}
@@ -239,6 +245,8 @@ datasets:
           - {word: the, word_count: 993, corpus: hamlet, corpus_date: 1599}
           - {word: king, word_count: 201, corpus: kinglear, corpus_date: 1605}
           - {word: love, word_count: 150, corpus: romeoandjuliet, corpus_date: 1597}
+          # Named-param samples filter romeoandjuliet with word_count >= 250.
+          - {word: the, word_count: 300, corpus: romeoandjuliet, corpus_date: 1597}
   - id: stackoverflow
     project_id: bigquery-public-data
     tables:

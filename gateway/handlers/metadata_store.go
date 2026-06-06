@@ -181,11 +181,14 @@ func stripEngineOwnedTableFields(t bqtypes.Table) bqtypes.Table {
 		TimePartitioning:          t.TimePartitioning,
 		Clustering:                t.Clustering,
 		DefaultCollation:          t.DefaultCollation,
+		DefaultCollationSet:       t.DefaultCollationSet,
 		Type:                      t.Type,
 		View:                      t.View,
 		MaterializedView:          t.MaterializedView,
 		RequirePartitionFilter:    t.RequirePartitionFilter,
 		ExternalDataConfiguration: t.ExternalDataConfiguration,
+		EncryptionConfiguration:   t.EncryptionConfiguration,
+		Schema:                    bqtypes.ExtractSchemaPolicyOverlay(t.Schema),
 	}
 }
 
@@ -200,6 +203,7 @@ func stripEngineOwnedDatasetFields(ds bqtypes.Dataset) bqtypes.Dataset {
 		DefaultTableExpirationMs:     ds.DefaultTableExpirationMs,
 		DefaultPartitionExpirationMs: ds.DefaultPartitionExpirationMs,
 		DefaultCollation:             ds.DefaultCollation,
+		DefaultCollationSet:          ds.DefaultCollationSet,
 	}
 }
 
@@ -229,8 +233,9 @@ func applyTableMetadataOverlay(base bqtypes.Table, overlay bqtypes.Table) bqtype
 	if overlay.Clustering != nil {
 		base.Clustering = overlay.Clustering
 	}
-	if overlay.DefaultCollation != "" {
+	if overlay.DefaultCollationSet {
 		base.DefaultCollation = overlay.DefaultCollation
+		base.DefaultCollationSet = true
 	}
 	if overlay.Type != "" {
 		base.Type = overlay.Type
@@ -246,6 +251,12 @@ func applyTableMetadataOverlay(base bqtypes.Table, overlay bqtypes.Table) bqtype
 	}
 	if overlay.ExternalDataConfiguration != nil {
 		base.ExternalDataConfiguration = overlay.ExternalDataConfiguration
+	}
+	if overlay.EncryptionConfiguration != nil {
+		base.EncryptionConfiguration = overlay.EncryptionConfiguration
+	}
+	if overlay.Schema != nil {
+		base.Schema = bqtypes.MergeSchemaPolicyTags(base.Schema, overlay.Schema)
 	}
 	return base
 }
@@ -281,8 +292,9 @@ func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
 	if patch.Clustering != nil {
 		base.Clustering = patch.Clustering
 	}
-	if patch.DefaultCollation != "" {
+	if patch.DefaultCollationSet {
 		base.DefaultCollation = patch.DefaultCollation
+		base.DefaultCollationSet = true
 	}
 	if patch.Type != "" {
 		base.Type = patch.Type
@@ -298,6 +310,12 @@ func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
 	}
 	if patch.ExternalDataConfiguration != nil {
 		base.ExternalDataConfiguration = patch.ExternalDataConfiguration
+	}
+	if patch.EncryptionConfiguration != nil {
+		base.EncryptionConfiguration = patch.EncryptionConfiguration
+	}
+	if patch.Schema != nil {
+		base.Schema = bqtypes.MergeSchemaPolicyTags(base.Schema, patch.Schema)
 	}
 	return base
 }
@@ -325,8 +343,9 @@ func applyDatasetMetadataOverlay(base bqtypes.Dataset, overlay bqtypes.Dataset) 
 	if overlay.DefaultPartitionExpirationMs != "" {
 		base.DefaultPartitionExpirationMs = overlay.DefaultPartitionExpirationMs
 	}
-	if overlay.DefaultCollation != "" {
+	if overlay.DefaultCollationSet {
 		base.DefaultCollation = overlay.DefaultCollation
+		base.DefaultCollationSet = true
 	}
 	return base
 }
@@ -358,8 +377,9 @@ func mergeDatasetMetadataOverlay(base, patch bqtypes.Dataset) bqtypes.Dataset {
 	if patch.DefaultPartitionExpirationMs != "" {
 		base.DefaultPartitionExpirationMs = patch.DefaultPartitionExpirationMs
 	}
-	if patch.DefaultCollation != "" {
+	if patch.DefaultCollationSet {
 		base.DefaultCollation = patch.DefaultCollation
+		base.DefaultCollationSet = true
 	}
 	return base
 }

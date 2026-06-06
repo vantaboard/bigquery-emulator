@@ -202,10 +202,22 @@ func newUploadID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// SessionLocation builds the resumable session URI returned in Location.
+// SessionLocation builds the relative resumable session URI path.
 func SessionLocation(projectID, uploadID string) string {
 	return fmt.Sprintf(
 		"/upload/bigquery/v2/projects/%s/jobs?uploadType=resumable&upload_id=%s",
 		projectID, uploadID,
 	)
+}
+
+// AbsoluteSessionLocation builds a fully-qualified Location header value.
+// Python/Node resumable upload clients pass the Location URL directly to
+// requests/teeny-request and require a scheme (relative paths → MissingSchema).
+func AbsoluteSessionLocation(baseURL, projectID, uploadID string) string {
+	path := SessionLocation(projectID, uploadID)
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return path
+	}
+	return base + path
 }

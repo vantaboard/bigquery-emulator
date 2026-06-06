@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
+	"github.com/vantaboard/bigquery-emulator/gateway/grpcserver"
 )
 
 // engineReadyTimeout bounds how long Gateway.Run will wait for the engine
@@ -39,9 +40,15 @@ type Options struct {
 	HTTPAddress string
 
 	// EngineAddress is the host:port of the internal C++ engine gRPC
-	// server, e.g. "localhost:9060". The Go gateway forwards SQL work
-	// to this address.
+	// server, e.g. "localhost:9061". The Go gateway forwards SQL work
+	// and the bqstorage shim's engine client to this address.
 	EngineAddress string
+
+	// StorageGRPCAddress is the host:port where the gateway registers
+	// the public google.cloud.bigquery.storage.v1 BigQueryRead /
+	// BigQueryWrite services, e.g. "localhost:9060". Client libraries
+	// dial BIGQUERY_STORAGE_GRPC_ENDPOINT here.
+	StorageGRPCAddress string
 
 	// EngineBinary is the path to the C++ engine binary. If empty, the
 	// gateway runs without an engine (useful early on while the engine
@@ -142,6 +149,10 @@ type Gateway struct {
 	// startup-time seeding from YAML files that needs the
 	// CatalogClient to be reachable.
 	postEngineHook func(Options, *engine.Client) error
+
+	// storageGRPC is the public BigQuery Storage listener (nil when
+	// StorageGRPCAddress is empty).
+	storageGRPC *grpcserver.Server
 }
 
 // New constructs a Gateway. Run actually starts it.
@@ -194,6 +205,22 @@ func (g *Gateway) Run() error {
 		}
 	}
 
+	if g.opts.StorageGRPCAddress != "" {
+		grpcSrv, err := grpcserver.Start(g.opts.StorageGRPCAddress, g.engineClient)
+		if err != nil {
+			g.stopEngine()
+			return fmt.Errorf("start storage grpc: %w", err)
+		}
+		g.storageGRPC = grpcSrv
+		go func() {
+			if err := grpcSrv.Serve(); err != nil {
+				g.logger.WarnContext(ctx, "storage grpc server exited", slog.Any("err", err))
+			}
+		}()
+		g.logger.InfoContext(ctx, "storage grpc listening",
+			slog.String("addr", g.opts.StorageGRPCAddress))
+	}
+
 	srv := &http.Server{
 		Addr:              g.opts.HTTPAddress,
 		Handler:           NewServer(g.opts, g.engineClient),
@@ -208,6 +235,10 @@ func (g *Gateway) Run() error {
 		case g.opts.EngineBinary != "":
 			g.logger.InfoContext(ctx, "engine grpc expected",
 				slog.String("addr", g.opts.EngineAddress))
+			if g.opts.StorageGRPCAddress != "" {
+				g.logger.InfoContext(ctx, "public storage grpc expected",
+					slog.String("addr", g.opts.StorageGRPCAddress))
+			}
 		default:
 			g.logger.InfoContext(ctx, "engine subprocess disabled; query routes will return Unimplemented")
 		}
@@ -224,6 +255,7 @@ func (g *Gateway) Run() error {
 
 	select {
 	case err := <-errCh:
+		g.stopStorageGRPC()
 		g.stopEngine()
 		return err
 	case sig := <-sigCh:
@@ -232,6 +264,7 @@ func (g *Gateway) Run() error {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
+		g.stopStorageGRPC()
 		g.stopEngine()
 		return nil
 	}
@@ -305,6 +338,13 @@ func (g *Gateway) connectAndWaitForEngine(ctx context.Context) error {
 	g.logger.InfoContext(ctx, "engine grpc serving",
 		slog.String("addr", g.opts.EngineAddress))
 	return nil
+}
+
+func (g *Gateway) stopStorageGRPC() {
+	if g.storageGRPC != nil {
+		_ = g.storageGRPC.Close()
+		g.storageGRPC = nil
+	}
 }
 
 func (g *Gateway) stopEngine() {

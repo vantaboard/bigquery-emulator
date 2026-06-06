@@ -16,6 +16,26 @@ const (
 	schemaUpdateAllowFieldRelaxation = "ALLOW_FIELD_RELAXATION"
 )
 
+// existingDestinationSchema returns the catalog schema for a destination
+// table when the load job omits an explicit schema and autodetect=false.
+func existingDestinationSchema(ctx context.Context, catalog enginepb.CatalogClient,
+	projectID, datasetID, tableID string,
+) *bqtypes.TableSchema {
+	tableRef := &enginepb.TableRef{
+		ProjectId: projectID,
+		DatasetId: datasetID,
+		TableId:   tableID,
+	}
+	if !tableExists(ctx, catalog, tableRef) {
+		return nil
+	}
+	desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+	if err != nil {
+		return nil
+	}
+	return schemaFromProto(desc.GetSchema())
+}
+
 // resolveDestinationSchema merges load-time schema updates into the destination
 // table schema for WRITE_APPEND jobs. When the merged schema differs from the
 // engine catalog, existing rows are preserved via drop-and-recreate.
@@ -28,7 +48,7 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 		wd = writeAppend
 	}
 	if wd != writeAppend || len(cfg.SchemaUpdateOptions) == 0 {
-		return schemaToProto(loadSchema), nil
+		return SchemaToProto(loadSchema), nil
 	}
 
 	tableRef := &enginepb.TableRef{
@@ -37,7 +57,7 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 		TableId:   tableID,
 	}
 	if !tableExists(ctx, catalog, tableRef) {
-		return schemaToProto(loadSchema), nil
+		return SchemaToProto(loadSchema), nil
 	}
 
 	desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
@@ -51,14 +71,14 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 	}
 	merged, changed := mergeSchemas(existing, explicit, cfg.SchemaUpdateOptions)
 	if !changed {
-		return schemaToProto(existing), nil
+		return SchemaToProto(existing), nil
 	}
 
 	preserved, err := listAllRows(ctx, catalog, tableRef, desc.GetSchema())
 	if err != nil {
 		return nil, err
 	}
-	protoMerged := schemaToProto(merged)
+	protoMerged := SchemaToProto(merged)
 	if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
 		return nil, fmt.Errorf("schema update drop table: %w", err)
 	}
@@ -115,7 +135,7 @@ func ApplySchemaUpdate(ctx context.Context, catalog enginepb.CatalogClient,
 	if err != nil {
 		return nil, err
 	}
-	protoMerged := schemaToProto(merged)
+	protoMerged := SchemaToProto(merged)
 	if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
 		return nil, fmt.Errorf("schema update drop table: %w", err)
 	}

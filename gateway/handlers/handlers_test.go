@@ -99,3 +99,16 @@ func TestBQStyleMessageRewritesStorageErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestEmulatorBaseURL(t *testing.T) {
+	t.Setenv("BIGQUERY_EMULATOR_HOST", "0.0.0.0:9050")
+	if got := requestEmulatorBaseURL(nil); got != "http://0.0.0.0:9050" {
+		t.Fatalf("env host = %q, want http://0.0.0.0:9050", got)
+	}
+	t.Setenv("BIGQUERY_EMULATOR_HOST", "")
+	req := httptest.NewRequest(http.MethodPost, "/upload/", nil)
+	req.Host = "localhost:9050"
+	if got := requestEmulatorBaseURL(req); got != "http://localhost:9050" {
+		t.Fatalf("request host = %q, want http://localhost:9050", got)
+	}
+}

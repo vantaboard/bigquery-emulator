@@ -350,6 +350,10 @@ absl::StatusOr<std::string> RenderSemanticParameterLiteral(
     case ::googlesql::TYPE_BIGNUMERIC:
       col.type = schema::ColumnType::kBignumeric;
       break;
+    case ::googlesql::TYPE_ARRAY:
+      col.mode = schema::ColumnMode::kRepeated;
+      col.type = schema::ColumnType::kString;
+      return RenderCellLiteral(*storage_or, col);
     default:
       col.type = schema::ColumnType::kString;
       break;

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -12,7 +14,15 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/seed"
 )
 
-const writeAppend = "WRITE_APPEND"
+const implicitDestDatasetID = "_bqemu_query_results"
+
+var nonIdentRE = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+
+const (
+	writeTruncate = "WRITE_TRUNCATE"
+	writeEmpty    = "WRITE_EMPTY"
+	writeAppend   = "WRITE_APPEND"
+)
 
 // AppendResults writes synchronous query output into
 // configuration.query.destinationTable when the job requests a
@@ -28,12 +38,12 @@ func AppendResults(ctx context.Context, catalog enginepb.CatalogClient,
 	if catalog == nil {
 		return errors.New("query destination requires Catalog client")
 	}
+	if len(rows) == 0 {
+		return nil
+	}
 	wd := cfg.WriteDisposition
 	if wd == "" {
-		wd = writeAppend
-	}
-	if wd != writeAppend {
-		return fmt.Errorf("query destination writeDisposition %q is not supported", wd)
+		wd = writeTruncate
 	}
 
 	destProject := cfg.DestinationTable.ProjectID
@@ -48,9 +58,31 @@ func AppendResults(ctx context.Context, catalog enginepb.CatalogClient,
 		DatasetId: destDataset,
 		TableId:   destTable,
 	}
-	protoSchema, err := load.ApplySchemaUpdate(ctx, catalog, tableRef, resultSchema, cfg.SchemaUpdateOptions)
-	if err != nil {
+	protoResult := load.SchemaToProto(resultSchema)
+	if err := load.EnsureDataset(ctx, catalog, destProject, destDataset); err != nil {
 		return err
+	}
+
+	var protoSchema *enginepb.TableSchema
+	switch wd {
+	case writeAppend:
+		if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
+			writeAppend, protoResult); err != nil {
+			return fmt.Errorf("ensure query destination table: %w", err)
+		}
+		var err error
+		protoSchema, err = load.ApplySchemaUpdate(ctx, catalog, tableRef, resultSchema, cfg.SchemaUpdateOptions)
+		if err != nil {
+			return err
+		}
+	case writeTruncate, writeEmpty:
+		if err := load.EnsureDestinationTable(ctx, catalog, destProject, destDataset, destTable,
+			wd, protoResult); err != nil {
+			return fmt.Errorf("ensure query destination table: %w", err)
+		}
+		protoSchema = protoResult
+	default:
+		return fmt.Errorf("query destination writeDisposition %q is not supported", wd)
 	}
 	if protoSchema == nil {
 		desc, derr := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
@@ -67,6 +99,49 @@ func AppendResults(ctx context.Context, catalog enginepb.CatalogClient,
 		return fmt.Errorf("query destination insert rows: %w", err)
 	}
 	return nil
+}
+
+// MaterializeImplicitDestination registers an anonymous results table for
+// SELECT jobs that omit destinationTable so clients can read
+// query_job.destination and list_rows for pagination samples.
+func MaterializeImplicitDestination(ctx context.Context, catalog enginepb.CatalogClient,
+	projectID, defaultDatasetID, jobID string,
+	resultSchema *bqtypes.TableSchema, rows []bqtypes.Row,
+) (*bqtypes.TableReference, error) {
+	if catalog == nil || resultSchema == nil || len(rows) == 0 {
+		return nil, errors.New("implicit destination requires catalog, schema, and rows")
+	}
+	datasetID := strings.TrimSpace(defaultDatasetID)
+	if datasetID == "" {
+		datasetID = implicitDestDatasetID
+	}
+	tableID := sanitizeJobTableID(jobID)
+	if err := load.EnsureDataset(ctx, catalog, projectID, datasetID); err != nil {
+		return nil, err
+	}
+	protoSchema := load.SchemaToProto(resultSchema)
+	if err := load.EnsureDestinationTable(ctx, catalog, projectID, datasetID, tableID,
+		writeTruncate, protoSchema); err != nil {
+		return nil, err
+	}
+	ref := seed.TableRef{ProjectID: projectID, DatasetID: datasetID, TableID: tableID}
+	applier := seed.NewCatalogApplier(catalog)
+	if _, err := applier.InsertRows(ctx, ref, protoSchema, restRowsToMaps(resultSchema, rows)); err != nil {
+		return nil, err
+	}
+	return &bqtypes.TableReference{
+		ProjectID: projectID,
+		DatasetID: datasetID,
+		TableID:   tableID,
+	}, nil
+}
+
+func sanitizeJobTableID(jobID string) string {
+	id := nonIdentRE.ReplaceAllString(jobID, "_")
+	if id == "" {
+		return "query_results"
+	}
+	return id
 }
 
 func restRowsToMaps(schema *bqtypes.TableSchema, rows []bqtypes.Row) []map[string]any {

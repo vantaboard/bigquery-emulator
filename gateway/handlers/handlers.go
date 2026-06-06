@@ -14,7 +14,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"regexp"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
@@ -287,4 +289,34 @@ func bqStyleResourceMessage(verb, noun, project, dataset, table string) string {
 		// rewrite.
 		return verb + ": " + noun + " " + resource
 	}
+}
+
+// requestEmulatorBaseURL returns the absolute emulator REST origin for
+// resumable upload Location headers (scheme + host, no trailing slash).
+func requestEmulatorBaseURL(r *http.Request) string {
+	if host := strings.TrimSpace(os.Getenv("BIGQUERY_EMULATOR_HOST")); host != "" {
+		host = strings.TrimRight(host, "/")
+		if !strings.Contains(host, "://") {
+			host = "http://" + strings.TrimPrefix(host, "//")
+		}
+		return host
+	}
+	if r == nil {
+		return ""
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if fwd := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); fwd != "" {
+		scheme = strings.TrimSpace(strings.Split(fwd, ",")[0])
+	}
+	host := r.Host
+	if fwdHost := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); fwdHost != "" {
+		host = strings.TrimSpace(strings.Split(fwdHost, ",")[0])
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + host
 }

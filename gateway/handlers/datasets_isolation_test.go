@@ -47,19 +47,58 @@ func TestDatasetPatchDeleteLabelResponseShape(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("decode patch response: %v", err)
 	}
-	labels, present := doc["labels"]
-	if !present {
-		t.Fatalf("patch response missing labels; body=%s", rec.Body.String())
+	if labels, present := doc["labels"]; present {
+		if labels == nil {
+			t.Fatal("patch response labels is null")
+		}
+		obj, ok := labels.(map[string]any)
+		if !ok {
+			t.Fatalf("labels is %T, want map[string]any", labels)
+		}
+		if len(obj) != 0 {
+			t.Errorf("labels = %v, want empty or omitted", obj)
+		}
 	}
-	if labels == nil {
-		t.Fatal("patch response labels is null; want {}")
+}
+
+func TestDatasetPatchClearDefaultCollation(t *testing.T) {
+	store := NewMetadataStore()
+	deps := Dependencies{Catalog: &fakeCatalogClient{}, Metadata: store}
+
+	insert := newDatasetReq(http.MethodPost, "",
+		`{"datasetReference":{"datasetId":"`+testDatasetID+`"}}`)
+	rec := httptest.NewRecorder()
+	DatasetInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status=%d", rec.Code)
 	}
-	obj, ok := labels.(map[string]any)
-	if !ok {
-		t.Fatalf("labels is %T, want map[string]any", labels)
+
+	setCollation := newDatasetReq(http.MethodPatch, testDatasetID, `{"defaultCollation":"und:ci"}`)
+	rec = httptest.NewRecorder()
+	DatasetPatch(deps)(rec, setCollation)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set collation: status=%d", rec.Code)
 	}
-	if len(obj) != 0 {
-		t.Errorf("labels = %v, want {}", obj)
+
+	clearCollation := newDatasetReq(http.MethodPatch, testDatasetID, `{"defaultCollation":""}`)
+	rec = httptest.NewRecorder()
+	DatasetPatch(deps)(rec, clearCollation)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear collation: status=%d", rec.Code)
+	}
+
+	get := newDatasetReq(http.MethodGet, testDatasetID, "")
+	rec = httptest.NewRecorder()
+	DatasetGet(deps)(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status=%d", rec.Code)
+	}
+	var got bqtypes.Dataset
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.DefaultCollation != "" {
+		t.Errorf("defaultCollation = %q, want empty", got.DefaultCollation)
 	}
 }
 

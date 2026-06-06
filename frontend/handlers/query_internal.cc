@@ -139,14 +139,11 @@ backend::engine::QueryRequest ProtoToEngineRequest(
     parameter.type_kind = kv.second.type_kind();
     parameter.value_json = kv.second.value_json();
     parameter.type_json = kv.second.type_json();
-    if (backend::engine::semantic::IsSyntheticPositionalParameterName(
-            parameter.name)) {
-      parameter.name.clear();
-    }
     engine_request.parameters.push_back(std::move(parameter));
   }
   // Proto map iteration order is undefined; sort positional keys (p0, p1,
-  // ...) so `?` placeholders bind in SQL order.
+  // ...) so `?` placeholders bind in SQL order. Sort before clearing
+  // synthetic names — clearing first makes the comparator blind to pN.
   std::sort(engine_request.parameters.begin(),
             engine_request.parameters.end(),
             [](const backend::engine::QueryParameter& a,
@@ -162,6 +159,12 @@ backend::engine::QueryRequest ProtoToEngineRequest(
               if (pa >= 0 && pb >= 0) return pa < pb;
               return a.name < b.name;
             });
+  for (auto& parameter : engine_request.parameters) {
+    if (backend::engine::semantic::IsSyntheticPositionalParameterName(
+            parameter.name)) {
+      parameter.name.clear();
+    }
+  }
   return engine_request;
 }
 

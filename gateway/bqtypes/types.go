@@ -21,6 +21,10 @@ type labelsWireState struct {
 	delete  []string
 }
 
+type collationWireState struct {
+	present bool
+}
+
 // DatasetReference is a stable handle to a dataset.
 type DatasetReference struct {
 	ProjectID string `json:"projectId"`
@@ -87,7 +91,10 @@ type Dataset struct {
 	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
 
-	labelsWire labelsWireState `json:"-"`
+	labelsWire            labelsWireState    `json:"-"`
+	defaultCollationWire  collationWireState `json:"-"`
+	DefaultCollationSet   bool               `json:"-"`
+	omitEmptyLabelsOnWire bool               `json:"-"`
 }
 
 // LabelsPatchPresent reports whether a decoded request body explicitly set labels.
@@ -100,13 +107,26 @@ func (d Dataset) LabelsToDelete() []string {
 	return d.labelsWire.delete
 }
 
+// DefaultCollationPresent reports whether the request body explicitly set
+// defaultCollation (including empty string to clear).
+func (d Dataset) DefaultCollationPresent() bool {
+	return d.defaultCollationWire.present
+}
+
+// SetOmitEmptyLabelsOnWire omits the labels JSON field on PATCH responses
+// when empty so Node deleteLabel* samples log `undefined` for apiResponse.labels.
+func (d *Dataset) SetOmitEmptyLabelsOnWire(v bool) {
+	d.omitEmptyLabelsOnWire = v
+}
+
 // UnmarshalJSON accepts labels values of JSON null (label delete) and the
 // usual string map entries client libraries send on datasets.patch.
 func (d *Dataset) UnmarshalJSON(data []byte) error {
 	type alias Dataset
 	var raw struct {
 		alias
-		Labels json.RawMessage `json:"labels,omitempty"`
+		Labels           json.RawMessage `json:"labels,omitempty"`
+		DefaultCollation json.RawMessage `json:"defaultCollation,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -120,7 +140,31 @@ func (d *Dataset) UnmarshalJSON(data []byte) error {
 		d.Labels = ResourceLabels(patch.values)
 		d.labelsWire = labelsWireState{present: true, delete: patch.delete}
 	}
+	if raw.DefaultCollation != nil {
+		d.defaultCollationWire.present = true
+		d.DefaultCollationSet = true
+		if err := json.Unmarshal(raw.DefaultCollation, &d.DefaultCollation); err != nil {
+			return fmt.Errorf("defaultCollation: %w", err)
+		}
+	}
 	return nil
+}
+
+// MarshalJSON emits labels:{} by default; omits labels when empty after a
+// label-delete PATCH so Node clients surface apiResponse.labels as undefined.
+func (d Dataset) MarshalJSON() ([]byte, error) {
+	type alias Dataset
+	var raw []byte
+	var err error
+	if d.omitEmptyLabelsOnWire && len(d.Labels) == 0 {
+		raw, err = marshalWithoutJSONField(alias(d), "labels")
+	} else {
+		raw, err = json.Marshal(alias(d))
+	}
+	if err != nil || !d.DefaultCollationSet {
+		return raw, err
+	}
+	return injectJSONStringField(raw, "defaultCollation", d.DefaultCollation)
 }
 
 // Table is the BigQuery Table resource (subset).
@@ -188,8 +232,14 @@ type Table struct {
 	// Persisted in the gateway MetadataStore and materialized into
 	// the engine catalog at insert/query time for supported formats.
 	ExternalDataConfiguration *ExternalDataConfiguration `json:"externalDataConfiguration,omitempty"`
+	// EncryptionConfiguration stores the opaque CMEK kmsKeyName the
+	// client supplied on create/load/update. Not enforced by the emulator.
+	EncryptionConfiguration *EncryptionConfiguration `json:"encryptionConfiguration,omitempty"`
 
-	labelsWire labelsWireState `json:"-"`
+	labelsWire            labelsWireState    `json:"-"`
+	defaultCollationWire  collationWireState `json:"-"`
+	DefaultCollationSet   bool               `json:"-"`
+	omitEmptyLabelsOnWire bool               `json:"-"`
 }
 
 // LabelsPatchPresent reports whether a decoded request body explicitly set labels.
@@ -202,14 +252,27 @@ func (t Table) LabelsToDelete() []string {
 	return t.labelsWire.delete
 }
 
+// DefaultCollationPresent reports whether the request body explicitly set
+// defaultCollation (including empty string to clear).
+func (t Table) DefaultCollationPresent() bool {
+	return t.defaultCollationWire.present
+}
+
+// SetOmitEmptyLabelsOnWire omits the labels JSON field on PATCH responses
+// when empty so Node deleteLabel* samples log `undefined` for apiResponse.labels.
+func (t *Table) SetOmitEmptyLabelsOnWire(v bool) {
+	t.omitEmptyLabelsOnWire = v
+}
+
 // UnmarshalJSON accepts expirationTime as a decimal string or JSON number and
 // labels values of JSON null (label delete).
 func (t *Table) UnmarshalJSON(data []byte) error {
 	type alias Table
 	var raw struct {
 		alias
-		ExpirationTime json.RawMessage `json:"expirationTime,omitempty"`
-		Labels         json.RawMessage `json:"labels,omitempty"`
+		ExpirationTime   json.RawMessage `json:"expirationTime,omitempty"`
+		Labels           json.RawMessage `json:"labels,omitempty"`
+		DefaultCollation json.RawMessage `json:"defaultCollation,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -230,7 +293,31 @@ func (t *Table) UnmarshalJSON(data []byte) error {
 		t.Labels = ResourceLabels(patch.values)
 		t.labelsWire = labelsWireState{present: true, delete: patch.delete}
 	}
+	if raw.DefaultCollation != nil {
+		t.defaultCollationWire.present = true
+		t.DefaultCollationSet = true
+		if err := json.Unmarshal(raw.DefaultCollation, &t.DefaultCollation); err != nil {
+			return fmt.Errorf("defaultCollation: %w", err)
+		}
+	}
 	return nil
+}
+
+// MarshalJSON emits labels:{} by default; omits labels when empty after a
+// label-delete PATCH so Node clients surface apiResponse.labels as undefined.
+func (t Table) MarshalJSON() ([]byte, error) {
+	type alias Table
+	var raw []byte
+	var err error
+	if t.omitEmptyLabelsOnWire && len(t.Labels) == 0 {
+		raw, err = marshalWithoutJSONField(alias(t), "labels")
+	} else {
+		raw, err = json.Marshal(alias(t))
+	}
+	if err != nil || !t.DefaultCollationSet {
+		return raw, err
+	}
+	return injectJSONStringField(raw, "defaultCollation", t.DefaultCollation)
 }
 
 // ExternalDataConfiguration mirrors the BigQuery REST external data
@@ -323,24 +410,6 @@ type MaterializedViewDefinition struct {
 	Query string `json:"query,omitempty"`
 }
 
-// RangePartitioning describes BigQuery integer-range partitioning. The
-// only currently-supported `Range.Interval` granularity is integer
-// buckets (`start`, `end`, `interval`); the field is just round-tripped
-// for now.
-type RangePartitioning struct {
-	Field string         `json:"field,omitempty"`
-	Range *RangePartSpec `json:"range,omitempty"`
-}
-
-// RangePartSpec is the `range` sub-object of RangePartitioning. All
-// three integer fields are wire-serialized as decimal strings to mirror
-// BigQuery REST. See docs/bigquery/docs/reference/rest/v2/tables/get.md.
-type RangePartSpec struct {
-	Start    string `json:"start,omitempty"`
-	End      string `json:"end,omitempty"`
-	Interval string `json:"interval,omitempty"`
-}
-
 // TimePartitioning describes time-based partitioning. Carried for
 // roundtrip only; the emulator does not enforce partition expiration.
 type TimePartitioning struct {
@@ -365,6 +434,7 @@ type TableFieldSchema struct {
 	Type        string             `json:"type"`           // STRING, INT64, FLOAT64, BOOL, TIMESTAMP, ...
 	Mode        string             `json:"mode,omitempty"` // NULLABLE, REQUIRED, REPEATED
 	Description string             `json:"description,omitempty"`
+	PolicyTags  *PolicyTagList     `json:"policyTags,omitempty"`
 	Fields      []TableFieldSchema `json:"fields,omitempty"` // for STRUCT/RECORD
 }
 
@@ -480,6 +550,10 @@ type JobStatistics2 struct {
 	// CREATE_PROCEDURE DDL statements. Mirrors upstream
 	// JobStatistics2.ddlTargetRoutine.
 	DdlTargetRoutine *RoutineReference `json:"ddlTargetRoutine,omitempty"`
+
+	// TotalBytesProcessed is the per-query bytes estimate surfaced
+	// under statistics.query (QueryJob reads this sub-object).
+	TotalBytesProcessed string `json:"totalBytesProcessed,omitempty"`
 }
 
 // SessionInfo tracks the session a query is running under, when sessions

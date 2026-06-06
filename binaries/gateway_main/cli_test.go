@@ -332,12 +332,15 @@ func TestParseArgs_ToOptionsAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseArgs: %v", err)
 	}
-	httpAddr, engineAddr, _ := cfg.ToOptions(cfg.EngineBinary)
+	httpAddr, storageGRPCAddr, engineAddr, _ := cfg.ToOptions(cfg.EngineBinary)
 	if httpAddr != "0.0.0.0:18050" {
 		t.Errorf("httpAddr=%q, want 0.0.0.0:18050", httpAddr)
 	}
-	if engineAddr != "0.0.0.0:18060" {
-		t.Errorf("engineAddr=%q, want 0.0.0.0:18060", engineAddr)
+	if storageGRPCAddr != "0.0.0.0:18060" {
+		t.Errorf("storageGRPCAddr=%q, want 0.0.0.0:18060", storageGRPCAddr)
+	}
+	if engineAddr != "0.0.0.0:18061" {
+		t.Errorf("engineAddr=%q, want 0.0.0.0:18061", engineAddr)
 	}
 }
 

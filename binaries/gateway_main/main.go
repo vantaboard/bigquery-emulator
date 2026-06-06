@@ -117,7 +117,7 @@ func main() {
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-	httpAddr, engineAddr, engineArgs := cfg.ToOptions(cfg.EngineBinary)
+	httpAddr, storageGRPCAddr, engineAddr, engineArgs := cfg.ToOptions(cfg.EngineBinary)
 
 	logLevel := slog.LevelInfo
 	if cfg.Debug {
@@ -129,6 +129,7 @@ func main() {
 
 	opts := gateway.Options{
 		HTTPAddress:            httpAddr,
+		StorageGRPCAddress:     storageGRPCAddr,
 		EngineAddress:          engineAddr,
 		EngineBinary:           resolveEngineBinary(cfg.EngineBinary),
 		EngineArgs:             engineArgs,

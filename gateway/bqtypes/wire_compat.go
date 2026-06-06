@@ -8,6 +8,34 @@ import (
 	"strconv"
 )
 
+// injectJSONStringField forces a top-level string field onto an encoded object.
+func injectJSONStringField(raw []byte, key, value string) ([]byte, error) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	doc[key] = encoded
+	return json.Marshal(doc)
+}
+
+// marshalWithoutJSONField JSON-encodes v while dropping one top-level field.
+func marshalWithoutJSONField(v any, dropField string) ([]byte, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, err
+	}
+	delete(doc, dropField)
+	return json.Marshal(doc)
+}
+
 // ResourceLabels is a BigQuery labels map on Dataset/Table resources.
 // UnmarshalJSON accepts null values as deletion markers (the upstream
 // Node `deleteLabelDataset` sample sends `{color: null}` via

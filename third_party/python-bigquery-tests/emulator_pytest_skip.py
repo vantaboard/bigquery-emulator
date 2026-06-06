@@ -19,6 +19,14 @@ _REASON = (
 )
 
 # Module path substrings that are never run against the emulator.
+# samples/tests that require Google Sheets API (no emulator stub).
+_SAMPLES_EMULATOR_SKIP: frozenset[str] = frozenset(
+    {
+        "test_query_external_sheets_permanent_table",
+        "test_query_external_sheets_temporary_table",
+    }
+)
+
 _MODULE_SKIP_SUBSTRINGS: tuple[str, ...] = (
     "model",
     "legacy",
@@ -176,6 +184,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             if _docs_snippets_test_should_skip(item.name):
                 item.add_marker(pytest.mark.skip(reason=_REASON))
                 continue
+        if item.name in _SAMPLES_EMULATOR_SKIP:
+            item.add_marker(pytest.mark.skip(reason=_REASON))
+            continue
         sample = _sample_module_for_test(path)
         if sample is not None and _sample_source_indicates_skip(sample):
             item.add_marker(pytest.mark.skip(reason=_REASON))

@@ -276,6 +276,9 @@ func DatasetPatch(deps Dependencies) http.HandlerFunc {
 		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok {
 			ds = applyDatasetMetadataOverlay(ds, overlay)
 		}
+		if ds.LabelsPatchPresent() && len(ds.Labels) == 0 {
+			ds.SetOmitEmptyLabelsOnWire(true)
+		}
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
 }
