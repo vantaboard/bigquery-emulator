@@ -184,6 +184,50 @@ TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   EXPECT_EQ(row.cells[0].int64_value(), 30);
 }
 
+TEST_F(LocalCoordinatorEngineTest, CreateAnyTypeUdfShadowsBuiltinThenCalls) {
+  CatalogBundle bundle = MakeCatalog();
+  ASSERT_TRUE(engine_
+                  ->ExecuteDdl(MakeRequest(R"(CREATE FUNCTION nullifzero(
+  expr ANY TYPE
+) AS (
+  IF(CAST(expr AS INT64) = 0, NULL, expr)
+))"),
+                               bundle.catalog.get())
+                  .ok());
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT nullifzero(CAST(0 AS INT64)) IS NULL"),
+      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kBool);
+  EXPECT_TRUE(row.cells[0].bool_value());
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreateAnyTypeUdfCastsStringToFloat) {
+  CatalogBundle bundle = MakeCatalog();
+  ASSERT_TRUE(
+      engine_
+          ->ExecuteDdl(MakeRequest(R"(CREATE FUNCTION int(v ANY TYPE) AS (
+  CAST(FLOOR(CAST(v AS FLOAT64)) AS INT64)
+))"),
+                       bundle.catalog.get())
+          .ok());
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(MakeRequest(R"(SELECT int("-1"))"),
+                                      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+  EXPECT_EQ(row.cells[0].int64_value(), -1);
+}
+
 TEST_F(LocalCoordinatorEngineTest,
        CorrelatedSubqueryWithTableAliasRoutesToSemanticAndFilters) {
   CreatePeopleTable();

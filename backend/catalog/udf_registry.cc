@@ -7,6 +7,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "googlesql/public/analyzer_output.h"
@@ -56,6 +57,13 @@ absl::Status RegisterProjectFunction(
   if (analyzer_output != nullptr) {
     bucket.analyzer_outputs.push_back(std::move(analyzer_output));
   }
+  const std::string fn_name = function->Name();
+  for (auto it = bucket.functions.begin(); it != bucket.functions.end(); ++it) {
+    if (*it != nullptr && absl::EqualsIgnoreCase((*it)->Name(), fn_name)) {
+      bucket.functions.erase(it);
+      break;
+    }
+  }
   bucket.functions.push_back(std::move(function));
   return absl::OkStatus();
 }
@@ -88,9 +96,14 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
   auto it = by_project.find(std::string(project_id));
   if (it == by_project.end()) return;
   for (const auto& fn : it->second.functions) {
-    if (fn != nullptr) {
-      catalog.AddFunction(fn.get());
-    }
+    if (fn == nullptr) continue;
+    const std::string name = fn->Name();
+    // User-defined functions shadow built-ins with the same name
+    // (e.g. migration `nullifzero` / community `typeof` UDFs).
+    catalog.RemoveFunctions([&name](const ::googlesql::Function* existing) {
+      return absl::EqualsIgnoreCase(existing->Name(), name);
+    });
+    catalog.AddFunction(fn.get());
   }
 }
 

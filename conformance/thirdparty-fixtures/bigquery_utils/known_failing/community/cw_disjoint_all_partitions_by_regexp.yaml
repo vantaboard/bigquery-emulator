@@ -16,7 +16,7 @@ query: |
     UNION ALL
     SELECT 2 AS case_id, TO_JSON_STRING(cw_disjoint_all_partitions_by_regexp("B@1#B@2#B@3#B@4#A@5#", "(?:A@\\d+#)+(?:B@\\d+#)")) AS actual, TO_JSON_STRING(CAST([] AS ARRAY<STRUCT<p INT64, rn INT64>>)) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

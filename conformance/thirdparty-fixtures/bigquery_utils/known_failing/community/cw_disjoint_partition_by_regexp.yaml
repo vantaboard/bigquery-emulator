@@ -22,7 +22,7 @@ query: |
     UNION ALL
     SELECT 5 AS case_id, TO_JSON_STRING(cw_disjoint_partition_by_regexp(104, "A@101#A@102#B@103#A@104#B@105#", "(?:A@\\d+#)+(?:B@\\d+#)")) AS actual, TO_JSON_STRING(CAST([104, 105] AS ARRAY<INT64>)) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

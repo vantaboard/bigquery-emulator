@@ -16,7 +16,7 @@ query: |
     UNION ALL
     SELECT 2 AS case_id, TO_JSON_STRING(convert_string_bytes('64617461', 2)) AS actual, TO_JSON_STRING(FROM_HEX('64617461')) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

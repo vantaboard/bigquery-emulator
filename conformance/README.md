@@ -11,13 +11,17 @@ fixture set is plan 42
 DML, structural errors, DDL, and a schema-only smoke check; see the
 "Contributing a new fixture" section below to add more.
 
-> **Sibling lane:** [`third_party/`](../third_party/README.md) hosts
+> **Sibling lanes:** [`third_party/`](../third_party/README.md) hosts
 > the imported client-library conformance suites
-> (`task thirdparty:*`). Those tests assert that the published
-> Google BigQuery clients (Go, Node.js, Python, BigQuery DataFrames)
-> talk to this emulator over its REST + gRPC surface end-to-end, in
-> contrast to the fixture lane below which pins SQL semantics through
-> a purpose-built runner. The two lanes are independent in CI.
+> (`task thirdparty:*`) and the **bigquery-utils UDF lane**
+> (`task conformance:bqutils`). Client tests assert that the published
+> Google BigQuery clients talk to this emulator over REST + gRPC;
+> the bigquery-utils lane runs generated YAML under
+> `conformance/thirdparty-fixtures/bigquery_utils/passing/` (CI-gated via
+> `.github/workflows/conformance.yml` job `bqutils` after `build-engine`).
+> Refresh with `task conformance:bqutils-sync`; triage with
+> `./scripts/triage_bqutils_fixtures.sh`. See
+> [`third_party/README.md`](../third_party/README.md#bigquery-utils-udf-conformance-non-gating).
 
 ## Quick start
 

@@ -174,6 +174,14 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
           "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION has null "
           "resolved stmt");
     }
+    // JavaScript UDFs are intentionally unsupported: registering an
+    // External_function body that is not persisted would silently
+    // diverge from BigQuery. See docs/ENGINE_POLICY.md.
+    if (absl::EqualsIgnoreCase(create_fn->language(), "js")) {
+      return absl::UnimplementedError(
+          "JavaScript UDFs (CREATE FUNCTION ... LANGUAGE js) are not "
+          "implemented");
+    }
     absl::StatusOr<std::unique_ptr<const ::googlesql::Function>> fn_or =
         catalog::MakeFunctionFromCreateFunction(*create_fn,
                                                 /*function_options=*/nullptr);

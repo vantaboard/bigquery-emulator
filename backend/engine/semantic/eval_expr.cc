@@ -13,6 +13,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/eval_udaf.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/functions/json_funcs.h"
 #include "backend/engine/semantic/system_variables.h"
@@ -113,6 +114,14 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       // arithmetic (INT64 -> FLOAT64 for `/`, ...).
       if (inner->is_null()) return NullOfType(target);
       if (target->kind() == ::googlesql::TYPE_DOUBLE) {
+        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
+          double parsed = 0;
+          if (!absl::SimpleAtod(inner->string_value(), &parsed)) {
+            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                     "semantic: CAST STRING to FLOAT64 failed");
+          }
+          return Value::Double(parsed);
+        }
         auto d = ToDouble(*inner);
         if (!d.ok()) return d.status();
         return Value::Double(*d);
@@ -136,6 +145,12 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       }
       if (target->kind() == ::googlesql::TYPE_INT64) {
         if (inner->type_kind() == ::googlesql::TYPE_INT64) return inner;
+        if (inner->type_kind() == ::googlesql::TYPE_DOUBLE) {
+          return Value::Int64(static_cast<int64_t>(inner->double_value()));
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_FLOAT) {
+          return Value::Int64(static_cast<int64_t>(inner->float_value()));
+        }
         if (inner->type_kind() == ::googlesql::TYPE_STRING) {
           if (inner->is_null()) return Value::NullInt64();
           absl::string_view s = inner->string_value();
@@ -255,6 +270,13 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       // not through column refs.
       const auto& ref = *expr.GetAs<::googlesql::ResolvedColumnRef>();
       if (ctx.columns == nullptr) {
+        if (ctx.columns_by_name != nullptr) {
+          auto name_it =
+              ctx.columns_by_name->find(std::string(ref.column().name()));
+          if (name_it != ctx.columns_by_name->end()) {
+            return name_it->second;
+          }
+        }
         return MakeSemanticError(
             SemanticErrorReason::kNotImplemented,
             absl::StrCat("semantic: ResolvedColumnRef '",
@@ -265,6 +287,13 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       }
       auto it = ctx.columns->find(ref.column().column_id());
       if (it == ctx.columns->end()) {
+        if (ctx.columns_by_name != nullptr) {
+          auto name_it =
+              ctx.columns_by_name->find(std::string(ref.column().name()));
+          if (name_it != ctx.columns_by_name->end()) {
+            return name_it->second;
+          }
+        }
         return MakeSemanticError(
             SemanticErrorReason::kInvalidArgument,
             absl::StrCat("semantic: no row binding for column '",
@@ -338,6 +367,17 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       const auto& node = *expr.GetAs<::googlesql::ResolvedSystemVariable>();
       return GetSystemVariable(ctx.project_id, node.name_path());
     }
+    case ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL:
+      if (ctx.udaf != nullptr) {
+        return EvalUdafInnerAggregate(
+            *expr.GetAs<::googlesql::ResolvedAggregateFunctionCall>(),
+            *ctx.udaf,
+            ctx);
+      }
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          "semantic: aggregate function call outside SQL UDAF body evaluation "
+          "is not yet implemented");
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",

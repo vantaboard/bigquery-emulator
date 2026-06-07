@@ -70,7 +70,7 @@ query: |
     UNION ALL
     SELECT 12 AS case_id, TO_JSON_STRING(cw_signed_leftshift_128bit(BIGNUMERIC '56713727820156410577229101238628035242', BIGNUMERIC '7')) AS actual, TO_JSON_STRING(BIGNUMERIC '113427455640312821154458202477256070400') AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

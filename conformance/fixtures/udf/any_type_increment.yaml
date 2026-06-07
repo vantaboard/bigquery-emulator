@@ -1,0 +1,14 @@
+# Minimal ANY TYPE templated scalar UDF: register + call-time eval.
+name: udf_any_type_increment
+description: |
+  CREATE FUNCTION with ANY TYPE parameter; body casts to INT64 and
+  increments. Pins registration replay and semantic UDF evaluation.
+project_id: proj-udf-any-type-increment
+setup:
+  - sql: |-
+      CREATE FUNCTION inc(v ANY TYPE) AS (CAST(v AS INT64) + 1);
+query: SELECT inc(41) AS out
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "42"}

@@ -1,0 +1,19 @@
+# ANY TYPE UDF whose name collides with a GoogleSQL builtin (nullifzero).
+name: udf_any_type_shadow_builtin
+description: |
+  User-defined nullifzero shadows the built-in of the same name and
+  applies the bigquery-utils Teradata migration semantics.
+project_id: proj-udf-any-type-shadow-builtin
+setup:
+  - sql: |-
+      CREATE FUNCTION nullifzero(expr ANY TYPE) AS (
+        IF(CAST(expr AS INT64) = 0, NULL, expr)
+      );
+query: |
+  SELECT
+    nullifzero(CAST(0 AS INT64)) IS NULL AS zero_is_null,
+    nullifzero(CAST(3 AS INT64)) AS three
+expected:
+  route: semantic_executor
+  rows:
+    - {zero_is_null: "true", three: "3"}

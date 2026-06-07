@@ -411,6 +411,28 @@ absl::StatusOr<Value> JustifyHours(const std::vector<Value>& args) {
 
 namespace {
 
+absl::StatusOr<double> NumericArgToDouble(const Value& v) {
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_DOUBLE:
+      return v.double_value();
+    case ::googlesql::TYPE_FLOAT:
+      return static_cast<double>(v.float_value());
+    case ::googlesql::TYPE_INT64:
+      return static_cast<double>(v.int64_value());
+    case ::googlesql::TYPE_STRING: {
+      double parsed = 0;
+      if (!absl::SimpleAtod(v.string_value(), &parsed)) {
+        return absl::InvalidArgumentError(
+            "semantic: cannot coerce STRING to FLOAT64");
+      }
+      return parsed;
+    }
+    default:
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: cannot coerce ", v.type()->DebugString(), " to FLOAT64"));
+  }
+}
+
 double RoundHalfAwayFromZero(double x, int64_t precision) {
   if (precision == 0) {
     if (x >= 0.0) return std::floor(x + 0.5);
@@ -429,6 +451,29 @@ double RoundHalfAwayFromZero(double x, int64_t precision) {
 
 }  // namespace
 
+absl::StatusOr<Value> UnaryMathOnNumeric(const std::vector<Value>& args,
+                                         absl::string_view fn_name,
+                                         double (*op)(double)) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", fn_name, " expects exactly one argument"));
+  }
+  if (args[0].is_null()) return Value::NullDouble();
+  auto x = NumericArgToDouble(args[0]);
+  if (!x.ok()) return x.status();
+  return Value::Double(op(*x));
+}
+
+absl::StatusOr<Value> Floor(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "FLOOR", static_cast<double (*)(double)>(std::floor));
+}
+
+absl::StatusOr<Value> Ceil(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "CEIL", static_cast<double (*)(double)>(std::ceil));
+}
+
 absl::StatusOr<Value> Round(const std::vector<Value>& args) {
   if (args.empty() || args.size() > 2) {
     return absl::InvalidArgumentError(
@@ -444,24 +489,9 @@ absl::StatusOr<Value> Round(const std::vector<Value>& args) {
     }
     precision = args[1].int64_value();
   }
-  switch (args[0].type_kind()) {
-    case ::googlesql::TYPE_INT64:
-      return Value::Int64(static_cast<int64_t>(RoundHalfAwayFromZero(
-          static_cast<double>(args[0].int64_value()), precision)));
-    case ::googlesql::TYPE_FLOAT:
-      return Value::Double(RoundHalfAwayFromZero(
-          static_cast<double>(args[0].float_value()), precision));
-    case ::googlesql::TYPE_DOUBLE:
-      return Value::Double(
-          RoundHalfAwayFromZero(args[0].double_value(), precision));
-    case ::googlesql::TYPE_NUMERIC:
-    case ::googlesql::TYPE_BIGNUMERIC:
-      return absl::InvalidArgumentError(
-          "semantic: ROUND on NUMERIC types is not yet implemented");
-    default:
-      return absl::InvalidArgumentError(
-          "semantic: ROUND requires a numeric argument");
-  }
+  auto x = NumericArgToDouble(args[0]);
+  if (!x.ok()) return x.status();
+  return Value::Double(RoundHalfAwayFromZero(*x, precision));
 }
 
 }  // namespace functions

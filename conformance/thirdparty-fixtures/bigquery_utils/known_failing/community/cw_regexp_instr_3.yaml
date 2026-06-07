@@ -50,7 +50,7 @@ query: |
     UNION ALL
     SELECT 7 AS case_id, TO_JSON_STRING(cw_regexp_instr_3("TestStr123456", "Str", NULL)) AS actual, TO_JSON_STRING(NULL) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

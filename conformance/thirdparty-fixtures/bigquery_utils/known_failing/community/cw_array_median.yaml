@@ -12,7 +12,7 @@ query: |
   WITH cases AS (
     SELECT 0 AS case_id, TO_JSON_STRING(cw_array_median((SELECT ARRAY<INT64>[1, 2, 3, 4, 5, 6]))) AS actual, TO_JSON_STRING(CAST(3.5 AS FLOAT64)) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

@@ -1,0 +1,43 @@
+# Source: GoogleCloudPlatform/bigquery-utils stored_procedures README chi_square golden
+# License: Apache-2.0. Hand-authored for bqutils plan 07 (inline stats; CALL deferred).
+name: bqutils_stored_procedures_chi_square
+description: bigquery-utils chi_square README golden on categorical Iris-like table
+profiles:
+  - duckdb
+project_id: proj-bqutils-chi-square
+query: |
+  WITH categorical AS (
+    SELECT 'dog' AS animal, 'ball' AS toy
+    UNION ALL SELECT 'dog', 'ball'
+    UNION ALL SELECT 'dog', 'ball'
+    UNION ALL SELECT 'dog', 'ball'
+    UNION ALL SELECT 'dog', 'yarn'
+    UNION ALL SELECT 'dog', 'yarn'
+    UNION ALL SELECT 'cat', 'ball'
+    UNION ALL SELECT 'cat', 'yarn'
+    UNION ALL SELECT 'cat', 'yarn'
+    UNION ALL SELECT 'cat', 'yarn'
+    UNION ALL SELECT 'cat', 'yarn'
+    UNION ALL SELECT 'cat', 'yarn'
+    UNION ALL SELECT 'cat', 'yarn'
+  ),
+  stats AS (
+    SELECT
+      SUM(POWER(observed - expected, 2) / expected) AS x,
+      CAST((COUNT(DISTINCT animal) - 1) * (COUNT(DISTINCT toy) - 1) AS FLOAT64) AS dof
+    FROM (
+      SELECT animal, toy, COUNT(*) AS observed,
+        SUM(COUNT(*)) OVER (PARTITION BY animal) * SUM(COUNT(*)) OVER (PARTITION BY toy) / SUM(COUNT(*)) OVER () AS expected
+      FROM categorical
+      GROUP BY animal, toy
+    )
+  )
+  SELECT
+    CAST(ROUND(x, 3) AS STRING) AS chi_x,
+    CAST(ROUND(dof, 1) AS STRING) AS chi_dof
+  FROM stats
+expected:
+  route: semantic_executor
+  rows:
+    - chi_x: "3.745"
+      chi_dof: "1.0"

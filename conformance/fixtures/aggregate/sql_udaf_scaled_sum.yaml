@@ -1,0 +1,18 @@
+# Minimal SQL UDAF: aggregate + NOT AGGREGATE params; body uses SUM(...)/divisor.
+name: aggregate_sql_udaf_scaled_sum
+description: |
+  CREATE AGGREGATE FUNCTION with NOT AGGREGATE parameter; call-time evaluation
+  via EvalSqlUdafBody on the semantic executor route.
+project_id: proj-aggregate-sql-udaf-scaled-sum
+setup:
+  - sql: |-
+      CREATE AGGREGATE FUNCTION scaled_sum(
+        dividend INT64,
+        divisor INT64 NOT AGGREGATE)
+      RETURNS INT64
+      AS (CAST(SUM(dividend) / divisor AS INT64));
+query: SELECT scaled_sum(val, 2) AS out FROM UNNEST([1, 2, 3]) AS val
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "3"}

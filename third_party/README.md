@@ -666,14 +666,26 @@ and `go run ./conformance/cmd/genbqutils` to emit one YAML per UDF under
 `known_failing/`. Use `BIGQUERY_UTILS_REF` to pin upstream (default
 `master`). The sync prints the resolved upstream SHA.
 
-**Gating policy:** `task conformance:bqutils` is **not** part of the
-default `task conformance:run` PR gate until plan 09 promotes a stable
-subset. `known_failing/` holds fixtures the engine does not pass yet;
-engine-feature plans (03–06) shrink that set over time.
+**Gating policy:** `task conformance:bqutils` runs in CI after
+`build-engine` succeeds (see `.github/workflows/conformance.yml`,
+job `bqutils`). It is separate from the default `task conformance:run`
+matrix so engine gaps in `known_failing/` do not block unrelated PRs.
+`known_failing/` holds fixtures the engine does not pass yet.
+
+**Pinned upstream ref:** `0754ad891dea3afe769f9fd5e537a7ea3c8b3a3b`
+(set `BIGQUERY_UTILS_REF` for `task conformance:bqutils-sync`). Refresh:
+sync at new ref → `./scripts/triage_bqutils_fixtures.sh` →
+`task conformance:bqutils`.
 
 **Baseline (2026-06-06, upstream `0754ad891dea`):** 110 emitted at
 codegen, 97 skipped (64 JS, 22 templated, 11 UDAF), **36 passing** /
-74 known_failing after first triage.
+74 known_failing after first triage. After plans 03–05 (2026-06-07):
+**55 passing** / 71+ known_failing (ANY TYPE + SQL UDAFs); JS remains
+excluded at codegen.
+
+**Corpus extensions (plans 07–08):** hand-authored fixtures under
+`known_failing/stored_procedures/` and `known_failing/views/` track
+README goldens until `CREATE VIEW` / `CALL PROCEDURE` gaps close.
 
 ## Inventory
 

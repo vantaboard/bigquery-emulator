@@ -1,0 +1,46 @@
+# Source: GoogleCloudPlatform/bigquery-utils views/migration/teradata/sys_calendar.sql
+# License: Apache-2.0. Hand-authored for bqutils plan 08; narrow date range for conformance.
+name: bqutils_views_teradata_sys_calendar
+description: bigquery-utils Teradata SYS_CALENDAR.CALENDAR view slice (2024-01-01)
+profiles:
+  - duckdb
+project_id: proj-bqutils-sys-calendar
+setup:
+  - sql: |-
+      CREATE OR REPLACE VIEW sys_calendar AS
+      SELECT
+        r AS calendar_date,
+        EXTRACT(DAYOFWEEK FROM r) AS day_of_week,
+        EXTRACT(DAY FROM r) AS day_of_month,
+        EXTRACT(DAYOFYEAR FROM r) AS day_of_year,
+        DATE_DIFF(r, DATE(1, 1, 1), DAY) AS day_of_calendar,
+        CAST(FLOOR((EXTRACT(DAY FROM r) - 1) / 7) AS INT64) + 1 AS weekday_of_month,
+        EXTRACT(WEEK FROM r) - EXTRACT(WEEK FROM DATE_TRUNC(r, MONTH))
+          + IF(EXTRACT(DAYOFWEEK FROM DATE_TRUNC(r, MONTH)) = 1, 1, 0)
+          AS week_of_month,
+        EXTRACT(WEEK FROM r) AS week_of_year,
+        DATE_DIFF(r, DATE(1, 1, 1), WEEK) AS week_of_calendar,
+        MOD(EXTRACT(MONTH FROM r) - 1, 3) + 1 AS month_of_quarter,
+        EXTRACT(MONTH FROM r) AS month_of_year,
+        DATE_DIFF(r, DATE(1, 1, 1), MONTH) AS month_of_calendar,
+        EXTRACT(QUARTER FROM r) AS quarter_of_year,
+        4 * EXTRACT(YEAR FROM r) + EXTRACT(QUARTER FROM r) AS quarter_of_calendar,
+        EXTRACT(YEAR FROM r) AS year_of_calendar
+      FROM UNNEST(GENERATE_DATE_ARRAY(DATE '2024-01-01', DATE '2024-01-31', INTERVAL 1 DAY)) AS r;
+query: |
+  SELECT
+    CAST(calendar_date AS STRING) AS calendar_date,
+    CAST(day_of_week AS STRING) AS day_of_week,
+    CAST(day_of_month AS STRING) AS day_of_month,
+    CAST(day_of_year AS STRING) AS day_of_year,
+    CAST(year_of_calendar AS STRING) AS year_of_calendar
+  FROM sys_calendar
+  WHERE calendar_date = DATE '2024-01-01'
+expected:
+  route: semantic_executor
+  rows:
+    - calendar_date: "2024-01-01"
+      day_of_week: "2"
+      day_of_month: "1"
+      day_of_year: "1"
+      year_of_calendar: "2024"

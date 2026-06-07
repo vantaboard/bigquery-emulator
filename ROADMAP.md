@@ -508,7 +508,16 @@ public-facing policy.
   SQL UDF / TVF body storage + invocation + JS UDF
   registration-time rejection stay deferred until the per-engine
   UDF / TVF registry round-trip through `DuckDBStorage` lands
-  (the prerequisite for cross-request function persistence)
+  (the prerequisite for cross-request function persistence).
+  **Landed (in-process):** `CREATE FUNCTION` with typed or
+  `ANY TYPE` templated scalar parameters registers in the
+  per-project UDF registry and replays into each query catalog
+  (shadowing built-ins on name collision); call-time evaluation
+  routes through the semantic executor. Conformance fixtures under
+  `conformance/fixtures/udf/` gate the scalar path; SQL UDAFs land on
+  the semantic executor via `EvalSqlUdafBody` with fixtures under
+  `conformance/fixtures/aggregate/`. TVFs and durable DuckDB-backed
+  persistence remain open.
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
   deferred DML work tracked in `docs/ENGINE_POLICY.md` plus the existing DuckDB

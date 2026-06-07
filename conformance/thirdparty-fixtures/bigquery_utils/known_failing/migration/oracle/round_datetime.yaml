@@ -22,7 +22,7 @@ query: |
     UNION ALL
     SELECT 5 AS case_id, TO_JSON_STRING(round_datetime(DATETIME "2024-3-4 12:34:56", "W")) AS actual, TO_JSON_STRING(DATETIME "2024-03-08T00:00:00") AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

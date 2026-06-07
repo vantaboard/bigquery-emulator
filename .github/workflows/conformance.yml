@@ -81,3 +81,50 @@ jobs:
           name: conformance-${{ matrix.profile }}
           path: conformance-${{ matrix.profile }}.json
           if-no-files-found: warn
+
+  bqutils:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: conformance (bqutils)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Run bigquery-utils passing lane
+        run: |
+          task conformance:bqutils \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-bqutils.json
+
+      - name: Upload bqutils conformance report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: conformance-bqutils
+          path: conformance-bqutils.json
+          if-no-files-found: warn

@@ -2,8 +2,6 @@
 // separate file so `duckdb_executor_test.cc` stays under the
 // cpp-lint file-length cap.
 
-#include "backend/engine/duckdb/duckdb_executor.h"
-
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -15,6 +13,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/engine.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "googlesql/public/analyzer.h"
@@ -61,8 +60,8 @@ class DuckDbExecutorRoutingTest : public ::testing::Test {
     std::random_device rd;
     std::seed_seq seed{rd(), rd()};
     std::mt19937_64 rng(seed);
-    data_dir_ = fs::path(tmpdir) /
-                absl::StrCat("bqemu-duckdb-routing-test-", rng());
+    data_dir_ =
+        fs::path(tmpdir) / absl::StrCat("bqemu-duckdb-routing-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
     auto opened = storage::duckdb::DuckDBStorage::Open(data_dir_.string());

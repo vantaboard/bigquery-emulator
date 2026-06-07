@@ -1,0 +1,13 @@
+# Single aggregate-parameter SQL UDAF; confirms registration + SUM body eval.
+name: aggregate_sql_udaf_simple_sum
+description: |
+  CREATE AGGREGATE FUNCTION with one aggregate parameter; body is SUM(x).
+project_id: proj-aggregate-sql-udaf-simple-sum
+setup:
+  - sql: |-
+      CREATE AGGREGATE FUNCTION my_sum(x INT64) RETURNS INT64 AS (SUM(x));
+query: SELECT my_sum(n) AS out FROM UNNEST([1, 2, 3]) AS n
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "6"}

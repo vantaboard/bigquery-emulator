@@ -18,7 +18,7 @@ query: |
     UNION ALL
     SELECT 3 AS case_id, TO_JSON_STRING(azimuth_to_geog_point(NULL, NULL, NULL, NULL)) AS actual, TO_JSON_STRING(NULL) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

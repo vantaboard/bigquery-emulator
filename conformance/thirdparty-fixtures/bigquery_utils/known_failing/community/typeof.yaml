@@ -130,7 +130,7 @@ query: |
     UNION ALL
     SELECT 38 AS case_id, TO_JSON_STRING(typeof(RANGE(current_timestamp() - interval 5 day, current_timestamp()))) AS actual, TO_JSON_STRING("RANGE<TIMESTAMP>") AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

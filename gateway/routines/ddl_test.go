@@ -68,9 +68,34 @@ func TestParseSQLType(t *testing.T) {
 	if !ok || typ.TypeKind != "INT64" || n != 5 {
 		t.Fatalf("INT64 parse failed: %+v %d %v", typ, n, ok)
 	}
+	typ, n, ok = scanSQLType("ANY TYPE")
+	if !ok || typ.TypeKind != "ANY TYPE" || n != 8 {
+		t.Fatalf("ANY TYPE parse failed: %+v %d %v", typ, n, ok)
+	}
 	typ, _, ok = scanSQLType("ARRAY<STRING>")
 	if !ok || typ.TypeKind != "ARRAY" || typ.ArrayElementType.TypeKind != "STRING" {
 		t.Fatalf("ARRAY<STRING> = %+v", typ)
+	}
+}
+
+func TestRegisterFromDDLAnyTypeArg(t *testing.T) {
+	store := NewStore()
+	sql := `CREATE FUNCTION nullifzero(expr ANY TYPE) AS (
+		IF(CAST(expr AS INT64) = 0, NULL, expr)
+	)`
+	ref := RegisterFromDDL(store, "proj", "ds", sql)
+	if ref == nil {
+		t.Fatal("RegisterFromDDL returned nil")
+	}
+	rt, ok := store.Get("proj", "ds", "nullifzero")
+	if !ok {
+		t.Fatal("routine not stored")
+	}
+	if len(rt.Arguments) != 1 {
+		t.Fatalf("arguments = %d", len(rt.Arguments))
+	}
+	if rt.Arguments[0].DataType == nil || rt.Arguments[0].DataType.TypeKind != "ANY TYPE" {
+		t.Fatalf("arg type = %+v", rt.Arguments[0].DataType)
 	}
 }
 

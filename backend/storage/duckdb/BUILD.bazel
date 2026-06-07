@@ -33,8 +33,8 @@ cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf",
-        "@googlesql//googlesql/public/functions:date_time_util",
-        "@googlesql//googlesql/public/functions:datetime_cc_proto",
+        # Prebuilt exposes functions headers/symbols via :value + libgooglesql.a.
+        "@googlesql//googlesql/public:value",
     ],
 )
 

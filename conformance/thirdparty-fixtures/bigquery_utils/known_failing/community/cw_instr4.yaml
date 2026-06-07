@@ -41,7 +41,7 @@ query: |
   WITH cases AS (
     SELECT 0 AS case_id, TO_JSON_STRING(cw_instr4("TestStr123456", "Str", CAST(1 AS INT64), CAST(1 AS INT64))) AS actual, TO_JSON_STRING(CAST(5 AS INT64)) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

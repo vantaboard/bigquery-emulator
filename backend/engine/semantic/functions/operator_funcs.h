@@ -32,6 +32,8 @@ absl::StatusOr<Value> DispatchInterval(const std::vector<Value>& args,
                                        const ::googlesql::Type* return_type);
 absl::StatusOr<Value> JustifyDays(const std::vector<Value>& args);
 absl::StatusOr<Value> JustifyHours(const std::vector<Value>& args);
+absl::StatusOr<Value> Floor(const std::vector<Value>& args);
+absl::StatusOr<Value> Ceil(const std::vector<Value>& args);
 absl::StatusOr<Value> Round(const std::vector<Value>& args);
 
 }  // namespace functions

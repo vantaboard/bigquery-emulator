@@ -64,7 +64,7 @@ query: |
     UNION ALL
     SELECT 8 AS case_id, TO_JSON_STRING(url_trim_query("https://www.example.com/abc/index.html", ["gclid"])) AS actual, TO_JSON_STRING("https://www.example.com/abc/index.html") AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

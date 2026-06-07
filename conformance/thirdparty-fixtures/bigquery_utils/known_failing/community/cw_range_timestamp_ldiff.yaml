@@ -43,7 +43,7 @@ query: |
     UNION ALL
     SELECT 3 AS case_id, TO_JSON_STRING(cw_range_timestamp_ldiff(RANGE<TIMESTAMP> '[2001-11-12 00:00:00, 2001-11-14 00:00:00)', RANGE<TIMESTAMP> '[2001-11-14 00:00:00, 2001-11-15 00:00:00)')) AS actual, TO_JSON_STRING(NULL) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

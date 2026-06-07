@@ -35,7 +35,7 @@ query: |
   WITH cases AS (
     SELECT 0 AS case_id, TO_JSON_STRING(cw_find_in_list("1", "[Test,1,2]")) AS actual, TO_JSON_STRING(CAST(2 AS INT64)) AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

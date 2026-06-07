@@ -53,6 +53,8 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "rtrim") return Rtrim(args);
   if (name == "lpad") return Lpad(args);
   if (name == "rpad") return Rpad(args);
+  if (name == "floor") return Floor(args);
+  if (name == "ceil" || name == "ceiling") return Ceil(args);
   if (name == "round") return Round(args);
   if (name == "replace") return Replace(args);
   if (name == "reverse") return Reverse(args);

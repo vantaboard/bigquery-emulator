@@ -238,6 +238,10 @@ func scanSQLType(s string) (*bqtypes.StandardSqlDataType, int, bool) {
 	}
 	upper := strings.ToUpper(s)
 	switch {
+	case strings.HasPrefix(upper, "ANY TYPE"):
+		return &bqtypes.StandardSqlDataType{
+			TypeKind: bqtypes.SQLTypeKind("ANY TYPE"),
+		}, len("ANY TYPE"), true
 	case strings.HasPrefix(upper, "ARRAY<"):
 		inner, consumed, ok := scanAngleInner(s[len("ARRAY<"):])
 		if !ok {

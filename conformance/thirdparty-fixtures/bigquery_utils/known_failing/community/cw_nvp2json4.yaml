@@ -33,7 +33,7 @@ query: |
   WITH cases AS (
     SELECT 0 AS case_id, TO_JSON_STRING(cw_nvp2json4("name=google#1&occupation=engineer#2&hair=color#3", "&", "=", "#")) AS actual, TO_JSON_STRING('{"name":"google1","occupation":"engineer2","hair":"color3"}') AS expected
   )
-  SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id
+  SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id
 expected:
   match: ordered
   rows:

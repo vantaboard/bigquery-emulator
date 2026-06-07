@@ -18,13 +18,16 @@ import (
 )
 
 type manifestCase struct {
-	Inputs         []string `json:"inputs"`
+	Inputs         []string `json:"inputs,omitempty"`
 	ExpectedOutput string   `json:"expected_output"`
+	InputColumns   []string `json:"input_columns,omitempty"`
+	InputRows      string   `json:"input_rows,omitempty"`
 }
 
 type manifestUDF struct {
 	Family            string         `json:"family"`
 	Name              string         `json:"name"`
+	Kind              string         `json:"kind,omitempty"`
 	UpstreamSQLX      string         `json:"upstream_sqlx"`
 	UpstreamTestCases string         `json:"upstream_test_cases"`
 	CreateSQL         string         `json:"create_sql"`
@@ -129,6 +132,9 @@ func projectID(name string) string {
 }
 
 func buildQuery(udf manifestUDF) string {
+	if udf.Kind == "udaf" {
+		return buildUdafQuery(udf)
+	}
 	var b strings.Builder
 	b.WriteString("WITH cases AS (\n")
 	for i, tc := range udf.Cases {
@@ -140,8 +146,54 @@ func buildQuery(udf manifestUDF) string {
 			i, udf.Name, args, tc.ExpectedOutput)
 	}
 	b.WriteString(")\n")
-	b.WriteString("SELECT case_id, actual = expected AS matches FROM cases ORDER BY case_id\n")
+	// NULL = NULL is UNKNOWN in SQL; treat two NULL JSON strings as equal.
+	b.WriteString(
+		"SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id\n",
+	)
 	return b.String()
+}
+
+func buildUdafQuery(udf manifestUDF) string {
+	var b strings.Builder
+	b.WriteString("WITH cases AS (\n")
+	for i, tc := range udf.Cases {
+		if i > 0 {
+			b.WriteString("  UNION ALL\n")
+		}
+		var aggCols []string
+		var udafArgs []string
+		aggIdx := 0
+		for _, col := range tc.InputColumns {
+			if strings.Contains(col, " NOT AGGREGATE") {
+				lit := strings.TrimSpace(strings.Split(col, " NOT AGGREGATE")[0])
+				udafArgs = append(udafArgs, lit)
+				continue
+			}
+			alias := fmt.Sprintf("test_input_%d", aggIdx)
+			aggCols = append(aggCols, fmt.Sprintf("%s AS %s", col, alias))
+			udafArgs = append(udafArgs, alias)
+			aggIdx++
+		}
+		fromClause := tc.InputRows
+		if len(aggCols) > 0 {
+			fromClause = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(aggCols, ", "), tc.InputRows)
+		}
+		fmt.Fprintf(&b,
+			"  SELECT %d AS case_id, TO_JSON_STRING(%s(%s)) AS actual, TO_JSON_STRING(%s) AS expected\n  FROM (%s)\n",
+			i, udf.Name, strings.Join(udafArgs, ", "), tc.ExpectedOutput, fromClause)
+	}
+	b.WriteString(")\n")
+	b.WriteString(
+		"SELECT case_id, IFNULL(actual = expected, actual IS NULL AND expected IS NULL) AS matches FROM cases ORDER BY case_id\n",
+	)
+	return b.String()
+}
+
+func kindLabel(kind string) string {
+	if kind == "udaf" {
+		return "UDAF"
+	}
+	return "UDF"
 }
 
 func buildFixture(udf manifestUDF) runner.Fixture {
@@ -153,10 +205,16 @@ func buildFixture(udf manifestUDF) runner.Fixture {
 		}
 	}
 	return runner.Fixture{
-		Name:        fixtureName(udf.Family, udf.Name),
-		Description: fmt.Sprintf("bigquery-utils %s UDF %s (%d cases)", udf.Family, udf.Name, len(udf.Cases)),
-		Profiles:    []string{runner.ProfileDuckDB},
-		ProjectID:   projectID(udf.Name),
+		Name: fixtureName(udf.Family, udf.Name),
+		Description: fmt.Sprintf(
+			"bigquery-utils %s %s %s (%d cases)",
+			udf.Family,
+			kindLabel(udf.Kind),
+			udf.Name,
+			len(udf.Cases),
+		),
+		Profiles:  []string{runner.ProfileDuckDB},
+		ProjectID: projectID(udf.Name),
 		Setup: []runner.SetupStep{
 			{SQL: strings.TrimSpace(udf.CreateSQL)},
 		},

@@ -31,7 +31,8 @@ std::string PartitionFingerprint(const std::vector<Value>& keys) {
 }
 
 int CompareOrderByItem(const ::googlesql::ResolvedOrderByItem* item,
-                       const Value& va, const Value& vb) {
+                       const Value& va,
+                       const Value& vb) {
   if (item == nullptr) return 0;
   if (ValueEqual(va, vb)) return 0;
   if (va.is_null() || vb.is_null()) {
@@ -102,28 +103,27 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
 
     std::vector<size_t> order(input_rows.size());
     std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(),
-                     [&](size_t a_idx, size_t b_idx) -> bool {
-                       if (partition_fps[a_idx] != partition_fps[b_idx]) {
-                         return partition_fps[a_idx] < partition_fps[b_idx];
-                       }
-                       if (order_spec == nullptr) return false;
-                       for (int i = 0; i < order_spec->order_by_item_list_size();
-                            ++i) {
-                         const ::googlesql::ResolvedOrderByItem* item =
-                             order_spec->order_by_item_list(i);
-                         if (item == nullptr || item->column_ref() == nullptr) {
-                           continue;
-                         }
-                         const int col_id =
-                             item->column_ref()->column().column_id();
-                         const int cmp = CompareOrderByItem(
-                             item, LookupColumnValue(input_rows[a_idx], col_id),
-                             LookupColumnValue(input_rows[b_idx], col_id));
-                         if (cmp != 0) return cmp < 0;
-                       }
-                       return false;
-                     });
+    std::stable_sort(
+        order.begin(), order.end(), [&](size_t a_idx, size_t b_idx) -> bool {
+          if (partition_fps[a_idx] != partition_fps[b_idx]) {
+            return partition_fps[a_idx] < partition_fps[b_idx];
+          }
+          if (order_spec == nullptr) return false;
+          for (int i = 0; i < order_spec->order_by_item_list_size(); ++i) {
+            const ::googlesql::ResolvedOrderByItem* item =
+                order_spec->order_by_item_list(i);
+            if (item == nullptr || item->column_ref() == nullptr) {
+              continue;
+            }
+            const int col_id = item->column_ref()->column().column_id();
+            const int cmp = CompareOrderByItem(
+                item,
+                LookupColumnValue(input_rows[a_idx], col_id),
+                LookupColumnValue(input_rows[b_idx], col_id));
+            if (cmp != 0) return cmp < 0;
+          }
+          return false;
+        });
 
     absl::flat_hash_map<std::string, int64_t> next_in_partition;
     std::vector<int64_t> row_numbers(input_rows.size(), 0);
@@ -154,10 +154,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
         fname = absl::AsciiStrToLower(afn->function()->Name());
       }
       if (fname != "row_number") {
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            absl::StrCat("semantic: analytic function '", fname,
-                         "' is not yet implemented"));
+        return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                                 absl::StrCat("semantic: analytic function '",
+                                              fname,
+                                              "' is not yet implemented"));
       }
       const int out_col_id = cc->column().column_id();
       for (size_t r = 0; r < out_rows.size(); ++r) {
