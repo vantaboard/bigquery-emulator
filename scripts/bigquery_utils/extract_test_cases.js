@@ -166,7 +166,7 @@ function discoverTestCaseFiles(srcRoot) {
 function evalTestCases(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const udfCases = new Map();
-  const udafNames = new Set();
+  const udafCases = new Map();
 
   const captureUdf = (name, cases) => {
     if (!udfCases.has(name)) {
@@ -174,8 +174,11 @@ function evalTestCases(filePath) {
     }
     udfCases.get(name).push(...cases);
   };
-  const captureUdaf = (name) => {
-    udafNames.add(name);
+  const captureUdaf = (name, testCase) => {
+    if (!udafCases.has(name)) {
+      udafCases.set(name, []);
+    }
+    udafCases.get(name).push(testCase);
   };
 
   const sandbox = {
@@ -196,7 +199,7 @@ function evalTestCases(filePath) {
   };
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox, { filename: filePath });
-  return { udfCases, udafNames };
+  return { udfCases, udafCases };
 }
 
 function relPath(srcRoot, absPath) {
@@ -217,9 +220,9 @@ function main() {
 
   for (const { family, file } of discoverTestCaseFiles(srcRoot)) {
     let udfCases;
-    let udafNames;
+    let udafCases;
     try {
-      ({ udfCases, udafNames } = evalTestCases(file));
+      ({ udfCases, udafCases } = evalTestCases(file));
     } catch (err) {
       skipped.push({
         family,
@@ -229,15 +232,56 @@ function main() {
       continue;
     }
 
-    for (const udafName of udafNames) {
-      skipped.push({
+    const dir = path.dirname(file);
+    for (const [name, cases] of udafCases) {
+      const sqlxPath = path.join(dir, `${name}.sqlx`);
+      if (!fs.existsSync(sqlxPath)) {
+        skipped.push({
+          family,
+          name,
+          reason: `missing sibling ${name}.sqlx`,
+        });
+        continue;
+      }
+
+      const rawSqlx = fs.readFileSync(sqlxPath, "utf8");
+      const createSql = prepareSqlxBody(rawSqlx, name);
+
+      if (hasLanguageJs(createSql)) {
+        skipped.push({ family, name, reason: "LANGUAGE js" });
+        continue;
+      }
+      if (hasDataformTemplate(createSql)) {
+        skipped.push({ family, name, reason: "Dataform templating (${...})" });
+        continue;
+      }
+
+      const excludeReason = isHardExcluded(name, createSql, cases);
+      if (excludeReason) {
+        skipped.push({ family, name, reason: excludeReason });
+        continue;
+      }
+
+      if (!cases.length) {
+        skipped.push({ family, name, reason: "no UDAF test cases" });
+        continue;
+      }
+
+      emitted.push({
         family,
-        name: udafName,
-        reason: "UDAF (generate_udaf_test)",
+        name,
+        kind: "udaf",
+        upstream_sqlx: relPath(srcRoot, sqlxPath),
+        upstream_test_cases: relPath(srcRoot, file),
+        create_sql: createSql,
+        cases: cases.map((tc) => ({
+          input_columns: tc.input_columns,
+          input_rows: tc.input_rows,
+          expected_output: tc.expected_output,
+        })),
       });
     }
 
-    const dir = path.dirname(file);
     for (const [name, cases] of udfCases) {
       const sqlxPath = path.join(dir, `${name}.sqlx`);
       if (!fs.existsSync(sqlxPath)) {
