@@ -20,6 +20,7 @@
 #                                                # bigframes nox `py` session
 #   task thirdparty:python-bigquery-dataframes-snippet-gate
 #                                                # narrow CI-friendly bigframes allowlist
+#   task thirdparty:dbt-bigquery-tests           # dbt-bigquery functional pytest (uvx)
 #
 # Bring-up contract: each suite task below calls `task emulator-up`
 # after its own vendor-tree existence check, so a fresh clone gets a
@@ -127,6 +128,15 @@ vars:
     CreateCampaignmanagerTransferIT,CreatePlayTransferIT,CreateRedshiftTransferIT,
     CreateTeradataTransferIT,CreateYoutubeChannelTransferIT,
     CreateYoutubeContentOwnerTransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT
+  # dbt-bigquery functional lane (plan 10). Sync upstream tests first via
+  # scripts/sync_dbt_bigquery_tests.sh. Default pytest selector is the full
+  # functional tree with emulator skip matrix; override for triage:
+  #   DBT_BIGQUERY_PYTEST_ARGS='tests/functional/adapter/test_basic.py::TestSimpleMaterializationsBigQuery -n0'
+  # Feasibility / first-wave triage (runs BaseSimpleMaterializations despite skip sketch):
+  #   DBT_BIGQUERY_RUN_TRIAGE=1 task thirdparty:dbt-bigquery-tests
+  DBT_BIGQUERY_PYTEST_ARGS: "tests/functional -n0"
+  DBT_BIGQUERY_CMD_TIMEOUT: "45m"
+  DBT_BIGQUERY_PYTHON: ""
 
 tasks:
   default:
@@ -1132,3 +1142,102 @@ tasks:
           echo "Install uv (https://docs.astral.sh/uv/) for 'uvx --from nox[pbs] nox', or install 'nox[pbs]' on PATH." >&2
           exit 1
         fi
+
+  # dbt-labs/dbt-adapters dbt-bigquery functional pytest lane. The scaffold
+  # vendors emulator conftest + skip plugin; upstream tests/ sync on demand
+  # (see scripts/sync_dbt_bigquery_tests.sh). Runtime installs dbt-core,
+  # dbt-bigquery, and dbt-tests-adapter from requirements-test.txt at the
+  # pinned upstream SHA. See third_party/README.md (dbt-bigquery-tests).
+  dbt-bigquery-tests:
+    desc: Run vendored dbt-bigquery functional pytest against the emulator (sync tests first; see third_party/README.md)
+    cmds:
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        scaffold="${root}/third_party/dbt-bigquery-tests"
+        if [ ! -f "${scaffold}/pyproject.toml" ]; then
+          echo "third_party/dbt-bigquery-tests scaffold missing" >&2
+          exit 1
+        fi
+        if [ ! -f "${scaffold}/tests/functional/adapter/test_basic.py" ]; then
+          echo "${scaffold}/tests/functional/adapter/test_basic.py is missing." >&2
+          echo "  This tree vendors emulator wiring but not upstream functional tests." >&2
+          echo "  Run: scripts/sync_dbt_bigquery_tests.sh" >&2
+          echo "  Or: DBT_ADAPTERS_LOCAL=/path/to/dbt-adapters scripts/sync_dbt_bigquery_tests.sh" >&2
+          echo "  See third_party/README.md (dbt-bigquery-tests section)." >&2
+          exit 1
+        fi
+      - task: emulator-up
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        scaffold="${root}/third_party/dbt-bigquery-tests"
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+          bash "${root}/scripts/preflight_python_samples_emulator.sh"
+        fi
+        cd "${scaffold}"
+        _bqhost="${BIGQUERY_EMULATOR_HOST:-http://localhost:9050}"
+        if [ -n "$_bqhost" ] && ! printf '%s' "$_bqhost" | grep -qE '^https?://'; then
+          export BIGQUERY_EMULATOR_HOST="http://${_bqhost#//}"
+        else
+          export BIGQUERY_EMULATOR_HOST="${_bqhost}"
+        fi
+        export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
+        export PYTHONUNBUFFERED=1
+        _py_path="${scaffold}"
+        if [ -n "${PYTHONPATH-}" ]; then
+          _py_path="${_py_path}:${PYTHONPATH}"
+        fi
+        export PYTHONPATH="${_py_path}"
+        py="${DBT_BIGQUERY_PYTHON:-}"
+        if [ -z "$py" ]; then
+          py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+        fi
+        case "$py" in
+          3.10|3.11|3.12|3.13) ;;
+          *)
+            _found=""
+            for _v in 3.13 3.12 3.11 3.10; do
+              if command -v "python${_v}" >/dev/null 2>&1; then
+                py="${_v}"
+                _found=1
+                echo "dbt-bigquery-tests: default Python is unsupported for dbt pins; using python${_v}." >&2
+                break
+              fi
+            done
+            if [ -z "${_found}" ]; then
+              echo "dbt-bigquery-tests: requires Python 3.10-3.13 (got ${py}). Set DBT_BIGQUERY_PYTHON." >&2
+              exit 1
+            fi
+            ;;
+        esac
+        _to="{{.DBT_BIGQUERY_CMD_TIMEOUT}}"
+        _run() {
+          case "${_to}" in
+            0|off|none) "$@" ;;
+            *)
+              if command -v timeout >/dev/null 2>&1; then
+                if timeout --help 2>&1 | grep -q -- '--foreground'; then
+                  timeout --foreground -k 30s "${_to}" "$@"
+                else
+                  timeout -k 30s "${_to}" "$@"
+                fi
+              else
+                echo "dbt-bigquery-tests: timeout not on PATH; running without wall-clock cap." >&2
+                "$@"
+              fi
+              ;;
+          esac
+        }
+        _pytest_args="{{.DBT_BIGQUERY_PYTEST_ARGS}}"
+        if [ -n "${DBT_BIGQUERY_PYTEST_ARGS:-}" ]; then
+          _pytest_args="${DBT_BIGQUERY_PYTEST_ARGS}"
+        fi
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "dbt-bigquery-tests: install uv (https://docs.astral.sh/uv/) for uvx pytest runs." >&2
+          exit 1
+        fi
+        echo "dbt-bigquery-tests: emulator=${BIGQUERY_EMULATOR_HOST} project=${GOOGLE_CLOUD_PROJECT} python=${py}"
+        # shellcheck disable=SC2086
+        _run uvx --python "${py}" --with-requirements requirements-test.txt \
+          pytest --profile=emulator -v --durations=10 ${_pytest_args}

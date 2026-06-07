@@ -8,7 +8,7 @@ in-repo SQL-fixture conformance harness:
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
-| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos. The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see `ROADMAP.md` and `taskfiles/thirdparty.yml`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
+| **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) and **dbt-bigquery** functional tests talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos (and dbt-labs/dbt-adapters for the dbt lane). The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see `ROADMAP.md` and `taskfiles/thirdparty.yml`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -576,6 +576,104 @@ falls back to `python3.12 → 3.13 → 3.11 → 3.10` on `PATH` automatically.
 When `STORAGE_EMULATOR_HOST` is set, the preflight
 `scripts/preflight_dataframe_samples_gcs.sh` confirms fake-gcs is
 reachable before the conftest tries to create buckets.
+
+## `dbt-bigquery-tests`
+
+In-tree **dbt-bigquery functional pytest** lane at
+[`dbt-bigquery-tests`](dbt-bigquery-tests) (plan 10; deferred from the
+bigquery-utils conformance work).
+
+**Status: scaffold + on-demand sync.** The committed tree carries emulator
+wiring (`conftest.py`, `emulator_bootstrap.py`, `emulator_pytest_skip.py`,
+`profiles/emulator/profiles.yml`, `requirements-test.txt`, `upstream_ref.txt`,
+`FEASIBILITY.md`) but upstream `tests/**/*.py` is synced on demand.
+`task thirdparty:dbt-bigquery-tests` fails fast when
+`tests/functional/adapter/test_basic.py` is missing.
+
+Populate (or refresh) upstream functional tests:
+
+```bash
+./scripts/sync_dbt_bigquery_tests.sh
+# or from a local clone:
+DBT_ADAPTERS_LOCAL=/path/to/dbt-adapters ./scripts/sync_dbt_bigquery_tests.sh
+DBT_ADAPTERS_REF=a82c766c ./scripts/sync_dbt_bigquery_tests.sh --dry-run
+```
+
+The sync script rsyncs `dbt-bigquery/tests/**/*.py` (never overwrites curated
+`conftest.py`) plus small fixtures (`*.csv`, `*.ndjson`, `*.yml`, …) and
+prints the resolved upstream SHA. Runtime packages install from
+`requirements-test.txt` (git pin at `upstream_ref.txt`).
+
+Run against the emulator:
+
+```bash
+task emulator:run-full                  # or task thirdparty:emulator-up
+task thirdparty:dbt-bigquery-tests
+```
+
+Feasibility / first-wave triage (attempts `TestSimpleMaterializationsBigQuery`
+despite the default skip sketch):
+
+```bash
+DBT_BIGQUERY_RUN_TRIAGE=1 \
+  DBT_BIGQUERY_PYTEST_ARGS='tests/functional/adapter/test_basic.py::TestSimpleMaterializationsBigQuery::test_base -n0' \
+  task thirdparty:dbt-bigquery-tests
+```
+
+### Emulator wiring
+
+| Piece | Role |
+|-------|------|
+| `api_endpoint` | Set from `BIGQUERY_EMULATOR_HOST` (normalized to `http://host:port`) in `conftest.py` `--profile=emulator` |
+| `emulator_bootstrap.py` | Patches `create_google_credentials` → `AnonymousCredentials` when the emulator host is set |
+| `emulator_pytest_skip.py` | Initial skip matrix for Dataproc/python models, GCS uploads, MV/catalog tests, etc. |
+
+### Skip matrix (initial sketch — refine at triage)
+
+| Area | Emulator posture |
+|------|-------------------|
+| **Dataproc / python models** | Skipped (`python_model`, `dataproc` paths) |
+| **GCS `upload_file`** | Skipped unless `STORAGE_EMULATOR_HOST` + fake-gcs wiring lands in this lane |
+| **INFORMATION_SCHEMA / docs generate** | Skipped (`catalog`, `TestDocsGenerateBigQuery`) |
+| **Materialized views** | Skipped (`simple_bigquery_view`, `materialized` paths) |
+| **JS / SQL UDAF functions** | Skipped (engine gaps; see bqutils plans 04–05) |
+| **Policy tags / grants / change history** | Skipped (deferred REST surfaces) |
+| **BaseSimpleMaterializations** | Skipped by default; set `DBT_BIGQUERY_RUN_TRIAGE=1` for feasibility |
+
+See [`FEASIBILITY.md`](dbt-bigquery-tests/FEASIBILITY.md) for the client-level
+`api_endpoint` probe results (list/create dataset, query job — all OK on
+`:9050`).
+
+## bigquery-utils UDF conformance (non-gating)
+
+Battle-tested BigQuery SQL UDF tests from
+[GoogleCloudPlatform/bigquery-utils](https://github.com/GoogleCloudPlatform/bigquery-utils)
+(Apache-2.0), converted to native YAML conformance fixtures. This is a
+**third conformance lane** alongside the in-repo `conformance/fixtures/`
+gate and the client-library `task thirdparty:*` suites.
+
+| Piece | Location / command |
+|-------|-------------------|
+| Generated fixtures | `conformance/thirdparty-fixtures/bigquery_utils/{passing,known_failing}/` |
+| Sync from upstream | `task conformance:bqutils-sync` (or `./scripts/sync_bigquery_utils_udfs.sh`) |
+| Run passing set | `task conformance:bqutils` (requires `./bin/emulator_main`) |
+| Triage after engine fixes | `./scripts/triage_bqutils_fixtures.sh` |
+
+**Codegen contract:** `scripts/sync_bigquery_utils_udfs.sh` clones or
+reads `BIGQUERY_UTILS_LOCAL`, runs `scripts/bigquery_utils/extract_test_cases.js`
+(pure-SQL scalar UDFs only; skips JS, UDAF, Dataform-templated bodies),
+and `go run ./conformance/cmd/genbqutils` to emit one YAML per UDF under
+`known_failing/`. Use `BIGQUERY_UTILS_REF` to pin upstream (default
+`master`). The sync prints the resolved upstream SHA.
+
+**Gating policy:** `task conformance:bqutils` is **not** part of the
+default `task conformance:run` PR gate until plan 09 promotes a stable
+subset. `known_failing/` holds fixtures the engine does not pass yet;
+engine-feature plans (03–06) shrink that set over time.
+
+**Baseline (2026-06-06, upstream `0754ad891dea`):** 110 emitted at
+codegen, 97 skipped (64 JS, 22 templated, 11 UDAF), **36 passing** /
+74 known_failing after first triage.
 
 ## Inventory
 

@@ -1,0 +1,11 @@
+# Scaffold marker for third_party/dbt-bigquery-tests (see third_party/README.md).
+# Upstream functional *.py lands via scripts/sync_dbt_bigquery_tests.sh.
+# Runtime deps for pytest are pinned in requirements-test.txt (git install at upstream_ref.txt).
+
+[project]
+name = "dbt-bigquery-emulator-tests"
+version = "0.0.0"
+description = "dbt-bigquery functional tests against the BigQuery emulator (scaffold)"
+requires-python = ">=3.10"
+readme = "FEASIBILITY.md"
+license = "Apache-2.0"

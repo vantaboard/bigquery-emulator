@@ -1,0 +1,16 @@
+# Emulator profile for dbt-bigquery functional tests.
+# Loaded by tests/conftest.py when --profile=emulator (the task default).
+config:
+  send_anonymous_usage_stats: false
+
+dbt_bigquery_emulator:
+  target: emulator
+  outputs:
+    emulator:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GOOGLE_CLOUD_PROJECT', 'dev') }}"
+      dataset: dbt_emulator_functional
+      threads: 1
+      job_retries: 0
+      api_endpoint: "{{ env_var('BIGQUERY_EMULATOR_HOST', 'http://localhost:9050') }}"
