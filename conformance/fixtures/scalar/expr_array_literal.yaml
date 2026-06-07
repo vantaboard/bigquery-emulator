@@ -22,6 +22,6 @@ expected:
   route: semantic_executor
   match: schema_only
   schema:
-    - {name: ints, type: INT64}
-    - {name: names, type: STRING}
-    - {name: nullable_ints, type: INT64}
+    - {name: ints, type: INT64, mode: REPEATED}
+    - {name: names, type: STRING, mode: REPEATED}
+    - {name: nullable_ints, type: INT64, mode: REPEATED}

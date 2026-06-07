@@ -117,11 +117,34 @@ func diffSchemaList(expected []ExpectedColumn, actual *bqtypes.TableSchema, chec
 		if !strings.EqualFold(e.Name, a.Name) {
 			return renderSchemaDiff(expected, actual)
 		}
-		if e.Type != "" && !strings.EqualFold(e.Type, a.Type) {
+		if e.Type != "" && !schemaTypesEqual(e.Type, a.Type) {
+			return renderSchemaDiff(expected, actual)
+		}
+		if e.Mode != "" && !strings.EqualFold(e.Mode, a.Mode) {
 			return renderSchemaDiff(expected, actual)
 		}
 	}
 	return ""
+}
+
+// schemaTypesEqual compares fixture-declared types against the
+// gateway REST schema, normalizing aliases the gateway emits
+// (INTEGER/FLOAT/BOOLEAN) to their canonical fixture spellings.
+func schemaTypesEqual(expected, actual string) bool {
+	return normalizeSchemaType(expected) == normalizeSchemaType(actual)
+}
+
+func normalizeSchemaType(t string) string {
+	switch strings.ToUpper(strings.TrimSpace(t)) {
+	case bqTypeINT64, bqTypeIntegerAlias:
+		return bqTypeINT64
+	case bqTypeFLOAT64, bqTypeFloatAlias:
+		return bqTypeFLOAT64
+	case bqTypeBool, bqTypeBooleanAlias:
+		return bqTypeBool
+	default:
+		return strings.ToUpper(strings.TrimSpace(t))
+	}
 }
 
 // renderSchemaDiff prints both schemas side by side so the failing
@@ -130,18 +153,28 @@ func renderSchemaDiff(expected []ExpectedColumn, actual *bqtypes.TableSchema) st
 	var b strings.Builder
 	b.WriteString("schema mismatch\nexpected:\n")
 	for _, c := range expected {
-		if c.Type == "" {
+		if c.Type == "" && c.Mode == "" {
 			fmt.Fprintf(&b, "  %s\n", c.Name)
 			continue
 		}
-		fmt.Fprintf(&b, "  %s:%s\n", c.Name, strings.ToUpper(c.Type))
+		if c.Mode == "" {
+			fmt.Fprintf(&b, "  %s:%s\n", c.Name, strings.ToUpper(c.Type))
+			continue
+		}
+		fmt.Fprintf(&b, "  %s:%s:%s\n", c.Name, strings.ToUpper(c.Type),
+			strings.ToUpper(c.Mode))
 	}
 	b.WriteString("actual:\n")
 	if actual == nil || len(actual.Fields) == 0 {
 		b.WriteString("  (no schema)\n")
 	} else {
 		for _, f := range actual.Fields {
-			fmt.Fprintf(&b, "  %s:%s\n", f.Name, strings.ToUpper(f.Type))
+			if f.Mode == "" {
+				fmt.Fprintf(&b, "  %s:%s\n", f.Name, strings.ToUpper(f.Type))
+				continue
+			}
+			fmt.Fprintf(&b, "  %s:%s:%s\n", f.Name, strings.ToUpper(f.Type),
+				strings.ToUpper(f.Mode))
 		}
 	}
 	return b.String()

@@ -236,10 +236,22 @@ cc_library(
 )
 
 cc_library(
+    name = "emulator_builtin_extensions",
+    srcs = ["emulator_builtin_extensions.cc"],
+    hdrs = ["emulator_builtin_extensions.h"],
+    deps = [
+        "@com_google_absl//absl/base",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
     name = "googlesql_catalog",
     srcs = ["googlesql_catalog.cc"],
     hdrs = ["googlesql_catalog.h"],
     deps = [
+        ":emulator_builtin_extensions",
         ":info_schema_table",
         ":storage_table",
         ":procedure_registry",

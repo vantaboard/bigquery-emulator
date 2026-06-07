@@ -674,6 +674,6 @@ to_json_string: semantic_executor
 # scripting executor (`docs/ENGINE_POLICY.md`).
 # All three stay `unsupported` until the matching plan lands a
 # real implementation.
-generate_uuid: semantic_executor
-session_user: semantic_executor
+generate_uuid: unsupported
+session_user: unsupported
 error: semantic_executor

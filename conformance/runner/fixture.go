@@ -254,6 +254,7 @@ const (
 type ExpectedColumn struct {
 	Name string `yaml:"name"`
 	Type string `yaml:"type"`
+	Mode string `yaml:"mode,omitempty"`
 }
 
 // ExpectedError captures the assertion vocabulary for the error path.

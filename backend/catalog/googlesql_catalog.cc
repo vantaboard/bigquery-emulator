@@ -14,6 +14,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "backend/catalog/emulator_builtin_extensions.h"
 #include "backend/catalog/info_schema_table.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/storage_table.h"
@@ -183,6 +184,7 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
     // just without the failing builtin entry.
     LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: " << s;
   }
+  RegisterEmulatorBuiltinFunctions(*this);
   ReplayFunctionsIntoCatalog(project_id_, *this);
   ReplayViewsIntoCatalog(project_id_, *this);
   ReplayTvfsIntoCatalog(project_id_, *this);

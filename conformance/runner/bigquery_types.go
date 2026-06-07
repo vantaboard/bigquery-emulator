@@ -8,6 +8,12 @@ const (
 	bqTypeINT64   = "INT64"
 	bqTypeFLOAT64 = "FLOAT64"
 	bqTypeSTRING  = "STRING"
+
+	// Gateway REST schema aliases normalized during schema/cell diff.
+	bqTypeIntegerAlias = "INTEGER"
+	bqTypeFloatAlias   = "FLOAT"
+	bqTypeBool         = "BOOL"
+	bqTypeBooleanAlias = "BOOLEAN"
 )
 
 // Canonical bool literal spellings emitted by the engine on the JSON

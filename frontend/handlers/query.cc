@@ -12,6 +12,7 @@
 #include "backend/catalog/udf_registry.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/coordinator/route_classifier.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/system_variables.h"
@@ -84,9 +85,11 @@ QueryService::QueryService(backend::storage::Storage* storage,
                                              options.language(),
                                              request->default_dataset_id());
 
+  const std::string preprocessed_sql =
+      backend::engine::coordinator::PreprocessSqlForAnalyzer(request->sql());
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
-      request->sql(), options, &catalog, &type_factory, &output);
+      preprocessed_sql, options, &catalog, &type_factory, &output);
   if (!analyze.ok()) {
     return AnalyzeStatusToGrpc(analyze);
   }
@@ -219,9 +222,11 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // `PreparedQuery::Prepare` / `PreparedModify::Prepare`; the cost is
   // dominated by the catalog setup and a follow-up will fold the
   // two analyses together.
+  const std::string preprocessed_sql =
+      backend::engine::coordinator::PreprocessSqlForAnalyzer(request.sql());
   std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
   absl::Status classify_status =
-      ::googlesql::AnalyzeStatement(request.sql(),
+      ::googlesql::AnalyzeStatement(preprocessed_sql,
                                     analyzer_options,
                                     &catalog,
                                     type_factory,

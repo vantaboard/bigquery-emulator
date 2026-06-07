@@ -108,6 +108,15 @@ cc_test(
 # `binaries/emulator_main` by `docs/ENGINE_POLICY.md`
 # step 6.
 cc_library(
+    name = "sql_preprocess",
+    srcs = ["sql_preprocess.cc"],
+    hdrs = ["sql_preprocess.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "local_coordinator_engine",
     srcs = [
         "local_coordinator_analyze.cc",
@@ -120,6 +129,7 @@ cc_library(
         "script_executor.h",
     ],
     deps = [
+        ":sql_preprocess",
         ":executor",
         ":route_classifier",
         ":stub_executors",

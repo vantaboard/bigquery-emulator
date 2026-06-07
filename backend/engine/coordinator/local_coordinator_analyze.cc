@@ -11,6 +11,7 @@
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
@@ -208,9 +209,10 @@ AnalyzeStatementImpl(const QueryRequest& request,
       BuildAnalyzerOptionsForRequest(request, bq_catalog, all_statements);
   if (!options.ok()) return options.status();
   ::googlesql::TypeFactory* type_factory = bq_catalog->type_factory();
+  const std::string preprocessed_sql = PreprocessSqlForAnalyzer(request.sql);
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
-      request.sql, *options, catalog, type_factory, &output);
+      preprocessed_sql, *options, catalog, type_factory, &output);
   if (!analyze.ok()) return analyze;
   if (output == nullptr || output->resolved_statement() == nullptr) {
     return absl::InternalError(

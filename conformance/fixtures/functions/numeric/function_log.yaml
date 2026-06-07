@@ -51,6 +51,6 @@ query: |
 expected:
   route: duckdb_udf
   rows:
-    - {id: "2", log_one_arg: "4.60517",  log_two_arg: "2"}
-    - {id: "3", log_one_arg: "2.079442", log_two_arg: "3"}
-    - {id: "4", log_one_arg: "3.295837", log_two_arg: "3"}
+    - {id: "2", log_one_arg: "4.60517",  log_two_arg: "2.0"}
+    - {id: "3", log_one_arg: "2.079442", log_two_arg: "3.0"}
+    - {id: "4", log_one_arg: "3.295837", log_two_arg: "3.0"}

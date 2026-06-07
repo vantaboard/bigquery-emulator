@@ -26,4 +26,4 @@ expected:
   route: semantic_executor
   route_strict: false
   error:
-    message_contains: "out of range"
+    message_contains: "Int64 overflow"

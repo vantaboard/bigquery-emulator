@@ -23,4 +23,4 @@ query: |
 expected:
   route: local_stub
   rows:
-    - {keyset: "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256"}
+    - {keyset: "YmlncXVlcnktZW11bGF0b3I6a2V5c2V0OnYxOkFFQURfQUVTX0dDTV8yNTY="}

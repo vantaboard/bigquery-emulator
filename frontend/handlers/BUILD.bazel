@@ -85,6 +85,7 @@ cc_library(
         "//backend/engine:disposition",
         "//backend/engine/coordinator:route_classifier",
         "//backend/engine/coordinator:local_coordinator_engine",
+        "//backend/engine/coordinator:sql_preprocess",
         "//backend/engine/semantic:system_variables",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
