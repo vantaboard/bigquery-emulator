@@ -63,6 +63,25 @@ Value LookupColumnValue(const ColumnBindings& row, int col_id) {
   return it->second;
 }
 
+absl::StatusOr<Value> AddValues(const Value& a, const Value& b) {
+  if (a.is_null()) return b;
+  if (b.is_null()) return a;
+  if (a.type_kind() == ::googlesql::TYPE_INT64 &&
+      b.type_kind() == ::googlesql::TYPE_INT64) {
+    return Value::Int64(a.int64_value() + b.int64_value());
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DOUBLE &&
+      b.type_kind() == ::googlesql::TYPE_DOUBLE) {
+    return Value::Double(a.double_value() + b.double_value());
+  }
+  if (a.type_kind() == ::googlesql::TYPE_FLOAT &&
+      b.type_kind() == ::googlesql::TYPE_FLOAT) {
+    return Value::Float(a.float_value() + b.float_value());
+  }
+  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                           "semantic: analytic SUM add unsupported types");
+}
+
 std::vector<Value> PartitionKeysForRow(
     const ::googlesql::ResolvedAnalyticFunctionGroup& group,
     const ColumnBindings& row) {
@@ -153,16 +172,48 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
       if (fname.empty()) {
         fname = absl::AsciiStrToLower(afn->function()->Name());
       }
-      if (fname != "row_number") {
-        return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                                 absl::StrCat("semantic: analytic function '",
-                                              fname,
-                                              "' is not yet implemented"));
-      }
       const int out_col_id = cc->column().column_id();
-      for (size_t r = 0; r < out_rows.size(); ++r) {
-        out_rows[r][out_col_id] = Value::Int64(row_numbers[r]);
+      if (fname == "row_number") {
+        for (size_t r = 0; r < out_rows.size(); ++r) {
+          out_rows[r][out_col_id] = Value::Int64(row_numbers[r]);
+        }
+        continue;
       }
+      if (fname == "sum") {
+        if (afn->argument_list_size() != 1 ||
+            afn->argument_list(0) == nullptr) {
+          return absl::InvalidArgumentError(
+              "semantic: analytic SUM expects one argument");
+        }
+        absl::flat_hash_map<std::string, Value> partition_sums;
+        for (size_t r = 0; r < input_rows.size(); ++r) {
+          EvalContext row_ctx = ctx;
+          row_ctx.columns = &input_rows[r];
+          auto piece = EvalExpr(*afn->argument_list(0), row_ctx);
+          if (!piece.ok()) return piece.status();
+          auto it = partition_sums.find(partition_fps[r]);
+          if (it == partition_sums.end()) {
+            partition_sums.emplace(partition_fps[r], *piece);
+          } else {
+            auto summed = AddValues(it->second, *piece);
+            if (!summed.ok()) return summed.status();
+            it->second = *std::move(summed);
+          }
+        }
+        for (size_t r = 0; r < out_rows.size(); ++r) {
+          auto it = partition_sums.find(partition_fps[r]);
+          if (it == partition_sums.end()) {
+            out_rows[r][out_col_id] = Value::NullInt64();
+          } else {
+            out_rows[r][out_col_id] = it->second;
+          }
+        }
+        continue;
+      }
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               absl::StrCat("semantic: analytic function '",
+                                            fname,
+                                            "' is not yet implemented"));
     }
   }
 

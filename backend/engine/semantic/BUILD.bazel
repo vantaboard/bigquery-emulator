@@ -125,6 +125,7 @@ cc_library(
         ":frame_stack",
         ":system_variables",
         ":value",
+        "//backend/engine/semantic/functions:datetime_funcs",
         "//backend/engine/semantic/functions:dispatch",
         "//backend/engine/semantic/functions:operator_funcs",
         "//backend/engine/semantic/functions:specialized_funcs",
@@ -154,6 +155,7 @@ cc_library(
 cc_library(
     name = "scan_eval",
     srcs = [
+        "eval_tvf.cc",
         "scan_eval.cc",
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
@@ -161,13 +163,16 @@ cc_library(
         "scan_eval_scan_impl.cc",
     ],
     hdrs = [
+        "eval_tvf.h",
         "scan_eval.h",
         "scan_eval_internal.h",
     ],
     deps = [
         ":error",
         ":eval_expr",
+        ":frame_stack",
         ":value",
+        "@googlesql//googlesql/public:function",
         "//backend/catalog:storage_table",
         "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/functions:specialized_funcs",
@@ -265,6 +270,7 @@ cc_library(
     deps = [
         ":error",
         ":eval_expr",
+        ":frame_stack",
         ":row_source",
         ":scan_eval",
         ":value",
@@ -272,6 +278,8 @@ cc_library(
         "//backend/engine/coordinator:executor",
         "//backend/engine/semantic/dml:dml_executor",
         "//backend/engine/semantic/script:assert_stmt",
+        "//backend/engine/semantic/script:assignment_stmt",
+        "//backend/engine/semantic/script:declare_stmt",
         "//backend/engine/semantic/script:script_driver",
         ":system_variables",
         "//backend/schema",

@@ -18,6 +18,7 @@
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/udf_registry.h"
+#include "backend/catalog/view_registry.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
@@ -387,13 +388,25 @@ absl::Status RunDropTable(storage::Storage& storage,
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: DROP has null resolved statement");
   }
+  if (stmt->object_type() == "VIEW") {
+    if (stmt->name_path().empty()) {
+      return absl::InvalidArgumentError(
+          "control op executor: DROP VIEW has empty name_path");
+    }
+    absl::Status dropped =
+        catalog::DropProjectView(project_id, stmt->name_path().back());
+    if (!dropped.ok() && stmt->is_if_exists() &&
+        dropped.code() == absl::StatusCode::kNotFound) {
+      return absl::OkStatus();
+    }
+    return dropped;
+  }
   if (stmt->object_type() != "TABLE") {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: DROP ",
-        stmt->object_type(),
-        " is not implemented yet (only DROP TABLE is supported); the "
-        "view / materialized-view drop paths land alongside the storage-"
-        "side view-CRUD surface; see docs/ENGINE_POLICY.md"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: DROP ",
+                     stmt->object_type(),
+                     " is not implemented yet (only DROP TABLE / DROP VIEW are "
+                     "supported); see docs/ENGINE_POLICY.md"));
   }
   absl::StatusOr<storage::TableId> target =
       NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);

@@ -76,20 +76,22 @@ namespace script {
 class ScriptDriver {
  public:
   ScriptDriver();
+  explicit ScriptDriver(FrameStack* external_variables);
   ~ScriptDriver();
 
   ScriptDriver(const ScriptDriver&) = delete;
   ScriptDriver& operator=(const ScriptDriver&) = delete;
 
   FrameStack& variables() {
-    return variables_;
+    return external_variables_ != nullptr ? *external_variables_ : variables_;
   }
   const FrameStack& variables() const {
-    return variables_;
+    return external_variables_ != nullptr ? *external_variables_ : variables_;
   }
 
  private:
   FrameStack variables_;
+  FrameStack* external_variables_ = nullptr;
 };
 
 }  // namespace script

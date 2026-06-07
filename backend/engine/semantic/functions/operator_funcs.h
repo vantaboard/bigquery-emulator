@@ -35,6 +35,8 @@ absl::StatusOr<Value> JustifyHours(const std::vector<Value>& args);
 absl::StatusOr<Value> Floor(const std::vector<Value>& args);
 absl::StatusOr<Value> Ceil(const std::vector<Value>& args);
 absl::StatusOr<Value> Round(const std::vector<Value>& args);
+absl::StatusOr<Value> Mod(const std::vector<Value>& args);
+absl::StatusOr<Value> Pow(const std::vector<Value>& args);
 
 }  // namespace functions
 }  // namespace semantic

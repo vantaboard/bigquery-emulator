@@ -97,6 +97,10 @@ class FrameStack {
   // `name`?
   bool Has(absl::string_view name) const;
 
+  // All bindings visible from the current stack position. Inner
+  // frames shadow outer frames (same resolution order as `Lookup`).
+  absl::flat_hash_map<std::string, Value> VisibleBindings() const;
+
  private:
   // Each frame is a flat map keyed on the analyzer-lowered name.
   // The payload is the current `Value`; updates via `Set`

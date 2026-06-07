@@ -7,6 +7,10 @@ namespace semantic {
 namespace script {
 
 ScriptDriver::ScriptDriver() = default;
+
+ScriptDriver::ScriptDriver(FrameStack* external_variables)
+    : external_variables_(external_variables) {}
+
 ScriptDriver::~ScriptDriver() = default;
 
 }  // namespace script

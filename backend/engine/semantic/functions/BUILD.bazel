@@ -80,7 +80,10 @@ cc_test(
 
 cc_library(
     name = "operator_funcs",
-    srcs = ["operator_funcs.cc"],
+    srcs = [
+        "operator_funcs.cc",
+        "operator_math_funcs.cc",
+    ],
     hdrs = ["operator_funcs.h"],
     deps = [
         ":datetime_funcs",

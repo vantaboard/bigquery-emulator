@@ -43,6 +43,7 @@ struct EvalContext {
   const absl::flat_hash_map<std::string, ::googlesql::Value>* columns_by_name =
       nullptr;
   const FrameStack* arguments = nullptr;
+  const FrameStack* script_variables = nullptr;
   const UdafEvalScope* udaf = nullptr;
   const absl::flat_hash_map<std::string, CteTable>* with_tables = nullptr;
   mutable std::optional<std::string> bignumeric_render_override;

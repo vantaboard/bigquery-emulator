@@ -21,10 +21,12 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/frame_stack.h"
 #include "backend/storage/storage.h"
 
 namespace googlesql {
 class Catalog;
+class ResolvedQueryStmt;
 class ResolvedStatement;
 }  // namespace googlesql
 
@@ -32,6 +34,14 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace semantic {
+
+// Execute an already-resolved SELECT with optional script-variable
+// bindings (used by the coordinator script driver for final SELECT
+// statements inside BEGIN..END blocks).
+[[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>>
+ExecuteResolvedQueryStmt(const QueryRequest& request,
+                         const ::googlesql::ResolvedQueryStmt& query_stmt,
+                         const FrameStack* script_variables = nullptr);
 
 // `SemanticExecutor` implements `coordinator::Executor` and so
 // installs cleanly into the coordinator's per-route dispatch

@@ -15,8 +15,11 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/catalog/info_schema_table.h"
+#include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registry.h"
+#include "backend/catalog/view_registry.h"
 #include "backend/catalog/wildcard_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -181,6 +184,9 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
     LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: " << s;
   }
   ReplayFunctionsIntoCatalog(project_id_, *this);
+  ReplayViewsIntoCatalog(project_id_, *this);
+  ReplayTvfsIntoCatalog(project_id_, *this);
+  ReplayProceduresIntoCatalog(project_id_, *this);
 }
 
 std::string GoogleSqlCatalog::CacheKey(absl::string_view project_id,
@@ -283,6 +289,43 @@ absl::Status GoogleSqlCatalog::FindTable(
   return absl::OkStatus();
 }
 
+absl::Status GoogleSqlCatalog::FindTableValuedFunction(
+    const absl::Span<const std::string>& path,
+    const ::googlesql::TableValuedFunction** function,
+    const FindOptions& options) {
+  if (function == nullptr) {
+    return absl::InvalidArgumentError(
+        "FindTableValuedFunction: output pointer is null");
+  }
+  *function = nullptr;
+  absl::Status found =
+      SimpleCatalog::FindTableValuedFunction(path, function, options);
+  if (found.ok() && *function != nullptr) return found;
+  if (path.size() >= 2) {
+    const std::vector<std::string> unqualified = {path.back()};
+    return SimpleCatalog::FindTableValuedFunction(
+        unqualified, function, options);
+  }
+  return found;
+}
+
+absl::Status GoogleSqlCatalog::FindProcedure(
+    const absl::Span<const std::string>& path,
+    const ::googlesql::Procedure** procedure,
+    const FindOptions& options) {
+  if (procedure == nullptr) {
+    return absl::InvalidArgumentError("FindProcedure: output pointer is null");
+  }
+  *procedure = nullptr;
+  absl::Status found = SimpleCatalog::FindProcedure(path, procedure, options);
+  if (found.ok() && *procedure != nullptr) return found;
+  if (path.size() >= 2) {
+    const std::vector<std::string> unqualified = {path.back()};
+    return SimpleCatalog::FindProcedure(unqualified, procedure, options);
+  }
+  return found;
+}
+
 absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
     absl::string_view project_id,
     absl::string_view dataset_id,
@@ -291,11 +334,25 @@ absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
   for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
     if (keys_[i] == key) return tables_[i].get();
   }
+  for (std::vector<std::string>::size_type i = 0;
+       i < registered_view_keys_.size();
+       ++i) {
+    if (registered_view_keys_[i] == key) return registered_views_[i];
+  }
 
   storage::TableId id{
       std::string(project_id), std::string(dataset_id), std::string(table_id)};
   absl::StatusOr<schema::TableSchema> table_schema = storage_->GetSchema(id);
-  if (!table_schema.ok()) return table_schema.status();
+  if (!table_schema.ok()) {
+    const ::googlesql::Table* registered_view =
+        FindProjectView(project_id, dataset_id, table_id);
+    if (registered_view != nullptr) {
+      registered_view_keys_.push_back(key);
+      registered_views_.push_back(registered_view);
+      return registered_view;
+    }
+    return table_schema.status();
+  }
 
   std::vector<SimpleTable::NameAndType> columns;
   columns.reserve(table_schema->columns.size());

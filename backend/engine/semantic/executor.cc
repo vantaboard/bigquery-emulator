@@ -19,6 +19,8 @@
 #include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/script/assert_stmt.h"
+#include "backend/engine/semantic/script/assignment_stmt.h"
+#include "backend/engine/semantic/script/declare_stmt.h"
 #include "backend/engine/semantic/script/script_driver.h"
 #include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
@@ -103,19 +105,10 @@ absl::StatusOr<storage::Row> ProjectOneRow(
 
 SemanticExecutor::~SemanticExecutor() = default;
 
-absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
+absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     const QueryRequest& request,
-    const ::googlesql::ResolvedStatement& stmt,
-    ::googlesql::Catalog* catalog) {
-  (void)catalog;
-  if (stmt.node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat(
-            "semantic: only SELECT-shaped statements route here today; got ",
-            stmt.node_kind_string()));
-  }
-  const auto& query_stmt = *stmt.GetAs<::googlesql::ResolvedQueryStmt>();
+    const ::googlesql::ResolvedQueryStmt& query_stmt,
+    const FrameStack* script_variables) {
   if (query_stmt.is_value_table()) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -142,6 +135,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
   EvalContext ctx;
   ctx.project_id = request.project_id;
   ctx.parameters = &bindings;
+  ctx.script_variables = script_variables;
 
   absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*> expr_by_column_id;
   if (project != nullptr) {
@@ -181,6 +175,23 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
 
   return std::unique_ptr<RowSource>(
       new MaterializedRowSource(std::move(output_schema), std::move(rows)));
+}
+
+absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
+    const QueryRequest& request,
+    const ::googlesql::ResolvedStatement& stmt,
+    ::googlesql::Catalog* catalog) {
+  (void)catalog;
+  if (stmt.node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        absl::StrCat(
+            "semantic: only SELECT-shaped statements route here today; got ",
+            stmt.node_kind_string()));
+  }
+  return ExecuteResolvedQueryStmt(request,
+                                  *stmt.GetAs<::googlesql::ResolvedQueryStmt>(),
+                                  /*script_variables=*/nullptr);
 }
 
 absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
@@ -241,9 +252,21 @@ absl::Status SemanticExecutor::ExecuteDdl(
     return script::ExecuteAssert(
         request, *stmt.GetAs<::googlesql::ResolvedAssertStmt>(), driver);
   }
+  if (stmt.node_kind() == ::googlesql::RESOLVED_CREATE_CONSTANT_STMT) {
+    script::ScriptDriver driver;
+    return script::ExecuteDeclare(
+        request,
+        *stmt.GetAs<::googlesql::ResolvedCreateConstantStmt>(),
+        driver);
+  }
   if (stmt.node_kind() == ::googlesql::RESOLVED_ASSIGNMENT_STMT) {
-    return ExecuteAssignment(
-        request, *stmt.GetAs<::googlesql::ResolvedAssignmentStmt>());
+    const auto* assign = stmt.GetAs<::googlesql::ResolvedAssignmentStmt>();
+    if (assign != nullptr &&
+        AsSystemVariableTarget(assign->target()) != nullptr) {
+      return ExecuteAssignment(request, *assign);
+    }
+    script::ScriptDriver driver;
+    return script::ExecuteScriptAssignment(request, *assign, driver);
   }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,

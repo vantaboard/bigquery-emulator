@@ -205,6 +205,13 @@ QueryService::QueryService(backend::storage::Storage* storage,
     return AnalyzeStatusToGrpc(sys_status);
   }
 
+  // Multi-statement scripts cannot be pre-classified with a single
+  // AnalyzeStatement call; delegate directly to the engine loop.
+  if (internal::NeedsScriptStatementLoop(request.sql())) {
+    return internal::StreamRows(
+        engine, engine_request, &catalog, "SELECT", "semantic_executor", write);
+  }
+
   // Pre-classify the statement so we can pick the right engine entry
   // point (ExecuteQuery for SELECT, ExecuteDml for INSERT/.../MERGE)
   // and reject DDL with a friendly UNIMPLEMENTED. We pay for one

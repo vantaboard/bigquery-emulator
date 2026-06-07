@@ -17,6 +17,7 @@
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registry.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
@@ -128,10 +129,9 @@ absl::Status ControlOpExecutor::ExecuteDdl(
     // infrastructure. See docs/ENGINE_POLICY.md for deferred
     // control-op families.
     case ::googlesql::RESOLVED_CREATE_VIEW_STMT:
-      return absl::UnimplementedError(
-          "control op executor: CREATE VIEW is not implemented yet; the "
-          "Storage interface has no view-CRUD surface today (see "
-          "backend/storage/storage.h). See docs/ENGINE_POLICY.md.");
+      // Registered in `LocalCoordinatorEngine::ExecuteDdl` via
+      // `view_registry` (SQLView inlining at analyze time).
+      return absl::OkStatus();
     case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
       return absl::UnimplementedError(
           "control op executor: CREATE MATERIALIZED VIEW is not "
@@ -142,14 +142,34 @@ absl::Status ControlOpExecutor::ExecuteDdl(
       // `AnalyzerOutput` so UDF type pointers stay valid across RPCs.
       return absl::OkStatus();
     case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT:
-      return absl::UnimplementedError(
-          "control op executor: CREATE TABLE FUNCTION registration is "
-          "not implemented yet; see docs/ENGINE_POLICY.md.");
+      // Registered in `LocalCoordinatorEngine::ExecuteDdl` via
+      // `tvf_registry`.
+      return absl::OkStatus();
+    case ::googlesql::RESOLVED_CREATE_PROCEDURE_STMT:
+      // Registered in `LocalCoordinatorEngine::ExecuteDdl` via
+      // `procedure_registry`.
+      return absl::OkStatus();
     case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
       return absl::UnimplementedError(
           "control op executor: DROP FUNCTION is not implemented yet; "
           "needs the functions registry CREATE FUNCTION will land. "
           "See docs/ENGINE_POLICY.md.");
+    case ::googlesql::RESOLVED_DROP_TABLE_FUNCTION_STMT: {
+      const auto* drop_tvf =
+          stmt.GetAs<::googlesql::ResolvedDropTableFunctionStmt>();
+      if (drop_tvf == nullptr || drop_tvf->name_path().empty()) {
+        return absl::InternalError(
+            "control op executor: DROP TABLE FUNCTION has null stmt or "
+            "empty name_path");
+      }
+      absl::Status dropped =
+          catalog::DropProjectTvf(project_id, drop_tvf->name_path().back());
+      if (!dropped.ok() && drop_tvf->is_if_exists() &&
+          dropped.code() == absl::StatusCode::kNotFound) {
+        return absl::OkStatus();
+      }
+      return dropped;
+    }
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
       // LOAD DATA splits by URI scheme at implementation time:
       // `LOAD DATA LOCAL ...` belongs on the control-op route

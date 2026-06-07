@@ -37,6 +37,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedAggregateFunctionCall* node) override;
   absl::Status VisitResolvedAnalyticFunctionCall(
       const ::googlesql::ResolvedAnalyticFunctionCall* node) override;
+  absl::Status VisitResolvedAnalyticScan(
+      const ::googlesql::ResolvedAnalyticScan* node) override;
   absl::Status VisitResolvedQueryStmt(
       const ::googlesql::ResolvedQueryStmt* node) override;
   absl::Status VisitResolvedJoinScan(

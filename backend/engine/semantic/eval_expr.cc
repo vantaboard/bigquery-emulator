@@ -15,10 +15,12 @@
 #include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/eval_udaf.h"
 #include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
 #include "backend/engine/semantic/functions/json_funcs.h"
 #include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/constant.h"
+#include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
@@ -142,6 +144,18 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
         if (inner->type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
           return Value::String(inner->bignumeric_value().ToString());
         }
+        if (inner->type_kind() == ::googlesql::TYPE_DATE) {
+          std::string out;
+          if (absl::Status s = ::googlesql::functions::FormatDateToString(
+                  "%F",
+                  inner->date_value(),
+                  functions::datetime_internal::kFormatOpts,
+                  &out);
+              !s.ok()) {
+            return s;
+          }
+          return Value::String(std::move(out));
+        }
       }
       if (target->kind() == ::googlesql::TYPE_INT64) {
         if (inner->type_kind() == ::googlesql::TYPE_INT64) return inner;
@@ -223,6 +237,19 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       return *std::move(bound);
     }
     case ::googlesql::RESOLVED_CONSTANT: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedConstant>();
+      const ::googlesql::Constant* constant = node.constant();
+      if (constant == nullptr) {
+        return absl::InternalError(
+            "semantic: ResolvedConstant has null constant pointer");
+      }
+      if (ctx.script_variables != nullptr &&
+          ctx.script_variables->Has(constant->Name())) {
+        absl::StatusOr<Value> bound =
+            ctx.script_variables->Lookup(constant->Name());
+        if (!bound.ok()) return bound.status();
+        return *std::move(bound);
+      }
       // `ResolvedConstant` carries a non-owning pointer to a
       // `googlesql::Constant` registered on the catalog. The
       // BigQuery emulator's catalog adapter (today only the
@@ -234,12 +261,6 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       // `SQLConstant`) surface as a structured `kInvalidArgument`
       // so the gateway envelope names the constant rather than
       // silently substituting NULL.
-      const auto& node = *expr.GetAs<::googlesql::ResolvedConstant>();
-      const ::googlesql::Constant* constant = node.constant();
-      if (constant == nullptr) {
-        return absl::InternalError(
-            "semantic: ResolvedConstant has null constant pointer");
-      }
       if (!constant->HasValue()) {
         return MakeSemanticError(
             SemanticErrorReason::kInvalidArgument,

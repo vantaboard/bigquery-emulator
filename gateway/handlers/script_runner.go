@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,10 +29,43 @@ func trimLeadingSQLComments(sql string) string {
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
+var beginEndBlockRE = regexp.MustCompile(`(?is)^\s*BEGIN\s+(.*)\s+END\s*;?\s*$`)
+
+func unwrapBeginEndBlock(sql string) string {
+	trimmed := strings.TrimSpace(sql)
+	if m := beginEndBlockRE.FindStringSubmatch(trimmed); len(m) == 2 {
+		return strings.TrimSpace(m[1])
+	}
+	return sql
+}
+
 func isMultiStatementScript(sql string) bool {
-	upper := strings.ToUpper(trimLeadingSQLComments(sql))
+	trimmed := strings.TrimSpace(sql)
+	upper := strings.ToUpper(trimLeadingSQLComments(trimmed))
+	// DDL setup statements (CREATE PROCEDURE bodies embed BEGIN/SET) must
+	// not enter the script splitter.
+	if strings.HasPrefix(upper, "CREATE ") ||
+		strings.HasPrefix(upper, "DROP ") ||
+		strings.HasPrefix(upper, "ALTER ") {
+		return false
+	}
+	sql = unwrapBeginEndBlock(trimmed)
+	upper = strings.ToUpper(trimLeadingSQLComments(sql))
 	return strings.Contains(upper, "DECLARE ") ||
+		strings.Contains(upper, "CALL ") ||
 		(strings.Count(sql, ";") >= 2 && strings.Contains(upper, "SET "))
+}
+
+// needsEngineScriptExecution reports whether the script must run as one
+// engine round-trip so DECLARE/CALL variable scope survives (the engine's
+// ExecuteMultiStmtScript path). Legacy SET+UNNEST substitution scripts
+// without DECLARE/CALL stay on the per-statement split path.
+func needsEngineScriptExecution(sql string) bool {
+	trimmed := strings.TrimSpace(sql)
+	upper := strings.ToUpper(trimLeadingSQLComments(trimmed))
+	return strings.HasPrefix(upper, "BEGIN") ||
+		strings.Contains(upper, "DECLARE ") ||
+		strings.Contains(upper, "CALL ")
 }
 
 // splitScriptStatements splits script SQL on semicolons outside quotes.
@@ -80,6 +114,7 @@ type scriptStmtKind int
 const (
 	scriptStmtDeclare scriptStmtKind = iota
 	scriptStmtSet
+	scriptStmtCall
 	scriptStmtQuery
 )
 
@@ -103,6 +138,8 @@ func classifyScriptStatement(sql string) scriptStatement {
 	case strings.HasPrefix(upper, "SET "):
 		name, body := parseSetStatement(trim)
 		return scriptStatement{kind: scriptStmtSet, sql: body, name: name}
+	case strings.HasPrefix(upper, "CALL "):
+		return scriptStatement{kind: scriptStmtCall, sql: trim}
 	default:
 		return scriptStatement{kind: scriptStmtQuery, sql: trim}
 	}
@@ -194,7 +231,69 @@ type scriptExecOutcome struct {
 	finalRoute    string
 }
 
-func runScriptStatements(
+// declareToCreateConstant lowers DECLARE to CREATE CONSTANT for the engine's
+// AnalyzeNextStatement script loop (DECLARE is script-only parse syntax).
+func declareToCreateConstant(stmt string) string {
+	trim := trimLeadingSQLComments(strings.TrimSpace(stmt))
+	if !strings.HasPrefix(strings.ToUpper(trim), "DECLARE ") {
+		return trim
+	}
+	rest := strings.TrimSpace(trim[8:])
+	rest = strings.TrimSuffix(rest, ";")
+	defaultPart := ""
+	if idx := strings.Index(strings.ToUpper(rest), " DEFAULT "); idx >= 0 {
+		defaultPart = strings.TrimSpace(rest[idx+len(" DEFAULT "):])
+		rest = strings.TrimSpace(rest[:idx])
+	}
+	before, after, ok := strings.Cut(rest, " ")
+	if !ok {
+		return trim
+	}
+	name := strings.TrimSpace(before)
+	typeName := strings.TrimSpace(after)
+	if defaultPart != "" {
+		return fmt.Sprintf("CREATE CONSTANT %s = %s", name, defaultPart)
+	}
+	return fmt.Sprintf("CREATE CONSTANT %s = CAST(NULL AS %s)", name, typeName)
+}
+
+func transformScriptDeclares(sql string) string {
+	inner := unwrapBeginEndBlock(sql)
+	parts := splitScriptStatements(inner)
+	if len(parts) == 0 {
+		return inner
+	}
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		out = append(out, declareToCreateConstant(p))
+	}
+	return strings.Join(out, ";\n")
+}
+
+func runEngineScript(
+	ctx context.Context,
+	deps Dependencies,
+	projectID, defaultDataset, sql string,
+	useLegacy bool,
+) (*scriptExecOutcome, error) {
+	// The analyzer resolves semicolon-separated script statements; outer
+	// BEGIN/END is client sugar. DECLARE is lowered to CREATE CONSTANT.
+	engineSQL := transformScriptDeclares(sql)
+	schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
+		ctx, deps, projectID, defaultDataset, engineSQL, useLegacy)
+	if err != nil {
+		return nil, err
+	}
+	return &scriptExecOutcome{
+		childCount:    1,
+		finalSchema:   schema,
+		finalRows:     rows,
+		finalStmtType: statementType,
+		finalRoute:    emulatorRoute,
+	}, nil
+}
+
+func runLegacySplitScript(
 	ctx context.Context,
 	deps Dependencies,
 	r *http.Request,
@@ -208,13 +307,13 @@ func runScriptStatements(
 ) (*scriptExecOutcome, error) {
 	vars := make(map[string][]string)
 	out := &scriptExecOutcome{}
-	for _, raw := range splitScriptStatements(sql) {
+	for _, raw := range splitScriptStatements(unwrapBeginEndBlock(sql)) {
 		st := classifyScriptStatement(raw)
 		switch st.kind {
 		case scriptStmtDeclare:
 			vars[st.name] = nil
 			continue
-		case scriptStmtSet, scriptStmtQuery:
+		case scriptStmtCall, scriptStmtSet, scriptStmtQuery:
 			stmtSQL := st.sql
 			if st.kind == scriptStmtQuery {
 				stmtSQL = substituteScriptVars(stmtSQL, vars)
@@ -252,6 +351,27 @@ func runScriptStatements(
 		}
 	}
 	return out, nil
+}
+
+func runScriptStatements(
+	ctx context.Context,
+	deps Dependencies,
+	r *http.Request,
+	projectID string,
+	parent *jobs.Job,
+	posted *jobs.Job,
+	cfg *jobs.JobConfiguration,
+	sql string,
+	defaultDataset string,
+	useLegacy bool,
+) (*scriptExecOutcome, error) {
+	if needsEngineScriptExecution(sql) {
+		return runEngineScript(
+			ctx, deps, projectID, defaultDataset, sql, useLegacy)
+	}
+	return runLegacySplitScript(
+		ctx, deps, r, projectID, parent, posted, cfg,
+		sql, defaultDataset, useLegacy)
 }
 
 func finalizeScriptParentJob(
@@ -301,7 +421,10 @@ func runSyncScriptQueryInsert(
 		cfg.Query.Query, defaultDataset, useLegacy)
 	if err != nil {
 		finalizeFailedJob(deps, parent, parentStart, err)
-		writeJSON(w, http.StatusOK, parent)
+		if queryGRPCToHTTPError(w, err) {
+			return
+		}
+		writeError(w, http.StatusBadRequest, reasonInvalidQuery, err.Error())
 		return
 	}
 	finalizeScriptParentJob(parent, parentStart, time.Now().UTC(), out)
@@ -335,9 +458,10 @@ func runQueryScriptExecute(
 		req.Query, defaultDataset, useLegacy)
 	if err != nil {
 		finalizeFailedJob(deps, parent, parentStart, err)
-		outResp := assembleQueryResponse(
-			parent, nil, nil, nil, nil, "", "", nil, nil)
-		writeJSON(w, http.StatusOK, outResp)
+		if queryGRPCToHTTPError(w, err) {
+			return
+		}
+		writeError(w, http.StatusBadRequest, reasonInvalidQuery, err.Error())
 		return
 	}
 	parentEnd := time.Now().UTC()

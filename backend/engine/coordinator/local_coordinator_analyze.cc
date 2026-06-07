@@ -166,41 +166,51 @@ class AnalyzedQueryImpl : public AnalyzedQuery {
 
 }  // namespace
 
+absl::StatusOr<::googlesql::AnalyzerOptions> BuildAnalyzerOptionsForRequest(
+    const QueryRequest& request,
+    catalog::GoogleSqlCatalog* catalog,
+    bool all_statements) {
+  if (catalog == nullptr) {
+    return absl::FailedPreconditionError(
+        "LocalCoordinatorEngine: catalog must be a GoogleSqlCatalog");
+  }
+  ::googlesql::TypeFactory* type_factory = catalog->type_factory();
+  if (type_factory == nullptr) {
+    return absl::FailedPreconditionError(
+        "LocalCoordinatorEngine: catalog type_factory is null");
+  }
+  ::googlesql::AnalyzerOptions options =
+      all_statements ? MakeAnalyzerOptionsAllStatements()
+                     : MakeAnalyzerOptions();
+  absl::Status param_status =
+      PopulateParameterOptions(request, options, type_factory);
+  if (!param_status.ok()) return param_status;
+  if (absl::Status sys_status =
+          RegisterSystemVariablesOnOptions(type_factory, options);
+      !sys_status.ok()) {
+    return sys_status;
+  }
+  return options;
+}
+
 // Analyze `request.sql` against `catalog` and return the
 // `AnalyzerOutput` (which owns the resolved AST).
 absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
 AnalyzeStatementImpl(const QueryRequest& request,
                      ::googlesql::Catalog* catalog,
                      bool all_statements) {
-  ::googlesql::AnalyzerOptions options =
-      all_statements ? MakeAnalyzerOptionsAllStatements()
-                     : MakeAnalyzerOptions();
   auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
   if (bq_catalog == nullptr) {
     return absl::FailedPreconditionError(
         "LocalCoordinatorEngine: catalog must be a GoogleSqlCatalog");
   }
+  absl::StatusOr<::googlesql::AnalyzerOptions> options =
+      BuildAnalyzerOptionsForRequest(request, bq_catalog, all_statements);
+  if (!options.ok()) return options.status();
   ::googlesql::TypeFactory* type_factory = bq_catalog->type_factory();
-  if (type_factory == nullptr) {
-    return absl::FailedPreconditionError(
-        "LocalCoordinatorEngine: catalog type_factory is null");
-  }
-  absl::Status param_status =
-      PopulateParameterOptions(request, options, type_factory);
-  if (!param_status.ok()) return param_status;
-  // Types embedded in the resolved AST are owned by the catalog's
-  // `TypeFactory` (see `GoogleSqlCatalog`'s constructor contract).
-  // A stack-local factory here would be destroyed before
-  // `ExecuteDdl` walks STRUCT column definitions -- that use-after-
-  // free surfaced as a SIGSEGV on CREATE TABLE with nested STRUCT.
-  if (absl::Status sys_status =
-          RegisterSystemVariablesOnOptions(type_factory, options);
-      !sys_status.ok()) {
-    return sys_status;
-  }
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyze = ::googlesql::AnalyzeStatement(
-      request.sql, options, catalog, type_factory, &output);
+      request.sql, *options, catalog, type_factory, &output);
   if (!analyze.ok()) return analyze;
   if (output == nullptr || output->resolved_statement() == nullptr) {
     return absl::InternalError(

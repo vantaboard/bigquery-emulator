@@ -102,6 +102,16 @@ bool FrameStack::Has(absl::string_view name) const {
   return false;
 }
 
+absl::flat_hash_map<std::string, Value> FrameStack::VisibleBindings() const {
+  absl::flat_hash_map<std::string, Value> out;
+  for (auto it = frames_.rbegin(); it != frames_.rend(); ++it) {
+    for (const auto& [key, value] : *it) {
+      out.try_emplace(key, value);
+    }
+  }
+  return out;
+}
+
 }  // namespace semantic
 }  // namespace engine
 }  // namespace backend

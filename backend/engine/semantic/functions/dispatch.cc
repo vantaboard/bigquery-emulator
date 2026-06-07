@@ -56,6 +56,8 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "floor") return Floor(args);
   if (name == "ceil" || name == "ceiling") return Ceil(args);
   if (name == "round") return Round(args);
+  if (name == "mod") return Mod(args);
+  if (name == "pow" || name == "power") return Pow(args);
   if (name == "replace") return Replace(args);
   if (name == "reverse") return Reverse(args);
   if (name == "starts_with") return StartsWith(args);

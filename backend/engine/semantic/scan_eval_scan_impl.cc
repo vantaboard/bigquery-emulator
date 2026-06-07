@@ -12,6 +12,7 @@
 #include "backend/engine/semantic/array_struct/array_scan.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/eval_tvf.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/simple_catalog.h"
@@ -245,6 +246,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return MaterializeLimitOffsetScan(
           *scan->GetAs<::googlesql::ResolvedLimitOffsetScan>(), ctx);
+    case ::googlesql::RESOLVED_TVFSCAN:
+      return MaterializeTvfScan(*scan->GetAs<::googlesql::ResolvedTVFScan>(),
+                                ctx);
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: scan kind ",

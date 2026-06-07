@@ -34,6 +34,11 @@ enum class StatementClass { kSelect, kDml, kDdl, kOther };
 
 StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind);
 
+// Multi-statement scripts (DECLARE/CALL/CREATE CONSTANT) must bypass
+// single-statement pre-classification and run through the engine's
+// AnalyzeNextStatement loop.
+bool NeedsScriptStatementLoop(absl::string_view sql);
+
 absl::string_view StatementTypeFor(const ::googlesql::ResolvedStatement& stmt);
 
 ::grpc::Status ValidateQueryRequest(

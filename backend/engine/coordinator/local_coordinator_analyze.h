@@ -9,6 +9,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/engine.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -46,6 +47,12 @@ absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
 AnalyzeStatementImpl(const QueryRequest& request,
                      ::googlesql::Catalog* catalog,
                      bool all_statements);
+
+// Build analyzer options for `request` (parameters + system variables).
+absl::StatusOr<::googlesql::AnalyzerOptions> BuildAnalyzerOptionsForRequest(
+    const QueryRequest& request,
+    catalog::GoogleSqlCatalog* catalog,
+    bool all_statements);
 
 absl::StatusOr<std::unique_ptr<AnalyzedQuery>> AnalyzeSelectQuery(
     const QueryRequest& request, ::googlesql::Catalog* catalog);

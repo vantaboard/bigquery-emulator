@@ -94,6 +94,14 @@ namespace internal {
   return options;
 }
 
+bool NeedsScriptStatementLoop(absl::string_view sql) {
+  return absl::StrContains(sql, ";") &&
+         (absl::StrContains(sql, "DECLARE") ||
+          absl::StrContains(sql, "CALL ") ||
+          absl::StrContains(sql, "CREATE CONSTANT") ||
+          absl::StrContains(sql, "BEGIN"));
+}
+
 // Query-result marshaller: same shape as `handler_common::ValueToCell`
 // except BYTES columns are base64-encoded to match
 // `gateway/bqtypes/wire.go::ValueToCell`.
@@ -197,6 +205,7 @@ backend::engine::QueryRequest ProtoToEngineRequest(
 StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
   switch (kind) {
     case ::googlesql::RESOLVED_QUERY_STMT:
+    case ::googlesql::RESOLVED_MULTI_STMT:
       return StatementClass::kSelect;
     case ::googlesql::RESOLVED_INSERT_STMT:
     case ::googlesql::RESOLVED_UPDATE_STMT:
@@ -265,6 +274,7 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     // executor owns the predicate evaluation.
     case ::googlesql::RESOLVED_ASSERT_STMT:
     case ::googlesql::RESOLVED_ASSIGNMENT_STMT:
+    case ::googlesql::RESOLVED_CALL_STMT:
       return StatementClass::kDdl;
     default:
       return StatementClass::kOther;

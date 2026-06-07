@@ -40,6 +40,7 @@
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/executor.h"
+#include "backend/engine/semantic/frame_stack.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer_options.h"
 
@@ -67,6 +68,15 @@ class LocalCoordinatorEngine : public Engine {
 
   absl::StatusOr<std::unique_ptr<RowSource>> ExecuteQuery(
       const QueryRequest& request, ::googlesql::Catalog* catalog) override;
+
+  // Execute an already-analyzed statement without re-parsing
+  // `request.sql`. When `script_variables` is set, semantic SELECT
+  // statements resolve script identifiers from that frame.
+  absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedStatement(
+      const QueryRequest& request,
+      const ::googlesql::ResolvedStatement& stmt,
+      ::googlesql::Catalog* catalog,
+      const semantic::FrameStack* script_variables = nullptr);
 
   absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
                                       ::googlesql::Catalog* catalog) override;

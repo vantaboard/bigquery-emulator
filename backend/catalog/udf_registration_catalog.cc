@@ -42,6 +42,16 @@ GoogleSqlCatalog* GetOrCreateRegistrationCatalog(
   return entry.catalog.get();
 }
 
+GoogleSqlCatalog* LookupRegistrationCatalog(absl::string_view project_id) {
+  if (project_id.empty()) return nullptr;
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end() || it->second.catalog == nullptr) {
+    return nullptr;
+  }
+  return it->second.catalog.get();
+}
+
 }  // namespace catalog
 }  // namespace backend
 }  // namespace bigquery_emulator

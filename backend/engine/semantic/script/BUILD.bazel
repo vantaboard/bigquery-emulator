@@ -61,6 +61,49 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "declare_stmt",
+    srcs = ["declare_stmt.cc"],
+    hdrs = ["declare_stmt.h"],
+    deps = [
+        ":script_driver",
+        "//backend/engine",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "assignment_stmt",
+    srcs = ["assignment_stmt.cc"],
+    hdrs = ["assignment_stmt.h"],
+    deps = [
+        ":script_driver",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "call_stmt",
+    srcs = ["call_stmt.cc"],
+    hdrs = ["call_stmt.h"],
+    deps = [
+        ":script_driver",
+        "//backend/engine",
+        "//backend/engine/semantic:error",
+        "@com_google_absl//absl/status",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
 cc_test(
     name = "assert_stmt_test",
     srcs = ["assert_stmt_test.cc"],

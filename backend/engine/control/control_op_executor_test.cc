@@ -457,13 +457,9 @@ TEST_F(ControlOpExecutorTest, AnalyzeWithoutTablesSucceeds) {
 
 // --- Deferred control-op shapes -----------------------------------------
 
-TEST_F(ControlOpExecutorTest, CreateViewSurfacesUnimplemented) {
+TEST_F(ControlOpExecutorTest, CreateViewRegisteredByCoordinator) {
   absl::Status s = RunDdl("CREATE VIEW ds.v AS SELECT 1 AS id");
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("docs/ENGINE_POLICY.md"),
-            std::string::npos)
-      << s.message();
+  EXPECT_TRUE(s.ok()) << s;
 }
 
 TEST_F(ControlOpExecutorTest, CreateMaterializedViewSurfacesUnimplemented) {

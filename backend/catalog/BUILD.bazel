@@ -107,6 +107,102 @@ cc_library(
 )
 
 cc_library(
+    name = "create_view_util",
+    srcs = ["create_view_util.cc"],
+    hdrs = ["create_view_util.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "create_tvf_util",
+    srcs = ["create_tvf_util.cc"],
+    hdrs = ["create_tvf_util.h"],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "view_registry",
+    srcs = ["view_registry.cc"],
+    hdrs = ["view_registry.h"],
+    deps = [
+        ":create_view_util",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "stored_procedure",
+    srcs = ["stored_procedure.cc"],
+    hdrs = ["stored_procedure.h"],
+    deps = [
+        "@googlesql//googlesql/public:function",
+    ],
+)
+
+cc_library(
+    name = "create_procedure_util",
+    srcs = ["create_procedure_util.cc"],
+    hdrs = ["create_procedure_util.h"],
+    deps = [
+        ":stored_procedure",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "procedure_registry",
+    srcs = ["procedure_registry.cc"],
+    hdrs = ["procedure_registry.h"],
+    deps = [
+        ":create_procedure_util",
+        ":stored_procedure",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "tvf_registry",
+    srcs = ["tvf_registry.cc"],
+    hdrs = ["tvf_registry.h"],
+    deps = [
+        ":create_tvf_util",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "udf_registry",
     srcs = ["udf_registry.cc"],
     hdrs = ["udf_registry.h"],
@@ -146,7 +242,10 @@ cc_library(
     deps = [
         ":info_schema_table",
         ":storage_table",
+        ":procedure_registry",
+        ":tvf_registry",
         ":udf_registry",
+        ":view_registry",
         ":wildcard_table",
         "//backend/schema",
         "//backend/storage",

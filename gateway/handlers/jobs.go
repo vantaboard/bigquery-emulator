@@ -433,7 +433,8 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	}
 	query.PersistDestinationMetadata(deps.Metadata, cfg.Query, projectID)
 	var ddlTarget *bqtypes.RoutineReference
-	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
+	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" ||
+		statementType == "CREATE_TABLE_FUNCTION" {
 		ddlTarget = routines.RegisterFromDDL(
 			routineStore(&deps), projectID, defaultDataset, cfg.Query.Query)
 	}

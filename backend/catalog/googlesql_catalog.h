@@ -127,6 +127,16 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
                          const FindOptions& options = FindOptions()) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  absl::Status FindTableValuedFunction(
+      const absl::Span<const std::string>& path,
+      const ::googlesql::TableValuedFunction** function,
+      const FindOptions& options = FindOptions()) override;
+
+  absl::Status FindProcedure(
+      const absl::Span<const std::string>& path,
+      const ::googlesql::Procedure** procedure,
+      const FindOptions& options = FindOptions()) override;
+
   // Convert a `schema::ColumnSchema` into a freshly-allocated
   // `googlesql::Type*`. Public so other catalog adapters can reuse
   // the same translation when they build their typed columns.
@@ -184,6 +194,10 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   // query (BigQuery queries rarely reference more than a handful of
   // tables) and a linear scan keeps the dependency surface narrow.
   std::vector<std::string> keys_ ABSL_GUARDED_BY(mu_){};
+  // Non-owning cache of registry-backed views (owned by view_registry).
+  std::vector<std::string> registered_view_keys_ ABSL_GUARDED_BY(mu_){};
+  std::vector<const ::googlesql::Table*> registered_views_
+      ABSL_GUARDED_BY(mu_){};
 };
 
 }  // namespace catalog

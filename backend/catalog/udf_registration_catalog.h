@@ -25,6 +25,9 @@ GoogleSqlCatalog* GetOrCreateRegistrationCatalog(
     const ::googlesql::LanguageOptions& language,
     absl::string_view default_dataset_id = "");
 
+// Returns nullptr when the project has no registration catalog yet.
+GoogleSqlCatalog* LookupRegistrationCatalog(absl::string_view project_id);
+
 }  // namespace catalog
 }  // namespace backend
 }  // namespace bigquery_emulator

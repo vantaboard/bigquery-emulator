@@ -236,7 +236,8 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	}
 	restDmlStats := dmlStatsFromProto(dmlStats)
 	var ddlTarget *bqtypes.RoutineReference
-	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" {
+	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" ||
+		statementType == "CREATE_TABLE_FUNCTION" {
 		store := routineStore(&deps)
 		ddlTarget = routines.RegisterFromDDL(store, projectID, defaultDataset, req.Query)
 	}
