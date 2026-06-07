@@ -181,10 +181,20 @@ absl::StatusOr<Value> EvalSubqueryExpr(
   auto rows_or = MaterializeScanImpl(node.subquery(), inner_ctx);
   if (!rows_or.ok()) return rows_or.status();
   const std::vector<ColumnBindings>& rows = *rows_or;
-  const ::googlesql::ResolvedScan* sub = StripBarrierScans(node.subquery());
   int value_col_id = -1;
-  if (sub != nullptr && sub->column_list_size() > 0) {
-    value_col_id = sub->column_list(0).column_id();
+  auto project_or = FindOutputProjectScan(node.subquery());
+  if (project_or.ok() && *project_or != nullptr) {
+    const ::googlesql::ResolvedProjectScan* project = *project_or;
+    if (project->expr_list_size() > 0 && project->expr_list(0) != nullptr) {
+      value_col_id = project->expr_list(0)->column().column_id();
+    } else if (project->column_list_size() > 0) {
+      value_col_id = project->column_list(0).column_id();
+    }
+  } else {
+    const ::googlesql::ResolvedScan* sub = StripBarrierScans(node.subquery());
+    if (sub != nullptr && sub->column_list_size() > 0) {
+      value_col_id = sub->column_list(0).column_id();
+    }
   }
 
   auto value_from_row =

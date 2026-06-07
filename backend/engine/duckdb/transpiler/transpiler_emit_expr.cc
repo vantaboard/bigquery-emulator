@@ -263,15 +263,18 @@ std::string Transpiler::EmitSubqueryExpr(
   const bool saved_has_rn = input_has_rn_column_;
   const bool saved_rn_order = input_rn_ordering_;
   const bool saved_output_rn = output_includes_input_rn_;
+  const bool saved_suppress_rn = suppress_rn_in_project_;
   const std::vector<std::string> saved_output_order = output_order_items_;
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
+  suppress_rn_in_project_ = true;
   output_order_items_.clear();
   std::string inner = EmitScan(node->subquery());
   input_has_rn_column_ = saved_has_rn;
   input_rn_ordering_ = saved_rn_order;
   output_includes_input_rn_ = saved_output_rn;
+  suppress_rn_in_project_ = saved_suppress_rn;
   output_order_items_ = saved_output_order;
   if (inner.empty()) return "";
   switch (node->subquery_type()) {

@@ -335,6 +335,14 @@ absl::StatusOr<Value> AvgAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values);
 
+absl::StatusOr<Value> MinAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values);
+
+absl::StatusOr<Value> MaxAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values);
+
 absl::StatusOr<Value> CountAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values) {
@@ -392,6 +400,12 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "avg") {
     return AvgAggregate(call, input_column_values);
+  }
+  if (name == "min") {
+    return MinAggregate(call, input_column_values);
+  }
+  if (name == "max") {
+    return MaxAggregate(call, input_column_values);
   }
   if (name == "count") {
     return CountAggregate(call, input_column_values);

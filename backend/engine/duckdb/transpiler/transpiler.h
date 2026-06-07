@@ -400,6 +400,9 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   std::vector<std::string> output_order_items_;
   // True when the user-visible SELECT list includes `__bq_input_rn`.
   bool output_includes_input_rn_ = false;
+  // Suppresses appending `__bq_input_rn` to ProjectScan output when
+  // lowering the inner scan of a subquery expression (IN/SCALAR/...).
+  bool suppress_rn_in_project_ = false;
   // User-visible output column names from `ResolvedQueryStmt`; used to
   // decide whether PARTITION BY keys belong in the final ORDER BY.
   std::vector<std::string> query_output_column_names_;

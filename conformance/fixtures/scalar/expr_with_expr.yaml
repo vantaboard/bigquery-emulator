@@ -15,8 +15,8 @@ description: |
   exercise the multi-binding path.
 project_id: proj-fastpath-expr-with-expr
 query: |
-  SELECT WITH(half AS 21, name AS 'ada') half * 2 AS doubled,
-         WITH(half AS 21, name AS 'ada') name     AS who
+  SELECT WITH(half AS 21, name AS 'ada', half * 2) AS doubled,
+         WITH(half AS 21, name AS 'ada', name)     AS who
 expected:
   route: semantic_executor
   rows:

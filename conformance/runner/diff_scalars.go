@@ -22,7 +22,7 @@ const floatRelEpsilon = 1e-9
 // false for NULL-vs-non-NULL pairs and otherwise delegates to a
 // per-type comparator. Fall-through for unknown types is the
 // string-form compare used by plan-40.
-func cellsEqual(expected, actual any, fieldType string) bool {
+func cellsEqual(expected, actual any, fieldType, fieldMode string) bool {
 	expIsNull := isNullExpected(expected)
 	actIsNull := actual == nil
 	if expIsNull && actIsNull {
@@ -30,6 +30,9 @@ func cellsEqual(expected, actual any, fieldType string) bool {
 	}
 	if expIsNull != actIsNull {
 		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(fieldMode), "REPEATED") {
+		return repeatedCellsEqual(expected, actual, fieldType)
 	}
 	switch strings.ToUpper(strings.TrimSpace(fieldType)) {
 	case bqTypeINT64, bqTypeIntegerAlias, "NUMERIC", "BIGNUMERIC":
@@ -49,6 +52,44 @@ func cellsEqual(expected, actual any, fieldType string) bool {
 		// existing fixtures.
 		return stringForm(expected) == stringForm(actual)
 	}
+}
+
+// repeatedCellsEqual compares REPEATED column values. Expected YAML
+// arrays (`["1","2"]`) are normalized alongside BigQuery REST wire
+// arrays (`[{"v":"1"},{"v":"2"}]`).
+func repeatedCellsEqual(expected, actual any, elemType string) bool {
+	expElems, okExp := normalizeArrayElements(expected)
+	actElems, okAct := normalizeArrayElements(actual)
+	if !okExp || !okAct {
+		return stringForm(expected) == stringForm(actual)
+	}
+	if len(expElems) != len(actElems) {
+		return false
+	}
+	for i := range expElems {
+		if !cellsEqual(expElems[i], actElems[i], elemType, "") {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeArrayElements(v any) ([]any, bool) {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]any, len(arr))
+	for i, el := range arr {
+		if m, ok := el.(map[string]any); ok {
+			if inner, ok := m["v"]; ok {
+				out[i] = inner
+				continue
+			}
+		}
+		out[i] = el
+	}
+	return out, true
 }
 
 // isNullExpected returns true when a YAML-decoded value is the

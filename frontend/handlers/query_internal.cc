@@ -1,6 +1,7 @@
 #include "frontend/handlers/query_internal.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
 #include "googlesql/public/error_helpers.h"
@@ -102,6 +104,17 @@ bool NeedsScriptStatementLoop(absl::string_view sql) {
           absl::StrContains(sql, "BEGIN"));
 }
 
+// BigQuery REST query results render integer-valued FLOAT64 cells with
+// a decimal point (e.g. CAST(2 AS FLOAT64) -> "2.0").
+std::string FormatQueryResultFloat64(double v) {
+  if (std::isnan(v)) return "NaN";
+  if (std::isinf(v)) return v > 0 ? "Infinity" : "-Infinity";
+  if (std::isfinite(v) && v == std::trunc(v)) {
+    return absl::StrFormat("%.1f", v);
+  }
+  return absl::StrCat(v);
+}
+
 // Query-result marshaller: same shape as `handler_common::ValueToCell`
 // except BYTES columns are base64-encoded to match
 // `gateway/bqtypes/wire.go::ValueToCell`.
@@ -120,7 +133,7 @@ void QueryResultValueToCell(const backend::storage::Value& value,
       out->set_string_value(absl::StrCat(value.int64_value()));
       return;
     case Kind::kFloat64:
-      out->set_string_value(absl::StrCat(value.float64_value()));
+      out->set_string_value(FormatQueryResultFloat64(value.float64_value()));
       return;
     case Kind::kString:
       out->set_string_value(value.string_value());

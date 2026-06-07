@@ -1,4 +1,6 @@
+#include <cmath>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -142,6 +144,54 @@ struct BuiltinAggregateView {
   }
 };
 
+template <typename CallLike>
+absl::StatusOr<Value> MinMaxAggregateImpl(
+    const CallLike& call,
+    const std::vector<std::vector<Value>>& input_column_values,
+    bool pick_max) {
+  if (input_column_values.size() != 1) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: MIN/MAX expects one argument column");
+  }
+  if (input_column_values[0].empty()) {
+    return NullOfAggregateType(call.type());
+  }
+  const std::vector<Value>& cells = input_column_values[0];
+  std::optional<Value> best;
+  for (const Value& v : cells) {
+    if (v.is_null()) continue;
+    if (!best.has_value()) {
+      best = v;
+      continue;
+    }
+    const Value& cur = *best;
+    if (cur.type_kind() != v.type_kind()) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: MIN/MAX argument type mismatch");
+    }
+    switch (v.type_kind()) {
+      case ::googlesql::TYPE_INT64: {
+        const bool take = pick_max ? v.int64_value() > cur.int64_value()
+                                   : v.int64_value() < cur.int64_value();
+        if (take) best = v;
+        break;
+      }
+      case ::googlesql::TYPE_DOUBLE: {
+        const bool take = pick_max ? v.double_value() > cur.double_value()
+                                   : v.double_value() < cur.double_value();
+        if (take) best = v;
+        break;
+      }
+      default:
+        return MakeSemanticError(
+            SemanticErrorReason::kNotImplemented,
+            "semantic: MIN/MAX is not implemented for this argument type");
+    }
+  }
+  if (!best.has_value()) return NullOfAggregateType(call.type());
+  return *best;
+}
+
 }  // namespace
 
 absl::StatusOr<Value> SumAggregate(
@@ -156,6 +206,18 @@ absl::StatusOr<Value> AvgAggregate(
   return AvgAggregateImpl(call, input_column_values);
 }
 
+absl::StatusOr<Value> MinAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  return MinMaxAggregateImpl(call, input_column_values, /*pick_max=*/false);
+}
+
+absl::StatusOr<Value> MaxAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  return MinMaxAggregateImpl(call, input_column_values, /*pick_max=*/true);
+}
+
 absl::StatusOr<Value> EvalAggregateBuiltin(
     absl::string_view name,
     const ::googlesql::Type* return_type,
@@ -167,6 +229,12 @@ absl::StatusOr<Value> EvalAggregateBuiltin(
   }
   if (name == "avg") {
     return AvgAggregateImpl(view, input_column_values);
+  }
+  if (name == "min") {
+    return MinMaxAggregateImpl(view, input_column_values, /*pick_max=*/false);
+  }
+  if (name == "max") {
+    return MinMaxAggregateImpl(view, input_column_values, /*pick_max=*/true);
   }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,

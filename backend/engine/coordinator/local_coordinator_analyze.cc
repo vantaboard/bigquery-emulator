@@ -45,11 +45,17 @@ namespace {
 ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   ::googlesql::LanguageOptions language;
   language.EnableMaximumLanguageFeatures();
+  // WITH(<name> AS <expr>, ...) <body> scalar bindings (GA feature).
+  language.EnableLanguageFeature(::googlesql::FEATURE_WITH_EXPRESSION);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
   options.set_attach_error_location_payload(true);
+  // Keep literal CAST as ResolvedCast nodes so the semantic executor's
+  // BigQuery-parity truncation (FLOAT64/NUMERIC -> INT64) runs instead
+  // of the analyzer's folded constant (which rounds 3.7 -> 4).
+  options.set_fold_literal_cast(false);
   // We do NOT flip `prune_unused_columns` on: doing so changes the
   // resolved column lifetime, which has historically broken the
   // engine's downstream uses of the resolved AST.

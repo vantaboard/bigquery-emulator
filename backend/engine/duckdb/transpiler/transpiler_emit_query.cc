@@ -269,7 +269,7 @@ std::string Transpiler::EmitProjectScan(
         break;
       }
     }
-    if (same_set) {
+    if (same_set && !suppress_rn_in_project_) {
       return EmitScan(node->input_scan());
     }
   }
@@ -332,7 +332,7 @@ std::string Transpiler::EmitProjectScan(
     }
     projections.push_back(col);
   }
-  if (input_has_rn_column_) {
+  if (input_has_rn_column_ && !suppress_rn_in_project_) {
     const std::string rn = internal::QuoteIdent(internal::kBqInputRnCol);
     if (std::find(projections.begin(), projections.end(), rn) ==
         projections.end()) {

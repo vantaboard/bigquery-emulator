@@ -1,5 +1,6 @@
 #include "backend/engine/semantic/eval_expr.h"
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -157,13 +158,29 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
           return Value::String(std::move(out));
         }
       }
+      if (target->kind() == ::googlesql::TYPE_BOOL) {
+        if (inner->type_kind() == ::googlesql::TYPE_BOOL) return inner;
+        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
+          absl::string_view s = inner->string_value();
+          if (absl::EqualsIgnoreCase(s, "true")) return Value::Bool(true);
+          if (absl::EqualsIgnoreCase(s, "false")) return Value::Bool(false);
+          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                   "semantic: CAST STRING to BOOL failed");
+        }
+      }
       if (target->kind() == ::googlesql::TYPE_INT64) {
         if (inner->type_kind() == ::googlesql::TYPE_INT64) return inner;
         if (inner->type_kind() == ::googlesql::TYPE_DOUBLE) {
-          return Value::Int64(static_cast<int64_t>(inner->double_value()));
+          return Value::Int64(
+              static_cast<int64_t>(std::trunc(inner->double_value())));
         }
         if (inner->type_kind() == ::googlesql::TYPE_FLOAT) {
-          return Value::Int64(static_cast<int64_t>(inner->float_value()));
+          return Value::Int64(
+              static_cast<int64_t>(std::trunc(inner->float_value())));
+        }
+        if (inner->type_kind() == ::googlesql::TYPE_NUMERIC) {
+          auto d = inner->numeric_value().ToDouble();
+          return Value::Int64(static_cast<int64_t>(std::trunc(d)));
         }
         if (inner->type_kind() == ::googlesql::TYPE_STRING) {
           if (inner->is_null()) return Value::NullInt64();
@@ -380,6 +397,35 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       auto base = EvalExpr(*node.expr(), ctx);
       if (!base.ok()) return base.status();
       return functions::JsonGetField(*base, node.field_name(), expr.type());
+    }
+    case ::googlesql::RESOLVED_WITH_EXPR: {
+      const auto& node = *expr.GetAs<::googlesql::ResolvedWithExpr>();
+      if (node.expr() == nullptr) {
+        return absl::InvalidArgumentError(
+            "semantic: ResolvedWithExpr has null body expr");
+      }
+      ColumnBindings bindings;
+      if (ctx.columns != nullptr) {
+        bindings = *ctx.columns;
+      }
+      absl::flat_hash_map<std::string, Value> by_name;
+      EvalContext inner_ctx = ctx;
+      for (int i = 0; i < node.assignment_list_size(); ++i) {
+        const ::googlesql::ResolvedComputedColumn* cc = node.assignment_list(i);
+        if (cc == nullptr || cc->expr() == nullptr) {
+          return absl::InternalError(
+              "semantic: ResolvedWithExpr assignment has null expr");
+        }
+        auto bound = EvalExpr(*cc->expr(), inner_ctx);
+        if (!bound.ok()) return bound.status();
+        bindings.emplace(cc->column().column_id(), *bound);
+        by_name[std::string(cc->column().name())] = *bound;
+        inner_ctx.columns = &bindings;
+        inner_ctx.columns_by_name = &by_name;
+      }
+      inner_ctx.columns = &bindings;
+      inner_ctx.columns_by_name = &by_name;
+      return EvalExpr(*node.expr(), inner_ctx);
     }
     case ::googlesql::RESOLVED_SUBQUERY_EXPR:
       return EvalSubqueryExpr(*expr.GetAs<::googlesql::ResolvedSubqueryExpr>(),

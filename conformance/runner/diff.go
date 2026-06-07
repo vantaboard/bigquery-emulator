@@ -189,7 +189,7 @@ func orderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actu
 	if len(expected) == len(actualRows) {
 		match := true
 		for i := range expected {
-			if !rowMatchesTyped(expected[i], actualRows[i], cols, types) {
+			if !rowMatchesTyped(expected[i], actualRows[i], cols, types, schema) {
 				match = false
 				break
 			}
@@ -344,7 +344,13 @@ func writeRowStanza(b *strings.Builder, lines []string) {
 // (INT64/NUMERIC compare as numbers, FLOAT64 with epsilon, etc.).
 // Missing keys on either side are surfaced as mismatches so the
 // diff exposes column-name drift.
-func rowMatchesTyped(expected map[string]any, actual bqtypes.Row, cols []string, types []string) bool {
+func rowMatchesTyped(
+	expected map[string]any,
+	actual bqtypes.Row,
+	cols []string,
+	types []string,
+	schema *bqtypes.TableSchema,
+) bool {
 	for i, col := range cols {
 		var actVal any
 		if i < len(actual.F) {
@@ -361,10 +367,14 @@ func rowMatchesTyped(expected map[string]any, actual bqtypes.Row, cols []string,
 			return false
 		}
 		fieldType := ""
+		fieldMode := ""
 		if i < len(types) {
 			fieldType = types[i]
 		}
-		if !cellsEqual(expVal, actVal, fieldType) {
+		if schema != nil && i < len(schema.Fields) {
+			fieldMode = schema.Fields[i].Mode
+		}
+		if !cellsEqual(expVal, actVal, fieldType, fieldMode) {
 			return false
 		}
 	}
