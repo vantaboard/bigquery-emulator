@@ -5,10 +5,10 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/container/flat_hash_map.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
@@ -47,12 +47,13 @@ absl::StatusOr<std::vector<bool>> ArgIsAggregateFlags(
 
 }  // namespace
 
-absl::Status BindUdafRowFrame(const UdafEvalScope& udaf,
-                              const EvalContext& ctx,
-                              size_t row_index,
-                              FrameStack& row_args,
-                              ColumnBindings& row_columns,
-                              absl::flat_hash_map<std::string, Value>& row_columns_by_name) {
+absl::Status BindUdafRowFrame(
+    const UdafEvalScope& udaf,
+    const EvalContext& ctx,
+    size_t row_index,
+    FrameStack& row_args,
+    ColumnBindings& row_columns,
+    absl::flat_hash_map<std::string, Value>& row_columns_by_name) {
   row_columns.clear();
   row_columns_by_name.clear();
   row_args.PushFrame();
@@ -79,7 +80,8 @@ absl::Status BindUdafRowFrame(const UdafEvalScope& udaf,
     if (ctx.arguments == nullptr) {
       return MakeSemanticError(
           SemanticErrorReason::kInvalidArgument,
-          absl::StrCat("semantic: SQL UDAF non-aggregate parameter '", name,
+          absl::StrCat("semantic: SQL UDAF non-aggregate parameter '",
+                       name,
                        "' has no outer invocation binding"));
     }
     absl::StatusOr<Value> bound = ctx.arguments->Lookup(name);
@@ -114,8 +116,8 @@ absl::StatusOr<Value> EvalUdafInnerAggregate(
     FrameStack row_args;
     ColumnBindings row_columns;
     absl::flat_hash_map<std::string, Value> row_columns_by_name;
-    absl::Status bound =
-        BindUdafRowFrame(udaf, ctx, r, row_args, row_columns, row_columns_by_name);
+    absl::Status bound = BindUdafRowFrame(
+        udaf, ctx, r, row_args, row_columns, row_columns_by_name);
     if (!bound.ok()) return bound;
     EvalContext row_ctx = ctx;
     row_ctx.arguments = &row_args;
@@ -136,7 +138,8 @@ absl::StatusOr<Value> EvalUdafInnerFunctionCall(
     const UdafEvalScope& udaf,
     const EvalContext& ctx) {
   if (udaf.row_indices == nullptr || call.function() == nullptr) {
-    return absl::InternalError("semantic: SQL UDAF inner function call invalid");
+    return absl::InternalError(
+        "semantic: SQL UDAF inner function call invalid");
   }
   std::vector<std::vector<Value>> inner_columns(
       static_cast<size_t>(call.argument_list_size()));
@@ -144,8 +147,8 @@ absl::StatusOr<Value> EvalUdafInnerFunctionCall(
     FrameStack row_args;
     ColumnBindings row_columns;
     absl::flat_hash_map<std::string, Value> row_columns_by_name;
-    absl::Status bound =
-        BindUdafRowFrame(udaf, ctx, r, row_args, row_columns, row_columns_by_name);
+    absl::Status bound = BindUdafRowFrame(
+        udaf, ctx, r, row_args, row_columns, row_columns_by_name);
     if (!bound.ok()) return bound;
     EvalContext row_ctx = ctx;
     row_ctx.arguments = &row_args;
@@ -158,9 +161,10 @@ absl::StatusOr<Value> EvalUdafInnerFunctionCall(
       inner_columns[static_cast<size_t>(a)].push_back(*std::move(v));
     }
   }
-  std::string name = eval_expr_internal::LowerFunctionDispatchName(call.function());
-  return functions::EvalAggregateBuiltin(name, call.type(), /*distinct=*/false,
-                                         inner_columns);
+  std::string name =
+      eval_expr_internal::LowerFunctionDispatchName(call.function());
+  return functions::EvalAggregateBuiltin(
+      name, call.type(), /*distinct=*/false, inner_columns);
 }
 
 absl::StatusOr<Value> EvalSqlUdafBody(
@@ -176,12 +180,12 @@ absl::StatusOr<Value> EvalSqlUdafBody(
   }
   std::vector<std::string> arg_names = sql_fn.GetArgumentNames();
   if (arg_names.size() != static_cast<size_t>(call.argument_list_size())) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: SQL UDAF argument count mismatch (expected ",
-        arg_names.size(),
-        ", got ",
-        call.argument_list_size(),
-        ")"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: SQL UDAF argument count mismatch (expected ",
+                     arg_names.size(),
+                     ", got ",
+                     call.argument_list_size(),
+                     ")"));
   }
   absl::StatusOr<std::vector<bool>> is_agg_or = ArgIsAggregateFlags(sql_fn);
   if (!is_agg_or.ok()) return is_agg_or.status();
@@ -203,8 +207,7 @@ absl::StatusOr<Value> EvalSqlUdafBody(
                        arg_names[i],
                        "' has no evaluated argument value"));
     }
-    size_t sample_row =
-        row_indices.empty() ? 0 : row_indices.front();
+    size_t sample_row = row_indices.empty() ? 0 : row_indices.front();
     if (sample_row >= arg_columns[i].size()) {
       return absl::InternalError(
           "semantic: SQL UDAF non-aggregate argument row out of range");
