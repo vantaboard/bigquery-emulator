@@ -1,0 +1,23 @@
+# call_with_declare_out: DECLARE + CALL with OUT param via engine script path.
+name: scripting_call_with_declare_out
+description: |
+  CREATE PROCEDURE with OUT array param; script DECLARE binds caller
+  variable, CALL copies OUT back, final SELECT reads the array length.
+project_id: proj-scripting-call-declare-out
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE OR REPLACE PROCEDURE ds.echo(OUT arr ARRAY<INT64>)
+      BEGIN
+        SET arr = GENERATE_ARRAY(1, 3);
+      END;
+query: |
+  BEGIN
+    DECLARE a ARRAY<INT64> DEFAULT [];
+    CALL ds.echo(a);
+    SELECT CAST(ARRAY_LENGTH(a) AS STRING) AS n;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "3"}

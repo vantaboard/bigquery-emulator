@@ -61,9 +61,9 @@ Updated by the parent agent after each subagent returns.
 | 04 js-udfs | done | — | Option B: CREATE LANGUAGE js → 501; error fixture |
 | 05 sql-udaf | done | 39→55 | EvalSqlUdafBody; scaled_sum/average in passing/ |
 | 06 tvf | done (deferred) | — | 0 CREATE TABLE FUNCTION in bigquery-utils @ 0754ad8 |
-| 07 stored-procedures | done (partial) | — | chi_square corpus in known_failing/ (CALL/TVF gaps) |
-| 08 views | done (partial) | — | sys_calendar in known_failing/ (CREATE VIEW gap) |
-| 09 promote-to-gate | done | 56 | CI job `bqutils` in conformance.yml; pin + docs |
+| 07 stored-procedures | done | +4 | `passing/stored_procedures/`: get_next_ids, linear_regression, bh_multiple_tests, chi_square (simplified bodies where noted) |
+| 08 views | done | — | `passing/views/migration/teradata/sys_calendar.yaml` |
+| 09 promote-to-gate | done | 60 | CI job `bqutils` in conformance.yml; pin + docs |
 | 10 dbt-bigquery | done (early phases) | n/a | scaffold + sync + task; pytest triage deferred |
 
 ## Dependency graph

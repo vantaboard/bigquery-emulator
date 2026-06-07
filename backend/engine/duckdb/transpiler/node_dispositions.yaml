@@ -55,7 +55,7 @@ ResolvedCreateTableStmt: control_op
 ResolvedCreateTableAsSelectStmt: control_op
 ResolvedCreateViewStmt: control_op
 ResolvedCreateMaterializedViewStmt: control_op
-ResolvedCreateProcedureStmt: semantic_executor status=planned
+ResolvedCreateProcedureStmt: control_op
 ResolvedCreateFunctionStmt: control_op
 ResolvedCreateTableFunctionStmt: control_op
 # `CREATE MODEL` (BigQuery ML) is `local_stub`: the statement
@@ -76,7 +76,9 @@ ResolvedInsertStmt: semantic_executor
 ResolvedUpdateStmt: semantic_executor
 ResolvedDeleteStmt: semantic_executor
 ResolvedMergeStmt: duckdb_rewrite
-ResolvedCallStmt: semantic_executor status=planned
+ResolvedCallStmt: semantic_executor
+ResolvedMultiStmt: semantic_executor
+ResolvedCreateConstantStmt: semantic_executor
 ResolvedAssignmentStmt: semantic_executor
 ResolvedExecuteImmediateStmt: semantic_executor status=planned
 ResolvedAnalyzeStmt: control_op
@@ -108,7 +110,7 @@ ResolvedPivotScan: duckdb_rewrite
 ResolvedUnpivotScan: duckdb_rewrite
 ResolvedMatchRecognizeScan: semantic_executor status=planned
 ResolvedGroupRowsScan: semantic_executor
-ResolvedTVFScan: semantic_executor status=planned
+ResolvedTVFScan: semantic_executor
 ResolvedRelationArgumentScan: semantic_executor status=planned
 ResolvedBarrierScan: semantic_executor
 ResolvedPipeIfScan: semantic_executor

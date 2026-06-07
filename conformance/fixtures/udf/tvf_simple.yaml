@@ -1,0 +1,20 @@
+# tvf_simple: CREATE TABLE FUNCTION + FROM tvf(args) on semantic executor.
+name: udf_tvf_simple
+description: |
+  Register a SQL TVF via CREATE TABLE FUNCTION, then scan it with
+  GENERATE_ARRAY inside the body.
+project_id: proj-tvf-simple
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE OR REPLACE TABLE FUNCTION ds.range_tvf(start INT64, stop INT64) AS (
+        SELECT x FROM UNNEST(GENERATE_ARRAY(start, stop)) AS x
+      );
+query: |
+  SELECT CAST(x AS STRING) AS x FROM ds.range_tvf(1, 3) ORDER BY x
+expected:
+  route: semantic_executor
+  rows:
+    - {x: "1"}
+    - {x: "2"}
+    - {x: "3"}

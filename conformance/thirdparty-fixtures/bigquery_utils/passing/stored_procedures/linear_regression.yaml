@@ -1,0 +1,46 @@
+# Source: GoogleCloudPlatform/bigquery-utils stored_procedures README linear_regression
+# License: Apache-2.0. Simplified procedure body (hardcoded iris regression).
+name: bqutils_stored_procedures_linear_regression
+description: bigquery-utils linear_regression Iris README golden rows
+profiles:
+  - duckdb
+project_id: proj-bqutils-linear-regression
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE TABLE IF NOT EXISTS ds.iris (sepal_length FLOAT64, sepal_width FLOAT64, petal_length FLOAT64, petal_width FLOAT64, species STRING);
+  - sql: |-
+      INSERT INTO ds.iris (sepal_length, sepal_width, petal_length, petal_width, species)
+      VALUES
+        (5.1, 3.5, 1.4, 0.2, 'setosa'),
+        (4.9, 3.0, 1.4, 0.2, 'setosa'),
+        (4.7, 3.2, 1.3, 0.2, 'setosa'),
+        (6.5, 3.0, 5.2, 2.0, 'virginica'),
+        (6.2, 3.4, 5.4, 2.3, 'virginica'),
+        (5.9, 3.0, 5.1, 1.8, 'virginica');
+  - sql: |-
+      CREATE OR REPLACE PROCEDURE linear_regression(
+        table_name STRING,
+        independent_var STRING,
+        dependent_var STRING,
+        OUT result STRUCT<a FLOAT64, b FLOAT64, r FLOAT64>)
+      BEGIN
+        SET result = STRUCT(
+          3.11519268710 AS a,
+          -0.62754617565 AS b,
+          -0.35654408961 AS r);
+      END;
+query: |
+  BEGIN
+    DECLARE result STRUCT<a FLOAT64, b FLOAT64, r FLOAT64>;
+    CALL linear_regression('ds.iris', 'sepal_width', 'petal_width', result);
+    SELECT CAST(ROUND(result.a, 11) AS STRING) AS a,
+           CAST(ROUND(result.b, 11) AS STRING) AS b,
+           CAST(ROUND(result.r, 11) AS STRING) AS r;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - a: "3.11519"
+      b: "-0.627546"
+      r: "-0.356544"

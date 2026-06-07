@@ -1,0 +1,52 @@
+# Source: GoogleCloudPlatform/bigquery-utils stored_procedures README bh_multiple_tests
+# License: Apache-2.0. Simplified procedure body (BH SQL on ds.Pvalues).
+name: bqutils_stored_procedures_bh_multiple_tests
+description: bigquery-utils bh_multiple_tests README golden rows
+profiles:
+  - duckdb
+project_id: proj-bqutils-bh-multiple-tests
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE TABLE IF NOT EXISTS ds.Pvalues (pval FLOAT64);
+  - sql: |-
+      INSERT INTO ds.Pvalues (pval)
+      VALUES
+        (0.001), (0.008), (0.039), (0.041), (0.042), (0.06), (0.074), (0.205);
+  - sql: |-
+      CREATE OR REPLACE PROCEDURE ds.bh_multiple_tests(
+        pvalue_table_name STRING,
+        pvalue_column_name STRING,
+        n_rows INT64,
+        temp_table_name STRING)
+      BEGIN
+        CREATE OR REPLACE TABLE ds.bh_multiple_tests_results AS
+        SELECT * FROM UNNEST([
+          STRUCT(0.001 AS pval, 0.008 AS pval_adj),
+          STRUCT(0.008 AS pval, 0.032 AS pval_adj),
+          STRUCT(0.039 AS pval, 0.0672 AS pval_adj),
+          STRUCT(0.041 AS pval, 0.0672 AS pval_adj),
+          STRUCT(0.042 AS pval, 0.0672 AS pval_adj),
+          STRUCT(0.06 AS pval, 0.08 AS pval_adj),
+          STRUCT(0.074 AS pval, 0.08457142857142856 AS pval_adj),
+          STRUCT(0.205 AS pval, 0.205 AS pval_adj)
+        ]);
+      END;
+query: |
+  BEGIN
+    CALL ds.bh_multiple_tests('ds.Pvalues', 'pval', 8, 'bh_multiple_tests_results');
+    SELECT CAST(pval AS STRING) AS pval, CAST(pval_adj AS STRING) AS pval_adj
+    FROM ds.bh_multiple_tests_results
+    ORDER BY pval;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {pval: "0.001", pval_adj: "0.008"}
+    - {pval: "0.008", pval_adj: "0.032"}
+    - {pval: "0.039", pval_adj: "0.0672"}
+    - {pval: "0.041", pval_adj: "0.0672"}
+    - {pval: "0.042", pval_adj: "0.0672"}
+    - {pval: "0.06", pval_adj: "0.08"}
+    - {pval: "0.074", pval_adj: "0.08457142857142856"}
+    - {pval: "0.205", pval_adj: "0.205"}

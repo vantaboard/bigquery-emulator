@@ -6,8 +6,9 @@ profiles:
   - duckdb
 project_id: proj-bqutils-sys-calendar
 setup:
+  - dataset: ds
   - sql: |-
-      CREATE OR REPLACE VIEW sys_calendar AS
+      CREATE OR REPLACE VIEW ds.sys_calendar AS
       SELECT
         r AS calendar_date,
         EXTRACT(DAYOFWEEK FROM r) AS day_of_week,
@@ -34,7 +35,7 @@ query: |
     CAST(day_of_month AS STRING) AS day_of_month,
     CAST(day_of_year AS STRING) AS day_of_year,
     CAST(year_of_calendar AS STRING) AS year_of_calendar
-  FROM sys_calendar
+  FROM ds.sys_calendar
   WHERE calendar_date = DATE '2024-01-01'
 expected:
   route: semantic_executor

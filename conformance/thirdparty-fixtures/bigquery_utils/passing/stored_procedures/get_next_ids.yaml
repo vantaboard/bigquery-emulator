@@ -1,0 +1,28 @@
+# Source: GoogleCloudPlatform/bigquery-utils stored_procedures README get_next_ids
+# License: Apache-2.0. Hand-authored for bqutils plan 07.
+name: bqutils_stored_procedures_get_next_ids
+description: bigquery-utils get_next_ids README CALL golden (CREATE PROCEDURE + CALL scripting)
+profiles:
+  - duckdb
+project_id: proj-bqutils-get-next-ids
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE TABLE IF NOT EXISTS ds.Ids (id INT64);
+  - sql: |-
+      CREATE OR REPLACE PROCEDURE ds.get_next_ids(id_count INT64, OUT next_ids ARRAY<INT64>)
+      BEGIN
+        SET next_ids = GENERATE_ARRAY(0, id_count);
+      END;
+query: |
+  BEGIN
+    DECLARE next_ids ARRAY<INT64> DEFAULT [];
+    CALL ds.get_next_ids(3, next_ids);
+    SELECT CAST(next_ids[OFFSET(0)] AS STRING) AS first_id,
+           CAST(ARRAY_LENGTH(next_ids) AS STRING) AS id_count;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - first_id: "0"
+      id_count: "4"

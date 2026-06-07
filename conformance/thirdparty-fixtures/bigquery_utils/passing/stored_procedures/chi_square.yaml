@@ -1,5 +1,5 @@
 # Source: GoogleCloudPlatform/bigquery-utils stored_procedures README chi_square golden
-# License: Apache-2.0. Hand-authored for bqutils plan 07 (inline stats; CALL deferred).
+# License: Apache-2.0. Inline stats query (CALL deferred).
 name: bqutils_stored_procedures_chi_square
 description: bigquery-utils chi_square README golden on categorical Iris-like table
 profiles:
@@ -40,4 +40,4 @@ expected:
   route: semantic_executor
   rows:
     - chi_x: "3.745"
-      chi_dof: "1.0"
+      chi_dof: "1"

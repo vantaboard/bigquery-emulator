@@ -486,9 +486,11 @@ public-facing policy.
   populated per the BigQuery REST reference). The DuckDB SQL evaluator
   no longer carries any DDL paths — the route classifier dispatches
   every `control_op` statement root to `ControlOpExecutor`.
-  `CREATE VIEW`, `CREATE MATERIALIZED VIEW` (full-refresh execution),
-  `EXPORT DATA`, function registration, `ALTER TABLE` still surface
-  `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE` continues
+  `CREATE VIEW` registers in the per-project view registry and replays
+  into each query catalog (`sys_calendar` bqutils fixture promoted).
+  `CREATE MATERIALIZED VIEW` (full-refresh execution), `EXPORT DATA`,
+  function registration, `ALTER TABLE` still surface `UNIMPLEMENTED`
+  from the dedicated handlers; `ALTER TABLE` continues
   to lower through the DuckDB engine pending its own subagent. Tracked
   via the control-op executor; materialized-view refresh
   semantics
@@ -500,11 +502,14 @@ public-facing policy.
   shared `semantic::FrameStack` primitive so the UDF / TVF call-
   side reuses the same stack-of-frames type. `ResolvedConstant`
   and `ResolvedArgumentRef` resolve on the semantic executor
-  (case-insensitive identifier matching for arg refs). CALL /
-  EXECUTE IMMEDIATE / DECLARE / SET / BEGIN..END / IF / WHILE /
-  LOOP / FOR / RAISE / EXCEPTION / CREATE PROCEDURE /
-  `@@error.message` remain `status=planned` in
-  `node_dispositions.yaml` until follow-up subagents pick them up;
+  (case-insensitive identifier matching for arg refs). **Landed
+  (partial):** `CREATE PROCEDURE` registers in `procedure_registry`;
+  `CALL` dispatches via `script_executor.cc` with SQL body execution;
+  gateway engine-first scripting (`DECLARE`/`CALL`/`BEGIN` in one
+  `ExecuteQuery`) preserves variable scope. Four bqutils README goldens
+  are in `passing/stored_procedures/` (2026-06-07). `EXECUTE IMMEDIATE`,
+  `WHILE`/`IF`/`LOOP`/`FOR`/`RAISE`/`EXCEPTION`, and `@@error.message`
+  remain open for upstream-faithful procedure bodies.
   SQL UDF / TVF body storage + invocation + JS UDF
   registration-time rejection stay deferred until the per-engine
   UDF / TVF registry round-trip through `DuckDBStorage` lands
@@ -516,8 +521,10 @@ public-facing policy.
   routes through the semantic executor. Conformance fixtures under
   `conformance/fixtures/udf/` gate the scalar path; SQL UDAFs land on
   the semantic executor via `EvalSqlUdafBody` with fixtures under
-  `conformance/fixtures/aggregate/`. TVFs and durable DuckDB-backed
-  persistence remain open.
+  `conformance/fixtures/aggregate/`. **Landed (in-process):** SQL TVFs
+  register in `tvf_registry` and evaluate via `eval_tvf.cc`
+  (`conformance/fixtures/udf/tvf_simple.yaml`). Durable DuckDB-backed
+  persistence remains open.
 - 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
   scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
   deferred DML work tracked in `docs/ENGINE_POLICY.md` plus the existing DuckDB

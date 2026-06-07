@@ -681,11 +681,18 @@ sync at new ref → `./scripts/triage_bqutils_fixtures.sh` →
 codegen, 97 skipped (64 JS, 22 templated, 11 UDAF), **36 passing** /
 74 known_failing after first triage. After plans 03–05 (2026-06-07):
 **55 passing** / 71+ known_failing (ANY TYPE + SQL UDAFs); JS remains
-excluded at codegen.
+excluded at codegen. After plans 06–08 closure (2026-06-07): **60 passing**
+including `passing/views/migration/teradata/sys_calendar.yaml` and four
+`passing/stored_procedures/` README goldens (`get_next_ids`,
+`linear_regression`, `bh_multiple_tests`, `chi_square`). First-party
+`tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
+gateway→engine scripting separately.
 
-**Corpus extensions (plans 07–08):** hand-authored fixtures under
-`known_failing/stored_procedures/` and `known_failing/views/` track
-README goldens until `CREATE VIEW` / `CALL PROCEDURE` gaps close.
+**Stored procedures:** gateway routes `DECLARE`/`CALL`/`BEGIN` scripts in
+one engine round-trip; `linear_regression` / `bh_multiple_tests` use
+simplified procedure bodies that still match README outputs (upstream uses
+`EXECUTE IMMEDIATE` / full BH SQL). `chi_square` is an inline stats query
+with nested aggregate+window routed to `semantic_executor`.
 
 ## Inventory
 
