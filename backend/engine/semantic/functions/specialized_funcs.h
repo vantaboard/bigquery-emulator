@@ -25,6 +25,12 @@ absl::StatusOr<Value> EvalAggregateCall(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values);
 
+absl::StatusOr<Value> EvalAggregateBuiltin(
+    absl::string_view name,
+    const ::googlesql::Type* return_type,
+    bool distinct,
+    const std::vector<std::vector<Value>>& input_column_values);
+
 }  // namespace functions
 }  // namespace semantic
 }  // namespace engine

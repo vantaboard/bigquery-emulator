@@ -242,6 +242,7 @@ cc_library(
     name = "specialized_funcs",
     srcs = [
         "aggregate_specialized.cc",
+        "aggregate_sum_avg.cc",
         "net_funcs.cc",
     ],
     hdrs = ["specialized_funcs.h"],

@@ -327,68 +327,13 @@ absl::StatusOr<Value> ArrayConcatAgg(
   return Value::Array(arr_type, std::move(out));
 }
 
-absl::StatusOr<Value> NullOfAggregateType(const ::googlesql::Type* type) {
-  if (type == nullptr) return Value::NullInt64();
-  switch (type->kind()) {
-    case ::googlesql::TYPE_INT64:
-      return Value::NullInt64();
-    case ::googlesql::TYPE_DOUBLE:
-      return Value::NullDouble();
-    case ::googlesql::TYPE_NUMERIC:
-      return Value::NullNumeric();
-    default:
-      return Value::NullInt64();
-  }
-}
-
 absl::StatusOr<Value> SumAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
-    const std::vector<std::vector<Value>>& input_column_values) {
-  if (input_column_values.size() != 1) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "semantic: SUM expects one argument column");
-  }
-  if (input_column_values[0].empty()) {
-    return NullOfAggregateType(call.type());
-  }
-  const ::googlesql::Type* out_type = call.type();
-  const std::vector<Value>& cells = input_column_values[0];
-  bool any_non_null = false;
-  switch (cells.front().type_kind()) {
-    case ::googlesql::TYPE_INT64: {
-      int64_t total = 0;
-      for (const Value& v : cells) {
-        if (v.is_null()) continue;
-        if (v.type_kind() != ::googlesql::TYPE_INT64) {
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: SUM argument type mismatch");
-        }
-        any_non_null = true;
-        total += v.int64_value();
-      }
-      if (!any_non_null) return NullOfAggregateType(out_type);
-      return Value::Int64(total);
-    }
-    case ::googlesql::TYPE_DOUBLE: {
-      double total = 0;
-      for (const Value& v : cells) {
-        if (v.is_null()) continue;
-        if (v.type_kind() != ::googlesql::TYPE_DOUBLE) {
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: SUM argument type mismatch");
-        }
-        any_non_null = true;
-        total += v.double_value();
-      }
-      if (!any_non_null) return NullOfAggregateType(out_type);
-      return Value::Double(total);
-    }
-    default:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: SUM is not implemented for this argument type");
-  }
-}
+    const std::vector<std::vector<Value>>& input_column_values);
+
+absl::StatusOr<Value> AvgAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values);
 
 absl::StatusOr<Value> CountAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
@@ -444,6 +389,9 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "sum") {
     return SumAggregate(call, input_column_values);
+  }
+  if (name == "avg") {
+    return AvgAggregate(call, input_column_values);
   }
   if (name == "count") {
     return CountAggregate(call, input_column_values);

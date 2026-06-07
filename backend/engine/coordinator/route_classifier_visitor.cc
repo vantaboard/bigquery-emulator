@@ -7,6 +7,7 @@
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/public/function.h"
+#include "googlesql/public/sql_function.h"
 #include "googlesql/resolved_ast/resolved_node.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
@@ -19,7 +20,6 @@ namespace {
 
 namespace transpiler = ::bigquery_emulator::backend::engine::duckdb::transpiler;
 
-constexpr absl::string_view kSqlFunctionGroup = "Lazy_resolution_function";
 constexpr absl::string_view kTemplatedSqlFunctionGroup =
     "Templated_SQL_Function";
 
@@ -214,7 +214,7 @@ void RouteClassifierVisitor::CheckFunction(
   }
   if (fn == nullptr) return;
   if (fn->GetGroup() == kTemplatedSqlFunctionGroup ||
-      fn->GetGroup() == kSqlFunctionGroup) {
+      fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
     MaybePromote(Disposition::kSemanticExecutor,
                  absl::StrCat("sql_udf:", fn->Name()));
     return;

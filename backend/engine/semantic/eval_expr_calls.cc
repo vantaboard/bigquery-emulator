@@ -11,6 +11,7 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/eval_udaf.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/functions/datetime_funcs.h"
 #include "backend/engine/semantic/functions/dispatch.h"
@@ -348,6 +349,9 @@ absl::StatusOr<Value> EvalFunctionCall(
         "semantic: ResolvedFunctionCall has null function");
   }
   const ::googlesql::Function* fn = call.function();
+  if (ctx.udaf != nullptr && fn != nullptr && fn->IsAggregate()) {
+    return EvalUdafInnerFunctionCall(call, *ctx.udaf, ctx);
+  }
   if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
           call.function_call_info();
       info != nullptr && fn != nullptr &&

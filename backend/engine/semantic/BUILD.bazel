@@ -113,10 +113,12 @@ cc_library(
         "eval_expr_calls.cc",
         "eval_expr_dispatch.cc",
         "eval_expr_operators.cc",
+        "eval_udaf.cc",
     ],
     hdrs = [
         "eval_expr.h",
         "eval_expr_internal.h",
+        "eval_udaf.h",
     ],
     deps = [
         ":error",
@@ -125,6 +127,7 @@ cc_library(
         ":value",
         "//backend/engine/semantic/functions:dispatch",
         "//backend/engine/semantic/functions:operator_funcs",
+        "//backend/engine/semantic/functions:specialized_funcs",
         "//backend/engine/semantic/stubs:dispatch",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",

@@ -53,6 +53,13 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // still surface UNIMPLEMENTED.
   // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) lowers `SAFE.SUM` via TRY().
   if (node == nullptr || node->function() == nullptr) return "";
+  if (const auto* sql_fn =
+          dynamic_cast<const ::googlesql::SQLFunction*>(node->function());
+      sql_fn != nullptr && sql_fn->IsAggregate()) {
+    LOG(INFO) << "duckdb transpiler: SQL UDAF '" << node->function()->Name()
+              << "' routes to semantic executor; surfacing UNIMPLEMENTED";
+    return "";
+  }
   const std::string name = internal::ResolveFunctionName(node->function());
   const bool ordered_agg = internal::SupportsOrderedAggregateModifiers(name);
   if (node->having_modifier() != nullptr || node->group_by_list_size() > 0 ||

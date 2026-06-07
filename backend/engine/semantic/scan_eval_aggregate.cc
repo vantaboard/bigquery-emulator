@@ -9,9 +9,12 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_udaf.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/sql_function.h"
 #include "googlesql/public/type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
@@ -233,6 +236,14 @@ absl::StatusOr<Value> EvalAggregateForRows(
   if (agg.function() != nullptr &&
       absl::AsciiStrToLower(agg.function()->Name()) == "array_agg") {
     return EvalArrayAgg(agg, arg_columns, input_rows, ctx);
+  }
+  if (agg.function() != nullptr &&
+      agg.function()->GetGroup() ==
+          ::googlesql::SQLFunction::kSQLFunctionGroup &&
+      agg.function()->IsAggregate()) {
+    const auto* sql_fn =
+        static_cast<const ::googlesql::SQLFunction*>(agg.function());
+    return EvalSqlUdafBody(agg, *sql_fn, arg_columns, row_indices, ctx);
   }
   return functions::EvalAggregateCall(agg, arg_columns);
 }
