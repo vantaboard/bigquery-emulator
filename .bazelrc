@@ -263,3 +263,10 @@ build --per_file_copt=//backend/[/:].*@-Wall,-Wextra,-Werror
 build --per_file_copt=//binaries/[/:].*@-Wall,-Wextra,-Werror
 build --per_file_copt=//frontend/[/:].*@-Wall,-Wextra,-Werror
 build --per_file_copt=//tools/googlesql-prebuilt/smoke/[/:].*@-Wall,-Wextra,-Werror
+
+# ---------------------------------------------------------------------------
+# External dependency fetch resilience (DuckDB zip, GoogleSQL http_archives).
+# Retries transient 5xx / connection resets during repository downloads.
+# ---------------------------------------------------------------------------
+common --experimental_repository_downloader_retries=5
+common --http_connector_attempts=5

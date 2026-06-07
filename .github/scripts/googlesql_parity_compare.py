@@ -40,6 +40,10 @@ from collections.abc import Iterable
 
 
 SCHEMA_VERSION = 1
+INFRA_NOTE_MARKERS = (
+    "failed before upload",
+    "not a parity divergence",
+)
 
 
 def _load_report(path: pathlib.Path) -> dict | None:
@@ -62,6 +66,10 @@ def _norm_status(value: str | None) -> str:
     return value.lower()
 
 
+def _job_failed(result: str | None) -> bool:
+    return _norm_status(result) == "failure"
+
+
 def _outcome_emoji(value: str) -> str:
     return {
         "success": "PASS",
@@ -72,11 +80,17 @@ def _outcome_emoji(value: str) -> str:
     }.get(value, value)
 
 
+def _is_infra_note(note: str) -> bool:
+    return any(marker in note for marker in INFRA_NOTE_MARKERS)
+
+
 def _diff_reports(
     prebuilt: dict | None,
     source: dict | None,
     *,
     label: str,
+    prebuilt_leg_failed: bool,
+    source_leg_failed: bool,
 ) -> tuple[list[str], list[str]]:
     """Compare two conformance Reports; return (notes, diffs).
 
@@ -87,13 +101,37 @@ def _diff_reports(
     notes: list[str] = []
     diffs: list[str] = []
     if prebuilt is None and source is None:
-        notes.append(f"{label}: neither leg produced a report")
+        if prebuilt_leg_failed and source_leg_failed:
+            notes.append(
+                f"{label}: both legs failed before upload "
+                "(build/infra failure — not a parity divergence)"
+            )
+        elif prebuilt_leg_failed or source_leg_failed:
+            notes.append(
+                f"{label}: report missing because a leg failed before upload "
+                f"(prebuilt={'failed' if prebuilt_leg_failed else 'ok'}, "
+                f"source={'failed' if source_leg_failed else 'ok'})"
+            )
+        else:
+            notes.append(f"{label}: neither leg produced a report")
         return notes, diffs
     if prebuilt is None:
-        notes.append(f"{label}: prebuilt-leg report missing")
+        if prebuilt_leg_failed:
+            notes.append(
+                f"{label}: prebuilt-leg report missing "
+                "(prebuilt job failed before upload)"
+            )
+        else:
+            notes.append(f"{label}: prebuilt-leg report missing")
         return notes, diffs
     if source is None:
-        notes.append(f"{label}: source-leg report missing")
+        if source_leg_failed:
+            notes.append(
+                f"{label}: source-leg report missing "
+                "(source job failed before upload)"
+            )
+        else:
+            notes.append(f"{label}: source-leg report missing")
         return notes, diffs
 
     p_schema = prebuilt.get("schema_version")
@@ -142,7 +180,11 @@ def _render_summary(
 ) -> str:
     """Markdown summary written to GITHUB_STEP_SUMMARY."""
     lines: list[str] = []
-    lines.append(f"## GoogleSQL source-vs-prebuilt parity (tier: `{args.tier}`)")
+    lanes_label = args.lanes if args.lanes != "all" else "smoke + conformance"
+    lines.append(
+        f"## GoogleSQL source-vs-prebuilt parity "
+        f"(tier: `{args.tier}`, lanes: `{lanes_label}`)"
+    )
     lines.append("")
     lines.append("### Artifact identity")
     lines.append("")
@@ -197,6 +239,12 @@ def _render_summary(
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", required=True, choices=("pr", "scheduled", "release"))
+    parser.add_argument(
+        "--lanes",
+        default="all",
+        choices=("smoke", "conformance", "all"),
+        help="Which conformance JSON lanes to compare (default: all).",
+    )
 
     # Top-level job outcomes (`needs.*.result` from the workflow):
     # success / failure / cancelled / skipped.
@@ -239,6 +287,14 @@ def main(argv: list[str]) -> int:
 
     args = parser.parse_args(argv)
 
+    prebuilt_failed = _job_failed(args.prebuilt_result)
+    source_failed = _job_failed(args.source_result)
+
+    compare_smoke = args.lanes in ("smoke", "all")
+    compare_conformance = (
+        args.lanes in ("conformance", "all") and args.tier in ("scheduled", "release")
+    )
+
     # Collect per-stage outcomes side-by-side.
     stage_rows: list[tuple[str, str, str, str]] = []
 
@@ -254,8 +310,9 @@ def main(argv: list[str]) -> int:
         stage_rows.append((name, p, s, status))
 
     add_stage("Build + link + startup", args.prebuilt_result, args.source_result)
-    add_stage("Smoke query set", args.prebuilt_smoke, args.source_smoke)
-    if args.tier in ("scheduled", "release"):
+    if compare_smoke:
+        add_stage("Smoke query set", args.prebuilt_smoke, args.source_smoke)
+    if compare_conformance:
         add_stage(
             "Conformance (duckdb)",
             args.prebuilt_conformance_duckdb,
@@ -269,15 +326,24 @@ def main(argv: list[str]) -> int:
     def diff_pair(label: str, prebuilt_name: str, source_name: str) -> None:
         p = _load_report(args.prebuilt_results_dir / prebuilt_name)
         s = _load_report(args.source_results_dir / source_name)
-        notes, diffs = _diff_reports(p, s, label=label)
+        notes, diffs = _diff_reports(
+            p,
+            s,
+            label=label,
+            prebuilt_leg_failed=prebuilt_failed,
+            source_leg_failed=source_failed,
+        )
         parity_notes.extend(notes)
         if diffs:
             parity_diffs.append((label, diffs))
 
-    diff_pair(
-        "smoke", "conformance-smoke-prebuilt.json", "conformance-smoke-source.json"
-    )
-    if args.tier in ("scheduled", "release"):
+    if compare_smoke:
+        diff_pair(
+            "smoke",
+            "conformance-smoke-prebuilt.json",
+            "conformance-smoke-source.json",
+        )
+    if compare_conformance:
         diff_pair(
             "conformance (duckdb)",
             "conformance-duckdb-prebuilt.json",
@@ -302,20 +368,31 @@ def main(argv: list[str]) -> int:
     if diverged or parity_diffs:
         print(
             "::error::GoogleSQL source-vs-prebuilt parity FAILED — "
+            "reports exist but diverge; see workflow summary for details.",
+            file=sys.stderr,
+        )
+        return 1
+
+    infra_notes = [n for n in parity_notes if _is_infra_note(n)]
+    other_notes = [n for n in parity_notes if n not in infra_notes]
+
+    if infra_notes and not other_notes:
+        print(
+            "::error::GoogleSQL parity legs failed before upload — "
+            "fix build/infra (not prebuilt-vs-source drift); "
             "see workflow summary for details.",
             file=sys.stderr,
         )
         return 1
-    if parity_notes:
-        # Notes alone (e.g. summary-count drift, missing reports) are
-        # still a parity warning that should fail the job — silent
-        # drift is exactly the failure mode this lane exists to catch.
+
+    if other_notes:
         print(
             "::error::GoogleSQL parity comparator surfaced notes — see "
             "workflow summary for details.",
             file=sys.stderr,
         )
         return 1
+
     print("::notice::GoogleSQL source-vs-prebuilt parity OK")
     return 0
 

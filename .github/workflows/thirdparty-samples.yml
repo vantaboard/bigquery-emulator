@@ -108,6 +108,7 @@ jobs:
           done
 
       - name: Run thirdparty:java-bigquery-tests (live ITs)
+        id: java_live_its
         continue-on-error: true
         run: task thirdparty:java-bigquery-tests
         env:
@@ -120,6 +121,32 @@ jobs:
             CreateCampaignmanagerTransferIT,CreatePlayTransferIT,CreateRedshiftTransferIT,
             CreateTeradataTransferIT,CreateYoutubeChannelTransferIT,
             CreateYoutubeContentOwnerTransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT
+
+      - name: Gate on non-allowlisted Java IT failures
+        env:
+          JAVA_BQ_ALLOW_FAILING_ITS: >-
+            CreateAwsConnectionIT,DeleteConnectionIT,GetConnectionIT,
+            ShareConnectionIT,UpdateConnectionIT,
+            CreateAmazonS3TransferIT,CreateAdManagerTransferIT,CreateAdsTransferIT,
+            CreateCampaignmanagerTransferIT,CreatePlayTransferIT,CreateRedshiftTransferIT,
+            CreateTeradataTransferIT,CreateYoutubeChannelTransferIT,
+            CreateYoutubeContentOwnerTransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT
+        run: |
+          set -euo pipefail
+          {
+            echo "### Java live IT gate"
+            echo ""
+            if [ "${{ steps.java_live_its.outcome }}" = "success" ]; then
+              echo "Maven verify passed (no unexpected failures)."
+            else
+              echo "Maven verify exited non-zero; checking Failsafe reports against allowlist."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/java_bq_ci_gate.sh "$JAVA_BQ_ALLOW_FAILING_ITS" \
+            third_party/java-bigquery-tests/java-bigquery/samples/snippets \
+            third_party/java-bigquery-tests/java-bigquerystorage/samples/snippets \
+            third_party/java-bigquery-tests/java-docs-samples/bigquery/bigqueryconnection/snippets \
+            third_party/java-bigquery-tests/java-docs-samples/bigquery/bigquerydatatransfer/snippets
 
       - name: Stop emulator
         if: always()
