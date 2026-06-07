@@ -112,6 +112,7 @@ cc_test(
         ":script_driver",
         "//backend/engine",
         "//backend/engine/semantic:error",
+        "//backend/engine/semantic:scan_eval",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest_main",

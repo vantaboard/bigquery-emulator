@@ -298,17 +298,15 @@ TEST_F(ControlOpExecutorTest, DropTableMissingSurfacesNotFound) {
   EXPECT_EQ(s.code(), absl::StatusCode::kNotFound) << s;
 }
 
-TEST_F(ControlOpExecutorTest, DropViewNotImplementedYet) {
-  // `CREATE VIEW` and friends are deferred (the storage layer has
-  // no view-CRUD surface today). The executor advertises that
-  // gap with UNIMPLEMENTED + a message that names this plan so a
-  // regression here makes it obvious the view-CRUD work has not
-  // landed yet.
+TEST_F(ControlOpExecutorTest, DropViewMissingSurfacesNotFound) {
   absl::Status s = RunDdl("DROP VIEW ds.absent_view");
   ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("DROP VIEW"), std::string::npos)
-      << s.message();
+  EXPECT_EQ(s.code(), absl::StatusCode::kNotFound) << s;
+}
+
+TEST_F(ControlOpExecutorTest, DropViewIfExistsSwallowsMissingView) {
+  absl::Status s = RunDdl("DROP VIEW IF EXISTS ds.absent");
+  EXPECT_TRUE(s.ok()) << s;
 }
 
 // --- CREATE TABLE AS SELECT ----------------------------------------------

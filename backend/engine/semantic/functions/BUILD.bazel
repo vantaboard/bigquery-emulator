@@ -289,6 +289,7 @@ cc_test(
         ":dispatch",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:scan_eval",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

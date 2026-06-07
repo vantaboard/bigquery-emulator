@@ -76,7 +76,7 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQuerySelectStarRoundTripsViaDuckDb) {
 
 TEST_F(LocalCoordinatorEngineTest,
        ExecuteQueryUnsupportedFunctionRoutesToUnsupportedStub) {
-  // `APPROX_QUANTILES` is `unsupported` in `functions.yaml` (not
+  // `GENERATE_UUID` is `unsupported` in `functions.yaml` (not
   // planned). The classifier promotes the route to
   // `kUnsupported`, the coordinator dispatches to the
   // `UnsupportedExecutor` stub, and the stub returns UNIMPLEMENTED
@@ -87,7 +87,7 @@ TEST_F(LocalCoordinatorEngineTest,
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(
-      MakeRequest("SELECT APPROX_QUANTILES(id, 4) FROM ds.people"),
+      MakeRequest("SELECT GENERATE_UUID() FROM ds.people"),
       bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);

@@ -83,8 +83,7 @@ absl::Status RegisterString(::duckdb_connection conn) {
   if (auto s = internal::RunMacroDdl(
           conn,
           "CREATE OR REPLACE MACRO bq_split(value, delimiter := ',') AS "
-          "CASE WHEN value IS NULL THEN []::VARCHAR[] "
-          "WHEN delimiter IS NULL THEN NULL "
+          "CASE WHEN value IS NULL OR delimiter IS NULL THEN NULL "
           "ELSE string_split(value, delimiter) END");
       !s.ok()) {
     return s;

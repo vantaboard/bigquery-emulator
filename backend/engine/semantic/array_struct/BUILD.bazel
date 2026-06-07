@@ -36,6 +36,7 @@ cc_test(
         ":array_scan",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:scan_eval",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest_main",
