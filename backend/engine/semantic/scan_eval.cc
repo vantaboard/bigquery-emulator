@@ -30,10 +30,15 @@ void BindCorrelatedSubqueryColumns(
     const ::googlesql::ResolvedSubqueryExpr& node,
     const EvalContext& ctx,
     ColumnBindings& bindings) {
-  if (ctx.columns == nullptr || node.parameter_list_size() == 0) {
+  if (ctx.columns == nullptr) {
     return;
   }
   absl::flat_hash_map<std::string, ::googlesql::Value> outer_by_key;
+  if (ctx.columns_by_name != nullptr) {
+    for (const auto& [name, val] : *ctx.columns_by_name) {
+      outer_by_key[name] = val;
+    }
+  }
   auto lookup_outer_value =
       [&](const ::googlesql::ResolvedColumn& col) -> const ::googlesql::Value* {
     if (ctx.columns != nullptr) {
@@ -60,7 +65,10 @@ void BindCorrelatedSubqueryColumns(
         absl::StrCat(outer_col.table_name(), ".", outer_col.name());
     outer_by_key[qualified] = *val;
     outer_by_key[std::string(outer_col.name())] = *val;
-    bindings[outer_col.column_id()] = *val;
+    bindings.emplace(outer_col.column_id(), *val);
+  }
+  for (const auto& [col_id, val] : *ctx.columns) {
+    bindings.emplace(col_id, val);
   }
 
   struct CorrelatedBinder : public ::googlesql::ResolvedASTVisitor {
@@ -212,7 +220,12 @@ absl::StatusOr<Value> EvalSubqueryExpr(
     case ::googlesql::ResolvedSubqueryExpr::EXISTS:
       return Value::Bool(!rows.empty());
     case ::googlesql::ResolvedSubqueryExpr::SCALAR: {
-      if (rows.empty()) return Value::Null(node.type());
+      if (rows.empty()) {
+        if (node.type() != nullptr && node.type()->IsArray()) {
+          return Value::Array(node.type()->AsArray(), {});
+        }
+        return Value::Null(node.type());
+      }
       if (rows.size() > 1) {
         return MakeSemanticError(
             SemanticErrorReason::kInvalidArgument,

@@ -423,6 +423,40 @@ std::string RewriteIntegerTypeAlias(absl::string_view sql) {
   return out;
 }
 
+// STRUCT(..., CAST(21 AS INT64) AS field, ...) is rejected by the parser
+// (nested AS). BigQuery-utils expected rows use INTEGER literals in STRUCT.
+std::string RewriteStructInt64LiteralCasts(absl::string_view sql) {
+  std::string out(sql);
+  const std::string prefix = "CAST(";
+  size_t pos = 0;
+  while ((pos = out.find(prefix, pos)) != std::string::npos) {
+    size_t lit_start = pos + prefix.size();
+    size_t lit_end = lit_start;
+    while (lit_end < out.size()) {
+      const char ch = out[lit_end];
+      if (std::isdigit(static_cast<unsigned char>(ch)) || ch == '-' ||
+          ch == '+') {
+        ++lit_end;
+        continue;
+      }
+      break;
+    }
+    if (lit_end == lit_start) {
+      ++pos;
+      continue;
+    }
+    const std::string lit = out.substr(lit_start, lit_end - lit_start);
+    const std::string pattern = prefix + lit + " AS INT64) AS ";
+    if (out.compare(pos, pattern.size(), pattern) == 0) {
+      out.replace(pos, pattern.size(), lit + " AS ");
+      pos += lit.size() + 4;
+      continue;
+    }
+    ++pos;
+  }
+  return out;
+}
+
 std::string PreprocessFunctionBodyBase(absl::string_view sql) {
   std::string normalized;
   normalized.reserve(sql.size());
@@ -433,8 +467,9 @@ std::string PreprocessFunctionBodyBase(absl::string_view sql) {
       normalized.push_back(c);
     }
   }
-  return RewriteIntegerTypeAlias(RewriteFormatTypeLiteral(
-      RewriteAnonymousStructFieldAccess(StripBlockComments(normalized))));
+  return RewriteStructInt64LiteralCasts(
+      RewriteIntegerTypeAlias(RewriteFormatTypeLiteral(
+          RewriteAnonymousStructFieldAccess(StripBlockComments(normalized)))));
 }
 
 }  // namespace

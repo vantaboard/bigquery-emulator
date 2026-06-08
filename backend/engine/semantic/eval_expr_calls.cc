@@ -309,6 +309,26 @@ absl::StatusOr<Value> EvalCaseNoValueLazy(
   return EvalExpr(*call.argument_list(n - 1), ctx);
 }
 
+absl::StatusOr<Value> EvalCaseWithValueLazy(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  const int n = call.argument_list_size();
+  if (n < 2 || (n % 2) != 0) {
+    return absl::InvalidArgumentError(
+        "semantic: $case_with_value expects even argument count");
+  }
+  auto input = EvalExpr(*call.argument_list(0), ctx);
+  if (!input.ok()) return input.status();
+  for (int i = 1; i + 1 < n; i += 2) {
+    auto when = EvalExpr(*call.argument_list(i), ctx);
+    if (!when.ok()) return when.status();
+    if (input->is_null() || when->is_null()) continue;
+    if (input->Equals(*when)) {
+      return EvalExpr(*call.argument_list(i + 1), ctx);
+    }
+  }
+  return EvalExpr(*call.argument_list(n - 1), ctx);
+}
+
 absl::StatusOr<Value> EvalSqlUdfBody(
     const ::googlesql::ResolvedFunctionCall& call,
     const ::googlesql::ResolvedExpr& body,
@@ -415,6 +435,9 @@ absl::StatusOr<Value> EvalFunctionCall(
   }
   if (name == "$case_no_value") {
     return EvalCaseNoValueLazy(call, ctx);
+  }
+  if (name == "$case_with_value") {
+    return EvalCaseWithValueLazy(call, ctx);
   }
   if (name == "error" && call.argument_list_size() == 1) {
     auto msg = EvalExpr(*call.argument_list(0), ctx);

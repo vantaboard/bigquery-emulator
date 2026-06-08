@@ -355,7 +355,7 @@ std::string ValueToJsonText(const Value& v) {
     case ::googlesql::TYPE_STRING:
       return absl::StrCat("\"", absl::Utf8SafeCEscape(v.string_value()), "\"");
     case ::googlesql::TYPE_BYTES:
-      return absl::StrCat("\"", absl::Utf8SafeCEscape(v.bytes_value()), "\"");
+      return absl::StrCat("\"", absl::Base64Escape(v.bytes_value()), "\"");
     case ::googlesql::TYPE_JSON:
       return v.json_string();
     case ::googlesql::TYPE_ARRAY: {

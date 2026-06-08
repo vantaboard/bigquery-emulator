@@ -238,6 +238,41 @@ AS (
       << preprocessed;
 }
 
+TEST(SqlPreprocess, RewritesIntegerTypeAliasInQuery) {
+  const std::string sql =
+      "SELECT STRUCT(CAST(2.89 AS FLOAT64) AS t_value, CAST(21 AS INTEGER) AS "
+      "dof)";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_TRUE(absl::StrContains(out, "CAST(21 AS INT64)")) << out;
+  EXPECT_FALSE(absl::StrContains(out, "INTEGER")) << out;
+}
+
+TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
+  const std::string sql =
+      "SELECT TO_JSON_STRING(STRUCT(CAST(2.8957935572829476 AS FLOAT64) AS "
+      "t_value, CAST(21 AS INTEGER) AS dof))";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_TRUE(absl::StrContains(out, "2.8957935572829476 AS t_value")) << out;
+  EXPECT_TRUE(absl::StrContains(out, "21 AS dof")) << out;
+  EXPECT_FALSE(absl::StrContains(out, "CAST(21 AS")) << out;
+
+  ::googlesql::TypeFactory type_factory;
+  ::googlesql::SimpleCatalog catalog("test", &type_factory);
+  ::googlesql::LanguageOptions language;
+  language.EnableMaximumLanguageFeatures();
+  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
+  ASSERT_TRUE(catalog
+                  .AddBuiltinFunctionsAndTypes(
+                      ::googlesql::BuiltinFunctionOptions(language))
+                  .ok());
+  ::googlesql::AnalyzerOptions options = MakeOptions();
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
+  EXPECT_TRUE(::googlesql::AnalyzeStatement(
+                  out, options, &catalog, &type_factory, &output)
+                  .ok())
+      << out;
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

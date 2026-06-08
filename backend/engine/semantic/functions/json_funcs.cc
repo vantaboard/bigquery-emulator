@@ -8,8 +8,11 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/geog_funcs.h"
 #include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/json.h"
@@ -334,6 +337,12 @@ absl::StatusOr<Value> ParseJson(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> ToJsonString(const std::vector<Value>& args) {
+  if (args.size() == 1 && !args[0].is_null() &&
+      args[0].type_kind() == ::googlesql::TYPE_GEOGRAPHY) {
+    auto lit = GeographyTypeLiteralForFormat();
+    if (!lit.ok()) return lit.status();
+    return Value::String(absl::StrCat("\"", absl::Utf8SafeCEscape(*lit), "\""));
+  }
   return ToJson(args);
 }
 

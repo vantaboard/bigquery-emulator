@@ -33,13 +33,44 @@ void PopulateColumnNameBindings(
     const ColumnBindings& row,
     absl::flat_hash_map<std::string, ::googlesql::Value>& out) {
   out.clear();
+  scan = StripBarrierScans(scan);
   if (scan == nullptr) return;
+  if (scan->node_kind() == ::googlesql::RESOLVED_ARRAY_SCAN) {
+    const auto* array_scan = scan->GetAs<::googlesql::ResolvedArrayScan>();
+    for (int i = 0; i < array_scan->element_column_list_size(); ++i) {
+      const ::googlesql::ResolvedColumn& col =
+          array_scan->element_column_list(i);
+      auto it = row.find(col.column_id());
+      if (it == row.end()) continue;
+      out[std::string(col.name())] = it->second;
+      out[absl::StrCat(col.table_name(), ".", col.name())] = it->second;
+    }
+    if (array_scan->array_offset_column() != nullptr) {
+      const ::googlesql::ResolvedColumn& col =
+          array_scan->array_offset_column()->column();
+      auto it = row.find(col.column_id());
+      if (it != row.end()) {
+        out[std::string(col.name())] = it->second;
+        out[absl::StrCat(col.table_name(), ".", col.name())] = it->second;
+      }
+    }
+  }
   for (int i = 0; i < scan->column_list_size(); ++i) {
     const ::googlesql::ResolvedColumn& col = scan->column_list(i);
     auto it = row.find(col.column_id());
     if (it == row.end()) continue;
     out[std::string(col.name())] = it->second;
     out[absl::StrCat(col.table_name(), ".", col.name())] = it->second;
+  }
+  if (scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN) {
+    const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
+    if (project->input_scan() != nullptr) {
+      absl::flat_hash_map<std::string, Value> inner;
+      PopulateColumnNameBindings(project->input_scan(), row, inner);
+      for (auto& [name, val] : inner) {
+        out[name] = std::move(val);
+      }
+    }
   }
 }
 
@@ -68,12 +99,15 @@ absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     // output projection expressions.
     ColumnBindings row = input;
     row.reserve(row.size() + project.column_list_size());
+    absl::flat_hash_map<std::string, Value> by_name;
+    PopulateColumnNameBindings(project.input_scan(), input, by_name);
     for (int i = 0; i < project.column_list_size(); ++i) {
       const ::googlesql::ResolvedColumn& col = project.column_list(i);
       const int col_id = col.column_id();
       auto eit = expr_by_column_id.find(col_id);
       EvalContext row_ctx = ctx;
       row_ctx.columns = &input;
+      row_ctx.columns_by_name = &by_name;
       Value v;
       if (eit != expr_by_column_id.end()) {
         auto eval_v = EvalExpr(*eit->second, row_ctx);

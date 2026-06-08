@@ -176,6 +176,16 @@ absl::Status RouteClassifierVisitor::VisitResolvedArrayScan(
   return ::googlesql::ResolvedASTVisitor::VisitResolvedArrayScan(node);
 }
 
+absl::Status RouteClassifierVisitor::VisitResolvedCast(
+    const ::googlesql::ResolvedCast* node) {
+  if (node != nullptr &&
+      (node->format() != nullptr || node->time_zone() != nullptr ||
+       node->extended_cast() != nullptr || !node->type_modifiers().IsEmpty())) {
+    MaybePromote(Disposition::kSemanticExecutor, "ResolvedCast(extended)");
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedCast(node);
+}
+
 absl::Status RouteClassifierVisitor::VisitResolvedInsertStmt(
     const ::googlesql::ResolvedInsertStmt* node) {
   bool duckdb_insert_select = false;

@@ -316,6 +316,9 @@ absl::StatusOr<Value> EvalStringAgg(
   }
 
   if (rows.empty()) {
+    if (ignore_nulls) {
+      return Value::NullString();
+    }
     return Value::String("");
   }
   std::string out;
@@ -342,14 +345,24 @@ std::string GroupKeyFingerprint(const std::vector<Value>& keys) {
 
 absl::StatusOr<Value> EvalAggregateForRows(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
     EvalContext& ctx) {
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(agg.argument_list_size()));
+  absl::flat_hash_map<std::string, Value> row_columns_by_name;
   for (size_t r : row_indices) {
     EvalContext row_ctx = ctx;
     row_ctx.columns = &input_rows[r];
+    row_columns_by_name.clear();
+    PopulateColumnNameBindings(input_scan, input_rows[r], row_columns_by_name);
+    if (ctx.columns_by_name != nullptr) {
+      for (const auto& [name, val] : *ctx.columns_by_name) {
+        row_columns_by_name[name] = val;
+      }
+    }
+    row_ctx.columns_by_name = &row_columns_by_name;
     for (int a = 0; a < agg.argument_list_size(); ++a) {
       auto v = EvalExpr(*agg.argument_list(a), row_ctx);
       if (!v.ok()) return v.status();
@@ -417,7 +430,8 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
           SemanticErrorReason::kNotImplemented,
           "semantic: aggregate expression is not a function call");
     }
-    auto result = EvalAggregateForRows(*agg, input_rows, row_indices, ctx);
+    auto result = EvalAggregateForRows(
+        *agg, aggregate.input_scan(), input_rows, row_indices, ctx);
     if (!result.ok()) return result.status();
     out_row.emplace(cc->column().column_id(), *std::move(result));
   }
