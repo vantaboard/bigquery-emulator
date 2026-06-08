@@ -28,11 +28,12 @@ namespace scan_eval_internal {
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
 
-void PopulateColumnNameBindings(
+namespace {
+
+void AppendColumnNameBindings(
     const ::googlesql::ResolvedScan* scan,
     const ColumnBindings& row,
     absl::flat_hash_map<std::string, ::googlesql::Value>& out) {
-  out.clear();
   scan = StripBarrierScans(scan);
   if (scan == nullptr) return;
   if (scan->node_kind() == ::googlesql::RESOLVED_ARRAY_SCAN) {
@@ -65,13 +66,51 @@ void PopulateColumnNameBindings(
   if (scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN) {
     const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
     if (project->input_scan() != nullptr) {
-      absl::flat_hash_map<std::string, Value> inner;
-      PopulateColumnNameBindings(project->input_scan(), row, inner);
-      for (auto& [name, val] : inner) {
-        out[name] = std::move(val);
-      }
+      AppendColumnNameBindings(project->input_scan(), row, out);
     }
   }
+}
+
+}  // namespace
+
+void PopulateColumnNameBindingsDeep(
+    const ::googlesql::ResolvedScan* scan,
+    const ColumnBindings& row,
+    absl::flat_hash_map<std::string, ::googlesql::Value>& out) {
+  out.clear();
+  scan = StripBarrierScans(scan);
+  while (scan != nullptr) {
+    AppendColumnNameBindings(scan, row, out);
+    switch (scan->node_kind()) {
+      case ::googlesql::RESOLVED_PROJECT_SCAN:
+        scan = StripBarrierScans(
+            scan->GetAs<::googlesql::ResolvedProjectScan>()->input_scan());
+        break;
+      case ::googlesql::RESOLVED_FILTER_SCAN:
+        scan = StripBarrierScans(
+            scan->GetAs<::googlesql::ResolvedFilterScan>()->input_scan());
+        break;
+      case ::googlesql::RESOLVED_AGGREGATE_SCAN:
+        scan = StripBarrierScans(
+            scan->GetAs<::googlesql::ResolvedAggregateScan>()->input_scan());
+        break;
+      case ::googlesql::RESOLVED_ARRAY_SCAN:
+        scan = StripBarrierScans(
+            scan->GetAs<::googlesql::ResolvedArrayScan>()->input_scan());
+        break;
+      default:
+        scan = nullptr;
+        break;
+    }
+  }
+}
+
+void PopulateColumnNameBindings(
+    const ::googlesql::ResolvedScan* scan,
+    const ColumnBindings& row,
+    absl::flat_hash_map<std::string, ::googlesql::Value>& out) {
+  out.clear();
+  AppendColumnNameBindings(scan, row, out);
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(

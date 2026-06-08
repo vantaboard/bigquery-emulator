@@ -243,8 +243,9 @@ TEST(SqlPreprocess, RewritesIntegerTypeAliasInQuery) {
       "SELECT STRUCT(CAST(2.89 AS FLOAT64) AS t_value, CAST(21 AS INTEGER) AS "
       "dof)";
   const std::string out = PreprocessSqlForAnalyzer(sql);
-  EXPECT_TRUE(absl::StrContains(out, "CAST(21 AS INT64)")) << out;
+  EXPECT_TRUE(absl::StrContains(out, "21 AS dof")) << out;
   EXPECT_FALSE(absl::StrContains(out, "INTEGER")) << out;
+  EXPECT_FALSE(absl::StrContains(out, "CAST(21 AS")) << out;
 }
 
 TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
@@ -252,7 +253,9 @@ TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
       "SELECT TO_JSON_STRING(STRUCT(CAST(2.8957935572829476 AS FLOAT64) AS "
       "t_value, CAST(21 AS INTEGER) AS dof))";
   const std::string out = PreprocessSqlForAnalyzer(sql);
-  EXPECT_TRUE(absl::StrContains(out, "2.8957935572829476 AS t_value")) << out;
+  EXPECT_TRUE(
+      absl::StrContains(out, "CAST(2.8957935572829476 AS FLOAT64) AS t_value"))
+      << out;
   EXPECT_TRUE(absl::StrContains(out, "21 AS dof")) << out;
   EXPECT_FALSE(absl::StrContains(out, "CAST(21 AS")) << out;
 

@@ -356,7 +356,8 @@ absl::StatusOr<Value> EvalAggregateForRows(
     EvalContext row_ctx = ctx;
     row_ctx.columns = &input_rows[r];
     row_columns_by_name.clear();
-    PopulateColumnNameBindings(input_scan, input_rows[r], row_columns_by_name);
+    PopulateColumnNameBindingsDeep(
+        input_scan, input_rows[r], row_columns_by_name);
     if (ctx.columns_by_name != nullptr) {
       for (const auto& [name, val] : *ctx.columns_by_name) {
         row_columns_by_name[name] = val;

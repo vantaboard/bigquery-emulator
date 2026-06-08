@@ -32,6 +32,10 @@ void PopulateColumnNameBindings(
     const ::googlesql::ResolvedScan* scan,
     const ColumnBindings& row,
     absl::flat_hash_map<std::string, ::googlesql::Value>& out);
+void PopulateColumnNameBindingsDeep(
+    const ::googlesql::ResolvedScan* scan,
+    const ColumnBindings& row,
+    absl::flat_hash_map<std::string, ::googlesql::Value>& out);
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
     const std::vector<ColumnBindings>& input_rows,

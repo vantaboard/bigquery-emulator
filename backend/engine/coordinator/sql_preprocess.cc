@@ -412,9 +412,11 @@ std::string RewriteIntegerTypeAlias(absl::string_view sql) {
             i + lit.size() >= sql.size() || !IsIdentChar(sql[i + lit.size()]);
         return before_ok && after_ok;
       };
-      if (match_ci("integer")) {
+      static constexpr absl::string_view kIntegerAlias = "integer";
+      if (match_ci(kIntegerAlias)) {
         out.append("INT64");
-        i += 7;
+        // for-loop ++i must land on the first char after the matched alias.
+        i += kIntegerAlias.size() - 1;
         continue;
       }
     }
@@ -446,10 +448,19 @@ std::string RewriteStructInt64LiteralCasts(absl::string_view sql) {
       continue;
     }
     const std::string lit = out.substr(lit_start, lit_end - lit_start);
-    const std::string pattern = prefix + lit + " AS INT64) AS ";
-    if (out.compare(pos, pattern.size(), pattern) == 0) {
-      out.replace(pos, pattern.size(), lit + " AS ");
-      pos += lit.size() + 4;
+    bool rewritten = false;
+    for (absl::string_view type_suffix :
+         {absl::string_view("INT64"), absl::string_view("INTEGER")}) {
+      const std::string pattern =
+          absl::StrCat(prefix, lit, " AS ", type_suffix, ") AS ");
+      if (out.compare(pos, pattern.size(), pattern) == 0) {
+        out.replace(pos, pattern.size(), absl::StrCat(lit, " AS "));
+        pos += lit.size() + 4;
+        rewritten = true;
+        break;
+      }
+    }
+    if (rewritten) {
       continue;
     }
     ++pos;
