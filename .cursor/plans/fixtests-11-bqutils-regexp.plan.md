@@ -7,19 +7,19 @@ isProject: true
 todos:
   - id: repro-diff
     content: Run the 16 string/regexp fixtures; diff cw_regexp_instr_3 against the passing cw_regexp_instr_2 and group the rest by missing primitive (unicode class, translate, instr, split, NVP, URL).
-    status: pending
+    status: completed
   - id: unicode-classes
     content: Add Unicode property classes (\p{P}, \p{S}, etc.) in REGEXP_EXTRACT_ALL / regexp matching (RE2 config) for initcap-style fixtures.
-    status: pending
+    status: cancelled
   - id: string-builtins
     content: Close gaps in cw_otranslate, cw_initcap, cw_split_part_delimstr_idx, cw_instr4, cw_substrb, cw_find_in_list, cw_comparable_format_varchar_t, NVP (cw_td_nvp, cw_nvp2json4), and URL parsing (url_trim_query).
-    status: pending
+    status: completed
   - id: regexp-instr
     content: Fix cw_regexp_instr_3 and the cw_disjoint_*_regexp / cw_overlapping_partition_by_regexp family.
-    status: pending
+    status: completed
   - id: triage
     content: Re-sync + triage; move newly-passing fixtures to passing/; update index count and docs.
-    status: pending
+    status: completed
 ---
 
 # FixTests 11 — bqutils regexp / unicode / string

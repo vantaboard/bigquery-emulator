@@ -64,6 +64,7 @@ Updated by the parent agent after each subagent returns.
 | 07 stored-procedures | done | +4 | `passing/stored_procedures/`: get_next_ids, linear_regression, bh_multiple_tests, chi_square (simplified bodies where noted) |
 | 08 views | done | — | `passing/views/migration/teradata/sys_calendar.yaml` |
 | 09 promote-to-gate | done | 80 | CI job `bqutils` in conformance.yml; pin + docs; fixtests-08 ANY TYPE +6; fixtests-09 bytes/bitwise +8; fixtests-10 RANGE +6 (80/81 runner pass; 7 legacy fails in passing/) |
+| fixtests-11 regexp/string | done | 80→95 | TRANSLATE, ARRAY_TO_STRING, CAST (STRING→BYTES, ARRAY/STRUCT), REGEXP_EXTRACT_ALL null→[]; 13/16 plan fixtures promoted (+ cw_xml_element); blockers: `cw_disjoint_partition_by_regexp`, `url_trim_query` (crash), `migration/redshift/translate` (correlated UNNEST) |
 | 10 dbt-bigquery | done (early phases) | n/a | scaffold + sync + task; pytest triage deferred |
 
 ## Dependency graph

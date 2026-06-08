@@ -329,6 +329,39 @@ absl::StatusOr<Value> Replace(const std::vector<Value>& args) {
   return Value::String(std::move(out));
 }
 
+absl::StatusOr<Value> Translate(const std::vector<Value>& args) {
+  if (args.size() != 3) {
+    return absl::InvalidArgumentError(
+        "semantic: TRANSLATE expects three arguments");
+  }
+  if (AnyNull(args)) {
+    if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
+      return Value::NullBytes();
+    }
+    return Value::NullString();
+  }
+  absl::Status error;
+  std::string out;
+  if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
+    if (!::googlesql::functions::TranslateBytes(args[0].bytes_value(),
+                                                args[1].bytes_value(),
+                                                args[2].bytes_value(),
+                                                &out,
+                                                &error)) {
+      return error;
+    }
+    return Value::Bytes(std::move(out));
+  }
+  if (!::googlesql::functions::TranslateUtf8(args[0].string_value(),
+                                             args[1].string_value(),
+                                             args[2].string_value(),
+                                             &out,
+                                             &error)) {
+    return error;
+  }
+  return Value::String(std::move(out));
+}
+
 }  // namespace functions
 }  // namespace semantic
 }  // namespace engine

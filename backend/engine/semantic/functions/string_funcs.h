@@ -51,6 +51,7 @@ absl::StatusOr<Value> Rtrim(const std::vector<Value>& args);
 absl::StatusOr<Value> Lpad(const std::vector<Value>& args);
 absl::StatusOr<Value> Rpad(const std::vector<Value>& args);
 absl::StatusOr<Value> Replace(const std::vector<Value>& args);
+absl::StatusOr<Value> Translate(const std::vector<Value>& args);
 absl::StatusOr<Value> Reverse(const std::vector<Value>& args);
 absl::StatusOr<Value> StartsWith(const std::vector<Value>& args);
 absl::StatusOr<Value> EndsWith(const std::vector<Value>& args);

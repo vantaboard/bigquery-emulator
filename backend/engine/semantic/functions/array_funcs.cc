@@ -6,6 +6,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/generate_array.h"
@@ -249,6 +250,46 @@ absl::StatusOr<Value> ArrayAtOrdinal(const std::vector<Value>& args,
                              "semantic: array ordinal out of bounds");
   }
   return args[0].element(static_cast<int>(idx));
+}
+
+absl::StatusOr<Value> ArrayToString(const std::vector<Value>& args) {
+  if (args.size() < 2 || args.size() > 3) {
+    return absl::InvalidArgumentError(
+        "semantic: ARRAY_TO_STRING expects two or three arguments");
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::NullString();
+  }
+  auto at = ExpectArrayType(args[0], "ARRAY_TO_STRING");
+  if (!at.ok()) return at.status();
+  if (args[1].type_kind() != ::googlesql::TYPE_STRING) {
+    return absl::InvalidArgumentError(
+        "semantic: ARRAY_TO_STRING delimiter must be STRING");
+  }
+  const absl::string_view delimiter = args[1].string_value();
+  const bool replace_nulls = args.size() == 3;
+  if (replace_nulls && args[2].is_null()) {
+    return Value::NullString();
+  }
+  const absl::string_view null_replacement =
+      replace_nulls ? args[2].string_value() : absl::string_view();
+  std::vector<std::string> parts;
+  parts.reserve(args[0].num_elements());
+  for (int i = 0; i < args[0].num_elements(); ++i) {
+    const Value& elem = args[0].element(i);
+    if (elem.is_null()) {
+      if (replace_nulls) {
+        parts.emplace_back(null_replacement);
+      }
+      continue;
+    }
+    if (elem.type_kind() != ::googlesql::TYPE_STRING) {
+      return absl::InvalidArgumentError(
+          "semantic: ARRAY_TO_STRING expects ARRAY<STRING>");
+    }
+    parts.emplace_back(elem.string_value());
+  }
+  return Value::String(absl::StrJoin(parts, delimiter));
 }
 
 }  // namespace functions

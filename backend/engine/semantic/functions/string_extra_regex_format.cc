@@ -87,6 +87,9 @@ absl::StatusOr<Value> RegexpExtractAll(const std::vector<Value>& args,
         "semantic: REGEXP_EXTRACT_ALL expects 2 to 4 arguments");
   }
   if (args[0].is_null() || args[1].is_null()) {
+    if (return_type != nullptr && return_type->IsArray()) {
+      return Value::Array(return_type->AsArray(), {});
+    }
     return Value::Null(return_type);
   }
   auto re = MakeRegExpForValue(args[1]);

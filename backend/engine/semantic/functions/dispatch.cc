@@ -63,6 +63,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "log") return Log(args);
   if (name == "ln") return Log(args);
   if (name == "replace") return Replace(args);
+  if (name == "translate") return Translate(args);
   if (name == "reverse") return Reverse(args);
   if (name == "starts_with") return StartsWith(args);
   if (name == "ends_with") return EndsWith(args);
@@ -177,6 +178,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
     return ArrayConcat(args, return_type);
   }
   if (name == "array_length") return ArrayLength(args);
+  if (name == "array_to_string") return ArrayToString(args);
   if (name == "array_reverse") {
     return ArrayReverse(args, return_type);
   }

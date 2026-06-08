@@ -311,7 +311,7 @@ to_code_points: semantic_executor
 initcap: semantic_executor
 repeat: duckdb_native duckdb_name=REPEAT
 right: duckdb_native duckdb_name=RIGHT
-translate: duckdb_native duckdb_name=TRANSLATE
+translate: semantic_executor
 farm_fingerprint: duckdb_native duckdb_name=hash
 rand: duckdb_native duckdb_name=random
 generate_date_array: semantic_executor
@@ -482,7 +482,7 @@ isnull: duckdb_udf duckdb_name=bq_isnull
 
 # --- Array -------------------------------------------------------------
 array_length: duckdb_native duckdb_name=LEN
-array_to_string: duckdb_native duckdb_name=ARRAY_TO_STRING
+array_to_string: semantic_executor
 array_concat: duckdb_native duckdb_name=ARRAY_CONCAT
 array_reverse: duckdb_native duckdb_name=ARRAY_REVERSE
 generate_array: duckdb_native duckdb_name=GENERATE_SERIES

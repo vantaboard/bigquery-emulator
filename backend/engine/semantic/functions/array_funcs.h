@@ -26,6 +26,7 @@ absl::StatusOr<Value> ArrayAtOffset(const std::vector<Value>& args,
 absl::StatusOr<Value> ArrayAtOrdinal(const std::vector<Value>& args,
                                      const ::googlesql::Type* return_type,
                                      bool safe);
+absl::StatusOr<Value> ArrayToString(const std::vector<Value>& args);
 
 }  // namespace functions
 }  // namespace semantic
