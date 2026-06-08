@@ -153,6 +153,14 @@ class TranspilerTest : public ::testing::Test {
         });
     catalog_->AddOwnedTable(std::move(wide));
 
+    auto org = std::make_unique<::googlesql::SimpleTable>(
+        "org",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"employee", type_factory_->get_string()},
+            {"manager", type_factory_->get_string()},
+        });
+    catalog_->AddOwnedTable(std::move(org));
+
     auto transactions = std::make_unique<::googlesql::SimpleTable>(
         "transactions",
         std::vector<::googlesql::SimpleTable::NameAndType>{

@@ -42,7 +42,7 @@ namespace {
 // verbatim so we don't drift name-resolution / feature toggles
 // between the legacy DuckDBEngine path (deleted at the end of this
 // plan) and the new coordinator.
-::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
+::googlesql::AnalyzerOptions MakeAnalyzerOptionsBase() {
   ::googlesql::LanguageOptions language;
   language.EnableMaximumLanguageFeatures();
   // WITH(<name> AS <expr>, ...) <body> scalar bindings (GA feature).
@@ -108,15 +108,21 @@ absl::Status RegisterSystemVariablesOnOptions(
   return semantic::RegisterAnalyzerSystemVariables(type_factory, options);
 }
 
-// `MakeAnalyzerOptions` plus the all-statement-kind allowlist
+// `MakeAnalyzerOptionsBase` plus the all-statement-kind allowlist
 // DML / DDL paths need.
 ::googlesql::AnalyzerOptions MakeAnalyzerOptionsAllStatements() {
-  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptionsBase();
   options.mutable_language()->SetSupportsAllStatementKinds();
   return options;
 }
 
 }  // namespace
+
+::googlesql::AnalyzerOptions MakeCoordinatorAnalyzerOptions(
+    bool all_statements) {
+  return all_statements ? MakeAnalyzerOptionsAllStatements()
+                        : MakeAnalyzerOptionsBase();
+}
 
 absl::Status ValidateRequest(const QueryRequest& request,
                              const ::googlesql::Catalog* catalog) {
@@ -187,8 +193,7 @@ absl::StatusOr<::googlesql::AnalyzerOptions> BuildAnalyzerOptionsForRequest(
         "LocalCoordinatorEngine: catalog type_factory is null");
   }
   ::googlesql::AnalyzerOptions options =
-      all_statements ? MakeAnalyzerOptionsAllStatements()
-                     : MakeAnalyzerOptions();
+      MakeCoordinatorAnalyzerOptions(all_statements);
   absl::Status param_status =
       PopulateParameterOptions(request, options, type_factory);
   if (!param_status.ok()) return param_status;

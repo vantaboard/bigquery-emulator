@@ -298,30 +298,68 @@ std::string Transpiler::EmitRecursiveScan(
   // downstream code can pick up the shape later.
   if (node->recursion_depth_modifier() != nullptr) return "";
 
-  // Build the anchor (non-recursive) arm. Each item's
-  // `output_column_list[j]` is the source-column ResolvedColumn the
-  // analyzer produces; we rename it to the per-CTE anchor name so
-  // the recursive term + body can reference the CTE by a stable
-  // column name regardless of the per-arm ResolvedColumn ids.
+  // Build one recursive-CTE arm. Each item's `output_column_list[j]`
+  // names the recursive scan's `column_list(j)` CTE column; the
+  // child scan may still emit the analyzer's internal `$colN` aliases.
+  // Resolve the child emit name (by `column_id`, then position) before
+  // projecting onto the CTE schema name, then rename those CTE columns
+  // onto the stable anchor names (`_cte_<idx>`) DuckDB's
+  // `WITH RECURSIVE` column list expects.
+  auto child_emit_column_name = [](const ::googlesql::ResolvedScan* child,
+                                   const ::googlesql::ResolvedColumn& out_col,
+                                   int index) -> std::string {
+    if (child != nullptr) {
+      for (int k = 0; k < child->column_list_size(); ++k) {
+        if (child->column_list(k).column_id() == out_col.column_id()) {
+          return std::string(child->column_list(k).name());
+        }
+      }
+      if (index >= 0 && index < child->column_list_size()) {
+        return std::string(child->column_list(index).name());
+      }
+    }
+    return std::string(out_col.name());
+  };
   auto build_arm =
       [&](const ::googlesql::ResolvedSetOperationItem* item) -> std::string {
     if (item == nullptr || item->scan() == nullptr) return "";
     if (item->output_column_list_size() != node->column_list_size()) {
       return "";
     }
-    std::string inner = EmitScan(item->scan());
+    const ::googlesql::ResolvedScan* child = item->scan();
+    std::string inner = EmitScan(child);
     if (inner.empty()) return "";
-    std::vector<std::string> projs;
-    projs.reserve(node->column_list_size());
+    std::vector<std::string> normalized;
+    normalized.reserve(node->column_list_size());
     for (int j = 0; j < node->column_list_size(); ++j) {
-      const ::googlesql::ResolvedColumn& src = item->output_column_list(j);
-      std::string src_q = internal::QuoteIdent(src.name());
-      std::string dst_q = internal::QuoteIdent(ctx.column_names[j]);
-      projs.push_back(src_q == dst_q ? src_q
-                                     : absl::StrCat(src_q, " AS ", dst_q));
+      const ::googlesql::ResolvedColumn& out_col = item->output_column_list(j);
+      const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
+      const std::string src_name = child_emit_column_name(child, out_col, j);
+      std::string src_q = internal::QuoteIdent(src_name);
+      if (src_name == cte_col.name()) {
+        normalized.push_back(std::move(src_q));
+      } else {
+        normalized.push_back(
+            absl::StrCat(src_q, " AS ", internal::QuoteIdent(cte_col.name())));
+      }
     }
-    return absl::StrCat(
-        "SELECT ", absl::StrJoin(projs, ", "), " FROM (", inner, ")");
+    std::string normalized_sql = absl::StrCat(
+        "SELECT ", absl::StrJoin(normalized, ", "), " FROM (", inner, ")");
+    std::vector<std::string> anchor_projs;
+    anchor_projs.reserve(node->column_list_size());
+    for (int j = 0; j < node->column_list_size(); ++j) {
+      const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
+      std::string src_q = internal::QuoteIdent(cte_col.name());
+      std::string dst_q = internal::QuoteIdent(ctx.column_names[j]);
+      anchor_projs.push_back(cte_col.name() == ctx.column_names[j]
+                                 ? src_q
+                                 : absl::StrCat(src_q, " AS ", dst_q));
+    }
+    return absl::StrCat("SELECT ",
+                        absl::StrJoin(anchor_projs, ", "),
+                        " FROM (",
+                        normalized_sql,
+                        ")");
   };
 
   std::string anchor = build_arm(node->non_recursive_term());

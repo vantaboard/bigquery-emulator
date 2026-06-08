@@ -316,7 +316,17 @@ std::string Transpiler::EmitProjectScan(
       }
       if (shadowed_by_computed) continue;
       if (input_id_aliases) {
-        projections.push_back(internal::JoinColumnIdAlias(col.column_id()));
+        std::string id_alias = internal::JoinColumnIdAlias(col.column_id());
+        std::string quoted = internal::QuoteIdent(col.name());
+        // Mixed passthrough + computed projections need stable
+        // `ResolvedColumn::name()` aliases so set-op / recursive-CTE
+        // arms can reference the child output by name (see
+        // `EmitRecursiveScan`'s `output_column_list` contract).
+        if (node->expr_list_size() > 0 && id_alias != quoted) {
+          projections.push_back(absl::StrCat(id_alias, " AS ", quoted));
+        } else {
+          projections.push_back(std::move(id_alias));
+        }
       } else {
         projections.push_back(internal::QuoteIdent(col.name()));
       }

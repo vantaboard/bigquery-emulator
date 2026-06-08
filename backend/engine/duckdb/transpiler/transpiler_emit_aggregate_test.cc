@@ -316,6 +316,31 @@ TEST_F(TranspilerTest, EmitUnpivotScanExcludeNullsByDefault) {
       << "expected EXCLUDE NULLS filter; got: " << sql;
 }
 
+TEST_F(TranspilerTest, EmitWithScanRecursiveHierarchyTraversal) {
+  // Mirrors `conformance/fixtures/advanced_relational/recursive_cte.yaml`:
+  // anchor arm projects a literal depth column (`0 AS depth`) whose
+  // analyzer name is a synthesized `$colN`; the recursive arm joins
+  // the CTE ref back to `org` and increments depth.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "WITH RECURSIVE descents AS ("
+      "  SELECT employee, 0 AS depth FROM org WHERE manager IS NULL"
+      "  UNION ALL"
+      "  SELECT org.employee, depth + 1"
+      "    FROM descents JOIN org AS org ON org.manager = descents.employee"
+      ")"
+      "SELECT employee, depth FROM descents ORDER BY depth, employee");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  EXPECT_NE(sql.find("WITH RECURSIVE \"descents\""), std::string::npos) << sql;
+  EXPECT_NE(sql.find("\"_cte_0\""), std::string::npos) << sql;
+  EXPECT_NE(sql.find("\"_cte_1\""), std::string::npos) << sql;
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos) << sql;
+  EXPECT_NE(sql.find("FROM \"descents\""), std::string::npos) << sql;
+  EXPECT_NE(sql.find("\"employee\" AS \"_cte_0\""), std::string::npos) << sql;
+  EXPECT_NE(sql.find("\"depth\" AS \"_cte_1\""), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, EmitWithScanRecursiveLowersToWithRecursive) {
   // `docs/ENGINE_POLICY.md` Family 4. A `WITH
   // RECURSIVE t AS (SELECT 1 AS n UNION ALL SELECT n FROM t) ...`

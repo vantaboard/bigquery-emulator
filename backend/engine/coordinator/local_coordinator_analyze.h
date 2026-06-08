@@ -26,6 +26,12 @@ namespace backend {
 namespace engine {
 namespace coordinator {
 
+// Shared analyzer options for the coordinator and the gRPC frontend.
+// Keeps rewrite toggles (PIVOT / UNPIVOT / pipe DDL) and literal-cast
+// folding aligned so route classification matches execution.
+::googlesql::AnalyzerOptions MakeCoordinatorAnalyzerOptions(
+    bool all_statements = false);
+
 absl::Status ValidateRequest(const QueryRequest& request,
                              const ::googlesql::Catalog* catalog);
 

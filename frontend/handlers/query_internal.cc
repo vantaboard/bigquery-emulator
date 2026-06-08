@@ -92,6 +92,11 @@ namespace internal {
   // returns false even on parse errors.
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
   options.set_attach_error_location_payload(true);
+  // Keep the route classifier aligned with `LocalCoordinatorEngine`:
+  // raw `ResolvedPivotScan` / `ResolvedUnpivotScan` nodes disposition
+  // to `duckdb_rewrite` (see `MakeCoordinatorAnalyzerOptions`).
+  options.disable_rewrite(::googlesql::REWRITE_PIVOT);
+  options.disable_rewrite(::googlesql::REWRITE_UNPIVOT);
   options.CreateDefaultArenasIfNotSet();
   return options;
 }
