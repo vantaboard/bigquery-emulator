@@ -1,0 +1,89 @@
+# Shared bring-up for thirdparty-samples live lanes: engine artifact,
+# prebuilt runtime image, optional fake-gcs seed, docker compose emulator.
+#
+# Callers run `task thirdparty:<suite>` with THIRDPARTY_SKIP_BUILD=1 so
+# emulator-up does not rebuild the image the prior step already tagged.
+
+name: Set up thirdparty docker emulator
+description: |
+  Stage engine-binaries, build bigquery-emulator:local (ENGINE_SOURCE=prebuilt),
+  seed fake-gcs when requested, and poll /healthz.
+
+inputs:
+  run-id:
+    description: build-engine workflow run id (workflow_run consumers).
+    required: false
+    default: ""
+  head-sha:
+    description: Commit SHA for artifact lookup.
+    required: false
+    default: ""
+  seed-fake-gcs:
+    description: Run task testdata:fake-gcs-sync before fake-gcs-up.
+    required: false
+    default: "true"
+  github-token:
+    description: Token with actions:read for artifact download.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Task
+      uses: go-task/setup-task@v2
+      with:
+        version: 3.x
+        repo-token: ${{ inputs.github-token }}
+
+    - name: Set up engine from build-engine artifact
+      uses: ./.github/actions/setup-engine-from-artifact
+      with:
+        run-id: ${{ inputs.run-id }}
+        head-sha: ${{ inputs.head-sha }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Build runtime image (ENGINE_SOURCE=prebuilt)
+      shell: bash
+      run: |
+        set -euo pipefail
+        gsq_args=()
+        if [ -n "${GOOGLESQL_PREBUILT_URL:-}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256:-}" ]; then
+          gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
+          gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+        fi
+        docker build \
+          --build-arg ENGINE_SOURCE=prebuilt \
+          "${gsq_args[@]}" \
+          -t bigquery-emulator:local \
+          .
+      env:
+        GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+        GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+
+    - name: Seed fake-gcs testdata
+      if: inputs.seed-fake-gcs == 'true'
+      shell: bash
+      run: task testdata:fake-gcs-sync
+
+    - name: Bring up emulator via docker compose
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker compose up -d bigquery-emulator
+        for _ in $(seq 1 120); do
+          if curl -fsS -o /dev/null http://localhost:9050/healthz 2>/dev/null; then
+            echo "emulator ready"
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "emulator did not become ready on :9050" >&2
+        exit 1
+
+    - name: Bring up fake-gcs (thirdparty profile)
+      if: inputs.seed-fake-gcs == 'true'
+      shell: bash
+      run: task thirdparty:fake-gcs-up
+      env:
+        THIRDPARTY_SKIP_BUILD: "1"

@@ -152,6 +152,139 @@ jobs:
         if: always()
         run: docker compose down -v --remove-orphans 2>/dev/null || true
 
+  python-bigquery-tests-live:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: python-bigquery-tests (live emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
+      THIRDPARTY_FRESH_VOLUME: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up thirdparty docker emulator
+        uses: ./.github/actions/setup-thirdparty-docker-emulator
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Run thirdparty:python-bigquery-tests (nox snippets)
+        run: task thirdparty:python-bigquery-tests
+        env:
+          BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
+          PYTHON_SAMPLES_PYTHON: "3.13"
+
+      - name: Stop emulator
+        if: always()
+        run: docker compose down -v --remove-orphans 2>/dev/null || true
+
+  node-bigquery-tests-live:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: node-bigquery-tests (live emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
+      THIRDPARTY_FRESH_VOLUME: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: third_party/node-bigquery-tests/package-lock.json
+
+      - name: Set up thirdparty docker emulator
+        uses: ./.github/actions/setup-thirdparty-docker-emulator
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Run thirdparty:node-bigquery-tests (Mocha)
+        run: task thirdparty:node-bigquery-tests
+        env:
+          BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
+
+      - name: Stop emulator
+        if: always()
+        run: docker compose down -v --remove-orphans 2>/dev/null || true
+
+  python-bigquery-dataframes-snippet-gate-live:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: python-bigquery-dataframes snippet gate (live emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
+      THIRDPARTY_FRESH_VOLUME: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up thirdparty docker emulator
+        uses: ./.github/actions/setup-thirdparty-docker-emulator
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Run thirdparty:python-bigquery-dataframes-snippet-gate
+        run: task thirdparty:python-bigquery-dataframes-snippet-gate
+        env:
+          BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
+          DATAFRAME_SAMPLES_PYTHON: "3.12"
+
+      - name: Stop emulator
+        if: always()
+        run: docker compose down -v --remove-orphans 2>/dev/null || true
+
   golang-bigquery-tests-live:
     name: golang-bigquery-tests (live emulator)
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_live == 'true' }}
@@ -230,10 +363,12 @@ jobs:
           tail -200 gateway.log >&2 || true
           exit 1
 
+      - name: Seed fake-gcs testdata
+        run: task testdata:fake-gcs-sync
+
       - name: Start fake-gcs-server (seeded testdata)
         run: |
           set -euo pipefail
-          mkdir -p testdata/fake-gcs-data
           docker compose --profile thirdparty up -d fake-gcs-server
 
       - name: Run thirdparty:golang-bigquery-tests (live)

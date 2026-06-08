@@ -384,17 +384,30 @@ Setting `JAVA_BQ_SKIP_TESTS=true` reverts to the legacy compile-only
 posture (`-DskipTests=true -Dmaven.test.skip=true`); useful when you
 just want the libraries-bom drift check.
 
-The CI job
-[`java-bigquery-tests-live`](../.github/workflows/thirdparty-samples.yml)
-exercises the same fan-out on every push/PR with Temurin 17. Until the
-shallow-emulators work lands, the job tolerates the expected-fail gRPC
-ITs via `JAVA_BQ_ALLOW_FAILING_ITS` (comma-separated Failsafe class
-names). The same allowlist is wired in
-[`taskfiles/thirdparty.yml`](../taskfiles/thirdparty.yml): when every
-failing IT in a module is on the list, that module is treated as OK.
-`QueryMaterializedViewIT` is **not** allowlisted — it exercises REST
-materialized-view schema inference and must pass once the gateway bug
-is fixed.
+The [`thirdparty-samples`](../.github/workflows/thirdparty-samples.yml)
+workflow (triggered by `build-engine` via `workflow_run`) now gates:
+
+| Job | Task | Notes |
+|-----|------|-------|
+| `java-bigquery-tests-live` | `task thirdparty:java-bigquery-tests` | Temurin 17; honest gate via `scripts/java_bq_ci_gate.sh` |
+| `python-bigquery-tests-live` | `task thirdparty:python-bigquery-tests` | nox `snippets`; fake-gcs seeded in CI |
+| `node-bigquery-tests-live` | `task thirdparty:node-bigquery-tests` | Mocha; fake-gcs seeded in CI |
+| `python-bigquery-dataframes-snippet-gate-live` | `task thirdparty:python-bigquery-dataframes-snippet-gate` | 4 allowlisted smokes |
+
+Shared bring-up lives in
+[`.github/actions/setup-thirdparty-docker-emulator`](../.github/actions/setup-thirdparty-docker-emulator/action.yml)
+(engine artifact + `ENGINE_SOURCE=prebuilt` image + `task testdata:fake-gcs-sync`).
+
+Until shallow gRPC backends land, the Java job tolerates expected-fail ITs via
+`JAVA_BQ_ALLOW_FAILING_ITS` (comma-separated Failsafe class names). The same
+allowlist is wired in [`taskfiles/thirdparty.yml`](../taskfiles/thirdparty.yml).
+`QueryMaterializedViewIT` is **not** allowlisted and passes against the
+stabilized engine (2026-06-08).
+
+**Local bar (2026-06-08):** node **green** (107 passing); python **1** failure
+(`test_query_script` / `SET`); golang **1** failure (public-data timestamp
+cast); bigframes gate **3/4**; java **OK** with allowlist. See
+[`docs/dev/fixtests-triage.md`](../docs/dev/fixtests-triage.md).
 
 ### Emulator wiring
 
@@ -583,12 +596,21 @@ In-tree **dbt-bigquery functional pytest** lane at
 [`dbt-bigquery-tests`](dbt-bigquery-tests) (plan 10; deferred from the
 bigquery-utils conformance work).
 
-**Status: scaffold + on-demand sync.** The committed tree carries emulator
-wiring (`conftest.py`, `emulator_bootstrap.py`, `emulator_pytest_skip.py`,
+**Status: scaffold + on-demand sync; manual lane only (not in `task thirdparty`
+aggregator or CI).** The committed tree carries emulator wiring
+(`conftest.py`, `emulator_bootstrap.py`, `emulator_pytest_skip.py`,
 `profiles/emulator/profiles.yml`, `requirements-test.txt`, `upstream_ref.txt`,
-`FEASIBILITY.md`) but upstream `tests/**/*.py` is synced on demand.
+`FEASIBILITY.md`) and functional tests after sync.
 `task thirdparty:dbt-bigquery-tests` fails fast when
 `tests/functional/adapter/test_basic.py` is missing.
+
+**Pass bar (plan 14 triage, 2026-06-08):** `task thirdparty:dbt-bigquery-tests`
+currently exits during pytest **collection** (2 errors in
+`test_generic_catalog.py` / `test_relation_type_change.py` import paths).
+Narrow triage: `DBT_BIGQUERY_RUN_TRIAGE=1` with a single-class
+`DBT_BIGQUERY_PYTEST_ARGS` selector (see below). Full functional green is
+out of scope for one session — track with dbt skip-matrix refinement and
+engine materialization parity.
 
 Populate (or refresh) upstream functional tests:
 

@@ -20,6 +20,9 @@ push / pull_request
                 ├─► conformance / conformance (duckdb)
                 ├─► docker-smoke / quickstart-smoke
                 ├─► thirdparty-samples / java live
+                ├─► thirdparty-samples / python nox snippets
+                ├─► thirdparty-samples / node Mocha
+                ├─► thirdparty-samples / bigframes snippet gate
                 └─► coverage-bazel / bazel-coverage (main push only)
                         │
                         └─► coverage-publish (after ci or coverage-bazel)
@@ -64,6 +67,9 @@ explicit run id is passed.
 - `conformance / conformance (duckdb)`
 - `docker-smoke / quickstart-smoke`
 - `thirdparty-samples / java-bigquery-tests (live emulator)`
+- `thirdparty-samples / python-bigquery-tests (live emulator)` (plan 14; may be red until thirdparty-02–09 land)
+- `thirdparty-samples / node-bigquery-tests (live emulator)` (plan 14)
+- `thirdparty-samples / python-bigquery-dataframes snippet gate (live emulator)` (plan 14)
 
 **Fast lanes (optional but recommended):**
 
