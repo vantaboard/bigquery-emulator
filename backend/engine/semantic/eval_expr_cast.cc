@@ -17,6 +17,7 @@
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/functions/parse_date_time.h"
+#include "googlesql/public/functions/string.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -62,6 +63,17 @@ std::optional<absl::StatusOr<Value>> TryCastValueToType(
   if (target->kind() == ::googlesql::TYPE_BYTES &&
       inner.type_kind() == ::googlesql::TYPE_STRING) {
     return Value::Bytes(std::string(inner.string_value()));
+  }
+  if (target->kind() == ::googlesql::TYPE_STRING &&
+      inner.type_kind() == ::googlesql::TYPE_BYTES) {
+    absl::Status error;
+    std::string out;
+    if (!::googlesql::functions::SafeConvertBytes(
+            inner.bytes_value(), &out, &error)) {
+      if (return_null_on_error) return NullOfType(target);
+      return error;
+    }
+    return Value::String(std::move(out));
   }
   if (target->kind() == ::googlesql::TYPE_STRING &&
       inner.type_kind() == ::googlesql::TYPE_INT64) {
@@ -124,6 +136,56 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
   if (target == nullptr) {
     return absl::InvalidArgumentError("semantic: ResolvedCast has null type");
   }
+  if (cast.format() != nullptr && target->kind() == ::googlesql::TYPE_STRING) {
+    if (inner.is_null()) return Value::NullString();
+    absl::string_view format_str;
+    if (cast.format()->node_kind() == ::googlesql::RESOLVED_LITERAL &&
+        cast.format()->type()->kind() == ::googlesql::TYPE_STRING) {
+      format_str = cast.format()
+                       ->GetAs<::googlesql::ResolvedLiteral>()
+                       ->value()
+                       .string_value();
+    } else {
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          "semantic: CAST ... FORMAT requires a string literal format");
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_DATETIME) {
+      std::string out;
+      if (absl::Status s =
+              ::googlesql::functions::FormatDatetimeToStringWithOptions(
+                  format_str, inner.datetime_value(), kFormatOpts, &out);
+          !s.ok()) {
+        if (cast.return_null_on_error()) return Value::NullString();
+        return s;
+      }
+      return Value::String(std::move(out));
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_DATE) {
+      std::string out;
+      if (absl::Status s = ::googlesql::functions::FormatDateToString(
+              format_str, inner.date_value(), kFormatOpts, &out);
+          !s.ok()) {
+        if (cast.return_null_on_error()) return Value::NullString();
+        return s;
+      }
+      return Value::String(std::move(out));
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+      std::string out;
+      if (absl::Status s = ::googlesql::functions::FormatTimestampToString(
+              format_str,
+              inner.ToUnixMicros(),
+              DefaultTimeZone(),
+              kFormatOpts,
+              &out);
+          !s.ok()) {
+        if (cast.return_null_on_error()) return Value::NullString();
+        return s;
+      }
+      return Value::String(std::move(out));
+    }
+  }
   if (auto casted = TryCastValueToType(
           inner, source, target, cast.return_null_on_error())) {
     return *std::move(casted);
@@ -172,6 +234,30 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       }
       return Value::String(std::move(out));
     }
+    if (inner.type_kind() == ::googlesql::TYPE_DATETIME) {
+      std::string out;
+      if (absl::Status s =
+              ::googlesql::functions::FormatDatetimeToStringWithOptions(
+                  "%F %T", inner.datetime_value(), kFormatOpts, &out);
+          !s.ok()) {
+        return s;
+      }
+      return Value::String(std::move(out));
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_BYTES) {
+      absl::Status error;
+      std::string out;
+      if (!::googlesql::functions::SafeConvertBytes(
+              inner.bytes_value(), &out, &error)) {
+        if (cast.return_null_on_error()) return NullOfType(target);
+        return error;
+      }
+      return Value::String(std::move(out));
+    }
+  }
+  if (target->kind() == ::googlesql::TYPE_BYTES &&
+      inner.type_kind() == ::googlesql::TYPE_STRING) {
+    return Value::Bytes(std::string(inner.string_value()));
   }
   if (target->kind() == ::googlesql::TYPE_DATETIME) {
     if (inner.type_kind() == ::googlesql::TYPE_DATETIME) return inner;

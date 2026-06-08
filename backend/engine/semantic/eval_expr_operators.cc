@@ -86,6 +86,8 @@ Value NullOfType(const ::googlesql::Type* type) {
     case ::googlesql::TYPE_UUID:
       return Value::NullUuid();
     case ::googlesql::TYPE_RANGE:
+    case ::googlesql::TYPE_ARRAY:
+    case ::googlesql::TYPE_STRUCT:
       return Value::Null(type);
     default:
       // Fall back: the analyzer always types every output column,

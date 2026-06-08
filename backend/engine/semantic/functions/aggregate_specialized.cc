@@ -369,6 +369,51 @@ absl::StatusOr<Value> CountAggregate(
   return Value::Int64(count);
 }
 
+absl::StatusOr<Value> AnyValueAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
+  for (const RowValue& row : rows) {
+    if (!row.is_null) return row.v;
+  }
+  return Value::Null(call.type());
+}
+
+absl::StatusOr<Value> StddevAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
+  std::vector<double> values;
+  values.reserve(rows.size());
+  for (const RowValue& row : rows) {
+    if (row.is_null) continue;
+    if (row.v.type_kind() == ::googlesql::TYPE_INT64) {
+      values.push_back(static_cast<double>(row.v.int64_value()));
+    } else if (row.v.type_kind() == ::googlesql::TYPE_DOUBLE) {
+      values.push_back(row.v.double_value());
+    } else if (row.v.type_kind() == ::googlesql::TYPE_FLOAT) {
+      values.push_back(static_cast<double>(row.v.float_value()));
+    } else {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: STDDEV expects numeric arguments");
+    }
+  }
+  if (values.size() < 2) return Value::NullDouble();
+  double mean = 0.0;
+  for (double v : values)
+    mean += v;
+  mean /= static_cast<double>(values.size());
+  double sum_sq = 0.0;
+  for (double v : values) {
+    const double d = v - mean;
+    sum_sq += d * d;
+  }
+  return Value::Double(
+      std::sqrt(sum_sq / static_cast<double>(values.size() - 1)));
+}
+
 absl::StatusOr<Value> CountIfAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values) {
@@ -412,6 +457,12 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "countif") {
     return CountIfAggregate(call, input_column_values);
+  }
+  if (name == "any_value") {
+    return AnyValueAggregate(call, input_column_values);
+  }
+  if (name == "stddev" || name == "stddev_samp" || name == "stdev") {
+    return StddevAggregate(call, input_column_values);
   }
   if (name == "approx_count_distinct") {
     return ApproxCountDistinct(call, input_column_values);

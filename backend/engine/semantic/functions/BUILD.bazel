@@ -53,6 +53,7 @@ cc_library(
     srcs = ["json_funcs.cc"],
     hdrs = ["json_funcs.h"],
     deps = [
+        ":geog_funcs",
         ":string_funcs",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",

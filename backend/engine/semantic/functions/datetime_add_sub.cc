@@ -41,6 +41,14 @@ absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects at least two arguments"));
   }
+  if (!args.empty() && args[0].type_kind() == ::googlesql::TYPE_DATETIME) {
+    if (name == "date_diff") {
+      return DatetimeAddSubDiffTrunc("datetime_diff", args);
+    }
+    if (name == "date_trunc") {
+      return DatetimeAddSubDiffTrunc("datetime_trunc", args);
+    }
+  }
   if (args[0].is_null() || args[1].is_null()) {
     return Value::Null(args[0].type());
   }

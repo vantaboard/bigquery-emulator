@@ -7,3 +7,7 @@ Generated from [GoogleCloudPlatform/bigquery-utils](https://github.com/GoogleClo
 - `passing/` — fixtures promoted after engine triage (plan 02).
 
 Do not edit generated YAML by hand; regenerate with `task conformance:bqutils-sync`.
+
+**Deferred external-language fixtures** (intentionally kept in `known_failing/`):
+
+- `community/cw_xml_extract.yaml` — `LANGUAGE python` (lxml xpath); mirrors the JS UDF disposition in plan 04 until Python UDF execution lands.

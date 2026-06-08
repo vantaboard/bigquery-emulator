@@ -696,17 +696,21 @@ After fixtests-11 regexp/string (2026-06-08): **95 fixtures in `passing/`**
 After fixtests-12 BIGNUMERIC/interval (2026-06-08): **102 fixtures in
 `passing/`** (+7: 128-bit shifts, round-half-even, `cw_months_between`,
 `ts_tumble`, `cw_stringify_interval`; **96/102** runner pass — six legacy
-fails unchanged). Promoted includes `cw_signed_{left,right}shift_128bit`,
-`cw_round_half_even{,_bignumeric}`, `cw_months_between`, `ts_tumble`,
-`cw_stringify_interval`. fixtests-11 promotions include `cw_regexp_instr_3`,
-regexp partition family (except `cw_disjoint_partition_by_regexp`), NVP
-(`cw_td_nvp`, `cw_nvp2json4`), `cw_substrb`, `cw_initcap`, `cw_otranslate`,
-`cw_instr4`, `cw_split_part_delimstr_idx`, `cw_find_in_list`,
-`cw_comparable_format_varchar_t`, `migration/redshift/initcap`. Still in
-`known_failing/`: `migration/oracle/round_datetime` (engine crash on
-ISOYEAR/WW rounding path), `cw_disjoint_partition_by_regexp` (REGEXP_EXTRACT
-filter on UNNEST), `url_trim_query` (engine crash on STRING_AGG path),
-`migration/redshift/translate` (correlated subquery in UNNEST).
+fails unchanged). After fixtests-13 bqutils tail (2026-06-08): **110 fixtures
+in `passing/`** (+8: `azimuth_to_geog_point`, `cw_xml_element_with_attributes`,
+`linear_regression`, `migration/oracle/round_datetime`, vertica
+`upperb`/`lowerb`/`substrb`, `migration/sqlserver/convert_bytes_string`;
+**104/110** runner pass — same six legacy fails). Promoted includes
+`cw_signed_{left,right}shift_128bit`, `cw_round_half_even{,_bignumeric}`,
+`cw_months_between`, `ts_tumble`, `cw_stringify_interval`. fixtests-11
+promotions include `cw_regexp_instr_3`, regexp partition family (except
+`cw_disjoint_partition_by_regexp`), NVP (`cw_td_nvp`, `cw_nvp2json4`),
+`cw_substrb`, `cw_initcap`, `cw_otranslate`, `cw_instr4`,
+`cw_split_part_delimstr_idx`, `cw_find_in_list`, `cw_comparable_format_varchar_t`,
+`migration/redshift/initcap`. Still in `known_failing/` (7): deferred
+`cw_xml_extract` (**LANGUAGE python**, documented external-language gap),
+`cw_disjoint_partition_by_regexp`, `url_trim_query`, `migration/redshift/translate`,
+`migration/sqlserver/convert_{datetime_string,string_bytes}`, `t_test` (7 total).
 First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.

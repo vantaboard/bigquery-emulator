@@ -123,10 +123,7 @@ absl::StatusOr<const Type*> ScalarOrStructType(
           "' has type ARRAY but no nested element schema; use ColumnMode "
           "REPEATED on the inner type instead"));
     case schema::ColumnType::kGeography:
-      return absl::InvalidArgumentError(absl::StrCat(
-          "column '",
-          column.name,
-          "': GEOGRAPHY is not yet supported by the analyzer catalog"));
+      return type_factory->get_geography();
     case schema::ColumnType::kUnknown:
       return absl::InvalidArgumentError(
           absl::StrCat("column '",

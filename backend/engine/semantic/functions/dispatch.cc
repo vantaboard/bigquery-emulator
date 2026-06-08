@@ -65,6 +65,12 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "pow" || name == "power") return Pow(args);
   if (name == "log") return Log(args);
   if (name == "ln") return Log(args);
+  if (name == "sqrt") return Sqrt(args);
+  if (name == "sin") return Sin(args);
+  if (name == "cos") return Cos(args);
+  if (name == "asin") return Asin(args);
+  if (name == "acos") return Acos(args);
+  if (name == "atan2") return Atan2(args);
   if (name == "replace") return Replace(args);
   if (name == "translate") return Translate(args);
   if (name == "reverse") return Reverse(args);

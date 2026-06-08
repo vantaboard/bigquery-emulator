@@ -343,6 +343,10 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   for (int i = 0; i < call.argument_list_size(); ++i) {
     auto v = EvalExpr(*call.argument_list(i), ctx);
     if (!v.ok()) return v.status();
+    if (!v->is_valid()) {
+      return absl::InternalError(
+          "semantic: SQL UDF argument evaluated to invalid Value");
+    }
     if (v->is_null()) {
       return NullOfType(call.type());
     }

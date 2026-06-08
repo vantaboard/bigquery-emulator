@@ -358,6 +358,71 @@ std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
   return out;
 }
 
+// BigQuery-utils fixtures use INTEGER as an alias for INT64 in CAST and
+// STRUCT literals; GoogleSQL in this repo only recognizes INT64.
+std::string RewriteIntegerTypeAlias(absl::string_view sql) {
+  std::string out;
+  out.reserve(sql.size());
+  bool in_single = false;
+  bool in_double = false;
+  for (size_t i = 0; i < sql.size(); ++i) {
+    const char c = sql[i];
+    if (in_single) {
+      out.push_back(c);
+      if (c == '\'') {
+        if (i + 1 < sql.size() && sql[i + 1] == '\'') {
+          out.push_back(sql[++i]);
+          continue;
+        }
+        in_single = false;
+      }
+      continue;
+    }
+    if (in_double) {
+      out.push_back(c);
+      if (c == '"') {
+        if (i + 1 < sql.size() && sql[i + 1] == '"') {
+          out.push_back(sql[++i]);
+          continue;
+        }
+        in_double = false;
+      }
+      continue;
+    }
+    if (c == '\'') {
+      in_single = true;
+      out.push_back(c);
+      continue;
+    }
+    if (c == '"') {
+      in_double = true;
+      out.push_back(c);
+      continue;
+    }
+    if ((c == 'I' || c == 'i') && i + 7 <= sql.size()) {
+      const auto match_ci = [&](absl::string_view lit) {
+        if (i + lit.size() > sql.size()) return false;
+        for (size_t k = 0; k < lit.size(); ++k) {
+          if (std::tolower(static_cast<unsigned char>(sql[i + k])) != lit[k]) {
+            return false;
+          }
+        }
+        const bool before_ok = i == 0 || !IsIdentChar(sql[i - 1]);
+        const bool after_ok =
+            i + lit.size() >= sql.size() || !IsIdentChar(sql[i + lit.size()]);
+        return before_ok && after_ok;
+      };
+      if (match_ci("integer")) {
+        out.append("INT64");
+        i += 7;
+        continue;
+      }
+    }
+    out.push_back(c);
+  }
+  return out;
+}
+
 std::string PreprocessFunctionBodyBase(absl::string_view sql) {
   std::string normalized;
   normalized.reserve(sql.size());
@@ -368,8 +433,8 @@ std::string PreprocessFunctionBodyBase(absl::string_view sql) {
       normalized.push_back(c);
     }
   }
-  return RewriteFormatTypeLiteral(
-      RewriteAnonymousStructFieldAccess(StripBlockComments(normalized)));
+  return RewriteIntegerTypeAlias(RewriteFormatTypeLiteral(
+      RewriteAnonymousStructFieldAccess(StripBlockComments(normalized))));
 }
 
 }  // namespace

@@ -46,8 +46,9 @@ absl::StatusOr<BigNumericValue> CoerceToBigNumeric(const Value& v) {
     case ::googlesql::TYPE_INT64:
       return BigNumericValue(v.int64_value());
     default:
-      return absl::InvalidArgumentError(absl::StrCat(
-          "semantic: cannot coerce ", v.type()->DebugString(), " to BIGNUMERIC"));
+      return absl::InvalidArgumentError(absl::StrCat("semantic: cannot coerce ",
+                                                     v.type()->DebugString(),
+                                                     " to BIGNUMERIC"));
   }
 }
 

@@ -319,6 +319,44 @@ absl::StatusOr<Value> Log(const std::vector<Value>& args) {
   return Value::Double(std::log(*x));
 }
 
+absl::StatusOr<Value> Sqrt(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "SQRT", static_cast<double (*)(double)>(std::sqrt));
+}
+
+absl::StatusOr<Value> Sin(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "SIN", static_cast<double (*)(double)>(std::sin));
+}
+
+absl::StatusOr<Value> Cos(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "COS", static_cast<double (*)(double)>(std::cos));
+}
+
+absl::StatusOr<Value> Asin(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "ASIN", static_cast<double (*)(double)>(std::asin));
+}
+
+absl::StatusOr<Value> Acos(const std::vector<Value>& args) {
+  return UnaryMathOnNumeric(
+      args, "ACOS", static_cast<double (*)(double)>(std::acos));
+}
+
+absl::StatusOr<Value> Atan2(const std::vector<Value>& args) {
+  if (args.size() != 2) {
+    return absl::InvalidArgumentError(
+        "semantic: ATAN2 expects exactly two arguments");
+  }
+  if (args[0].is_null() || args[1].is_null()) return Value::NullDouble();
+  auto y = NumericArgToDouble(args[0]);
+  if (!y.ok()) return y.status();
+  auto x = NumericArgToDouble(args[1]);
+  if (!x.ok()) return x.status();
+  return Value::Double(std::atan2(*y, *x));
+}
+
 absl::StatusOr<Value> Pow(const std::vector<Value>& args) {
   if (args.size() != 2) {
     return absl::InvalidArgumentError(
