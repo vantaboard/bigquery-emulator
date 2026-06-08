@@ -208,6 +208,27 @@ cc_test(
 )
 
 cc_test(
+    name = "sql_preprocess_test",
+    srcs = ["sql_preprocess_test.cc"],
+    deps = [
+        ":sql_preprocess",
+        "//backend/catalog:create_function_util",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast:resolved_ast",
+    ],
+)
+
+cc_test(
     name = "route_classifier_test",
     srcs = [
         "route_classifier_advanced_test.cc",

@@ -105,6 +105,21 @@ absl::StatusOr<Value> Mod(const std::vector<Value>& args) {
   return Value::Int64(remainder);
 }
 
+absl::StatusOr<Value> Log(const std::vector<Value>& args) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        "semantic: LOG expects exactly one argument");
+  }
+  if (args[0].is_null()) return Value::NullDouble();
+  auto x = NumericArgToDouble(args[0]);
+  if (!x.ok()) return x.status();
+  if (*x <= 0.0) {
+    return absl::InvalidArgumentError(
+        "semantic: LOG requires a positive argument");
+  }
+  return Value::Double(std::log(*x));
+}
+
 absl::StatusOr<Value> Pow(const std::vector<Value>& args) {
   if (args.size() != 2) {
     return absl::InvalidArgumentError(

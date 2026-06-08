@@ -327,20 +327,20 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
   }
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES ||
       args[1].type_kind() == ::googlesql::TYPE_BYTES) {
-    auto shift = RequireInt64(args[1], name);
-    if (!shift.ok()) return shift.status();
-    if (name == "$bitwise_right_shift" &&
-        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
-        args[1].type_kind() == ::googlesql::TYPE_INT64) {
-      auto out = ShiftBytesRight(args[0].bytes_value(), *shift);
-      if (!out.ok()) return out.status();
-      return Value::Bytes(*std::move(out));
-    }
     if (name == "$bitwise_and" &&
         args[0].type_kind() == ::googlesql::TYPE_BYTES &&
         args[1].type_kind() == ::googlesql::TYPE_BYTES) {
       return Value::Bytes(
           AndBytes(args[0].bytes_value(), args[1].bytes_value()));
+    }
+    if (name == "$bitwise_right_shift" &&
+        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
+        args[1].type_kind() == ::googlesql::TYPE_INT64) {
+      auto shift = RequireInt64(args[1], name);
+      if (!shift.ok()) return shift.status();
+      auto out = ShiftBytesRight(args[0].bytes_value(), *shift);
+      if (!out.ok()) return out.status();
+      return Value::Bytes(*std::move(out));
     }
     return absl::InvalidArgumentError(absl::StrCat(
         "semantic: ", name, " does not support these BYTES operand types"));

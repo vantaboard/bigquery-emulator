@@ -104,6 +104,32 @@ absl::StatusOr<Value> EndsWith(const std::vector<Value>& args) {
   return Value::Bool(out);
 }
 
+absl::StatusOr<Value> Right(const std::vector<Value>& args) {
+  if (args.size() != 2) {
+    return absl::InvalidArgumentError("semantic: RIGHT expects two arguments");
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
+      return Value::NullBytes();
+    }
+    return Value::NullString();
+  }
+  absl::Status error;
+  absl::string_view out;
+  if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
+    if (!::googlesql::functions::RightBytes(
+            args[0].bytes_value(), args[1].int64_value(), &out, &error)) {
+      return error;
+    }
+    return Value::Bytes(std::string(out));
+  }
+  if (!::googlesql::functions::RightUtf8(
+          args[0].string_value(), args[1].int64_value(), &out, &error)) {
+    return error;
+  }
+  return Value::String(std::string(out));
+}
+
 absl::StatusOr<Value> Left(const std::vector<Value>& args) {
   if (args.size() != 2) {
     return absl::InvalidArgumentError("semantic: LEFT expects two arguments");

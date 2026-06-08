@@ -198,6 +198,140 @@ absl::StatusOr<Value> EvalArrayAgg(
   return Value::Array(arr_type, std::move(elements));
 }
 
+std::string StringifyAggValue(const Value& v) {
+  if (v.is_null()) return "";
+  if (v.type_kind() == ::googlesql::TYPE_STRING) {
+    return std::string(v.string_value());
+  }
+  if (v.type_kind() == ::googlesql::TYPE_BYTES) {
+    return std::string(v.bytes_value());
+  }
+  return v.DebugString();
+}
+
+absl::StatusOr<Value> EvalStringAgg(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values,
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx) {
+  if (input_column_values.empty()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: STRING_AGG expects one argument");
+  }
+  std::string delimiter = ",";
+  if (call.argument_list_size() >= 2) {
+    if (input_column_values.size() < 2 || input_column_values[1].empty()) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: STRING_AGG delimiter missing");
+    }
+    const Value& delim = input_column_values[1][0];
+    if (delim.is_null()) return Value::NullString();
+    if (delim.type_kind() != ::googlesql::TYPE_STRING) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: STRING_AGG delimiter must be STRING");
+    }
+    delimiter = std::string(delim.string_value());
+  }
+  const bool ignore_nulls =
+      call.null_handling_modifier() ==
+      ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
+  const bool distinct = call.distinct();
+
+  struct Row {
+    Value val;
+    std::vector<Value> sort_keys;
+  };
+  std::vector<Row> rows;
+  rows.reserve(input_rows.size());
+  for (size_t r = 0; r < input_rows.size(); ++r) {
+    const Value& v = input_column_values[0][r];
+    if (ignore_nulls && v.is_null()) continue;
+    Row row;
+    row.val = v;
+    EvalContext row_ctx = ctx;
+    row_ctx.columns = &input_rows[r];
+    row.sort_keys.reserve(call.order_by_item_list_size());
+    for (int i = 0; i < call.order_by_item_list_size(); ++i) {
+      const ::googlesql::ResolvedOrderByItem* item = call.order_by_item_list(i);
+      if (item == nullptr || item->column_ref() == nullptr) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            "semantic: STRING_AGG ORDER BY requires column references");
+      }
+      auto key_or = EvalExpr(*item->column_ref(), row_ctx);
+      if (!key_or.ok()) return key_or.status();
+      row.sort_keys.push_back(*std::move(key_or));
+    }
+    rows.push_back(std::move(row));
+  }
+
+  if (distinct) {
+    std::vector<Row> deduped;
+    for (Row& row : rows) {
+      bool seen = false;
+      for (const Row& prior : deduped) {
+        if (ValueEqual(prior.val, row.val)) {
+          seen = true;
+          break;
+        }
+      }
+      if (!seen) deduped.push_back(std::move(row));
+    }
+    rows = std::move(deduped);
+  }
+
+  if (call.order_by_item_list_size() > 0) {
+    std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) {
+      for (int i = 0; i < call.order_by_item_list_size(); ++i) {
+        const ::googlesql::ResolvedOrderByItem* item =
+            call.order_by_item_list(i);
+        int cmp =
+            CompareArrayAggOrderKey(*item, a.sort_keys[i], b.sort_keys[i]);
+        if (cmp != 0) return cmp < 0;
+      }
+      return false;
+    });
+  }
+
+  if (call.limit() != nullptr) {
+    auto limit_or = EvalExpr(*call.limit(), ctx);
+    if (!limit_or.ok()) return limit_or.status();
+    if (limit_or->is_null()) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: STRING_AGG LIMIT must not be NULL");
+    }
+    if (limit_or->type_kind() != ::googlesql::TYPE_INT64) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: STRING_AGG LIMIT must be INT64");
+    }
+    const int64_t limit = limit_or->int64_value();
+    if (limit < 0) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic: STRING_AGG LIMIT must be non-negative");
+    }
+    if (rows.size() > static_cast<size_t>(limit)) {
+      rows.resize(static_cast<size_t>(limit));
+    }
+  }
+
+  if (rows.empty()) {
+    return Value::String("");
+  }
+  std::string out;
+  bool appended = false;
+  for (const Row& row : rows) {
+    if (row.val.is_null()) continue;
+    if (appended) out.append(delimiter);
+    out.append(StringifyAggValue(row.val));
+    appended = true;
+  }
+  if (!appended) {
+    return Value::NullString();
+  }
+  return Value::String(std::move(out));
+}
+
 std::string GroupKeyFingerprint(const std::vector<Value>& keys) {
   std::string fp;
   for (const Value& key : keys) {
@@ -236,6 +370,10 @@ absl::StatusOr<Value> EvalAggregateForRows(
   if (agg.function() != nullptr &&
       absl::AsciiStrToLower(agg.function()->Name()) == "array_agg") {
     return EvalArrayAgg(agg, arg_columns, input_rows, ctx);
+  }
+  if (agg.function() != nullptr &&
+      absl::AsciiStrToLower(agg.function()->Name()) == "string_agg") {
+    return EvalStringAgg(agg, arg_columns, input_rows, ctx);
   }
   if (agg.function() != nullptr &&
       agg.function()->GetGroup() ==

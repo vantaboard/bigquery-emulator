@@ -52,7 +52,7 @@ MakeFunctionFromCreateFunctionImpl(
     function = std::move(*sql_fn);
   } else if (create_function_stmt.language() == "SQL") {
     const std::string preprocessed_code =
-        engine::coordinator::PreprocessSqlForAnalyzer(
+        engine::coordinator::PreprocessFunctionBodyForAnalyzer(
             create_function_stmt.code());
     function = std::make_unique<::googlesql::TemplatedSQLFunction>(
         create_function_stmt.name_path(),

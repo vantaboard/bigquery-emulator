@@ -3,6 +3,8 @@
 #include <cctype>
 #include <string>
 
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 
 namespace bigquery_emulator {
@@ -186,14 +188,47 @@ std::string RewriteFormatTypeLiteral(absl::string_view sql) {
   return out;
 }
 
-// BigQuery-utils fixtures often use `AS ( (` on separate lines after a
-// license block comment. The analyzer rejects that shape when the body
-// contains `SELECT ... FROM UNNEST(...)`; collapse to `AS ((` / `));`.
+bool MatchKeywordAt(absl::string_view sql, size_t pos, absl::string_view lit) {
+  if (pos + lit.size() > sql.size()) return false;
+  for (size_t k = 0; k < lit.size(); ++k) {
+    if (std::tolower(static_cast<unsigned char>(sql[pos + k])) != lit[k]) {
+      return false;
+    }
+  }
+  if (pos + lit.size() < sql.size() && IsIdentChar(sql[pos + lit.size()])) {
+    return false;
+  }
+  return true;
+}
+
+bool IsSubqueryBodyStart(absl::string_view sql, size_t pos) {
+  return MatchKeywordAt(sql, pos, "select") || MatchKeywordAt(sql, pos, "with");
+}
+
+// Collapse `AS ( (WITH` to `AS (( WITH` and `AS ( (SELECT` to `AS ((SELECT`.
+void AppendOpenedSubqueryParens(std::string* out,
+                                absl::string_view sql,
+                                size_t body) {
+  if (MatchKeywordAt(sql, body, "with")) {
+    out->append("(( ");
+  } else {
+    out->append("((");
+  }
+}
+
+// BigQuery-utils fixtures often use nested parens on separate lines:
+//   CREATE FUNCTION ... AS ( ( SELECT ... ) );
+// or, in templated bodies extracted by the analyzer:
+//   ( ( SELECT ... ) );
+// Collapse to `AS ((` / `((` and `));` closers. Only rewrite subquery
+// bodies starting with `SELECT` / `WITH`, not scalar expr groups like
+// `(bits & (1 << index))`.
 std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
   std::string out;
   out.reserve(sql.size());
   bool in_single = false;
   bool in_double = false;
+  bool opened_as_double = false;
   for (size_t i = 0; i < sql.size(); ++i) {
     const char c = sql[i];
     if (in_single) {
@@ -228,6 +263,28 @@ std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
       out.push_back(c);
       continue;
     }
+    if (out.empty() && c == '(') {
+      size_t j = i + 1;
+      bool had_ws_between = false;
+      while (j < sql.size() &&
+             std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
+        had_ws_between = true;
+        ++j;
+      }
+      if (had_ws_between && j < sql.size() && sql[j] == '(') {
+        size_t body = j + 1;
+        while (body < sql.size() &&
+               std::isspace(static_cast<unsigned char>(sql[body])) != 0) {
+          ++body;
+        }
+        if (IsSubqueryBodyStart(sql, body)) {
+          AppendOpenedSubqueryParens(&out, sql, body);
+          opened_as_double = true;
+          i = j;
+          continue;
+        }
+      }
+    }
     if ((c == 'A' || c == 'a') && i + 1 < sql.size()) {
       const auto match_ci = [&](absl::string_view lit) {
         if (i + lit.size() > sql.size()) return false;
@@ -244,16 +301,26 @@ std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
                std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
           ++j;
         }
-        if (j < sql.size() && sql[j] == '(') {
+        if (j < sql.size() && sql[j] == '(' &&
+            !(j + 1 < sql.size() && sql[j + 1] == '(')) {
           size_t k = j + 1;
           while (k < sql.size() &&
                  std::isspace(static_cast<unsigned char>(sql[k])) != 0) {
             ++k;
           }
           if (k < sql.size() && sql[k] == '(') {
-            out.append("AS ((");
-            i = k;
-            continue;
+            size_t body = k + 1;
+            while (body < sql.size() &&
+                   std::isspace(static_cast<unsigned char>(sql[body])) != 0) {
+              ++body;
+            }
+            if (IsSubqueryBodyStart(sql, body)) {
+              out.append("AS ");
+              AppendOpenedSubqueryParens(&out, sql, body);
+              opened_as_double = true;
+              i = k;
+              continue;
+            }
           }
         }
       }
@@ -271,10 +338,19 @@ std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
           ++k;
         }
         if (k < sql.size() && sql[k] == ';') {
-          out.append("));");
-          i = k;
-          continue;
+          if (opened_as_double) {
+            out.append("));");
+            opened_as_double = false;
+            i = k + 1;
+            continue;
+          }
         }
+      }
+      if (opened_as_double && j < sql.size() && sql[j] == ';') {
+        out.append("));");
+        opened_as_double = false;
+        i = j + 1;
+        continue;
       }
     }
     out.push_back(c);
@@ -282,11 +358,43 @@ std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {
   return out;
 }
 
+std::string PreprocessFunctionBodyBase(absl::string_view sql) {
+  std::string normalized;
+  normalized.reserve(sql.size());
+  for (char c : sql) {
+    if (c == '\t') {
+      normalized.push_back(' ');
+    } else {
+      normalized.push_back(c);
+    }
+  }
+  return RewriteFormatTypeLiteral(
+      RewriteAnonymousStructFieldAccess(StripBlockComments(normalized)));
+}
+
 }  // namespace
 
+std::string PreprocessFunctionBodyForAnalyzer(absl::string_view sql) {
+  std::string normalized =
+      NormalizeCreateFunctionAsParens(PreprocessFunctionBodyBase(sql));
+  while (!normalized.empty() &&
+         std::isspace(static_cast<unsigned char>(normalized.back())) != 0) {
+    normalized.pop_back();
+  }
+  // Templated SQL UDF bodies are parsed via ParseResumeLocation as
+  // expressions, not semicolon-terminated statements.
+  if (!normalized.empty() && normalized.back() == ';') {
+    normalized.pop_back();
+  }
+  return normalized;
+}
+
 std::string PreprocessSqlForAnalyzer(absl::string_view sql) {
-  return NormalizeCreateFunctionAsParens(RewriteFormatTypeLiteral(
-      RewriteAnonymousStructFieldAccess(StripBlockComments(sql))));
+  const std::string base = PreprocessFunctionBodyBase(sql);
+  if (absl::StrContains(absl::AsciiStrToLower(base), "create function")) {
+    return NormalizeCreateFunctionAsParens(base);
+  }
+  return base;
 }
 
 }  // namespace coordinator

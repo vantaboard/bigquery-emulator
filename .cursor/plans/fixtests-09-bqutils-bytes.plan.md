@@ -7,19 +7,19 @@ isProject: true
 todos:
   - id: repro
     content: Run the 8 bytes/bitwise known_failing fixtures; diff each against the already-passing getbit fixture to isolate the missing primitive.
-    status: pending
+    status: completed
   - id: bitwise
     content: Implement/repair INT64 bit shifts (<<, >>) and bit extraction used by cw_getbit / cw_getbit_binary / to_binary / from_binary.
-    status: pending
+    status: completed
   - id: format-hex
     content: Support FORMAT('%02x', ...) and GENERATE_ARRAY byte walks for to_hex / from_hex / cw_to_base / cw_from_base.
-    status: pending
+    status: completed
   - id: bytes-substr
     content: Support CAST(str AS BYTES) + SUBSTR over bytes (overlaps migration/vertica substrb) for multibyte handling.
-    status: pending
+    status: completed
   - id: triage
     content: Re-sync + triage; move newly-passing fixtures to passing/; update index count and docs.
-    status: pending
+    status: completed
 ---
 
 # FixTests 09 — bqutils bytes / binary / bitwise

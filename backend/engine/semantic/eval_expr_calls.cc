@@ -338,12 +338,20 @@ absl::StatusOr<Value> EvalSqlUdfBody(
                      call.argument_list_size(),
                      ")"));
   }
-  FrameStack arg_frames;
-  arg_frames.PushFrame();
+  std::vector<Value> arg_values;
+  arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
   for (int i = 0; i < call.argument_list_size(); ++i) {
     auto v = EvalExpr(*call.argument_list(i), ctx);
     if (!v.ok()) return v.status();
-    absl::Status declared = arg_frames.Declare(arg_names[i], *std::move(v));
+    if (v->is_null()) {
+      return NullOfType(call.type());
+    }
+    arg_values.push_back(*std::move(v));
+  }
+  FrameStack arg_frames;
+  arg_frames.PushFrame();
+  for (size_t i = 0; i < arg_values.size(); ++i) {
+    absl::Status declared = arg_frames.Declare(arg_names[i], arg_values[i]);
     if (!declared.ok()) return declared;
   }
   EvalContext inner = ctx;

@@ -157,6 +157,26 @@ TEST_F(LocalCoordinatorEngineTest,
       << source.status();
 }
 
+TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureUdf) {
+  CatalogBundle bundle = MakeCatalog();
+  const absl::Status ddl =
+      engine_->ExecuteDdl(MakeRequest(R"(CREATE FUNCTION from_hex(value STRING) 
+
+AS
+(
+  (
+    SELECT 
+      SUM(
+      	CAST(
+      	  CONCAT('0x', SUBSTR(value, byte * 2 + 1, 2)) 
+      	    AS INT64) << ((LENGTH(value) - (byte + 1) * 2) * 4))
+    FROM UNNEST(GENERATE_ARRAY(1, LENGTH(value) / 2)) WITH OFFSET byte
+  )
+);)"),
+                          bundle.catalog.get());
+  ASSERT_TRUE(ddl.ok()) << ddl;
+}
+
 TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   CatalogBundle bundle = MakeCatalog();
   ASSERT_TRUE(engine_
@@ -182,6 +202,53 @@ TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   ASSERT_EQ(row.cells.size(), 1u);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 30);
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreateFromHexFixtureUdf) {
+  CatalogBundle bundle = MakeCatalog();
+  const std::string sql = R"(/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+-- from_hex:
+-- Input: STRING representing a number in hexadecimal form
+-- Output: INT64 number in decimal form
+CREATE FUNCTION from_hex(value STRING) 
+
+AS
+(
+  (
+    SELECT 
+      SUM(
+      	CAST(
+      	  CONCAT('0x', SUBSTR(value, byte * 2 + 1, 2)) 
+      	    AS INT64) << ((LENGTH(value) - (byte + 1) * 2) * 4))
+    FROM UNNEST(GENERATE_ARRAY(1, LENGTH(value) / 2)) WITH OFFSET byte
+  )
+);)";
+  ASSERT_TRUE(engine_->ExecuteDdl(MakeRequest(sql), bundle.catalog.get()).ok());
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(R"(SELECT from_hex("000000000001e240"))"),
+      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells[0].int64_value(), 123456);
 }
 
 TEST_F(LocalCoordinatorEngineTest, CreateAnyTypeUdfShadowsBuiltinThenCalls) {
@@ -253,6 +320,54 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(ids[0], 1);
   EXPECT_EQ(ids[1], 2);
   EXPECT_EQ(ids[2], 3);
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureViaExecuteDdl) {
+  CatalogBundle bundle = MakeCatalog();
+  const std::string sql = R"(/*
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+-- from_hex:
+CREATE FUNCTION from_hex(value STRING) 
+
+AS
+(
+  (
+    SELECT 
+      SUM(
+      	CAST(
+      	  CONCAT('0x', SUBSTR(value, byte * 2 + 1, 2)) 
+      	    AS INT64) << ((LENGTH(value) - (byte + 1) * 2) * 4))
+    FROM UNNEST(GENERATE_ARRAY(1, LENGTH(value) / 2)) WITH OFFSET byte
+  )
+);)";
+  absl::Status created =
+      engine_->ExecuteDdl(MakeRequest(sql), bundle.catalog.get());
+  ASSERT_TRUE(created.ok()) << created;
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(R"(SELECT from_hex("000000000001e240"))"),
+      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+  EXPECT_EQ(row.cells[0].int64_value(), 123456);
 }
 }  // namespace
 }  // namespace coordinator

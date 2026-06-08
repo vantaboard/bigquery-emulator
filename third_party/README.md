@@ -685,7 +685,10 @@ excluded at codegen. After plans 06–08 closure (2026-06-07): **60 passing**
 including `passing/views/migration/teradata/sys_calendar.yaml` and four
 `passing/stored_procedures/` README goldens. After fixtests-08 ANY TYPE
 (2026-06-08): **67 passing** (`typeof`, `sure_values`, `cw_array_max`,
-`cw_array_min`, `cw_array_median`, `cw_array_stable_distinct`). First-party
+`cw_array_min`, `cw_array_median`, `cw_array_stable_distinct`). After
+fixtests-09 bytes/bitwise (2026-06-08): **75 passing** (`to_hex`, `from_hex`,
+`to_binary`, `from_binary`, `cw_getbit`, `cw_getbit_binary`, `cw_to_base`,
+`cw_from_base`). First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.
 

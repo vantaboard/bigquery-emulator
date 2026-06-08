@@ -11,6 +11,7 @@
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -63,6 +64,10 @@ absl::StatusOr<Value> DispatchCaseNoValue(const std::vector<Value>& args,
                                           const ::googlesql::Type* return_type);
 absl::StatusOr<Value> WrapSafe(absl::StatusOr<Value> result,
                                const ::googlesql::Type* return_type);
+
+absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
+                                       Value inner,
+                                       const ::googlesql::Type* source);
 
 absl::StatusOr<Value> DispatchFunctionByName(
     absl::string_view name,

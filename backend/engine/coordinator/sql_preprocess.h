@@ -16,6 +16,11 @@ namespace coordinator {
 // transpiler's synthesized `_N` field naming on the DuckDB emit side.
 std::string PreprocessSqlForAnalyzer(absl::string_view sql);
 
+// Rewrite pass for templated SQL function bodies extracted from
+// CREATE FUNCTION ... AS (...), including nested-paren normalization for
+// subquery bodies (see NormalizeCreateFunctionAsParens).
+std::string PreprocessFunctionBodyForAnalyzer(absl::string_view sql);
+
 }  // namespace coordinator
 }  // namespace engine
 }  // namespace backend

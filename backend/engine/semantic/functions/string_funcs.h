@@ -55,6 +55,7 @@ absl::StatusOr<Value> Reverse(const std::vector<Value>& args);
 absl::StatusOr<Value> StartsWith(const std::vector<Value>& args);
 absl::StatusOr<Value> EndsWith(const std::vector<Value>& args);
 absl::StatusOr<Value> Left(const std::vector<Value>& args);
+absl::StatusOr<Value> Right(const std::vector<Value>& args);
 absl::StatusOr<Value> Substr(const std::vector<Value>& args);
 absl::StatusOr<Value> Strpos(const std::vector<Value>& args);
 absl::StatusOr<Value> Split(const std::vector<Value>& args,

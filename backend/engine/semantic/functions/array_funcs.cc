@@ -41,6 +41,41 @@ std::optional<Value> NullIfAny(const std::vector<Value>& args,
   return std::nullopt;
 }
 
+Value GenerateArrayElement(const ::googlesql::Type* element_type, int64_t v) {
+  switch (element_type->kind()) {
+    case ::googlesql::TYPE_INT64:
+      return Value::Int64(v);
+    case ::googlesql::TYPE_DOUBLE:
+      return Value::Double(static_cast<double>(v));
+    case ::googlesql::TYPE_FLOAT:
+      return Value::Float(static_cast<float>(v));
+    default:
+      break;
+  }
+  if (element_type->IsFloatingPoint()) {
+    return Value::Double(static_cast<double>(v));
+  }
+  return Value::Int64(v);
+}
+
+absl::StatusOr<int64_t> Int64Arg(const Value& v, absl::string_view what) {
+  if (v.type_kind() == ::googlesql::TYPE_INT64) {
+    return v.int64_value();
+  }
+  if (v.type_kind() == ::googlesql::TYPE_DOUBLE ||
+      v.type_kind() == ::googlesql::TYPE_FLOAT) {
+    const double d = v.type_kind() == ::googlesql::TYPE_DOUBLE
+                         ? v.double_value()
+                         : static_cast<double>(v.float_value());
+    return static_cast<int64_t>(d);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: ",
+                   what,
+                   " requires INT64-compatible argument; got ",
+                   v.type()->DebugString()));
+}
+
 absl::StatusOr<const ::googlesql::ArrayType*> ExpectArrayType(
     const Value& v, absl::string_view what) {
   if (!v.type()->IsArray()) {
@@ -67,15 +102,19 @@ absl::StatusOr<Value> GenerateArray(const std::vector<Value>& args,
   if (args.size() == 3 && args[2].is_null()) {
     if (auto n = NullIfAny(args, return_type)) return *n;
   }
-  const int64_t start = args[0].int64_value();
-  const int64_t end = args[1].int64_value();
+  auto start = Int64Arg(args[0], "GENERATE_ARRAY start");
+  if (!start.ok()) return start.status();
+  auto end = Int64Arg(args[1], "GENERATE_ARRAY end");
+  if (!end.ok()) return end.status();
   int64_t step = 1;
   if (args.size() == 3) {
-    step = args[2].int64_value();
+    auto step_or = Int64Arg(args[2], "GENERATE_ARRAY step");
+    if (!step_or.ok()) return step_or.status();
+    step = *step_or;
   }
   std::vector<int64_t> raw;
   if (auto s = ::googlesql::functions::GenerateArray<int64_t, int64_t>(
-          start, end, step, &raw);
+          *start, *end, step, &raw);
       !s.ok()) {
     return s;
   }
@@ -84,10 +123,11 @@ absl::StatusOr<Value> GenerateArray(const std::vector<Value>& args,
         "semantic: GENERATE_ARRAY requires ARRAY return type");
   }
   const ::googlesql::ArrayType* arr_type = return_type->AsArray();
+  const ::googlesql::Type* element_type = arr_type->element_type();
   std::vector<Value> elems;
   elems.reserve(raw.size());
   for (int64_t v : raw) {
-    elems.push_back(Value::Int64(v));
+    elems.push_back(GenerateArrayElement(element_type, v));
   }
   return Value::Array(arr_type, std::move(elems));
 }

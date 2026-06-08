@@ -18,6 +18,26 @@ import (
 
 // isMultiStatementScript reports whether sql is a DECLARE/SET script the
 // gateway executes statement-by-statement.
+func stripBlockComments(sql string) string {
+	var out strings.Builder
+	out.Grow(len(sql))
+	for i := 0; i < len(sql); {
+		if i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*' {
+			i += 2
+			for i+1 < len(sql) && (sql[i] != '*' || sql[i+1] != '/') {
+				i++
+			}
+			if i+1 < len(sql) {
+				i += 2
+			}
+			continue
+		}
+		out.WriteByte(sql[i])
+		i++
+	}
+	return out.String()
+}
+
 func trimLeadingSQLComments(sql string) string {
 	var kept []string
 	for line := range strings.SplitSeq(sql, "\n") {
@@ -28,6 +48,12 @@ func trimLeadingSQLComments(sql string) string {
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
+
+func sqlForScriptDetection(sql string) string {
+	return trimLeadingSQLComments(stripBlockComments(sql))
+}
+
+var setKeywordRE = regexp.MustCompile(`(?i)\bSET\b`)
 
 var beginEndBlockRE = regexp.MustCompile(`(?is)^\s*BEGIN\s+(.*)\s+END\s*;?\s*$`)
 
@@ -41,7 +67,7 @@ func unwrapBeginEndBlock(sql string) string {
 
 func isMultiStatementScript(sql string) bool {
 	trimmed := strings.TrimSpace(sql)
-	upper := strings.ToUpper(trimLeadingSQLComments(trimmed))
+	upper := strings.ToUpper(sqlForScriptDetection(trimmed))
 	// DDL setup statements (CREATE PROCEDURE bodies embed BEGIN/SET) must
 	// not enter the script splitter.
 	if strings.HasPrefix(upper, "CREATE ") ||
@@ -50,10 +76,11 @@ func isMultiStatementScript(sql string) bool {
 		return false
 	}
 	sql = unwrapBeginEndBlock(trimmed)
-	upper = strings.ToUpper(trimLeadingSQLComments(sql))
+	detected := sqlForScriptDetection(sql)
+	upper = strings.ToUpper(detected)
 	return strings.Contains(upper, "DECLARE ") ||
 		strings.Contains(upper, "CALL ") ||
-		(strings.Count(sql, ";") >= 2 && strings.Contains(upper, "SET "))
+		(strings.Count(detected, ";") >= 2 && setKeywordRE.MatchString(upper))
 }
 
 // needsEngineScriptExecution reports whether the script must run as one

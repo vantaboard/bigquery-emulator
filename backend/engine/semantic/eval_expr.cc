@@ -9,6 +9,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -33,6 +34,7 @@ namespace backend {
 namespace engine {
 namespace semantic {
 
+using eval_expr_internal::EvalResolvedCast;
 using eval_expr_internal::NullOfType;
 using eval_expr_internal::ToDouble;
 
@@ -100,118 +102,14 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
             "semantic: ResolvedCast has null expr");
       }
       auto inner = EvalExpr(*cast.expr(), ctx);
-      if (!inner.ok()) return inner;
-      const ::googlesql::Type* target = cast.type();
-      if (target == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedCast has null type");
-      }
-      const ::googlesql::Type* source = cast.expr()->type();
-      if (source != nullptr && source->Equals(target)) {
+      if (!inner.ok()) {
+        if (cast.return_null_on_error() && cast.type() != nullptr) {
+          return NullOfType(cast.type());
+        }
         return inner;
       }
-      // The semantic executor's CAST surface is intentionally
-      // narrow today; the full table lives with
-      // `docs/ENGINE_POLICY.md`. We cover the
-      // implicit-coercion casts the analyzer inserts inside scalar
-      // arithmetic (INT64 -> FLOAT64 for `/`, ...).
-      if (inner->is_null()) return NullOfType(target);
-      if (target->kind() == ::googlesql::TYPE_DOUBLE) {
-        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
-          double parsed = 0;
-          if (!absl::SimpleAtod(inner->string_value(), &parsed)) {
-            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                     "semantic: CAST STRING to FLOAT64 failed");
-          }
-          return Value::Double(parsed);
-        }
-        auto d = ToDouble(*inner);
-        if (!d.ok()) return d.status();
-        return Value::Double(*d);
-      }
-      if (target->kind() == ::googlesql::TYPE_STRING) {
-        if (inner->type_kind() == ::googlesql::TYPE_INT64) {
-          return Value::String(absl::StrCat(inner->int64_value()));
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_BOOL) {
-          return Value::String(inner->bool_value() ? "true" : "false");
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_DOUBLE) {
-          return Value::String(absl::StrCat(inner->double_value()));
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_NUMERIC) {
-          return Value::String(inner->numeric_value().ToString());
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
-          return Value::String(inner->bignumeric_value().ToString());
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_DATE) {
-          std::string out;
-          if (absl::Status s = ::googlesql::functions::FormatDateToString(
-                  "%F",
-                  inner->date_value(),
-                  functions::datetime_internal::kFormatOpts,
-                  &out);
-              !s.ok()) {
-            return s;
-          }
-          return Value::String(std::move(out));
-        }
-      }
-      if (target->kind() == ::googlesql::TYPE_BOOL) {
-        if (inner->type_kind() == ::googlesql::TYPE_BOOL) return inner;
-        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
-          absl::string_view s = inner->string_value();
-          if (absl::EqualsIgnoreCase(s, "true")) return Value::Bool(true);
-          if (absl::EqualsIgnoreCase(s, "false")) return Value::Bool(false);
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: CAST STRING to BOOL failed");
-        }
-      }
-      if (target->kind() == ::googlesql::TYPE_INT64) {
-        if (inner->type_kind() == ::googlesql::TYPE_INT64) return inner;
-        if (inner->type_kind() == ::googlesql::TYPE_DOUBLE) {
-          return Value::Int64(
-              static_cast<int64_t>(std::trunc(inner->double_value())));
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_FLOAT) {
-          return Value::Int64(
-              static_cast<int64_t>(std::trunc(inner->float_value())));
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_NUMERIC) {
-          auto d = inner->numeric_value().ToDouble();
-          return Value::Int64(static_cast<int64_t>(std::trunc(d)));
-        }
-        if (inner->type_kind() == ::googlesql::TYPE_STRING) {
-          if (inner->is_null()) return Value::NullInt64();
-          absl::string_view s = inner->string_value();
-          if (!s.empty() && (s[0] == '+' || s[0] == '-')) {
-            s.remove_prefix(1);
-          }
-          while (s.size() > 1 && s[0] == '0') {
-            s.remove_prefix(1);
-          }
-          int64_t parsed = 0;
-          if (s.empty()) {
-            parsed = 0;
-          } else if (!absl::SimpleAtoi(s, &parsed)) {
-            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                     "semantic: CAST STRING to INT64 failed");
-          }
-          if (!inner->string_value().empty() &&
-              inner->string_value()[0] == '-') {
-            parsed = -parsed;
-          }
-          return Value::Int64(parsed);
-        }
-      }
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: CAST from ",
-                       source != nullptr ? source->DebugString() : "<null>",
-                       " to ",
-                       target->DebugString(),
-                       " is not yet implemented"));
+      const ::googlesql::Type* source = cast.expr()->type();
+      return EvalResolvedCast(cast, *std::move(inner), source);
     }
     case ::googlesql::RESOLVED_ARGUMENT_REF: {
       // `ResolvedArgumentRef` reads an argument of the enclosing

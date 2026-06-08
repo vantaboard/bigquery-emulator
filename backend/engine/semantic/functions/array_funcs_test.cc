@@ -32,6 +32,15 @@ TEST(ArrayFuncsTest, GenerateArrayBasic) {
   EXPECT_EQ(got->element(4).int64_value(), 5);
 }
 
+TEST(ArrayFuncsTest, GenerateArrayDoubleElements) {
+  const ::googlesql::Type* ret = ::googlesql::types::DoubleArrayType();
+  auto got = GenerateArray({Value::Int64(1), Value::Int64(3)}, ret);
+  ASSERT_TRUE(got.ok()) << got.status();
+  ASSERT_EQ(got->num_elements(), 3);
+  EXPECT_DOUBLE_EQ(got->element(0).double_value(), 1.0);
+  EXPECT_DOUBLE_EQ(got->element(2).double_value(), 3.0);
+}
+
 TEST(ArrayFuncsTest, ArrayConcatMerges) {
   const ::googlesql::Type* ret = Int64ArrayType();
   Value a = Value::Array(ret->AsArray(), {Value::Int64(1), Value::Int64(2)});

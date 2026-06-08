@@ -14,13 +14,13 @@ This index replaces the monolith at [fix_remaining_test_failures_26f123d3.plan.m
 | Lane | Status | Scope |
 |------|--------|-------|
 | Go packages (`task test:run`) | Green | — |
-| bqutils passing (`task conformance:bqutils`) | Green | 67/67 |
+| bqutils passing (`task conformance:bqutils`) | Green | 75/75 |
 | First-party conformance (`task conformance:run`) | Red | 20/100 fail |
 | CI fastpath (`task conformance:fastpath`) | Red | 5/20 fail (subset of above) |
 | C++ cc_test (`task lint:cpp:test`) | CI exit 37 (Bazel internal crash) | 44 targets |
 | googlesql-parity | Red | DuckDB fetch 504; source-leg conformance; compare-job artifact gating |
 | Third-party | Partial CI | Java soft-gated; golang compile-only; python/node/bigframes/dbt manual |
-| bqutils known_failing | Intentionally red | 50 fixtures |
+| bqutils known_failing | Intentionally red | 42 fixtures |
 
 Branch is ~79 commits ahead of `origin/main`; remote CI does not yet reflect bqutils 06–08 work. **Push early** (plan 01) so `build-engine` -> `ci` / `conformance` run on current code.
 
@@ -134,7 +134,7 @@ Updated by the parent agent after each sub-plan returns.
 | 06 fastpath-scans | pending | |
 | 07 advanced-relational | pending | |
 | 08 bqutils-any-type | done | de89b70; 61→67; typeof, sure_values, cw_array_* |
-| 09 bqutils-bytes | pending | |
+| 09 bqutils-bytes | done | 83c7377; 67→75; to_hex, from_hex, to_binary, from_binary, cw_getbit*, cw_to_base, cw_from_base |
 | 10 bqutils-range | pending | |
 | 11 bqutils-regexp | pending | |
 | 12 bqutils-bignumeric | pending | |

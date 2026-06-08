@@ -20,8 +20,6 @@ absl::StatusOr<Value> DispatchBetween(absl::string_view name,
                                       const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIn(absl::string_view name,
                                  const std::vector<Value>& args);
-absl::StatusOr<Value> DispatchInArray(absl::string_view name,
-                                      const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIsTrue(absl::string_view name,
                                      const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIsFalse(absl::string_view name,
@@ -39,6 +37,7 @@ absl::StatusOr<Value> Ceil(const std::vector<Value>& args);
 absl::StatusOr<Value> Round(const std::vector<Value>& args);
 absl::StatusOr<Value> Mod(const std::vector<Value>& args);
 absl::StatusOr<Value> Pow(const std::vector<Value>& args);
+absl::StatusOr<Value> Log(const std::vector<Value>& args);
 
 }  // namespace functions
 }  // namespace semantic
