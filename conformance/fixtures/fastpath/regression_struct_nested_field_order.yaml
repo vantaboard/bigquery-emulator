@@ -19,16 +19,16 @@ description: |
   field-access emit composes against an inner STRUCT result.
 project_id: proj-fastpath-regression-struct-nested-field-order
 query: |
-  SELECT outer.a              AS a,
-         outer.b              AS b,
-         outer.c.d            AS d,
-         outer.c.e            AS e
+  SELECT `outer`.a              AS a,
+         `outer`.b              AS b,
+         `outer`.c.d            AS d,
+         `outer`.c.e            AS e
     FROM (
       SELECT STRUCT(
                1     AS a,
                'two' AS b,
                STRUCT(3 AS d, 'four' AS e) AS c
-             ) AS outer
+             ) AS `outer`
     )
 expected:
   route: duckdb_rewrite

@@ -277,7 +277,12 @@ std::string Transpiler::EmitProjectScan(
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
   const bool input_id_aliases = join_output_uses_id_aliases_;
-  join_output_uses_id_aliases_ = false;
+  // Keep join id aliases visible to EmitComputedColumn / EmitExpr while
+  // lowering expressions that reference join-renamed columns (e.g.
+  // COALESCE(CAST(u.id AS STRING), ...) over a FULL OUTER JOIN).
+  if (!input_id_aliases) {
+    join_output_uses_id_aliases_ = false;
+  }
 
   std::vector<std::string> projections;
   projections.reserve(node->column_list_size());
@@ -319,7 +324,9 @@ std::string Transpiler::EmitProjectScan(
   }
 
   if (input_id_aliases) {
-    join_output_uses_id_aliases_ = true;
+    // Computed projections replace join column aliases with new output
+    // names; downstream OrderByScan / QueryStmt must reference those names.
+    join_output_uses_id_aliases_ = node->expr_list_size() == 0;
   }
 
   for (const std::string& item : output_order_items_) {

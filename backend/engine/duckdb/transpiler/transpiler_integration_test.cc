@@ -202,6 +202,24 @@ ORDER BY `bfuid_col_2` ASC NULLS LAST
   ASSERT_FALSE(sql.empty()) << "full bigframes stats query must transpile";
 }
 
+TEST_F(TranspilerTest, TranspileFullOuterJoinCoalesceOrderBy) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT COALESCE(CAST(u.id AS STRING), 'no-user') AS user_id, "
+      "COALESCE(CAST(e.id AS STRING), 'no-event') AS event_id, "
+      "COALESCE(u.name, '<none>') AS name, "
+      "COALESCE(e.kind, '<none>') AS kind "
+      "FROM (SELECT 1 AS id, 'ada' AS name) AS u "
+      "FULL OUTER JOIN (SELECT 10 AS id, 1 AS user_id, 'login' AS kind) AS e "
+      "ON u.id = e.user_id "
+      "ORDER BY user_id, event_id");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "FULL OUTER JOIN COALESCE must transpile";
+  EXPECT_NE(sql.find("ORDER BY \"user_id\""), std::string::npos) << sql;
+  EXPECT_EQ(sql.find("__bq_j_6"), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, TranspileClusteredTableSampleQuery) {
   // golang-samples queryClusteredTable: global aggregates + filter +
   // named parameter. Regression for transpiler coverage on the

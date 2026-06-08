@@ -233,6 +233,11 @@ std::string Transpiler::EmitOrderByScan(
         internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
   }
   if (items.empty()) return "";
+  // Explicit ORDER BY wins over analytic-captured output_order_items_ that
+  // child scans (e.g. ROW_NUMBER PARTITION BY) may have queued for the
+  // outer QueryStmt wrap.
+  output_order_items_.clear();
+  input_rn_ordering_ = false;
   return absl::StrCat(
       "SELECT * FROM (", input, ") ORDER BY ", absl::StrJoin(items, ", "));
 }
