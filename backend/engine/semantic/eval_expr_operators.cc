@@ -209,6 +209,7 @@ absl::StatusOr<Value> ArithmeticAdd(const Value& a, const Value& b) {
     if (!out.ok()) return out.status();
     return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
   }
+  if (auto promoted = TryPromotedNumericAdd(a, b)) return *promoted;
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '+' operands have mismatched kinds: ",
@@ -303,6 +304,7 @@ absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
     if (!out.ok()) return out.status();
     return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
   }
+  if (auto promoted = TryPromotedNumericSub(a, b)) return *promoted;
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '-' operands have mismatched kinds: ",
@@ -328,6 +330,7 @@ absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
 }
 
 absl::StatusOr<Value> ArithmeticMul(const Value& a, const Value& b) {
+  if (auto promoted = TryPromotedNumericMul(a, b)) return *promoted;
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '*' operands have mismatched kinds: ",
@@ -394,6 +397,7 @@ absl::StatusOr<Value> ArithmeticDiv(const Value& a, const Value& b) {
     }
     return Value::BigNumeric(*result);
   }
+  if (auto promoted = TryPromotedNumericDiv(a, b)) return *promoted;
   return absl::InvalidArgumentError(
       absl::StrCat("semantic: '/' not implemented for (",
                    a.type()->DebugString(),

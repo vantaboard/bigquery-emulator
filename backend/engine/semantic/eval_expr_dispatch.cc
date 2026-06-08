@@ -115,6 +115,17 @@ absl::StatusOr<Value> DispatchAbs(const std::vector<Value>& args,
   if (v.type_kind() == ::googlesql::TYPE_DOUBLE) {
     return Value::Double(std::abs(v.double_value()));
   }
+  if (v.type_kind() == ::googlesql::TYPE_NUMERIC) {
+    return Value::Numeric(v.numeric_value().Abs());
+  }
+  if (v.type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
+    auto out = v.bignumeric_value().Abs();
+    if (!out.ok()) {
+      return MakeSemanticError(SemanticErrorReason::kOverflow,
+                               out.status().message());
+    }
+    return Value::BigNumeric(*out);
+  }
   return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                            "semantic: ABS requires numeric argument");
 }

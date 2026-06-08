@@ -113,6 +113,7 @@ cc_library(
         "eval_expr_calls.cc",
         "eval_expr_cast.cc",
         "eval_expr_dispatch.cc",
+        "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
         "eval_udaf.cc",
     ],

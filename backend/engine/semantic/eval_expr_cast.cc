@@ -10,11 +10,13 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/functions/datetime_funcs_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -28,7 +30,9 @@ namespace eval_expr_internal {
 
 namespace {
 
+using functions::datetime_internal::DefaultTimeZone;
 using functions::datetime_internal::kFormatOpts;
+using functions::datetime_internal::kMicros;
 
 bool StructTypesCompatibleByPosition(const ::googlesql::StructType* source,
                                      const ::googlesql::StructType* target) {
@@ -169,6 +173,60 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       return Value::String(std::move(out));
     }
   }
+  if (target->kind() == ::googlesql::TYPE_DATETIME) {
+    if (inner.type_kind() == ::googlesql::TYPE_DATETIME) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_DATE) {
+      ::googlesql::DatetimeValue out;
+      if (auto s = ::googlesql::functions::ConstructDatetime(
+              inner.date_value(), ::googlesql::TimeValue(), &out);
+          !s.ok()) {
+        return s;
+      }
+      return Value::Datetime(out);
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_STRING) {
+      ::googlesql::DatetimeValue out;
+      if (auto s = ::googlesql::functions::ParseStringToDatetime(
+              "%F %T",
+              inner.string_value(),
+              kMicros,
+              /*parse_version2=*/true,
+              &out);
+          !s.ok()) {
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 s.message());
+      }
+      return Value::Datetime(out);
+    }
+  }
+  if (target->kind() == ::googlesql::TYPE_TIMESTAMP) {
+    if (inner.type_kind() == ::googlesql::TYPE_TIMESTAMP) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_STRING) {
+      int64_t micros = 0;
+      const std::string text(inner.string_value());
+      absl::Time t;
+      std::string err;
+      if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
+          absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
+          absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err)) {
+        return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
+      }
+      if (auto s = ::googlesql::functions::ParseStringToTimestamp(
+              "%F %T",
+              inner.string_value(),
+              DefaultTimeZone(),
+              /*parse_version2=*/true,
+              &micros);
+          s.ok()) {
+        return Value::TimestampFromUnixMicros(micros);
+      }
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               absl::StrCat("semantic: CAST STRING to "
+                                            "TIMESTAMP failed for '",
+                                            inner.string_value(),
+                                            "'"));
+    }
+  }
   if (target->kind() == ::googlesql::TYPE_BOOL) {
     if (inner.type_kind() == ::googlesql::TYPE_BOOL) return inner;
     if (inner.type_kind() == ::googlesql::TYPE_STRING) {
@@ -237,8 +295,51 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       return Value::Int64(parsed);
     }
   }
+  if (target->kind() == ::googlesql::TYPE_BIGNUMERIC) {
+    if (inner.type_kind() == ::googlesql::TYPE_BIGNUMERIC) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_INT64) {
+      return Value::BigNumeric(
+          ::googlesql::BigNumericValue(inner.int64_value()));
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_NUMERIC) {
+      return Value::BigNumeric(
+          ::googlesql::BigNumericValue(inner.numeric_value()));
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_DOUBLE) {
+      auto n = ::googlesql::BigNumericValue::FromDouble(inner.double_value());
+      if (!n.ok()) {
+        if (n.status().code() == absl::StatusCode::kOutOfRange) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   n.status().message());
+        }
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 n.status().message());
+      }
+      return Value::BigNumeric(*n);
+    }
+    if (inner.type_kind() == ::googlesql::TYPE_STRING) {
+      auto n = ::googlesql::BigNumericValue::FromString(inner.string_value());
+      if (!n.ok()) {
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 n.status().message());
+      }
+      return Value::BigNumeric(*n);
+    }
+  }
   if (target->kind() == ::googlesql::TYPE_NUMERIC) {
     if (inner.type_kind() == ::googlesql::TYPE_NUMERIC) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
+      auto n = inner.bignumeric_value().ToNumericValue();
+      if (!n.ok()) {
+        if (n.status().code() == absl::StatusCode::kOutOfRange) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   n.status().message());
+        }
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 n.status().message());
+      }
+      return Value::Numeric(*n);
+    }
     if (inner.type_kind() == ::googlesql::TYPE_INT64) {
       auto n = ::googlesql::NumericValue::FromString(
           absl::StrCat(inner.int64_value()));

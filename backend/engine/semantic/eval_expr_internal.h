@@ -29,6 +29,15 @@ absl::StatusOr<Value> ArithmeticMul(const Value& a, const Value& b);
 absl::StatusOr<Value> ArithmeticDiv(const Value& a, const Value& b);
 absl::StatusOr<Value> UnaryMinus(const Value& a);
 
+std::optional<absl::StatusOr<Value>> TryPromotedNumericAdd(const Value& a,
+                                                           const Value& b);
+std::optional<absl::StatusOr<Value>> TryPromotedNumericSub(const Value& a,
+                                                           const Value& b);
+std::optional<absl::StatusOr<Value>> TryPromotedNumericMul(const Value& a,
+                                                           const Value& b);
+std::optional<absl::StatusOr<Value>> TryPromotedNumericDiv(const Value& a,
+                                                           const Value& b);
+
 absl::StatusOr<Value> DispatchAdd(const std::vector<Value>& args,
                                   const ::googlesql::Type* return_type);
 absl::StatusOr<Value> DispatchSub(const std::vector<Value>& args,

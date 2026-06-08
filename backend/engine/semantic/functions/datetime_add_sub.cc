@@ -358,6 +358,58 @@ absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
   return Value::Time(out);
 }
 
+absl::StatusOr<Value> TimestampBucket(const std::vector<Value>& args) {
+  if (args.size() < 2 || args.size() > 3) {
+    return absl::InvalidArgumentError(
+        "semantic: TIMESTAMP_BUCKET expects 2 or 3 arguments");
+  }
+  if (args[0].is_null() || args[1].is_null() ||
+      (args.size() == 3 && args[2].is_null())) {
+    return Value::NullTimestamp();
+  }
+  if (args[0].type_kind() != ::googlesql::TYPE_TIMESTAMP) {
+    return absl::InvalidArgumentError(
+        "semantic: TIMESTAMP_BUCKET first argument must be TIMESTAMP");
+  }
+  if (args[1].type_kind() != ::googlesql::TYPE_INTERVAL) {
+    return absl::InvalidArgumentError(
+        "semantic: TIMESTAMP_BUCKET second argument must be INTERVAL");
+  }
+  const absl::Time input = args[0].ToTime();
+  const ::googlesql::IntervalValue bucket_width = args[1].interval_value();
+  absl::Time origin = input;
+  if (args.size() == 3) {
+    if (args[2].type_kind() != ::googlesql::TYPE_TIMESTAMP) {
+      return absl::InvalidArgumentError(
+          "semantic: TIMESTAMP_BUCKET origin must be TIMESTAMP");
+    }
+    origin = args[2].ToTime();
+  } else {
+    int64_t default_origin_micros = 0;
+    if (auto s = ::googlesql::functions::ParseStringToTimestamp(
+            "%F %T",
+            "1950-01-01 00:00:00",
+            DefaultTimeZone(),
+            /*parse_version2=*/true,
+            &default_origin_micros);
+        !s.ok()) {
+      return s;
+    }
+    origin = absl::FromUnixMicros(default_origin_micros);
+  }
+  absl::Time bucket_start;
+  if (auto s = ::googlesql::functions::TimestampBucket(input,
+                                                       bucket_width,
+                                                       origin,
+                                                       DefaultTimeZone(),
+                                                       kMicros,
+                                                       &bucket_start);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Timestamp(bucket_start);
+}
+
 }  // namespace functions
 }  // namespace semantic
 }  // namespace engine

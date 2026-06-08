@@ -38,6 +38,9 @@ absl::StatusOr<Value> Round(const std::vector<Value>& args);
 absl::StatusOr<Value> Mod(const std::vector<Value>& args);
 absl::StatusOr<Value> Pow(const std::vector<Value>& args);
 absl::StatusOr<Value> Log(const std::vector<Value>& args);
+absl::StatusOr<Value> Trunc(const std::vector<Value>& args);
+absl::StatusOr<Value> Sign(const std::vector<Value>& args);
+absl::StatusOr<Value> Div(const std::vector<Value>& args);
 
 }  // namespace functions
 }  // namespace semantic

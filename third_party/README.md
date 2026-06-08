@@ -693,13 +693,19 @@ fixtests-09 bytes/bitwise (2026-06-08): **75 passing** (`to_hex`, `from_hex`,
 fixtures in `passing/` still fail runner — see `task conformance:bqutils`).
 After fixtests-11 regexp/string (2026-06-08): **95 fixtures in `passing/`**
 (+14 triage promotions; **89/95** runner pass — six legacy fails remain).
-Promoted includes `cw_regexp_instr_3`, regexp partition family (except
-`cw_disjoint_partition_by_regexp`), NVP (`cw_td_nvp`, `cw_nvp2json4`),
-`cw_substrb`, `cw_initcap`, `cw_otranslate`, `cw_instr4`,
-`cw_split_part_delimstr_idx`, `cw_find_in_list`,
+After fixtests-12 BIGNUMERIC/interval (2026-06-08): **102 fixtures in
+`passing/`** (+7: 128-bit shifts, round-half-even, `cw_months_between`,
+`ts_tumble`, `cw_stringify_interval`; **96/102** runner pass — six legacy
+fails unchanged). Promoted includes `cw_signed_{left,right}shift_128bit`,
+`cw_round_half_even{,_bignumeric}`, `cw_months_between`, `ts_tumble`,
+`cw_stringify_interval`. fixtests-11 promotions include `cw_regexp_instr_3`,
+regexp partition family (except `cw_disjoint_partition_by_regexp`), NVP
+(`cw_td_nvp`, `cw_nvp2json4`), `cw_substrb`, `cw_initcap`, `cw_otranslate`,
+`cw_instr4`, `cw_split_part_delimstr_idx`, `cw_find_in_list`,
 `cw_comparable_format_varchar_t`, `migration/redshift/initcap`. Still in
-`known_failing/`: `cw_disjoint_partition_by_regexp` (REGEXP_EXTRACT filter on
-UNNEST), `url_trim_query` (engine crash on STRING_AGG path),
+`known_failing/`: `migration/oracle/round_datetime` (engine crash on
+ISOYEAR/WW rounding path), `cw_disjoint_partition_by_regexp` (REGEXP_EXTRACT
+filter on UNNEST), `url_trim_query` (engine crash on STRING_AGG path),
 `migration/redshift/translate` (correlated subquery in UNNEST).
 First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and

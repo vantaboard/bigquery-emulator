@@ -419,6 +419,7 @@ timestamp_add: semantic_executor
 timestamp_sub: semantic_executor
 timestamp_diff: semantic_executor
 timestamp_trunc: semantic_executor
+timestamp_bucket: semantic_executor
 # BQ EXTRACT(part FROM value) has BigQuery-specific parts
 # (DATE / TIME / DATETIME extraction from a TIMESTAMP at a
 # specified timezone, ISOYEAR, ISOWEEK, MICROSECOND with

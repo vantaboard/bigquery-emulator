@@ -94,6 +94,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@googlesql//googlesql/public:interval_value",
+        "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:type_cc_proto",
         "@googlesql//googlesql/public:value",

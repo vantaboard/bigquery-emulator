@@ -49,6 +49,7 @@ absl::StatusOr<Value> TimestampMicros(const std::vector<Value>& args);
 
 absl::StatusOr<Value> DateFromUnixDate(const std::vector<Value>& args);
 absl::StatusOr<Value> LastDay(const std::vector<Value>& args);
+absl::StatusOr<Value> TimestampBucket(const std::vector<Value>& args);
 absl::StatusOr<Value> MakeInterval(const std::vector<Value>& args);
 absl::StatusOr<Value> JustifyInterval(const std::vector<Value>& args);
 absl::StatusOr<Value> Extract(const std::vector<Value>& args,
