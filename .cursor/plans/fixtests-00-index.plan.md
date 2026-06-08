@@ -135,7 +135,7 @@ Updated by the parent agent after each sub-plan returns.
 | 07 advanced-relational | pending | |
 | 08 bqutils-any-type | done | de89b70; 61→67; typeof, sure_values, cw_array_* |
 | 09 bqutils-bytes | done | 83c7377; 67→75; to_hex, from_hex, to_binary, from_binary, cw_getbit*, cw_to_base, cw_from_base |
-| 10 bqutils-range | pending | |
+| 10 bqutils-range | done | RANGE<> type + RANGE_OVERLAPS/START/END; 75→80 (+6 cw_range_*) |
 | 11 bqutils-regexp | pending | |
 | 12 bqutils-bignumeric | pending | |
 | 13 bqutils-tail | pending | |

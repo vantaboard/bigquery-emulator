@@ -12,6 +12,7 @@
 #include "backend/engine/semantic/functions/json_funcs.h"
 #include "backend/engine/semantic/functions/numeric_edges.h"
 #include "backend/engine/semantic/functions/operator_funcs.h"
+#include "backend/engine/semantic/functions/range_funcs.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
@@ -206,6 +207,10 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   }
   // Intervals and extract.
   if (name == "make_interval") return MakeInterval(args);
+  if (name == "range") return RangeCtor(args, return_type);
+  if (name == "range_start") return RangeStart(args);
+  if (name == "range_end") return RangeEnd(args);
+  if (name == "range_overlaps") return RangeOverlaps(args);
   if (name == "extract") return Extract(args, return_type);
   if (auto specialized = DispatchSpecializedScalar(name, args, return_type)) {
     return *specialized;

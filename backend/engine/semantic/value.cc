@@ -102,6 +102,8 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
       return "GEOGRAPHY";
     case ::googlesql::TYPE_INTERVAL:
       return "INTERVAL";
+    case ::googlesql::TYPE_RANGE:
+      return "RANGE";
     case ::googlesql::TYPE_UUID:
       return "UUID";
     case ::googlesql::TYPE_ARRAY:
@@ -144,6 +146,9 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
     return ::googlesql::TYPE_GEOGRAPHY;
   if (absl::EqualsIgnoreCase(name, "INTERVAL"))
     return ::googlesql::TYPE_INTERVAL;
+  if (absl::StartsWithIgnoreCase(name, "RANGE")) {
+    return ::googlesql::TYPE_RANGE;
+  }
   if (absl::EqualsIgnoreCase(name, "UUID")) return ::googlesql::TYPE_UUID;
   if (absl::EqualsIgnoreCase(name, "ARRAY")) return ::googlesql::TYPE_ARRAY;
   if (absl::EqualsIgnoreCase(name, "STRUCT") ||
@@ -215,6 +220,13 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
           value.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL));
     case ::googlesql::TYPE_INTERVAL:
       return storage::Value::String(value.interval_value().ToString());
+    case ::googlesql::TYPE_RANGE: {
+      std::string lit = value.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL);
+      for (char& c : lit) {
+        if (c == '"') c = '\'';
+      }
+      return storage::Value::String(lit);
+    }
     case ::googlesql::TYPE_UUID: {
       auto uuid = value.uuid_value();
       if (!uuid.ok()) return uuid.status();
@@ -323,14 +335,21 @@ absl::StatusOr<schema::ColumnSchema> ColumnSchemaForType(
     }
     case ::googlesql::TYPE_INTERVAL:
     case ::googlesql::TYPE_UUID:
-      // INTERVAL and UUID have no first-class BigQuery REST schema
-      // type today; the gateway accepts STRING for the wire shape
-      // when the semantic executor renders them. We surface kString
-      // here so the gateway-side schema reflection lines up with
-      // the cell shape `ToStorageValue` emits.
+    case ::googlesql::TYPE_RANGE:
+      // INTERVAL, UUID, and RANGE have no first-class BigQuery REST
+      // schema type in the engine proto today; the gateway accepts
+      // STRING for the wire shape when the semantic executor renders
+      // them. We surface kString here so the gateway-side schema
+      // reflection lines up with the cell shape `ToStorageValue`
+      // emits.
       column.type = schema::ColumnType::kString;
-      column.raw_type = std::string(
-          core->kind() == ::googlesql::TYPE_INTERVAL ? "INTERVAL" : "UUID");
+      if (core->kind() == ::googlesql::TYPE_INTERVAL) {
+        column.raw_type = "INTERVAL";
+      } else if (core->kind() == ::googlesql::TYPE_UUID) {
+        column.raw_type = "UUID";
+      } else {
+        column.raw_type = core->TypeName(::googlesql::PRODUCT_EXTERNAL);
+      }
       break;
     default:
       return absl::InvalidArgumentError(absl::StrCat("semantic: column '",

@@ -10,6 +10,7 @@
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/range_type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_column.h"
@@ -143,7 +144,20 @@ absl::Status FillScalarOrStruct(const ::googlesql::Type* type,
     out->set_type("STRUCT");
     return FillStructFields(st, nested_path, out);
   }
-  // Unsupported kinds (PROTO, ENUM, INTERVAL, RANGE, GRAPH_ELEMENT,
+  if (type->IsRange()) {
+    const ::googlesql::RangeType* rt = type->AsRange();
+    if (rt == nullptr) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "field '", nested_path, "': TYPE_RANGE without RangeType payload"));
+    }
+    out->set_type("RANGE");
+    v1::FieldSchema* element = out->add_fields();
+    element->set_name("range_element_type");
+    return FillScalarOrStruct(rt->element_type(),
+                              absl::StrCat(nested_path, ".range_element_type"),
+                              element);
+  }
+  // Unsupported kinds (PROTO, ENUM, INTERVAL, GRAPH_ELEMENT,
   // EXTENDED, UUID, ...) fall through here. Surface the GoogleSQL
   // debug name so the analyzer error message is actionable.
   return absl::InvalidArgumentError(

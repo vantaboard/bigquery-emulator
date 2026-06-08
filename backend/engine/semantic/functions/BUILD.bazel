@@ -280,6 +280,43 @@ cc_library(
 )
 
 cc_library(
+    name = "range_funcs",
+    srcs = ["range_funcs.cc"],
+    hdrs = ["range_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "range_funcs_test",
+    srcs = ["range_funcs_test.cc"],
+    deps = [
+        ":range_funcs",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "dispatch",
     srcs = ["dispatch.cc"],
     hdrs = ["dispatch.h"],
@@ -290,6 +327,7 @@ cc_library(
         ":json_funcs",
         ":numeric_edges",
         ":operator_funcs",
+        ":range_funcs",
         ":specialized_funcs",
         ":string_funcs",
         "//backend/engine/semantic:value",

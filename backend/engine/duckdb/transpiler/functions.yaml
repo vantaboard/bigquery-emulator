@@ -664,6 +664,12 @@ json_value_array: semantic_executor
 json_type: semantic_executor
 json_extract_string_array: semantic_executor
 parse_json: semantic_executor
+# RANGE<> type algebra (DATE / DATETIME / TIMESTAMP bounds).
+range: semantic_executor
+range_start: semantic_executor
+range_end: semantic_executor
+range_overlaps: semantic_executor
+
 to_json: semantic_executor
 to_json_string: semantic_executor
 

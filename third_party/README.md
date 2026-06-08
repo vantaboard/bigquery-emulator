@@ -688,7 +688,10 @@ including `passing/views/migration/teradata/sys_calendar.yaml` and four
 `cw_array_min`, `cw_array_median`, `cw_array_stable_distinct`). After
 fixtests-09 bytes/bitwise (2026-06-08): **75 passing** (`to_hex`, `from_hex`,
 `to_binary`, `from_binary`, `cw_getbit`, `cw_getbit_binary`, `cw_to_base`,
-`cw_from_base`). First-party
+`cw_from_base`). After fixtests-10 RANGE<> (2026-06-08): **80 passing**
+(+6: `cw_range_{date,datetime,timestamp}_{ldiff,rdiff}`; seven legacy
+fixtures in `passing/` still fail runner — see `task conformance:bqutils`).
+First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.
 

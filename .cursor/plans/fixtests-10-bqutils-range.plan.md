@@ -7,16 +7,16 @@ isProject: true
 todos:
   - id: repro-diff
     content: Run the 6 cw_range_* fixtures and diff their SQL bodies against the passing cw_period_* fixtures to enumerate exactly which RANGE constructs are missing.
-    status: pending
+    status: completed
   - id: range-type
     content: Implement the RANGE<DATE|DATETIME|TIMESTAMP> type end to end (analyzer/catalog -> semantic value -> wire) for params and return values.
-    status: pending
+    status: completed
   - id: range-funcs
     content: Implement RANGE() constructor, RANGE_OVERLAPS, RANGE_START, RANGE_END (and any other range fns the bodies call).
-    status: pending
+    status: completed
   - id: triage
     content: Re-sync + triage; move the 6 fixtures to passing/; update index count and docs.
-    status: pending
+    status: completed
 ---
 
 # FixTests 10 — bqutils RANGE<> type algebra

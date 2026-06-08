@@ -369,6 +369,15 @@ std::string ValueToJsonText(const Value& v) {
     }
     case ::googlesql::TYPE_STRUCT:
       return StructToJson(v);
+    case ::googlesql::TYPE_RANGE: {
+      // BigQuery TO_JSON_STRING serializes RANGE bounds with single
+      // quotes; googlesql GetSQLLiteral uses double quotes.
+      std::string lit = v.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL);
+      for (char& c : lit) {
+        if (c == '"') c = '\'';
+      }
+      return absl::StrCat("\"", absl::Utf8SafeCEscape(lit), "\"");
+    }
     default:
       return absl::StrCat("\"", absl::Utf8SafeCEscape(v.DebugString()), "\"");
   }
@@ -399,7 +408,7 @@ absl::StatusOr<Value> ToJson(const std::vector<Value>& args) {
     return absl::InvalidArgumentError(
         "semantic: TO_JSON expects one or two arguments");
   }
-  if (args[0].is_null()) return Value::NullJson();
+  if (!args[0].is_valid() || args[0].is_null()) return Value::NullJson();
   return Value::UnvalidatedJsonString(ValueToJsonText(args[0]));
 }
 

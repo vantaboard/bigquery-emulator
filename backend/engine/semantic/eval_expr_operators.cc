@@ -85,6 +85,8 @@ Value NullOfType(const ::googlesql::Type* type) {
       return Value::NullInterval();
     case ::googlesql::TYPE_UUID:
       return Value::NullUuid();
+    case ::googlesql::TYPE_RANGE:
+      return Value::Null(type);
     default:
       // Fall back: the analyzer always types every output column,
       // and the generic null factory is invalid for compound types.
