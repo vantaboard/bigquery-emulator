@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/functions/operator_funcs.h"
-
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -8,6 +6,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/functions/operator_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 
@@ -92,8 +91,7 @@ absl::StatusOr<Value> Mod(const std::vector<Value>& args) {
   }
   if (args[0].type_kind() != ::googlesql::TYPE_INT64 ||
       args[1].type_kind() != ::googlesql::TYPE_INT64) {
-    return absl::InvalidArgumentError(
-        "semantic: MOD requires INT64 operands");
+    return absl::InvalidArgumentError("semantic: MOD requires INT64 operands");
   }
   const int64_t dividend = args[0].int64_value();
   const int64_t divisor = args[1].int64_value();

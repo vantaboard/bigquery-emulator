@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <numeric>
 #include <string>
@@ -80,6 +81,42 @@ absl::StatusOr<Value> AddValues(const Value& a, const Value& b) {
   }
   return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                            "semantic: analytic SUM add unsupported types");
+}
+
+double PercentileContFromSorted(const std::vector<double>& sorted, double p) {
+  if (sorted.empty()) return 0.0;
+  if (sorted.size() == 1) return sorted.front();
+  const double rank = p * static_cast<double>(sorted.size() - 1);
+  const size_t lo = static_cast<size_t>(rank);
+  const size_t hi = std::min(lo + 1, sorted.size() - 1);
+  const double frac = rank - static_cast<double>(lo);
+  return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+}
+
+absl::StatusOr<Value> PercentileContValue(const Value& percentile,
+                                          const std::vector<Value>& values) {
+  if (percentile.is_null()) return Value::NullDouble();
+  const double p = percentile.double_value();
+  std::vector<double> nums;
+  nums.reserve(values.size());
+  for (const Value& v : values) {
+    if (v.is_null()) continue;
+    if (v.type_kind() == ::googlesql::TYPE_INT64) {
+      nums.push_back(static_cast<double>(v.int64_value()));
+    } else if (v.type_kind() == ::googlesql::TYPE_DOUBLE) {
+      nums.push_back(v.double_value());
+    } else if (v.type_kind() == ::googlesql::TYPE_FLOAT) {
+      nums.push_back(static_cast<double>(v.float_value()));
+    } else if (v.type_kind() == ::googlesql::TYPE_NUMERIC) {
+      nums.push_back(v.numeric_value().ToDouble());
+    } else {
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               "semantic: PERCENTILE_CONT unsupported type");
+    }
+  }
+  if (nums.empty()) return Value::NullDouble();
+  std::sort(nums.begin(), nums.end());
+  return Value::Double(PercentileContFromSorted(nums, p));
 }
 
 std::vector<Value> PartitionKeysForRow(
@@ -204,6 +241,43 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
           auto it = partition_sums.find(partition_fps[r]);
           if (it == partition_sums.end()) {
             out_rows[r][out_col_id] = Value::NullInt64();
+          } else {
+            out_rows[r][out_col_id] = it->second;
+          }
+        }
+        continue;
+      }
+      if (fname == "percentile_cont") {
+        if (afn->argument_list_size() != 2 ||
+            afn->argument_list(0) == nullptr ||
+            afn->argument_list(1) == nullptr) {
+          return absl::InvalidArgumentError(
+              "semantic: analytic PERCENTILE_CONT expects two arguments");
+        }
+        absl::flat_hash_map<std::string, std::vector<Value>> partition_values;
+        absl::flat_hash_map<std::string, Value> partition_percentile;
+        for (size_t r = 0; r < input_rows.size(); ++r) {
+          EvalContext row_ctx = ctx;
+          row_ctx.columns = &input_rows[r];
+          auto piece = EvalExpr(*afn->argument_list(0), row_ctx);
+          if (!piece.ok()) return piece.status();
+          auto pct = EvalExpr(*afn->argument_list(1), row_ctx);
+          if (!pct.ok()) return pct.status();
+          partition_values[partition_fps[r]].push_back(*piece);
+          partition_percentile.emplace(partition_fps[r], *pct);
+        }
+        absl::flat_hash_map<std::string, Value> partition_result;
+        for (const auto& [fp, vals] : partition_values) {
+          auto it = partition_percentile.find(fp);
+          if (it == partition_percentile.end()) continue;
+          auto out = PercentileContValue(it->second, vals);
+          if (!out.ok()) return out.status();
+          partition_result.emplace(fp, *out);
+        }
+        for (size_t r = 0; r < out_rows.size(); ++r) {
+          auto it = partition_result.find(partition_fps[r]);
+          if (it == partition_result.end()) {
+            out_rows[r][out_col_id] = Value::NullDouble();
           } else {
             out_rows[r][out_col_id] = it->second;
           }

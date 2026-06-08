@@ -1,5 +1,6 @@
 #include "backend/engine/semantic/functions/operator_funcs.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -74,6 +75,69 @@ absl::StatusOr<int64_t> RequireInt64(const Value& v, absl::string_view op) {
         absl::StrCat("semantic: ", op, " requires INT64 operands"));
   }
   return v.int64_value();
+}
+
+std::string BytesToBitString(absl::string_view bytes) {
+  std::string bits;
+  bits.reserve(bytes.size() * 8);
+  for (unsigned char c : bytes) {
+    for (int b = 7; b >= 0; --b) {
+      bits.push_back(((c >> b) & 1) ? '1' : '0');
+    }
+  }
+  return bits;
+}
+
+std::string BitStringToBytes(absl::string_view bits) {
+  if (bits.empty()) return "";
+  std::string padded(bits);
+  while (padded.size() % 8 != 0) {
+    padded.insert(padded.begin(), '0');
+  }
+  std::string out;
+  out.reserve(padded.size() / 8);
+  for (size_t i = 0; i < padded.size(); i += 8) {
+    uint8_t byte = 0;
+    for (int b = 0; b < 8; ++b) {
+      byte = static_cast<uint8_t>((byte << 1) | (padded[i + b] == '1' ? 1 : 0));
+    }
+    out.push_back(static_cast<char>(byte));
+  }
+  return out;
+}
+
+absl::StatusOr<std::string> ShiftBytesRight(absl::string_view bytes,
+                                            int64_t shift_bits) {
+  if (shift_bits < 0) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: shift count out of range");
+  }
+  if (bytes.empty() || shift_bits == 0) {
+    return std::string(bytes);
+  }
+  std::string bits = BytesToBitString(bytes);
+  if (shift_bits >= static_cast<int64_t>(bits.size())) {
+    return std::string();
+  }
+  bits.resize(bits.size() - static_cast<size_t>(shift_bits));
+  const size_t first_one = bits.find('1');
+  if (first_one == std::string::npos) {
+    return std::string(1, '\0');
+  }
+  return BitStringToBytes(bits.substr(first_one));
+}
+
+std::string AndBytes(absl::string_view a, absl::string_view b) {
+  const size_t n = std::max(a.size(), b.size());
+  std::string out(n, '\0');
+  for (size_t i = 0; i < n; ++i) {
+    const unsigned char left =
+        i < a.size() ? static_cast<unsigned char>(a[a.size() - 1 - i]) : 0;
+    const unsigned char right =
+        i < b.size() ? static_cast<unsigned char>(b[b.size() - 1 - i]) : 0;
+    out[n - 1 - i] = static_cast<char>(left & right);
+  }
+  return out;
 }
 
 absl::StatusOr<DateTimestampPart> PartFromArg(const Value& v) {
@@ -170,40 +234,6 @@ absl::StatusOr<Value> DispatchBetween(absl::string_view name,
   return Value::Bool(in_range);
 }
 
-absl::StatusOr<Value> DispatchIn(absl::string_view name,
-                                 const std::vector<Value>& args) {
-  if (args.size() < 2) {
-    return absl::InvalidArgumentError(
-        "semantic: IN expects at least two arguments");
-  }
-  if (args[0].is_null()) {
-    return Value::NullBool();
-  }
-  const Value& lhs = args[0];
-  bool saw_null_rhs = false;
-  for (size_t i = 1; i < args.size(); ++i) {
-    if (args[i].is_null()) {
-      saw_null_rhs = true;
-      continue;
-    }
-    if (lhs.Equals(args[i])) {
-      bool found = true;
-      if (name == "$not_in") {
-        found = false;
-      }
-      return Value::Bool(found);
-    }
-  }
-  if (saw_null_rhs) {
-    return Value::NullBool();
-  }
-  bool found = false;
-  if (name == "$not_in") {
-    found = true;
-  }
-  return Value::Bool(found);
-}
-
 absl::StatusOr<Value> DispatchIsTrue(absl::string_view name,
                                      const std::vector<Value>& args) {
   if (args.size() != 1) {
@@ -289,7 +319,31 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
         absl::StrCat("semantic: ", name, " expects exactly two arguments"));
   }
   if (args[0].is_null() || args[1].is_null()) {
+    if (args[0].type_kind() == ::googlesql::TYPE_BYTES ||
+        args[1].type_kind() == ::googlesql::TYPE_BYTES) {
+      return Value::NullBytes();
+    }
     return Value::NullInt64();
+  }
+  if (args[0].type_kind() == ::googlesql::TYPE_BYTES ||
+      args[1].type_kind() == ::googlesql::TYPE_BYTES) {
+    auto shift = RequireInt64(args[1], name);
+    if (!shift.ok()) return shift.status();
+    if (name == "$bitwise_right_shift" &&
+        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
+        args[1].type_kind() == ::googlesql::TYPE_INT64) {
+      auto out = ShiftBytesRight(args[0].bytes_value(), *shift);
+      if (!out.ok()) return out.status();
+      return Value::Bytes(*std::move(out));
+    }
+    if (name == "$bitwise_and" &&
+        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
+        args[1].type_kind() == ::googlesql::TYPE_BYTES) {
+      return Value::Bytes(
+          AndBytes(args[0].bytes_value(), args[1].bytes_value()));
+    }
+    return absl::InvalidArgumentError(absl::StrCat(
+        "semantic: ", name, " does not support these BYTES operand types"));
   }
   auto a = RequireInt64(args[0], name);
   if (!a.ok()) return a.status();
@@ -305,16 +359,22 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
     return Value::Int64(*a ^ *b);
   }
   if (name == "$bitwise_left_shift") {
-    if (*b < 0 || *b >= 64) {
+    if (*b < 0) {
       return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                                "semantic: shift count out of range");
+    }
+    if (*b >= 64) {
+      return Value::Int64(0);
     }
     return Value::Int64(static_cast<uint64_t>(*a) << *b);
   }
   if (name == "$bitwise_right_shift") {
-    if (*b < 0 || *b >= 64) {
+    if (*b < 0) {
       return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                                "semantic: shift count out of range");
+    }
+    if (*b >= 64) {
+      return Value::Int64(0);
     }
     return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(*a) >> *b));
   }

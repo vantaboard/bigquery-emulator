@@ -683,8 +683,9 @@ codegen, 97 skipped (64 JS, 22 templated, 11 UDAF), **36 passing** /
 **55 passing** / 71+ known_failing (ANY TYPE + SQL UDAFs); JS remains
 excluded at codegen. After plans 06–08 closure (2026-06-07): **60 passing**
 including `passing/views/migration/teradata/sys_calendar.yaml` and four
-`passing/stored_procedures/` README goldens (`get_next_ids`,
-`linear_regression`, `bh_multiple_tests`, `chi_square`). First-party
+`passing/stored_procedures/` README goldens. After fixtests-08 ANY TYPE
+(2026-06-08): **67 passing** (`typeof`, `sure_values`, `cw_array_max`,
+`cw_array_min`, `cw_array_median`, `cw_array_stable_distinct`). First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.
 

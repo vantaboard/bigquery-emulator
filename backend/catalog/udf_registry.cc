@@ -90,6 +90,20 @@ absl::Status RegisterProjectFunction(
   return bucket.type_factory.get();
 }
 
+bool IsProjectRegisteredFunction(absl::string_view project_id,
+                                 absl::string_view fn_name) {
+  if (project_id.empty() || fn_name.empty()) return false;
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) return false;
+  for (const auto& fn : it->second.functions) {
+    if (fn != nullptr && absl::EqualsIgnoreCase(fn->Name(), fn_name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ReplayFunctionsIntoCatalog(absl::string_view project_id,
                                 ::googlesql::SimpleCatalog& catalog) {
   absl::MutexLock lock(&mu);

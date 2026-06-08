@@ -8,6 +8,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
 #include "googlesql/public/templated_sql_function.h"
@@ -50,12 +51,14 @@ MakeFunctionFromCreateFunctionImpl(
     if (!sql_fn.ok()) return sql_fn.status();
     function = std::move(*sql_fn);
   } else if (create_function_stmt.language() == "SQL") {
+    const std::string preprocessed_code =
+        engine::coordinator::PreprocessSqlForAnalyzer(
+            create_function_stmt.code());
     function = std::make_unique<::googlesql::TemplatedSQLFunction>(
         create_function_stmt.name_path(),
         create_function_stmt.signature(),
         create_function_stmt.argument_name_list(),
-        ::googlesql::ParseResumeLocation::FromStringView(
-            create_function_stmt.code()),
+        ::googlesql::ParseResumeLocation::FromString(preprocessed_code),
         function_mode,
         options);
   } else {

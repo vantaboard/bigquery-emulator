@@ -8,6 +8,7 @@
 #include "backend/engine/semantic/eval_context.h"
 #include "backend/engine/semantic/functions/array_funcs.h"
 #include "backend/engine/semantic/functions/datetime_funcs.h"
+#include "backend/engine/semantic/functions/geog_funcs.h"
 #include "backend/engine/semantic/functions/json_funcs.h"
 #include "backend/engine/semantic/functions/numeric_edges.h"
 #include "backend/engine/semantic/functions/operator_funcs.h"
@@ -58,11 +59,14 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "round") return Round(args);
   if (name == "mod") return Mod(args);
   if (name == "pow" || name == "power") return Pow(args);
+  if (name == "log") return Log(args);
+  if (name == "ln") return Log(args);
   if (name == "replace") return Replace(args);
   if (name == "reverse") return Reverse(args);
   if (name == "starts_with") return StartsWith(args);
   if (name == "ends_with") return EndsWith(args);
   if (name == "left") return Left(args);
+  if (name == "right") return Right(args);
   if (name == "substr" || name == "substring") return Substr(args);
   if (name == "strpos") return Strpos(args);
   if (name == "split") return Split(args, return_type);
@@ -98,6 +102,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "regexp_replace") return RegexpReplace(args);
   if (name == "regexp_instr") return RegexpInstr(args);
   if (name == "format") return Format(args);
+  if (name == "st_geogpoint") return StGeogPoint(args);
   if (name == "to_json") return ToJson(args);
   if (name == "to_json_string") return ToJsonString(args);
   if (name == "parse_json") return ParseJson(args);

@@ -20,6 +20,8 @@ absl::StatusOr<Value> DispatchBetween(absl::string_view name,
                                       const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIn(absl::string_view name,
                                  const std::vector<Value>& args);
+absl::StatusOr<Value> DispatchInArray(absl::string_view name,
+                                      const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIsTrue(absl::string_view name,
                                      const std::vector<Value>& args);
 absl::StatusOr<Value> DispatchIsFalse(absl::string_view name,

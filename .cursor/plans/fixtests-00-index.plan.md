@@ -14,13 +14,13 @@ This index replaces the monolith at [fix_remaining_test_failures_26f123d3.plan.m
 | Lane | Status | Scope |
 |------|--------|-------|
 | Go packages (`task test:run`) | Green | — |
-| bqutils passing (`task conformance:bqutils`) | Green | 61/61 |
+| bqutils passing (`task conformance:bqutils`) | Green | 67/67 |
 | First-party conformance (`task conformance:run`) | Red | 20/100 fail |
 | CI fastpath (`task conformance:fastpath`) | Red | 5/20 fail (subset of above) |
 | C++ cc_test (`task lint:cpp:test`) | CI exit 37 (Bazel internal crash) | 44 targets |
 | googlesql-parity | Red | DuckDB fetch 504; source-leg conformance; compare-job artifact gating |
 | Third-party | Partial CI | Java soft-gated; golang compile-only; python/node/bigframes/dbt manual |
-| bqutils known_failing | Intentionally red | 56 fixtures |
+| bqutils known_failing | Intentionally red | 50 fixtures |
 
 Branch is ~79 commits ahead of `origin/main`; remote CI does not yet reflect bqutils 06–08 work. **Push early** (plan 01) so `build-engine` -> `ci` / `conformance` run on current code.
 
@@ -73,7 +73,7 @@ flowchart LR
 | 06 | [fixtests-06-fastpath-scans.plan.md](fixtests-06-fastpath-scans.plan.md) | ~1 week | 4 scan/struct fixtures |
 | 07 | [fixtests-07-advanced-relational.plan.md](fixtests-07-advanced-relational.plan.md) | 2–3 weeks | pivot, unpivot, recursive_cte -> conformance 100/100 |
 
-### Track B — bqutils known_failing (56 -> 0)
+### Track B — bqutils known_failing (50 -> 0)
 
 | # | Plan file | Est. effort | Fixtures |
 |---|-----------|-------------|----------|
@@ -114,7 +114,7 @@ task conformance:bqutils                       # verify passing/ still green
 | Go | `task test:run` | all pass |
 | CI fastpath | `task conformance:fastpath` | 20/20 |
 | Full conformance | `task conformance:run` | 100/100 |
-| bqutils gate | `task conformance:bqutils` | grows to ~117 (61 + 56) |
+| bqutils gate | `task conformance:bqutils` | grows to ~117 (67 + 50) |
 | C++ tests | `GOOGLESQL_SOURCE=prebuilt task lint:cpp:test` | exit 0 |
 | Full CI mirror | `task ci:run` | all steps green |
 | Third-party | `task thirdparty` | all suites green |
@@ -126,14 +126,14 @@ Updated by the parent agent after each sub-plan returns.
 
 | Plan | State | Notes |
 |------|-------|-------|
-| 01 foundation | pending | |
-| 02 quickwins | pending | |
-| 03 cc-test | pending | |
-| 04 ci-parity-infra | pending | |
+| 01 foundation | done | fastpath 15/20, full 80/100; cc_test exit 201 (abseil); triage in docs/dev/fixtests-triage.md |
+| 02 quickwins | done | 3d3e45a; 8/8 plan fixtures; fastpath 17/20, full 89/100 |
+| 03 cc-test | done | bb52b45; lint:cpp:test 44/44 exit 0 |
+| 04 ci-parity-infra | done | c187084; parity artifact gating, Java CI gate |
 | 05 scalar-subquery | pending | |
 | 06 fastpath-scans | pending | |
 | 07 advanced-relational | pending | |
-| 08 bqutils-any-type | pending | |
+| 08 bqutils-any-type | done | de89b70; 61→67; typeof, sure_values, cw_array_* |
 | 09 bqutils-bytes | pending | |
 | 10 bqutils-range | pending | |
 | 11 bqutils-regexp | pending | |

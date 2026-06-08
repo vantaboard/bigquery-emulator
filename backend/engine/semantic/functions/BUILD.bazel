@@ -82,6 +82,7 @@ cc_library(
     name = "operator_funcs",
     srcs = [
         "operator_funcs.cc",
+        "operator_in.cc",
         "operator_math_funcs.cc",
     ],
     hdrs = ["operator_funcs.h"],
@@ -264,12 +265,28 @@ cc_library(
 )
 
 cc_library(
+    name = "geog_funcs",
+    srcs = ["geog_funcs.cc"],
+    hdrs = ["geog_funcs.h"],
+    deps = [
+        ":string_funcs",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "dispatch",
     srcs = ["dispatch.cc"],
     hdrs = ["dispatch.h"],
     deps = [
         ":array_funcs",
         ":datetime_funcs",
+        ":geog_funcs",
         ":json_funcs",
         ":numeric_edges",
         ":operator_funcs",

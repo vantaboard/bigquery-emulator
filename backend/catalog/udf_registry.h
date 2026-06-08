@@ -49,6 +49,10 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
 ::googlesql::TypeFactory* LookupProjectTypeFactory(
     absl::string_view project_id);
 
+// True when `project_id` owns a user-defined function named `fn_name`.
+bool IsProjectRegisteredFunction(absl::string_view project_id,
+                                 absl::string_view fn_name);
+
 // Ensures a per-project `TypeFactory` exists for UDF registration.
 ::googlesql::TypeFactory* EnsureProjectTypeFactory(
     absl::string_view project_id);

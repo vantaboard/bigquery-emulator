@@ -8,6 +8,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/udf_registry.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
@@ -15,6 +16,7 @@
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/functions/datetime_funcs.h"
 #include "backend/engine/semantic/functions/dispatch.h"
+#include "backend/engine/semantic/functions/geog_funcs.h"
 #include "backend/engine/semantic/functions/operator_funcs.h"
 #include "backend/engine/semantic/stubs/dispatch.h"
 #include "backend/engine/semantic/value.h"
@@ -100,6 +102,13 @@ absl::StatusOr<Value> DispatchFunctionByName(
     return functions::DispatchBetween(name, args);
   }
   if (name == "$in" || name == "$not_in") {
+    if (args.size() == 2 && args[1].type() != nullptr &&
+        args[1].type()->IsArray()) {
+      std::vector<Value> expanded = {args[0]};
+      expanded.insert(
+          expanded.end(), args[1].elements().begin(), args[1].elements().end());
+      return functions::DispatchIn(name, expanded);
+    }
     return functions::DispatchIn(name, args);
   }
   if (name == "$is_true" || name == "$is_not_true") {
@@ -359,18 +368,30 @@ absl::StatusOr<Value> EvalFunctionCall(
           ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup) {
     const auto* templated =
         static_cast<const ::googlesql::TemplatedSQLFunctionCall*>(info.get());
-    if (templated->expr() != nullptr) {
+    if (templated->expr() != nullptr &&
+        catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
       return EvalSqlUdfBody(call, *templated->expr(), ctx);
     }
   }
   if (fn != nullptr &&
       fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
     const auto* sql_fn = static_cast<const ::googlesql::SQLFunction*>(fn);
-    if (sql_fn->FunctionExpression() != nullptr) {
+    if (sql_fn->FunctionExpression() != nullptr &&
+        catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
       return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);
     }
   }
   const std::string name = LowerFunctionDispatchName(call.function());
+  if (name == "emu_format_t") {
+    std::vector<Value> args;
+    args.reserve(call.argument_list_size());
+    for (int i = 0; i < call.argument_list_size(); ++i) {
+      auto v = EvalExpr(*call.argument_list(i), ctx);
+      if (!v.ok()) return v.status();
+      args.push_back(*std::move(v));
+    }
+    return functions::EmuFormatTypeLiteral(args);
+  }
   if (name == "array_transform") {
     return EvalArrayTransform(call, ctx);
   }

@@ -30,21 +30,32 @@ void EnsureEmulatorFunctionsCreated() {
   absl::call_once(g_register_once, []() {
     ::googlesql::FunctionArgumentTypeOptions arg_opts;
     arg_opts.set_argument_name("x", ::googlesql::kPositionalOrNamed);
-    const int64_t context_id = 0;
-    ::googlesql::FunctionSignature signature(
-        ::googlesql::FunctionArgumentType(::googlesql::types::BoolType(), 1),
-        {::googlesql::FunctionArgumentType(::googlesql::ARG_TYPE_ANY_1,
-                                           arg_opts)},
-        context_id);
-    ::googlesql::FunctionOptions options;
-    options.set_uses_upper_case_sql_name(false);
-    auto fn = std::make_unique<::googlesql::Function>(
-        std::vector<std::string>{"isnull"},
-        "Emulator",
-        ::googlesql::Function::SCALAR,
-        std::vector<::googlesql::FunctionSignature>{signature},
-        options);
-    EmulatorFunctions()->push_back(std::move(fn));
+    auto add_scalar = [&](absl::string_view fn_name,
+                          const ::googlesql::FunctionArgumentType& arg,
+                          const ::googlesql::FunctionArgumentType& ret) {
+      const int64_t context_id = 0;
+      ::googlesql::FunctionSignature signature(ret, {arg}, context_id);
+      ::googlesql::FunctionOptions options;
+      options.set_uses_upper_case_sql_name(false);
+      auto fn = std::make_unique<::googlesql::Function>(
+          std::vector<std::string>{std::string(fn_name)},
+          "Emulator",
+          ::googlesql::Function::SCALAR,
+          std::vector<::googlesql::FunctionSignature>{signature},
+          options);
+      EmulatorFunctions()->push_back(std::move(fn));
+    };
+
+    add_scalar(
+        "isnull",
+        ::googlesql::FunctionArgumentType(::googlesql::ARG_TYPE_ANY_1,
+                                          arg_opts),
+        ::googlesql::FunctionArgumentType(::googlesql::types::BoolType(), 1));
+    add_scalar(
+        "emu_format_t",
+        ::googlesql::FunctionArgumentType(::googlesql::ARG_TYPE_ANY_1,
+                                          arg_opts),
+        ::googlesql::FunctionArgumentType(::googlesql::types::StringType(), 1));
   });
 }
 

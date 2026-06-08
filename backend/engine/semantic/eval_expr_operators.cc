@@ -280,6 +280,27 @@ absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
     if (!iv.ok()) return iv.status();
     return Value::Interval(*iv);
   }
+  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    auto negated = b.interval_value().Multiply(-1);
+    if (!negated.ok()) return negated.status();
+    ::googlesql::DatetimeValue datetime;
+    if (auto s = ::googlesql::functions::AddDatetime(
+            a.datetime_value(), *negated, &datetime);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Datetime(datetime);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    auto negated = b.interval_value().Multiply(-1);
+    if (!negated.ok()) return negated.status();
+    auto out = ::googlesql::functions::AddTimestamp(
+        a.ToUnixPicos().ToPicoTime(), *negated);
+    if (!out.ok()) return out.status();
+    return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
+  }
   if (a.type_kind() != b.type_kind()) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: '-' operands have mismatched kinds: ",
