@@ -478,8 +478,10 @@ std::string PreprocessFunctionBodyBase(absl::string_view sql) {
       normalized.push_back(c);
     }
   }
-  return RewriteStructInt64LiteralCasts(
-      RewriteIntegerTypeAlias(RewriteFormatTypeLiteral(
+  // Rewrite STRUCT literal casts before INTEGER→INT64 alias so patterns still
+  // match `CAST(lit AS INTEGER) AS field` from bigquery-utils fixtures.
+  return RewriteIntegerTypeAlias(
+      RewriteStructInt64LiteralCasts(RewriteFormatTypeLiteral(
           RewriteAnonymousStructFieldAccess(StripBlockComments(normalized)))));
 }
 
