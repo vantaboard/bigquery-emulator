@@ -66,7 +66,7 @@ Updated by the parent agent after each subagent returns.
 | 09 promote-to-gate | done | 80 | CI job `bqutils` in conformance.yml; pin + docs; fixtests-08 ANY TYPE +6; fixtests-09 bytes/bitwise +8; fixtests-10 RANGE +6 (80/81 runner pass; 7 legacy fails in passing/) |
 | fixtests-11 regexp/string | done | 80→95 | TRANSLATE, ARRAY_TO_STRING, CAST (STRING→BYTES, ARRAY/STRUCT), REGEXP_EXTRACT_ALL null→[]; 13/16 plan fixtures promoted (+ cw_xml_element); blockers: `cw_disjoint_partition_by_regexp`, `url_trim_query` (crash), `migration/redshift/translate` (correlated UNNEST) |
 | fixtests-12 bignumeric/interval | done | 95→102 | BIGNUMERIC casts, MOD/POW/FLOOR/TRUNC/SIGN/DIV semantic, TIMESTAMP_BUCKET, mixed-type numeric ops; 7/7 community fixtures promoted; blockers: `migration/oracle/round_datetime` (engine crash on DATE_TRUNC/ISOYEAR path) |
-| fixtests-13 bqutils tail | done | 102→110 | `b8148bb` + `25b7674`: trig math, ANY_VALUE/STDDEV, BYTES/DATETIME CAST+FORMAT, DATE_TRUNC/DATE_DIFF on DATETIME, INTEGER→INT64 + STRUCT literal preprocess, `$case_with_value`, correlated UNNEST bindings; +8 promoted; **104/110** runner pass (6 legacy in passing/); **7** known_failing (6 blockers + deferred `cw_xml_extract`) |
+| fixtests-13 bqutils tail | done | 102→111 | `b8148bb` + `25b7674` + `c14485a`: trig math, ANY_VALUE/STDDEV, BYTES/DATETIME CAST+FORMAT, DATE_TRUNC/DATE_DIFF on DATETIME, INTEGER→INT64 + STRUCT literal preprocess, `$case_with_value`, correlated UNNEST bindings, TO_JSON_STRING bytes base64; +9 promoted (+ `convert_string_bytes`); **6** known_failing (5 blockers + deferred `cw_xml_extract` python UDF) |
 | 10 dbt-bigquery | done (early phases) | n/a | scaffold + sync + task; pytest triage deferred |
 
 ## Dependency graph
