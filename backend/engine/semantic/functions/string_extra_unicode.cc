@@ -230,9 +230,13 @@ absl::StatusOr<Value> LeastGreatest(absl::string_view name,
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects arguments"));
   }
+  for (const Value& arg : args) {
+    if (arg.is_null()) {
+      return Value::Null(return_type);
+    }
+  }
   Value best = args[0];
   for (size_t i = 1; i < args.size(); ++i) {
-    if (args[i].is_null()) return Value::Null(return_type);
     if (name == "least") {
       if (args[i].LessThan(best)) best = args[i];
     } else if (best.LessThan(args[i])) {

@@ -229,11 +229,15 @@ absl::StatusOr<Value> Split(const std::vector<Value>& args,
     return absl::InvalidArgumentError(
         "semantic: SPLIT expects one or two arguments");
   }
-  if (args[0].is_null()) return Value::Array(return_type->AsArray(), {});
+  if (args[0].is_null()) {
+    if (return_type != nullptr) return Value::Null(return_type);
+    return Value::NullInt64();
+  }
   absl::string_view delim = ",";
   if (args.size() == 2) {
     if (args[1].is_null()) {
-      return Value::Array(return_type->AsArray(), {});
+      if (return_type != nullptr) return Value::Null(return_type);
+      return Value::NullInt64();
     }
     delim = AsStringOrBytes(args[1]);
   }

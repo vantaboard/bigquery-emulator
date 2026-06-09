@@ -111,6 +111,25 @@ absl::StatusOr<Value> DispatchFunctionByName(
     }
     return functions::DispatchIn(name, args);
   }
+  if (name == "$in_array" || name == "$not_in_array") {
+    if (args.size() != 2) {
+      return absl::InvalidArgumentError(
+          "semantic: $in_array expects exactly two arguments");
+    }
+    const absl::string_view in_name =
+        name == "$not_in_array" ? "$not_in" : "$in";
+    if (args[1].is_null()) {
+      return Value::NullBool();
+    }
+    if (!args[1].type()->IsArray()) {
+      return absl::InvalidArgumentError(
+          "semantic: $in_array expects an ARRAY second argument");
+    }
+    std::vector<Value> expanded = {args[0]};
+    expanded.insert(
+        expanded.end(), args[1].elements().begin(), args[1].elements().end());
+    return functions::DispatchIn(in_name, expanded);
+  }
   if (name == "$is_true" || name == "$is_not_true") {
     return functions::DispatchIsTrue(name, args);
   }
