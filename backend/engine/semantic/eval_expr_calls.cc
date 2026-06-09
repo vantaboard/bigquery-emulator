@@ -363,14 +363,16 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   for (int i = 0; i < call.argument_list_size(); ++i) {
     auto v = EvalExpr(*call.argument_list(i), ctx);
     if (!v.ok()) return v.status();
-    if (!v->is_valid()) {
+    if (!v->is_null() && !v->is_valid()) {
       return absl::InternalError(
           "semantic: SQL UDF argument evaluated to invalid Value");
     }
     if (v->is_null()) {
-      return NullOfType(call.type());
+      const ::googlesql::Type* arg_type = call.argument_list(i)->type();
+      arg_values.push_back(NullOfType(arg_type));
+    } else {
+      arg_values.push_back(*std::move(v));
     }
-    arg_values.push_back(*std::move(v));
   }
   FrameStack arg_frames;
   arg_frames.PushFrame();

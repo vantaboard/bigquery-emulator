@@ -137,7 +137,7 @@ std::string RewriteFormatTypeLiteral(absl::string_view sql) {
         return true;
       };
       if (match_ci("format(")) {
-        size_t j = i + 6;
+        size_t j = i + 7;
         while (j < sql.size() &&
                std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
           ++j;
@@ -175,7 +175,7 @@ std::string RewriteFormatTypeLiteral(absl::string_view sql) {
                 out.append("emu_format_t(");
                 out.append(sql.substr(expr_start, j - expr_start));
                 out.push_back(')');
-                i = j - 1;
+                i = j;
                 continue;
               }
             }

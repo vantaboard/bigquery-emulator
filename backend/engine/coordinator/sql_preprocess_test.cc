@@ -248,6 +248,12 @@ TEST(SqlPreprocess, RewritesIntegerTypeAliasInQuery) {
   EXPECT_FALSE(absl::StrContains(out, "CAST(21 AS")) << out;
 }
 
+TEST(SqlPreprocess, RewritesFormatTypeLiteralStandalone) {
+  const std::string sql = "FORMAT('%T', input)";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_EQ("emu_format_t(input)", out);
+}
+
 TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
   const std::string sql =
       "SELECT TO_JSON_STRING(STRUCT(CAST(2.8957935572829476 AS FLOAT64) AS "

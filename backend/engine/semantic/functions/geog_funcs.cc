@@ -50,6 +50,9 @@ absl::StatusOr<Value> StGeogPoint(const std::vector<Value>& args) {
     return absl::InvalidArgumentError(
         "semantic: ST_GEOGPOINT expects two arguments");
   }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::NullGeography();
+  }
   auto lng = CoerceDouble(args[0]);
   if (!lng.ok()) return lng.status();
   auto lat = CoerceDouble(args[1]);
@@ -67,13 +70,13 @@ absl::StatusOr<Value> EmuFormatTypeLiteral(const std::vector<Value>& args) {
     return absl::InvalidArgumentError(
         "semantic: emu_format_t expects one argument");
   }
-  if (args[0].is_null()) {
-    return Value::String("NULL");
-  }
   if (args[0].type_kind() == ::googlesql::TYPE_GEOGRAPHY) {
     auto lit = GeographyTypeLiteralForFormat();
     if (!lit.ok()) return lit.status();
     return Value::String(*lit);
+  }
+  if (args[0].is_null()) {
+    return Value::String("NULL");
   }
   if (args[0].type()->IsRange()) {
     return Value::String(args[0].GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL));

@@ -112,7 +112,14 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   }
   if (name == "regexp_replace") return RegexpReplace(args);
   if (name == "regexp_instr") return RegexpInstr(args);
-  if (name == "format") return Format(args);
+  if (name == "format") {
+    if (args.size() == 2 && !args[0].is_null() &&
+        args[0].string_value() == "%T" && !args[1].is_null() &&
+        args[1].type_kind() == ::googlesql::TYPE_GEOGRAPHY) {
+      return EmuFormatTypeLiteral({args[1]});
+    }
+    return Format(args);
+  }
   if (name == "st_geogpoint") return StGeogPoint(args);
   if (name == "to_json") return ToJson(args);
   if (name == "to_json_string") return ToJsonString(args);

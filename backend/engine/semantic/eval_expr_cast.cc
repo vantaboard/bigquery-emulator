@@ -79,6 +79,27 @@ std::optional<absl::StatusOr<Value>> TryCastValueToType(
       inner.type_kind() == ::googlesql::TYPE_INT64) {
     return Value::String(absl::StrCat(inner.int64_value()));
   }
+  if (target->kind() == ::googlesql::TYPE_DATE &&
+      inner.type_kind() == ::googlesql::TYPE_STRING) {
+    int32_t date = 0;
+    const std::string text(inner.string_value());
+    if (auto s = ::googlesql::functions::ParseStringToDate(
+            "%Y-%m-%d", text, /*parse_version2=*/true, &date);
+        s.ok()) {
+      return Value::Date(date);
+    }
+    if (auto s = ::googlesql::functions::ParseStringToDate(
+            "%F", text, /*parse_version2=*/true, &date);
+        s.ok()) {
+      return Value::Date(date);
+    }
+    if (return_null_on_error) return NullOfType(target);
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             absl::StrCat("semantic: CAST STRING to DATE "
+                                          "failed for '",
+                                          text,
+                                          "'"));
+  }
   if (target->IsArray() && inner.type()->IsArray()) {
     const ::googlesql::ArrayType* target_arr = target->AsArray();
     const ::googlesql::ArrayType* source_arr = inner.type()->AsArray();
@@ -259,6 +280,29 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       inner.type_kind() == ::googlesql::TYPE_STRING) {
     return Value::Bytes(std::string(inner.string_value()));
   }
+  if (target->kind() == ::googlesql::TYPE_DATE) {
+    if (inner.type_kind() == ::googlesql::TYPE_DATE) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_STRING) {
+      int32_t date = 0;
+      const std::string text(inner.string_value());
+      if (auto s = ::googlesql::functions::ParseStringToDate(
+              "%Y-%m-%d", text, /*parse_version2=*/true, &date);
+          s.ok()) {
+        return Value::Date(date);
+      }
+      if (auto s = ::googlesql::functions::ParseStringToDate(
+              "%F", text, /*parse_version2=*/true, &date);
+          s.ok()) {
+        return Value::Date(date);
+      }
+      if (cast.return_null_on_error()) return Value::NullDate();
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               absl::StrCat("semantic: CAST STRING to DATE "
+                                            "failed for '",
+                                            text,
+                                            "'"));
+    }
+  }
   if (target->kind() == ::googlesql::TYPE_DATETIME) {
     if (inner.type_kind() == ::googlesql::TYPE_DATETIME) return inner;
     if (inner.type_kind() == ::googlesql::TYPE_DATE) {
@@ -289,7 +333,10 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
     if (inner.type_kind() == ::googlesql::TYPE_TIMESTAMP) return inner;
     if (inner.type_kind() == ::googlesql::TYPE_STRING) {
       int64_t micros = 0;
-      const std::string text(inner.string_value());
+      std::string text(inner.string_value());
+      if (absl::EndsWith(text, " UTC")) {
+        text.resize(text.size() - 4);
+      }
       absl::Time t;
       std::string err;
       if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
@@ -299,7 +346,7 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       }
       if (auto s = ::googlesql::functions::ParseStringToTimestamp(
               "%F %T",
-              inner.string_value(),
+              text,
               DefaultTimeZone(),
               /*parse_version2=*/true,
               &micros);
