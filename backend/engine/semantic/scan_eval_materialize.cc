@@ -136,16 +136,28 @@ absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     // Keep inner scan bindings (e.g. `$agg1`) so the executor's
     // `ProjectOneRow` pass can still resolve column refs in the
     // output projection expressions.
-    ColumnBindings row = input;
+    ColumnBindings merged;
+    if (ctx.columns != nullptr) {
+      merged = *ctx.columns;
+    }
+    for (const auto& [col_id, val] : input) {
+      merged[col_id] = val;
+    }
+    ColumnBindings row = merged;
     row.reserve(row.size() + project.column_list_size());
     absl::flat_hash_map<std::string, Value> by_name;
-    PopulateColumnNameBindings(project.input_scan(), input, by_name);
+    PopulateColumnNameBindings(project.input_scan(), merged, by_name);
+    if (ctx.columns_by_name != nullptr) {
+      for (const auto& [name, val] : *ctx.columns_by_name) {
+        by_name[name] = val;
+      }
+    }
     for (int i = 0; i < project.column_list_size(); ++i) {
       const ::googlesql::ResolvedColumn& col = project.column_list(i);
       const int col_id = col.column_id();
       auto eit = expr_by_column_id.find(col_id);
       EvalContext row_ctx = ctx;
-      row_ctx.columns = &input;
+      row_ctx.columns = &merged;
       row_ctx.columns_by_name = &by_name;
       Value v;
       if (eit != expr_by_column_id.end()) {
@@ -153,8 +165,8 @@ absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
         if (!eval_v.ok()) return eval_v.status();
         v = *std::move(eval_v);
       } else {
-        auto cit = input.find(col_id);
-        if (cit == input.end()) {
+        auto cit = merged.find(col_id);
+        if (cit == merged.end()) {
           return absl::InternalError(
               absl::StrCat("semantic: ProjectScan missing binding for column '",
                            col.name(),
