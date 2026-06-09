@@ -24,8 +24,7 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
                                  ::googlesql::SimpleCatalog& catalog);
 
 const StoredSQLProcedure* FindProjectProcedure(
-    absl::string_view project_id,
-    absl::string_view procedure_name);
+    absl::string_view project_id, absl::string_view procedure_name);
 
 }  // namespace catalog
 }  // namespace backend

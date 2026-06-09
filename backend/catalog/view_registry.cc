@@ -57,7 +57,8 @@ absl::Status RegisterProjectView(
   const std::string view_name = create_view_stmt.name_path().back();
   std::string dataset_id;
   if (create_view_stmt.name_path().size() >= 2) {
-    dataset_id = create_view_stmt.name_path()[create_view_stmt.name_path().size() - 2];
+    dataset_id =
+        create_view_stmt.name_path()[create_view_stmt.name_path().size() - 2];
   }
 
   absl::MutexLock lock(&mu);
@@ -74,8 +75,7 @@ absl::Status RegisterProjectView(
   if (analyzer_output != nullptr) {
     bucket.analyzer_outputs.push_back(std::move(analyzer_output));
   }
-  bucket.views.push_back(
-      RegisteredViewEntry{dataset_id, std::move(*view_or)});
+  bucket.views.push_back(RegisteredViewEntry{dataset_id, std::move(*view_or)});
   return absl::OkStatus();
 }
 

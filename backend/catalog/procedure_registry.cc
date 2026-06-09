@@ -29,7 +29,8 @@ struct ProjectProcedures {
 };
 
 absl::Mutex mu;
-absl::flat_hash_map<std::string, ProjectProcedures> by_project ABSL_GUARDED_BY(mu);
+absl::flat_hash_map<std::string, ProjectProcedures> by_project
+    ABSL_GUARDED_BY(mu);
 
 }  // namespace
 
@@ -75,8 +76,7 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
 }
 
 const StoredSQLProcedure* FindProjectProcedure(
-    absl::string_view project_id,
-    absl::string_view procedure_name) {
+    absl::string_view project_id, absl::string_view procedure_name) {
   if (project_id.empty() || procedure_name.empty()) return nullptr;
   absl::MutexLock lock(&mu);
   auto it = by_project.find(std::string(project_id));

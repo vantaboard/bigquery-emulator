@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -18,14 +19,13 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/executor.h"
+#include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/script/assert_stmt.h"
 #include "backend/engine/semantic/script/assignment_stmt.h"
 #include "backend/engine/semantic/script/declare_stmt.h"
-#include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/script/script_driver.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
-#include "absl/container/flat_hash_set.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/parse_resume_location.h"
@@ -50,8 +50,7 @@ std::string StripBeginEnd(absl::string_view sql) {
     while (pos > 0 && (trimmed[pos - 1] == ';' || trimmed[pos - 1] == ' ')) {
       --pos;
     }
-    if (pos >= 3 &&
-        absl::EqualsIgnoreCase(trimmed.substr(pos - 3, 3), "END")) {
+    if (pos >= 3 && absl::EqualsIgnoreCase(trimmed.substr(pos - 3, 3), "END")) {
       trimmed = trimmed.substr(0, pos - 3);
       trimmed = std::string(absl::StripAsciiWhitespace(trimmed));
     }
@@ -128,13 +127,17 @@ absl::StatusOr<semantic::Value> EvalExpressionScalar(
     ::googlesql::Catalog* catalog,
     const semantic::FrameStack& variables) {
   absl::StatusOr<::googlesql::AnalyzerOptions> options =
-      BuildAnalyzerOptionsForRequest(request, bq_catalog,
-                                   /*all_statements=*/false);
+      BuildAnalyzerOptionsForRequest(request,
+                                     bq_catalog,
+                                     /*all_statements=*/false);
   if (!options.ok()) return options.status();
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  absl::Status analyzed = ::googlesql::AnalyzeExpression(
-      std::string(expr), *options, catalog, bq_catalog->type_factory(),
-      &output);
+  absl::Status analyzed =
+      ::googlesql::AnalyzeExpression(std::string(expr),
+                                     *options,
+                                     catalog,
+                                     bq_catalog->type_factory(),
+                                     &output);
   if (!analyzed.ok()) return analyzed;
   if (output == nullptr || output->resolved_expr() == nullptr) {
     return absl::InternalError(
@@ -147,13 +150,12 @@ absl::StatusOr<semantic::Value> EvalExpressionScalar(
   return semantic::EvalExpr(*output->resolved_expr(), ctx);
 }
 
-absl::Status ExecuteProcedureSet(
-    const QueryRequest& request,
-    absl::string_view target_name,
-    absl::string_view expr,
-    catalog::GoogleSqlCatalog* bq_catalog,
-    ::googlesql::Catalog* catalog,
-    semantic::script::ScriptDriver& driver) {
+absl::Status ExecuteProcedureSet(const QueryRequest& request,
+                                 absl::string_view target_name,
+                                 absl::string_view expr,
+                                 catalog::GoogleSqlCatalog* bq_catalog,
+                                 ::googlesql::Catalog* catalog,
+                                 semantic::script::ScriptDriver& driver) {
   absl::StatusOr<semantic::Value> value = EvalExpressionScalar(
       request, expr, bq_catalog, catalog, driver.variables());
   if (!value.ok()) return value.status();
@@ -206,20 +208,20 @@ absl::Status ExecuteOneScriptStatement(
           driver);
     case ::googlesql::RESOLVED_ASSIGNMENT_STMT:
       return semantic::script::ExecuteScriptAssignment(
-          request,
-          *stmt.GetAs<::googlesql::ResolvedAssignmentStmt>(),
-          driver);
+          request, *stmt.GetAs<::googlesql::ResolvedAssignmentStmt>(), driver);
     case ::googlesql::RESOLVED_ASSERT_STMT:
       return semantic::script::ExecuteAssert(
           request, *stmt.GetAs<::googlesql::ResolvedAssertStmt>(), driver);
     case ::googlesql::RESOLVED_CALL_STMT:
-      return ExecuteCallStmt(
-          engine, request, *stmt.GetAs<::googlesql::ResolvedCallStmt>(),
-          driver, catalog);
+      return ExecuteCallStmt(engine,
+                             request,
+                             *stmt.GetAs<::googlesql::ResolvedCallStmt>(),
+                             driver,
+                             catalog);
     case ::googlesql::RESOLVED_QUERY_STMT: {
       absl::StatusOr<std::unique_ptr<RowSource>> rows =
-          engine.ExecuteResolvedStatement(request, stmt, catalog,
-                                          &driver.variables());
+          engine.ExecuteResolvedStatement(
+              request, stmt, catalog, &driver.variables());
       if (!rows.ok()) return rows.status();
       *final_rows = std::move(*rows);
       return absl::OkStatus();
@@ -243,8 +245,8 @@ absl::Status ExecuteOneScriptStatement(
       return semantic::MakeSemanticError(
           semantic::SemanticErrorReason::kNotImplemented,
           absl::StrCat("script: statement kind ",
-                         stmt.node_kind_string(),
-                         " is not yet implemented"));
+                       stmt.node_kind_string(),
+                       " is not yet implemented"));
   }
 }
 
@@ -266,9 +268,8 @@ absl::Status ExecuteStatementList(
       // Procedure bodies evaluate expressions against formal args.
       (void)procedure_args;
     }
-    absl::Status status =
-        ExecuteOneScriptStatement(engine, request, *child, catalog, driver,
-                                  final_rows);
+    absl::Status status = ExecuteOneScriptStatement(
+        engine, request, *child, catalog, driver, final_rows);
     if (!status.ok()) return status;
   }
   return absl::OkStatus();
@@ -276,12 +277,11 @@ absl::Status ExecuteStatementList(
 
 }  // namespace
 
-absl::Status ExecuteCallStmt(
-    LocalCoordinatorEngine& engine,
-    const QueryRequest& request,
-    const ::googlesql::ResolvedCallStmt& stmt,
-    semantic::script::ScriptDriver& driver,
-    ::googlesql::Catalog* catalog) {
+absl::Status ExecuteCallStmt(LocalCoordinatorEngine& engine,
+                             const QueryRequest& request,
+                             const ::googlesql::ResolvedCallStmt& stmt,
+                             semantic::script::ScriptDriver& driver,
+                             ::googlesql::Catalog* catalog) {
   const ::googlesql::Procedure* procedure = stmt.procedure();
   if (procedure == nullptr) {
     return absl::InvalidArgumentError(
@@ -290,8 +290,8 @@ absl::Status ExecuteCallStmt(
   const catalog::StoredSQLProcedure* sql_proc =
       dynamic_cast<const catalog::StoredSQLProcedure*>(procedure);
   if (sql_proc == nullptr) {
-    sql_proc = catalog::FindProjectProcedure(request.project_id,
-                                             procedure->Name());
+    sql_proc =
+        catalog::FindProjectProcedure(request.project_id, procedure->Name());
   }
   if (sql_proc == nullptr) {
     return semantic::MakeSemanticError(
@@ -325,9 +325,8 @@ absl::Status ExecuteCallStmt(
     if (!caller_name.empty()) {
       absl::StatusOr<semantic::Value> existing =
           driver.variables().Lookup(caller_name);
-      semantic::Value seed = existing.ok()
-                                ? *std::move(existing)
-                                : NullForType(formal_type.type());
+      semantic::Value seed = existing.ok() ? *std::move(existing)
+                                           : NullForType(formal_type.type());
       absl::Status declared = proc_args.Declare(formal_name, seed);
       if (!declared.ok()) return declared;
       out_bindings.emplace_back(formal_name, caller_name);
@@ -356,12 +355,11 @@ absl::Status ExecuteCallStmt(
   return absl::OkStatus();
 }
 
-absl::Status ExecuteProcedureBody(
-    LocalCoordinatorEngine& engine,
-    const QueryRequest& request,
-    absl::string_view procedure_body,
-    semantic::FrameStack& arg_frame,
-    ::googlesql::Catalog* catalog) {
+absl::Status ExecuteProcedureBody(LocalCoordinatorEngine& engine,
+                                  const QueryRequest& request,
+                                  absl::string_view procedure_body,
+                                  semantic::FrameStack& arg_frame,
+                                  ::googlesql::Catalog* catalog) {
   auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
   if (bq_catalog == nullptr) {
     return absl::FailedPreconditionError(
@@ -369,8 +367,8 @@ absl::Status ExecuteProcedureBody(
   }
   semantic::script::ScriptDriver proc_driver(&arg_frame);
   absl::flat_hash_set<std::string> registered_args;
-  absl::Status registered = RegisterScriptVariablesOnCatalog(
-      bq_catalog, arg_frame, &registered_args);
+  absl::Status registered =
+      RegisterScriptVariablesOnCatalog(bq_catalog, arg_frame, &registered_args);
   if (!registered.ok()) return registered;
 
   std::vector<std::string> statements =
@@ -438,10 +436,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
   auto* bq_catalog = dynamic_cast<catalog::GoogleSqlCatalog*>(catalog);
   if (bq_catalog == nullptr) {
     return absl::FailedPreconditionError(
-        "script::ExecuteScriptViaAnalyzeNext: catalog must be GoogleSqlCatalog");
+        "script::ExecuteScriptViaAnalyzeNext: catalog must be "
+        "GoogleSqlCatalog");
   }
   absl::StatusOr<::googlesql::AnalyzerOptions> options =
-      BuildAnalyzerOptionsForRequest(request, bq_catalog, /*all_statements=*/true);
+      BuildAnalyzerOptionsForRequest(
+          request, bq_catalog, /*all_statements=*/true);
   if (!options.ok()) return options.status();
   ::googlesql::TypeFactory* type_factory = bq_catalog->type_factory();
 
@@ -463,9 +463,13 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
       return absl::InternalError(
           "script::ExecuteScriptViaAnalyzeNext: analyzer returned null");
     }
-    absl::Status executed = ExecuteOneScriptStatement(
-        engine, request, *output->resolved_statement(), catalog, driver,
-        &final_rows);
+    absl::Status executed =
+        ExecuteOneScriptStatement(engine,
+                                  request,
+                                  *output->resolved_statement(),
+                                  catalog,
+                                  driver,
+                                  &final_rows);
     if (!executed.ok()) return executed;
   }
   if (final_rows == nullptr) {

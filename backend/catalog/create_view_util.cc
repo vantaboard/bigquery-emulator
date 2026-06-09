@@ -39,24 +39,21 @@ MakeViewFromCreateView(
       return absl::InvalidArgumentError(
           "create_view_util: CREATE VIEW column has null type");
     }
-    columns.push_back(
-        {std::string(col->name()), col->type()});
+    columns.push_back({std::string(col->name()), col->type()});
   }
   const std::string view_name = create_view_stmt.name_path().back();
   ::googlesql::ResolvedCreateStatement::SqlSecurity security =
       create_view_stmt.sql_security();
   if (security ==
       ::googlesql::ResolvedCreateStatementEnums::SQL_SECURITY_UNSPECIFIED) {
-    security =
-        ::googlesql::ResolvedCreateStatementEnums::SQL_SECURITY_INVOKER;
+    security = ::googlesql::ResolvedCreateStatementEnums::SQL_SECURITY_INVOKER;
   }
   absl::StatusOr<std::unique_ptr<::googlesql::SimpleSQLView>> view =
-      ::googlesql::SimpleSQLView::Create(
-          view_name,
-          std::move(columns),
-          security,
-          create_view_stmt.is_value_table(),
-          create_view_stmt.query());
+      ::googlesql::SimpleSQLView::Create(view_name,
+                                         std::move(columns),
+                                         security,
+                                         create_view_stmt.is_value_table(),
+                                         create_view_stmt.query());
   if (!view.ok()) return view.status();
   return std::unique_ptr<const ::googlesql::Table>(
       std::move(view).value().release());

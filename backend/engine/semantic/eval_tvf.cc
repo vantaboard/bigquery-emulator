@@ -23,11 +23,10 @@ namespace semantic {
 
 namespace {
 
-absl::Status BindTvfArguments(
-    const ::googlesql::ResolvedTVFScan& scan,
-    const std::vector<std::string>& arg_names,
-    const EvalContext& ctx,
-    FrameStack& frames) {
+absl::Status BindTvfArguments(const ::googlesql::ResolvedTVFScan& scan,
+                              const std::vector<std::string>& arg_names,
+                              const EvalContext& ctx,
+                              FrameStack& frames) {
   if (arg_names.size() != static_cast<size_t>(scan.argument_list_size())) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: TVF argument count mismatch (expected ",
@@ -73,11 +72,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
   const auto* sql_tvf =
       dynamic_cast<const ::googlesql::SQLTableValuedFunction*>(scan.tvf());
   if (sql_tvf == nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat("semantic: TVF '",
-                     scan.tvf()->SQLName(),
-                     "' is not a supported SQL TVF"));
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             absl::StrCat("semantic: TVF '",
+                                          scan.tvf()->SQLName(),
+                                          "' is not a supported SQL TVF"));
   }
   if (sql_tvf->query() == nullptr) {
     return absl::InternalError(

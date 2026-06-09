@@ -107,8 +107,9 @@ absl::StatusOr<Value> RangeOverlaps(const std::vector<Value>& args) {
   }
   if (args[0].type_kind() != ::googlesql::TYPE_RANGE ||
       args[1].type_kind() != ::googlesql::TYPE_RANGE) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "semantic: RANGE_OVERLAPS expects RANGE arguments");
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic: RANGE_OVERLAPS expects RANGE arguments");
   }
   return Value::Bool(RangesOverlap(args[0], args[1]));
 }

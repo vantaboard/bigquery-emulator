@@ -62,7 +62,7 @@ absl::Status RegisterProjectTvf(
 }
 
 void ReplayTvfsIntoCatalog(absl::string_view project_id,
-                          ::googlesql::SimpleCatalog& catalog) {
+                           ::googlesql::SimpleCatalog& catalog) {
   absl::MutexLock lock(&mu);
   auto it = by_project.find(std::string(project_id));
   if (it == by_project.end()) return;

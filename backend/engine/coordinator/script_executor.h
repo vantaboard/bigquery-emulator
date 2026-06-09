@@ -17,12 +17,11 @@ namespace coordinator {
 
 class LocalCoordinatorEngine;
 
-absl::Status ExecuteCallStmt(
-    LocalCoordinatorEngine& engine,
-    const QueryRequest& request,
-    const ::googlesql::ResolvedCallStmt& stmt,
-    semantic::script::ScriptDriver& driver,
-    ::googlesql::Catalog* catalog);
+absl::Status ExecuteCallStmt(LocalCoordinatorEngine& engine,
+                             const QueryRequest& request,
+                             const ::googlesql::ResolvedCallStmt& stmt,
+                             semantic::script::ScriptDriver& driver,
+                             ::googlesql::Catalog* catalog);
 
 // Execute a `ResolvedMultiStmt` script block (DECLARE / SET / CALL /
 // SELECT / DML / DDL) and return rows from the final SELECT-shaped
@@ -35,12 +34,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteMultiStmtScript(
 
 // Execute a stored SQL procedure body (BEGIN..END string) with `arg_frame`
 // bound to the procedure's formal parameters.
-absl::Status ExecuteProcedureBody(
-    LocalCoordinatorEngine& engine,
-    const QueryRequest& request,
-    absl::string_view procedure_body,
-    semantic::FrameStack& arg_frame,
-    ::googlesql::Catalog* catalog);
+absl::Status ExecuteProcedureBody(LocalCoordinatorEngine& engine,
+                                  const QueryRequest& request,
+                                  absl::string_view procedure_body,
+                                  semantic::FrameStack& arg_frame,
+                                  ::googlesql::Catalog* catalog);
 
 // Execute semicolon-separated script statements via AnalyzeNextStatement
 // (DECLARE is lowered to CREATE CONSTANT by the gateway before this runs).
