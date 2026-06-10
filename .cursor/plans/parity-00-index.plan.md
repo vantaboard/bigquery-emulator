@@ -83,7 +83,7 @@ Plans 01–05 are independent of each other and can run in parallel
 |------|-------|-------------------|---------|-------|
 | 01 | done | 102→107 pass | 00a5426 | outer-row UNNEST, lateral join, correlated subqueries |
 | 02 | done | 107→111 pass | e1d31ff | polyfills; sqrt_numeric still blocked |
-| 03 | done | 111→118 pass | (pending) | ORDER BY/LIMIT, FILTER, IGNORE NULLS, HAVING MAX, SAFE.SUM |
+| 03 | done | 111→118 pass | 683fc74, 60f10dd, 5b9a441 | ORDER BY/LIMIT, FILTER, IGNORE NULLS, HAVING MAX, SAFE.SUM |
 | 04 | pending | — | | |
 | 05 | pending | — | | |
 | 06 | pending | — | | |
