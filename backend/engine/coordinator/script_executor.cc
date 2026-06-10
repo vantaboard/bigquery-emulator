@@ -51,7 +51,7 @@ std::string StripBeginEnd(absl::string_view sql) {
       --pos;
     }
     if (pos >= 3 && absl::EqualsIgnoreCase(trimmed.substr(pos - 3, 3), "END")) {
-      trimmed = trimmed.substr(0, pos - 3);
+      trimmed.resize(pos - 3);
       trimmed = std::string(absl::StripAsciiWhitespace(trimmed));
     }
   }
@@ -426,7 +426,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteMultiStmtScript(
     return std::unique_ptr<RowSource>(
         new semantic::MaterializedRowSource(schema::TableSchema{}, {}));
   }
-  return std::move(final_rows);
+  return final_rows;
 }
 
 absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
@@ -476,7 +476,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
     return std::unique_ptr<RowSource>(
         new semantic::MaterializedRowSource(schema::TableSchema{}, {}));
   }
-  return std::move(final_rows);
+  return final_rows;
 }
 
 }  // namespace coordinator

@@ -179,7 +179,6 @@ std::string Transpiler::EmitWithScan(
     const bool saved_rn_in_cte = input_rn_ordering_;
     input_rn_ordering_ = false;
     output_order_items_.clear();
-    bool cte_has_rn = false;
     const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
     if (entry == nullptr || entry->with_subquery() == nullptr) return "";
     if (entry->with_query_name().empty()) return "";
@@ -223,6 +222,7 @@ std::string Transpiler::EmitWithScan(
                        body_sql,
                        ")"));
     } else {
+      bool cte_has_rn = false;
       std::string sub = EmitScan(sub_scan);
       if (sub.empty()) return "";
       if (body_needs_input_rn &&

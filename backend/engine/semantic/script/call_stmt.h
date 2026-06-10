@@ -14,7 +14,7 @@ namespace script {
 
 absl::Status ExecuteCall(const QueryRequest& request,
                          const ::googlesql::ResolvedCallStmt& stmt,
-                         ScriptDriver& driver);
+                         const ScriptDriver& driver);
 
 }  // namespace script
 }  // namespace semantic

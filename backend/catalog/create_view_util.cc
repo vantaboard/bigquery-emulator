@@ -17,7 +17,7 @@ namespace catalog {
 absl::StatusOr<std::unique_ptr<const ::googlesql::Table>>
 MakeViewFromCreateView(
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
-    ::googlesql::TypeFactory* type_factory) {
+    const ::googlesql::TypeFactory* type_factory) {
   if (type_factory == nullptr) {
     return absl::InvalidArgumentError(
         "create_view_util: type_factory must be non-null");

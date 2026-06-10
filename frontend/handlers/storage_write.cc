@@ -283,7 +283,7 @@ std::string StorageWriteService::Rfc3339Now() const {
     // CreateWriteStream requests while it writes the parquet file.
     backend::storage::TableId table;
     backend::schema::TableSchema schema;
-    v1::WriteStream::Type stream_type = v1::WriteStream::COMMITTED;
+    v1::WriteStream::Type stream_type;
     bool stream_finalized = false;
     {
       absl::MutexLock lock(&mu_);

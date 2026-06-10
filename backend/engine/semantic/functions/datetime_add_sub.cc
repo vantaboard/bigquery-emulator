@@ -385,7 +385,7 @@ absl::StatusOr<Value> TimestampBucket(const std::vector<Value>& args) {
   }
   const absl::Time input = args[0].ToTime();
   const ::googlesql::IntervalValue bucket_width = args[1].interval_value();
-  absl::Time origin = input;
+  absl::Time origin;
   if (args.size() == 3) {
     if (args[2].type_kind() != ::googlesql::TYPE_TIMESTAMP) {
       return absl::InvalidArgumentError(

@@ -251,7 +251,6 @@ absl::StatusOr<Value> ApproxTopSum(
         entry.weight_was_non_null = true;
       }
       sums.emplace(key, std::move(entry));
-      it = sums.find(key);
     } else if (!weight_v.is_null() &&
                weight_v.type_kind() == ::googlesql::TYPE_INT64) {
       it->second.sum += weight_v.int64_value();

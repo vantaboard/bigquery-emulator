@@ -172,7 +172,7 @@ absl::StatusOr<Value> EvalSqlUdafBody(
     const ::googlesql::SQLFunction& sql_fn,
     const std::vector<std::vector<Value>>& arg_columns,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   const ::googlesql::ResolvedExpr* body = sql_fn.FunctionExpression();
   if (body == nullptr) {
     return absl::InvalidArgumentError(

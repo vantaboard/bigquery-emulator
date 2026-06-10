@@ -495,7 +495,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
 
   std::vector<ColumnBindings> out;
   out.reserve(groups.size());
-  for (auto& kv : groups) {
+  for (const auto& kv : groups) {
     auto row_or = MaterializeAggregateGroup(
         aggregate, input_rows, kv.second.second, &kv.second.first, ctx);
     if (!row_or.ok()) return row_or.status();

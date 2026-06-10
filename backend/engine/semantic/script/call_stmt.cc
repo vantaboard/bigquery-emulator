@@ -11,7 +11,7 @@ namespace script {
 
 absl::Status ExecuteCall(const QueryRequest& request,
                          const ::googlesql::ResolvedCallStmt& stmt,
-                         ScriptDriver& driver) {
+                         const ScriptDriver& driver) {
   (void)request;
   (void)stmt;
   (void)driver;

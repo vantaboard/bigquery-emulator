@@ -130,7 +130,7 @@ absl::StatusOr<Value> Extract(const std::vector<Value>& args,
         return s;
       }
     }
-    int64_t value64 = 0;
+    value64 = 0;
     if (auto s = ::googlesql::functions::ExtractFromTimestamp(
             *part, v.ToTime(), tz, &value64);
         !s.ok()) {

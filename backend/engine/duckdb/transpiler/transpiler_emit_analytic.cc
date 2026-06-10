@@ -189,11 +189,12 @@ std::string Transpiler::BuildAnalyticProjection(
   }
   const auto* afn =
       col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+  if (afn == nullptr) return "";
   std::string frame_clause = BuildFrameClause(afn->window_frame());
   if (frame_clause == kAnalyticBail) return "";
 
   std::string fn_sql;
-  if (afn != nullptr && afn->function() != nullptr &&
+  if (afn->function() != nullptr &&
       internal::ResolveFunctionName(afn->function()) == "percentile_disc" &&
       afn->null_handling_modifier() ==
           ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS &&

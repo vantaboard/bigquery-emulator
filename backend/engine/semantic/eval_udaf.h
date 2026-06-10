@@ -29,7 +29,7 @@ absl::StatusOr<Value> EvalSqlUdafBody(
     const ::googlesql::SQLFunction& sql_fn,
     const std::vector<std::vector<Value>>& arg_columns,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx);
+    const EvalContext& ctx);
 
 }  // namespace semantic
 }  // namespace engine

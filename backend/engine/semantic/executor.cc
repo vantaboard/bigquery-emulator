@@ -261,8 +261,11 @@ absl::Status SemanticExecutor::ExecuteDdl(
   }
   if (stmt.node_kind() == ::googlesql::RESOLVED_ASSIGNMENT_STMT) {
     const auto* assign = stmt.GetAs<::googlesql::ResolvedAssignmentStmt>();
-    if (assign != nullptr &&
-        AsSystemVariableTarget(assign->target()) != nullptr) {
+    if (assign == nullptr) {
+      return absl::InternalError(
+          "semantic: RESOLVED_ASSIGNMENT_STMT cast returned null");
+    }
+    if (AsSystemVariableTarget(assign->target()) != nullptr) {
       return ExecuteAssignment(request, *assign);
     }
     script::ScriptDriver driver;

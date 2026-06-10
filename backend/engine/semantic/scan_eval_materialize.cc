@@ -116,7 +116,7 @@ void PopulateColumnNameBindings(
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*> expr_by_column_id;
   for (int i = 0; i < project.expr_list_size(); ++i) {
     const ::googlesql::ResolvedComputedColumn* cc = project.expr_list(i);

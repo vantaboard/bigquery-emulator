@@ -39,7 +39,7 @@ void PopulateColumnNameBindingsDeep(
 absl::StatusOr<std::vector<ColumnBindings>> ProjectRows(
     const ::googlesql::ResolvedProjectScan& project,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx);
+    const EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeTableScan(
     const ::googlesql::ResolvedTableScan& scan);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSingleRowScan(
