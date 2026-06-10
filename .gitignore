@@ -21,6 +21,9 @@ cloud-spanner-emulator/
 
 # Go
 *.test
+# Vendored GoogleSQL compliance corpus (not Go test binaries).
+!conformance/googlesql-corpus/corpus/
+!conformance/googlesql-corpus/corpus/*.test
 *.prof
 # Repo-root coverage profile that `task coverage:go` and ci.yml write
 # next to the Taskfile. Scoped to the root so checked-in fixtures
