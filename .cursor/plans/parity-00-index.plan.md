@@ -6,6 +6,9 @@ isProject: true
 
 # Parity — subagent dispatch index
 
+Orchestration playbook (who runs, in what order, with what prompt):
+[parity-dispatch.plan.md](parity-dispatch.plan.md).
+
 Source documents (re-read before starting any sub-plan; they are the
 authoritative trackers and must be updated in the same commits that land
 implementations):
@@ -73,6 +76,24 @@ Plans 01–05 are independent of each other and can run in parallel
 | Routing matrix | `task conformance:routing-matrix` | new shapes report intended route |
 | Third-party (targeted) | `task thirdparty:<suite>` | per-plan; skip-matrix rows removed as shapes land |
 | Bazel hygiene | `task bazel:shutdown && task bazel:status` | `(clean)` |
+
+## Status (updated by the parent agent after each subagent returns)
+
+| Plan | State | Conformance delta | Commits | Notes |
+|------|-------|-------------------|---------|-------|
+| 01 | pending | — | | |
+| 02 | pending | — | | |
+| 03 | pending | — | | |
+| 04 | pending | — | | |
+| 05 | pending | — | | |
+| 06 | pending | — | | |
+| 07 | pending | — | | |
+| 08 | pending | — | | |
+| 09 | pending | — | | |
+| 10 | pending | — | | |
+| 11 | pending | — | | |
+| 12 | pending | — | | |
+| 13 | pending | — | | |
 
 ## Bookkeeping per landed plan
 
