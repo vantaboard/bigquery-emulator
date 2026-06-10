@@ -108,10 +108,20 @@ jobs:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: |
           set -euo pipefail
-          if [ -x bin/emulator_main ] && [ -f bin/libduckdb.so ] && ./bin/emulator_main --version >/dev/null 2>&1; then
+          exact_cache="${{ steps.bin-cache.outputs.cache-hit }}"
+          # Only skip Bazel when actions/cache matched the full source hash key.
+          # A restore-key prefix hit can leave pre-change binaries in bin/ that
+          # still pass --version; that shipped a stale emulator_main missing
+          # frontend fixes (e.g. SIGINT shutdown deferral) into conformance CI.
+          if [ "$exact_cache" = "true" ] && \
+             [ -x bin/emulator_main ] && [ -f bin/libduckdb.so ] && \
+             ./bin/emulator_main --version >/dev/null 2>&1; then
             echo "cache_hit=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Restored engine binaries cache hit; skipping Bazel compile"
+            echo "::notice::Exact engine-binaries cache hit; skipping Bazel compile"
           else
+            if [ "$exact_cache" != "true" ] && [ -x bin/emulator_main ]; then
+              echo "::notice::Partial engine-binaries cache restore; recompiling to pick up source changes"
+            fi
             echo "cache_hit=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
             task emulator:build-engine:bazel
