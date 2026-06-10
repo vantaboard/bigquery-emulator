@@ -381,8 +381,8 @@ handler.
   DuckDB STRUCTs (`{'a': 1}`, `s."a"`); anonymous STRUCT fields
   synthesize positional names (`_0`, `_1`, ...) on both the
   construction and access sides so they round-trip; deep STRUCT
-  mutations (`UPDATE t SET s.a.b = ...`) still fall back via the
-  empty-string contract (see Open Questions)
+  mutations (`UPDATE t SET s.a.b = ...`) land on the semantic DML
+  executor (`backend/engine/semantic/dml/dml_mutate.cc`)
 - ✅ UNNEST handling: standalone `UNNEST(arr) AS col` lowers to
   DuckDB `SELECT unnest(arr) AS "col"`. Divergent shapes route to
   the semantic executor (`backend/engine/semantic/array_struct/array_scan.cc`
@@ -480,13 +480,13 @@ public-facing policy.
 ## DML / DDL
 
 - 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast
-  path today; `INSERT VALUES`, `INSERT ... SELECT`, scalar-`SET`
-  `UPDATE`, and `DELETE` route through the storage-aware local DML
+  path today; `INSERT VALUES`, `INSERT ... SELECT`, scalar- and
+  deep-STRUCT `SET` `UPDATE`, `UPDATE ... FROM`, `DELETE`, and
+  `ASSERT_ROWS_MODIFIED` route through the storage-aware local DML
   executor (`backend/engine/semantic/dml/`) and populate
-  `numDmlAffectedRows` correctly. Deep-STRUCT `SET`
-  (`SET s.a.b = ...`), the harder MERGE matrix
+  `numDmlAffectedRows` correctly. The harder MERGE matrix
   (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
-  `RETURNING`, `ASSERT_ROWS_MODIFIED`, and
+  `RETURNING`, `DELETE`/`UPDATE` with `array_offset_column`, and
   `ResolvedPipeInsertScan` continue to surface
   `UNIMPLEMENTED` and stay tracked under
   `docs/ENGINE_POLICY.md`. Conformance fixtures may seed

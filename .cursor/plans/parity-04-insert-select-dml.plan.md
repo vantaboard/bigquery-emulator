@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: insert-select
     content: "INSERT ... SELECT: run the SELECT through the coordinator (whatever route the query shape picks), stream resulting rows into DuckDBStorage::AppendRows via the DML executor; honor column-list reordering + implicit coercions; populate numDmlAffectedRows."
-    status: pending
+    status: completed
   - id: update-from
     content: "UPDATE ... FROM ...: join-driven update on the semantic DML executor (per-row match against the FROM relation, BigQuery's multiple-match error surface)."
-    status: pending
+    status: completed
   - id: deep-struct-set
     content: "Deep-STRUCT SET (UPDATE t SET s.a.b = ...): implement nested-field rewrite in the DML executor's value layer instead of DuckDB struct update; remove the empty-string fallback noted in ROADMAP STRUCT handling."
-    status: pending
+    status: completed
   - id: delete-offset
     content: "DELETE with array_offset_column (lateral UNNEST in target): depends on parity-01's outer-row primitive; land after or behind it."
     status: pending
   - id: assert-rows-modified
     content: "ASSERT_ROWS_MODIFIED on INSERT/UPDATE/DELETE/MERGE: compare affected count post-execution, surface BigQuery's documented error envelope on mismatch, roll back the statement's effects."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Fixtures under conformance/fixtures/dml/ (round-trip seed -> mutate -> SELECT verify, plus numDmlAffectedRows assertions); flip SHAPE_TRACKER ResolvedInsertStmt/ResolvedUpdateStmt/ResolvedDeleteStmt subset notes; update ROADMAP DML bullet + ENGINE_POLICY practice section.
-    status: pending
+    status: completed
 ---
 
 # Parity 04 — INSERT ... SELECT + DML completion
