@@ -66,6 +66,11 @@ absl::StatusOr<Value> EvalArrayAgg(
     const std::vector<std::vector<Value>>& input_column_values,
     const std::vector<ColumnBindings>& input_rows,
     EvalContext& ctx);
+absl::StatusOr<Value> EvalStringAgg(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values,
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(

@@ -112,7 +112,9 @@ cc_library(
         "eval_expr.cc",
         "eval_expr_calls.cc",
         "eval_expr_cast.cc",
+        "eval_expr_cast_helpers.cc",
         "eval_expr_dispatch.cc",
+        "eval_expr_fn_dispatch.cc",
         "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
         "eval_udaf.cc",
@@ -161,6 +163,7 @@ cc_library(
     srcs = [
         "eval_tvf.cc",
         "scan_eval.cc",
+        "scan_eval_agg_list.cc",
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
         "scan_eval_analytic.cc",

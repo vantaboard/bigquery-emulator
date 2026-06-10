@@ -74,6 +74,12 @@ absl::StatusOr<Value> DispatchCaseNoValue(const std::vector<Value>& args,
 absl::StatusOr<Value> WrapSafe(absl::StatusOr<Value> result,
                                const ::googlesql::Type* return_type);
 
+std::optional<absl::StatusOr<Value>> TryCastValueToType(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error);
+
 absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);

@@ -109,8 +109,14 @@ cc_test(
 # step 6.
 cc_library(
     name = "sql_preprocess",
-    srcs = ["sql_preprocess.cc"],
-    hdrs = ["sql_preprocess.h"],
+    srcs = [
+        "sql_preprocess.cc",
+        "sql_preprocess_rewrites.cc",
+    ],
+    hdrs = [
+        "sql_preprocess.h",
+        "sql_preprocess_internal.h",
+    ],
     deps = [
         "@com_google_absl//absl/strings",
     ],

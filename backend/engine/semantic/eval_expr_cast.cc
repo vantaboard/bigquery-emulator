@@ -1,6 +1,5 @@
 #include <cmath>
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -21,7 +20,6 @@
 #include "googlesql/public/functions/string.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/types/struct_type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
@@ -35,119 +33,6 @@ namespace {
 using functions::datetime_internal::DefaultTimeZone;
 using functions::datetime_internal::kFormatOpts;
 using functions::datetime_internal::kMicros;
-
-bool StructTypesCompatibleByPosition(const ::googlesql::StructType* source,
-                                     const ::googlesql::StructType* target) {
-  if (source == nullptr || target == nullptr) return false;
-  if (source->num_fields() != target->num_fields()) return false;
-  for (int i = 0; i < source->num_fields(); ++i) {
-    if (!source->field(i).type->Equals(target->field(i).type)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-std::optional<absl::StatusOr<Value>> TryCastValueToType(
-    Value inner,
-    const ::googlesql::Type* source,
-    const ::googlesql::Type* target,
-    bool return_null_on_error) {
-  if (target == nullptr) {
-    return absl::InvalidArgumentError("semantic: cast target type is null");
-  }
-  if (source != nullptr && source->Equals(target)) {
-    return inner;
-  }
-  if (inner.is_null()) return NullOfType(target);
-
-  if (target->kind() == ::googlesql::TYPE_BYTES &&
-      inner.type_kind() == ::googlesql::TYPE_STRING) {
-    return Value::Bytes(std::string(inner.string_value()));
-  }
-  if (target->kind() == ::googlesql::TYPE_STRING &&
-      inner.type_kind() == ::googlesql::TYPE_BYTES) {
-    absl::Status error;
-    std::string out;
-    if (!::googlesql::functions::SafeConvertBytes(
-            inner.bytes_value(), &out, &error)) {
-      if (return_null_on_error) return NullOfType(target);
-      return error;
-    }
-    return Value::String(std::move(out));
-  }
-  if (target->kind() == ::googlesql::TYPE_STRING &&
-      inner.type_kind() == ::googlesql::TYPE_INT64) {
-    return Value::String(absl::StrCat(inner.int64_value()));
-  }
-  if (target->kind() == ::googlesql::TYPE_DATE &&
-      inner.type_kind() == ::googlesql::TYPE_STRING) {
-    int32_t date = 0;
-    const std::string text(inner.string_value());
-    if (auto s = ::googlesql::functions::ParseStringToDate(
-            "%Y-%m-%d", text, /*parse_version2=*/true, &date);
-        s.ok()) {
-      return Value::Date(date);
-    }
-    if (auto s = ::googlesql::functions::ParseStringToDate(
-            "%F", text, /*parse_version2=*/true, &date);
-        s.ok()) {
-      return Value::Date(date);
-    }
-    if (return_null_on_error) return NullOfType(target);
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             absl::StrCat("semantic: CAST STRING to DATE "
-                                          "failed for '",
-                                          text,
-                                          "'"));
-  }
-  if (target->IsArray() && inner.type()->IsArray()) {
-    const ::googlesql::ArrayType* target_arr = target->AsArray();
-    const ::googlesql::ArrayType* source_arr = inner.type()->AsArray();
-    const ::googlesql::Type* target_elem = target_arr->element_type();
-    const ::googlesql::Type* source_elem = source_arr->element_type();
-    if (target_elem == nullptr || source_elem == nullptr) {
-      return absl::InvalidArgumentError(
-          "semantic: cast array missing element type");
-    }
-    if (source_elem->Equals(target_elem)) {
-      return inner;
-    }
-    std::vector<Value> elements;
-    elements.reserve(inner.num_elements());
-    for (int i = 0; i < inner.num_elements(); ++i) {
-      auto cast_elem = TryCastValueToType(
-          inner.element(i), source_elem, target_elem, return_null_on_error);
-      if (!cast_elem.has_value()) {
-        return std::nullopt;
-      }
-      if (!cast_elem->ok()) return cast_elem->status();
-      elements.push_back(*std::move(*cast_elem));
-    }
-    return Value::Array(target_arr, std::move(elements));
-  }
-  if (target->IsStruct() && inner.type()->IsStruct()) {
-    const ::googlesql::StructType* target_st = target->AsStruct();
-    const ::googlesql::StructType* source_st = inner.type()->AsStruct();
-    if (!StructTypesCompatibleByPosition(source_st, target_st)) {
-      if (return_null_on_error) return NullOfType(target);
-      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                               absl::StrCat("semantic: CAST from ",
-                                            source->DebugString(),
-                                            " to ",
-                                            target->DebugString(),
-                                            " is not yet implemented"));
-    }
-    std::vector<Value> fields;
-    fields.reserve(inner.num_fields());
-    for (int i = 0; i < inner.num_fields(); ++i) {
-      fields.push_back(inner.field(i));
-    }
-    return Value::Struct(target_st, std::move(fields));
-  }
-
-  return std::nullopt;
-}
 
 }  // namespace
 
