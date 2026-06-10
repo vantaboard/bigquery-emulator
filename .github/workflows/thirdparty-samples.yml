@@ -181,7 +181,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.2.0
 
       - name: Set up thirdparty docker emulator
         uses: ./.github/actions/setup-thirdparty-docker-emulator
@@ -273,7 +273,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.2.0
 
       - name: Set up thirdparty docker emulator
         uses: ./.github/actions/setup-thirdparty-docker-emulator
