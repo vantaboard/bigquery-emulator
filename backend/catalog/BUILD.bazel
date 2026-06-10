@@ -11,7 +11,7 @@
 # GoogleSQL = bumping that checkout; no registry hop required.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS")
+load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS", "GOOGLESQL_SQL_TVF_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -128,7 +128,7 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/resolved_ast",
-    ],
+    ] + GOOGLESQL_SQL_TVF_DEPS,
 )
 
 cc_library(

@@ -9,3 +9,12 @@ GOOGLESQL_SQL_FUNCTION_DEPS = select({
     ],
     "//conditions:default": [],
 })
+
+# Same pattern for TVF headers (`sql_tvf.h`, `templated_sql_tvf.h`).
+GOOGLESQL_SQL_TVF_DEPS = select({
+    "//:googlesql_source": [
+        "@googlesql//googlesql/public:sql_tvf",
+        "@googlesql//googlesql/public:templated_sql_tvf",
+    ],
+    "//conditions:default": [],
+})

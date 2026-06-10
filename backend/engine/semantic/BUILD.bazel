@@ -19,7 +19,7 @@
 # scope and design constraints.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS")
+load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS", "GOOGLESQL_SQL_TVF_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -185,7 +185,7 @@ cc_library(
         "//backend/engine/semantic/functions:specialized_funcs",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
-    ],
+    ] + GOOGLESQL_SQL_FUNCTION_DEPS + GOOGLESQL_SQL_TVF_DEPS,
 )
 
 cc_test(
