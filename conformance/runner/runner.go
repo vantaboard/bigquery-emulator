@@ -240,12 +240,9 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 		}
 	}
 
-	queryBody, marshalErr := json.Marshal(map[string]any{
-		"query":        fx.Query,
-		"useLegacySql": false,
-	})
+	queryBody, marshalErr := marshalJobsQueryBody(fx.Query)
 	if marshalErr != nil {
-		result.Message = "marshal query: " + marshalErr.Error()
+		result.Message = marshalErr.Error()
 		return markDuration(result, started)
 	}
 	status, body, queryErr := doRequest(ctx, base+"/queries", queryBody)
@@ -528,12 +525,9 @@ func setupRows(ctx context.Context, base string, rs *RowsSetup) error {
 // `/queries` endpoint. Used for setup phases that do not fit the
 // dataset/table/rows shape (e.g. preparing a temp UDF).
 func setupSQL(ctx context.Context, base, sql string) error {
-	queryBody, err := json.Marshal(map[string]any{
-		"query":        sql,
-		"useLegacySql": false,
-	})
+	queryBody, err := marshalJobsQueryBody(sql)
 	if err != nil {
-		return fmt.Errorf("marshal sql body: %w", err)
+		return err
 	}
 	status, respBody, err := doRequest(ctx, base+"/queries", queryBody)
 	if err != nil {

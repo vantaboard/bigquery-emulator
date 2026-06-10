@@ -383,14 +383,16 @@ handler.
   construction and access sides so they round-trip; deep STRUCT
   mutations (`UPDATE t SET s.a.b = ...`) still fall back via the
   empty-string contract (see Open Questions)
-- 🟡 UNNEST handling: standalone `UNNEST(arr) AS col` lowers to
-  DuckDB `SELECT unnest(arr) AS "col"`. `WITH OFFSET` routes to the
-  local semantic executor
-  (`backend/engine/semantic/array_struct/array_scan.cc`, pinned by
-  `conformance/fixtures/array_struct/unnest_with_offset.yaml`).
-  Multi-array zip, outer `UNNEST`, and lateral / cross-join shapes
-  still surface `UNIMPLEMENTED`
-  (see [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
+- ✅ UNNEST handling: standalone `UNNEST(arr) AS col` lowers to
+  DuckDB `SELECT unnest(arr) AS "col"`. Divergent shapes route to
+  the semantic executor (`backend/engine/semantic/array_struct/array_scan.cc`
+  + `outer_row_eval` + `MaterializeArrayScan`): `WITH OFFSET`,
+  multi-array zip (`array_zip_mode`), `LEFT JOIN UNNEST`, and
+  cross-joined `FROM t, UNNEST(t.arr)` — pinned by
+  `conformance/fixtures/array_struct/`. `JOIN USING` stays on
+  `duckdb_native` (`conformance/fixtures/fastpath/join_using_inner.yaml`).
+  Lateral `ResolvedJoinScan` (`is_lateral`) evaluates per outer row on
+  the semantic executor.
 - 🟡 Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
@@ -461,12 +463,11 @@ public-facing policy.
   (`ResolvedWithScan` / `ResolvedWithRefScan`) lower to DuckDB
   `WITH "a" AS (...)` natively. Non-correlated scalar / IN /
   EXISTS / ARRAY `ResolvedSubqueryExpr` forms lower directly to
-  DuckDB. Correlated subqueries are promoted to the semantic
-  executor at planning time (via
-  `ResolvedSubqueryExpr::parameter_list()`) but the executor
-  itself stays a structured `kNotImplemented` until the
-  outer-row iteration primitive lands -- tracked under
-  `docs/ENGINE_POLICY.md`. Recursive CTEs and the LIKE
+  DuckDB. Correlated subqueries (`parameter_list()` non-empty)
+  evaluate per outer row on the semantic executor via
+  `EvalSubqueryExpr` + `outer_row_eval` (pinned by
+  `conformance/fixtures/cte_subquery/subquery_expr_correlated_exists.yaml`).
+  Recursive CTEs and the LIKE
   ANY / ALL subquery family remain deliberately out of the DuckDB
   fast path's scope and surface UNIMPLEMENTED; see
   `docs/ENGINE_POLICY.md`
@@ -644,11 +645,14 @@ and
   used to pass now fails" rather than "a test that never passed is
   still failing" — see `third_party/README.md` for the per-language
   skip matrices
-- ⏳ Vendor a subset of the GoogleSQL `.test` corpus and run it
+- ✅ Vendor a subset of the GoogleSQL `.test` corpus and run it
   against the engine via `jobs.query` (catches semantic
-  regressions whenever GoogleSQL is upgraded). The GoogleSQL
-  parity workflow ([`.github/workflows/googlesql-parity.yml`](./.github/workflows/googlesql-parity.yml))
-  is the placeholder for this lane today
+  regressions whenever GoogleSQL is upgraded). Starter subset:
+  `conformance/googlesql-corpus/corpus/logical_functions.test`
+  (55 pinned cases); widen via [`conformance/googlesql-corpus/README.md`](./conformance/googlesql-corpus/README.md).
+  CI: `googlesql-corpus` job in
+  [`.github/workflows/googlesql-parity.yml`](./.github/workflows/googlesql-parity.yml);
+  local: `task conformance:googlesql-corpus`
 
 ## Distribution
 

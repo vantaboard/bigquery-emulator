@@ -196,6 +196,27 @@ tasks:
         # shellcheck disable=SC2086
         ./scripts/sync_bigquery_utils_udfs.sh ${CLI_ARGS:-}
 
+  googlesql-corpus:
+    desc: |
+      Run the pinned GoogleSQL .test corpus lane (jobs.query semantic
+      regression net). Requires bin/emulator_main. Honors EMULATOR_BIN,
+      OUTPUT, OUTPUT_FILE.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        # shellcheck disable=SC2086
+        go run ./conformance/cmd/googlesql-corpus \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --gate-pinned=true \
+          $OUTPUT_FILE_FLAG
+
   bqutils:
     desc: |
       Run the passing bigquery-utils UDF conformance lane (non-gating).

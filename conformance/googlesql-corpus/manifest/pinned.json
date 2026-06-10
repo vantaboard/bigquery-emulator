@@ -1,0 +1,242 @@
+{
+  "pinned": [
+    "logical_functions.test::logical_and_true_true",
+    "logical_functions.test::logical_and_true_false",
+    "logical_functions.test::logical_and_false_true",
+    "logical_functions.test::logical_and_false_false",
+    "logical_functions.test::logical_and_true_null",
+    "logical_functions.test::logical_and_null_true",
+    "logical_functions.test::logical_and_false_null",
+    "logical_functions.test::logical_and_null_false",
+    "logical_functions.test::logical_and_null_null",
+    "logical_functions.test::logical_and_true_and_true_false",
+    "logical_functions.test::logical_and_true_and_true_true",
+    "logical_functions.test::logical_and_true_and_false_null",
+    "logical_functions.test::logical_and_true_and_true_null",
+    "logical_functions.test::logical_or_true_true",
+    "logical_functions.test::logical_or_true_false",
+    "logical_functions.test::logical_or_false_true",
+    "logical_functions.test::logical_or_false_false",
+    "logical_functions.test::logical_or_true_null",
+    "logical_functions.test::logical_or_null_true",
+    "logical_functions.test::logical_or_false_null",
+    "logical_functions.test::logical_or_null_false",
+    "logical_functions.test::logical_or_null_null",
+    "logical_functions.test::logical_or_false_or_true_false",
+    "logical_functions.test::logical_or_false_or_false_false",
+    "logical_functions.test::logical_or_false_or_null_true",
+    "logical_functions.test::logical_or_false_or_null_false",
+    "logical_functions.test::logical_or_true_and_true_true",
+    "logical_functions.test::logical_or_false_and_true_true",
+    "logical_functions.test::logical_or_true_and_false_true",
+    "logical_functions.test::logical_or_and_false_true_true",
+    "logical_functions.test::logical_or_null_and_true_true",
+    "logical_functions.test::logical_or_true_and_null_true",
+    "logical_functions.test::logical_and_or_true_false_true",
+    "logical_functions.test::logical_and_or_false_false_true",
+    "logical_functions.test::logical_and_or_true_true_false",
+    "logical_functions.test::logical_and_false_or_true_true",
+    "logical_functions.test::logical_and_null_or_true_true",
+    "logical_functions.test::logical_and_null_or_false_false",
+    "logical_functions.test::logical_and_true_or_null_true",
+    "logical_functions.test::logical_and_true_or_null_false",
+    "logical_functions.test::logical_not_true",
+    "logical_functions.test::logical_not_false",
+    "logical_functions.test::logical_not_not_true",
+    "logical_functions.test::logical_not_not_false",
+    "logical_functions.test::logical_not_and_true_false",
+    "logical_functions.test::logical_not_or_true_false",
+    "logical_functions.test::logical_and_true_not_false",
+    "logical_functions.test::logical_or_false_not_false",
+    "logical_functions.test::logical_not_and_true_null",
+    "logical_functions.test::logical_is_true_true",
+    "logical_functions.test::logical_is_false_true",
+    "logical_functions.test::logical_is_true_null",
+    "logical_functions.test::logical_is_true_false",
+    "logical_functions.test::logical_is_false_false",
+    "logical_functions.test::logical_is_false_null"
+  ],
+  "triage": {
+    "logical_functions.test::logical_and_false_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_false_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_false_or_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_null_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_null_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_null_or_false_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_null_or_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_null_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_or_false_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_or_true_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_or_true_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_and_false_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_and_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_and_true_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_and_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_not_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_or_null_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_or_null_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_and_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_false_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_false_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_null_false": {
+      "bucket": "engine-bug",
+      "message": "row mismatch"
+    },
+    "logical_functions.test::logical_is_null_true": {
+      "bucket": "engine-bug",
+      "message": "row mismatch"
+    },
+    "logical_functions.test::logical_is_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_true_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_is_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_and_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_and_true_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_not_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_not_null": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "logical_functions.test::logical_not_not_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_null": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "logical_functions.test::logical_not_or_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_not_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_and_false_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_and_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_not_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_or_false_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_or_null_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_or_null_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_or_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_null_and_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_null_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_null_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_null_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_and_false_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_and_null_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_and_true_true": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_false": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_null": {
+      "bucket": "pinned-pass"
+    },
+    "logical_functions.test::logical_or_true_true": {
+      "bucket": "pinned-pass"
+    }
+  }
+}

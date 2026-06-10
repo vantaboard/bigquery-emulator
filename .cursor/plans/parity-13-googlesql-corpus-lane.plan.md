@@ -6,19 +6,19 @@ isProject: true
 todos:
   - id: corpus-survey
     content: "Survey the upstream GoogleSQL .test corpus format (statements + expected results + feature flags) in the sibling googlesql checkout; pick a starter subset matching landed routes (scalar functions, aggregates, joins, arrays/structs)."
-    status: pending
+    status: completed
   - id: vendor-runner
     content: "Vendor the subset under conformance/googlesql-corpus/ (or third_party/) with provenance notes; write a Go runner that parses .test files, executes via jobs.query, and compares results with the typed-cell comparison the fixture lane already has."
-    status: pending
+    status: completed
   - id: triage-and-pin
     content: "First run triage: bucket failures into engine-bug / not-yet-landed-route / corpus-feature-out-of-scope; pin the passing set as the gate (the lane's purpose is 'a test that used to pass now fails', mirroring the third-party skip-matrix discipline)."
-    status: pending
+    status: completed
   - id: ci-wire
     content: "Wire into CI: extend .github/workflows/googlesql-parity.yml (ROADMAP names it the placeholder for this lane) with a corpus job gating on the pinned passing set; task conformance:googlesql-corpus task entry."
-    status: pending
+    status: completed
   - id: docs
     content: "Document the lane in conformance/README.md + flip the ROADMAP ⏳ bullet; describe the subset-refresh procedure for GoogleSQL upgrades."
-    status: pending
+    status: completed
 ---
 
 # Parity 13 — GoogleSQL .test corpus lane
@@ -65,6 +65,12 @@ task conformance:googlesql-corpus          # pinned set green
 task conformance:run                       # existing lanes unaffected
 rtk gh run list --workflow googlesql-parity.yml   # after push
 ```
+
+## Notes (plan 13 execution)
+
+- Starter vendored file: `logical_functions.test` only (59 cases; 55 pinned).
+- Triage buckets: 2 `engine-bug` (`IS NULL` on null literal — `logical_is_null_true`, `logical_is_null_false`); 1 `corpus-feature-out-of-scope` (`logical_not_null` ERROR expectation deferred); 1 skipped at gate (unpinned failure).
+- Deferred widening: `strings.test`, `join_queries.test` (`prepare_database` seeding), proto-backed files.
 
 ## Out of scope
 

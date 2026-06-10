@@ -21,6 +21,15 @@ DML, structural errors, DDL, and a schema-only smoke check; see the
 > Refresh with `task conformance:bqutils-sync`; triage with
 > `./scripts/triage_bqutils_fixtures.sh`. See
 > [`third_party/README.md`](../third_party/README.md#bigquery-utils-udf-conformance-non-gating).
+>
+> **GoogleSQL `.test` corpus lane** (`task conformance:googlesql-corpus`):
+> vendored upstream compliance files under
+> [`conformance/googlesql-corpus/`](googlesql-corpus/README.md), executed
+> via `jobs.query` with the same typed-cell comparator as YAML fixtures.
+> CI job `googlesql-corpus` in
+> [`.github/workflows/googlesql-parity.yml`](../.github/workflows/googlesql-parity.yml)
+> gates on `manifest/pinned.json`. Re-triage after GoogleSQL upgrades with
+> `go run ./conformance/cmd/googlesql-corpus --triage --gate-pinned=false`.
 
 ## Quick start
 

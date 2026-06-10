@@ -91,6 +91,10 @@ on:
       - 'binaries/emulator_main/**'
       - 'backend/**'
       - 'frontend/**'
+      - 'conformance/googlesql-corpus/**'
+      - 'conformance/googlesqlcorpus/**'
+      - 'conformance/cmd/googlesql-corpus/**'
+      - 'conformance/runner/gateway.go'
 
 permissions:
   contents: read
@@ -509,3 +513,82 @@ jobs:
             --prebuilt-results-dir parity/prebuilt \
             --source-results-dir parity/source \
             --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------
+  # GoogleSQL .test corpus lane (pinned semantic regression net).
+  # ---------------------------------------------------------------------
+  googlesql-corpus:
+    name: googlesql corpus (pinned)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: parity-corpus
+          repository-cache: true
+
+      - name: Resolve GoogleSQL (prebuilt)
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+          fail-on-source-fallback: 'true'
+
+      - name: Build C++ engine
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: task emulator:build-engine:bazel
+
+      - name: Build Go gateway
+        run: |
+          mkdir -p bin
+          go build -o bin/gateway_main ./binaries/gateway_main
+
+      - name: Run pinned GoogleSQL .test corpus
+        run: |
+          set -euo pipefail
+          task conformance:googlesql-corpus \
+            OUTPUT=json \
+            OUTPUT_FILE=googlesql-corpus-result.json
+
+      - name: Upload corpus results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: googlesql-corpus-results
+          path: googlesql-corpus-result.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: timeout 60 bazel shutdown || true
