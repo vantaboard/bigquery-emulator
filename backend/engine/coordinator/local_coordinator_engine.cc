@@ -149,7 +149,8 @@ LocalCoordinatorEngine::ExecuteResolvedStatement(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog,
-    const semantic::FrameStack* script_variables) {
+    const semantic::FrameStack* script_variables,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables) {
   Executor* executor = RouteFor(stmt);
   if (executor == nullptr) {
     return absl::InternalError(
@@ -161,7 +162,8 @@ LocalCoordinatorEngine::ExecuteResolvedStatement(
     return semantic::ExecuteResolvedQueryStmt(
         request,
         *stmt.GetAs<::googlesql::ResolvedQueryStmt>(),
-        script_variables);
+        script_variables,
+        script_system_variables);
   }
   return executor->ExecuteQuery(request, stmt, catalog);
 }

@@ -13,9 +13,9 @@
 #include "backend/engine/coordinator/script_executor_internal.h"
 #include "backend/engine/coordinator/script_statement_evaluator.h"
 #include "backend/engine/semantic/row_source.h"
+#include "backend/engine/semantic/script/script_driver.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
-#include "backend/engine/semantic/script/script_driver.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/scripting/script_executor.h"
 
@@ -37,11 +37,11 @@ namespace {
 }
 
 std::string AugmentScriptWithDriverDeclares(
-    absl::string_view tail,
-    const semantic::FrameStack& variables) {
+    absl::string_view tail, const semantic::FrameStack& variables) {
   std::string augmented;
   for (const auto& [name, value] : variables.VisibleBindings()) {
-    const absl::string_view type_name = semantic::BigQueryTypeName(value.type());
+    const absl::string_view type_name =
+        semantic::BigQueryTypeName(value.type());
     if (type_name.empty()) continue;
     absl::StrAppend(&augmented, "DECLARE ", name, " ", type_name);
     if (!value.is_null()) {
@@ -84,7 +84,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaGoogleSql(
   const absl::string_view tail =
       script_sql.empty() ? absl::string_view(request.sql) : script_sql;
   std::string sql = std::string(tail);
-  if (driver != nullptr && !active_driver->variables().VisibleBindings().empty()) {
+  if (driver != nullptr &&
+      !active_driver->variables().VisibleBindings().empty()) {
     sql = AugmentScriptWithDriverDeclares(tail, active_driver->variables());
   }
   sql = WrapScriptInBeginEnd(sql);

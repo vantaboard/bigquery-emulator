@@ -5,10 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "googlesql/public/evaluator_table_iterator.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
-#include "absl/status/status.h"
 
 namespace bigquery_emulator {
 namespace backend {

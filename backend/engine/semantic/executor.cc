@@ -108,7 +108,8 @@ SemanticExecutor::~SemanticExecutor() = default;
 absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     const QueryRequest& request,
     const ::googlesql::ResolvedQueryStmt& query_stmt,
-    const FrameStack* script_variables) {
+    const FrameStack* script_variables,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables) {
   if (query_stmt.is_value_table()) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -136,6 +137,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
   ctx.project_id = request.project_id;
   ctx.parameters = &bindings;
   ctx.script_variables = script_variables;
+  ctx.script_system_variables = script_system_variables;
 
   absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*> expr_by_column_id;
   if (project != nullptr) {

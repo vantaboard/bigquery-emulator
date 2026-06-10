@@ -42,7 +42,7 @@
 #include "backend/engine/semantic/executor.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/storage/storage.h"
-#include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/analyzer.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -76,7 +76,9 @@ class LocalCoordinatorEngine : public Engine {
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog,
-      const semantic::FrameStack* script_variables = nullptr);
+      const semantic::FrameStack* script_variables = nullptr,
+      const ::googlesql::SystemVariableValuesMap* script_system_variables =
+          nullptr);
 
   absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
                                       ::googlesql::Catalog* catalog) override;

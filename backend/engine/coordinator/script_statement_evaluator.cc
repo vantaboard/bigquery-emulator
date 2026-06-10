@@ -38,9 +38,9 @@ namespace {
 
 absl::Status AttachScriptExceptionIfCatchable(absl::Status status) {
   if (status.ok()) return status;
-  const std::string script_exception_type_url = absl::StrCat(
-      "type.googleapis.com/",
-      ::googlesql::ScriptException::descriptor()->full_name());
+  const std::string script_exception_type_url =
+      absl::StrCat("type.googleapis.com/",
+                   ::googlesql::ScriptException::descriptor()->full_name());
   if (status.GetPayload(script_exception_type_url).has_value()) {
     return status;
   }
@@ -50,13 +50,12 @@ absl::Status AttachScriptExceptionIfCatchable(absl::Status status) {
       status.code() == absl::StatusCode::kInternal) {
     return status;
   }
-  return static_cast<absl::Status>(
-      ::googlesql::MakeScriptException() << status.message());
+  return static_cast<absl::Status>(::googlesql::MakeScriptException()
+                                   << status.message());
 }
 
-absl::Status SyncDriverFromExecutor(
-    const ::googlesql::ScriptExecutor& executor,
-    semantic::script::ScriptDriver& driver) {
+absl::Status SyncDriverFromExecutor(const ::googlesql::ScriptExecutor& executor,
+                                    semantic::script::ScriptDriver& driver) {
   for (const auto& [name, value] : executor.GetCurrentVariables()) {
     const std::string key = std::string(name.ToString());
     if (driver.variables().Has(key)) {
@@ -140,8 +139,8 @@ absl::Status EmulatorStatementEvaluator::ExecuteStatement(
   if (!updated.ok()) return updated;
 
   absl::flat_hash_set<std::string> registered;
-  absl::Status registered_status =
-      RegisterScriptVariablesOnCatalogFromDriver(bq_catalog, *driver_, &registered);
+  absl::Status registered_status = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, *driver_, &registered);
   if (!registered_status.ok()) return registered_status;
 
   QueryRequest stmt_request = request_;
@@ -161,8 +160,14 @@ absl::Status EmulatorStatementEvaluator::ExecuteStatement(
   std::unique_ptr<RowSource> ignored;
   std::unique_ptr<RowSource>* rows_out =
       final_rows_out_ != nullptr ? final_rows_out_ : &ignored;
-  absl::Status executed = ExecuteOneScriptStatement(
-      *engine_, stmt_request, *resolved, catalog_, *driver_, rows_out);
+  absl::Status executed =
+      ExecuteOneScriptStatement(*engine_,
+                                stmt_request,
+                                *resolved,
+                                catalog_,
+                                *driver_,
+                                rows_out,
+                                &executor.GetKnownSystemVariables());
   return AttachScriptExceptionIfCatchable(executed);
 }
 
@@ -184,8 +189,8 @@ EmulatorStatementEvaluator::ExecuteQueryWithResult(
   if (!updated.ok()) return updated;
 
   absl::flat_hash_set<std::string> registered;
-  absl::Status registered_status =
-      RegisterScriptVariablesOnCatalogFromDriver(bq_catalog, *driver_, &registered);
+  absl::Status registered_status = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, *driver_, &registered);
   if (!registered_status.ok()) return registered_status;
 
   QueryRequest stmt_request = request_;
@@ -205,15 +210,22 @@ EmulatorStatementEvaluator::ExecuteQueryWithResult(
   std::unique_ptr<RowSource> rows;
   std::unique_ptr<RowSource>* rows_out =
       final_rows_out_ != nullptr ? final_rows_out_ : &rows;
-  absl::Status executed = ExecuteOneScriptStatement(
-      *engine_, stmt_request, *resolved, catalog_, *driver_, rows_out);
+  absl::Status executed =
+      ExecuteOneScriptStatement(*engine_,
+                                stmt_request,
+                                *resolved,
+                                catalog_,
+                                *driver_,
+                                rows_out,
+                                &executor.GetKnownSystemVariables());
   if (!executed.ok()) {
     return AttachScriptExceptionIfCatchable(executed);
   }
   RowSource* source = rows_out->get();
   if (source == nullptr) {
     return std::make_unique<MaterializedEvaluatorTableIterator>(
-        std::vector<std::string>{}, std::vector<const ::googlesql::Type*>{},
+        std::vector<std::string>{},
+        std::vector<const ::googlesql::Type*>{},
         std::vector<std::vector<::googlesql::Value>>{});
   }
   return RowSourceToEvaluatorIterator(*source, bq_catalog->type_factory());
@@ -271,7 +283,8 @@ absl::StatusOr<int64_t> EmulatorStatementEvaluator::GetIteratorMemoryUsage(
   return 0;
 }
 
-absl::StatusOr<::googlesql::Value> EmulatorStatementEvaluator::EvaluateScalarExpression(
+absl::StatusOr<::googlesql::Value>
+EmulatorStatementEvaluator::EvaluateScalarExpression(
     const ::googlesql::ScriptExecutor& executor,
     const ::googlesql::ScriptSegment& segment,
     const ::googlesql::Type* target_type) {
@@ -300,13 +313,12 @@ EmulatorStatementEvaluator::ResolveTypeName(
   const std::string type_name = std::string(segment.GetSegmentText());
   const ::googlesql::Type* type = nullptr;
   ::googlesql::TypeModifiers type_modifiers;
-  absl::Status analyzed = ::googlesql::AnalyzeType(
-      type_name,
-      options,
-      catalog_,
-      bq_catalog->type_factory(),
-      &type,
-      &type_modifiers);
+  absl::Status analyzed = ::googlesql::AnalyzeType(type_name,
+                                                   options,
+                                                   catalog_,
+                                                   bq_catalog->type_factory(),
+                                                   &type,
+                                                   &type_modifiers);
   if (!analyzed.ok()) return analyzed;
   if (type == nullptr) {
     return absl::InternalError(
@@ -345,7 +357,8 @@ EmulatorStatementEvaluator::LoadProcedure(
   const catalog::StoredSQLProcedure* proc =
       catalog::FindProjectProcedure(request_.project_id, name);
   if (proc == nullptr) {
-    return absl::NotFoundError(absl::StrCat("procedure '", name, "' not found"));
+    return absl::NotFoundError(
+        absl::StrCat("procedure '", name, "' not found"));
   }
   return std::make_unique<::googlesql::ProcedureDefinition>(
       proc->Name(),
@@ -362,22 +375,24 @@ absl::Status EmulatorStatementEvaluator::AssignSystemVariable(
     return absl::InvalidArgumentError(
         "EmulatorStatementEvaluator::AssignSystemVariable: null argument");
   }
-  absl::StatusOr<bool> assigned = executor->DefaultAssignSystemVariable(
-      ast_assignment, value);
+  absl::StatusOr<bool> assigned =
+      executor->DefaultAssignSystemVariable(ast_assignment, value);
   if (!assigned.ok()) return assigned.status();
   if (*assigned) return absl::OkStatus();
 
   if (ast_assignment->system_variable() == nullptr ||
       ast_assignment->system_variable()->path() == nullptr) {
     return absl::InvalidArgumentError(
-        "EmulatorStatementEvaluator::AssignSystemVariable: null system variable");
+        "EmulatorStatementEvaluator::AssignSystemVariable: null system "
+        "variable");
   }
   const std::vector<std::string> path =
       ast_assignment->system_variable()->path()->ToIdentifierVector();
   return semantic::SetSystemVariable(request_.project_id, path, value);
 }
 
-absl::StatusOr<::googlesql::Value> EmulatorStatementEvaluator::EvalScalarSegment(
+absl::StatusOr<::googlesql::Value>
+EmulatorStatementEvaluator::EvalScalarSegment(
     const ::googlesql::ScriptSegment& segment,
     semantic::EvalContext& ctx,
     const ::googlesql::Type* target_type) {
@@ -389,14 +404,17 @@ absl::StatusOr<::googlesql::Value> EmulatorStatementEvaluator::EvalScalarSegment
   ::googlesql::AnalyzerOptions options =
       MakeCoordinatorAnalyzerOptions(/*all_statements=*/false);
   absl::flat_hash_set<std::string> registered;
-  absl::Status registered_status =
-      RegisterScriptVariablesOnCatalogFromDriver(bq_catalog, *driver_, &registered);
+  absl::Status registered_status = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, *driver_, &registered);
   if (!registered_status.ok()) return registered_status;
 
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  absl::Status analyzed = ::googlesql::AnalyzeExpression(
-      segment.GetSegmentText(), options, catalog_, bq_catalog->type_factory(),
-      &output);
+  absl::Status analyzed =
+      ::googlesql::AnalyzeExpression(segment.GetSegmentText(),
+                                     options,
+                                     catalog_,
+                                     bq_catalog->type_factory(),
+                                     &output);
   if (!analyzed.ok()) return analyzed;
   if (output == nullptr || output->resolved_expr() == nullptr) {
     return absl::InternalError(

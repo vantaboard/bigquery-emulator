@@ -1,0 +1,20 @@
+# exception_error_message: EXCEPTION handler reads @@error.message after a
+# failing statement.
+name: scripting_exception_error_message
+description: |
+  Division-by-zero inside BEGIN is caught; handler SELECT returns a row
+  when @@error.message mentions division by zero.
+project_id: proj-scripting-exception-message
+query: |
+  BEGIN
+    SELECT 1/0;
+  EXCEPTION WHEN ERROR THEN
+    SELECT IF(
+      STARTS_WITH(@@error.message, 'division by zero'),
+      'caught',
+      'miss') AS result;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {result: caught}

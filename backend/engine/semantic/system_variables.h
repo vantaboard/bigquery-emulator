@@ -18,8 +18,8 @@ namespace backend {
 namespace engine {
 namespace semantic {
 
-// Registers @@time_zone (and future vars) on `options` so the
-// analyzer resolves `SET @@time_zone` / `SELECT @@time_zone`.
+// Registers @@time_zone and scripting @@error.* on `options` so the
+// analyzer resolves system-variable references inside scripts.
 absl::Status RegisterAnalyzerSystemVariables(
     ::googlesql::TypeFactory* type_factory,
     ::googlesql::AnalyzerOptions& options);

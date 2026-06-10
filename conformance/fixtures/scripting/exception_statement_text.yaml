@@ -1,0 +1,15 @@
+# exception_statement_text: @@error.statement_text names the failing stmt.
+name: scripting_exception_statement_text
+description: |
+  EXCEPTION handler surfaces the text of the statement that failed.
+project_id: proj-scripting-exception-stmt-text
+query: |
+  BEGIN
+    SELECT 1/0;
+  EXCEPTION WHEN ERROR THEN
+    SELECT @@error.statement_text AS stmt_text;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {stmt_text: SELECT 1/0}

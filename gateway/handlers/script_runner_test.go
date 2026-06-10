@@ -86,3 +86,42 @@ SELECT name FROM UNNEST(top_names) AS name;`
 		t.Fatalf("childCount = %d, want 2", childCount)
 	}
 }
+
+func TestRegisterEngineScriptChildJobsControlFlowSingleChild(t *testing.T) {
+	const sql = `BEGIN
+  DECLARE total INT64 DEFAULT 0;
+  DECLARE i INT64 DEFAULT 0;
+  WHILE i < 3 DO
+    SET total = total + i;
+    SET i = i + 1;
+  END WHILE;
+  SELECT CAST(total AS STRING) AS total;
+END;`
+	childCount := 0
+	inner := unwrapBeginEndBlock(sql)
+	if !scriptNeedsGoogleSQLExecutor(inner) {
+		t.Fatal("expected WHILE script to need GoogleSQL executor")
+	}
+	for _, raw := range splitScriptStatements(inner) {
+		st := classifyScriptStatement(raw)
+		switch st.kind {
+		case scriptStmtDeclare, scriptStmtCall, scriptStmtSet:
+			continue
+		case scriptStmtQuery:
+			childCount++
+		}
+	}
+	// Naive semicolon split breaks WHILE bodies into multiple query-classified
+	// fragments; registerEngineScriptChildJobs skips this loop when
+	// scriptNeedsGoogleSQLExecutor is true and registers one child job instead.
+	if childCount < 2 {
+		t.Fatalf("naive split childCount = %d, want >=2 (proves control-flow path)", childCount)
+	}
+}
+
+func TestScriptNeedsGoogleSQLExecutorDetectsException(t *testing.T) {
+	const sql = `BEGIN SELECT 1; EXCEPTION WHEN ERROR THEN SELECT 1; END;`
+	if !scriptNeedsGoogleSQLExecutor(sql) {
+		t.Fatal("expected EXCEPTION script detection")
+	}
+}

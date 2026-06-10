@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: assignment
     content: "ResolvedAssignmentStmt (SET var = expr, SET (a, b) = (...)): evaluate on the semantic executor against the FrameStack; flip the (planned) row."
-    status: pending
+    status: completed
   - id: control-flow
     content: "IF/ELSEIF/ELSE, WHILE, LOOP/BREAK/CONTINUE, REPEAT, FOR...IN (query-driven iteration): structured control flow in script_executor.cc over the statement list GoogleSQL's script analyzer produces."
-    status: pending
+    status: completed
   - id: execute-immediate
     content: "ResolvedExecuteImmediateStmt: analyze + execute the dynamic SQL string through the coordinator at script runtime; support USING parameter binding and INTO variable capture."
-    status: pending
+    status: completed
   - id: exception-handling
     content: "BEGIN ... EXCEPTION WHEN ERROR THEN ... END: catch statement errors, populate @@error.message / @@error.statement_text (ResolvedSystemVariable on the semantic executor), execute the handler block; RAISE / RAISE USING MESSAGE re-raise semantics."
-    status: pending
+    status: completed
   - id: gateway-script-loop
     content: "Verify gateway script runner (gateway/handlers/script_runner.go + script_runner_engine.go) streams multi-statement child-job results per BigQuery's script job contract for the new statement kinds (each statement a child job; final SELECT result surfaced)."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Fixtures under conformance/fixtures/scripting/ (loop accumulation, dynamic DDL via EXECUTE IMMEDIATE, exception recovery with @@error.message); promote remaining bqutils stored_procedures goldens; flip SHAPE_TRACKER rows (ResolvedAssignmentStmt, ResolvedExecuteImmediateStmt, ResolvedSystemVariable) and update ENGINE_POLICY scripting row.
-    status: pending
+    status: completed
 ---
 
 # Parity 05 — Scripting control flow

@@ -115,7 +115,8 @@ absl::Status ExecuteOneScriptStatement(
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog,
     semantic::script::ScriptDriver& driver,
-    std::unique_ptr<RowSource>* final_rows) {
+    std::unique_ptr<RowSource>* final_rows,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables) {
   switch (stmt.node_kind()) {
     case ::googlesql::RESOLVED_CREATE_CONSTANT_STMT:
       return semantic::script::ExecuteDeclare(
@@ -136,8 +137,11 @@ absl::Status ExecuteOneScriptStatement(
                              catalog);
     case ::googlesql::RESOLVED_QUERY_STMT: {
       absl::StatusOr<std::unique_ptr<RowSource>> rows =
-          engine.ExecuteResolvedStatement(
-              request, stmt, catalog, &driver.variables());
+          engine.ExecuteResolvedStatement(request,
+                                          stmt,
+                                          catalog,
+                                          &driver.variables(),
+                                          script_system_variables);
       if (!rows.ok()) return rows.status();
       *final_rows = std::move(*rows);
       return absl::OkStatus();

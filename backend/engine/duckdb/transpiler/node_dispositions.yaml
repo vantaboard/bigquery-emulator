@@ -80,7 +80,7 @@ ResolvedCallStmt: semantic_executor
 ResolvedMultiStmt: semantic_executor
 ResolvedCreateConstantStmt: semantic_executor
 ResolvedAssignmentStmt: semantic_executor
-ResolvedExecuteImmediateStmt: semantic_executor status=planned
+ResolvedExecuteImmediateStmt: semantic_executor
 ResolvedAnalyzeStmt: control_op
 ResolvedAuxLoadDataStmt: control_op
 ResolvedAssertStmt: semantic_executor

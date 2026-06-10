@@ -8,6 +8,7 @@
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/script/script_driver.h"
+#include "googlesql/public/analyzer.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -37,7 +38,9 @@ absl::Status ExecuteOneScriptStatement(
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog,
     semantic::script::ScriptDriver& driver,
-    std::unique_ptr<RowSource>* final_rows);
+    std::unique_ptr<RowSource>* final_rows,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables =
+        nullptr);
 
 absl::Status RegisterScriptVariablesOnCatalogFromDriver(
     catalog::GoogleSqlCatalog* catalog,

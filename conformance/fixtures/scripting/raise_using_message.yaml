@@ -1,0 +1,15 @@
+# raise_using_message: RAISE USING MESSAGE surfaces the user message.
+name: scripting_raise_using_message
+description: |
+  RAISE USING MESSAGE aborts the script with the supplied text.
+project_id: proj-scripting-raise-message
+query: |
+  BEGIN
+    RAISE USING MESSAGE = 'boom from script';
+  END;
+expected:
+  route: semantic_executor
+  route_strict: false
+  error:
+    code: 400
+    message_contains: boom from script

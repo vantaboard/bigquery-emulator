@@ -27,8 +27,16 @@ func registerEngineScriptChildJobs(
 	sql string,
 	final engineScriptFinalResult,
 ) int {
+	inner := unwrapBeginEndBlock(sql)
+	if scriptNeedsGoogleSQLExecutor(inner) {
+		if final.schema == nil && len(final.rows) == 0 {
+			return 0
+		}
+		return registerFinalSelectChildJob(
+			deps, r, projectID, parent, posted, cfg, final)
+	}
 	childCount := 0
-	for _, raw := range splitScriptStatements(unwrapBeginEndBlock(sql)) {
+	for _, raw := range splitScriptStatements(inner) {
 		st := classifyScriptStatement(raw)
 		switch st.kind {
 		case scriptStmtDeclare, scriptStmtCall, scriptStmtSet:
@@ -57,6 +65,31 @@ func registerEngineScriptChildJobs(
 		}
 	}
 	return childCount
+}
+
+func registerFinalSelectChildJob(
+	deps Dependencies,
+	r *http.Request,
+	projectID string,
+	parent *jobs.Job,
+	posted *jobs.Job,
+	cfg *jobs.JobConfiguration,
+	final engineScriptFinalResult,
+) int {
+	childPosted := *posted
+	childPosted.JobReference.JobID = ""
+	childCfg := *cfg
+	qCopy := *cfg.Query
+	childCfg.Query = &qCopy
+	child := newPendingJob(deps, projectID, &childPosted, &childCfg)
+	stampChildJobParent(child, parent.JobReference.JobID)
+	childStart := time.Now().UTC()
+	childEnd := time.Now().UTC()
+	finalizeDoneJob(deps, child, childStart, childEnd,
+		final.schema, nil, final.rows, final.statementType, final.emulatorRoute,
+		nil, nil, r)
+	stampChildJobParent(child, parent.JobReference.JobID)
+	return 1
 }
 
 func runEngineScript(

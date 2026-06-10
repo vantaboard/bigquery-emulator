@@ -12,6 +12,8 @@
 #include "absl/synchronization/mutex.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
 
 namespace bigquery_emulator {
@@ -52,7 +54,27 @@ absl::Status RegisterAnalyzerSystemVariables(
   }
   absl::Status s = options.AddSystemVariable({"time_zone"}, string_type);
   if (!s.ok()) return s;
-  return absl::OkStatus();
+  // Scripting @@error.* variables (populated at runtime by
+  // googlesql::ScriptExecutor during EXCEPTION handlers).
+  s = options.AddSystemVariable({"error", "message"}, string_type);
+  if (!s.ok()) return s;
+  s = options.AddSystemVariable({"error", "statement_text"}, string_type);
+  if (!s.ok()) return s;
+  s = options.AddSystemVariable({"error", "formatted_stack_trace"},
+                                string_type);
+  if (!s.ok()) return s;
+  const ::googlesql::StructType* stack_frame_type = nullptr;
+  s = type_factory->MakeStructType(
+      {::googlesql::StructField("line", type_factory->get_int64()),
+       ::googlesql::StructField("column", type_factory->get_int64()),
+       ::googlesql::StructField("filename", string_type),
+       ::googlesql::StructField("location", string_type)},
+      &stack_frame_type);
+  if (!s.ok()) return s;
+  const ::googlesql::ArrayType* stack_trace_type = nullptr;
+  s = type_factory->MakeArrayType(stack_frame_type, &stack_trace_type);
+  if (!s.ok()) return s;
+  return options.AddSystemVariable({"error", "stack_trace"}, stack_trace_type);
 }
 
 absl::StatusOr<Value> GetSystemVariable(

@@ -60,8 +60,8 @@ absl::Status ExecuteExecuteImmediate(
         "script::ExecuteExecuteImmediate: catalog must be GoogleSqlCatalog");
   }
   absl::flat_hash_set<std::string> registered;
-  absl::Status registered_status =
-      RegisterScriptVariablesOnCatalogFromDriver(bq_catalog, driver, &registered);
+  absl::Status registered_status = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, driver, &registered);
   if (!registered_status.ok()) return registered_status;
 
   absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>> output =

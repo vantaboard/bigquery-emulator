@@ -23,6 +23,7 @@
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/storage/storage.h"
+#include "googlesql/public/analyzer.h"
 
 namespace googlesql {
 class Catalog;
@@ -41,7 +42,9 @@ namespace semantic {
 [[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>>
 ExecuteResolvedQueryStmt(const QueryRequest& request,
                          const ::googlesql::ResolvedQueryStmt& query_stmt,
-                         const FrameStack* script_variables = nullptr);
+                         const FrameStack* script_variables = nullptr,
+                         const ::googlesql::SystemVariableValuesMap*
+                             script_system_variables = nullptr);
 
 // `SemanticExecutor` implements `coordinator::Executor` and so
 // installs cleanly into the coordinator's per-route dispatch

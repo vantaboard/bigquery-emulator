@@ -522,9 +522,11 @@ public-facing policy.
   `CALL` dispatches via `script_executor.cc` with SQL body execution;
   gateway engine-first scripting (`DECLARE`/`CALL`/`BEGIN` in one
   `ExecuteQuery`) preserves variable scope. Four bqutils README goldens
-  are in `passing/stored_procedures/` (2026-06-07). `EXECUTE IMMEDIATE`,
-  `WHILE`/`IF`/`LOOP`/`FOR`/`RAISE`/`EXCEPTION`, and `@@error.message`
-  remain open for upstream-faithful procedure bodies.
+  are in `passing/stored_procedures/` (2026-06-07). **Landed:** `SET`
+  assignment, `IF`/`WHILE`, `EXECUTE IMMEDIATE`, `BEGIN…EXCEPTION` with
+  `@@error.message` / `@@error.statement_text`, and `RAISE USING MESSAGE`
+  (conformance/fixtures/scripting/, 2026-06-10). `LOOP`/`FOR…IN`/`REPEAT`
+  and nested exception edge cases remain open where not yet pinned.
   SQL UDF / TVF body storage + invocation + JS UDF
   registration-time rejection stay deferred until the per-engine
   UDF / TVF registry round-trip through `DuckDBStorage` lands

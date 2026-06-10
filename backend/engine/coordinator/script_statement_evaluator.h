@@ -1,19 +1,19 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_COORDINATOR_SCRIPT_STATEMENT_EVALUATOR_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_COORDINATOR_SCRIPT_STATEMENT_EVALUATOR_H_
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/script/script_driver.h"
+#include "google/protobuf/any.pb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/types/type_parameters.h"
 #include "googlesql/public/value.h"
 #include "googlesql/scripting/script_executor.h"
 #include "googlesql/scripting/script_segment.h"
-#include "google/protobuf/any.pb.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/types/span.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -29,9 +29,9 @@ class EmulatorStatementEvaluator : public ::googlesql::StatementEvaluator {
 
   void SetFinalRowsOut(std::unique_ptr<RowSource>* final_rows_out);
 
-  absl::Status ExecuteStatement(const ::googlesql::ScriptExecutor& executor,
-                                const ::googlesql::ScriptSegment& segment)
-      override;
+  absl::Status ExecuteStatement(
+      const ::googlesql::ScriptExecutor& executor,
+      const ::googlesql::ScriptSegment& segment) override;
 
   absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>
   ExecuteQueryWithResult(const ::googlesql::ScriptExecutor& executor,
@@ -42,9 +42,10 @@ class EmulatorStatementEvaluator : public ::googlesql::StatementEvaluator {
       google::protobuf::Any& out) override;
 
   absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>
-  DeserializeToIterator(const google::protobuf::Any& msg,
-                        const ::googlesql::ScriptExecutor& executor,
-                        const ::googlesql::ParsedScript& parsed_script) override;
+  DeserializeToIterator(
+      const google::protobuf::Any& msg,
+      const ::googlesql::ScriptExecutor& executor,
+      const ::googlesql::ParsedScript& parsed_script) override;
 
   absl::StatusOr<int> EvaluateCaseExpression(
       const ::googlesql::ScriptSegment& case_value,

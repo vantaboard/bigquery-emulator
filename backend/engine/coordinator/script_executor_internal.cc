@@ -10,7 +10,7 @@
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "googlesql/public/catalog.h"
-#include "googlesql/public/simple_constant.h"
+#include "googlesql/public/simple_catalog.h"
 
 namespace bigquery_emulator {
 namespace backend {
