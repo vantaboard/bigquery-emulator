@@ -257,6 +257,30 @@ inline std::string EmitValueLiteral(const ::googlesql::Value& v) {
   }
 }
 
+// BigQuery STRUCT-to-STRUCT casts match fields by positional index;
+// DuckDB `CAST(... AS STRUCT(...))` requires overlapping field names.
+// Remap each target field from the source struct via dotted access and
+// emit a DuckDB struct literal keyed by the target names.
+inline std::string EmitStructPositionalCastRemap(
+    absl::string_view inner,
+    const ::googlesql::StructType& source_st,
+    const ::googlesql::StructType& target_st) {
+  if (source_st.num_fields() != target_st.num_fields()) return "";
+  std::vector<std::string> kvs;
+  kvs.reserve(target_st.num_fields());
+  const std::string wrapped = absl::StrCat("(", inner, ")");
+  for (int i = 0; i < target_st.num_fields(); ++i) {
+    const std::string source_field = ResolveStructFieldName(source_st, i);
+    const std::string target_field = ResolveStructFieldName(target_st, i);
+    kvs.push_back(absl::StrCat(QuoteString(target_field),
+                               ": ",
+                               wrapped,
+                               ".",
+                               QuoteIdent(source_field)));
+  }
+  return absl::StrCat("{", absl::StrJoin(kvs, ", "), "}");
+}
+
 // Whitelist of GoogleSQL `TypeKind`s the `EmitCast` path will lower.
 // `DuckDBSqlTypeName` itself is intentionally total (it falls through
 // to `VARCHAR` for unsupported kinds so column-def emit always

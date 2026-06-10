@@ -1,4 +1,6 @@
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
+#include "googlesql/public/types/struct_type.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -205,6 +207,26 @@ TEST_F(TranspilerTest, EmitCastNestedInsideFunctionCall) {
   EXPECT_EQ(
       t.EmitFunctionCall(expr->GetAs<::googlesql::ResolvedFunctionCall>()),
       "COALESCE(CAST(\"id\" AS VARCHAR), 'x')");
+}
+
+TEST_F(TranspilerTest, EmitCastStructPositionalRemap) {
+  ::googlesql::TypeFactory factory;
+  const ::googlesql::Type* int64 = factory.get_int64();
+  const ::googlesql::Type* str = factory.get_string();
+  std::vector<::googlesql::StructField> src_fields;
+  src_fields.emplace_back("", int64);
+  src_fields.emplace_back("", str);
+  const ::googlesql::StructType* source_st = nullptr;
+  ASSERT_TRUE(factory.MakeStructType(src_fields, &source_st).ok());
+  std::vector<::googlesql::StructField> tgt_fields;
+  tgt_fields.emplace_back("x", int64);
+  tgt_fields.emplace_back("y", str);
+  const ::googlesql::StructType* target_st = nullptr;
+  ASSERT_TRUE(factory.MakeStructType(tgt_fields, &target_st).ok());
+  EXPECT_EQ(internal::EmitStructPositionalCastRemap(
+                "{ '_0': 1, '_1': 'a' }", *source_st, *target_st),
+            "{'x': ({ '_0': 1, '_1': 'a' }).\"_0\", 'y': ({ '_0': 1, '_1': 'a' "
+            "}).\"_1\"}");
 }
 
 TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {

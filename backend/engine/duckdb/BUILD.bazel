@@ -103,6 +103,29 @@ cc_test(
 )
 
 cc_test(
+    name = "duckdb_executor_struct_cast_test",
+    srcs = ["duckdb_executor_struct_cast_test.cc"],
+    deps = [
+        ":duckdb_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
     name = "duckdb_executor_test",
     srcs = ["duckdb_executor_test.cc"],
     deps = [

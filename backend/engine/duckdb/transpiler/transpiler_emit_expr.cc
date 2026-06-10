@@ -85,6 +85,18 @@ std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* node) {
     }
     type_sql = "TIMESTAMPTZ";
   }
+  if (target->kind() == ::googlesql::TYPE_STRUCT) {
+    const ::googlesql::Type* source_type = node->expr()->type();
+    if (source_type != nullptr && source_type->IsStruct()) {
+      const ::googlesql::StructType* target_st = target->AsStruct();
+      const ::googlesql::StructType* source_st = source_type->AsStruct();
+      if (target_st != nullptr && source_st != nullptr) {
+        std::string remapped = internal::EmitStructPositionalCastRemap(
+            inner, *source_st, *target_st);
+        if (!remapped.empty()) return remapped;
+      }
+    }
+  }
   const char* op = node->return_null_on_error() ? "TRY_CAST" : "CAST";
   return absl::StrCat(op, "(", inner, " AS ", type_sql, ")");
 }

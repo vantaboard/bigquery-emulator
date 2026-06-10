@@ -1,0 +1,19 @@
+# regression_struct_positional_cast: STRUCT-to-STRUCT cast by position.
+#
+# BigQuery matches STRUCT cast fields by index; DuckDB CAST requires
+# matching names. Bigframes local-data UNNEST paths emit
+# CAST(STRUCT(...) AS STRUCT<named fields>), which the transpiler
+# remaps to a DuckDB struct literal via positional field access.
+name: regression_struct_positional_cast
+description: |
+  UNNEST an ARRAY of anonymous STRUCT literals into named STRUCT
+  columns. Verifies positional STRUCT cast remapping in EmitCast.
+project_id: proj-fastpath-regression-struct-positional-cast
+query: |
+  SELECT t.x, t.y
+    FROM UNNEST(ARRAY<STRUCT<x INT64, y STRING>>[STRUCT(1, 'a'), STRUCT(2, 'b')]) AS t
+expected:
+  route: duckdb_rewrite
+  rows:
+    - {x: "1", y: "a"}
+    - {x: "2", y: "b"}
