@@ -107,6 +107,9 @@ jobs:
             sleep 2
           done
 
+      - name: Seed fake-gcs testdata
+        run: task testdata:fake-gcs-sync
+
       - name: Run thirdparty:java-bigquery-tests (live ITs)
         id: java_live_its
         continue-on-error: true
@@ -185,6 +188,8 @@ jobs:
         with:
           run-id: ${{ github.event.workflow_run.id }}
           head-sha: ${{ github.event.workflow_run.head_sha }}
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Run thirdparty:python-bigquery-tests (nox snippets)
         run: task thirdparty:python-bigquery-tests
@@ -229,6 +234,8 @@ jobs:
         with:
           run-id: ${{ github.event.workflow_run.id }}
           head-sha: ${{ github.event.workflow_run.head_sha }}
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Run thirdparty:node-bigquery-tests (Mocha)
         run: task thirdparty:node-bigquery-tests
@@ -273,6 +280,8 @@ jobs:
         with:
           run-id: ${{ github.event.workflow_run.id }}
           head-sha: ${{ github.event.workflow_run.head_sha }}
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Run thirdparty:python-bigquery-dataframes-snippet-gate
         run: task thirdparty:python-bigquery-dataframes-snippet-gate

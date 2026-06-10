@@ -26,6 +26,18 @@ inputs:
     description: Token with actions:read for artifact download.
     required: false
     default: ${{ github.token }}
+  prebuilt-url:
+    description: |
+      GoogleSQL prebuilt tarball URL. Composite actions cannot read
+      `vars`; pass `vars.GOOGLESQL_PREBUILT_URL` from the workflow.
+    required: false
+    default: ""
+  prebuilt-sha256:
+    description: |
+      Expected SHA-256 hex of the prebuilt tarball. Pass
+      `vars.GOOGLESQL_PREBUILT_SHA256` from the workflow.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -58,8 +70,8 @@ runs:
           -t bigquery-emulator:local \
           .
       env:
-        GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-        GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+        GOOGLESQL_PREBUILT_URL: ${{ inputs.prebuilt-url }}
+        GOOGLESQL_PREBUILT_SHA256: ${{ inputs.prebuilt-sha256 }}
 
     - name: Seed fake-gcs testdata
       if: inputs.seed-fake-gcs == 'true'
