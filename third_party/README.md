@@ -403,8 +403,7 @@ stabilized engine (2026-06-08).
 
 **Local bar (2026-06-08):** node **green** (107 passing); python **1** failure
 (`test_query_script` / `SET`); golang **1** failure (public-data timestamp
-cast); bigframes gate **3/4**; java **OK** with allowlist. See
-[`docs/dev/fixtests-triage.md`](../docs/dev/fixtests-triage.md).
+cast); bigframes gate **3/4**; java **OK** with allowlist.
 
 ### Emulator wiring
 
@@ -590,8 +589,7 @@ reachable before the conftest tries to create buckets.
 ## `dbt-bigquery-tests`
 
 In-tree **dbt-bigquery functional pytest** lane at
-[`dbt-bigquery-tests`](dbt-bigquery-tests) (plan 10; deferred from the
-bigquery-utils conformance work).
+[`dbt-bigquery-tests`](dbt-bigquery-tests).
 
 **Status: scaffold + on-demand sync; manual lane only (not in `task thirdparty`
 aggregator or CI).** The committed tree carries emulator wiring
@@ -601,13 +599,13 @@ aggregator or CI).** The committed tree carries emulator wiring
 `task thirdparty:dbt-bigquery-tests` fails fast when
 `tests/functional/adapter/test_basic.py` is missing.
 
-**Pass bar (plan 14 triage, 2026-06-08):** `task thirdparty:dbt-bigquery-tests`
+**Pass bar (2026-06-08):** `task thirdparty:dbt-bigquery-tests`
 currently exits during pytest **collection** (2 errors in
 `test_generic_catalog.py` / `test_relation_type_change.py` import paths).
 Narrow triage: `DBT_BIGQUERY_RUN_TRIAGE=1` with a single-class
-`DBT_BIGQUERY_PYTEST_ARGS` selector (see below). Full functional green is
-out of scope for one session — track with dbt skip-matrix refinement and
-engine materialization parity.
+`DBT_BIGQUERY_PYTEST_ARGS` selector (see below). Full functional green
+remains open — track with dbt skip-matrix refinement and engine
+materialization parity.
 
 Populate (or refresh) upstream functional tests:
 
@@ -696,41 +694,17 @@ matrix so engine gaps in `known_failing/` do not block unrelated PRs.
 sync at new ref → `./scripts/triage_bqutils_fixtures.sh` →
 `task conformance:bqutils`.
 
-**Baseline (2026-06-06, upstream `0754ad891dea`):** 110 emitted at
-codegen, 97 skipped (64 JS, 22 templated, 11 UDAF), **36 passing** /
-74 known_failing after first triage. After plans 03–05 (2026-06-07):
-**55 passing** / 71+ known_failing (ANY TYPE + SQL UDAFs); JS remains
-excluded at codegen. After plans 06–08 closure (2026-06-07): **60 passing**
-including `passing/views/migration/teradata/sys_calendar.yaml` and four
-`passing/stored_procedures/` README goldens. After fixtests-08 ANY TYPE
-(2026-06-08): **67 passing** (`typeof`, `sure_values`, `cw_array_max`,
-`cw_array_min`, `cw_array_median`, `cw_array_stable_distinct`). After
-fixtests-09 bytes/bitwise (2026-06-08): **75 passing** (`to_hex`, `from_hex`,
-`to_binary`, `from_binary`, `cw_getbit`, `cw_getbit_binary`, `cw_to_base`,
-`cw_from_base`). After fixtests-10 RANGE<> (2026-06-08): **80 passing**
-(+6: `cw_range_{date,datetime,timestamp}_{ldiff,rdiff}`; seven legacy
-fixtures in `passing/` still fail runner — see `task conformance:bqutils`).
-After fixtests-11 regexp/string (2026-06-08): **95 fixtures in `passing/`**
-(+14 triage promotions; **89/95** runner pass — six legacy fails remain).
-After fixtests-12 BIGNUMERIC/interval (2026-06-08): **102 fixtures in
-`passing/`** (+7: 128-bit shifts, round-half-even, `cw_months_between`,
-`ts_tumble`, `cw_stringify_interval`; **96/102** runner pass — six legacy
-fails unchanged). After fixtests-13 bqutils tail (2026-06-08): **110 fixtures
-in `passing/`** (+8: `azimuth_to_geog_point`, `cw_xml_element_with_attributes`,
-`linear_regression`, `migration/oracle/round_datetime`, vertica
-`upperb`/`lowerb`/`substrb`, `migration/sqlserver/convert_bytes_string`;
-**104/110** runner pass — same six legacy fails). Promoted includes
-`cw_signed_{left,right}shift_128bit`, `cw_round_half_even{,_bignumeric}`,
-`cw_months_between`, `ts_tumble`, `cw_stringify_interval`. fixtests-11
-promotions include `cw_regexp_instr_3`, regexp partition family (except
-`cw_disjoint_partition_by_regexp`), NVP (`cw_td_nvp`, `cw_nvp2json4`),
-`cw_substrb`, `cw_initcap`, `cw_otranslate`, `cw_instr4`,
-`cw_split_part_delimstr_idx`, `cw_find_in_list`, `cw_comparable_format_varchar_t`,
-`migration/redshift/initcap`. Still in `known_failing/` (7): deferred
-`cw_xml_extract` (**LANGUAGE python**, documented external-language gap),
-`cw_disjoint_partition_by_regexp`, `url_trim_query`, `migration/redshift/translate`,
-`migration/sqlserver/convert_{datetime_string,string_bytes}`, `t_test` (7 total).
-First-party
+**Current state (upstream `0754ad891dea`):** codegen emits pure-SQL
+scalar UDF fixtures only (JS, Dataform-templated, and UDAF bodies are
+skipped at extraction). After engine triage and promotion, **116
+fixtures live in `passing/`** — spanning scalar UDFs, ANY TYPE
+templated UDFs, SQL UDAFs, RANGE<>, BIGNUMERIC/interval,
+regexp/string, bytes/bitwise families, plus hand-authored
+`passing/views/` and `passing/stored_procedures/` README goldens —
+and **1 in `known_failing/`**: `community/cw_xml_extract.yaml`
+(**LANGUAGE python**, the documented external-language gap; same
+disposition as JS UDFs in `docs/ENGINE_POLICY.md`). Run
+`task conformance:bqutils` for the live pass/fail bar. First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.
 

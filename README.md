@@ -26,10 +26,11 @@ BigQuery REST API.
 > evaluation, and storage/catalog handlers for DDL and metadata
 > operations. Results land back as REST `f`/`v` JSON or, on the
 > internal gRPC Storage Read API, as native Arrow batches.
-> `MERGE`, `CREATE TABLE`, `CREATE TABLE AS SELECT`, and `DROP TABLE`
-> work today; `INSERT VALUES` / `UPDATE` / `DELETE` still surface
-> `UNIMPLEMENTED` — seed rows via `tabledata.insertAll` while those
-> close. See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
+> DDL (`CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`) and
+> DML (`INSERT` — including `INSERT ... SELECT` — `UPDATE`, `DELETE`,
+> `MERGE`) execute locally; a few harder DML branches (e.g. deep
+> STRUCT updates) still surface `UNIMPLEMENTED`.
+> See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
 > narrative, [`docs/REST_API.md`](./docs/REST_API.md) for the
 > per-endpoint mapping + current status, and
 > [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the

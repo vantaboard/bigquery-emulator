@@ -65,17 +65,18 @@ routes resolved-AST shapes to the right local executor.
     scans, filters, projections, joins, aggregates, windows, set
     operations, struct / array literals, JSON field access, Arrow
     output.
-  - **DuckDB rewrites and UDFs** (planned): DuckDB SQL expressed in
-    terms of UDFs / macros / structural rewrites for the BigQuery
-    functions whose semantics are close enough to DuckDB's that they
-    can be made correct locally without a separate executor.
-  - **Local semantic executor** (planned): a row/array/value
-    interpreter that runs against scanned Arrow batches when the
-    BigQuery semantics differ enough from DuckDB to make a rewrite
-    risky (exact NULL behavior, BigQuery-specific date arithmetic
-    edge cases, SAFE-mode error surfaces, deep STRUCT mutation,
-    `UNNEST WITH OFFSET`, multi-array zip, ...).
-  - **Catalog / control ops** (planned for full coverage): DDL,
+  - **DuckDB rewrites and UDFs**
+    (`backend/engine/duckdb/udf/`): DuckDB SQL expressed in terms of
+    UDFs / macros / structural rewrites for the BigQuery functions
+    whose semantics are close enough to DuckDB's that they can be
+    made correct locally without a separate executor.
+  - **Local semantic executor** (`backend/engine/semantic/`): a
+    row/array/value interpreter that runs against scanned rows when
+    the BigQuery semantics differ enough from DuckDB to make a
+    rewrite risky (exact NULL behavior, BigQuery-specific date
+    arithmetic edge cases, SAFE-mode error surfaces, DML,
+    `UNNEST WITH OFFSET`, scripting, SQL UDF/UDAF/TVF evaluation).
+  - **Catalog / control ops** (`backend/engine/control/`): DDL,
     metadata, and other "this is really a storage / catalog
     operation" statements bypass query execution entirely and run
     through the storage layer.
@@ -293,11 +294,13 @@ behind each, and the multi-strategy coordinator is the only
   `CREATE TABLE AS SELECT`, `DROP TABLE`, and `ANALYZE` flow through
   `backend/engine/control/control_op_executor.{h,cc}` and mutate
   `Storage` directly (no longer through the DuckDB SQL evaluator).
-  `ALTER TABLE` still lowers through the DuckDB transpiler pending
-  its own migration; `CREATE VIEW`, `CREATE MATERIALIZED VIEW` (full
-  refresh), `EXPORT DATA`, function registration, partitioning /
-  clustering hints, and direct external-Parquet drop-in still
-  pending
+  `CREATE VIEW` registers in the per-project view registry, and
+  `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
+  the UDF registry (see "DML / DDL" below). `ALTER TABLE` still
+  lowers through the DuckDB transpiler pending its own migration;
+  `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`,
+  partitioning / clustering hints, and direct external-Parquet
+  drop-in still pending
 
 ### Catalog wiring
 
@@ -305,9 +308,9 @@ behind each, and the multi-strategy coordinator is the only
   (`frontend/handlers/catalog.{h,cc}`)
 - ✅ `tabledata.insertAll` end-to-end (Go REST ->
   [`gateway/handlers/tabledata.go`](./gateway/handlers/tabledata.go) ->
-  engine gRPC -> `DuckDBStorage`); used by the conformance harness
-  as the canonical seeding path while DML INSERT is still
-  UNIMPLEMENTED on the DuckDB engine
+  engine gRPC -> `DuckDBStorage`); available to the conformance
+  harness as a seeding path that bypasses DML entirely (DML
+  `INSERT` also works, via the local DML executor)
 - ✅ `tabledata.list` end-to-end (paginated reads, Arrow-batched
   scans on `DuckDBStorage`)
 
@@ -325,9 +328,11 @@ behind each, and the multi-strategy coordinator is the only
   each query to the strategy that fits its resolved-AST shape. Policy
   is documented in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md);
   shapes not yet implemented surface `UNIMPLEMENTED`.
-- ⏳ Local semantic executor (`backend/engine/semantic/`)
-- ⏳ DuckDB UDF / polyfill library (`backend/engine/duckdb/udf/`)
-- ⏳ Control-op executor for DDL / metadata (`backend/engine/control/`)
+- ✅ Local semantic executor (`backend/engine/semantic/`) — DML,
+  scripting, SQL UDF/UDAF/TVF evaluation, array/struct scans,
+  function stubs
+- ✅ DuckDB UDF / polyfill library (`backend/engine/duckdb/udf/`)
+- ✅ Control-op executor for DDL / metadata (`backend/engine/control/`)
 
 ## Query analysis (C++ via GoogleSQL)
 
@@ -379,11 +384,13 @@ handler.
   mutations (`UPDATE t SET s.a.b = ...`) still fall back via the
   empty-string contract (see Open Questions)
 - 🟡 UNNEST handling: standalone `UNNEST(arr) AS col` lowers to
-  DuckDB `SELECT unnest(arr) AS "col"`. `WITH OFFSET`, multi-array
-  zip, outer `UNNEST`, and lateral / cross-join shapes still surface
-  `  UNIMPLEMENTED` pending the lateral / multi-array / WITH OFFSET
-  shapes, which reroute from the DuckDB fast path to the local
-  semantic executor (see [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
+  DuckDB `SELECT unnest(arr) AS "col"`. `WITH OFFSET` routes to the
+  local semantic executor
+  (`backend/engine/semantic/array_struct/array_scan.cc`, pinned by
+  `conformance/fixtures/array_struct/unnest_with_offset.yaml`).
+  Multi-array zip, outer `UNNEST`, and lateral / cross-join shapes
+  still surface `UNIMPLEMENTED`
+  (see [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
 - 🟡 Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
@@ -460,21 +467,23 @@ public-facing policy.
   itself stays a structured `kNotImplemented` until the
   outer-row iteration primitive lands -- tracked under
   `docs/ENGINE_POLICY.md`. Recursive CTEs and the LIKE
-  ANY / ALL subquery family remain out of plan-10 scope and
-  surface UNIMPLEMENTED; see `docs/ENGINE_POLICY.md`
+  ANY / ALL subquery family remain deliberately out of the DuckDB
+  fast path's scope and surface UNIMPLEMENTED; see
+  `docs/ENGINE_POLICY.md`
 
 ## DML / DDL
 
 - 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast
-  path today; `INSERT VALUES`, scalar-`SET` `UPDATE`, and `DELETE`
-  now route through the storage-aware local DML executor
-  (`backend/engine/semantic/dml/`) and populate
-  `numDmlAffectedRows` correctly. `INSERT ... SELECT`,
-  deep-STRUCT `SET` (`SET s.a.b = ...`), the harder MERGE matrix
+  path today; `INSERT VALUES`, `INSERT ... SELECT`, scalar-`SET`
+  `UPDATE`, and `DELETE` route through the storage-aware local DML
+  executor (`backend/engine/semantic/dml/`) and populate
+  `numDmlAffectedRows` correctly. Deep-STRUCT `SET`
+  (`SET s.a.b = ...`), the harder MERGE matrix
   (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
-  `RETURNING`, and `ResolvedPipeInsertScan` continue to surface
+  `RETURNING`, `ASSERT_ROWS_MODIFIED`, and
+  `ResolvedPipeInsertScan` continue to surface
   `UNIMPLEMENTED` and stay tracked under
-  `docs/ENGINE_POLICY.md`. Conformance fixtures may now seed
+  `docs/ENGINE_POLICY.md`. Conformance fixtures may seed
   rows via either `tabledata.insertAll` or `INSERT VALUES` `sql:`
   steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
@@ -488,12 +497,12 @@ public-facing policy.
   every `control_op` statement root to `ControlOpExecutor`.
   `CREATE VIEW` registers in the per-project view registry and replays
   into each query catalog (`sys_calendar` bqutils fixture promoted).
-  `CREATE MATERIALIZED VIEW` (full-refresh execution), `EXPORT DATA`,
-  function registration, `ALTER TABLE` still surface `UNIMPLEMENTED`
-  from the dedicated handlers; `ALTER TABLE` continues
-  to lower through the DuckDB engine pending its own subagent. Tracked
-  via the control-op executor; materialized-view refresh
-  semantics
+  `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
+  the UDF registry (next bullet). `CREATE MATERIALIZED VIEW`
+  (full-refresh execution) and `EXPORT DATA` still surface
+  `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE`
+  continues to lower through the DuckDB engine pending its own
+  migration to the control-op executor.
 - 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
@@ -525,14 +534,13 @@ public-facing policy.
   register in `tvf_registry` and evaluate via `eval_tvf.cc`
   (`conformance/fixtures/udf/tvf_simple.yaml`). Durable DuckDB-backed
   persistence remains open.
-- 🟡 Job stats: `numDmlAffectedRows` populated for INSERT VALUES,
-  scalar-`SET` UPDATE, DELETE, and MERGE (the families landed via
-  deferred DML work tracked in `docs/ENGINE_POLICY.md` plus the existing DuckDB
-  MERGE path). Deferred shapes (INSERT ... SELECT, deep-STRUCT
-  UPDATE, MERGE harder branches, RETURNING, PipeInsertScan) keep
-  the field absent until they land; the row count is otherwise
-  the legacy aggregate (inserted + updated + deleted) per the
-  BigQuery REST contract.
+- 🟡 Job stats: `numDmlAffectedRows` populated for the DML shapes
+  the local DML executor lands (INSERT, scalar-`SET` UPDATE,
+  DELETE) plus the existing DuckDB MERGE path. Deferred shapes
+  (deep-STRUCT UPDATE, MERGE harder branches, RETURNING,
+  PipeInsertScan) keep the field absent until they land; the row
+  count is otherwise the legacy aggregate
+  (inserted + updated + deleted) per the BigQuery REST contract.
 
 ## Storage Read API (gRPC)
 
@@ -543,24 +551,23 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
   ([`frontend/handlers/storage_read.{h,cc}`](./frontend/handlers/));
   `CreateReadSession` and `ReadRows` are wired, `SplitReadStream`
   is still pending (single-stream sessions only — see below)
-- 🟡 Arrow output format implemented; Avro output is not wired yet
-- ✅ **Native Arrow fast path.** DuckDB produces Arrow
-  `RecordBatch`es as its native result format; `ReadRows` streams
-  those batches straight onto the gRPC wire (`ArrowRecordBatch` /
-  `ArrowSchema` messages) without round-tripping through the
-  BigQuery REST `f`/`v` row shape, sidestepping the row-by-row
-  serialization the REST path uses
+- ✅ Public `google.cloud.bigquery.storage.v1.BigQueryRead` service
+  registered on `:9060` by the gateway shim
+  ([`gateway/handlers/bqstorage/`](./gateway/handlers/bqstorage/)),
+  adapting the engine's internal `DataRow` stream to the public
+  wire formats: Arrow schema + IPC record batches
+  (`arrow.go` / `arrow_ipc.go`) and Avro OCF encoding (`avro.go`)
 - 🟡 `ReadOptions.row_restriction`: a single `<column> = <literal>`
   equality clause is pushed down into the DuckDB `read_parquet(...)`
   scan as a `WHERE` clause. Range / inequality ops, connectives,
   `IN`, `NULL`, and array/struct columns reject at `CreateReadSession`
   with `INVALID_ARGUMENT` (see "Supported `ReadOptions`" in
   [`docs/REST_API.md`](./docs/REST_API.md)). Multi-clause expansion
-  is deferred to a follow-up subagent of
-  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
+  is deliberately deferred
+  (see [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md))
   because doing it half-right (parser-only, no analyzer-resolved
   boolean expression) is exactly the silent-approximation hazard
-  the plan forbids
+  the execution policy forbids
 - ✅ `ReadOptions.selected_fields` enforced. CreateReadSession
   validates each name against the table's top-level columns
   (unknowns surface as `INVALID_ARGUMENT` before any streaming RPC
@@ -569,9 +576,8 @@ Goal: support BigQuery client libraries that prefer the Storage Read API
   `ReadSession.schema` reply reflects the projection too
 - ⏳ Single-stream sessions only — `max_stream_count > 1` is rejected.
   DuckDB's parallel scan + Arrow output makes multi-stream a
-  tractable follow-up. Deferred to a follow-up subagent of
-  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)
-  pending a deterministic parquet-row-boundary partition design
+  tractable follow-up, pending a deterministic
+  parquet-row-boundary partition design
 
 ## Storage Write API (gRPC)
 
@@ -585,24 +591,23 @@ already uses.
   `CreateWriteStream`, bidi-streaming `AppendRows`, and
   `GetWriteStream` are wired for the `COMMITTED` and reserved
   `_default` stream types. Append batches commit immediately
-  through plan 9's `DuckDBStorage::AppendRows`, the same primitive
+  through `DuckDBStorage::AppendRows`, the same primitive
   the local DML executor uses
 - 🟡 Schema-shape mismatches and recoverable storage errors land
   on the `AppendRowsResponse.error_message` envelope so a producer
   can fix the batch and retry without tearing the bidi stream down,
   matching the public Storage Write API's recoverable-error
   contract
-- 🟡 `BUFFERED` stream type (engine, plan 10 partial):
-  `CreateWriteStream`, buffered `AppendRows`, `FlushRows`, and
-  `FinalizeWriteStream` commit through `DuckDBStorage::AppendRows`
-  on flush. Java `WriteBufferedStreamIT` still fails until the
-  public `BigQueryWrite` gRPC shim registers on `:9060` (see
+- ✅ `BUFFERED` stream type: `CreateWriteStream`, buffered
+  `AppendRows`, `FlushRows`, and `FinalizeWriteStream` commit
+  through `DuckDBStorage::AppendRows` on flush. The public
+  `BigQueryWrite` gRPC shim registers on `:9060`
+  ([`gateway/handlers/bqstorage/`](./gateway/handlers/bqstorage/));
+  Java `WriteBufferedStreamIT` and `StorageArrowSampleIT` pass
+  against the local emulator (see
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) Storage gRPC
   section).
 - ⏳ `PENDING` + `BatchCommitWriteStreams` not implemented.
-  ⏳ Storage Read Arrow/Avro pages (`StorageArrowSampleIT`) —
-  engine `ReadRows` emits `DataRow` cells only; Arrow IPC encoding
-  and the public `BigQueryRead` adapter remain deferred.
 
 ## Conformance harness
 
@@ -619,10 +624,12 @@ and
   diffs `expected.rows` against the gateway's wire response with
   typed cell comparison (INT64 as `*big.Rat`, FLOAT64 with epsilon,
   RFC3339 / SQL-form timestamps, ...), supports `ordered` /
-  `unordered` / `schema_only` matching modes. 18 fixtures today
-  spanning SELECT shapes, GROUP BY / aggregates, JOINs, DDL,
-  structural errors, and schema-only smokes. JSON output is
-  consumed by the coverage publisher
+  `unordered` / `schema_only` matching modes. 100 fixtures today
+  spanning SELECT shapes, GROUP BY / aggregates, JOINs, CTEs /
+  subqueries, DML / DDL round-trips, functions, scripting / UDFs,
+  structural errors, and schema-only smokes (plus the
+  bigquery-utils suite under `conformance/thirdparty-fixtures/`).
+  JSON output is consumed by the coverage publisher
 - ✅ **Third-party client lane** — the five official BigQuery
   client-library sample suites are vendored under
   [`third_party/`](./third_party/) and driven by `task thirdparty:*`:
@@ -694,10 +701,8 @@ and
   shapes that route through the DuckDB fast path; expect "fast
   enough for tests, not fast enough for benchmarks" for shapes that
   route through the semantic executor; expect `UNIMPLEMENTED` for
-  shapes still on the `unsupported` route
-  (INSERT / UPDATE / DELETE / scalar-only SELECT today, plus the
-  unsupported-by-design families documented in
-  `docs/ENGINE_POLICY.md`).
+  the unsupported-by-design families documented in
+  `docs/ENGINE_POLICY.md`.
 - No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
   later if there's demand, and only with a local implementation or a
   deterministic stub — never with a cloud passthrough.
@@ -761,11 +766,11 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   `_default` + `COMMITTED` stream types on the same gRPC surface
   (`bigquery_emulator.v1.StorageWrite`) and routes appends through
   the same `DuckDBStorage::AppendRows` primitive the local DML
-  executor owns. `BUFFERED` and `PENDING` (and the matching
-  `FlushRows` / `FinalizeWriteStream` / `BatchCommitWriteStreams`
-  RPCs) are deferred to a follow-up subagent of
-  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md);
-  they reserve their proto slots and return `UNIMPLEMENTED` today.
+  executor owns. `BUFFERED` (with `FlushRows` /
+  `FinalizeWriteStream`) is implemented; `PENDING` and
+  `BatchCommitWriteStreams` reserve their proto slots and return
+  `UNIMPLEMENTED` today (see
+  [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)).
 - **Dialect translation friction (GoogleSQL <-> DuckDB).** The DuckDB
   fast path is no longer the project's whole story, but the friction
   it surfaces is exactly why the local coordinator exists: shapes
@@ -810,5 +815,6 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   - The pragmatic answer to all of the above is the route catalog,
     not "everything becomes a transpiler shape." Unmapped shapes return
     `UNIMPLEMENTED` rather than silently degrading, but the router has
-    five places to put a shape before that and the plan set names which
-    one each remaining unsupported shape is going to land in.
+    five places to put a shape before that, and the disposition
+    registries (`functions.yaml` / `node_dispositions.yaml`) record
+    which one each remaining shape is going to land in.

@@ -60,7 +60,7 @@ omit the host and use `{x}` for path variables.
 | `tables.setIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy` | wired | [`gateway/handlers/tables.go::TableSetIamPolicy`][tables] |
 | `tables.testIamPermissions` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions` | wired | [`gateway/handlers/tables.go::TableTestIamPermissions`][tables] |
 
-**External tables (plan 07):** `tables.insert` accepts
+**External tables:** `tables.insert` accepts
 `externalDataConfiguration` (`sourceUris`, `sourceFormat`, `schema`,
 `csvOptions`, …). Supported GCS formats (`CSV`, `NEWLINE_DELIMITED_JSON`,
 `PARQUET`, …) are fetched via fake-gcs (`STORAGE_EMULATOR_HOST` /
@@ -101,7 +101,7 @@ The literal `/delete` segment after `{jobId}` is not a typo — that is
 the upstream URL template, see
 [`docs/bigquery/docs/reference/rest/v2/jobs/delete.md`][delete-md].
 
-**COPY / EXTRACT / undelete (tp08):** `configuration.copy` copies rows
+**COPY / EXTRACT / undelete:** `configuration.copy` copies rows
 from `sourceTable` / `sourceTables` into `destinationTable`, honoring
 `writeDisposition` (`WRITE_EMPTY`, `WRITE_TRUNCATE`, `WRITE_APPEND`).
 Live sources prefer engine SQL (`CREATE TABLE AS SELECT` / `UNION ALL`);

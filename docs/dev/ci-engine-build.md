@@ -92,9 +92,9 @@ explicit run id is passed.
 - `conformance / conformance (duckdb)`
 - `docker-smoke / quickstart-smoke`
 - `thirdparty-samples / java-bigquery-tests (live emulator)`
-- `thirdparty-samples / python-bigquery-tests (live emulator)` (plan 14; may be red until thirdparty-02–09 land)
-- `thirdparty-samples / node-bigquery-tests (live emulator)` (plan 14)
-- `thirdparty-samples / python-bigquery-dataframes snippet gate (live emulator)` (plan 14)
+- `thirdparty-samples / python-bigquery-tests (live emulator)`
+- `thirdparty-samples / node-bigquery-tests (live emulator)`
+- `thirdparty-samples / python-bigquery-dataframes snippet gate (live emulator)`
 - `thirdparty-samples / golang-bigquery-tests (live emulator)`
 
 **Fast lanes (optional but recommended):**

@@ -7,7 +7,7 @@ catalog at startup. Pick the one that matches your workflow:
 |--------------------------------------------------------------------------------|--------------------------------------------------------------------------|--------------------------------------------------------------------|
 | [Declarative YAML seed files](#1-declarative-yaml-seed-files-recommended)      | Local dev fixtures, CI test data, repeatable demos                       | Re-applied at every gateway start                                  |
 | [Initial-data template directory](#2-initial-data-template-directory)          | Shipping a pre-built DuckDB catalog with a container image               | Materialized once into `--data-dir`; subsequent boots are no-ops   |
-| [Production seed REST API](#3-production-seed-rest-api-opt-in-build)           | One-off "mirror this real BigQuery project into my laptop" sessions      | Whatever `--storage` you chose (`memory` resets, `duckdb` persists)|
+| [Production seed REST API](#3-production-seed-rest-api-opt-in-build)           | One-off "mirror this real BigQuery project into my laptop" sessions      | Persists in the DuckDB catalog under `--data-dir`                  |
 
 All three end up writing through the same engine `CatalogClient` /
 `InsertRows` surface the REST handlers use, so seeded data is

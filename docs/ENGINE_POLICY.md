@@ -102,7 +102,7 @@ summary the unsupported error envelope points at. Per-family posture
 | MEASURE / measure functions (`AGGREGATE(<measure>)`)                                                         | `unsupported` | Measure types require BigQuery's analytical layer the emulator does not model.                                                                                                                              |
 | Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`)                                                  | `unsupported` | The Spanner-Graph SQL surface is not part of this emulator's scope.                                                                                                                                         |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`)                                                             | `unsupported` | BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on `unsupported` to make the gap explicit.                                                                          |
-| JavaScript UDFs (`CREATE FUNCTION ... LANGUAGE js`)                                                          | `unsupported` | `CREATE FUNCTION ... LANGUAGE js` surfaces `UNIMPLEMENTED` (HTTP 501) and does **not** register an `External_function` (registering a non-persisted JS body would silently diverge from BigQuery). Call-time execution remains unimplemented until an embedded JS runtime lands (plan 04 Option A). |
+| JavaScript UDFs (`CREATE FUNCTION ... LANGUAGE js`)                                                          | `unsupported` | `CREATE FUNCTION ... LANGUAGE js` surfaces `UNIMPLEMENTED` (HTTP 501) and does **not** register an `External_function` (registering a non-persisted JS body would silently diverge from BigQuery). Call-time execution remains unimplemented until an embedded JS runtime lands. |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` | No Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/` as a documented external-language gap (same disposition as JS UDFs). |
 | SQL scalar UDFs (`CREATE FUNCTION ... AS (...)`), including `ANY TYPE` templated parameters                  | `semantic_executor`     | `CREATE FUNCTION` registers through the per-project UDF registry (`backend/catalog/udf_registry.cc`) and replays into each query's `GoogleSqlCatalog`, shadowing a built-in when the names collide (e.g. migration `nullifzero`, community `typeof`). Templated bodies evaluate on the semantic executor via `EvalSqlUdfBody`; typed-parameter bodies inline through the same path when the route classifier promotes the call. SQL UDAFs (`CREATE AGGREGATE FUNCTION ... AS (...)`) register through the same control-op path and evaluate on the semantic executor via `EvalSqlUdafBody` (honoring `NOT AGGREGATE` parameters). TVFs and durable cross-request persistence through DuckDB storage remain deferred. |
 | Scripting (`DECLARE`, `SET`, `CALL`, `BEGIN…END` multi-stmt blocks)                                          | `semantic_executor`     | Gateway lowers `DECLARE` to `CREATE CONSTANT` and sends the full script in one engine `ExecuteQuery`; the coordinator runs `ExecuteScriptViaAnalyzeNext` and the frontend bypasses single-statement pre-classify. Procedure bodies execute via `script_executor.cc` (`SET` via expression eval; other statements via resolved-statement dispatch). `EXECUTE IMMEDIATE`, `WHILE`/`IF`, and `EXCEPTION` remain deferred. |
@@ -170,16 +170,18 @@ Per the policy above:
   intentionally targeting a future second profile. Today the default
   profile set is `[local]` and the harness runs every fixture against
   it.
-- **Use `rows:` setup steps** (which call `tabledata.insertAll`)
-  instead of `sql:` `INSERT VALUES` for seeding when INSERT is not
-  yet implemented on your target route.
+- **Seed with `sql:` `INSERT VALUES` or `rows:` setup steps** —
+  `INSERT` executes through the local DML executor, and `rows:`
+  steps (which call `tabledata.insertAll`) remain available for
+  fixtures that want to bypass DML entirely.
 - **Document `unsupported` gaps loudly.** If a fixture is blocked on
   an `unsupported` shape, leave it out of the suite rather than
   `t.Skip()`-ing it; the conformance harness's purpose is to pin what
   works.
-- **Route labels are optional today.** Fixtures may assert which
-  route served a query alongside the row output when the routing
-  matrix fixture lands.
+- **Route labels are optional.** Fixtures may assert which route
+  served a query alongside the row output (`expected.route`), and
+  `task conformance:routing-matrix` reports the observed route for
+  every fixture.
 
 ## History
 
