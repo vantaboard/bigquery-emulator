@@ -1,11 +1,10 @@
-#include "backend/engine/coordinator/sql_preprocess_internal.h"
-
 #include <cctype>
 #include <string>
 
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "backend/engine/coordinator/sql_preprocess_internal.h"
 
 namespace bigquery_emulator {
 namespace backend {
