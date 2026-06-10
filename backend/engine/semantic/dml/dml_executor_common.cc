@@ -10,6 +10,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/semantic/dml/dml_executor.h"
 #include "backend/engine/semantic/dml/dml_executor_internal.h"
@@ -155,7 +156,8 @@ absl::StatusOr<ColumnBindings> BindRow(
                                               row.cells.size(),
                                               " cells"));
     }
-    auto v = catalog::StorageValueToGoogleSqlValue(row.cells[idx], col.type());
+    auto v = catalog::StorageValueToGoogleSqlValue(
+        row.cells[idx], col.type(), schema.columns[idx]);
     if (!v.ok()) return v.status();
     bindings[col.column_id()] = *std::move(v);
   }
@@ -202,19 +204,148 @@ absl::StatusOr<storage::Row> BuildInsertRow(
   return out;
 }
 
+absl::StatusOr<UpdateTarget> ParseUpdateTarget(
+    const ::googlesql::ResolvedExpr& target,
+    const schema::TableSchema& schema) {
+  UpdateTarget out;
+  std::vector<int> path_inner_to_outer;
+  const ::googlesql::ResolvedExpr* cur = &target;
+  while (cur->node_kind() == ::googlesql::RESOLVED_GET_STRUCT_FIELD) {
+    const auto* gsf = cur->GetAs<::googlesql::ResolvedGetStructField>();
+    if (gsf == nullptr) {
+      return absl::InternalError(
+          "semantic/dml: ResolvedGetStructField cast failed");
+    }
+    path_inner_to_outer.push_back(gsf->field_idx());
+    cur = gsf->expr();
+    if (cur == nullptr) {
+      return absl::InternalError(
+          "semantic/dml: ResolvedGetStructField has null expr");
+    }
+  }
+  if (cur->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        absl::StrCat("semantic/dml: UPDATE SET target kind ",
+                     cur->node_kind_string(),
+                     " is not yet supported; see docs/ENGINE_POLICY.md"));
+  }
+  const auto* col_ref = cur->GetAs<::googlesql::ResolvedColumnRef>();
+  const int idx = IndexOfColumn(schema, col_ref->column().name());
+  if (idx < 0) {
+    return absl::InternalError(
+        absl::StrCat("semantic/dml: UPDATE target column '",
+                     col_ref->column().name(),
+                     "' not found in storage table schema"));
+  }
+  out.column_idx = idx;
+  out.struct_field_path.assign(path_inner_to_outer.rbegin(),
+                               path_inner_to_outer.rend());
+  return out;
+}
+
+absl::StatusOr<Value> SetNestedStructField(const Value& root,
+                                           absl::Span<const int> field_path,
+                                           const Value& leaf) {
+  if (field_path.empty()) {
+    return leaf;
+  }
+  if (root.is_null()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic/dml: cannot SET a nested STRUCT field on NULL");
+  }
+  if (!root.type()->IsStruct()) {
+    return absl::InvalidArgumentError(
+        "semantic/dml: SetNestedStructField base is not STRUCT");
+  }
+  const ::googlesql::StructType* st = root.type()->AsStruct();
+  if (st == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic/dml: SetNestedStructField STRUCT type cast failed");
+  }
+  const int idx = field_path[0];
+  if (idx < 0 || idx >= root.num_fields()) {
+    return absl::InvalidArgumentError(
+        "semantic/dml: SetNestedStructField index out of range");
+  }
+  std::vector<Value> fields;
+  fields.reserve(root.num_fields());
+  for (int i = 0; i < root.num_fields(); ++i) {
+    fields.push_back(root.field(i));
+  }
+  if (field_path.size() == 1) {
+    fields[idx] = leaf;
+    return Value::Struct(st, std::move(fields));
+  }
+  auto nested = SetNestedStructField(fields[idx], field_path.subspan(1), leaf);
+  if (!nested.ok()) return nested.status();
+  fields[idx] = *std::move(nested);
+  return Value::Struct(st, std::move(fields));
+}
+
+int64_t AffectedRowCount(DmlStatementKind kind, const DmlStats& stats) {
+  switch (kind) {
+    case DmlStatementKind::kInsert:
+      return stats.inserted_row_count;
+    case DmlStatementKind::kUpdate:
+      return stats.updated_row_count;
+    case DmlStatementKind::kDelete:
+      return stats.deleted_row_count;
+  }
+  return 0;
+}
+
+absl::Status CheckAssertRowsModified(
+    const ::googlesql::ResolvedAssertRowsModified* assert_rows,
+    DmlStatementKind kind,
+    const DmlStats& stats,
+    EvalContext& ctx) {
+  if (assert_rows == nullptr) return absl::OkStatus();
+  const ::googlesql::ResolvedExpr* rows_expr = assert_rows->rows();
+  if (rows_expr == nullptr) {
+    return absl::InternalError(
+        "semantic/dml: ResolvedAssertRowsModified has null rows expr");
+  }
+  auto expected_or = EvalExpr(*rows_expr, ctx);
+  if (!expected_or.ok()) return expected_or.status();
+  const Value& expected = *expected_or;
+  if (!expected.is_valid() || expected.is_null() ||
+      expected.type_kind() != ::googlesql::TYPE_INT64) {
+    return absl::InternalError(
+        "semantic/dml: ASSERT_ROWS_MODIFIED rows must be a non-null INT64");
+  }
+  const int64_t expected_count = expected.int64_value();
+  const int64_t actual = AffectedRowCount(kind, stats);
+  if (actual != expected_count) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             absl::StrCat("DML statement modified ",
+                                          actual,
+                                          " row(s), but ",
+                                          expected_count,
+                                          " row(s) were expected."));
+  }
+  return absl::OkStatus();
+}
+
+ColumnBindings MergeColumnBindings(const ColumnBindings& target,
+                                   const ColumnBindings& from) {
+  ColumnBindings merged = target;
+  for (const auto& [col_id, value] : from) {
+    merged[col_id] = value;
+  }
+  return merged;
+}
+
 // Reject DML shapes the executor does not yet handle. Surfaces
 // `kNotImplemented` so the gateway envelope is the same as for
 // any other planned-but-not-landed route. Specific deferred
-// shapes: `RETURNING` clause (Family 7), `ASSERT_ROWS_MODIFIED`
-// modifier (BigQuery-only, no DuckDB analog), generated columns
+// shapes: `RETURNING` clause (Family 7), generated columns
 // (BigQuery doesn't expose CREATE TABLE generated columns
-// today). `array_offset_column` is only set on UPDATE/DELETE
-// when the target sits inside a `FROM t, UNNEST(t.arr)` shape,
-// which Family 4 (correlated array scans, deferred from plan
-// 8) is the right home for.
+// today). `array_offset_column` on UPDATE/DELETE without a
+// landed unnest-DML evaluator still surfaces `kNotImplemented`.
 absl::Status RejectUnsupportedDmlFeatures(
     const ::googlesql::ResolvedReturningClause* returning,
-    const ::googlesql::ResolvedAssertRowsModified* assert_rows,
     bool has_array_offset_column,
     int generated_column_count,
     absl::string_view kind) {
@@ -225,13 +356,6 @@ absl::Status RejectUnsupportedDmlFeatures(
                      kind,
                      " RETURNING clause is not yet supported; see "
                      "docs/ENGINE_POLICY.md"));
-  }
-  if (assert_rows != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat("semantic/dml: ",
-                     kind,
-                     " ASSERT_ROWS_MODIFIED modifier is not yet supported"));
   }
   if (has_array_offset_column) {
     return MakeSemanticError(

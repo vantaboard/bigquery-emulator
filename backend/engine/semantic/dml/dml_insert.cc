@@ -46,7 +46,6 @@ absl::StatusOr<DmlStats> ExecuteInsert(
   }
   absl::Status guard =
       RejectUnsupportedDmlFeatures(insert.returning(),
-                                   insert.assert_rows_modified(),
                                    /*has_array_offset_column=*/false,
                                    insert.generated_column_expr_list_size(),
                                    "INSERT");
@@ -114,14 +113,20 @@ absl::StatusOr<DmlStats> ExecuteInsert(
 
     if (rows.empty()) {
       DmlStats stats;
+      absl::Status assert_ok = CheckAssertRowsModified(
+          insert.assert_rows_modified(), DmlStatementKind::kInsert, stats, ctx);
+      if (!assert_ok.ok()) return assert_ok;
       return stats;
     }
+    DmlStats stats;
+    stats.inserted_row_count = static_cast<int64_t>(rows.size());
+    absl::Status assert_ok = CheckAssertRowsModified(
+        insert.assert_rows_modified(), DmlStatementKind::kInsert, stats, ctx);
+    if (!assert_ok.ok()) return assert_ok;
     absl::Status appended =
         // cpp-lint:allow(status-discarded) -- captured into appended
         storage.AppendRows(target->storage_table_id(), rows);
     if (!appended.ok()) return appended;
-    DmlStats stats;
-    stats.inserted_row_count = static_cast<int64_t>(rows.size());
     return stats;
   }
 
@@ -144,13 +149,15 @@ absl::StatusOr<DmlStats> ExecuteInsert(
     rows.push_back(*std::move(built));
   }
 
+  DmlStats stats;
+  stats.inserted_row_count = static_cast<int64_t>(rows.size());
+  absl::Status assert_ok = CheckAssertRowsModified(
+      insert.assert_rows_modified(), DmlStatementKind::kInsert, stats, ctx);
+  if (!assert_ok.ok()) return assert_ok;
   absl::Status appended =
       // cpp-lint:allow(status-discarded) -- captured into appended
       storage.AppendRows(target->storage_table_id(), rows);
   if (!appended.ok()) return appended;
-
-  DmlStats stats;
-  stats.inserted_row_count = static_cast<int64_t>(rows.size());
   return stats;
 }
 

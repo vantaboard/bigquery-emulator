@@ -1,6 +1,7 @@
 #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_DML_DML_EXECUTOR_INTERNAL_H_
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_DML_DML_EXECUTOR_INTERNAL_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/eval_expr.h"
@@ -66,9 +68,39 @@ absl::StatusOr<storage::Row> BuildInsertRow(
     const schema::TableSchema& schema,
     EvalContext& ctx);
 
+enum class DmlStatementKind {
+  kInsert,
+  kUpdate,
+  kDelete,
+};
+
+// Target of `UPDATE t SET <target> = ...` — either a top-level column
+// or a nested STRUCT field path rooted at a table column.
+struct UpdateTarget {
+  int column_idx = -1;
+  std::vector<int> struct_field_path;
+};
+
+absl::StatusOr<UpdateTarget> ParseUpdateTarget(
+    const ::googlesql::ResolvedExpr& target, const schema::TableSchema& schema);
+
+absl::StatusOr<Value> SetNestedStructField(const Value& root,
+                                           absl::Span<const int> field_path,
+                                           const Value& leaf);
+
+int64_t AffectedRowCount(DmlStatementKind kind, const DmlStats& stats);
+
+absl::Status CheckAssertRowsModified(
+    const ::googlesql::ResolvedAssertRowsModified* assert_rows,
+    DmlStatementKind kind,
+    const DmlStats& stats,
+    EvalContext& ctx);
+
+ColumnBindings MergeColumnBindings(const ColumnBindings& target,
+                                   const ColumnBindings& from);
+
 absl::Status RejectUnsupportedDmlFeatures(
     const ::googlesql::ResolvedReturningClause* returning,
-    const ::googlesql::ResolvedAssertRowsModified* assert_rows,
     bool has_array_offset_column,
     int generated_column_count,
     absl::string_view kind);

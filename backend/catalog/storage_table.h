@@ -133,6 +133,13 @@ class StorageTable : public ::googlesql::SimpleTable {
 absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
     const storage::Value& value, const ::googlesql::Type* type);
 
+// Same as above but uses `column` for nested ARRAY / STRUCT field
+// layout when converting storage cells (required for deep-STRUCT DML).
+absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
+    const storage::Value& value,
+    const ::googlesql::Type* type,
+    const schema::ColumnSchema& column);
+
 }  // namespace catalog
 }  // namespace backend
 }  // namespace bigquery_emulator

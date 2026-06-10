@@ -131,6 +131,41 @@ absl::StatusOr<Value> ParseDuckDBListVarchar(
   return Value::Array(std::move(elements));
 }
 
+absl::StatusOr<Value> ParseStructFieldLiteral(
+    absl::string_view raw, const schema::ColumnSchema& field) {
+  const absl::string_view trimmed = TrimAsciiSpace(raw);
+  if (trimmed.empty() || trimmed == "NULL") {
+    return Value::Null();
+  }
+  switch (field.type) {
+    case schema::ColumnType::kBool: {
+      if (trimmed == "true" || trimmed == "TRUE") return Value::Bool(true);
+      if (trimmed == "false" || trimmed == "FALSE") return Value::Bool(false);
+      return Value::String(std::string(trimmed));
+    }
+    case schema::ColumnType::kInt64: {
+      char* end = nullptr;
+      const long long v = std::strtoll(trimmed.data(), &end, 10);
+      if (end != trimmed.data() && end == trimmed.data() + trimmed.size()) {
+        return Value::Int64(static_cast<int64_t>(v));
+      }
+      return Value::String(std::string(trimmed));
+    }
+    case schema::ColumnType::kFloat64: {
+      char* end = nullptr;
+      const double v = std::strtod(trimmed.data(), &end);
+      if (end != trimmed.data() && end == trimmed.data() + trimmed.size()) {
+        return Value::Float64(v);
+      }
+      return Value::String(std::string(trimmed));
+    }
+    case schema::ColumnType::kStruct:
+      return ParseDuckDBStructVarchar(trimmed, field);
+    default:
+      return Value::String(std::string(trimmed));
+  }
+}
+
 absl::StatusOr<Value> ParseDuckDBStructVarchar(
     absl::string_view text, const schema::ColumnSchema& column) {
   absl::string_view body = TrimAsciiSpace(text);
@@ -181,7 +216,9 @@ absl::StatusOr<Value> ParseDuckDBStructVarchar(
     }
     for (size_t i = 0; i < column.fields.size(); ++i) {
       if (column.fields[i].name == *key_or) {
-        fields[i] = Value::String(raw_value);
+        auto parsed = ParseStructFieldLiteral(raw_value, column.fields[i]);
+        if (!parsed.ok()) return parsed.status();
+        fields[i] = *std::move(parsed);
         break;
       }
     }

@@ -192,6 +192,7 @@ class DmlExecutorTest : public ::testing::Test {
     // it to a `test_ds` sub-catalog of the test root.
     ::googlesql::SimpleCatalog* dataset_catalog =
         catalog_->MakeOwnedSimpleCatalog("test_ds");
+    dataset_catalog_ = dataset_catalog;
     dataset_catalog->AddOwnedTable(std::move(storage_table));
   }
 
@@ -218,6 +219,7 @@ class DmlExecutorTest : public ::testing::Test {
   std::unique_ptr<::googlesql::SimpleCatalog> catalog_{};
   std::unique_ptr<FakeStorage> storage_{};
   storage::TableId table_id_{};
+  ::googlesql::SimpleCatalog* dataset_catalog_ = nullptr;
   std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
 };
 
@@ -373,6 +375,82 @@ TEST_F(DmlExecutorTest, UpdateSetExprUsesSourceColumnRef) {
   ASSERT_TRUE(stats.ok()) << stats.status();
   EXPECT_EQ(stats->updated_row_count, 1);
   EXPECT_EQ(storage_->Rows(table_id_)[0].cells[0].int64_value(), 11);
+}
+
+TEST_F(DmlExecutorTest, UpdateDeepStructSetMutatesNestedField) {
+  storage::TableId struct_id{"test_proj", "test_ds", "items"};
+  schema::TableSchema struct_schema;
+  struct_schema.columns.push_back({.name = "id",
+                                   .type = schema::ColumnType::kInt64,
+                                   .mode = schema::ColumnMode::kRequired});
+  schema::ColumnSchema nested_field;
+  nested_field.name = "nested";
+  nested_field.type = schema::ColumnType::kStruct;
+  nested_field.mode = schema::ColumnMode::kNullable;
+  nested_field.fields.push_back({.name = "val",
+                                 .type = schema::ColumnType::kInt64,
+                                 .mode = schema::ColumnMode::kNullable});
+  nested_field.fields.push_back({.name = "tag",
+                                 .type = schema::ColumnType::kString,
+                                 .mode = schema::ColumnMode::kNullable});
+  schema::ColumnSchema payload_col;
+  payload_col.name = "payload";
+  payload_col.type = schema::ColumnType::kStruct;
+  payload_col.mode = schema::ColumnMode::kNullable;
+  payload_col.fields.push_back(std::move(nested_field));
+  struct_schema.columns.push_back(std::move(payload_col));
+  storage_->RegisterTable(struct_id, struct_schema);
+
+  const ::googlesql::StructType* inner_st = nullptr;
+  ASSERT_TRUE(type_factory_
+                  ->MakeStructType({{"val", type_factory_->get_int64()},
+                                    {"tag", type_factory_->get_string()}},
+                                   &inner_st)
+                  .ok());
+  const ::googlesql::StructType* payload_st = nullptr;
+  ASSERT_TRUE(
+      type_factory_->MakeStructType({{"nested", inner_st}}, &payload_st).ok());
+  std::vector<::googlesql::SimpleTable::NameAndType> item_cols = {
+      {"id", type_factory_->get_int64()},
+      {"payload", payload_st},
+  };
+  auto item_table = std::make_unique<catalog::StorageTable>("items",
+                                                            "test_ds.items",
+                                                            item_cols,
+                                                            struct_schema,
+                                                            struct_id,
+                                                            storage_.get());
+  dataset_catalog_->AddOwnedTable(std::move(item_table));
+
+  const auto* seed = Analyze(
+      "INSERT INTO test_ds.items (id, payload) VALUES "
+      "(1, STRUCT(STRUCT(10 AS val, 'keep' AS tag) AS nested))");
+  ASSERT_NE(seed, nullptr);
+  QueryRequest req;
+  ASSERT_TRUE(ExecuteDml(req, *seed, catalog_.get(), storage_.get()).ok());
+
+  const auto* stmt =
+      Analyze("UPDATE test_ds.items SET payload.nested.val = 99 WHERE id = 1");
+  ASSERT_NE(stmt, nullptr);
+  QueryRequest request;
+  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(stats.ok()) << stats.status();
+  EXPECT_EQ(stats->updated_row_count, 1);
+}
+
+TEST_F(DmlExecutorTest, InsertAssertRowsModifiedMismatchRollsBack) {
+  const auto* stmt = Analyze(
+      "INSERT INTO test_ds.people (id, name) VALUES (1, 'ada') "
+      "ASSERT_ROWS_MODIFIED 2");
+  ASSERT_NE(stmt, nullptr);
+
+  QueryRequest request;
+  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_FALSE(stats.ok());
+  EXPECT_NE(
+      stats.status().message().find("1 row(s), but 2 row(s) were expected"),
+      std::string::npos);
+  EXPECT_TRUE(storage_->Rows(table_id_).empty());
 }
 
 }  // namespace

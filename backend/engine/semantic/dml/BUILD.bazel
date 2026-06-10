@@ -36,6 +36,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
         "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",

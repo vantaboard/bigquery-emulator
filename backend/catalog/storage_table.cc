@@ -269,6 +269,13 @@ absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
   return ConvertCell(value, type, synthetic);
 }
 
+absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
+    const storage::Value& value,
+    const ::googlesql::Type* type,
+    const schema::ColumnSchema& column) {
+  return ConvertCell(value, type, column);
+}
+
 StorageTable::StorageTable(absl::string_view name,
                            absl::string_view full_name,
                            absl::Span<const NameAndType> columns,

@@ -35,7 +35,6 @@ absl::StatusOr<DmlStats> ExecuteDelete(
     EvalContext& ctx) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
       del.returning(),
-      del.assert_rows_modified(),
       /*has_array_offset_column=*/del.array_offset_column() != nullptr,
       /*generated_column_count=*/0,
       "DELETE");
@@ -89,56 +88,54 @@ absl::StatusOr<DmlStats> ExecuteDelete(
   ctx.columns = nullptr;
 
   if (deleted > 0) {
+    DmlStats stats;
+    stats.deleted_row_count = deleted;
+    absl::Status assert_ok = CheckAssertRowsModified(
+        del.assert_rows_modified(), DmlStatementKind::kDelete, stats, ctx);
+    if (!assert_ok.ok()) return assert_ok;
     absl::Status overwrote =
         // cpp-lint:allow(status-discarded) -- captured into overwrote
         storage.OverwriteRows(target->storage_table_id(), kept);
     if (!overwrote.ok()) return overwrote;
+    return stats;
   }
 
   DmlStats stats;
   stats.deleted_row_count = deleted;
+  absl::Status assert_ok = CheckAssertRowsModified(
+      del.assert_rows_modified(), DmlStatementKind::kDelete, stats, ctx);
+  if (!assert_ok.ok()) return assert_ok;
   return stats;
 }
 
 // UPDATE applies one or more `update_item_list` items per matched
-// row. Today we only handle the scalar-SET form
-// (`update_item->target() == ResolvedColumnRef` AND `set_value()`
-// is non-null AND the nested-update lists are empty); the deep-
-// STRUCT path (`SET s.a.b = ...`, where `target()` is a
-// `ResolvedGetStructField` chain) is owned by the
-// plan. Each unsupported subshape surfaces a structured
-// `kNotImplemented`.
+// row. Scalar `SET col = <expr>` and deep-STRUCT `SET s.a.b = ...`
+// land on the semantic value layer; `UPDATE ... FROM ...` joins
+// the target table against `from_scan` and surfaces BigQuery's
+// multiple-match error when more than one source row matches a
+// target row.
 absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedUpdateStmt& upd,
     storage::Storage& storage,
     EvalContext& ctx) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
       upd.returning(),
-      upd.assert_rows_modified(),
       /*has_array_offset_column=*/upd.array_offset_column() != nullptr,
       upd.generated_column_expr_list_size(),
       "UPDATE");
   if (!guard.ok()) return guard;
-  if (upd.from_scan() != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic/dml: UPDATE ... FROM ... is not yet supported");
-  }
 
   auto target_or = StorageTargetFor(upd, "UPDATE");
   if (!target_or.ok()) return target_or.status();
   const catalog::StorageTable* target = *target_or;
   const schema::TableSchema& schema = target->bq_schema();
 
-  // Validate every update item up-front (cheap; lets us bail
-  // before scanning rows when the executor cannot land the SET
-  // shape). For the scalar form, `target()` must resolve to a
-  // top-level `ResolvedColumnRef` over the same table scan.
-  struct ScalarSet {
-    int column_idx = -1;  // index into bq_schema_.columns
+  struct SetAssignment {
+    UpdateTarget target;
     const ::googlesql::ResolvedExpr* set_expr = nullptr;
+    const ::googlesql::Type* root_column_type = nullptr;
   };
-  std::vector<ScalarSet> sets;
+  std::vector<SetAssignment> sets;
   sets.reserve(upd.update_item_list_size());
   for (int i = 0; i < upd.update_item_list_size(); ++i) {
     const ::googlesql::ResolvedUpdateItem* item = upd.update_item_list(i);
@@ -158,28 +155,25 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       return absl::InternalError(
           "semantic/dml: ResolvedUpdateItem has null target");
     }
-    if (item->target()->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic/dml: UPDATE SET target kind ",
-                       item->target()->node_kind_string(),
-                       " (deep STRUCT mutation) is not yet supported; see "
-                       "docs/ENGINE_POLICY.md"));
-    }
     if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
       return absl::InternalError(
           "semantic/dml: scalar UPDATE item has null set_value");
     }
-    const auto* col_ref =
-        item->target()->GetAs<::googlesql::ResolvedColumnRef>();
-    const int idx = IndexOfColumn(schema, col_ref->column().name());
-    if (idx < 0) {
-      return absl::InternalError(
-          absl::StrCat("semantic/dml: UPDATE target column '",
-                       col_ref->column().name(),
-                       "' not found in storage table schema"));
+    auto parsed = ParseUpdateTarget(*item->target(), schema);
+    if (!parsed.ok()) return parsed.status();
+    const ::googlesql::Type* root_type = nullptr;
+    for (int c = 0; c < upd.table_scan()->column_list_size(); ++c) {
+      const ::googlesql::ResolvedColumn& col = upd.table_scan()->column_list(c);
+      if (IndexOfColumn(schema, col.name()) == parsed->column_idx) {
+        root_type = col.type();
+        break;
+      }
     }
-    sets.push_back({idx, item->set_value()->value()});
+    if (root_type == nullptr) {
+      return absl::InternalError(
+          "semantic/dml: UPDATE target column missing from table scan");
+    }
+    sets.push_back({*std::move(parsed), item->set_value()->value(), root_type});
   }
 
   auto by_id = BuildColumnIndexByColumnId(*upd.table_scan(), schema);
@@ -189,50 +183,120 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
   if (!rows_or.ok()) return rows_or.status();
   std::vector<storage::Row> rows = *std::move(rows_or);
 
+  std::vector<ColumnBindings> from_rows;
+  if (upd.from_scan() != nullptr) {
+    auto materialized = MaterializeScan(upd.from_scan(), ctx);
+    if (!materialized.ok()) return materialized.status();
+    from_rows = *std::move(materialized);
+  }
+
+  auto apply_sets = [&](storage::Row& mutated,
+                        const ColumnBindings& row_ctx) -> absl::Status {
+    ctx.columns = &row_ctx;
+    for (const SetAssignment& s : sets) {
+      auto v = EvalExpr(*s.set_expr, ctx);
+      if (!v.ok()) return v.status();
+      if (s.target.struct_field_path.empty()) {
+        auto cell = ToStorageValue(*v);
+        if (!cell.ok()) return cell.status();
+        mutated.cells[s.target.column_idx] = *std::move(cell);
+        continue;
+      }
+      auto current = catalog::StorageValueToGoogleSqlValue(
+          mutated.cells[s.target.column_idx],
+          s.root_column_type,
+          schema.columns[s.target.column_idx]);
+      if (!current.ok()) return current.status();
+      auto rewritten =
+          SetNestedStructField(*current, s.target.struct_field_path, *v);
+      if (!rewritten.ok()) return rewritten.status();
+      auto cell = ToStorageValue(*rewritten);
+      if (!cell.ok()) return cell.status();
+      mutated.cells[s.target.column_idx] = *std::move(cell);
+    }
+    ctx.columns = nullptr;
+    return absl::OkStatus();
+  };
+
   std::vector<storage::Row> rewritten;
   rewritten.reserve(rows.size());
   int64_t updated = 0;
   for (const storage::Row& row : rows) {
     auto bind = BindRow(row, *upd.table_scan(), *by_id, schema);
     if (!bind.ok()) return bind.status();
-    ColumnBindings local = *std::move(bind);
-    ctx.columns = &local;
-    bool matched = false;
-    if (upd.where_expr() == nullptr) {
-      matched = true;
-    } else {
-      auto v = EvalExpr(*upd.where_expr(), ctx);
-      if (!v.ok()) {
+    ColumnBindings target_bind = *std::move(bind);
+
+    if (upd.from_scan() == nullptr) {
+      ctx.columns = &target_bind;
+      bool matched = false;
+      if (upd.where_expr() == nullptr) {
+        matched = true;
+      } else {
+        auto v = EvalExpr(*upd.where_expr(), ctx);
         ctx.columns = nullptr;
-        return v.status();
+        if (!v.ok()) return v.status();
+        matched = v->is_valid() && !v->is_null() &&
+                  v->type_kind() == ::googlesql::TYPE_BOOL && v->bool_value();
       }
-      matched = v->is_valid() && !v->is_null() &&
-                v->type_kind() == ::googlesql::TYPE_BOOL && v->bool_value();
+      if (!matched) {
+        ctx.columns = nullptr;
+        rewritten.push_back(row);
+        continue;
+      }
+      storage::Row mutated = row;
+      absl::Status applied = apply_sets(mutated, target_bind);
+      if (!applied.ok()) return applied;
+      ++updated;
+      rewritten.push_back(std::move(mutated));
+      continue;
     }
-    if (!matched) {
-      ctx.columns = nullptr;
+
+    int match_count = 0;
+    ColumnBindings matched_from;
+    for (const ColumnBindings& from_bind : from_rows) {
+      ColumnBindings merged = MergeColumnBindings(target_bind, from_bind);
+      ctx.columns = &merged;
+      bool matched = false;
+      if (upd.where_expr() == nullptr) {
+        matched = true;
+      } else {
+        auto v = EvalExpr(*upd.where_expr(), ctx);
+        if (!v.ok()) {
+          ctx.columns = nullptr;
+          return v.status();
+        }
+        matched = v->is_valid() && !v->is_null() &&
+                  v->type_kind() == ::googlesql::TYPE_BOOL && v->bool_value();
+      }
+      if (matched) {
+        ++match_count;
+        matched_from = std::move(merged);
+      }
+    }
+    ctx.columns = nullptr;
+    if (match_count == 0) {
       rewritten.push_back(row);
       continue;
     }
-    storage::Row mutated = row;
-    for (const ScalarSet& s : sets) {
-      auto v = EvalExpr(*s.set_expr, ctx);
-      if (!v.ok()) {
-        ctx.columns = nullptr;
-        return v.status();
-      }
-      auto cell = ToStorageValue(*v);
-      if (!cell.ok()) {
-        ctx.columns = nullptr;
-        return cell.status();
-      }
-      mutated.cells[s.column_idx] = *std::move(cell);
+    if (match_count > 1) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic/dml: UPDATE/MERGE must match at most one source row for "
+          "each target row");
     }
-    ctx.columns = nullptr;
+    storage::Row mutated = row;
+    absl::Status applied = apply_sets(mutated, matched_from);
+    if (!applied.ok()) return applied;
     ++updated;
     rewritten.push_back(std::move(mutated));
   }
   ctx.columns = nullptr;
+
+  DmlStats stats;
+  stats.updated_row_count = updated;
+  absl::Status assert_ok = CheckAssertRowsModified(
+      upd.assert_rows_modified(), DmlStatementKind::kUpdate, stats, ctx);
+  if (!assert_ok.ok()) return assert_ok;
 
   if (updated > 0) {
     absl::Status overwrote =
@@ -240,9 +304,6 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
         storage.OverwriteRows(target->storage_table_id(), rewritten);
     if (!overwrote.ok()) return overwrote;
   }
-
-  DmlStats stats;
-  stats.updated_row_count = updated;
   return stats;
 }
 

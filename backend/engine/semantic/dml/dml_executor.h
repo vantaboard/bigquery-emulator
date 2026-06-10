@@ -6,27 +6,15 @@
 // Owns the DML statement shapes the DuckDB fast path cannot lower
 // cleanly, per `docs/ENGINE_POLICY.md`:
 //
-//   * `ResolvedInsertStmt` -- INSERT VALUES (single + multi-row).
-//     INSERT ... SELECT is recognized but currently surfaces
-//     `kNotImplemented` until the SELECT-streaming family lands.
-//   * `ResolvedDeleteStmt` -- `DELETE FROM t WHERE <pred>`. Walks
-//     the storage row source, evaluates `<pred>` per row, hands
-//     the kept rows back through `Storage::OverwriteRows`.
-//   * `ResolvedUpdateStmt` -- `UPDATE t SET col = <expr> WHERE
-//     <pred>` (scalar SET only; deep-STRUCT mutation via
-//     `Value::WithField` is owned by the plan).
+//   * `ResolvedInsertStmt` -- INSERT VALUES and INSERT ... SELECT
+//     (SELECT half via `MaterializeScan` or DuckDB fast path).
+//   * `ResolvedDeleteStmt` -- `DELETE FROM t WHERE <pred>`.
+//   * `ResolvedUpdateStmt` -- scalar SET, deep-STRUCT SET, and
+//     `UPDATE ... FROM ...`.
+//   * `ASSERT_ROWS_MODIFIED` on INSERT / UPDATE / DELETE.
 //
-// The executor reads + mutates storage through the
-// `backend::storage::Storage*` the coordinator holds, so the
-// catalog needs to back the target table with a
-// `backend::catalog::StorageTable` (the production
-// `GoogleSqlCatalog` does this; tests fake the same shape).
-//
-// Statements outside the supported subset (INSERT ... SELECT,
-// MERGE harder branches, RETURNING, deep-STRUCT UPDATE,
-// `ResolvedPipeInsertScan`) surface a structured
-// `SemanticErrorReason::kNotImplemented` so the gateway envelope
-// stays the same as for any other "planned but not landed" route.
+// Still deferred: MERGE harder branches, RETURNING, DML with
+// `array_offset_column`, `ResolvedPipeInsertScan`.
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"
