@@ -71,6 +71,11 @@ absl::StatusOr<Value> EvalStringAgg(
     const std::vector<std::vector<Value>>& input_column_values,
     const std::vector<ColumnBindings>& input_rows,
     EvalContext& ctx);
+absl::StatusOr<std::vector<size_t>> FilterRowsByHavingModifier(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(

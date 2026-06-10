@@ -176,6 +176,7 @@ cc_library(
     srcs = [
         "eval_tvf.cc",
         "scan_eval.cc",
+        "scan_eval_agg_having.cc",
         "scan_eval_agg_list.cc",
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",

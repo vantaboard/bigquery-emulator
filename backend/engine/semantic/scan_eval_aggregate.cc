@@ -49,10 +49,17 @@ absl::StatusOr<Value> EvalAggregateForRows(
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
     EvalContext& ctx) {
+  std::vector<size_t> effective_rows = row_indices;
+  if (agg.having_modifier() != nullptr) {
+    auto filtered_or =
+        FilterRowsByHavingModifier(agg, input_rows, row_indices, ctx);
+    if (!filtered_or.ok()) return filtered_or.status();
+    effective_rows = std::move(*filtered_or);
+  }
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(agg.argument_list_size()));
   absl::flat_hash_map<std::string, Value> row_columns_by_name;
-  for (size_t r : row_indices) {
+  for (size_t r : effective_rows) {
     EvalContext row_ctx = ctx;
     row_ctx.columns = &input_rows[r];
     row_columns_by_name.clear();
@@ -79,7 +86,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
     }
   }
   if (agg_name == "$count_star") {
-    return Value::Int64(static_cast<int64_t>(row_indices.size()));
+    return Value::Int64(static_cast<int64_t>(effective_rows.size()));
   }
   if (agg.function() != nullptr &&
       absl::AsciiStrToLower(agg.function()->Name()) == "array_agg") {

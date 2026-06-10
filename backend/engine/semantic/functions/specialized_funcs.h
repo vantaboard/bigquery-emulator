@@ -25,6 +25,10 @@ absl::StatusOr<Value> EvalAggregateCall(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values);
 
+absl::StatusOr<Value> MaybeWrapSafeAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    absl::StatusOr<Value> result);
+
 absl::StatusOr<Value> EvalAggregateBuiltin(
     absl::string_view name,
     const ::googlesql::Type* return_type,

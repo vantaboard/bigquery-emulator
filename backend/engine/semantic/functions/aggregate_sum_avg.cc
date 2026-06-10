@@ -137,7 +137,12 @@ absl::StatusOr<Value> SumAggregateImpl(
                                    "semantic: SUM argument type mismatch");
         }
         any_non_null = true;
-        total += v.int64_value();
+        int64_t next = 0;
+        if (__builtin_add_overflow(total, v.int64_value(), &next)) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   "semantic: integer overflow");
+        }
+        total = next;
       }
       if (!any_non_null) return NullOfAggregateType(out_type);
       return Value::Int64(total);

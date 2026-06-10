@@ -248,6 +248,7 @@ cc_test(
 cc_library(
     name = "specialized_funcs",
     srcs = [
+        "aggregate_safe_wrap.cc",
         "aggregate_specialized.cc",
         "aggregate_sum_avg.cc",
         "net_funcs.cc",
