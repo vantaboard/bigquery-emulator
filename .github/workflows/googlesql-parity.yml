@@ -442,12 +442,15 @@ jobs:
     name: compare conformance (prebuilt vs source)
     runs-on: ubuntu-latest
     needs: [build-prebuilt, build-source]
+    # Job-level if/continue-on-error cannot use the workflow env context; mirror
+    # PARITY_TIER via github.event_name and workflow_dispatch inputs instead.
     if: >-
       always()
-      && env.PARITY_TIER != 'pr'
+      && (github.event_name == 'schedule'
+          || (github.event.inputs.tier != '' && github.event.inputs.tier != 'pr'))
     # Scheduled tier keeps full-suite parity informational until plan 07
     # conformance is green; release tier still gates on duckdb parity.
-    continue-on-error: ${{ env.PARITY_TIER == 'scheduled' }}
+    continue-on-error: ${{ github.event_name == 'schedule' || github.event.inputs.tier == 'scheduled' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
