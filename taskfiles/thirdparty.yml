@@ -419,9 +419,10 @@ tasks:
           _live=1
         fi
         # Live docker lanes call emulator-up + fake-gcs-up. Host-gateway
-        # lanes (workflow_dispatch live job) set THIRDPARTY_SKIP_EMULATOR_UP=1
-        # so compose is not started. Compile-only CI clears
-        # BIGQUERY_EMULATOR_HOST so neither container is touched.
+        # local dev (gateway_main subprocess) can set
+        # THIRDPARTY_SKIP_EMULATOR_UP=1 so compose is not started.
+        # Compile-only CI clears BIGQUERY_EMULATOR_HOST so neither
+        # container is touched.
         if [ "$_live" = "1" ] && [ "${THIRDPARTY_SKIP_EMULATOR_UP:-0}" != "1" ]; then
           task thirdparty:emulator-up
           task thirdparty:fake-gcs-up

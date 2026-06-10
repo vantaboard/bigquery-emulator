@@ -22,6 +22,7 @@ push / pull_request
                 ├─► thirdparty-samples / java live
                 ├─► thirdparty-samples / python nox snippets
                 ├─► thirdparty-samples / node Mocha
+                ├─► thirdparty-samples / golang live
                 ├─► thirdparty-samples / bigframes snippet gate
                 └─► coverage-bazel / bazel-coverage (main push only)
                         │
@@ -94,6 +95,7 @@ explicit run id is passed.
 - `thirdparty-samples / python-bigquery-tests (live emulator)` (plan 14; may be red until thirdparty-02–09 land)
 - `thirdparty-samples / node-bigquery-tests (live emulator)` (plan 14)
 - `thirdparty-samples / python-bigquery-dataframes snippet gate (live emulator)` (plan 14)
+- `thirdparty-samples / golang-bigquery-tests (live emulator)`
 
 **Fast lanes (optional but recommended):**
 

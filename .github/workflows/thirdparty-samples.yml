@@ -1,10 +1,8 @@
 # Third-party BigQuery client live integration lanes.
 #
-# Java live ITs consume the shared engine artifact from build-engine
-# via workflow_run. Golang compile lives in thirdparty-golang-compile.yml.
-#
-# workflow_dispatch can enable the manual golang live lane (builds its
-# own engine). See third_party/README.md for env-var matrix.
+# Live suites consume the shared engine artifact from build-engine via
+# workflow_run. Golang compile-only (no emulator) lives in
+# thirdparty-golang-compile.yml. See third_party/README.md for env-var matrix.
 
 name: thirdparty-samples
 
@@ -13,12 +11,6 @@ on:
     workflows: [build-engine]
     types: [completed]
   workflow_dispatch:
-    inputs:
-      run_live:
-        description: "Also run the live emulator lane (Bazel build, ~30-50min cold)"
-        type: boolean
-        default: false
-        required: false
 
 permissions:
   contents: read
@@ -295,122 +287,47 @@ jobs:
         run: docker compose down -v --remove-orphans 2>/dev/null || true
 
   golang-bigquery-tests-live:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
     name: golang-bigquery-tests (live emulator)
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_live == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
+      THIRDPARTY_FRESH_VOLUME: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache: true
+          cache-dependency-path: third_party/golang-bigquery-tests/go.sum
 
-      - name: Install Task
-        uses: go-task/setup-task@v2
+      - name: Set up thirdparty docker emulator
+        uses: ./.github/actions/setup-thirdparty-docker-emulator
         with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install C++ build deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            clang \
-            libprotobuf-dev \
-            protobuf-compiler \
-            libgrpc++-dev \
-            libgrpc-dev \
-            protobuf-compiler-grpc
-
-      - name: Set up Bazel (bazelisk)
-        uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: engine
-          repository-cache: true
-
-      - name: Resolve GoogleSQL build mode
-        id: googlesql
-        uses: ./.github/actions/setup-googlesql
-        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
           prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
           prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
-      - name: Build C++ engine via Bazel
-        env:
-          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: |
-          echo "::notice::Live thirdparty build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
-          task emulator:build-engine:bazel
-
-      - name: Build Go gateway (gateway_main)
-        run: task emulator:build
-
-      - name: Start gateway with engine subprocess
-        run: |
-          set -euo pipefail
-          ./bin/gateway_main \
-            --hostname=127.0.0.1 \
-            --http_port=9050 \
-            --grpc_port=9060 \
-            --engine_binary=./bin/emulator_main \
-            --log_requests \
-            >gateway.log 2>&1 &
-          echo $! > gateway.pid
-          for _ in $(seq 1 90); do
-            if curl -fsS -o /dev/null "http://127.0.0.1:9050/healthz" 2>/dev/null; then
-              echo "gateway ready"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "gateway did not become ready on :9050" >&2
-          tail -200 gateway.log >&2 || true
-          exit 1
-
-      - name: Seed fake-gcs testdata
-        run: task testdata:fake-gcs-sync
-
-      - name: Start fake-gcs-server (seeded testdata)
-        run: |
-          set -euo pipefail
-          docker compose --profile thirdparty up -d fake-gcs-server
-
       - name: Run thirdparty:golang-bigquery-tests (live)
-        env:
-          BIGQUERY_EMULATOR_HOST: "127.0.0.1:9050"
-          BIGQUERY_STORAGE_GRPC_ENDPOINT: "127.0.0.1:9060"
-          BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT: "127.0.0.1:9060"
-          STORAGE_EMULATOR_HOST: "127.0.0.1:4443"
-          GOLANG_SAMPLES_PROJECT_ID: "dev"
-          GOLANG_SAMPLES_E2E_TEST: "1"
-          GOOGLE_CLOUD_PROJECT: "dev"
-          GCLOUD_PROJECT: "dev"
-          EMULATOR_PROJECT_ID: "dev"
-          FAKE_GCS_PORT: "4443"
-          THIRDPARTY_SKIP_EMULATOR_UP: "1"
         run: task thirdparty:golang-bigquery-tests
+        env:
+          BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
+          BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT: "localhost:9060"
 
-      - name: Stop gateway
+      - name: Stop emulator
         if: always()
-        run: |
-          if [ -f gateway.pid ]; then
-            kill "$(cat gateway.pid)" 2>/dev/null || true
-          fi
-          docker compose down -v --remove-orphans 2>/dev/null || true
-
-      - name: Upload gateway log on failure
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: thirdparty-gateway-log
-          path: gateway.log
-          if-no-files-found: warn
-
-      - name: Release Bazel daemon
-        if: always()
-        run: timeout 60 bazel shutdown || true
+        run: docker compose down -v --remove-orphans 2>/dev/null || true

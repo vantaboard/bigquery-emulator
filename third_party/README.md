@@ -388,6 +388,7 @@ workflow (triggered by `build-engine` via `workflow_run`) now gates:
 | `java-bigquery-tests-live` | `task thirdparty:java-bigquery-tests` | Temurin 17; honest gate via `scripts/java_bq_ci_gate.sh` |
 | `python-bigquery-tests-live` | `task thirdparty:python-bigquery-tests` | nox `snippets`; fake-gcs seeded in CI |
 | `node-bigquery-tests-live` | `task thirdparty:node-bigquery-tests` | Mocha; fake-gcs seeded in CI |
+| `golang-bigquery-tests-live` | `task thirdparty:golang-bigquery-tests` | `go test ./...`; fake-gcs seeded in CI |
 | `python-bigquery-dataframes-snippet-gate-live` | `task thirdparty:python-bigquery-dataframes-snippet-gate` | 4 allowlisted smokes |
 
 Shared bring-up lives in
