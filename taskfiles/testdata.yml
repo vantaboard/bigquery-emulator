@@ -13,9 +13,10 @@
 # (hundreds of MB) and is the kind of thing every developer fetches
 # on demand instead of committing.
 #
-# The script prefers `gcloud storage cp` for parallelism + auth
-# fallthrough, and falls back to a stdlib HTTPS mirror when gcloud
-# isn't on PATH (`scripts/sync_fake_gcs_public_samples_http.py`).
+# The script prefers `gcloud storage cp` when gcloud has an active account,
+# and falls back to a stdlib HTTPS mirror when gcloud is missing,
+# unauthenticated (typical on GitHub Actions), or FAKE_GCS_SYNC_HTTP=1
+# (`scripts/sync_fake_gcs_public_samples_http.py`).
 version: "3"
 
 tasks:

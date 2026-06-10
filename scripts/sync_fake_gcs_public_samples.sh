@@ -2,10 +2,11 @@
 # Mirror public GCS sample objects into testdata/fake-gcs-data for fake-gcs-server
 # (see docker-compose.yaml and third_party/README.md).
 #
-# Prefers gcloud (https://cloud.google.com/sdk/docs/install). If gcloud is not in
-# PATH, falls back to scripts/sync_fake_gcs_public_samples_http.py (stdlib JSON
-# API + HTTPS). Public reads usually need no auth; if gcloud copy fails, try:
-#   gcloud auth application-default login
+# Prefers gcloud (https://cloud.google.com/sdk/docs/install) when an active
+# account is configured. Otherwise falls back to
+# scripts/sync_fake_gcs_public_samples_http.py (stdlib JSON API + HTTPS).
+# Set FAKE_GCS_SYNC_HTTP=1 to force the HTTP mirror. Public reads need no auth;
+# if gcloud copy fails with credentials, try: gcloud auth application-default login
 #
 # Usage (from repo root):
 #   ./scripts/sync_fake_gcs_public_samples.sh
@@ -14,8 +15,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${ROOT}/testdata/fake-gcs-data"
 
-if ! command -v gcloud >/dev/null 2>&1; then
-	echo "gcloud not found; using Python HTTP mirror (same layout)" >&2
+_use_http_mirror() {
+	if [ "${FAKE_GCS_SYNC_HTTP:-}" = "1" ]; then
+		return 0
+	fi
+	if ! command -v gcloud >/dev/null 2>&1; then
+		return 0
+	fi
+	if ! gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null | grep -q .; then
+		return 0
+	fi
+	return 1
+}
+
+if _use_http_mirror; then
+	echo "using Python HTTP mirror (no gcloud or no active gcloud account)" >&2
 	exec python3 "${ROOT}/scripts/sync_fake_gcs_public_samples_http.py"
 fi
 
