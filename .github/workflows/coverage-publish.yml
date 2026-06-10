@@ -99,7 +99,7 @@ jobs:
       # for the same SHA overwrites it with the full data.
       - name: Locate sibling coverage runs
         id: locate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const sha = context.payload.workflow_run.head_sha;
@@ -134,7 +134,7 @@ jobs:
 
       - name: Download Go coverage artifact
         if: steps.locate.outputs.ci_run_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: go-coverage
           path: artifacts/go
@@ -144,7 +144,7 @@ jobs:
 
       - name: Download C++ Bazel coverage artifact
         if: steps.locate.outputs.coverage_bazel_run_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cpp-bazel-coverage
           path: artifacts/cpp

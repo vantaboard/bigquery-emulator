@@ -387,7 +387,7 @@ jobs:
       - name: Download prebuilt-mode results
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: parity-prebuilt-results
           path: parity/prebuilt
@@ -395,7 +395,7 @@ jobs:
       - name: Download source-mode results
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: parity-source-results
           path: parity/source
@@ -458,7 +458,7 @@ jobs:
       - name: Download prebuilt-mode results
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: parity-prebuilt-results
           path: parity/prebuilt
@@ -466,7 +466,7 @@ jobs:
       - name: Download source-mode results
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: parity-source-results
           path: parity/source

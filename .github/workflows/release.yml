@@ -23,7 +23,7 @@
 #      The goreleaser config's `before.hooks` block on these existing.
 #   4. Push the Docker runtime image (multi-stage `Dockerfile`) to
 #      GHCR. Tags are derived from the SemVer triplet by
-#      `docker/metadata-action@v5` (`vX.Y.Z`, `vX.Y`, `vX`, `latest`);
+#      `docker/metadata-action@v6` (`vX.Y.Z`, `vX.Y`, `vX`, `latest`);
 #      `latest` is suppressed for pre-release tags (`v0.0.1-rc1`).
 #      Linux/amd64 only — the engine binary is linux/amd64 only and
 #      the README documents the caveat. Multi-arch is explicitly out
@@ -258,7 +258,7 @@ jobs:
           echo "owner_lc=$owner_lc" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -266,7 +266,7 @@ jobs:
 
       - name: Compute Docker tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
           # `type=semver` parses the trigger tag and produces the
@@ -299,7 +299,7 @@ jobs:
         # "Inherit access from repository" on the package settings),
         # subsequent tag pushes get the image too. See gh#26495700505.
         continue-on-error: true
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -323,7 +323,7 @@ jobs:
             ENGINE_SOURCE=prebuilt
 
       - name: Run goreleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
           args: release --clean
