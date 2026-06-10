@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Preflight for third_party/python-bigquery-tests nox snippets/system/prerelease_deps.
-# When BIGQUERY_EMULATOR_HOST is set (go-googlesql .envrc), fail fast if nothing
+# When BIGQUERY_EMULATOR_HOST is set (e.g. from .envrc), fail fast if nothing
 # listens — otherwise pytest can hang for minutes per test on connection retries.
 set -euo pipefail
 

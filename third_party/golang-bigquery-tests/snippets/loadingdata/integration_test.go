@@ -52,7 +52,7 @@ func TestImportSnippets(t *testing.T) {
 	// Cleanup dataset at end of test.
 	defer client.Dataset(testDatasetID).DeleteWithContents(ctx)
 
-	// AVRO/PARQUET/ORC GCS loads are accepted by the go-googlesql emulator but only materialize an
+	// AVRO/PARQUET/ORC GCS loads are accepted by the emulator but only materialize an
 	// empty stub table (no wire-format decode). If a load job fails upstream, some sample flows
 	// may call Table.Metadata without checking job status first (potential nil metadata); prefer
 	// checking job.Err() / Wait before Metadata in production code.

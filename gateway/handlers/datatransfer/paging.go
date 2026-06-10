@@ -18,8 +18,8 @@ import "strconv"
 
 // pageWindow returns the [start, end) slice into a sorted resource
 // list for the given pageSize / pageToken query knobs. pageToken is
-// an integer-as-string offset (the same scheme go-googlesql's
-// datatransfer handler emits and re-reads). Defaults: pageSize 100,
+// an integer-as-string offset (the same scheme this handler emits and
+// re-reads). Defaults: pageSize 100,
 // max 1000, missing/invalid token resets to 0.
 func pageWindow(lenNames int, pageSizeStr, pageToken string) (start, end int) {
 	pageSize := 0

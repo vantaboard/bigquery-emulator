@@ -131,8 +131,7 @@ docker run --rm -v /tmp/seed_template:/data ghcr.io/vantaboard/bigquery-emulator
 Environment-variable fallbacks for the template path:
 
 - `BIGQUERY_EMULATOR_INITIAL_DATA_DIR`
-- `EMULATOR_INITIAL_DATA_DIR` (legacy, accepted for compatibility
-  with go-googlesql)
+- `EMULATOR_INITIAL_DATA_DIR` (legacy, accepted for compatibility)
 
 ---
 
@@ -140,9 +139,8 @@ Environment-variable fallbacks for the template path:
 
 The gateway exposes a `POST /api/emulator/seed` endpoint that, when
 the build includes a production client, copies live BigQuery
-metadata + rows into the local emulator. This is the same shape
-`go-googlesql`'s emulatorseed package exposes, so existing tooling
-that hits one can talk to the other.
+metadata + rows into the local emulator. The request and response
+shape is documented below so existing seed tooling can reuse it.
 
 ### Posture
 
@@ -207,7 +205,7 @@ envelope:
 Poll the operation with `GET /api/emulator/seed/operations/{id}`.
 The response shape stays the same; `state` moves
 `PENDING → RUNNING → DONE | FAILED`, and the final `result`
-breakdown is the same one go-googlesql ships:
+breakdown follows the stable seed API contract:
 
 ```json
 {
@@ -260,7 +258,7 @@ persistence for those resource types.
 
 Every operator-facing gateway flag accepts both the legacy
 underscore form (`--http_port`) and the hyphen form
-(`--http-port`) `go-googlesql`'s `bq-emulator` uses. The
+(`--http-port`) documented for `gateway_main`. The
 canonical reference:
 
 | Flag                           | Aliases                       | Purpose                                                                          |

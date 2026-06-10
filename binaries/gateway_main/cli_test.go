@@ -182,8 +182,8 @@ func TestParseArgs_HyphenAndUnderscoreAliases(t *testing.T) {
 
 // TestParseArgs_EnvFallbacks pins the documented env-var defaults:
 // flag > env > nothing. A flag value, even a deliberate empty string
-// via `--flag=`, must NOT trigger the env fallback (mirrors the
-// go-googlesql contract callers depend on).
+// via `--flag=`, must NOT trigger the env fallback (stable
+// compatibility contract documented in docs/SEEDING.md).
 func TestParseArgs_EnvFallbacks(t *testing.T) {
 	env := envFrom(map[string]string{
 		"BIGQUERY_EMULATOR_DATA_DIR":         "/env/data",
@@ -228,9 +228,8 @@ func TestParseArgs_EnvFallbacks(t *testing.T) {
 	})
 
 	t.Run("legacy-env-key-honored", func(t *testing.T) {
-		// EMULATOR_INITIAL_DATA_DIR is the go-googlesql legacy
-		// fallback for the same setting; honoring it lets us
-		// land in repos that already export it.
+		// EMULATOR_INITIAL_DATA_DIR is the legacy fallback for the
+		// same setting; honoring it lets existing tooling keep working.
 		legacy := envFrom(map[string]string{
 			"EMULATOR_INITIAL_DATA_DIR": "/legacy",
 		})

@@ -46,13 +46,13 @@ Resolve `Table not found: bigquery-public-data.*` failures without hitting real 
 
 [`third_party/README.md`](../../third_party/README.md) line 154:
 
-> go-googlesql snapshot under `testdata/bq-emulator/` (`-initial-data-dir`) seeds these. This emulator does not yet expose `--initial-data-dir` on `gateway_main`.
+> A snapshot under `testdata/bq-emulator/` (`-initial-data-dir`) seeds these. This emulator does not yet expose `--initial-data-dir` on `gateway_main`.
 
 ## Implementation options
 
 | Option | Pros | Cons |
 |--------|------|------|
-| A. `--initial-data-dir` flag on gateway | Matches go-googlesql | New CLI surface + docs |
+| A. `--initial-data-dir` flag on gateway | Matches documented contract | New CLI surface + docs |
 | B. Docker compose seed job on `bq-emulator-data` volume | Works for `task thirdparty` | Heavier fixture pipeline |
 | C. Gateway startup REST bootstrap from `testdata/public-data/` | No new flag | Slower cold start |
 

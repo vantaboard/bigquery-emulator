@@ -429,8 +429,7 @@ func destinationOf(req SeedRequest) struct{ Project, Dataset, Table string } {
 //
 // The unused parameter list is intentional: the live impl needs
 // the project to set ADC quota and the env lookup to derive
-// fallbacks (matching go-googlesql's clients.NewProductionClient
-// signature).
+// fallbacks for the production client signature).
 func NewProductionReader(
 	ctx context.Context,
 	billingProject string,

@@ -175,7 +175,7 @@ official client libraries
 `google-cloud-bigquery-migration` for Python/Node/Java) read
 `BIGQUERY_MIGRATION_EMULATOR_HOST` and fall back to
 `BIGQUERY_EMULATOR_HOST`. Routes are registered under both `v2alpha`
-and `v2` (alias parity with go-googlesql). Engine has no workflow
+and `v2` (alias parity for client compatibility). Engine has no workflow
 state, AST translator, or LRO store yet — list returns the documented
 empty page, get/delete return 404, create / `:start` return 501.
 

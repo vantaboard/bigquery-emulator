@@ -29,8 +29,7 @@ import (
 )
 
 // emulatorAPIRegionRoundTripper adds X-BigQuery-Emulator-Api-Region on each request so the
-// emulator can enforce regional dataset rules when Host is loopback (see go-googlesql
-// api/datasets bigQueryEffectiveEndpointRegion).
+// emulator can enforce regional dataset rules when Host is loopback.
 type emulatorAPIRegionRoundTripper struct {
 	Base   http.RoundTripper
 	Region string
@@ -48,8 +47,8 @@ func (t *emulatorAPIRegionRoundTripper) RoundTrip(req *http.Request) (*http.Resp
 
 // DataTransferRESTClientOptions returns options for
 // [cloud.google.com/go/bigquery/datatransfer/apiv1.NewRESTClient] when
-// BIGQUERY_EMULATOR_HOST is set. The go-googlesql emulator serves Data Transfer
-// metadata routes on the same HTTP host:port as BigQuery Jobs REST.
+// BIGQUERY_EMULATOR_HOST is set. The emulator serves Data Transfer metadata
+// routes on the same HTTP host:port as BigQuery Jobs REST.
 // When BIGQUERY_EMULATOR_HOST is unset, returns nil.
 func DataTransferRESTClientOptions() []option.ClientOption {
 	return ClientOptions()
@@ -86,7 +85,7 @@ func ClientOptions() []option.ClientOption {
 
 // MigrationRESTClientOptions returns client options for
 // [cloud.google.com/go/bigquery/migration/apiv2alpha.NewRESTClient] when running
-// against the go-googlesql HTTP emulator (BigQuery Migration v2alpha workflow routes).
+// against the bigquery-emulator HTTP gateway (BigQuery Migration v2alpha workflow routes).
 //
 // It reads BIGQUERY_MIGRATION_EMULATOR_HOST as host:port (no URL scheme). If that
 // variable is unset but BIGQUERY_EMULATOR_HOST is set, the latter is used so one
@@ -118,7 +117,7 @@ func MigrationRESTClientOptions() []option.ClientOption {
 
 // BigQueryV2GRPCClientOptions returns options for
 // [cloud.google.com/go/bigquery/v2/apiv2_client.NewClient] (BigQuery v2 metadata gRPC) when dialing the
-// go-googlesql emulator. Reads BIGQUERY_V2_GRPC_ENDPOINT as host:port (no scheme); if unset,
+// bigquery-emulator. Reads BIGQUERY_V2_GRPC_ENDPOINT as host:port (no scheme); if unset,
 // falls back to BIGQUERY_STORAGE_GRPC_ENDPOINT (the emulator serves BigQuery v2 metadata gRPC on the
 // same listener as Storage, Connection, Reservation, and Analytics Hub). Returns nil when neither is set.
 //
@@ -144,7 +143,7 @@ func BigQueryV2GRPCClientOptions() []option.ClientOption {
 // StorageGRPCClientOptions returns options for BigQuery Storage API gRPC clients
 // ([cloud.google.com/go/bigquery/storage/apiv1], [cloud.google.com/go/bigquery/storage/managedwriter], etc.)
 // when BIGQUERY_STORAGE_GRPC_ENDPOINT is set to host:port (no URL scheme), as used with the
-// go-googlesql emulator gRPC listener. When unset, returns nil so callers can spread into client
+// bigquery-emulator gRPC listener. When unset, returns nil so callers can spread into client
 // constructors with no effect.
 //
 // gRPC dials use BIGQUERY_EMULATOR_GRPC_DIAL_TIMEOUT (default 15s) so clients fail fast when
@@ -165,8 +164,8 @@ func StorageGRPCClientOptions() []option.ClientOption {
 // ReservationGRPCClientOptions returns options for
 // [cloud.google.com/go/bigquery/reservation/apiv1] clients when
 // BIGQUERY_STORAGE_GRPC_ENDPOINT is set to host:port (no URL scheme).
-// The go-googlesql emulator serves ReservationService on the same gRPC listener as
-// BigQuery Storage (see emulator/server.go). When unset, returns nil so callers can spread
+// The emulator serves ReservationService on the same gRPC listener as BigQuery Storage.
+// When unset, returns nil so callers can spread
 // into NewClient with no effect.
 func ReservationGRPCClientOptions() []option.ClientOption {
 	return StorageGRPCClientOptions()
@@ -175,8 +174,8 @@ func ReservationGRPCClientOptions() []option.ClientOption {
 // ConnectionGRPCClientOptions returns options for
 // [cloud.google.com/go/bigquery/connection/apiv1] clients when
 // BIGQUERY_STORAGE_GRPC_ENDPOINT is set to host:port (no URL scheme).
-// The go-googlesql emulator serves ConnectionService on the same gRPC listener as
-// BigQuery Storage. When unset, returns nil so callers can spread into NewClient with no effect.
+// The emulator serves ConnectionService on the same gRPC listener as BigQuery Storage.
+// When unset, returns nil so callers can spread into NewClient with no effect.
 func ConnectionGRPCClientOptions() []option.ClientOption {
 	return StorageGRPCClientOptions()
 }
@@ -184,7 +183,7 @@ func ConnectionGRPCClientOptions() []option.ClientOption {
 // AnalyticsHubGRPCClientOptions returns options for
 // [cloud.google.com/go/bigquery/analyticshub/apiv1] clients when
 // BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT is set to host:port (no URL scheme), matching the
-// go-googlesql emulator gRPC listener (same port as BigQuery Storage gRPC). When unset, returns nil
+// bigquery-emulator gRPC listener (same port as BigQuery Storage gRPC). When unset, returns nil
 // so callers can spread into NewClient with no effect.
 func AnalyticsHubGRPCClientOptions() []option.ClientOption {
 	ep := strings.TrimSpace(os.Getenv("BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT"))

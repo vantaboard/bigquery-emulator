@@ -25,7 +25,7 @@ import (
 func SkipEmulatorBQML(t *testing.T) {
 	t.Helper()
 	if strings.TrimSpace(os.Getenv("BIGQUERY_EMULATOR_HOST")) != "" {
-		t.Skip("BigQuery ML is not implemented by the go-googlesql BigQuery emulator")
+		t.Skip("BigQuery ML is not implemented by the bigquery-emulator")
 	}
 }
 

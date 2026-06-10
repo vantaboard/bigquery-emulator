@@ -438,7 +438,7 @@ the per-fixture diff.
 
 The gateway accepts both the legacy underscore flag names this
 repository started with (`--http_port`) and the hyphen-separated
-names that `go-googlesql`'s `bq-emulator` exposes (`--http-port`),
+names documented for `gateway_main` (`--http-port`),
 so existing scripts keep working and operators can lift invocation
 snippets from the upstream docs unchanged. The full alias table
 and the seeding workflows live in

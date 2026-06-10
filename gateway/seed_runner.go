@@ -60,7 +60,7 @@ type lazyProductionRunner struct {
 // production reader (which fails with ErrProductionUnsupported in
 // the default build); subsequent invocations get their own reader
 // so the cloud client's connection lifecycle stays scoped to one
-// request (matches what go-googlesql's orchestrator does).
+// request (one reader per seed invocation).
 func (l *lazyProductionRunner) Run(ctx context.Context, req seed.SeedRequest) (*seed.SeedResult, error) {
 	billing := seed.ResolveBillingProject(req, l.defaults.ProjectID, l.envLookup)
 	reader, err := seed.NewProductionReader(ctx, billing, l.envLookup)

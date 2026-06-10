@@ -91,7 +91,7 @@ func TestAppends(t *testing.T) {
 
 	t.Run("PendingStream", func(t *testing.T) {
 		if os.Getenv("BIGQUERY_EMULATOR_HOST") != "" {
-			t.Skip("PENDING write streams are not implemented by the go-googlesql BigQuery emulator")
+			t.Skip("PENDING write streams are not implemented by the bigquery-emulator")
 		}
 		if err := appendToPendingStream(ioutil.Discard, tc.ProjectID, testDatasetID, testTableID); err != nil {
 			t.Errorf("appendToPendingStream(%q %q): %v", testDatasetID, testTableID, err)

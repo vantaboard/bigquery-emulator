@@ -114,10 +114,9 @@ services:
   # `task docker:smoke` do not pay the JVM cold-start cost. Bump the
   # tag periodically: https://cloud.google.com/sdk/docs/downloads-docker.
   #
-  # Mirrors go-googlesql's compose layout so a developer who already
-  # knows that repo's contract (set `PUBSUB_EMULATOR_HOST=127.0.0.1:8085`
-  # and run a pull/push subscriber in test code) gets the same wiring
-  # here. The official Pub/Sub emulator cannot deliver to a BigQuery
+  # Set `PUBSUB_EMULATOR_HOST=127.0.0.1:8085` and run a pull/push
+  # subscriber in test code for local Pub/Sub wiring. The official Pub/Sub
+  # emulator cannot deliver to a BigQuery
   # subscription (documented limitation); local "message -> BigQuery
   # row" tests should still use a subscriber in test code that writes
   # against `BIGQUERY_EMULATOR_HOST`.

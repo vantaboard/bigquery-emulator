@@ -15,7 +15,7 @@
 'use strict';
 
 /**
- * Resolves a BigQuery project id for samples / tests. Order matches go-googlesql
+ * Resolves a BigQuery project id for samples / tests. Order matches third_party/README.md
  * third_party docs: NODE_SAMPLES_PROJECT_ID, GOLANG_SAMPLES_PROJECT_ID, then
  * standard Google env vars. When BIGQUERY_EMULATOR_HOST is set and nothing else
  * provides a project, defaults to EMULATOR_PROJECT_ID or "dev".

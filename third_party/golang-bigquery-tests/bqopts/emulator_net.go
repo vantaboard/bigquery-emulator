@@ -73,7 +73,7 @@ func wrapEmulatorReachabilityErr(err error, envVar, host string) error {
 	if err == nil {
 		return nil
 	}
-	hint := fmt.Sprintf("%s=%q appears unreachable — is the BigQuery emulator running? (e.g. task emulator:start from go-googlesql)", envVar, host)
+	hint := fmt.Sprintf("%s=%q appears unreachable — is the BigQuery emulator running? (e.g. task emulator:run-full)", envVar, host)
 	// google.golang.org/api (and net/http) may wrap RoundTrip errors in *url.Error.
 	// cloud.google.com/go/bigquery v1.74+ treats *url.Error strings containing
 	// "connection refused" / "connection reset" as retryable, so scrub those tokens

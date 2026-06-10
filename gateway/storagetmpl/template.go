@@ -1,8 +1,7 @@
 // Package storagetmpl materializes an initial-data template tree into
 // the persistent storage root the engine reads on startup.
 //
-// The intent is the same one go-googlesql captures in
-// `storage.MaybeMaterializeCatalogFromTemplate`: an operator (or a
+// An operator (or a
 // container image) ships a pre-populated catalog plus row files, and
 // the emulator should copy them into the runtime data-dir on first
 // boot so a downstream client sees a populated catalog at t=0. Once
@@ -105,8 +104,7 @@ func isInitialized(dataDir string) bool {
 // copyTree walks src and mirrors its layout under dst. Existing
 // destination files are overwritten -- callers gate this entire
 // function on `isInitialized` so the operator must explicitly
-// remove `catalog.duckdb` to reseed, which is the same posture
-// go-googlesql takes.
+// remove `catalog.duckdb` to reseed.
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

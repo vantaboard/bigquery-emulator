@@ -31,8 +31,7 @@
 # directories listed in `SYNC_PATHS` below. It never overwrites the
 # scaffold's curated non-.py files (LICENSE, pyproject.toml, setup.cfg,
 # uv.lock, sample JSON schemas, tests/data/* fixtures). That keeps refreshes
-# diff-bounded and matches the go-googlesql ignore policy referenced in
-# third_party/README.md.
+# diff-bounded per the ignore policy in third_party/README.md.
 
 set -euo pipefail
 

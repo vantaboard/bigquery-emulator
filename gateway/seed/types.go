@@ -10,11 +10,9 @@ import (
 )
 
 // SeedRequest is the JSON body the seed API accepts on
-// `POST /api/emulator/seed`. The contract mirrors what
-// go-googlesql's emulatorseed package exposes (see
-// /home/brighten-tompkins/Code/go-googlesql/api/emulatorseed/types.go)
-// so operators with existing tooling can swap one emulator for the
-// other without rewriting their request bodies.
+// `POST /api/emulator/seed`. The contract is documented in
+// docs/SEEDING.md so operators with existing seed tooling can
+// reuse request bodies without changes.
 type SeedRequest struct {
 	// Source is the production-side resource the seeder reads
 	// from. Required.
@@ -62,9 +60,9 @@ type SeedDestinationRef struct {
 }
 
 // SeedResult is what we report back to the caller once an operation
-// finishes. Counters mirror the go-googlesql shape so dashboards /
-// scripts that already consume that emulator's seed response can
-// read this one without changes.
+// finishes. Counters follow the stable seed API shape documented in
+// docs/SEEDING.md so dashboards and scripts can read responses
+// without changes.
 type SeedResult struct {
 	// Started / Finished are RFC 3339 timestamps.
 	Started  string `json:"started"`
@@ -92,9 +90,8 @@ type SeedResult struct {
 
 	// ResourceErrors holds per-resource failures. The operation
 	// itself can still finish "DONE" while individual tables
-	// failed -- this is how go-googlesql ships partial-failure
-	// data without forcing the caller to retry the entire
-	// scope.
+	// failed -- partial-failure data is returned without forcing
+	// the caller to retry the entire scope.
 	ResourceErrors []SeedResourceError `json:"resourceErrors,omitempty"`
 }
 
@@ -168,8 +165,8 @@ var billingEnvChain = []string{
 }
 
 // ResolveBillingProject picks the GCP project the seeder bills its
-// production reads against. The fallback chain mirrors what
-// go-googlesql documents (and what gcloud's tooling follows):
+// production reads against. The fallback chain matches what
+// gcloud's tooling follows:
 //
 //  1. Request body's `billingProject`.
 //  2. Gateway default project (--project-id).

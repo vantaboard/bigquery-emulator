@@ -45,8 +45,8 @@ All 11 ITs currently **FAIL** with
 emulator — the gapic `DataTransferServiceClient` dials gRPC, not
 REST, and the shallow-emulator `gateway/handlers/datatransfer/`
 package serves the REST surface only. The gRPC-server follow-up will
-land a DTS gRPC bridge (either by re-porting go-googlesql's gRPC
-handlers or by translating gRPC calls back into REST handler calls).
+land a DTS gRPC bridge (either by adding gRPC handlers or by
+translating gRPC calls back into REST handler calls).
 When that lands, the 8 third-party-connector smokes are expected to
 PASS (the emulator's catalog already accepts every connector ID the
 8 drivers send — see

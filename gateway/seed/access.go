@@ -12,7 +12,7 @@ import (
 type AccessConfig struct {
 	// AllowRemote, when false (the default), rejects any request
 	// whose RemoteAddr is not loopback (127.0.0.0/8 or ::1). The
-	// rationale is the same one go-googlesql encodes: a seed
+	// rationale: a seed
 	// operation pulls down real production data and writes it
 	// into a local emulator -- the call must originate from the
 	// operator who owns both endpoints, not from a co-tenant

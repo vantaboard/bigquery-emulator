@@ -28,8 +28,7 @@ import (
 // every dataset/table create against the emulator REST gateway returns
 // `invalid character '\x1f'` because handlers see the raw gzip framing.
 //
-// The middleware mirrors the go-googlesql/api/bqhttp gunzip helper so
-// the emulator and full-engine paths agree on shape: missing/empty
+// The middleware keeps the emulator and full-engine paths aligned on shape: missing/empty
 // Content-Encoding short-circuits to next without allocation, an
 // invalid gzip stream returns a BigQuery-shaped 400, and on success
 // the Content-Encoding header is dropped so handlers don't double-

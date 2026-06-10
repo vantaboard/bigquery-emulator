@@ -8,8 +8,8 @@
 //
 // Every operator-facing flag accepts both the legacy
 // underscore-separated name this repository started with
-// (`--http_port`) and the hyphen-separated equivalent used by
-// `go-googlesql`'s `bq-emulator` (`--http-port`). Both names target
+// (`--http_port`) and the hyphen-separated equivalent documented for
+// `gateway_main` (`--http-port`). Both names target
 // the same parsed value; whichever appears last on the command line
 // wins, the same way Go's `flag` package handles late overrides for
 // any single flag. This keeps existing scripts/Taskfiles working
@@ -19,7 +19,7 @@
 // # Environment-variable fallbacks
 //
 // Three settings honor environment variables when the CLI flag is
-// not supplied, matching go-googlesql's documented contract:
+// not supplied, per the stable compatibility contract in docs/SEEDING.md:
 //
 //   - BIGQUERY_EMULATOR_INITIAL_DATA_DIR (also EMULATOR_INITIAL_DATA_DIR)
 //     populates --initial-data-dir.

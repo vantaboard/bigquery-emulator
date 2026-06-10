@@ -25,7 +25,7 @@ import com.google.cloud.bigquery.BigQueryOptions;
  * application-default-credential path for live BigQuery otherwise.
  *
  * <p>This helper is the bigquery-emulator slim-path equivalent of the Go {@code bqopts} package
- * from go-googlesql. The published {@code google-cloud-bigquery} client does not auto-read
+ * for bigquery-emulator. The published {@code google-cloud-bigquery} client does not auto-read
  * {@code BIGQUERY_EMULATOR_HOST} (unlike the Go client), so emulator-aware sample drivers must
  * route through this helper instead of {@link BigQueryOptions#getDefaultInstance()}. See
  * {@code third_party/README.md} (Java section) and {@code java-bigquery/samples/EMULATOR.md}.

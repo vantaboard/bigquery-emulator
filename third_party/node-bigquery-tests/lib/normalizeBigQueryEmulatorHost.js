@@ -15,7 +15,7 @@
 'use strict';
 
 /**
- * Aligns BIGQUERY_EMULATOR_HOST with @google-cloud/bigquery and the go-googlesql
+ * Aligns BIGQUERY_EMULATOR_HOST with @google-cloud/bigquery and the bigquery-emulator
  * emulator: schemeless host:port is rewritten to http://… so the client does not
  * default to https:// against a plain HTTP listener.
  */

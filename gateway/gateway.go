@@ -73,7 +73,7 @@ type Options struct {
 
 	// DefaultProjectID is the project clients are assumed to be acting
 	// against when seeding or other gateway-level operations need a
-	// fallback project. Mirrors `--project-id` in go-googlesql.
+	// fallback project. Mirrors `--project-id` on gateway_main.
 	DefaultProjectID string
 
 	// DefaultDatasetLocation is the BigQuery location used as the
@@ -112,7 +112,7 @@ type Options struct {
 	// InitialDataDir is an optional template directory the gateway
 	// copies into DataDir on startup when DataDir does not yet
 	// contain an initialized catalog (`catalog.duckdb` missing).
-	// Mirrors `--initial-data-dir` in go-googlesql.
+	// Mirrors `--initial-data-dir` on gateway_main.
 	InitialDataDir string
 
 	// Debug enables verbose request and lifecycle logging.

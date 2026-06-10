@@ -60,7 +60,7 @@ func sanitize(s string, allowedSeparator string) string {
 // SkipCMEKTests probes whether CMEK-based tests should be skipped.
 //
 // Order of precedence: Kokoro CI runs CMEK tests. Local runs against the
-// go-googlesql BigQuery emulator (BIGQUERY_EMULATOR_HOST) run them with emulated
+// bigquery-emulator (BIGQUERY_EMULATOR_HOST) run them with emulated
 // KMS key names (no real Cloud KMS). Otherwise local runs against real GCP
 // require RUN_CMEK_TESTS to opt in.
 func SkipCMEKTests() bool {

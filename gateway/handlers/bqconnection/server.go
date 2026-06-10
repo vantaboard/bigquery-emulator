@@ -14,34 +14,32 @@
 // Both are explicitly larger than the shallow-emulator port budget
 // per `docs/ENGINE_POLICY.md`.
 // The surface-mapping table below documents which failing-IT each
-// go-googlesql `api/bqconnection/` symbol satisfies, so the
-// follow-up ports a one-to-one mapping rather than a free-form
-// rebuild.
+// intended handler symbol satisfies, so follow-up ports use a
+// one-to-one mapping rather than a free-form rebuild.
 //
-// Failing-IT → go-googlesql source mapping (shallow-emulator intake table):
+// Failing-IT → intended handler mapping (shallow-emulator intake table):
 //
 //	CreateAwsConnectionIT  → connectionpb.ConnectionService.CreateConnection
-//	                          ⇒ api/bqconnection/server.go: (s *Server).CreateConnection
-//	                          ⇒ api/bqconnection/rest_handler.go (HTTP/JSON variant)
-//	                          ⇒ api/bqconnection/connection_properties.go: applyCloudSQLFromCreate,
-//
-// validateConnectionPropertiesOneof
+//	                          ⇒ gateway/handlers/bqconnection/server.go: CreateConnection
+//	                          ⇒ gateway/handlers/bqconnection/rest_handler.go (HTTP/JSON variant)
+//	                          ⇒ gateway/handlers/bqconnection/connection_properties.go: applyCloudSQLFromCreate,
+//	                             validateConnectionPropertiesOneof
 //
 //	DeleteConnectionIT     → connectionpb.ConnectionService.DeleteConnection
-//	                          ⇒ api/bqconnection/server.go: (s *Server).DeleteConnection
+//	                          ⇒ gateway/handlers/bqconnection/server.go: DeleteConnection
 //	GetConnectionIT        → connectionpb.ConnectionService.GetConnection
-//	                          ⇒ api/bqconnection/server.go: (s *Server).GetConnection
+//	                          ⇒ gateway/handlers/bqconnection/server.go: GetConnection
 //	ShareConnectionIT      → connectionpb.ConnectionService.{GetIamPolicy,SetIamPolicy}
-//	                          ⇒ api/bqconnection/server.go: (s *Server).{GetIamPolicy,SetIamPolicy}
-//	                            (currently UNIMPLEMENTED upstream — IT will fail-fast)
+//	                          ⇒ gateway/handlers/bqconnection/server.go: {GetIamPolicy,SetIamPolicy}
+//	                            (currently UNIMPLEMENTED — IT will fail-fast)
 //	UpdateConnectionIT     → connectionpb.ConnectionService.UpdateConnection
-//	                          ⇒ api/bqconnection/server.go: (s *Server).UpdateConnection
-//	                          ⇒ api/bqconnection/connection_mask_paths.go: applyConnectionUpdateMask
-//	                          ⇒ api/bqconnection/connection_update.go: per-field setters
+//	                          ⇒ gateway/handlers/bqconnection/server.go: UpdateConnection
+//	                          ⇒ gateway/handlers/bqconnection/connection_mask_paths.go: applyConnectionUpdateMask
+//	                          ⇒ gateway/handlers/bqconnection/connection_update.go: per-field setters
 //
-// Storage adapter shim (deferred): go-googlesql's
-// `storage.{ConnectionRecord,GetConnectionRecord,PutConnectionRecord,
-// ListConnectionRecords,DeleteConnectionRecord,IsNotFound}` map onto
+// Storage adapter shim (deferred): connection-record helpers
+// (GetConnectionRecord, PutConnectionRecord, ListConnectionRecords,
+// DeleteConnectionRecord, IsNotFound) map onto
 // this repo's `backend/storage/` once a connections table lands. The
 // initial cut should keep them in-process (a `sync.Map`-backed store
 // is fine for the live-IT track) and add a SQLite-backed

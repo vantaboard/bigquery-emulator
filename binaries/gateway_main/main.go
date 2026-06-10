@@ -11,7 +11,7 @@
 // The parser is broken out into cli.go and supports both the legacy
 // underscore-separated flag names this repository started with
 // (`--http_port`) and the hyphen-separated equivalents
-// (`--http-port`) that `go-googlesql`'s `bq-emulator` exposes. Every
+// (`--http-port`) documented for gateway_main. Every
 // new operator-facing flag (data dir, engine pass-through, seed API,
 // seed YAML files) is registered there; this file only wires the
 // parsed Config into the gateway runtime.

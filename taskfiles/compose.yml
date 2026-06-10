@@ -1,6 +1,5 @@
 # Convenience helpers for the `thirdparty`-profiled docker compose
-# services. Mirrors `go-googlesql`'s `task-compose.yml` so a developer
-# who already knows that repo can `task compose:gcs` /
+# services. Use `task compose:gcs` /
 # `task compose:pubsub` here without thinking about profile flags or
 # the longer `thirdparty:fake-gcs-up` lane.
 #

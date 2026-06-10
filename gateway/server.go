@@ -186,8 +186,8 @@ func mountMigration(mux *http.ServeMux, deps handlers.Dependencies) {
 }
 
 // mountDataTransfer registers the BigQuery Data Transfer Service v1
-// surface. The shallow-emulator port of go-googlesql's
-// `api/datatransfer/` package replaces the empty shell that lived in
+// surface. The shallow-emulator port per docs/ENGINE_POLICY.md
+// replaces the empty shell that lived in
 // gateway/handlers/data_transfer.go: dataSources catalog
 // (`scheduled_query`, `amazon_s3`), in-memory CRUD for
 // transferConfigs + transferRuns, and the AIP-136 custom methods

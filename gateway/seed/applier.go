@@ -31,8 +31,7 @@ type Applier interface {
 	// Implementations treat an ALREADY_EXISTS response as success
 	// so seeding is idempotent across reruns. Created reports
 	// whether the call actually changed engine state, so callers
-	// can tally a "created vs skipped" counter the way
-	// go-googlesql does in its orchestrator metrics.
+	// can tally a "created vs skipped" counter in orchestrator metrics.
 	EnsureDataset(ctx context.Context, projectID, datasetID, location string) (created bool, err error)
 
 	// EnsureTable registers (project, dataset, table) with the

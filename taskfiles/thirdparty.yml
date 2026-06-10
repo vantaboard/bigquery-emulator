@@ -2,7 +2,7 @@
 # `nox`, and `npm test` against the four upstream sample trees
 # vendored under `third_party/<lang>-bigquery-tests/`.
 #
-# Mirrors the go-googlesql `task thirdparty:*` lane: each suite gets
+# Each suite gets
 # its own task plus a `default` aggregator, env vars steer which nox
 # session / Python interpreter / pytest selector runs, and shell
 # preflights under `scripts/` fail fast when the emulator or
@@ -786,7 +786,7 @@ tasks:
   # JAVA_BQ_SAMPLE_PATHS; each one is a standalone Maven module that resolves
   # google-cloud-{bigquery,bigquerystorage,bigqueryconnection,bigquerydatatransfer}
   # from libraries-bom on Maven Central (no vendored Java reactor and no client
-  # patches, unlike go-googlesql's pre-94048be5b shape). Each module's POM now
+  # patches). Each module's POM now
   # binds maven-failsafe-plugin to the integration-test + verify goals so the
   # vendored src/test/java/**/*IT.java suite runs against the local
   # bigquery-emulator gateway/storage listeners. The targeted ITs construct

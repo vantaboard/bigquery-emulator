@@ -17,7 +17,7 @@
 const {normalizeBigQueryEmulatorHost} = require('./normalizeBigQueryEmulatorHost');
 const {getSampleProjectId} = require('./sampleProjectEnv');
 
-// Matches api/apiregion/policy.go (go-googlesql emulator).
+// Matches the gateway regional policy (X-BigQuery-Emulator-Api-Region).
 const headerBigQueryEmulatorAPIRegion = 'X-BigQuery-Emulator-Api-Region';
 
 /**

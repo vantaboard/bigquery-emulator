@@ -1,9 +1,8 @@
 # Third-party client sample test trees
 
-This directory vendors the five BigQuery client-library sample suites that
-[`go-googlesql`](https://github.com/vantaboard/go-googlesql) exposes as its
-"third-party" conformance lane. They are kept here as a sibling to the
-in-repo SQL-fixture conformance harness:
+This directory vendors the five BigQuery client-library sample suites used
+for the third-party client conformance lane in bigquery-emulator. They are
+kept here as a sibling to the in-repo SQL-fixture conformance harness:
 
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
@@ -62,9 +61,9 @@ bucket on demand (gcloud-or-stdlib HTTP fallback; see
 
 ## Environment-variable contract
 
-These match the upstream go-googlesql defaults so the same client wiring
+These match the documented defaults so client wiring
 (`bqopts.ClientOptions()`, `setClientEndpoint.js`, `bigframes.pandas.options`)
-works against either emulator without code changes.
+works against the emulator without code changes.
 
 | Variable | Default for this repo | Purpose |
 |----------|-----------------------|---------|
@@ -137,8 +136,8 @@ unset so GCS-backed subtests skip cleanly.
 
 When `BIGQUERY_EMULATOR_HOST` points at this emulator, tests **skip**
 rather than fail when they require unsupported surfaces. The list below is
-inherited from go-googlesql; deltas specific to this emulator's
-conformance-harness state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
+documented below; deltas specific to this emulator's conformance-harness
+state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 
 | Area | Behavior with `BIGQUERY_EMULATOR_HOST` set |
 |------|---------------------------------------------|
@@ -175,7 +174,7 @@ In-tree Python BigQuery client and integration tests at
 upstream layout (`LICENSE`, `pyproject.toml`, `setup.cfg`, `uv.lock`,
 `samples/`, `samples/snippets/`, `samples/tests/`, `tests/data/`,
 `docs/`) but the actual `.py` source — including `noxfile.py` — is
-*not* checked in, matching go-googlesql's ignore policy. `task
+*not* checked in per the ignore policy in this README. `task
 thirdparty:python-bigquery-tests` fails fast at the `noxfile.py`
 precondition and asks you to populate the tree first.
 
@@ -332,10 +331,7 @@ on Maven Central (BOM version pinned per upstream — currently 26.73.0 for
 `java-bigquery/samples/snippets`, 26.70.0 for the storage tree, and
 26.32.0 for the two `java-docs-samples` modules). This tree does **not**
 vendor any Java client jars or patched sources — that heavier path was
-explored by go-googlesql and removed in
-[`94048be5b`](https://github.com/vantaboard/go-googlesql/commit/94048be5b3e4c55b0daab48fb092c75a3032e39c)
-/ [`78d8e0529`](https://github.com/vantaboard/go-googlesql/commit/78d8e0529714f8368be9c1b396495e3a97ca2e62)
-once the maintenance cost became clear.
+explored and dropped once the maintenance cost became clear.
 
 ```bash
 task thirdparty:java-bigquery-tests   # mvn -B verify on every snippets/ POM (Failsafe ITs against local emulator)

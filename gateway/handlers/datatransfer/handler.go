@@ -3,14 +3,12 @@
 // CRUD (in-memory), transferRuns CRUD, and the AIP-136 custom methods
 // (`scheduleRuns`, `checkValidCreds`, `startManualRuns`).
 //
-// Ported from go-googlesql `api/datatransfer/` (handler.go, handler_runs.go,
-// handler_scheduled_query.go, handlers_project_scoped.go, catalog.go,
-// paging.go) per `docs/ENGINE_POLICY.md`.
-// Adapter shim: go-googlesql's `apiregion.CheckHTTP` location-mismatch gate
-// is intentionally dropped here — this repo's REST surface does not yet
-// surface regional endpoints and the emulator's docker-compose listener is
-// always loopback. Logging goes through `log/slog.New(slog.DiscardHandler)`
-// when the caller does not provide one (mirrors go-googlesql).
+// Shallow-emulator port per docs/ENGINE_POLICY.md.
+// The apiregion.CheckHTTP location-mismatch gate is intentionally dropped
+// here — this repo's REST surface does not yet surface regional endpoints
+// and the emulator's docker-compose listener is always loopback. Logging
+// goes through `log/slog.New(slog.DiscardHandler)` when the caller does
+// not provide one.
 //
 // The package is wired by `gateway/server.go` via `(*Handler).Register(mux)`.
 // Routes registered:
