@@ -266,6 +266,24 @@ samples `test_query_external_sheets_*` are skipped via
 `BIGQUERY_EMULATOR_HOST` is set. GCS-backed external tables remain in
 scope.
 
+## Relational UNNEST / lateral / correlated subqueries
+
+These shapes share the semantic executor's per-outer-row evaluation
+frame (`backend/engine/semantic/outer_row_eval.{h,cc}`). The
+classifier promotes divergent subsets to `semantic_executor`; the
+fast path keeps the standalone cases on `duckdb_native`.
+
+| Family | Representative SQL | Route | Conformance |
+|---|---|---|---|
+| Standalone UNNEST | `SELECT n FROM UNNEST([1,2,3]) AS n` | `duckdb_native` | fast-path fixtures |
+| UNNEST WITH OFFSET | `... UNNEST(arr) AS n WITH OFFSET AS idx` | `semantic_executor` | `array_struct/unnest_with_offset.yaml` |
+| Multi-array zip | `FROM UNNEST(a, b)` (`array_zip_mode`) | `semantic_executor` | `array_struct/multi_array_unnest_pad.yaml` |
+| Cross-join UNNEST | `FROM t, UNNEST(t.arr) AS n` | `semantic_executor` | `array_struct/cross_join_unnest.yaml` |
+| LEFT JOIN UNNEST | `LEFT JOIN UNNEST(t.arr) AS n ON TRUE` | `semantic_executor` | `array_struct/left_join_unnest.yaml` |
+| JOIN USING | `INNER JOIN t2 USING (id)` | `duckdb_native` | `fastpath/join_using_inner.yaml` |
+| Lateral join scan | `... JOIN LATERAL (...)` (`is_lateral`) | `semantic_executor` | unit tests (`MaterializeJoinScan`) |
+| Correlated subquery | `EXISTS (SELECT 1 FROM r WHERE r.k = o.k)` | `semantic_executor` | `cte_subquery/subquery_expr_correlated_exists.yaml` |
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).

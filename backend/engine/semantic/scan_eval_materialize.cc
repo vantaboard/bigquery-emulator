@@ -11,6 +11,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/outer_row_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/simple_catalog.h"
@@ -312,9 +313,53 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeSetOperationScan(
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(
     const ::googlesql::ResolvedJoinScan& join, EvalContext& ctx) {
   if (join.is_lateral()) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: lateral JoinScan is not yet implemented");
+    auto left_or = MaterializeScanImpl(join.left_scan(), ctx);
+    if (!left_or.ok()) return left_or.status();
+
+    const bool is_left_outer =
+        join.join_type() == ::googlesql::ResolvedJoinScan::LEFT;
+    const bool is_cross =
+        join.join_expr() == nullptr &&
+        join.join_type() == ::googlesql::ResolvedJoinScan::INNER;
+    const ::googlesql::ResolvedScan* rscan =
+        StripBarrierScans(join.right_scan());
+
+    std::vector<ColumnBindings> out;
+    for (const ColumnBindings& lrow : *left_or) {
+      OuterRowFrame frame = MakeOuterRowFrame(ctx, lrow, join.left_scan());
+      BindCorrelatedColumnRefs(join.right_scan(), frame);
+      auto right_or = MaterializeScanImpl(join.right_scan(), frame.row_ctx);
+      if (!right_or.ok()) return right_or.status();
+
+      bool any_match = false;
+      for (const ColumnBindings& rrow : *right_or) {
+        ColumnBindings merged = lrow;
+        merged.insert(rrow.begin(), rrow.end());
+        EvalContext merged_ctx = ctx;
+        merged_ctx.columns = &merged;
+        bool include = is_cross || join.join_expr() == nullptr;
+        if (!include) {
+          auto ok = EvalBoolExpr(join.join_expr(), merged_ctx);
+          if (!ok.ok()) return ok.status();
+          include = *ok;
+        }
+        if (include) {
+          any_match = true;
+          out.push_back(std::move(merged));
+        }
+      }
+      if (!any_match && is_left_outer) {
+        ColumnBindings merged = lrow;
+        if (rscan != nullptr) {
+          for (int i = 0; i < rscan->column_list_size(); ++i) {
+            const ::googlesql::ResolvedColumn& col = rscan->column_list(i);
+            merged.emplace(col.column_id(), Value::Null(col.type()));
+          }
+        }
+        out.push_back(std::move(merged));
+      }
+    }
+    return out;
   }
   if (join.join_type() == ::googlesql::ResolvedJoinScan::RIGHT ||
       join.join_type() == ::googlesql::ResolvedJoinScan::FULL) {
@@ -374,9 +419,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScan(
     if (!left_or.ok()) return left_or.status();
     std::vector<ColumnBindings> out;
     for (const ColumnBindings& lrow : *left_or) {
-      EvalContext row_ctx = ctx;
-      row_ctx.columns = &lrow;
-      auto array_rows = array_struct::EvaluateArrayScan(scan, row_ctx);
+      OuterRowFrame frame = MakeOuterRowFrame(ctx, lrow, scan.input_scan());
+      auto array_rows = array_struct::EvaluateArrayScan(scan, frame.row_ctx);
       if (!array_rows.ok()) return array_rows.status();
       bool any = false;
       for (const ColumnBindings& arow : *array_rows) {
@@ -413,9 +457,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScan(
     if (!left_or.ok()) return left_or.status();
     std::vector<ColumnBindings> out;
     for (const ColumnBindings& lrow : *left_or) {
-      EvalContext row_ctx = ctx;
-      row_ctx.columns = &lrow;
-      auto array_rows = array_struct::EvaluateArrayScan(scan, row_ctx);
+      OuterRowFrame frame = MakeOuterRowFrame(ctx, lrow, scan.input_scan());
+      auto array_rows = array_struct::EvaluateArrayScan(scan, frame.row_ctx);
       if (!array_rows.ok()) return array_rows.status();
       for (const ColumnBindings& arow : *array_rows) {
         ColumnBindings merged = lrow;

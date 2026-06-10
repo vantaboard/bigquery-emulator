@@ -10,6 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/outer_row_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -33,83 +34,41 @@ void BindCorrelatedSubqueryColumns(
   if (ctx.columns == nullptr) {
     return;
   }
-  absl::flat_hash_map<std::string, ::googlesql::Value> outer_by_key;
-  if (ctx.columns_by_name != nullptr) {
-    for (const auto& [name, val] : *ctx.columns_by_name) {
-      outer_by_key[name] = val;
-    }
-  }
-  auto lookup_outer_value =
-      [&](const ::googlesql::ResolvedColumn& col) -> const ::googlesql::Value* {
-    if (ctx.columns != nullptr) {
-      auto it = ctx.columns->find(col.column_id());
-      if (it != ctx.columns->end()) return &it->second;
-    }
-    if (ctx.columns_by_name != nullptr) {
-      const std::string qualified =
-          absl::StrCat(col.table_name(), ".", col.name());
-      auto it = ctx.columns_by_name->find(qualified);
-      if (it != ctx.columns_by_name->end()) return &it->second;
-      it = ctx.columns_by_name->find(col.name());
-      if (it != ctx.columns_by_name->end()) return &it->second;
-    }
-    return nullptr;
-  };
+  OuterRowFrame frame = MakeOuterRowFrame(ctx, *ctx.columns, nullptr);
   for (int i = 0; i < node.parameter_list_size(); ++i) {
     const auto* param = node.parameter_list(i);
     if (param == nullptr) continue;
     const ::googlesql::ResolvedColumn& outer_col = param->column();
-    const ::googlesql::Value* val = lookup_outer_value(outer_col);
-    if (val == nullptr) continue;
+    auto it = ctx.columns->find(outer_col.column_id());
+    if (it == ctx.columns->end()) {
+      if (ctx.columns_by_name != nullptr) {
+        const std::string qualified =
+            absl::StrCat(outer_col.table_name(), ".", outer_col.name());
+        auto nit = ctx.columns_by_name->find(qualified);
+        if (nit == ctx.columns_by_name->end()) {
+          nit = ctx.columns_by_name->find(std::string(outer_col.name()));
+        }
+        if (nit != ctx.columns_by_name->end()) {
+          frame.merged.emplace(outer_col.column_id(), nit->second);
+          frame.by_name[qualified] = nit->second;
+          frame.by_name[std::string(outer_col.name())] = nit->second;
+        }
+      }
+      continue;
+    }
+    frame.merged.emplace(outer_col.column_id(), it->second);
     const std::string qualified =
         absl::StrCat(outer_col.table_name(), ".", outer_col.name());
-    outer_by_key[qualified] = *val;
-    outer_by_key[std::string(outer_col.name())] = *val;
-    bindings.emplace(outer_col.column_id(), *val);
+    frame.by_name[qualified] = it->second;
+    frame.by_name[std::string(outer_col.name())] = it->second;
   }
   for (const auto& [col_id, val] : *ctx.columns) {
-    bindings.emplace(col_id, val);
+    frame.merged.emplace(col_id, val);
   }
-
-  struct CorrelatedBinder : public ::googlesql::ResolvedASTVisitor {
-    const absl::flat_hash_map<std::string, ::googlesql::Value>& outer;
-    ColumnBindings& bind;
-
-    CorrelatedBinder(
-        const absl::flat_hash_map<std::string, ::googlesql::Value>& outer_in,
-        ColumnBindings& bind_in)
-        : outer(outer_in), bind(bind_in) {}
-
-    absl::Status DefaultVisit(const ::googlesql::ResolvedNode* n) override {
-      return ::googlesql::ResolvedASTVisitor::DefaultVisit(n);
-    }
-
-    absl::Status VisitResolvedColumnRef(
-        const ::googlesql::ResolvedColumnRef* ref) override {
-      if (ref == nullptr) {
-        return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
-      }
-      const int col_id = ref->column().column_id();
-      if (bind.contains(col_id)) {
-        return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
-      }
-      const std::string qualified =
-          absl::StrCat(ref->column().table_name(), ".", ref->column().name());
-      auto it = outer.find(qualified);
-      if (it == outer.end()) {
-        it = outer.find(std::string(ref->column().name()));
-      }
-      if (it != outer.end()) {
-        bind.emplace(col_id, it->second);
-      }
-      return ::googlesql::ResolvedASTVisitor::VisitResolvedColumnRef(ref);
-    }
-  };
-
   if (node.subquery() != nullptr) {
-    CorrelatedBinder binder{outer_by_key, bindings};
-    (void)node.subquery()->Accept(&binder);
+    BindCorrelatedColumnRefs(node.subquery(), frame);
   }
+  bindings = frame.merged;
 }
 
 }  // namespace

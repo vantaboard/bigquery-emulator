@@ -6,25 +6,25 @@ isProject: true
 todos:
   - id: outer-row-primitive
     content: Build the outer-row iteration primitive in backend/engine/semantic/ - evaluate an inner scan/expr once per outer row with the outer row's columns bound into the eval frame (generalize FrameStack binding from the UDF call path).
-    status: pending
+    status: completed
   - id: cross-join-unnest
     content: "FROM t, UNNEST(t.arr) [WITH OFFSET]: extend array_scan.cc to drive the primitive when ResolvedArrayScan has a non-SingleRowScan input_scan; preserve BigQuery element order and offset semantics."
-    status: pending
+    status: completed
   - id: left-join-unnest
     content: "LEFT JOIN UNNEST / is_outer ArrayScan: emit the NULL-padded outer row when the array is NULL/empty (BigQuery keeps the row; DuckDB unnest drops it)."
-    status: pending
+    status: completed
   - id: multi-array-zip
     content: "Multi-array UNNEST(a, b, ...) honoring array_zip_mode (PAD vs STRICT) on the semantic executor."
-    status: pending
+    status: completed
   - id: join-using
     content: "JOIN USING(...): evaluate whether DuckDB's native USING matches GoogleSQL's resolved shape (has_using is metadata-only on an already-resolved join_expr) - if so land as duckdb_native in the transpiler instead of semantic; otherwise route through the primitive."
-    status: pending
+    status: completed
   - id: correlated-subqueries
     content: "Correlated ResolvedSubqueryExpr (scalar/IN/EXISTS/ARRAY with non-empty parameter_list): replace the structured kNotImplemented in the semantic executor with per-outer-row evaluation via the primitive."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Add conformance fixtures (array_struct/ + cte_subquery/) with expected.route labels; flip SHAPE_TRACKER.md + node_dispositions.yaml rows; update ENGINE_POLICY.md Family 1 wording; drop matching third-party skip rows.
-    status: pending
+    status: completed
 ---
 
 # Parity 01 — UNNEST lateral / correlated subqueries

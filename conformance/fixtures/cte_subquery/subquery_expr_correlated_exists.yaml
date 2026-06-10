@@ -1,0 +1,46 @@
+# subquery_expr_correlated_exists: correlated EXISTS via semantic_executor.
+name: subquery_expr_correlated_exists
+description: |
+  Correlated EXISTS subquery referencing the outer row. Evaluated
+  per outer row through `EvalSubqueryExpr` + `outer_row_eval`.
+project_id: proj-cte-subquery-correlated-exists
+dataset_id: ds_cte_subquery_corr_exists
+setup:
+  - dataset: ds_cte_subquery_corr_exists
+  - table:
+      dataset: ds_cte_subquery_corr_exists
+      id: orders
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_cte_subquery_corr_exists
+      id: refunds
+      schema:
+        - {name: order_id, type: INT64, mode: REQUIRED}
+        - {name: cents, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_cte_subquery_corr_exists
+      table: orders
+      rows:
+        - {id: 1, amount: 50}
+        - {id: 2, amount: 200}
+  - rows:
+      dataset: ds_cte_subquery_corr_exists
+      table: refunds
+      rows:
+        - {order_id: 2, cents: 10}
+query: |
+  SELECT o.id,
+         EXISTS (
+           SELECT 1
+             FROM ds_cte_subquery_corr_exists.refunds AS r
+            WHERE r.order_id = o.id
+         ) AS has_refund
+    FROM ds_cte_subquery_corr_exists.orders AS o
+   ORDER BY o.id
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", has_refund: "false"}
+    - {id: "2", has_refund: "true"}

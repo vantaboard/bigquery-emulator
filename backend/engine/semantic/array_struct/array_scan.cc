@@ -135,16 +135,13 @@ void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
 
 absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
     const ::googlesql::ResolvedArrayScan& scan, const EvalContext& parent_ctx) {
-  // -------- Out-of-scope shapes (deferred to follow-up subagents).
+  // -------- Correlated shapes without outer bindings.
   //
-  // A non-null, non-`SingleRowScan` `input_scan` is the correlated
-  // shape (`FROM t, UNNEST(t.arr)`); a non-null `join_expr` is the
-  // `LEFT JOIN UNNEST(arr) ON ...` shape. Both need a row source
-  // adapter (`RowSource` -> per-row `ColumnBindings`) which is
-  // `docs/ENGINE_POLICY.md`. Until that
-  // lands, surface a structured `kNotImplemented` so the gateway's
-  // envelope is consistent with other "planned but not landed"
-  // routes.
+  // `MaterializeArrayScan` binds each outer row via `MakeOuterRowFrame`
+  // before calling here. A direct call with a non-`SingleRowScan`
+  // `input_scan` / `join_expr` but no `parent_ctx.columns` is a
+  // caller bug — surface `kNotImplemented` so the gateway envelope
+  // stays consistent.
   if (scan.join_expr() != nullptr && parent_ctx.columns == nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,

@@ -1,0 +1,43 @@
+# join_using_inner: JOIN USING lowers to DuckDB native USING.
+name: join_using_inner
+description: |
+  INNER JOIN ... USING (id) via DuckDB's native USING clause after
+  the transpiler peels column names from the analyzer's join_expr.
+project_id: proj-fastpath-join-using
+dataset_id: ds_fastpath_join_using
+setup:
+  - dataset: ds_fastpath_join_using
+  - table:
+      dataset: ds_fastpath_join_using
+      id: left_t
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: label, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_fastpath_join_using
+      id: right_t
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: score, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_fastpath_join_using
+      table: left_t
+      rows:
+        - {id: 1, label: ada}
+        - {id: 2, label: linus}
+  - rows:
+      dataset: ds_fastpath_join_using
+      table: right_t
+      rows:
+        - {id: 1, score: 100}
+        - {id: 3, score: 300}
+query: |
+  SELECT l.label, r.score
+    FROM ds_fastpath_join_using.left_t AS l
+   INNER JOIN ds_fastpath_join_using.right_t AS r
+      USING (id)
+   ORDER BY l.label
+expected:
+  route: duckdb_native
+  rows:
+    - {label: "ada", score: "100"}

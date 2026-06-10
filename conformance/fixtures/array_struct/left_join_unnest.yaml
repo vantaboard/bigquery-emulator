@@ -1,0 +1,36 @@
+# left_join_unnest: LEFT JOIN UNNEST preserves NULL-padded outer rows.
+#
+# BigQuery emits one row with NULL element columns when the array is
+# NULL/empty; DuckDB lateral unnest drops the row. This fixture pins
+# the semantic_executor contract for `is_outer=true`.
+name: left_join_unnest
+description: |
+  LEFT JOIN UNNEST on a table with one populated and one empty array.
+  Verifies the empty-array outer row survives with a NULL unnest column.
+project_id: proj-array-struct-left-join-unnest
+dataset_id: ds_array_struct_left_join
+setup:
+  - dataset: ds_array_struct_left_join
+  - table:
+      dataset: ds_array_struct_left_join
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: vals, type: INT64, mode: REPEATED}
+  - rows:
+      dataset: ds_array_struct_left_join
+      table: items
+      rows:
+        - {id: 1, vals: [5]}
+        - {id: 2, vals: []}
+query: |
+  SELECT t.id, n
+    FROM ds_array_struct_left_join.items AS t
+    LEFT JOIN UNNEST(t.vals) AS n
+      ON TRUE
+   ORDER BY t.id, n
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", n: "5"}
+    - {id: "2", n: null}

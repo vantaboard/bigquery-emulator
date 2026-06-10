@@ -216,10 +216,11 @@ TEST_F(ArrayScanTest, MultiArrayUnnestStrictRejectsMismatchedLengths) {
             SemanticErrorReason::kInvalidArgument);
 }
 
-TEST_F(ArrayScanTest, CorrelatedInputScanSurfacesNotImplemented) {
-  // Family 4 deferral: the FROM-table cross-join form is not
-  // implemented yet. The evaluator surfaces `kNotImplemented`
-  // with a pointer at the follow-up subagent.
+TEST_F(ArrayScanTest,
+       CorrelatedInputScanWithoutBindingsSurfacesNotImplemented) {
+  // `EvaluateArrayScan` is the inner evaluator; `MaterializeArrayScan`
+  // binds outer rows before calling it. A direct call without
+  // `parent_ctx.columns` must not silently approximate.
   const ::googlesql::Type* int64_array = nullptr;
   ASSERT_TRUE(
       type_factory_->MakeArrayType(type_factory_->get_int64(), &int64_array)
@@ -238,6 +239,38 @@ TEST_F(ArrayScanTest, CorrelatedInputScanSurfacesNotImplemented) {
   auto rows = EvaluateArrayScan(*scan, ctx);
   ASSERT_FALSE(rows.ok());
   EXPECT_EQ(rows.status().code(), absl::StatusCode::kUnimplemented);
+}
+
+TEST_F(ArrayScanTest, CorrelatedInputScanWithOuterBindingsUnnestsPerRow) {
+  const ::googlesql::Type* int64_array = nullptr;
+  ASSERT_TRUE(
+      type_factory_->MakeArrayType(type_factory_->get_int64(), &int64_array)
+          .ok());
+  auto arr_tab = std::make_unique<::googlesql::SimpleTable>(
+      "arr_tab",
+      std::vector<::googlesql::SimpleTable::NameAndType>{
+          {"id", type_factory_->get_int64()},
+          {"arr", int64_array},
+      });
+  catalog_->AddOwnedTable(std::move(arr_tab));
+  const auto* scan =
+      AnalyzeArrayScan("SELECT id, n FROM arr_tab, UNNEST(arr_tab.arr) AS n");
+  ASSERT_NE(scan, nullptr);
+  ColumnBindings outer;
+  outer.emplace(scan->input_scan()->column_list(0).column_id(),
+                ::googlesql::Value::Int64(7));
+  outer.emplace(scan->input_scan()->column_list(1).column_id(),
+                ::googlesql::Value::Array(int64_array->AsArray(),
+                                          {::googlesql::Value::Int64(10),
+                                           ::googlesql::Value::Int64(20)}));
+  EvalContext ctx;
+  ctx.columns = &outer;
+  auto rows = EvaluateArrayScan(*scan, ctx);
+  ASSERT_TRUE(rows.ok()) << rows.status();
+  ASSERT_EQ(rows->size(), 2u);
+  const int n_col = scan->element_column_list(0).column_id();
+  EXPECT_EQ((*rows)[0].at(n_col).int64_value(), 10);
+  EXPECT_EQ((*rows)[1].at(n_col).int64_value(), 20);
 }
 
 }  // namespace
