@@ -5,7 +5,8 @@
 # to consume via `workflow_run` + `setup-engine-from-artifact`.
 #
 # Caching layers:
-#   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin
+#   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin (exact
+#     hit only; no restore-keys prefix — see docs/dev/ci-engine-build.md)
 #   * `actions/cache` on `.cache/googlesql-prebuilt/` keyed by prebuilt SHA256
 #   * Unified Bazel `disk-cache: engine` (shared with cc_test consumers)
 #
@@ -78,9 +79,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: bin
-          key: engine-binaries-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'backend/**', 'binaries/emulator_main/**', 'frontend/**', 'proto/**', 'third_party/**') }}-gsq-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
-          restore-keys: |
-            engine-binaries-
+          # v2 bumped 2026-06 after partial restore-key poisoning shipped stale
+          # emulator_main under an exact key; bump again only if that recurs.
+          key: engine-binaries-v2-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'backend/**', 'binaries/emulator_main/**', 'frontend/**', 'proto/**', 'third_party/**') }}-gsq-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
 
       - name: Restore GoogleSQL prebuilt cache
         uses: actions/cache@v5
@@ -119,8 +120,8 @@ jobs:
             echo "cache_hit=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Exact engine-binaries cache hit; skipping Bazel compile"
           else
-            if [ "$exact_cache" != "true" ] && [ -x bin/emulator_main ]; then
-              echo "::notice::Partial engine-binaries cache restore; recompiling to pick up source changes"
+            if [ "$exact_cache" != "true" ]; then
+              rm -f bin/emulator_main bin/libduckdb.so
             fi
             echo "cache_hit=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Building emulator_main with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
@@ -148,6 +149,12 @@ jobs:
               "tarball_sha256": os.environ.get("TARBALL_SHA256") or "",
               "head_sha": os.environ.get("HEAD_SHA") or "",
               "cache_hit": os.environ.get("CACHE_HIT") == "true",
+              "engine_binaries_cache_key_version": os.environ.get(
+                  "ENGINE_BINARIES_CACHE_KEY_VERSION", ""
+              ),
+              "engine_binaries_cache_hit": os.environ.get(
+                  "ENGINE_BINARIES_CACHE_HIT", ""
+              ) == "true",
           }
           with open("engine-provenance.json", "w", encoding="utf-8") as fh:
               json.dump(data, fh, indent=2)
@@ -162,6 +169,8 @@ jobs:
           TARBALL_SHA256: ${{ steps.googlesql.outputs.tarball-sha256 }}
           HEAD_SHA: ${{ github.sha }}
           CACHE_HIT: ${{ steps.engine-build.outputs.cache_hit }}
+          ENGINE_BINARIES_CACHE_KEY_VERSION: v2
+          ENGINE_BINARIES_CACHE_HIT: ${{ steps.bin-cache.outputs.cache-hit }}
 
       - name: Upload engine-binaries artifact
         uses: actions/upload-artifact@v6

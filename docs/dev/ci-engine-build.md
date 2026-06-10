@@ -48,10 +48,34 @@ Cheap push/PR workflows (no engine):
 
 | Layer | Where | Purpose |
 |-------|--------|---------|
-| `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged across commits |
+| `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged **and** the cache key matches exactly |
 | `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine`, `coverage-bazel` | Skip tarball download when prebuilt SHA256 pin unchanged |
-| Bazel `disk-cache: engine` | `build-engine`, `coverage-bazel`, `ci` cc_test | Shared incremental compile cache |
+| Bazel `disk-cache: engine` | `build-engine`, `coverage-bazel`, `ci` cc_test | Shared incremental compile cache (safe partial reuse) |
 | `engine-binaries` artifact | per successful `build-engine` run | Consumers + re-runs download without rebuilding |
+
+### `bin/` cache safety (exact hit only)
+
+The staged `bin/` cache is an all-or-nothing shortcut: when `actions/cache`
+reports `cache-hit: true` for the full key (currently prefixed
+`engine-binaries-v2-…`), `build-engine` skips Bazel if
+`./bin/emulator_main --version` succeeds.
+
+**Do not use `restore-keys` prefix fallback on `bin/`.** A partial restore can
+leave pre-change `emulator_main` binaries that still pass `--version`; a
+subsequent run can save them under the exact key and ship stale engines into
+conformance and thirdparty consumers (2026-06 incident: SIGINT teardown mutex
+fatals). Incremental compile speed belongs in the Bazel `disk-cache: engine`
+layer, not prefix-matched staged binaries.
+
+When the cache key does not match exactly, the workflow removes any restored
+`bin/emulator_main` / `bin/libduckdb.so` and runs
+`task emulator:build-engine:bazel`. Bump the `engine-binaries-vN` prefix in
+[`.github/workflows/build-engine.yml`](../../.github/workflows/build-engine.yml)
+only when invalidating poisoned or incompatible cached `bin/` trees.
+
+`engine-provenance.json` in the uploaded artifact records
+`engine_binaries_cache_key_version`, `engine_binaries_cache_hit` (exact
+`actions/cache` match), and `cache_hit` (whether Bazel compile was skipped).
 
 Re-running a failed consumer (e.g. conformance) on the same commit reuses the
 artifact via [`.github/actions/setup-engine-from-artifact`](../../.github/actions/setup-engine-from-artifact/action.yml),
