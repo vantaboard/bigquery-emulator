@@ -1,0 +1,28 @@
+# update_deep_struct_round_trip: UPDATE t SET s.field = ... via semantic_executor.
+name: update_deep_struct_round_trip
+description: |
+  Seed a STRUCT column, apply one-level nested-field SET, verify the
+  target field mutates without replacing sibling fields.
+project_id: proj-dml-deep-struct
+dataset_id: ds_dml_deep_struct
+setup:
+  - dataset: ds_dml_deep_struct
+  - sql: |
+      CREATE TABLE ds_dml_deep_struct.items (
+        id INT64,
+        payload STRUCT<val INT64, tag STRING>
+      )
+  - sql: |
+      INSERT INTO ds_dml_deep_struct.items (id, payload) VALUES
+        (1, STRUCT(10 AS val, 'keep' AS tag))
+  - sql: |
+      UPDATE ds_dml_deep_struct.items
+         SET payload.val = 99
+       WHERE id = 1
+query: |
+  SELECT id, payload.val AS val, payload.tag AS tag
+    FROM ds_dml_deep_struct.items
+   ORDER BY id
+expected:
+  rows:
+    - {id: "1", val: "99", tag: "keep"}

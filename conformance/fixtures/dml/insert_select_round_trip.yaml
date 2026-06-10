@@ -1,0 +1,30 @@
+# insert_select_round_trip: INSERT ... SELECT via the local DML executor.
+#
+# Simple SELECT literals route through semantic_executor; SELECT over
+# storage-backed tables may route duckdb_native when the inner query
+# transpiles. Both paths commit through AppendRows and populate
+# numDmlAffectedRows.
+name: insert_select_round_trip
+description: |
+  CREATE TABLE -> INSERT ... SELECT (multi-row) -> SELECT round-trip.
+  Pins column-list reordering and affected-row counting for the
+  INSERT ... SELECT family.
+project_id: proj-dml-insert-select
+dataset_id: ds_dml_insert_select
+setup:
+  - dataset: ds_dml_insert_select
+  - sql: |
+      CREATE TABLE ds_dml_insert_select.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_insert_select.people (name, id)
+      SELECT 'ada', 1 UNION ALL SELECT 'linus', 2
+query: |
+  SELECT id, name FROM ds_dml_insert_select.people ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", name: "ada"}
+    - {id: "2", name: "linus"}

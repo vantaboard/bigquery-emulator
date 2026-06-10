@@ -1,0 +1,21 @@
+# insert_assert_rows_modified: ASSERT_ROWS_MODIFIED on INSERT.
+name: insert_assert_rows_modified
+description: |
+  INSERT with ASSERT_ROWS_MODIFIED matching the inserted row count.
+project_id: proj-dml-assert-rows
+dataset_id: ds_dml_assert_rows
+setup:
+  - dataset: ds_dml_assert_rows
+  - sql: |
+      CREATE TABLE ds_dml_assert_rows.items (id INT64)
+  - sql: |
+      INSERT INTO ds_dml_assert_rows.items (id)
+      SELECT 1 UNION ALL SELECT 2
+      ASSERT_ROWS_MODIFIED 2
+query: |
+  SELECT id FROM ds_dml_assert_rows.items ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1"}
+    - {id: "2"}

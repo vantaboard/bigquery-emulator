@@ -1,0 +1,39 @@
+# update_from_round_trip: UPDATE ... FROM ... via semantic_executor.
+name: update_from_round_trip
+description: |
+  Seed target + source tables, UPDATE target FROM source on join key,
+  verify matched rows pick up source labels.
+project_id: proj-dml-update-from
+dataset_id: ds_dml_update_from
+setup:
+  - dataset: ds_dml_update_from
+  - sql: |
+      CREATE TABLE ds_dml_update_from.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      CREATE TABLE ds_dml_update_from.labels (
+        id INT64,
+        label STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_update_from.people (id, name) VALUES
+        (1, 'old_a'),
+        (2, 'old_b')
+  - sql: |
+      INSERT INTO ds_dml_update_from.labels (id, label) VALUES
+        (1, 'new_a'),
+        (2, 'new_b')
+  - sql: |
+      UPDATE ds_dml_update_from.people AS p
+         SET name = l.label
+        FROM ds_dml_update_from.labels AS l
+       WHERE p.id = l.id
+query: |
+  SELECT id, name FROM ds_dml_update_from.people ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", name: "new_a"}
+    - {id: "2", name: "new_b"}
