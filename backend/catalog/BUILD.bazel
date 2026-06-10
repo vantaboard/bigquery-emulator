@@ -243,6 +243,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/base",
         "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
     ],
 )
