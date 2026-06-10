@@ -75,7 +75,7 @@ jobs:
 
       - name: Restore staged engine binaries cache
         id: bin-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: bin
           key: engine-binaries-${{ hashFiles('MODULE.bazel', 'MODULE.bazel.lock', '.bazelrc', '.bazelversion', 'backend/**', 'binaries/emulator_main/**', 'frontend/**', 'proto/**', 'third_party/**') }}-gsq-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
@@ -83,7 +83,7 @@ jobs:
             engine-binaries-
 
       - name: Restore GoogleSQL prebuilt cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .cache/googlesql-prebuilt
           key: googlesql-prebuilt-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
