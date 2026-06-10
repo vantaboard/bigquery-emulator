@@ -286,6 +286,12 @@ func declareToCreateConstant(stmt string) string {
 
 func transformScriptDeclares(sql string) string {
 	inner := unwrapBeginEndBlock(sql)
+	// Control-flow scripts must reach googlesql::ScriptExecutor with DECLARE
+	// syntax and intact IF/WHILE bodies. Per-statement splitting breaks
+	// semicolons inside THEN/ELSE branches.
+	if scriptNeedsGoogleSQLExecutor(inner) {
+		return strings.TrimSpace(sql)
+	}
 	parts := splitScriptStatements(inner)
 	if len(parts) == 0 {
 		return inner

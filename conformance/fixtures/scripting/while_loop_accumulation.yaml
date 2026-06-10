@@ -1,0 +1,19 @@
+# while_loop_accumulation: WHILE increments a counter to a target sum.
+name: scripting_while_loop_accumulation
+description: |
+  WHILE loop accumulates a counter; final SELECT returns the total.
+project_id: proj-scripting-while-loop
+query: |
+  BEGIN
+    DECLARE total INT64 DEFAULT 0;
+    DECLARE i INT64 DEFAULT 0;
+    WHILE i < 3 DO
+      SET total = total + i;
+      SET i = i + 1;
+    END WHILE;
+    SELECT CAST(total AS STRING) AS total;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {total: "3"}

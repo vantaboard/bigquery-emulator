@@ -123,20 +123,56 @@ cc_library(
     ],
 )
 
+_GOOGLESQL_SCRIPTING_SRCS = select({
+    "//:googlesql_source": [
+        "script_googlesql_runner.cc",
+        "script_row_iterator.cc",
+        "script_statement_evaluator.cc",
+    ],
+    "//conditions:default": [],
+})
+
+_GOOGLESQL_SCRIPTING_HDRS = select({
+    "//:googlesql_source": [
+        "script_googlesql_runner.h",
+        "script_row_iterator.h",
+        "script_statement_evaluator.h",
+    ],
+    "//conditions:default": [],
+})
+
+_GOOGLESQL_SCRIPTING_DEPS = select({
+    "//:googlesql_source": [
+        "@googlesql//googlesql/public:evaluator_table_iterator",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:parse_resume_location",
+        "@googlesql//googlesql/scripting:script_executor",
+    ],
+    "//conditions:default": [],
+})
+
 cc_library(
     name = "local_coordinator_engine",
     srcs = [
         "local_coordinator_analyze.cc",
         "local_coordinator_engine.cc",
         "script_executor.cc",
+        "script_executor_internal.cc",
         "script_executor_set.cc",
-    ],
+        "script_execute_immediate.cc",
+    ] + _GOOGLESQL_SCRIPTING_SRCS,
     hdrs = [
         "local_coordinator_analyze.h",
         "local_coordinator_engine.h",
         "script_executor.h",
+        "script_executor_internal.h",
         "script_executor_set.h",
-    ],
+        "script_execute_immediate.h",
+    ] + _GOOGLESQL_SCRIPTING_HDRS,
+    local_defines = select({
+        "//:googlesql_source": ["BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":sql_preprocess",
         ":executor",
@@ -181,7 +217,10 @@ cc_library(
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",
+    ] + _GOOGLESQL_SCRIPTING_DEPS + [
+        "@com_google_protobuf//:protobuf",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )

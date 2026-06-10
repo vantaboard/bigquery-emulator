@@ -1,0 +1,19 @@
+# if_scalar_branch: IF/ELSE assigns a script variable before final SELECT.
+name: scripting_if_scalar_branch
+description: |
+  IF/ELSE updates a script variable; the final SELECT proves the taken branch.
+project_id: proj-scripting-if-branch
+query: |
+  BEGIN
+    DECLARE n INT64 DEFAULT 0;
+    IF n = 0 THEN
+      SET n = 7;
+    ELSE
+      SET n = 9;
+    END IF;
+    SELECT CAST(n AS STRING) AS n;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "7"}

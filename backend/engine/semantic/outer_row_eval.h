@@ -31,14 +31,15 @@ struct OuterRowFrame {
 // `scan_for_names` is non-null, populate `columns_by_name` from the
 // scan's column list so unqualified / qualified name lookups match
 // BigQuery's resolution rules.
-OuterRowFrame MakeOuterRowFrame(const EvalContext& parent_ctx,
-                                const ColumnBindings& outer_row,
-                                const ::googlesql::ResolvedScan* scan_for_names);
+OuterRowFrame MakeOuterRowFrame(
+    const EvalContext& parent_ctx,
+    const ColumnBindings& outer_row,
+    const ::googlesql::ResolvedScan* scan_for_names);
 
 // Walk `correlated_scan` and bind any `ResolvedColumnRef` nodes that
 // reference columns already present in `frame` into `frame.merged`.
 void BindCorrelatedColumnRefs(const ::googlesql::ResolvedScan* correlated_scan,
-                                OuterRowFrame& frame);
+                              OuterRowFrame& frame);
 
 }  // namespace semantic
 }  // namespace engine

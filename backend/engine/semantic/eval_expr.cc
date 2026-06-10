@@ -330,6 +330,12 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                               ctx);
     case ::googlesql::RESOLVED_SYSTEM_VARIABLE: {
       const auto& node = *expr.GetAs<::googlesql::ResolvedSystemVariable>();
+      if (ctx.script_system_variables != nullptr) {
+        auto it = ctx.script_system_variables->find(node.name_path());
+        if (it != ctx.script_system_variables->end()) {
+          return it->second;
+        }
+      }
       return GetSystemVariable(ctx.project_id, node.name_path());
     }
     case ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL:

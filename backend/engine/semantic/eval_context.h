@@ -7,6 +7,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
+#include "googlesql/public/analyzer.h"
 #include "googlesql/public/value.h"
 
 namespace bigquery_emulator {
@@ -44,6 +45,7 @@ struct EvalContext {
       nullptr;
   const FrameStack* arguments = nullptr;
   const FrameStack* script_variables = nullptr;
+  const ::googlesql::SystemVariableValuesMap* script_system_variables = nullptr;
   const UdafEvalScope* udaf = nullptr;
   const absl::flat_hash_map<std::string, CteTable>* with_tables = nullptr;
   mutable std::optional<std::string> bignumeric_render_override;

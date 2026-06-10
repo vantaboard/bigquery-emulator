@@ -8,6 +8,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
@@ -16,6 +17,11 @@
 #include "backend/catalog/stored_procedure.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
+#include "backend/engine/coordinator/script_execute_immediate.h"
+#include "backend/engine/coordinator/script_executor_internal.h"
+#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
+#include "backend/engine/coordinator/script_googlesql_runner.h"
+#endif
 #include "backend/engine/coordinator/script_executor_set.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
@@ -39,25 +45,6 @@ namespace engine {
 namespace coordinator {
 
 namespace {
-
-std::string StripBeginEnd(absl::string_view sql) {
-  std::string trimmed = std::string(absl::StripAsciiWhitespace(sql));
-  if (absl::StartsWithIgnoreCase(trimmed, "BEGIN")) {
-    trimmed = trimmed.substr(5);
-    trimmed = std::string(absl::StripAsciiWhitespace(trimmed));
-  }
-  if (absl::EndsWithIgnoreCase(trimmed, "END")) {
-    size_t pos = trimmed.size();
-    while (pos > 0 && (trimmed[pos - 1] == ';' || trimmed[pos - 1] == ' ')) {
-      --pos;
-    }
-    if (pos >= 3 && absl::EqualsIgnoreCase(trimmed.substr(pos - 3, 3), "END")) {
-      trimmed.resize(pos - 3);
-      trimmed = std::string(absl::StripAsciiWhitespace(trimmed));
-    }
-  }
-  return trimmed;
-}
 
 std::string ScriptVariableNameFromExpr(const ::googlesql::ResolvedExpr& expr) {
   if (expr.node_kind() == ::googlesql::RESOLVED_CONSTANT) {
@@ -98,29 +85,6 @@ std::vector<std::string> SplitSemicolonStatements(absl::string_view sql) {
   return out;
 }
 
-absl::Status RegisterScriptVariablesOnCatalog(
-    catalog::GoogleSqlCatalog* catalog,
-    const semantic::FrameStack& variables,
-    absl::flat_hash_set<std::string>* registered) {
-  for (const auto& [name, value] : variables.VisibleBindings()) {
-    if (registered->contains(name)) continue;
-    const ::googlesql::Constant* existing = nullptr;
-    absl::Status found =
-        catalog->FindConstant({name}, &existing, /*options=*/{});
-    if (found.ok() && existing != nullptr) {
-      registered->insert(name);
-      continue;
-    }
-    std::unique_ptr<::googlesql::SimpleConstant> constant;
-    absl::Status created =
-        ::googlesql::SimpleConstant::Create({name}, value, &constant);
-    if (!created.ok()) return created;
-    catalog->AddOwnedConstant(constant.release());
-    registered->insert(name);
-  }
-  return absl::OkStatus();
-}
-
 semantic::Value NullForType(const ::googlesql::Type* type) {
   if (type == nullptr) return semantic::Value::NullString();
   switch (type->kind()) {
@@ -142,6 +106,8 @@ semantic::Value NullForType(const ::googlesql::Type* type) {
       return semantic::Value::NullString();
   }
 }
+
+}  // namespace
 
 absl::Status ExecuteOneScriptStatement(
     LocalCoordinatorEngine& engine,
@@ -191,6 +157,13 @@ absl::Status ExecuteOneScriptStatement(
       if (!stats.ok()) return stats.status();
       return absl::OkStatus();
     }
+    case ::googlesql::RESOLVED_EXECUTE_IMMEDIATE_STMT:
+      return ExecuteExecuteImmediate(
+          engine,
+          request,
+          *stmt.GetAs<::googlesql::ResolvedExecuteImmediateStmt>(),
+          catalog,
+          driver);
     default:
       return semantic::MakeSemanticError(
           semantic::SemanticErrorReason::kNotImplemented,
@@ -224,8 +197,6 @@ absl::Status ExecuteStatementList(
   }
   return absl::OkStatus();
 }
-
-}  // namespace
 
 absl::Status ExecuteCallStmt(LocalCoordinatorEngine& engine,
                              const QueryRequest& request,
@@ -317,8 +288,8 @@ absl::Status ExecuteProcedureBody(LocalCoordinatorEngine& engine,
   }
   semantic::script::ScriptDriver proc_driver(&arg_frame);
   absl::flat_hash_set<std::string> registered_args;
-  absl::Status registered =
-      RegisterScriptVariablesOnCatalog(bq_catalog, arg_frame, &registered_args);
+  absl::Status registered = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, proc_driver, &registered_args);
   if (!registered.ok()) return registered;
 
   std::vector<std::string> statements =
@@ -395,6 +366,22 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
   if (!options.ok()) return options.status();
   ::googlesql::TypeFactory* type_factory = bq_catalog->type_factory();
 
+#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
+  {
+    const std::string trimmed_sql =
+        std::string(absl::StripAsciiWhitespace(request.sql));
+    const std::string inner_script = StripBeginEnd(request.sql);
+    if (!ScriptUsesCreateConstantLowering(request.sql) &&
+        ScriptNeedsGoogleSqlExecutor(inner_script)) {
+      const absl::string_view script_for_googlesql =
+          absl::StartsWithIgnoreCase(trimmed_sql, "BEGIN") ? request.sql
+                                                           : inner_script;
+      return ExecuteScriptViaGoogleSql(
+          engine, request, catalog, nullptr, script_for_googlesql);
+    }
+  }
+#endif
+
   ::googlesql::ParseResumeLocation resume =
       ::googlesql::ParseResumeLocation::FromStringView(request.sql);
   semantic::script::ScriptDriver driver;
@@ -402,8 +389,29 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
   bool at_end = false;
   absl::flat_hash_set<std::string> registered_script_vars;
   while (!at_end) {
-    absl::Status registered = RegisterScriptVariablesOnCatalog(
-        bq_catalog, driver.variables(), &registered_script_vars);
+    const absl::string_view remaining =
+        resume.input().substr(resume.byte_position());
+    if (ScriptNeedsGoogleSqlExecutor(LeadingScriptStatement(remaining))) {
+#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
+      absl::string_view tail_for_executor = remaining;
+      const std::string trimmed_remaining =
+          std::string(absl::StripAsciiWhitespace(remaining));
+      if (!absl::StartsWithIgnoreCase(trimmed_remaining, "BEGIN")) {
+        tail_for_executor = StripBeginEnd(remaining);
+      }
+      return ExecuteScriptViaGoogleSql(
+          engine, request, catalog, &driver, tail_for_executor);
+#else
+      return semantic::MakeSemanticError(
+          semantic::SemanticErrorReason::kNotImplemented,
+          "script: structured control flow (IF/WHILE/LOOP/FOR/EXCEPTION) "
+          "requires "
+          "googlesql/scripting::ScriptExecutor, which is not linked in the "
+          "prebuilt artifact");
+#endif
+    }
+    absl::Status registered = RegisterScriptVariablesOnCatalogFromDriver(
+        bq_catalog, driver, &registered_script_vars);
     if (!registered.ok()) return registered;
     bool set_handled = false;
     absl::Status set_status = TryExecuteLeadingSetStatement(

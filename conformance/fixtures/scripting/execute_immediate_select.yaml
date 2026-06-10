@@ -1,0 +1,13 @@
+# execute_immediate_select: dynamic SQL string runs a scalar SELECT.
+name: scripting_execute_immediate_select
+description: |
+  EXECUTE IMMEDIATE evaluates a STRING literal and returns its query result.
+project_id: proj-scripting-execute-immediate
+query: |
+  BEGIN
+    EXECUTE IMMEDIATE 'SELECT 42 AS n';
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "42"}

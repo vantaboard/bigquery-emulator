@@ -1,0 +1,15 @@
+# set_scalar_round_trip: SET updates a script variable before final SELECT.
+name: scripting_set_scalar_round_trip
+description: |
+  DECLARE + SET scalar assignment round-trip via the engine script path.
+project_id: proj-scripting-set-scalar
+query: |
+  BEGIN
+    DECLARE n INT64 DEFAULT 1;
+    SET n = 3;
+    SELECT CAST(n AS STRING) AS n;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "3"}

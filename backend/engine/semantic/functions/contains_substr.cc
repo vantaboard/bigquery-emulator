@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/functions/string_funcs.h"
-
 #include <string>
 #include <vector>
 
@@ -7,6 +5,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/normalize_mode.pb.h"
 #include "googlesql/public/functions/string.h"
@@ -27,7 +26,8 @@ enum class SubstrTriState { kFalse, kTrue, kNullFromNullPath };
 SubstrTriState ContainsSubstrRecursive(const Value& v,
                                        absl::string_view normalized_needle);
 
-absl::StatusOr<std::string> NormalizeForContainsSubstr(absl::string_view input) {
+absl::StatusOr<std::string> NormalizeForContainsSubstr(
+    absl::string_view input) {
   std::string out;
   absl::Status error;
   if (!::googlesql::functions::Normalize(
@@ -92,8 +92,7 @@ SubstrTriState ContainsSubstrRecursive(const Value& v,
     return SearchComposite(v, normalized_needle, /*is_array=*/false);
   }
 
-  auto normalized_haystack =
-      NormalizeForContainsSubstr(ScalarToPlainText(v));
+  auto normalized_haystack = NormalizeForContainsSubstr(ScalarToPlainText(v));
   if (!normalized_haystack.ok()) {
     return SubstrTriState::kFalse;
   }
@@ -118,8 +117,7 @@ absl::StatusOr<Value> ContainsSubstr(const std::vector<Value>& args) {
     return Value::NullBool();
   }
 
-  auto normalized_needle =
-      NormalizeForContainsSubstr(args[1].string_value());
+  auto normalized_needle = NormalizeForContainsSubstr(args[1].string_value());
   if (!normalized_needle.ok()) {
     return normalized_needle.status();
   }

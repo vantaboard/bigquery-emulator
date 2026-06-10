@@ -20,8 +20,7 @@ const ::googlesql::Value* LookupOuterValue(
   auto it = outer_row.find(col.column_id());
   if (it != outer_row.end()) return &it->second;
   if (outer_by_name == nullptr) return nullptr;
-  const std::string qualified =
-      absl::StrCat(col.table_name(), ".", col.name());
+  const std::string qualified = absl::StrCat(col.table_name(), ".", col.name());
   auto nit = outer_by_name->find(qualified);
   if (nit != outer_by_name->end()) return &nit->second;
   nit = outer_by_name->find(std::string(col.name()));
@@ -31,9 +30,10 @@ const ::googlesql::Value* LookupOuterValue(
 
 }  // namespace
 
-OuterRowFrame MakeOuterRowFrame(const EvalContext& parent_ctx,
-                                const ColumnBindings& outer_row,
-                                const ::googlesql::ResolvedScan* scan_for_names) {
+OuterRowFrame MakeOuterRowFrame(
+    const EvalContext& parent_ctx,
+    const ColumnBindings& outer_row,
+    const ::googlesql::ResolvedScan* scan_for_names) {
   OuterRowFrame frame;
   if (parent_ctx.columns != nullptr) {
     frame.merged = *parent_ctx.columns;
@@ -63,7 +63,7 @@ OuterRowFrame MakeOuterRowFrame(const EvalContext& parent_ctx,
 }
 
 void BindCorrelatedColumnRefs(const ::googlesql::ResolvedScan* correlated_scan,
-                                OuterRowFrame& frame) {
+                              OuterRowFrame& frame) {
   if (correlated_scan == nullptr) return;
 
   struct CorrelatedBinder : public ::googlesql::ResolvedASTVisitor {
@@ -109,8 +109,8 @@ void BindCorrelatedColumnRefs(const ::googlesql::ResolvedScan* correlated_scan,
     }
   };
 
-  CorrelatedBinder binder{frame.by_name, frame.merged, frame.merged,
-                          frame.by_name};
+  CorrelatedBinder binder{
+      frame.by_name, frame.merged, frame.merged, frame.by_name};
   (void)correlated_scan->Accept(&binder);
 }
 

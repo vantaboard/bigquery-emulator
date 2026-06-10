@@ -18,53 +18,37 @@ type engineScriptFinalResult struct {
 }
 
 func registerEngineScriptChildJobs(
-	ctx context.Context,
 	deps Dependencies,
 	r *http.Request,
-	projectID, defaultDataset string,
+	projectID string,
 	parent *jobs.Job,
 	posted *jobs.Job,
 	cfg *jobs.JobConfiguration,
 	sql string,
-	useLegacy bool,
 	final engineScriptFinalResult,
-) (int, error) {
+) int {
 	childCount := 0
 	for _, raw := range splitScriptStatements(unwrapBeginEndBlock(sql)) {
 		st := classifyScriptStatement(raw)
 		switch st.kind {
-		case scriptStmtDeclare, scriptStmtCall:
+		case scriptStmtDeclare, scriptStmtCall, scriptStmtSet:
+			// DECLARE/CALL/SET already ran in the parent engine script round-trip.
 			continue
-		case scriptStmtSet, scriptStmtQuery:
+		case scriptStmtQuery:
 			childPosted := *posted
 			childPosted.JobReference.JobID = ""
 			childCfg := *cfg
 			qCopy := *cfg.Query
-			stmtSQL := st.sql
-			if st.kind == scriptStmtQuery {
-				stmtSQL = substituteScriptVars(stmtSQL, nil)
-			}
+			stmtSQL := substituteScriptVars(raw, nil)
 			qCopy.Query = stmtSQL
 			childCfg.Query = &qCopy
 			child := newPendingJob(deps, projectID, &childPosted, &childCfg)
 			stampChildJobParent(child, parent.JobReference.JobID)
 			childStart := time.Now().UTC()
-			var childSchema *enginepb.TableSchema
-			var childRows []bqtypes.Row
-			var childStmtType, childRoute string
-			var err error
-			if st.kind == scriptStmtQuery {
-				childSchema = final.schema
-				childRows = final.rows
-				childStmtType = final.statementType
-				childRoute = final.emulatorRoute
-			} else {
-				childSchema, childRows, childStmtType, childRoute, err = executeScriptStatement(
-					ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy)
-				if err != nil {
-					return 0, err
-				}
-			}
+			childSchema := final.schema
+			childRows := final.rows
+			childStmtType := final.statementType
+			childRoute := final.emulatorRoute
 			childEnd := time.Now().UTC()
 			finalizeDoneJob(deps, child, childStart, childEnd,
 				childSchema, nil, childRows, childStmtType, childRoute, nil, nil, r)
@@ -72,7 +56,7 @@ func registerEngineScriptChildJobs(
 			childCount++
 		}
 	}
-	return childCount, nil
+	return childCount
 }
 
 func runEngineScript(
@@ -92,17 +76,14 @@ func runEngineScript(
 	if err != nil {
 		return nil, err
 	}
-	childCount, err := registerEngineScriptChildJobs(
-		ctx, deps, r, projectID, defaultDataset, parent, posted, cfg, sql, useLegacy,
+	childCount := registerEngineScriptChildJobs(
+		deps, r, projectID, parent, posted, cfg, sql,
 		engineScriptFinalResult{
 			schema:        schema,
 			rows:          rows,
 			statementType: statementType,
 			emulatorRoute: emulatorRoute,
 		})
-	if err != nil {
-		return nil, err
-	}
 	return &scriptExecOutcome{
 		childCount:    childCount,
 		finalSchema:   schema,
