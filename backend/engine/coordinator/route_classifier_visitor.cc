@@ -224,8 +224,55 @@ absl::Status RouteClassifierVisitor::VisitResolvedCast(
   return ::googlesql::ResolvedASTVisitor::VisitResolvedCast(node);
 }
 
+bool RouteClassifierVisitor::MergeRequiresSemanticExecutor(
+    const ::googlesql::ResolvedMergeStmt* merge) {
+  if (merge == nullptr) return false;
+  int matched_clauses = 0;
+  int not_matched_target_clauses = 0;
+  int not_matched_source_clauses = 0;
+  int update_actions = 0;
+  int delete_actions = 0;
+  int insert_actions = 0;
+  for (int i = 0; i < merge->when_clause_list_size(); ++i) {
+    const ::googlesql::ResolvedMergeWhen* when = merge->when_clause_list(i);
+    if (when == nullptr) continue;
+    switch (when->match_type()) {
+      case ::googlesql::ResolvedMergeWhen::MATCHED:
+        ++matched_clauses;
+        break;
+      case ::googlesql::ResolvedMergeWhen::NOT_MATCHED_BY_TARGET:
+        ++not_matched_target_clauses;
+        break;
+      case ::googlesql::ResolvedMergeWhen::NOT_MATCHED_BY_SOURCE:
+        ++not_matched_source_clauses;
+        break;
+    }
+    switch (when->action_type()) {
+      case ::googlesql::ResolvedMergeWhen::UPDATE:
+        ++update_actions;
+        break;
+      case ::googlesql::ResolvedMergeWhen::DELETE:
+        ++delete_actions;
+        break;
+      case ::googlesql::ResolvedMergeWhen::INSERT:
+        ++insert_actions;
+        break;
+    }
+  }
+  if (not_matched_source_clauses > 0) return true;
+  if (matched_clauses > 1 || not_matched_target_clauses > 1) return true;
+  if (update_actions > 1 || delete_actions > 1 || insert_actions > 1) {
+    return true;
+  }
+  return false;
+}
+
 absl::Status RouteClassifierVisitor::VisitResolvedInsertStmt(
     const ::googlesql::ResolvedInsertStmt* node) {
+  if (node != nullptr && node->returning() != nullptr) {
+    MaybePromote(Disposition::kSemanticExecutor,
+                 "ResolvedInsertStmt(returning)");
+  }
   bool duckdb_insert_select = false;
   if (node != nullptr && node->query() != nullptr) {
     RouteClassifierVisitor inner;
@@ -259,6 +306,67 @@ absl::Status RouteClassifierVisitor::VisitResolvedInsertStmt(
     }
   }
   return absl::OkStatus();
+}
+
+absl::Status RouteClassifierVisitor::VisitResolvedUpdateStmt(
+    const ::googlesql::ResolvedUpdateStmt* node) {
+  if (node != nullptr) {
+    if (node->returning() != nullptr) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedUpdateStmt(returning)");
+    }
+    if (node->from_scan() != nullptr) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedUpdateStmt(from_scan)");
+    }
+    CheckNodeClass(node);
+    if (node->table_scan() != nullptr) {
+      absl::Status s = node->table_scan()->Accept(this);
+      if (!s.ok()) return s;
+    }
+    if (node->from_scan() != nullptr) {
+      absl::Status s = node->from_scan()->Accept(this);
+      if (!s.ok()) return s;
+    }
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedUpdateStmt(node);
+}
+
+absl::Status RouteClassifierVisitor::VisitResolvedDeleteStmt(
+    const ::googlesql::ResolvedDeleteStmt* node) {
+  if (node != nullptr) {
+    if (node->returning() != nullptr) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedDeleteStmt(returning)");
+    }
+    CheckNodeClass(node);
+    if (node->table_scan() != nullptr) {
+      absl::Status s = node->table_scan()->Accept(this);
+      if (!s.ok()) return s;
+    }
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedDeleteStmt(node);
+}
+
+absl::Status RouteClassifierVisitor::VisitResolvedMergeStmt(
+    const ::googlesql::ResolvedMergeStmt* node) {
+  if (node != nullptr) {
+    if (MergeRequiresSemanticExecutor(node)) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedMergeStmt(hard_matrix)");
+    } else {
+      CheckNodeClass(node);
+    }
+    if (node->table_scan() != nullptr) {
+      absl::Status s = node->table_scan()->Accept(this);
+      if (!s.ok()) return s;
+    }
+    if (node->from_scan() != nullptr) {
+      absl::Status s = node->from_scan()->Accept(this);
+      if (!s.ok()) return s;
+    }
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedMergeStmt(node);
 }
 
 void RouteClassifierVisitor::CheckNodeClass(

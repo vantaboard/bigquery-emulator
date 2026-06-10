@@ -60,7 +60,7 @@ class DuckDbExecutor : public coordinator::Executor {
   // Execute a `RESOLVED_MERGE_STMT`. INSERT / UPDATE / DELETE land
   // here as a future plan; today they return UNIMPLEMENTED so the
   // gateway surfaces BigQuery's `notImplemented` reason.
-  [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] absl::StatusOr<DmlResult> ExecuteDml(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;

@@ -1,0 +1,38 @@
+# merge_not_matched_by_source: WHEN NOT MATCHED BY SOURCE via semantic_executor.
+name: merge_not_matched_by_source
+description: |
+  MERGE with WHEN NOT MATCHED BY SOURCE THEN DELETE removes target rows
+  that have no join partner in the source.
+project_id: proj-dml-merge-nmbs
+dataset_id: ds_dml_merge_nmbs
+setup:
+  - dataset: ds_dml_merge_nmbs
+  - sql: |
+      CREATE TABLE ds_dml_merge_nmbs.target (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      CREATE TABLE ds_dml_merge_nmbs.source (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_merge_nmbs.target (id, name) VALUES
+        (1, 'keep'),
+        (2, 'orphan')
+  - sql: |
+      INSERT INTO ds_dml_merge_nmbs.source (id, name) VALUES
+        (1, 'src')
+  - sql: |
+      MERGE ds_dml_merge_nmbs.target AS T
+      USING ds_dml_merge_nmbs.source AS S
+      ON T.id = S.id
+      WHEN NOT MATCHED BY SOURCE THEN DELETE
+query: |
+  SELECT id, name FROM ds_dml_merge_nmbs.target ORDER BY id
+expected:
+  # Verification query is SELECT; MERGE route is pinned in routing-matrix.
+  route: duckdb_native
+  rows:
+    - {id: "1", name: "keep"}

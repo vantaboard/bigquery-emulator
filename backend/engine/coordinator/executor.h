@@ -77,7 +77,7 @@ class Executor {
       ::googlesql::Catalog* catalog) = 0;
 
   // Execute a DML statement (INSERT / UPDATE / DELETE / MERGE).
-  [[nodiscard]] virtual absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] virtual absl::StatusOr<DmlResult> ExecuteDml(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) = 0;

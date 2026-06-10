@@ -157,8 +157,8 @@ absl::Status ExecuteOneScriptStatement(
     case ::googlesql::RESOLVED_UPDATE_STMT:
     case ::googlesql::RESOLVED_DELETE_STMT:
     case ::googlesql::RESOLVED_MERGE_STMT: {
-      absl::StatusOr<DmlStats> stats = engine.ExecuteDml(request, catalog);
-      if (!stats.ok()) return stats.status();
+      absl::StatusOr<DmlResult> result = engine.ExecuteDml(request, catalog);
+      if (!result.ok()) return result.status();
       return absl::OkStatus();
     }
     case ::googlesql::RESOLVED_EXECUTE_IMMEDIATE_STMT:

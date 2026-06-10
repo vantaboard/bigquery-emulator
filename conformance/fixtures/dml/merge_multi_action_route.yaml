@@ -1,0 +1,27 @@
+# merge_multi_action_route: pins semantic_executor for multi-action MERGE.
+name: merge_multi_action_route
+description: |
+  Multiple WHEN MATCHED branches promote MERGE to semantic_executor.
+project_id: proj-dml-merge-multi-route
+dataset_id: ds_dml_merge_multi_route
+setup:
+  - dataset: ds_dml_merge_multi_route
+  - sql: |
+      CREATE TABLE ds_dml_merge_multi_route.target (
+        id INT64,
+        status STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_merge_multi_route.target (id, status) VALUES
+        (1, 'stale')
+query: |
+  MERGE ds_dml_merge_multi_route.target AS T
+  USING (SELECT 1 AS id, 'updated' AS status) AS S
+  ON T.id = S.id
+  WHEN MATCHED AND T.status = 'stale' THEN
+    UPDATE SET status = S.status
+  WHEN MATCHED THEN
+    DELETE
+expected:
+  route: semantic_executor
+  rows: []

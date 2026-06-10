@@ -1,0 +1,33 @@
+# merge_multi_action: ordered WHEN MATCHED clauses via semantic_executor.
+name: merge_multi_action
+description: |
+  Two WHEN MATCHED branches run in declaration order; only the first
+  matching branch fires per target row (UPDATE before DELETE).
+project_id: proj-dml-merge-multi
+dataset_id: ds_dml_merge_multi
+setup:
+  - dataset: ds_dml_merge_multi
+  - sql: |
+      CREATE TABLE ds_dml_merge_multi.target (
+        id INT64,
+        status STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_merge_multi.target (id, status) VALUES
+        (1, 'stale'),
+        (2, 'fresh')
+  - sql: |
+      MERGE ds_dml_merge_multi.target AS T
+      USING (SELECT 1 AS id, 'updated' AS status UNION ALL SELECT 2 AS id, 'gone' AS status) AS S
+      ON T.id = S.id
+      WHEN MATCHED AND T.status = 'stale' THEN
+        UPDATE SET status = S.status
+      WHEN MATCHED THEN
+        DELETE
+query: |
+  SELECT id, status FROM ds_dml_merge_multi.target ORDER BY id
+expected:
+  # Verification query is SELECT; MERGE route is pinned in routing-matrix.
+  route: duckdb_native
+  rows:
+    - {id: "1", status: "updated"}

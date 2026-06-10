@@ -157,7 +157,7 @@ TEST_F(LocalCoordinatorEngineTest,
        ExecuteDmlMergeMatchedAndNotMatchedUpdatesStorage) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto stats = engine_->ExecuteDml(
+  auto result = engine_->ExecuteDml(
       MakeRequest("MERGE INTO ds.people T USING ("
                   "  SELECT 2 AS id, 'linus-updated' AS name "
                   "  UNION ALL "
@@ -167,10 +167,10 @@ TEST_F(LocalCoordinatorEngineTest,
                   "WHEN NOT MATCHED THEN INSERT (id, name) "
                   "VALUES (S.id, S.name)"),
       bundle.catalog.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->inserted_row_count, 1);
-  EXPECT_EQ(stats->updated_row_count, 1);
-  EXPECT_EQ(stats->deleted_row_count, 0);
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.inserted_row_count, 1);
+  EXPECT_EQ(result->stats.updated_row_count, 1);
+  EXPECT_EQ(result->stats.deleted_row_count, 0);
 
   auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
   ASSERT_TRUE(scan.ok()) << scan.status();

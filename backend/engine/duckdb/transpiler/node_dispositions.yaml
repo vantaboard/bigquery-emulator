@@ -75,7 +75,7 @@ ResolvedDropFunctionStmt: control_op
 ResolvedInsertStmt: semantic_executor
 ResolvedUpdateStmt: semantic_executor
 ResolvedDeleteStmt: semantic_executor
-ResolvedMergeStmt: duckdb_rewrite
+ResolvedMergeStmt: duckdb_rewrite # hard matrix (NOT MATCHED BY SOURCE, multi-action) promotes to semantic_executor at classify time
 ResolvedCallStmt: semantic_executor
 ResolvedMultiStmt: semantic_executor
 ResolvedCreateConstantStmt: semantic_executor
@@ -191,4 +191,4 @@ ResolvedWindowFrameExpr: duckdb_native
 ResolvedAnalyticFunctionGroup: duckdb_native
 ResolvedSetOperationItem: duckdb_native
 ResolvedFunctionArgument: duckdb_native
-ResolvedReturningClause: semantic_executor status=planned
+ResolvedReturningClause: semantic_executor

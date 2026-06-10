@@ -15,6 +15,7 @@
 #include "backend/engine/semantic/dml/dml_executor_internal.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
@@ -32,9 +33,9 @@ namespace dml {
 absl::StatusOr<DmlStats> ExecuteDelete(
     const ::googlesql::ResolvedDeleteStmt& del,
     storage::Storage& storage,
-    EvalContext& ctx) {
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      del.returning(),
       /*has_array_offset_column=*/del.array_offset_column() != nullptr,
       /*generated_column_count=*/0,
       "DELETE");
@@ -60,6 +61,8 @@ absl::StatusOr<DmlStats> ExecuteDelete(
   // case maps to TRUE-everywhere in the analyzer).
   std::vector<storage::Row> kept;
   kept.reserve(rows.size());
+  std::vector<ColumnBindings> returning_contexts;
+  std::vector<std::string> returning_actions;
   int64_t deleted = 0;
   for (const storage::Row& row : rows) {
     auto bind = BindRow(row, *del.table_scan(), *by_id, schema);
@@ -81,30 +84,38 @@ absl::StatusOr<DmlStats> ExecuteDelete(
                          pred_val.bool_value();
     if (matched) {
       ++deleted;
+      if (del.returning() != nullptr && returning_out != nullptr) {
+        returning_contexts.push_back(local);
+        returning_actions.push_back("DELETE");
+      }
     } else {
       kept.push_back(row);
     }
   }
   ctx.columns = nullptr;
 
-  if (deleted > 0) {
-    DmlStats stats;
-    stats.deleted_row_count = deleted;
-    absl::Status assert_ok = CheckAssertRowsModified(
-        del.assert_rows_modified(), DmlStatementKind::kDelete, stats, ctx);
-    if (!assert_ok.ok()) return assert_ok;
-    absl::Status overwrote =
-        // cpp-lint:allow(status-discarded) -- captured into overwrote
-        storage.OverwriteRows(target->storage_table_id(), kept);
-    if (!overwrote.ok()) return overwrote;
-    return stats;
-  }
-
   DmlStats stats;
   stats.deleted_row_count = deleted;
   absl::Status assert_ok = CheckAssertRowsModified(
       del.assert_rows_modified(), DmlStatementKind::kDelete, stats, ctx);
   if (!assert_ok.ok()) return assert_ok;
+
+  if (deleted > 0) {
+    absl::Status overwrote =
+        // cpp-lint:allow(status-discarded) -- captured into overwrote
+        storage.OverwriteRows(target->storage_table_id(), kept);
+    if (!overwrote.ok()) return overwrote;
+  }
+
+  if (del.returning() != nullptr && returning_out != nullptr &&
+      !returning_contexts.empty()) {
+    auto returning_or = BuildReturningRowSource(*del.returning(),
+                                                std::move(returning_contexts),
+                                                std::move(returning_actions),
+                                                ctx);
+    if (!returning_or.ok()) return returning_or.status();
+    *returning_out = *std::move(returning_or);
+  }
   return stats;
 }
 
@@ -117,9 +128,9 @@ absl::StatusOr<DmlStats> ExecuteDelete(
 absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedUpdateStmt& upd,
     storage::Storage& storage,
-    EvalContext& ctx) {
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      upd.returning(),
       /*has_array_offset_column=*/upd.array_offset_column() != nullptr,
       upd.generated_column_expr_list_size(),
       "UPDATE");
@@ -220,6 +231,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
 
   std::vector<storage::Row> rewritten;
   rewritten.reserve(rows.size());
+  std::vector<ColumnBindings> returning_contexts;
+  std::vector<std::string> returning_actions;
   int64_t updated = 0;
   for (const storage::Row& row : rows) {
     auto bind = BindRow(row, *upd.table_scan(), *by_id, schema);
@@ -247,6 +260,12 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       absl::Status applied = apply_sets(mutated, target_bind);
       if (!applied.ok()) return applied;
       ++updated;
+      if (upd.returning() != nullptr && returning_out != nullptr) {
+        auto post_bind = BindRow(mutated, *upd.table_scan(), *by_id, schema);
+        if (!post_bind.ok()) return post_bind.status();
+        returning_contexts.push_back(*std::move(post_bind));
+        returning_actions.push_back("UPDATE");
+      }
       rewritten.push_back(std::move(mutated));
       continue;
     }
@@ -288,6 +307,12 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     absl::Status applied = apply_sets(mutated, matched_from);
     if (!applied.ok()) return applied;
     ++updated;
+    if (upd.returning() != nullptr && returning_out != nullptr) {
+      auto post_bind = BindRow(mutated, *upd.table_scan(), *by_id, schema);
+      if (!post_bind.ok()) return post_bind.status();
+      returning_contexts.push_back(*std::move(post_bind));
+      returning_actions.push_back("UPDATE");
+    }
     rewritten.push_back(std::move(mutated));
   }
   ctx.columns = nullptr;
@@ -304,13 +329,22 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
         storage.OverwriteRows(target->storage_table_id(), rewritten);
     if (!overwrote.ok()) return overwrote;
   }
+  if (upd.returning() != nullptr && returning_out != nullptr &&
+      !returning_contexts.empty()) {
+    auto returning_or = BuildReturningRowSource(*upd.returning(),
+                                                std::move(returning_contexts),
+                                                std::move(returning_actions),
+                                                ctx);
+    if (!returning_or.ok()) return returning_or.status();
+    *returning_out = *std::move(returning_or);
+  }
   return stats;
 }
 
-absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
-                                    const ::googlesql::ResolvedStatement& stmt,
-                                    ::googlesql::Catalog* catalog,
-                                    storage::Storage* storage) {
+absl::StatusOr<DmlResult> ExecuteDml(const QueryRequest& request,
+                                     const ::googlesql::ResolvedStatement& stmt,
+                                     ::googlesql::Catalog* catalog,
+                                     storage::Storage* storage) {
   (void)catalog;  // analysis is owned by the coordinator above us.
 
   // Storage is only required for the kinds the executor actually
@@ -338,27 +372,36 @@ absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
   ctx.project_id = request.project_id;
   ctx.parameters = &bindings;
 
+  DmlResult out;
   switch (kind) {
-    case ::googlesql::RESOLVED_INSERT_STMT:
-      return ExecuteInsert(
-          *stmt.GetAs<::googlesql::ResolvedInsertStmt>(), *storage, ctx);
-    case ::googlesql::RESOLVED_DELETE_STMT:
-      return ExecuteDelete(
-          *stmt.GetAs<::googlesql::ResolvedDeleteStmt>(), *storage, ctx);
-    case ::googlesql::RESOLVED_UPDATE_STMT:
-      return ExecuteUpdate(
-          *stmt.GetAs<::googlesql::ResolvedUpdateStmt>(), *storage, ctx);
-    case ::googlesql::RESOLVED_MERGE_STMT:
-      // Simple MERGE branches stay on the DuckDB fast path
-      // (`duckdb_rewrite`); the harder matrix
-      // (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences)
-      // is owned by the plan and deferred from this
-      // subagent.
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic/dml: MERGE harder branches (WHEN NOT MATCHED BY "
-          "SOURCE / multi-action) are not yet supported; see "
-          "docs/ENGINE_POLICY.md");
+    case ::googlesql::RESOLVED_INSERT_STMT: {
+      const auto* insert = stmt.GetAs<::googlesql::ResolvedInsertStmt>();
+      auto stats = ExecuteInsert(*insert, *storage, ctx, &out.returning_rows);
+      if (!stats.ok()) return stats.status();
+      out.stats = *std::move(stats);
+      return out;
+    }
+    case ::googlesql::RESOLVED_DELETE_STMT: {
+      const auto* del = stmt.GetAs<::googlesql::ResolvedDeleteStmt>();
+      auto stats = ExecuteDelete(*del, *storage, ctx, &out.returning_rows);
+      if (!stats.ok()) return stats.status();
+      out.stats = *std::move(stats);
+      return out;
+    }
+    case ::googlesql::RESOLVED_UPDATE_STMT: {
+      const auto* upd = stmt.GetAs<::googlesql::ResolvedUpdateStmt>();
+      auto stats = ExecuteUpdate(*upd, *storage, ctx, &out.returning_rows);
+      if (!stats.ok()) return stats.status();
+      out.stats = *std::move(stats);
+      return out;
+    }
+    case ::googlesql::RESOLVED_MERGE_STMT: {
+      auto stats = ExecuteMerge(
+          *stmt.GetAs<::googlesql::ResolvedMergeStmt>(), *storage, ctx);
+      if (!stats.ok()) return stats.status();
+      out.stats = *std::move(stats);
+      return out;
+    }
     case ::googlesql::RESOLVED_TRUNCATE_STMT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

@@ -15,6 +15,7 @@
 #include "backend/engine/semantic/dml/dml_executor_internal.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
@@ -32,7 +33,8 @@ namespace dml {
 absl::StatusOr<DmlStats> ExecuteInsert(
     const ::googlesql::ResolvedInsertStmt& insert,
     storage::Storage& storage,
-    EvalContext& ctx) {
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out) {
   if (insert.insert_mode() != ::googlesql::ResolvedInsertStmt::OR_ERROR) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -44,17 +46,21 @@ absl::StatusOr<DmlStats> ExecuteInsert(
         SemanticErrorReason::kNotImplemented,
         "semantic/dml: INSERT ... ON CONFLICT is not yet supported");
   }
-  absl::Status guard =
-      RejectUnsupportedDmlFeatures(insert.returning(),
-                                   /*has_array_offset_column=*/false,
-                                   insert.generated_column_expr_list_size(),
-                                   "INSERT");
+  absl::Status guard = RejectUnsupportedDmlFeatures(
+      /*has_array_offset_column=*/false,
+      insert.generated_column_expr_list_size(),
+      "INSERT");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(insert, "INSERT");
   if (!target_or.ok()) return target_or.status();
   const catalog::StorageTable* target = *target_or;
   const schema::TableSchema& schema = target->bq_schema();
+  absl::StatusOr<absl::flat_hash_map<int, int>> by_id;
+  if (insert.returning() != nullptr && insert.table_scan() != nullptr) {
+    by_id = BuildColumnIndexByColumnId(*insert.table_scan(), schema);
+    if (!by_id.ok()) return by_id.status();
+  }
 
   // Map each `insert_column_list[i]` onto the matching index in
   // the storage schema. The analyzer guarantees `insert_column_list`
@@ -127,6 +133,23 @@ absl::StatusOr<DmlStats> ExecuteInsert(
         // cpp-lint:allow(status-discarded) -- captured into appended
         storage.AppendRows(target->storage_table_id(), rows);
     if (!appended.ok()) return appended;
+    if (insert.returning() != nullptr && returning_out != nullptr &&
+        insert.table_scan() != nullptr && !rows.empty()) {
+      std::vector<ColumnBindings> contexts;
+      std::vector<std::string> actions;
+      contexts.reserve(rows.size());
+      actions.reserve(rows.size());
+      for (const storage::Row& row : rows) {
+        auto bind = BindRow(row, *insert.table_scan(), *by_id, schema);
+        if (!bind.ok()) return bind.status();
+        contexts.push_back(*std::move(bind));
+        actions.push_back("INSERT");
+      }
+      auto ret_or = BuildReturningRowSource(
+          *insert.returning(), std::move(contexts), std::move(actions), ctx);
+      if (!ret_or.ok()) return ret_or.status();
+      *returning_out = *std::move(ret_or);
+    }
     return stats;
   }
 
@@ -158,6 +181,23 @@ absl::StatusOr<DmlStats> ExecuteInsert(
       // cpp-lint:allow(status-discarded) -- captured into appended
       storage.AppendRows(target->storage_table_id(), rows);
   if (!appended.ok()) return appended;
+  if (insert.returning() != nullptr && returning_out != nullptr &&
+      insert.table_scan() != nullptr && !rows.empty()) {
+    std::vector<ColumnBindings> contexts;
+    std::vector<std::string> actions;
+    contexts.reserve(rows.size());
+    actions.reserve(rows.size());
+    for (const storage::Row& row : rows) {
+      auto bind = BindRow(row, *insert.table_scan(), *by_id, schema);
+      if (!bind.ok()) return bind.status();
+      contexts.push_back(*std::move(bind));
+      actions.push_back("INSERT");
+    }
+    auto ret_or = BuildReturningRowSource(
+        *insert.returning(), std::move(contexts), std::move(actions), ctx);
+    if (!ret_or.ok()) return ret_or.status();
+    *returning_out = *std::move(ret_or);
+  }
   return stats;
 }
 

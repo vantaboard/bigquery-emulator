@@ -1,25 +1,26 @@
 ---
 name: Parity 06 — MERGE matrix + RETURNING
 overview: Land the harder MERGE branches (WHEN NOT MATCHED BY SOURCE, multi-action sequences) on the semantic executor as ENGINE_POLICY prescribes, plus DML RETURNING (ResolvedReturningClause), keeping numDmlAffectedRows and per-branch action ordering BigQuery-exact.
-depends_on: [parity-04-insert-select-dml]
-est_effort: ~1 week
-isProject: true
 todos:
   - id: merge-classifier
     content: "Route classification: detect WHEN NOT MATCHED BY SOURCE and multi-action MERGE shapes and promote them to semantic_executor (today they fall into the duckdb_rewrite path's unsupported edge); simple branches stay duckdb_rewrite."
-    status: pending
+    status: completed
   - id: merge-semantic
     content: "Semantic MERGE evaluator: full match matrix (MATCHED / NOT MATCHED BY TARGET / NOT MATCHED BY SOURCE), per-branch search conditions, action sequence ordering, BigQuery's multiple-match error; commit through the DML executor's storage primitives."
-    status: pending
+    status: completed
   - id: merge-stats
-    content: "numDmlAffectedRows for semantic MERGE = inserted + updated + deleted per the BigQuery REST contract (legacy aggregate)."
-    status: pending
+    content: numDmlAffectedRows for semantic MERGE = inserted + updated + deleted per the BigQuery REST contract (legacy aggregate).
+    status: completed
   - id: returning
     content: "ResolvedReturningClause (THEN RETURN on INSERT/UPDATE/DELETE/MERGE): evaluate the returning projection over affected rows; surface rows through the normal RowSource so the gateway serializes them like a query result."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Fixtures under conformance/fixtures/dml/ (merge_not_matched_by_source, merge_multi_action, dml_returning) with seed/verify round-trips; flip SHAPE_TRACKER ResolvedMergeStmt + ResolvedReturningClause rows; update ROADMAP MERGE hazard bullet.
+    status: completed
+  - id: merge-returning-followup
+    content: "MERGE THEN RETURN evaluator (classifier promotes; ExecuteMerge surfaces UNIMPLEMENTED until landed)."
     status: pending
+isProject: true
 ---
 
 # Parity 06 — MERGE matrix + RETURNING

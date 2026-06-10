@@ -51,8 +51,16 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedCast* node) override;
   absl::Status VisitResolvedInsertStmt(
       const ::googlesql::ResolvedInsertStmt* node) override;
+  absl::Status VisitResolvedUpdateStmt(
+      const ::googlesql::ResolvedUpdateStmt* node) override;
+  absl::Status VisitResolvedDeleteStmt(
+      const ::googlesql::ResolvedDeleteStmt* node) override;
+  absl::Status VisitResolvedMergeStmt(
+      const ::googlesql::ResolvedMergeStmt* node) override;
 
   static bool IsScalarOnlySelect(const ::googlesql::ResolvedQueryStmt* node);
+  static bool MergeRequiresSemanticExecutor(
+      const ::googlesql::ResolvedMergeStmt* merge);
 
  private:
   void CheckNodeClass(const ::googlesql::ResolvedNode* node);

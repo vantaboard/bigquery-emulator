@@ -80,8 +80,8 @@ class LocalCoordinatorEngine : public Engine {
       const ::googlesql::SystemVariableValuesMap* script_system_variables =
           nullptr);
 
-  absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
-                                      ::googlesql::Catalog* catalog) override;
+  absl::StatusOr<DmlResult> ExecuteDml(const QueryRequest& request,
+                                       ::googlesql::Catalog* catalog) override;
 
   absl::Status ExecuteDdl(const QueryRequest& request,
                           ::googlesql::Catalog* catalog) override;

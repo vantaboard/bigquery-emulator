@@ -1,0 +1,24 @@
+# dml_returning: DELETE ... THEN RETURN via semantic_executor.
+name: dml_returning
+description: |
+  DML with THEN RETURN surfaces deleted rows on the query response
+  while still applying the mutation.
+project_id: proj-dml-returning
+dataset_id: ds_dml_returning
+setup:
+  - dataset: ds_dml_returning
+  - sql: |
+      CREATE TABLE ds_dml_returning.people (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_dml_returning.people (id, name) VALUES
+        (1, 'ada'),
+        (2, 'linus')
+query: |
+  DELETE FROM ds_dml_returning.people WHERE id = 1 THEN RETURN id, name
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", name: "ada"}

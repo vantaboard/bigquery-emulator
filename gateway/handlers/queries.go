@@ -479,13 +479,13 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 			dmlStats.GetInsertedRowCount()+
 				dmlStats.GetUpdatedRowCount()+
 				dmlStats.GetDeletedRowCount(), 10)
-		// DML statements have no result schema or rows; clear the
-		// SELECT-shape fields so the response stays consistent with
-		// BigQuery's wire encoding (TotalRows = "0", no rows array,
-		// no schema).
-		out.Schema = nil
-		out.Rows = nil
-		out.TotalRows = "0"
+		// Plain DML has no result rows. `THEN RETURN` keeps schema +
+		// rows alongside the stats envelope.
+		if len(rows) == 0 {
+			out.Schema = nil
+			out.Rows = nil
+			out.TotalRows = "0"
+		}
 	}
 	return out
 }

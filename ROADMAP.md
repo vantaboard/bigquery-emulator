@@ -479,19 +479,20 @@ public-facing policy.
 
 ## DML / DDL
 
-- 🟡 DML routed by shape. `MERGE` lowers through the DuckDB fast
-  path today; `INSERT VALUES`, `INSERT ... SELECT`, scalar- and
-  deep-STRUCT `SET` `UPDATE`, `UPDATE ... FROM`, `DELETE`, and
-  `ASSERT_ROWS_MODIFIED` route through the storage-aware local DML
-  executor (`backend/engine/semantic/dml/`) and populate
-  `numDmlAffectedRows` correctly. The harder MERGE matrix
-  (`WHEN NOT MATCHED BY SOURCE`, multi-action sequences),
-  `RETURNING`, `DELETE`/`UPDATE` with `array_offset_column`, and
-  `ResolvedPipeInsertScan` continue to surface
-  `UNIMPLEMENTED` and stay tracked under
-  `docs/ENGINE_POLICY.md`. Conformance fixtures may seed
-  rows via either `tabledata.insertAll` or `INSERT VALUES` `sql:`
-  steps. See
+- 🟡 DML routed by shape. Simple `MERGE` (`WHEN MATCHED` + single
+  `WHEN NOT MATCHED BY TARGET`) lowers through the DuckDB fast path;
+  the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`,
+  multi-action sequences) routes through the storage-aware local DML
+  executor (`backend/engine/semantic/dml/dml_merge.cc`). `INSERT
+  VALUES`, `INSERT ... SELECT`, scalar- and deep-STRUCT `SET`
+  `UPDATE`, `UPDATE ... FROM`, `DELETE`, `THEN RETURN` on
+  INSERT/UPDATE/DELETE, and `ASSERT_ROWS_MODIFIED` also route through
+  the semantic DML executor and populate `numDmlAffectedRows`
+  correctly. `DELETE`/`UPDATE` with `array_offset_column` and
+  `ResolvedPipeInsertScan` continue to surface `UNIMPLEMENTED` and
+  stay tracked under `docs/ENGINE_POLICY.md`. Conformance fixtures
+  may seed rows via either `tabledata.insertAll` or `INSERT VALUES`
+  `sql:` steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
@@ -542,13 +543,13 @@ public-facing policy.
   register in `tvf_registry` and evaluate via `eval_tvf.cc`
   (`conformance/fixtures/udf/tvf_simple.yaml`). Durable DuckDB-backed
   persistence remains open.
-- 🟡 Job stats: `numDmlAffectedRows` populated for the DML shapes
-  the local DML executor lands (INSERT, scalar-`SET` UPDATE,
-  DELETE) plus the existing DuckDB MERGE path. Deferred shapes
-  (deep-STRUCT UPDATE, MERGE harder branches, RETURNING,
-  PipeInsertScan) keep the field absent until they land; the row
-  count is otherwise the legacy aggregate
+- ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
+  local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
+  matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
+  gateway folds `dmlStats` into the legacy aggregate
   (inserted + updated + deleted) per the BigQuery REST contract.
+  `ResolvedPipeInsertScan` and other deferred shapes keep the field
+  absent until they land.
 
 ## Storage Read API (gRPC)
 

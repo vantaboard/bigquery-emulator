@@ -196,7 +196,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
                                   /*script_variables=*/nullptr);
 }
 
-absl::StatusOr<DmlStats> SemanticExecutor::ExecuteDml(
+absl::StatusOr<DmlResult> SemanticExecutor::ExecuteDml(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {

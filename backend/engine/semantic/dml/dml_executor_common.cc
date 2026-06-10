@@ -344,19 +344,9 @@ ColumnBindings MergeColumnBindings(const ColumnBindings& target,
 // (BigQuery doesn't expose CREATE TABLE generated columns
 // today). `array_offset_column` on UPDATE/DELETE without a
 // landed unnest-DML evaluator still surfaces `kNotImplemented`.
-absl::Status RejectUnsupportedDmlFeatures(
-    const ::googlesql::ResolvedReturningClause* returning,
-    bool has_array_offset_column,
-    int generated_column_count,
-    absl::string_view kind) {
-  if (returning != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat("semantic/dml: ",
-                     kind,
-                     " RETURNING clause is not yet supported; see "
-                     "docs/ENGINE_POLICY.md"));
-  }
+absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
+                                          int generated_column_count,
+                                          absl::string_view kind) {
   if (has_array_offset_column) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,

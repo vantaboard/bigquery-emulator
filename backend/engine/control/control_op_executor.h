@@ -77,7 +77,7 @@ class ControlOpExecutor : public coordinator::Executor {
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;
 
-  [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] absl::StatusOr<DmlResult> ExecuteDml(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;

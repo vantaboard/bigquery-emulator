@@ -13,8 +13,10 @@
 //     `UPDATE ... FROM ...`.
 //   * `ASSERT_ROWS_MODIFIED` on INSERT / UPDATE / DELETE.
 //
-// Still deferred: MERGE harder branches, RETURNING, DML with
-// `array_offset_column`, `ResolvedPipeInsertScan`.
+// Still deferred: DML with `array_offset_column`,
+// `ResolvedPipeInsertScan`. MERGE harder matrix, `THEN RETURN`, and
+// `ASSERT_ROWS_MODIFIED` on MERGE land here when routed by the
+// classifier.
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"
@@ -38,10 +40,10 @@ namespace dml {
 // `storage` is a programming error (FAILED_PRECONDITION) -- the
 // coordinator only routes here for resolved DML statements that
 // reference at least one storage-backed table.
-absl::StatusOr<DmlStats> ExecuteDml(const QueryRequest& request,
-                                    const ::googlesql::ResolvedStatement& stmt,
-                                    ::googlesql::Catalog* catalog,
-                                    storage::Storage* storage);
+absl::StatusOr<DmlResult> ExecuteDml(const QueryRequest& request,
+                                     const ::googlesql::ResolvedStatement& stmt,
+                                     ::googlesql::Catalog* catalog,
+                                     storage::Storage* storage);
 
 }  // namespace dml
 }  // namespace semantic

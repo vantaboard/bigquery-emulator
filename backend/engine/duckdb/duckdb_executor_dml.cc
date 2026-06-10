@@ -216,7 +216,7 @@ DmlStats DiffByPrimaryKey(absl::Span<const storage::Row> before,
 }
 }  // namespace internal
 
-absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
+absl::StatusOr<DmlResult> DuckDbExecutor::ExecuteDml(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {
@@ -233,7 +233,12 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
           "duckdb engine: INSERT VALUES routes to semantic_executor; see "
           "docs/ENGINE_POLICY.md");
     }
-    return internal::RunInsertSelect(request, storage_, *insert_stmt);
+    absl::StatusOr<DmlStats> stats =
+        internal::RunInsertSelect(request, storage_, *insert_stmt);
+    if (!stats.ok()) return stats.status();
+    DmlResult out;
+    out.stats = *std::move(stats);
+    return out;
   }
 
   if (stmt.node_kind() != ::googlesql::RESOLVED_MERGE_STMT) {
@@ -403,8 +408,12 @@ absl::StatusOr<DmlStats> DuckDbExecutor::ExecuteDml(
       storage_->OverwriteRows(target_id, absl::MakeConstSpan(*after_rows));
   if (!applied.ok()) return applied;
 
-  return internal::DiffByPrimaryKey(absl::MakeConstSpan(before_rows),
-                                    absl::MakeConstSpan(*after_rows));
+  absl::StatusOr<DmlStats> stats = internal::DiffByPrimaryKey(
+      absl::MakeConstSpan(before_rows), absl::MakeConstSpan(*after_rows));
+  if (!stats.ok()) return stats.status();
+  DmlResult out;
+  out.stats = *std::move(stats);
+  return out;
 }
 
 }  // namespace duckdb

@@ -116,19 +116,43 @@ namespace internal {
     absl::string_view statement_type,
     absl::string_view emulator_route,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
-  absl::StatusOr<backend::engine::DmlStats> stats =
+  absl::StatusOr<backend::engine::DmlResult> result =
       engine->ExecuteDml(request, catalog);
-  if (!stats.ok()) return AnalyzeStatusToGrpc(stats.status());
-  // DML reply: no schema and no row messages, just a single
-  // `dml_stats` summary the gateway folds into BigQuery's
-  // `dmlStats` / `numDmlAffectedRows` envelope, followed by the
-  // `statement_type` + `emulator_route` trailer pair the gateway
-  // folds into `statistics.query.{statementType,emulatorRoute}`.
+  if (!result.ok()) return AnalyzeStatusToGrpc(result.status());
+
+  if (result->returning_rows != nullptr) {
+    v1::QueryResultRow schema_message;
+    backend::schema::TableSchemaToProto(result->returning_rows->schema(),
+                                        schema_message.mutable_schema());
+    if (!write(schema_message)) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::CANCELLED,
+          "QueryService::ExecuteQuery: client cancelled stream before "
+          "returning schema");
+    }
+    backend::storage::Row row;
+    while (true) {
+      absl::StatusOr<bool> next = result->returning_rows->Next(&row);
+      if (!next.ok()) return AnalyzeStatusToGrpc(next.status());
+      if (!*next) break;
+      v1::QueryResultRow row_message;
+      for (const auto& cell : row.cells) {
+        QueryResultValueToCell(cell, row_message.add_cells());
+      }
+      if (!write(row_message)) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::CANCELLED,
+            "QueryService::ExecuteQuery: client cancelled stream before "
+            "returning row");
+      }
+    }
+  }
+
   v1::QueryResultRow stats_message;
   auto* proto_stats = stats_message.mutable_dml_stats();
-  proto_stats->set_inserted_row_count(stats->inserted_row_count);
-  proto_stats->set_updated_row_count(stats->updated_row_count);
-  proto_stats->set_deleted_row_count(stats->deleted_row_count);
+  proto_stats->set_inserted_row_count(result->stats.inserted_row_count);
+  proto_stats->set_updated_row_count(result->stats.updated_row_count);
+  proto_stats->set_deleted_row_count(result->stats.deleted_row_count);
   if (!write(stats_message)) {
     return ::grpc::Status(
         ::grpc::StatusCode::CANCELLED,

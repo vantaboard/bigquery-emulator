@@ -66,7 +66,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> UnsupportedExecutor::ExecuteQuery(
                                OffendingFamilyFor(stmt)));
 }
 
-absl::StatusOr<DmlStats> UnsupportedExecutor::ExecuteDml(
+absl::StatusOr<DmlResult> UnsupportedExecutor::ExecuteDml(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {

@@ -73,7 +73,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ControlOpExecutor::ExecuteQuery(
       "ExecuteDdl)"));
 }
 
-absl::StatusOr<DmlStats> ControlOpExecutor::ExecuteDml(
+absl::StatusOr<DmlResult> ControlOpExecutor::ExecuteDml(
     const QueryRequest& request,
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {

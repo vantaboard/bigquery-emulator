@@ -168,7 +168,7 @@ LocalCoordinatorEngine::ExecuteResolvedStatement(
   return executor->ExecuteQuery(request, stmt, catalog);
 }
 
-absl::StatusOr<DmlStats> LocalCoordinatorEngine::ExecuteDml(
+absl::StatusOr<DmlResult> LocalCoordinatorEngine::ExecuteDml(
     const QueryRequest& request, ::googlesql::Catalog* catalog) {
   absl::Status valid = ValidateRequest(request, catalog);
   if (!valid.ok()) return valid;

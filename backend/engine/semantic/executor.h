@@ -75,7 +75,7 @@ class SemanticExecutor : public coordinator::Executor {
   // "planned but not landed" route. DDL stays on the
   // control-op executor and the semantic executor surfaces a
   // clean error if it ever sees one.
-  [[nodiscard]] absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] absl::StatusOr<DmlResult> ExecuteDml(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;

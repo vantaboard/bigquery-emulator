@@ -233,11 +233,11 @@ TEST_F(DmlExecutorTest, InsertValuesAppendsRowsAndCountsThem) {
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_INSERT_STMT);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->inserted_row_count, 3);
-  EXPECT_EQ(stats->updated_row_count, 0);
-  EXPECT_EQ(stats->deleted_row_count, 0);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.inserted_row_count, 3);
+  EXPECT_EQ(result->stats.updated_row_count, 0);
+  EXPECT_EQ(result->stats.deleted_row_count, 0);
 
   const auto& rows = storage_->Rows(table_id_);
   ASSERT_EQ(rows.size(), 3u);
@@ -256,9 +256,9 @@ TEST_F(DmlExecutorTest, InsertValuesOmittedColumnDefaultsNull) {
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->inserted_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.inserted_row_count, 1);
 
   const auto& rows = storage_->Rows(table_id_);
   ASSERT_EQ(rows.size(), 1u);
@@ -273,9 +273,9 @@ TEST_F(DmlExecutorTest, InsertSelectFromLiteralRows) {
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->inserted_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.inserted_row_count, 1);
 
   const auto& rows = storage_->Rows(table_id_);
   ASSERT_EQ(rows.size(), 1u);
@@ -302,9 +302,9 @@ TEST_F(DmlExecutorTest, DeleteWherePredicateRemovesMatchingRows) {
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_DELETE_STMT);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->deleted_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.deleted_row_count, 1);
 
   const auto& rows = storage_->Rows(table_id_);
   ASSERT_EQ(rows.size(), 2u);
@@ -323,9 +323,9 @@ TEST_F(DmlExecutorTest, DeleteWhereTrueClearsTable) {
   const auto* stmt = Analyze("DELETE FROM test_ds.people WHERE TRUE");
   ASSERT_NE(stmt, nullptr);
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->deleted_row_count, 2);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.deleted_row_count, 2);
   EXPECT_TRUE(storage_->Rows(table_id_).empty());
 }
 
@@ -345,9 +345,9 @@ TEST_F(DmlExecutorTest, UpdateScalarSetMutatesMatchingRow) {
   ASSERT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_UPDATE_STMT);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->updated_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.updated_row_count, 1);
 
   const auto& rows = storage_->Rows(table_id_);
   ASSERT_EQ(rows.size(), 3u);
@@ -371,9 +371,9 @@ TEST_F(DmlExecutorTest, UpdateSetExprUsesSourceColumnRef) {
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->updated_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.updated_row_count, 1);
   EXPECT_EQ(storage_->Rows(table_id_)[0].cells[0].int64_value(), 11);
 }
 
@@ -433,9 +433,9 @@ TEST_F(DmlExecutorTest, UpdateDeepStructSetMutatesNestedField) {
       Analyze("UPDATE test_ds.items SET payload.nested.val = 99 WHERE id = 1");
   ASSERT_NE(stmt, nullptr);
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->updated_row_count, 1);
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.updated_row_count, 1);
 }
 
 TEST_F(DmlExecutorTest, InsertAssertRowsModifiedMismatchRollsBack) {
@@ -445,10 +445,10 @@ TEST_F(DmlExecutorTest, InsertAssertRowsModifiedMismatchRollsBack) {
   ASSERT_NE(stmt, nullptr);
 
   QueryRequest request;
-  auto stats = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
-  ASSERT_FALSE(stats.ok());
+  auto result = ExecuteDml(request, *stmt, catalog_.get(), storage_.get());
+  ASSERT_FALSE(result.ok());
   EXPECT_NE(
-      stats.status().message().find("1 row(s), but 2 row(s) were expected"),
+      result.status().message().find("1 row(s), but 2 row(s) were expected"),
       std::string::npos);
   EXPECT_TRUE(storage_->Rows(table_id_).empty());
 }

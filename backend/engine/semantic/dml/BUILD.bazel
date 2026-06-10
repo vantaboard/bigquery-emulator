@@ -17,7 +17,9 @@ cc_library(
     srcs = [
         "dml_executor_common.cc",
         "dml_insert.cc",
+        "dml_merge.cc",
         "dml_mutate.cc",
+        "dml_returning.cc",
     ],
     hdrs = [
         "dml_executor.h",
@@ -28,6 +30,7 @@ cc_library(
         "//backend/engine",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:row_source",
         "//backend/engine/semantic:scan_eval",
         "//backend/engine/semantic:value",
         "//backend/schema",

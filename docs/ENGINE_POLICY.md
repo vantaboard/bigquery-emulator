@@ -133,16 +133,20 @@ running the route classifier in their head.
    UDF, semantic executor, control op), land the implementation, and
    update the shape tracker row in the same commit.
 
-2. **Some DML / DDL shapes are still deferred today.** Harder DML
-   branches (pipe-operator forms, `DELETE`/`UPDATE` with
-   `array_offset_column`, MERGE harder matrix, `RETURNING`, ...) land
-   on the `semantic_executor` route as handlers are added. Landed
-   today: `INSERT VALUES`, `INSERT ... SELECT`, scalar and deep-STRUCT
-   `UPDATE`, `UPDATE ... FROM`, `DELETE`, and `ASSERT_ROWS_MODIFIED`
-   on the local DML executor (`backend/engine/semantic/dml/`). Use
-   `tabledata.insertAll` to seed rows for tests and fixtures while
-   gaps are closed. `MERGE`, `CREATE TABLE`, `CREATE TABLE AS
-   SELECT`, and `DROP TABLE` are implemented today.
+2. **Some DML / DDL shapes are still deferred today.** Remaining DML
+   gaps (pipe-operator forms, `DELETE`/`UPDATE` with
+   `array_offset_column`, ...) land on the `semantic_executor` route
+   as handlers are added. Landed today on the local DML executor
+   (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
+   SELECT`, scalar and deep-STRUCT `UPDATE`, `UPDATE ... FROM`,
+   `DELETE`, `THEN RETURN` on INSERT/UPDATE/DELETE,
+   `ASSERT_ROWS_MODIFIED`, and the harder MERGE matrix (`WHEN NOT
+   MATCHED BY SOURCE`, multi-action sequences via `dml_merge.cc`).
+   Simple `MERGE` (`WHEN MATCHED` + single `WHEN NOT MATCHED BY
+   TARGET`) stays on the DuckDB fast path. Use `tabledata.insertAll`
+   to seed rows for tests and fixtures while gaps are closed.
+   `CREATE TABLE`, `CREATE TABLE AS SELECT`, and `DROP TABLE` are
+   implemented today.
 
 3. **Storage follows the same single-implementation rule.** The
    in-memory storage backend is gone; every persistent state path

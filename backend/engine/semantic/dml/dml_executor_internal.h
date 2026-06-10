@@ -14,6 +14,7 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/row_source.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -99,24 +100,36 @@ absl::Status CheckAssertRowsModified(
 ColumnBindings MergeColumnBindings(const ColumnBindings& target,
                                    const ColumnBindings& from);
 
-absl::Status RejectUnsupportedDmlFeatures(
-    const ::googlesql::ResolvedReturningClause* returning,
-    bool has_array_offset_column,
-    int generated_column_count,
-    absl::string_view kind);
+absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
+                                          int generated_column_count,
+                                          absl::string_view kind);
+
+absl::StatusOr<std::unique_ptr<RowSource>> BuildReturningRowSource(
+    const ::googlesql::ResolvedReturningClause& returning,
+    std::vector<ColumnBindings> row_contexts,
+    std::vector<std::string> actions,
+    EvalContext& ctx);
 
 absl::StatusOr<DmlStats> ExecuteInsert(
     const ::googlesql::ResolvedInsertStmt& insert,
     storage::Storage& storage,
-    EvalContext& ctx);
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out);
 
 absl::StatusOr<DmlStats> ExecuteDelete(
     const ::googlesql::ResolvedDeleteStmt& del,
     storage::Storage& storage,
-    EvalContext& ctx);
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out);
 
 absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedUpdateStmt& upd,
+    storage::Storage& storage,
+    EvalContext& ctx,
+    std::unique_ptr<RowSource>* returning_out);
+
+absl::StatusOr<DmlStats> ExecuteMerge(
+    const ::googlesql::ResolvedMergeStmt& merge,
     storage::Storage& storage,
     EvalContext& ctx);
 

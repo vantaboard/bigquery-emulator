@@ -86,14 +86,14 @@ Plans 01–05 are independent of each other and can run in parallel
 | 03 | done | 111→118 pass | 683fc74, 60f10dd, 5b9a441 | ORDER BY/LIMIT, FILTER, IGNORE NULLS, HAVING MAX, SAFE.SUM |
 | 04 | done | 118→122 pass | bfc7b31, 0d76d90, ef6f4b7 | INSERT SELECT, UPDATE FROM, deep STRUCT, ASSERT_ROWS_MODIFIED; DELETE+offset blocked |
 | 05 | done | 122→129 pass (scripting lane 11/11) | 396ea98, ca99944 | IF/WHILE/EXECUTE IMMEDIATE (396ea98); EXCEPTION/@@error.*/RAISE + tracker flips + gateway child-job fix |
-| 06 | pending | — | | |
+| 06 | done | 129→134 pass (+5 DML fixtures) | (this session) | semantic MERGE matrix + DML RETURNING; MERGE THEN RETURN deferred |
 | 07 | pending | — | | |
 | 08 | pending | — | | |
 | 09 | pending | — | | |
 | 10 | pending | — | | |
 | 11 | pending | — | | |
 | 12 | pending | — | | |
-| 13 | pending | — | | |
+| 13 | done | 55 pinned (logical_functions.test) | 72a586a, c5e02ba | Go runner + CI wired; starter corpus subset gated |
 
 ## Bookkeeping per landed plan
 

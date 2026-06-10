@@ -121,6 +121,15 @@ struct DmlStats {
   int64_t deleted_row_count = 0;
 };
 
+// Result of `Engine::ExecuteDml` when the statement may carry a
+// `THEN RETURN` clause. `returning_rows` is non-null only when the
+// resolved AST includes `ResolvedReturningClause`; the frontend
+// streams its schema + rows before the trailing `dml_stats` message.
+struct DmlResult {
+  DmlStats stats;
+  std::unique_ptr<RowSource> returning_rows;
+};
+
 // Engine is the abstract interface every query backend implements.
 //
 // Lifetime: created once at startup with a `Storage*` and a
@@ -165,7 +174,7 @@ class Engine {
   // implement DML yet return `absl::StatusCode::kUnimplemented`; the
   // frontend handler maps that to gRPC `UNIMPLEMENTED` so the
   // gateway can surface BigQuery's `notImplemented` reason.
-  [[nodiscard]] virtual absl::StatusOr<DmlStats> ExecuteDml(
+  [[nodiscard]] virtual absl::StatusOr<DmlResult> ExecuteDml(
       const QueryRequest& request, googlesql::Catalog* catalog) {
     (void)request;
     (void)catalog;

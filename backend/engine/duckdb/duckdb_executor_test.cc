@@ -446,10 +446,10 @@ TEST_F(DuckDbExecutorTest, ExecuteDmlInsertSelectQualifyDedupesRows) {
       (*analyzed)->resolved_statement();
   ASSERT_NE(stmt, nullptr);
 
-  auto stats =
+  auto result =
       executor_->ExecuteDml(MakeRequest(sql), *stmt, bundle.catalog.get());
-  ASSERT_TRUE(stats.ok()) << stats.status();
-  EXPECT_EQ(stats->inserted_row_count, 2);
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.inserted_row_count, 2);
 
   auto scan = storage_->ScanRows({"proj-test", "ds", "ins_dst"});
   ASSERT_TRUE(scan.ok()) << scan.status();
