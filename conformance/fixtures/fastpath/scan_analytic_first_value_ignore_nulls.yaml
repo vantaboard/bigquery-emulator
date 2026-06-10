@@ -1,0 +1,41 @@
+# scan_analytic_first_value_ignore_nulls: FIRST_VALUE(x IGNORE NULLS).
+#
+# Pins DuckDB-native IGNORE NULLS on FIRST_VALUE window functions
+# (googlesql catalog allows null-handling on FIRST/LAST/NTH_VALUE).
+name: scan_analytic_first_value_ignore_nulls
+description: |
+  FIRST_VALUE IGNORE NULLS skips NULL values when picking the first
+  value within each partition.
+project_id: proj-fastpath-analytic-first-value-ignore-nulls
+dataset_id: ds_analytic_first_value_ignore_nulls
+setup:
+  - dataset: ds_analytic_first_value_ignore_nulls
+  - table:
+      dataset: ds_analytic_first_value_ignore_nulls
+      id: events
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+        - {name: val, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_analytic_first_value_ignore_nulls
+      table: events
+      rows:
+        - {id: 1, kind: a, val: 10}
+        - {id: 2, kind: a, val: null}
+        - {id: 3, kind: a, val: 30}
+        - {id: 4, kind: b, val: 5}
+query: |
+  SELECT id,
+         FIRST_VALUE(val IGNORE NULLS)
+           OVER (PARTITION BY kind ORDER BY id
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS fv
+    FROM ds_analytic_first_value_ignore_nulls.events
+   ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", fv: "10"}
+    - {id: "2", fv: "10"}
+    - {id: "3", fv: "10"}
+    - {id: "4", fv: "5"}

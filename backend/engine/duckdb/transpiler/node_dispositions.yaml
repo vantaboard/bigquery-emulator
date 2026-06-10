@@ -183,7 +183,7 @@ ResolvedColumnHolder: semantic_executor
 ResolvedGroupingSet: duckdb_rewrite
 ResolvedRollup: duckdb_rewrite
 ResolvedCube: duckdb_rewrite
-ResolvedAggregateHavingModifier: semantic_executor status=planned
+ResolvedAggregateHavingModifier: semantic_executor
 # `ResolvedWindowFrame*` / `ResolvedAnalyticFunctionGroup` row from
 # SHAPE_TRACKER.md, expanded to per-class rows.
 ResolvedWindowFrame: duckdb_native

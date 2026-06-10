@@ -1,0 +1,33 @@
+# aggregate_any_value_having_max: ANY_VALUE(x HAVING MAX y).
+#
+# Pins semantic-executor evaluation of ResolvedAggregateHavingModifier
+# (HAVING MAX restricts input rows before ANY_VALUE runs).
+name: aggregate_any_value_having_max
+description: |
+  ANY_VALUE(fruit HAVING MAX sold) returns a fruit from the row with
+  the highest sold count.
+project_id: proj-aggregate-having-max
+dataset_id: ds_aggregate_having_max
+setup:
+  - dataset: ds_aggregate_having_max
+  - table:
+      dataset: ds_aggregate_having_max
+      id: store
+      schema:
+        - {name: fruit, type: STRING, mode: REQUIRED}
+        - {name: sold, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_aggregate_having_max
+      table: store
+      rows:
+        - {fruit: apple, sold: 3}
+        - {fruit: pear, sold: 7}
+        - {fruit: banana, sold: 7}
+query: |
+  SELECT ANY_VALUE(fruit HAVING MAX sold) AS top_fruit
+    FROM ds_aggregate_having_max.store
+expected:
+  route: semantic_executor
+  match: schema_only
+  schema:
+    - {name: top_fruit, type: STRING, mode: NULLABLE}

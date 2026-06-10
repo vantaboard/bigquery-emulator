@@ -81,9 +81,9 @@ Plans 01–05 are independent of each other and can run in parallel
 
 | Plan | State | Conformance delta | Commits | Notes |
 |------|-------|-------------------|---------|-------|
-| 01 | pending | — | | |
-| 02 | pending | — | | |
-| 03 | pending | — | | |
+| 01 | done | 102→107 pass | 00a5426 | outer-row UNNEST, lateral join, correlated subqueries |
+| 02 | done | 107→111 pass | e1d31ff | polyfills; sqrt_numeric still blocked |
+| 03 | done | 111→118 pass | (pending) | ORDER BY/LIMIT, FILTER, IGNORE NULLS, HAVING MAX, SAFE.SUM |
 | 04 | pending | — | | |
 | 05 | pending | — | | |
 | 06 | pending | — | | |

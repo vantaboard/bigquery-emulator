@@ -1,0 +1,15 @@
+# aggregate_safe_sum: SAFE.SUM aggregate overflow returns NULL.
+#
+# Pins semantic-executor SAFE.SUM overflow short-circuit (DuckDB rejects
+# aggregates inside TRY).
+name: aggregate_safe_sum
+description: |
+  SAFE.SUM on INT64 overflow returns NULL instead of error.
+project_id: proj-aggregate-safe-sum
+query: |
+  SELECT SAFE.SUM(x) AS total
+    FROM UNNEST([9223372036854775807, 1]) AS x
+expected:
+  route: semantic_executor
+  rows:
+    - {total: null}

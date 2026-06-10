@@ -1,0 +1,15 @@
+# aggregate_array_agg_ignore_nulls: ARRAY_AGG(x IGNORE NULLS).
+#
+# Pins FILTER (WHERE x IS NOT NULL) lowering for IGNORE NULLS on
+# ARRAY_AGG without ORDER BY / LIMIT modifiers.
+name: aggregate_array_agg_ignore_nulls
+description: |
+  ARRAY_AGG IGNORE NULLS drops NULL elements before aggregation.
+project_id: proj-aggregate-array-agg-ignore-nulls
+query: |
+  SELECT ARRAY_AGG(x IGNORE NULLS) AS vals
+    FROM UNNEST([1, NULL, 3, NULL, 2]) AS x
+expected:
+  route: duckdb_rewrite
+  rows:
+    - {vals: ["1", "3", "2"]}

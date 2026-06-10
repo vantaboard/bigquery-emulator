@@ -1,0 +1,31 @@
+# aggregate_sum_filter: SUM(x WHERE condition) aggregate filtering.
+#
+# Pins DuckDB conditional aggregation via FILTER (WHERE ...).
+name: aggregate_sum_filter
+description: |
+  SUM(amount WHERE kind = 'A') counts only rows matching the filter.
+project_id: proj-aggregate-sum-filter
+dataset_id: ds_aggregate_sum_filter
+setup:
+  - dataset: ds_aggregate_sum_filter
+  - table:
+      dataset: ds_aggregate_sum_filter
+      id: sales
+      schema:
+        - {name: kind, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_aggregate_sum_filter
+      table: sales
+      rows:
+        - {kind: A, amount: 10}
+        - {kind: B, amount: 20}
+        - {kind: A, amount: 5}
+query: |
+  SELECT SUM(amount WHERE kind = 'A') AS sum_a,
+         SUM(amount WHERE kind = 'B') AS sum_b
+    FROM ds_aggregate_sum_filter.sales
+expected:
+  route: duckdb_native
+  rows:
+    - {sum_a: "15", sum_b: "20"}

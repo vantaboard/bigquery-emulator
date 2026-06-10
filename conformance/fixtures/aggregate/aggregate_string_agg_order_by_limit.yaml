@@ -1,0 +1,16 @@
+# aggregate_string_agg_order_by_limit: STRING_AGG(x, sep ORDER BY y LIMIT n).
+#
+# Pins list staging + array_to_string lowering for ordered limited
+# STRING_AGG on duckdb_rewrite (array_agg/string_agg disposition).
+name: aggregate_string_agg_order_by_limit
+description: |
+  STRING_AGG with explicit delimiter, ORDER BY, and LIMIT. Verifies
+  lexicographic ordering and LIMIT truncation.
+project_id: proj-aggregate-string-agg-order-limit
+query: |
+  SELECT STRING_AGG(x, ',' ORDER BY x ASC LIMIT 2) AS top2
+    FROM UNNEST(['c', 'a', 'b']) AS x
+expected:
+  route: duckdb_rewrite
+  rows:
+    - {top2: "a,b"}

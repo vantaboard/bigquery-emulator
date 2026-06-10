@@ -1,0 +1,16 @@
+# aggregate_array_agg_order_by_limit: ARRAY_AGG(x ORDER BY y LIMIT n).
+#
+# Pins DuckDB lowering via list(... ORDER BY ...) + list_slice(..., 1, n)
+# on the duckdb_rewrite path (array_agg disposition).
+name: aggregate_array_agg_order_by_limit
+description: |
+  ARRAY_AGG with ORDER BY and LIMIT over an UNNEST relation. Verifies
+  ascending order and LIMIT truncation on the duckdb_native path.
+project_id: proj-aggregate-array-agg-order-limit
+query: |
+  SELECT ARRAY_AGG(x ORDER BY x LIMIT 2) AS top2
+    FROM UNNEST([3, 1, 2, 4]) AS x
+expected:
+  route: duckdb_rewrite
+  rows:
+    - {top2: ["1", "2"]}
