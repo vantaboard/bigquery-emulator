@@ -411,6 +411,31 @@ TEST_F(TranspilerTest, EmitAggregateScanGroupingCallProjectsBitMask) {
       << "expected GROUPING projection; got: " << sql;
 }
 
+TEST_F(TranspilerTest, EmitAggregateScanSumFilterClause) {
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT SUM(amount WHERE kind = 'A') FROM sales");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("SUM(\"amount\") FILTER (WHERE"), std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("\"kind\" = 'A'"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, EmitAggregateScanArrayAggIgnoreNulls) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT ARRAY_AGG(x IGNORE NULLS) FROM UNNEST([1, NULL, 2]) AS x");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAggregateScan(scan->GetAs<::googlesql::ResolvedAggregateScan>());
+  EXPECT_NE(sql.find("FILTER (WHERE \"x\" IS NOT NULL)"), std::string::npos)
+      << sql;
+}
+
 // --- Order By -----------------------------------------------------------
 
 }  // namespace transpiler

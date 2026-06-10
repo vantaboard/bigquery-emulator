@@ -75,6 +75,23 @@ absl::Status RouteClassifierVisitor::VisitResolvedFunctionCall(
 absl::Status RouteClassifierVisitor::VisitResolvedAggregateFunctionCall(
     const ::googlesql::ResolvedAggregateFunctionCall* node) {
   CheckFunction(node);
+  if (node != nullptr) {
+    if (node->having_modifier() != nullptr) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedAggregateFunctionCall(having_modifier)");
+    }
+    if (node->group_by_list_size() > 0 ||
+        node->group_by_aggregate_list_size() > 0 ||
+        node->having_expr() != nullptr) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedAggregateFunctionCall(multi_level_group_by)");
+    }
+    if (node->error_mode() ==
+        ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedAggregateFunctionCall(safe_agg)");
+    }
+  }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedAggregateFunctionCall(
       node);
 }

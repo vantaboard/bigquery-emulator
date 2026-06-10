@@ -140,6 +140,20 @@ TEST_F(TranspilerTest, EmitAnalyticScanSafeAggregateFallsBack) {
       t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>()), "");
 }
 
+TEST_F(TranspilerTest, EmitAnalyticScanFirstValueIgnoreNulls) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT FIRST_VALUE(id IGNORE NULLS) OVER (ORDER BY id) FROM people");
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ANALYTIC_SCAN);
+  TestTranspiler t;
+  std::string sql =
+      t.EmitAnalyticScan(scan->GetAs<::googlesql::ResolvedAnalyticScan>());
+  EXPECT_NE(sql.find("FIRST_VALUE(\"id\" IGNORE NULLS) OVER"),
+            std::string::npos)
+      << sql;
+}
+
 // --- Top-level SELECT (QueryStmt / ProjectScan / SingleRowScan /
 //     OutputColumn / ComputedColumn) -----------------------------------
 

@@ -51,7 +51,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
   // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax.
   // HAVING MAX/MIN, multi-level GROUP BY, and aggregate filtering
   // still surface UNIMPLEMENTED.
-  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) lowers `SAFE.SUM` via TRY().
+  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) reroutes to semantic_executor
+  // (DuckDB rejects aggregates inside TRY).
   if (node == nullptr || node->function() == nullptr) return "";
   if (const auto* sql_fn =
           dynamic_cast<const ::googlesql::SQLFunction*>(node->function());
@@ -64,11 +65,17 @@ std::string Transpiler::EmitAggregateFunctionCall(
   const bool ordered_agg = internal::SupportsOrderedAggregateModifiers(name);
   if (node->having_modifier() != nullptr || node->group_by_list_size() > 0 ||
       node->group_by_aggregate_list_size() > 0 ||
-      node->where_expr() != nullptr || node->having_expr() != nullptr) {
+      node->having_expr() != nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
               << "' uses a modifier (HAVING / GROUP BY / filtering) that has "
                  "no DuckDB analog yet; surfacing UNIMPLEMENTED";
     return "";
+  }
+  std::string filter_suffix;
+  if (node->where_expr() != nullptr) {
+    std::string filter_expr = EmitExpr(node->where_expr());
+    if (filter_expr.empty()) return "";
+    filter_suffix = absl::StrCat(" FILTER (WHERE ", filter_expr, ")");
   }
   if (!ordered_agg &&
       (node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
@@ -90,16 +97,18 @@ std::string Transpiler::EmitAggregateFunctionCall(
   }
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-    if (name != "sum") {
-      LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces "
-                   "UNIMPLEMENTED (function="
-                << node->function()->Name() << ")";
-      return "";
-    }
+    LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces UNIMPLEMENTED "
+                 "(function="
+              << node->function()->Name() << ")";
+    return "";
   }
+  auto append_filter = [&filter_suffix](std::string body) {
+    if (filter_suffix.empty()) return body;
+    return absl::StrCat(std::move(body), filter_suffix);
+  };
   if (name == "$count_star") {
     if (node->argument_list_size() != 0) return "";
-    return "COUNT(*)";
+    return append_filter("COUNT(*)");
   }
   std::vector<std::string> args;
   args.reserve(node->argument_list_size());
@@ -156,7 +165,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
       list_body =
           absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
     }
-    return absl::StrCat("flatten(", list_body, ")");
+    return append_filter(absl::StrCat("flatten(", list_body, ")"));
   }
   std::vector<std::string> call_args = args;
   if (name == "string_agg" && call_args.size() == 1) {
@@ -178,7 +187,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (!ignore_nulls) {
       body = internal::WrapArrayAggRespectNulls(body, args[0]);
     }
-    return body;
+    return append_filter(std::move(body));
   }
   if (name == "array_agg" && !has_order && !has_limit) {
     const std::string rn_order =
@@ -194,7 +203,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
     if (!ignore_nulls) {
       body = internal::WrapArrayAggRespectNulls(body, args[0]);
     }
-    return body;
+    return append_filter(std::move(body));
   }
   if (name == "string_agg" && node->distinct() && !has_order && !has_limit) {
     return "";
@@ -205,7 +214,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
         absl::StrCat("list(", prefix, args[0], order_suffix, ")");
     list_body =
         absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
-    return absl::StrCat("array_to_string(", list_body, ", ", call_args[1], ")");
+    return append_filter(
+        absl::StrCat("array_to_string(", list_body, ", ", call_args[1], ")"));
   }
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
@@ -226,11 +236,7 @@ std::string Transpiler::EmitAggregateFunctionCall(
       if (name == "countif") {
         body = absl::StrCat("coalesce(", body, ", 0)");
       }
-      if (node->error_mode() ==
-          ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
-        return absl::StrCat("TRY(", body, ")");
-      }
-      return body;
+      return append_filter(std::move(body));
     }
     case Disposition::kDuckdbUdf:
       // Same ready/planned dispatch as scalar `EmitFunctionCall`. A
@@ -240,8 +246,8 @@ std::string Transpiler::EmitAggregateFunctionCall(
       // refuses a ready row without `duckdb_name=`.
       if (!entry->planned && !entry->duckdb_name.empty()) {
         std::string prefix = node->distinct() ? "DISTINCT " : "";
-        return absl::StrCat(
-            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+        return append_filter(absl::StrCat(
+            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")"));
       }
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
                 << "' route=duckdb_udf (planned=" << entry->planned
@@ -297,10 +303,8 @@ std::string Transpiler::EmitAnalyticFunctionCall(
   if (node->null_handling_modifier() !=
       ::googlesql::ResolvedNonScalarFunctionCallBase::DEFAULT_NULL_HANDLING) {
     const std::string name = internal::ResolveFunctionName(node->function());
-    if (name != "percentile_disc") {
-      // IGNORE / RESPECT NULLS modifies LAG / LEAD / FIRST_VALUE /
-      // LAST_VALUE semantics; DuckDB has the same keywords but the
-      // rewrite needs more care than this emit pass covers.
+    if (name != "percentile_disc" &&
+        !internal::SupportsAnalyticNullHandling(name)) {
       LOG(INFO) << "duckdb transpiler: analytic '" << node->function()->Name()
                 << "' uses IGNORE/RESPECT NULLS; surfacing UNIMPLEMENTED";
       return "";
@@ -329,7 +333,11 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     case Disposition::kDuckdbRewrite: {
       std::string prefix = node->distinct() ? "DISTINCT " : "";
       std::string body = absl::StrCat(
-          entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+          entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "));
+      if (internal::SupportsAnalyticNullHandling(name)) {
+        absl::StrAppend(&body, internal::AnalyticNullHandlingSuffix(node));
+      }
+      absl::StrAppend(&body, ")");
       return body;
     }
     case Disposition::kDuckdbUdf:

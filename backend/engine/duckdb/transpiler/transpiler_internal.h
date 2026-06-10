@@ -400,6 +400,23 @@ inline bool SupportsOrderedAggregateModifiers(absl::string_view name) {
          name == "array_concat_agg";
 }
 
+inline bool SupportsAnalyticNullHandling(absl::string_view name) {
+  return name == "first_value" || name == "last_value" || name == "nth_value";
+}
+
+inline std::string AnalyticNullHandlingSuffix(
+    const ::googlesql::ResolvedAnalyticFunctionCall* node) {
+  if (node == nullptr) return "";
+  switch (node->null_handling_modifier()) {
+    case ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS:
+      return " IGNORE NULLS";
+    case ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS:
+      return " RESPECT NULLS";
+    default:
+      return "";
+  }
+}
+
 inline std::string AppendArrayAggNullFilter(absl::string_view body,
                                             absl::string_view arg,
                                             bool ignore_nulls) {
