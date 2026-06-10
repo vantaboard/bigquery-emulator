@@ -1,0 +1,18 @@
+# function_contains_substr: BigQuery CONTAINS_SUBSTR via semantic executor.
+#
+# Pins NFKC + case-folding substring search and the STRUCT field
+# recursion contract from BigQuery's string_functions reference.
+name: function_contains_substr
+description: |
+  BigQuery CONTAINS_SUBSTR lowered through
+  `backend/engine/semantic/functions/contains_substr.cc`.
+project_id: proj-functions-contains-substr
+query: |
+  SELECT CONTAINS_SUBSTR('the blue house', 'Blue house') AS ci_match,
+         CONTAINS_SUBSTR((23, 35, 41), '35') AS struct_match,
+         CONTAINS_SUBSTR((23, NULL, 41), '35') AS struct_null_no_match,
+         SAFE.CONTAINS_SUBSTR('hello', 'ell') AS safe_match
+expected:
+  route: semantic_executor
+  rows:
+    - {ci_match: "true", struct_match: "true", struct_null_no_match: null, safe_match: "true"}

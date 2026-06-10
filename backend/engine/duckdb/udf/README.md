@@ -35,18 +35,18 @@ backend/engine/duckdb/udf/
 
 Families today:
 
-- `numeric/` — `MOD`, `DIV`, `LOG`, `SQRT` over NUMERIC, etc.
+- `numeric/` — `MOD`, `DIV`, `LOG` (sign / base / truncate semantics).
 - `conditional/` — `IF`, `ISNULL`.
-- `string/` — `STRPOS`, `INSTR`, `CONTAINS_SUBSTR`, `SOUNDEX`, ...
+- `string/` — `STRPOS`, `SPLIT` (default delimiter).
+- `regex/` — `REGEXP_CONTAINS`, `REGEXP_REPLACE` (global replace).
+- `datetime/` — `UNIX_SECONDS`, `UNIX_MILLIS`, `UNIX_MICROS`,
+  `UNIX_DATE` (epoch wrappers).
 
-Future families (per the plan, not yet landed in this commit set):
-
-- `datetime/` — `DATE_ADD/SUB/DIFF`, `DATETIME_*`, `TIMESTAMP_*`
-  with BigQuery's month-end + timezone behavior.
-- `regex/` — `REGEXP_CONTAINS / EXTRACT / REPLACE` with BigQuery RE2
-  flag semantics on DuckDB PCRE.
-- `json/` — `JSON_VALUE / QUERY / EXTRACT / EXTRACT_SCALAR` with
-  BigQuery `$.a.b[0]` path + lenient / strict modes.
+BigQuery-exact interval datetime arithmetic (`DATE_ADD` month-end
+snap, calendar `*_DIFF` / `*_TRUNC`) and the extended `FORMAT_*` /
+`PARSE_*` / `CONTAINS_SUBSTR` families route through the semantic
+executor (`backend/engine/semantic/functions/`) because googlesql
+owns the exact semantics or the surface needs recursive value search.
 
 ## Authoring a new UDF (convention)
 

@@ -9,8 +9,8 @@ namespace catalog {
 
 // Registers emulator-specific scalar functions missing from the
 // stock GoogleSQL builtin set but required for BigQuery parity
-// (e.g. ISNULL). Safe to call on every per-query catalog instance;
-// function objects are created once and reused.
+// (e.g. ISNULL, CONTAINS_SUBSTR). Safe to call on every per-query catalog
+// instance; function objects are created once and reused.
 void RegisterEmulatorBuiltinFunctions(::googlesql::SimpleCatalog& catalog);
 
 }  // namespace catalog

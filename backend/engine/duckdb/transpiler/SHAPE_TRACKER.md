@@ -212,21 +212,27 @@ semantic-executor / control-op code) so the doc stays honest.
     `<entry.duckdb_name>(<args>)` directly. Covers the math /
     string / array / aggregation / window functions whose DuckDB
     counterparts already match BigQuery semantics.
-  * `duckdb_udf` (with `status=planned`) — the lowering is a
-    DuckDB UDF/macro registered at engine startup. Covers the
-    interval-semantics datetime arithmetic, regex/format/string
-    polyfills, and the `IF` / `ISNULL` / `COUNTIF` / `MOD` / `DIV`
-    / two-arg `LOG` rewrites. Owned by
-    `docs/ENGINE_POLICY.md`; until that plan lands
-    these rows return "" and the engine surfaces UNIMPLEMENTED.
+  * `duckdb_udf` — the lowering is a DuckDB UDF/macro registered at
+    engine startup (`backend/engine/duckdb/udf/registrar.cc`).
+    Landed families: conditional (`bq_if`, `bq_isnull`), numeric
+    (`bq_mod`, `bq_div`, `bq_log`), string (`bq_strpos`, `bq_split`),
+    regex (`bq_regexp_contains`, `bq_regexp_replace`), datetime epoch
+    wrappers (`bq_unix_*`, `bq_unix_date`). Each ready row carries
+    `duckdb_name=<macro>` in `functions.yaml` and a matching fixture
+    under `conformance/fixtures/functions/`. Interval-semantics
+    datetime arithmetic (`DATE_ADD` month-end snap, calendar `*_DIFF` /
+    `*_TRUNC`) and the extended `FORMAT_*` / `PARSE_*` families route
+    through `semantic_executor` instead because googlesql owns the exact
+    semantics.
   * `semantic_executor` (with `status=planned`) — runs on the
     local row/value executor because the BigQuery semantics are
-    exact (not close): `SAFE_DIVIDE`, `SAFE_NEGATE`,
-    `SQRT_NUMERIC`. Owned by
-    `docs/ENGINE_POLICY.md`. Already ready (the
+    exact (not close): `SQRT_NUMERIC` (unreachable until signature-
+    aware transpiler dispatch lands). Already ready (the
     `status=planned` marker has dropped): `BIT_COUNT`,
     `IEEE_DIVIDE`, `SAFE_DIVIDE`, `SAFE_NEGATE`, `SOUNDEX`,
-    `INSTR`.
+    `INSTR`, `CONTAINS_SUBSTR`, `FORMAT_DATE`, `FORMAT_DATETIME`,
+    `FORMAT_TIMESTAMP`, and the googlesql-backed `DATE_*` /
+    `DATETIME_*` / `TIMESTAMP_*` add/sub/diff/trunc family.
   * `local_stub` — `docs/ENGINE_POLICY.md`'s
     deterministic-placeholder posture for client-library startup
     probes. Today: `KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`. The

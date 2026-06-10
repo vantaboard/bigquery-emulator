@@ -1,0 +1,13 @@
+# function_format_date: BigQuery FORMAT_DATE via semantic executor.
+name: function_format_date
+description: |
+  BigQuery FORMAT_DATE lowered through the semantic executor's
+  googlesql format helpers.
+project_id: proj-functions-format-date
+query: |
+  SELECT FORMAT_DATE('%F', DATE '2008-12-25') AS iso,
+         SAFE.FORMAT_DATE('%F', CAST(NULL AS DATE)) AS safe_null
+expected:
+  route: semantic_executor
+  rows:
+    - {iso: "2008-12-25", safe_null: null}

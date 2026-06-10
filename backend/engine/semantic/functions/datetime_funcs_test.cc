@@ -38,6 +38,38 @@ TEST(DatetimeFuncsTest, DateAddDay) {
   EXPECT_EQ(got->date_value(), next->date_value());
 }
 
+TEST(DatetimeFuncsTest, DateAddMonthEndClampsToLastDay) {
+  auto base =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2024-01-31")});
+  ASSERT_TRUE(base.ok());
+  std::vector<Value> args = {
+      *base,
+      Value::Int64(1),
+      Value::Int64(static_cast<int64_t>(::googlesql::functions::MONTH))};
+  auto got = DateAddSubDiffTrunc("date_add", args);
+  ASSERT_TRUE(got.ok()) << got.status();
+  auto expected =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2024-02-29")});
+  ASSERT_TRUE(expected.ok());
+  EXPECT_EQ(got->date_value(), expected->date_value());
+}
+
+TEST(DatetimeFuncsTest, DateDiffMonthBoundaryWithinSameMonth) {
+  auto start =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2024-01-31")});
+  auto end =
+      ParseDate({Value::String("%Y-%m-%d"), Value::String("2024-01-01")});
+  ASSERT_TRUE(start.ok());
+  ASSERT_TRUE(end.ok());
+  std::vector<Value> args = {
+      *end,
+      *start,
+      Value::Int64(static_cast<int64_t>(::googlesql::functions::MONTH))};
+  auto got = DateAddSubDiffTrunc("date_diff", args);
+  ASSERT_TRUE(got.ok()) << got.status();
+  EXPECT_EQ(got->int64_value(), 0);
+}
+
 TEST(DatetimeFuncsTest, FormatDatePercentF) {
   std::vector<Value> args = {Value::String("%F"), Value::Date(14238)};
   auto got = FormatDate(args);

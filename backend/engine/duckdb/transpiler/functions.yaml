@@ -328,11 +328,12 @@ generate_timestamp_array: semantic_executor
 format: semantic_executor
 # BQ CONTAINS_SUBSTR applies Unicode NFKC normalization plus
 # case-folding to both arguments before substring search; DuckDB's
-# `contains` does exact byte-level match. The gap is wider than a
-# thin macro (no DuckDB NFKC primitive), so the row re-points at
-# the semantic executor per the polyfill plan's "no silent
-# approximation" rule.
-contains_substr: semantic_executor status=planned
+# `contains` does exact byte-level match. The semantic executor
+# (`backend/engine/semantic/functions/contains_substr.cc`) owns the
+# recursive STRUCT / ARRAY search and the NULL-in-composite
+# propagation contract documented in BigQuery's string_functions
+# reference.
+contains_substr: semantic_executor
 # BQ STRPOS returns 1-based index; DuckDB strpos agrees today. The
 # `bq_strpos` macro pins the contract under our name so a future
 # DuckDB upgrade flipping to 0-based would surface as a unit-test
@@ -429,19 +430,15 @@ timestamp_bucket: semantic_executor
 # Sunday-start convention. A thin macro cannot translate the
 # part token between dialects without losing edge cases.
 extract: semantic_executor
-# BQ FORMAT_TIMESTAMP / FORMAT_DATE / FORMAT_DATETIME and the
-# matching PARSE_* family use BigQuery's extended strftime
-# specification (`%E4Y` for 4-digit zero-padded year, `%E*S` for
-# fractional seconds with adaptive precision, `%Q` for quarter,
-# `%Ez` for ISO-8601 timezone, `%Z` for IANA timezone name) on
-# top of POSIX strftime. DuckDB's `strftime` / `strptime`
-# implement the POSIX core but not the `%E*` / `%Q` / `%Ez`
-# extensions. The format-spec translation table is doable but
-# extensive (each spec needs a translated emit + a fallback for
-# unsupported specs); more naturally expressed in Go.
-format_timestamp: semantic_executor status=planned
-format_date: semantic_executor status=planned
-format_datetime: semantic_executor status=planned
+# BQ FORMAT_TIMESTAMP / FORMAT_DATE / FORMAT_DATETIME use BigQuery's
+# extended strftime specification (`%E4Y`, `%E*S`, `%Q`, `%Ez`, `%Z`).
+# DuckDB's `strftime` / `strptime` implement the POSIX core but not
+# the `%E*` / `%Q` / `%Ez` extensions. The semantic executor delegates
+# to googlesql's `Format*ToString` helpers with `kFormatOpts`
+# (`backend/engine/semantic/functions/datetime_parse_format.cc`).
+format_timestamp: semantic_executor
+format_date: semantic_executor
+format_datetime: semantic_executor
 parse_date: semantic_executor
 parse_timestamp: semantic_executor
 parse_datetime: semantic_executor

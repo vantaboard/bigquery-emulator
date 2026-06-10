@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: udf-infra-audit
     content: Audit backend/engine/duckdb/udf/ registration infra - confirm startup-time macro/UDF registration covers scalar + aggregate forms and that functions.yaml duckdb_udf rows can carry the UDF name for the transpiler emit.
-    status: pending
+    status: completed
   - id: conditional-math
     content: "Land IF, ISNULL, IFNULL-gaps, COUNTIF (aggregate), MOD, DIV, two-arg LOG as macros/UDFs; drop status=planned from each functions.yaml row as it lands."
-    status: pending
+    status: completed
   - id: datetime-interval
     content: "BigQuery-exact DATE_ADD/DATE_SUB/DATETIME_ADD/TIMESTAMP_ADD/_SUB/_DIFF/_TRUNC interval semantics, including month-end clamping (DATE_ADD('2024-01-31', INTERVAL 1 MONTH) -> 2024-02-29) and part-boundary rules DuckDB's interval math gets wrong."
-    status: pending
+    status: completed
   - id: regex-format
     content: "RE2-faithful REGEXP_CONTAINS/EXTRACT/EXTRACT_ALL/REPLACE/SUBSTR polyfills and the FORMAT()/FORMAT_DATE/FORMAT_TIMESTAMP/PARSE_* family (BigQuery format elements differ from DuckDB strftime)."
-    status: pending
+    status: completed
   - id: semantic-scalars
     content: "Clear remaining semantic_executor status=planned scalar rows (e.g. SQRT_NUMERIC) in eval_expr; confirm already-ready rows (BIT_COUNT, IEEE_DIVIDE, SAFE_DIVIDE, SAFE_NEGATE, SOUNDEX, INSTR) have fixtures."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: One conformance fixture per function family under conformance/fixtures/functions/ with expected.route; update functions.yaml + SHAPE_TRACKER coverage summary; verify SAFE.<fn> handling on every new entry.
-    status: pending
+    status: completed
 ---
 
 # Parity 02 — Function polyfills (duckdb_udf lane)
@@ -84,3 +84,14 @@ Spot-check `SAFE.<fn>(...)` on at least one new function per bucket
 - Aggregate modifiers (ORDER BY/LIMIT/IGNORE NULLS inside aggregates) — plan 03
 - `HLL_COUNT.*` / `NET.*` semantic bodies — plan 12
 - `unsupported`-by-design families (`APPROX_QUANTILES`, `ML.*`, `ST_*`, `KEYS.ENCRYPT`) — stay per ENGINE_POLICY
+
+## Blocked / deferred notes
+
+- `sqrt_numeric` remains `semantic_executor status=planned`: the transpiler
+  looks up functions by lowercase name only; the analyzer resolves NUMERIC
+  `SQRT` to `sqrt`, so this row is unreachable until signature-aware dispatch
+  lands (transpiler architecture change, not a polyfill macro).
+- `regexp_extract` / `regexp_extract_all` stay on `semantic_executor` (not
+  `duckdb_udf`) because capture-group semantics need pattern introspection.
+- `CONTAINS_SUBSTR` JSON `json_scope` named argument is not pinned yet; STRING
+  / STRUCT / ARRAY recursion is covered by conformance.

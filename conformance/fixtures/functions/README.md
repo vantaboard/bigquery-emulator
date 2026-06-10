@@ -16,17 +16,18 @@ conformance/fixtures/functions/
 Families today:
 
 - `numeric/` — `bq_mod`, `bq_div`, `bq_log`.
+- `conditional/` — `bq_if`, `bq_isnull`.
 - `regex/` — `bq_regexp_contains`, `bq_regexp_replace` (re2-vendored
-  thin wrappers; `regexp_extract` / `regexp_extract_all` stay at
-  `status=planned` because their capture-group semantic needs
+  thin wrappers; `regexp_extract` / `regexp_extract_all` stay on
+  `semantic_executor` because their capture-group semantic needs
   pattern introspection).
 - `datetime/` — `bq_unix_seconds`, `bq_unix_millis`, `bq_unix_micros`,
-  `bq_unix_date` (epoch wrappers; the richer date / time
-  arithmetic + format / parse family stays at `status=planned`
-  because of BigQuery's month-end snap, ISO-year discrimination,
-  and timezone-aware truncation semantics).
-- `conditional/` — `bq_if`, `bq_isnull`.
-- `string/` — `bq_strpos`, `bq_split`.
+  `bq_unix_date` (epoch wrappers). Interval-semantics
+  `DATE_ADD` / `*_DIFF` / `*_TRUNC` and extended `FORMAT_*` /
+  `PARSE_*` route through `semantic_executor` (googlesql-backed).
+- `string/` — `bq_strpos`, `bq_split`; `contains_substr` /
+  `instr` / `soundex` route through `semantic_executor`.
+- `format/` — `format_date` conformance fixture (semantic executor).
 - `aggregate/` — `countif` (routed `duckdb_native` to DuckDB's
   `count_if` aggregate; no UDF wrapper needed because v1.5.3's
   `count_if` already matches BQ COUNTIF on NULL / FALSE handling).

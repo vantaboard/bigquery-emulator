@@ -1,0 +1,16 @@
+# function_safe_mod: SAFE.MOD via SAFE trampoline on bq_mod polyfill.
+#
+# Spot-checks the SAFE prefix on a duckdb_udf-backed function: divide-
+# by-zero must return NULL instead of surfacing the macro's error() arm.
+name: function_safe_mod
+description: |
+  BigQuery SAFE.MOD on the `bq_mod` polyfill macro. Verifies the SAFE
+  prefix short-circuits the divide-by-zero raise into NULL.
+project_id: proj-functions-safe-mod
+query: |
+  SELECT SAFE.MOD(7, 0) AS safe_by_zero,
+         SAFE.MOD(CAST(NULL AS INT64), 3) AS safe_null
+expected:
+  route: semantic_executor
+  rows:
+    - {safe_by_zero: null, safe_null: null}

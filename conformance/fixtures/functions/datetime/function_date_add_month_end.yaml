@@ -1,0 +1,17 @@
+# function_date_add_month_end: BigQuery DATE_ADD month-end clamping.
+#
+# Pins the semantic executor's googlesql-backed DATE_ADD contract:
+# adding one MONTH to 2024-01-31 clamps to 2024-02-29 (last day of
+# February in a leap year), not DuckDB's overflow into March.
+name: function_date_add_month_end
+description: |
+  BigQuery DATE_ADD month-end snap via the semantic executor
+  (`backend/engine/semantic/functions/datetime_add_sub.cc`).
+project_id: proj-functions-date-add
+query: |
+  SELECT DATE_ADD(DATE '2024-01-31', INTERVAL 1 MONTH) AS clamped,
+         DATE_ADD(DATE '2020-02-29', INTERVAL 1 YEAR) AS leap_year
+expected:
+  route: semantic_executor
+  rows:
+    - {clamped: "2024-02-29", leap_year: "2021-02-28"}

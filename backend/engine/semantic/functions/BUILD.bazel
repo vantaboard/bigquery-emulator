@@ -152,6 +152,7 @@ cc_library(
         "string_extra_helpers.cc",
         "string_extra_regex_format.cc",
         "string_extra_unicode.cc",
+        "contains_substr.cc",
         "string_funcs.cc",
     ],
     hdrs = [

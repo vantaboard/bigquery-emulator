@@ -38,6 +38,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   // String family.
   if (name == "soundex") return Soundex(args);
   if (name == "instr") return Instr(args);
+  if (name == "contains_substr") return ContainsSubstr(args);
   if (name == "ascii") return Ascii(args);
   if (name == "byte_length") return ByteLength(args);
   if (name == "char_length" || name == "character_length") {

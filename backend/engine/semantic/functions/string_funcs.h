@@ -25,6 +25,7 @@ namespace functions {
 
 absl::StatusOr<Value> Soundex(const std::vector<Value>& args);
 absl::StatusOr<Value> Instr(const std::vector<Value>& args);
+absl::StatusOr<Value> ContainsSubstr(const std::vector<Value>& args);
 absl::StatusOr<Value> RegexpContains(const std::vector<Value>& args);
 absl::StatusOr<Value> RegexpExtract(const std::vector<Value>& args);
 absl::StatusOr<Value> RegexpExtractAll(const std::vector<Value>& args,

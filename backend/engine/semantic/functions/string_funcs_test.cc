@@ -150,6 +150,24 @@ TEST(InstrTest, NonPositiveOccurrenceRejected) {
             SemanticErrorReason::kInvalidArgument);
 }
 
+TEST(ContainsSubstrTest, CaseInsensitiveStringMatch) {
+  auto v = ContainsSubstr(
+      {Value::String("the blue house"), Value::String("Blue house")});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->bool_value());
+}
+
+TEST(ContainsSubstrTest, UnicodeNormalizationMatch) {
+  auto v = ContainsSubstr({Value::String("\u2168"), Value::String("IX")});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->bool_value());
+}
+
+TEST(ContainsSubstrTest, NullSearchValueRejected) {
+  auto v = ContainsSubstr({Value::String("hello"), Value::NullString()});
+  ASSERT_FALSE(v.ok());
+}
+
 }  // namespace
 }  // namespace functions
 }  // namespace semantic

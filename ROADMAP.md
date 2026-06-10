@@ -397,16 +397,21 @@ handler.
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
   conditional, array, aggregation, window, and BQ-specific
-  categories). A Bazel `genrule` materializes it into
+  categories). Polyfill UDF lane (`duckdb_udf`) covers
+  IF/ISNULL/MOD/DIV/LOG, regex wrappers, and unix-epoch helpers;
+  interval datetime arithmetic, `FORMAT_*`, and `CONTAINS_SUBSTR`
+  route through the semantic executor. Remaining `status=planned`
+  scalar: `sqrt_numeric` (blocked on signature-aware transpiler
+  dispatch). A Bazel `genrule` materializes the table into
   `functions_table.inc`, which `functions.cc` includes inside an
-  `absl::flat_hash_map`. Each entry now records one of the
-  seven canonical route dispositions (`duckdb_native`,
-  `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`,
-  `control_op`, `local_stub`, `unsupported`); deferred rows carry
-  `status=planned` in the YAML tables. Unsupported families
-  (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `KEYS.*`, `ST_*`, ...) are
-  documented in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The
-  legacy `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
+  `absl::flat_hash_map`. Each entry records one of the seven
+  canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
+  `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`,
+  `unsupported`); deferred rows carry `status=planned` in the YAML
+  tables. Unsupported families (`APPROX_QUANTILES`, `ML.*`, `NET.*`,
+  `KEYS.*`, `ST_*`, ...) are documented in
+  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
+  `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
   `SAFE.<fn>(...)` is handled uniformly regardless of disposition
 - ✅ DuckDB fast-path execution: file-backed `catalog.duckdb`
   connection, the transpiled SQL is bound and executed via the DuckDB
