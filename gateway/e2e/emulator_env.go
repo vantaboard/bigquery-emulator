@@ -79,8 +79,8 @@ type emulatorEnv struct {
 	// engineAddr is the `host:port` the engine subprocess is listening
 	// on for its gRPC surface (Catalog + Query + StorageRead). The
 	// gateway's REST handlers reach it via `client`; tests that drive
-	// the engine directly (plan 39 StorageRead integration) dial this
-	// address to open their own channel.
+	// the engine directly (e.g. the StorageRead integration tests)
+	// dial this address to open their own channel.
 	engineAddr string
 	// dataDir is the `--data_dir` passed when spawning emulator_main.
 	// The query port TestMain harness reuses it when restarting after
@@ -91,7 +91,7 @@ type emulatorEnv struct {
 func (e *emulatorEnv) URL() string { return e.httpServer.URL }
 
 // EngineAddress returns the `host:port` for the engine subprocess's
-// gRPC server. Plan 39's StorageRead E2E uses this to open a
+// gRPC server. The StorageRead E2E uses this to open a
 // dedicated channel that mirrors the way real BigQuery clients dial
 // the Storage Read endpoint (which is a separate gRPC service from
 // the REST surface, so the gateway does not proxy it — see

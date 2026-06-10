@@ -15,7 +15,8 @@
 # Per-handler unit coverage:
 # `dml_executor_test.cc::UpdateScalarSetMutatesMatchingRow`,
 # `UpdateSetExprUsesSourceColumnRef`. Route-label assertion
-# deferred to plan 16.
+# intentionally omitted; routing drift is tracked by
+# `task conformance:routing-matrix`.
 name: update_set_scalar_round_trip
 description: |
   Seed -> UPDATE t SET name = 'augusta' WHERE id = 1 -> SELECT

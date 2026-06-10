@@ -71,7 +71,7 @@ func repoRoot() (string, error) {
 
 // TestRunFixturesAgainstEmulatorMain executes every seed fixture
 // against the real `emulator_main` on both profiles and asserts the
-// matrix PASSes. This is the plan-40 done-criteria check: the runner
+// matrix PASSes. This is the end-to-end smoke check: the runner
 // boots the engine, runs setup, queries the gateway, and the diff
 // engine reports PASS. A failure here means either the fixture is
 // wrong or the engine regressed for that profile.
@@ -90,8 +90,8 @@ func TestRunFixturesAgainstEmulatorMain(t *testing.T) {
 	// 90s budget covers `emulator_main` cold-start (~1-2s per spawn)
 	// for the 4 fixtures x 2 profiles = 8 invocations on a developer
 	// laptop, with headroom for slower CI. If the suite outgrows this
-	// budget (plan 42 lands the 20-fixture corpus), bump explicitly
-	// here rather than papering over a hang.
+	// budget as the fixture corpus grows, bump explicitly here
+	// rather than papering over a hang.
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -130,7 +130,7 @@ func TestRunFixturesAgainstEmulatorMain(t *testing.T) {
 			report.SchemaVersion, runner.JSONSchemaVersion)
 	}
 
-	// The JSON output is the artifact plan 41's diff CI ingests.
+	// The JSON output is the artifact the diff CI ingests.
 	// Decode it back to make sure the shape on the wire stays in
 	// step with the in-memory Report.
 	var decoded runner.Report

@@ -8,8 +8,8 @@
 # CAST against `Value`-level coercion. SAFE_CAST + the format /
 # time-zone / extended-cast cases stay deferred under
 # `docs/ENGINE_POLICY.md`.
-# Rehomed from `fastpath/` to `scalar/` by plan 17 to match the
-# route the harness actually observes.
+# Rehomed from `fastpath/` to `scalar/` to match the route the
+# harness actually observes.
 name: expr_cast_types
 description: |
   CAST across STRING / INT64 / FLOAT64 / BOOL. Verifies each cast

@@ -10,7 +10,8 @@
 # filter, not a "keep-me" one).
 #
 # Per-handler unit coverage: `dml_executor_test.cc::DeleteWhere*`.
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: delete_where_round_trip
 description: |
   Seed -> DELETE FROM t WHERE id = 2 -> SELECT round-trip. Pins

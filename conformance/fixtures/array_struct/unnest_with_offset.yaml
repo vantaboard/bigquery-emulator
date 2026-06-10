@@ -14,9 +14,10 @@
 # alias for the offset column (`WITH OFFSET AS idx`) flows through
 # the projection.
 #
-# Route-label assertion: deferred to plan 16 (the route-label
+# Route-label assertion: intentionally omitted (the route-label
 # infrastructure does not yet inspect ResolvedArrayScan promotion
-# decisions; see `conformance/fixtures/functions/README.md`).
+# decisions); routing drift is tracked by
+# `task conformance:routing-matrix`.
 name: unnest_with_offset
 description: |
   Standalone UNNEST of a STRING ARRAY with WITH OFFSET AS idx.

@@ -239,8 +239,9 @@ std::string Transpiler::EmitSubqueryExpr(
   //                                   both engines agree on this).
   //
   // LIKE ANY / ALL / NOT LIKE ANY / ALL (BigQuery's
-  // `<expr> LIKE ANY (<subquery>)`) are out of plan-10 scope;
-  // they fall through to the empty-string contract today.
+  // `<expr> LIKE ANY (<subquery>)`) are deliberately out of scope
+  // for the transpiler; they fall through to the empty-string
+  // contract today (surfacing UNIMPLEMENTED).
   //
   // Correlated subqueries (non-empty `parameter_list()`) belong to
   // the semantic executor (`docs/ENGINE_POLICY.md` Family 4,
@@ -291,8 +292,9 @@ std::string Transpiler::EmitSubqueryExpr(
       return absl::StrCat("(", lhs, " IN (", inner, "))");
     }
     default:
-      // LIKE_ANY / LIKE_ALL / NOT_LIKE_ANY / NOT_LIKE_ALL: out of
-      // plan-10 scope; empty-string contract surfaces UNIMPLEMENTED.
+      // LIKE_ANY / LIKE_ALL / NOT_LIKE_ANY / NOT_LIKE_ALL:
+      // deliberately out of scope for the transpiler; the
+      // empty-string contract surfaces UNIMPLEMENTED.
       return "";
   }
 }

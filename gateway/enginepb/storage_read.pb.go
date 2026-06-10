@@ -5,14 +5,15 @@
 // can stream rows back without the entire result set living in the
 // gateway's heap.
 //
-// Plan 37 ships the proto + the `CreateReadSession` handler; plan 38
-// (`storage-read-rows`) lights up the streaming `ReadRows` reply, and
-// plan 39 (`storage-read-gateway-e2e`) wires the gateway to it. The
-// shape here is the **simplified** Storage Read v1 contract: no
-// Arrow/Avro projections (rows ride on the same `DataRow` cells that
+// The engine implements `CreateReadSession` and the streaming
+// `ReadRows` reply, including per-column projection
+// (`selected_fields`) and `row_restriction` pushdown, and the gateway
+// is wired to it (with e2e coverage under `gateway/e2e/`). The shape
+// here is the **simplified** Storage Read v1 contract: no Arrow/Avro
+// projections (rows ride on the same `DataRow` cells that
 // `Catalog.ListRows` already returns), no SplitReadStream RPC, no
 // session liveness extension. Those are documented as "future" so
-// the conformance harness in plan 40 can pin per-feature gaps.
+// the conformance harness can pin per-feature gaps.
 //
 // Code generation:
 //   - Go:  `task proto:gen` writes
@@ -51,13 +52,14 @@ type CreateReadSessionRequest struct {
 	// The gateway derives this from the REST URL path so different
 	// projects do not see each other's sessions.
 	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	// Session shape the caller wants to read. Today only `read_session.table`
-	// is honored; `read_options.selected_fields` is parsed but not yet
-	// projected (plan 38 wires it).
+	// Session shape the caller wants to read. `read_session.table` names
+	// the table; `read_options.selected_fields` and
+	// `read_options.row_restriction` are validated here and applied when
+	// the streams are drained.
 	ReadSession *ReadSession `protobuf:"bytes,2,opt,name=read_session,json=readSession,proto3" json:"read_session,omitempty"`
 	// Maximum number of streams the caller is willing to drain in
-	// parallel. Plan 37 always returns exactly one stream (no parallel
-	// reads); plan 39+ will respect this knob.
+	// parallel. The engine always returns exactly one stream (no
+	// parallel reads), regardless of this value.
 	MaxStreamCount int32 `protobuf:"varint,3,opt,name=max_stream_count,json=maxStreamCount,proto3" json:"max_stream_count,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -131,11 +133,11 @@ type ReadSession struct {
 	// from `Storage::GetSchema` so the caller can decode the cells the
 	// same way it decodes `tabledata.list` rows.
 	Schema *TableSchema `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
-	// Subset of fields to read. Plan 37 accepts but does not enforce
-	// this list; plan 38 wires per-column projection.
+	// Subset of fields to read; the engine validates the list at
+	// session creation and projects rows to these columns on ReadRows.
 	ReadOptions *ReadOptions `protobuf:"bytes,4,opt,name=read_options,json=readOptions,proto3" json:"read_options,omitempty"`
 	// Streams the caller can drain. Each one is independent and any
-	// single row in `table` appears in exactly one stream. Plan 37
+	// single row in `table` appears in exactly one stream. The engine
 	// always returns a single stream with the full table.
 	Streams       []*ReadStream `protobuf:"bytes,5,rep,name=streams,proto3" json:"streams,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -210,13 +212,15 @@ func (x *ReadSession) GetStreams() []*ReadStream {
 type ReadOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Names of the columns the caller wants returned. Empty / unset
-	// means "all columns". Plan 38 wires the projection; today the
-	// engine returns every column even when this is non-empty.
+	// means "all columns". Non-empty lists are validated at session
+	// creation and rows are projected to exactly these columns.
 	SelectedFields []string `protobuf:"bytes,1,rep,name=selected_fields,json=selectedFields,proto3" json:"selected_fields,omitempty"`
-	// SQL-shaped filter expression the engine should push down. Plan 37
-	// does not honor this knob; it is here so the proto matches the
-	// public surface and so plan 39+ can light it up without changing
-	// the wire shape.
+	// SQL-shaped filter expression the engine pushes down. The
+	// supported surface is a single `<column> = <literal>` equality
+	// (INT64 / STRING / BOOL literals); anything else is rejected with
+	// INVALID_ARGUMENT at CreateReadSession time. The predicate is
+	// applied before `offset`, matching BigQuery's documented
+	// semantics.
 	RowRestriction string `protobuf:"bytes,2,opt,name=row_restriction,json=rowRestriction,proto3" json:"row_restriction,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -321,8 +325,8 @@ type ReadRowsRequest struct {
 	ReadStream string `protobuf:"bytes,1,opt,name=read_stream,json=readStream,proto3" json:"read_stream,omitempty"`
 	// Row offset to resume from. The gateway uses this to re-attach to
 	// a stream after a transient failure without re-driving rows the
-	// client already received. Plan 38 wires this; today the engine
-	// returns rows starting from `offset == 0`.
+	// client already received. The engine honors the offset (counted
+	// over the post-filter row stream).
 	Offset        int64 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -374,9 +378,9 @@ func (x *ReadRowsRequest) GetOffset() int64 {
 
 type ReadRowsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Rows on this page of the stream. Plan 38 chooses a page size and
-	// wires the streaming logic; today this list is empty and the
-	// method returns UNIMPLEMENTED before sending the first message.
+	// Rows on this page of the stream. The engine streams rows in
+	// fixed-size pages (see `kReadRowsBatchSize` in
+	// `frontend/handlers/storage_read.cc`).
 	Rows []*DataRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
 	// Number of rows in this page. Convenience field so callers do not
 	// have to count `rows.size()` on every reply.

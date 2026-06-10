@@ -10,7 +10,8 @@
 #
 # Route: `duckdb_native` via
 # `docs/ENGINE_POLICY.md::EmitWithScan` /
-# `EmitWithRefScan`. Route-label assertion deferred to plan 16.
+# `EmitWithRefScan`. Route-label assertion intentionally omitted;
+# routing drift is tracked by `task conformance:routing-matrix`.
 name: with_scan_multiple_ctes
 description: |
   Two non-recursive CTEs joined across a cross-product so both

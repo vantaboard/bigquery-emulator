@@ -9,7 +9,8 @@
 # Edge cases pinned: 1-based index, missing needle returns 0,
 # empty needle returns 1, NULL propagation.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_strpos
 description: |
   BigQuery STRPOS lowered through the polyfill UDF library

@@ -2,7 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_SYSTEM_VARIABLES_H_
 
 // BigQuery @@ system variable registration and per-project session
-// values for the semantic executor (query port plan 14).
+// values for the semantic executor.
 
 #include <string>
 #include <vector>

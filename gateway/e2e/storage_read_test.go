@@ -62,7 +62,7 @@ func runStorageReadRoundTrip(t *testing.T, env *emulatorEnv,
 	// 1. Seed the dataset + table over REST so the engine has a row
 	// store to scan. We pick INT64 / STRING / BOOL columns so the
 	// row_restriction tests below have something to exercise across
-	// all three literal kinds the plan-39 parser accepts.
+	// all three literal kinds the row_restriction parser accepts.
 	base := env.URL() + "/bigquery/v2/projects/" + projectID
 	statusCode, body := doJSON(t, http.MethodPost, base+"/datasets",
 		[]byte(`{"datasetReference":{"projectId":"`+projectID+
@@ -156,7 +156,7 @@ func runStorageReadRoundTrip(t *testing.T, env *emulatorEnv,
 
 	// 7. Malformed restriction must surface from CreateReadSession as
 	// INVALID_ARGUMENT before any rows are read — `id > 0` is a range
-	// op outside the plan-39 parser's surface.
+	// op outside the row_restriction parser's surface.
 	malformedReq := &enginepb.CreateReadSessionRequest{
 		Parent: "projects/" + projectID,
 		ReadSession: &enginepb.ReadSession{
@@ -234,7 +234,7 @@ func readSessionIDs(t *testing.T, storage enginepb.StorageReadClient,
 			if len(row.GetCells()) == 0 {
 				t.Fatalf("ReadRows row has no cells: %+v", row)
 			}
-			// Plan 38 lowers every primitive onto Cell.string_value
+			// The engine lowers every primitive onto Cell.string_value
 			// regardless of the declared column type; INT64 cells
 			// arrive as decimal strings, BOOL cells as "true"/"false".
 			ids = append(ids, row.GetCells()[0].GetStringValue())

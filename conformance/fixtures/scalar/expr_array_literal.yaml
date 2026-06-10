@@ -5,7 +5,8 @@
 # `semantic_executor` per the route-classifier rule documented in
 # `docs/ENGINE_POLICY.md`, so this fixture's
 # rehome under `scalar/` matches the route the harness actually
-# observes (it previously lived under `fastpath/` -- moved by plan 17).
+# observes (it previously lived under `fastpath/` and was moved
+# here to match the observed route).
 # We intentionally include a NULL element so a regression that drops
 # NULLs from the array would surface.
 name: expr_array_literal

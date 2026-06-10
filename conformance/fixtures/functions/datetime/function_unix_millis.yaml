@@ -5,7 +5,8 @@
 # wrapper pins the contract under our own name so a future
 # DuckDB precision drift would surface as a unit-test failure.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_unix_millis
 description: |
   BigQuery UNIX_MILLIS lowered through the polyfill UDF library

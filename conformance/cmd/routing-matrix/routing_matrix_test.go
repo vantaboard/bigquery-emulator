@@ -24,8 +24,8 @@ func fixturesDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(here), "..", "..", "fixtures")
 }
 
-// TestRoutingMatrixIsReproducible pins the determinism contract
-// plan 16 calls out: two consecutive invocations of
+// TestRoutingMatrixIsReproducible pins the routing matrix's
+// determinism contract: two consecutive invocations of
 // `buildMatrix` MUST return byte-identical output. CI uses this
 // in the upload step (a non-blocking artifact whose diff between
 // two runs proves the matrix is a deterministic function of the

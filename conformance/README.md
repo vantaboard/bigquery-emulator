@@ -3,10 +3,9 @@
 The conformance harness drives the BigQuery emulator through its REST
 gateway with declarative YAML fixtures and diffs the resulting rows (or
 errors) against the values pinned in each file. The harness is the
-conformance-harness capability area of `ROADMAP.md`; the runner CLI is
-the deliverable of plan 40 (`conformance-fixtures-runner`) and the seed
-fixture set is plan 42
-(`conformance-seed-docs`). At time of writing the directory contains
+conformance-harness capability area of `ROADMAP.md`; it consists of
+the runner CLI (`conformance/cmd/runner`) plus the seed fixture set
+under `conformance/fixtures/`. At time of writing the directory contains
 **24 fixtures** spanning SELECT shapes, GROUP BY / aggregates, JOINs,
 DML, structural errors, DDL, and a schema-only smoke check; see the
 "Contributing a new fixture" section below to add more.
@@ -44,7 +43,7 @@ task conformance:run PROFILE=local
 # 4. Run a single fixture file. Honors PROFILE too.
 task conformance:run-fixture FIXTURE=conformance/fixtures/select_literal_value.yaml
 
-# 5. JSON output for CI consumption (plan 41 hooks this).
+# 5. JSON output for CI consumption (the diff CI ingests this).
 task conformance:run OUTPUT=json OUTPUT_FILE=conformance-result.json
 
 # 6. Reach an already-running gateway on :9060 instead of spawning
@@ -147,7 +146,7 @@ A fixture that needs only a `SELECT` (with no catalog state) omits
 ### `expected.match` matching modes
 
 Three matching modes are supported. The mode is declared on
-`expected.match`; omitting it defaults to `ordered` (the plan-40
+`expected.match`; omitting it defaults to `ordered` (the original
 default, kept stable for the seed fixtures).
 
 | mode | what it pins | when to use |
@@ -217,7 +216,7 @@ may be omitted; the runner only asserts on what the fixture pins.
 
 ### `expected.route` matching
 
-Plan 16 (`docs/ENGINE_POLICY.md`) wired
+`docs/ENGINE_POLICY.md` wires
 the coordinator's `RouteClassifier` decision through to the REST
 response as the `emulatorRoute` debug field on
 `Job.statistics.query`. The field is loopback-only -- the
@@ -313,9 +312,9 @@ Flags:
                           named profiles (duckdb). Default: all.
   --update-baselines      Overwrite the `expected:` block of every fixture
                           with the actual response. Used to bootstrap new
-                          fixtures (plan 42 leans on this).
+                          fixtures.
   --output FORMAT         text (human, default) or json (machine,
-                          consumed by plan 41 CI).
+                          consumed by the diff CI).
   --output-file PATH      If non-empty, tee the rendered report into
                           this file (atomic write via a sibling tmp +
                           rename) in addition to stdout. Used by the
@@ -329,7 +328,7 @@ Exit codes:
 - `1` — at least one fixture x profile FAILed.
 - `2` — runner-internal error (bad YAML, can't start engine, etc).
 
-### JSON output shape (consumed by plan 41)
+### JSON output shape (consumed by the diff CI)
 
 ```json
 {

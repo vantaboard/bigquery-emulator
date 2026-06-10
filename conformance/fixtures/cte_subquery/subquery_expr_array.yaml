@@ -9,7 +9,8 @@
 # observable on both engines. Route: `duckdb_native`
 # (`docs/ENGINE_POLICY.md` Family 2).
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: subquery_expr_array
 description: |
   Non-correlated ARRAY subquery returning the rows of an inline

@@ -9,7 +9,8 @@
 # subquery). See `docs/ENGINE_POLICY.md` Family 2 and
 # `backend/engine/duckdb/transpiler/transpiler.cc::EmitSubqueryExpr`.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: subquery_expr_scalar
 description: |
   Non-correlated scalar subquery returning the maximum value of a

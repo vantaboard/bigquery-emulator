@@ -14,8 +14,9 @@
 #      directly would surface here as `LOG(8, 2) == ln(2)/ln(8)
 #      == 0.333...` instead of `LOG(8, 2) == 3`.
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_log
 description: |
   BigQuery LOG lowered through the polyfill UDF library

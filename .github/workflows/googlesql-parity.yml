@@ -448,8 +448,9 @@ jobs:
       always()
       && (github.event_name == 'schedule'
           || (github.event.inputs.tier != '' && github.event.inputs.tier != 'pr'))
-    # Scheduled tier keeps full-suite parity informational until plan 07
-    # conformance is green; release tier still gates on duckdb parity.
+    # Scheduled tier keeps full-suite parity informational until the
+    # remaining conformance gaps are closed; release tier still gates
+    # on duckdb parity.
     continue-on-error: ${{ github.event_name == 'schedule' || github.event.inputs.tier == 'scheduled' }}
     steps:
       - name: Checkout

@@ -5,7 +5,8 @@
 # (`bq_isnull('') == FALSE`); a regression that treated `''` as
 # NULL would surface the empty-string row as TRUE.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_isnull
 description: |
   BigQuery ISNULL lowered through the polyfill UDF library

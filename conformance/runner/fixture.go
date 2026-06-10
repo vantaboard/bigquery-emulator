@@ -94,8 +94,8 @@ type SetupStep struct {
 	// tool when the fixture wants to assert the streaming side of
 	// the wire (separate from the DML envelope); INSERT VALUES /
 	// UPDATE / DELETE now land via the local DML executor
-	// (`backend/engine/semantic/dml/`, plan 9), so fixtures that
-	// just want seed data may use either `rows:` or an `sql:` step.
+	// (`backend/engine/semantic/dml/`), so fixtures that just
+	// want seed data may use either `rows:` or an `sql:` step.
 	Rows *RowsSetup `yaml:"rows,omitempty"`
 
 	// SQL is a query the runner POSTs to /queries. Errors from the

@@ -51,7 +51,7 @@ const (
 	WriteStream_TYPE_UNSPECIFIED WriteStream_Type = 0
 	// `_default` and explicit COMMITTED both commit on every
 	// AppendRows batch (rows immediately visible to readers).
-	// Plan 15 lights both up.
+	// The emulator supports both.
 	WriteStream_COMMITTED WriteStream_Type = 1
 	// PENDING streams buffer rows server-side until
 	// `BatchCommitWriteStreams` makes them visible. Reserved for
@@ -257,8 +257,8 @@ type AppendRowsRequest struct {
 	// leave this empty (the handler keeps the first message's
 	// binding) or re-assert the same value.
 	WriteStream string `protobuf:"bytes,1,opt,name=write_stream,json=writeStream,proto3" json:"write_stream,omitempty"`
-	// Optional offset for ordered append. Plan 15 ignores the value
-	// for `_default` / `COMMITTED` (every append is immediately
+	// Optional offset for ordered append. The handler ignores the
+	// value for `_default` / `COMMITTED` (every append is immediately
 	// committed in arrival order); the field is here so the wire
 	// shape is forward-compatible with BUFFERED / PENDING flows.
 	Offset    int64                        `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -430,8 +430,8 @@ type AppendRowsResponse_ErrorMessage struct {
 	// Error message from the storage layer (`DuckDBStorage::AppendRows`
 	// failures, schema mismatches, ...). The handler maps absl
 	// statuses onto a free-form message here; the public BigQuery
-	// surface uses `google.rpc.Status` but plan 15 keeps the
-	// simpler shape so we don't pull `google.rpc.status` in.
+	// surface uses `google.rpc.Status` but we keep the simpler
+	// shape so we don't pull `google.rpc.status` in.
 	ErrorMessage string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3,oneof"`
 }
 
@@ -530,7 +530,7 @@ func (x *FinalizeWriteStreamRequest) GetName() string {
 type FinalizeWriteStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Total rows committed on the stream. Reserved for the deferred
-	// follow-up; plan 15 returns UNIMPLEMENTED.
+	// follow-up; the emulator returns UNIMPLEMENTED.
 	RowCount      int64 `protobuf:"varint,1,opt,name=row_count,json=rowCount,proto3" json:"row_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -578,7 +578,7 @@ type BatchCommitWriteStreamsRequest struct {
 	// Parent table that owns the streams.
 	Parent string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	// Stream names to commit atomically. Reserved for the deferred
-	// follow-up; plan 15 returns UNIMPLEMENTED.
+	// follow-up; the emulator returns UNIMPLEMENTED.
 	WriteStreams  []string `protobuf:"bytes,2,rep,name=write_streams,json=writeStreams,proto3" json:"write_streams,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

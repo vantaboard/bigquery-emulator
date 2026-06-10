@@ -9,7 +9,8 @@
 # passing through as `GROUP BY`.
 #
 # Route: `duckdb_rewrite` via `EmitPivotScan` (FILTER aggregates).
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 #
 # Fixture shape: a tiny sales table pivoted on `kind` aggregates the
 # per-region totals into one row per region with one column per

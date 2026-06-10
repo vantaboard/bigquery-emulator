@@ -158,7 +158,7 @@ TEST_F(DuckDBStorageTest, CreateReadStreamOnMissingTableIsNotFound) {
 }
 
 // ---------------------------------------------------------------------------
-// row_restriction predicate pushdown (plan 39)
+// row_restriction predicate pushdown
 //
 // The handler parses `<column> = <literal>` into a typed
 // `EqualityPredicate` and hands it to `CreateReadStream`. The DuckDB
@@ -263,7 +263,7 @@ TEST_F(DuckDBStorageTest, CreateReadStreamPredicateNoMatchYieldsEmpty) {
   EXPECT_TRUE(scanned.empty());
 }
 
-// Plan 15 (storage-read-write): selected_fields projection pushdown.
+// selected_fields projection pushdown.
 // The DuckDB backend filters the SELECT projection list down to the
 // caller-supplied subset and the row decoder reads cells back in the
 // projected order. Verifies both the cell count and the projected

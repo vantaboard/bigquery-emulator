@@ -3,8 +3,7 @@
 // it; the helper is a pure function over package-level vars and is
 // trivially testable in-process). The integration check that the
 // linker-injected values actually surface is performed by the
-// `task gateway:build` + `./bin/gateway_main --version` smoke at the
-// end of plan 45's verification block.
+// `task gateway:build` + `./bin/gateway_main --version` smoke.
 
 package main
 

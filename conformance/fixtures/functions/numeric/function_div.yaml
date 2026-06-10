@@ -8,8 +8,9 @@
 # `(x - x % y) // y` identity so the result agrees with BigQuery
 # regardless of which convention DuckDB's `//` lands on.
 #
-# Route-label assertion: deferred to plan 16 per the same convention
-# `function_mod.yaml` documents.
+# Route-label assertion: intentionally omitted per the same
+# convention `function_mod.yaml` documents; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_div
 description: |
   BigQuery DIV lowered through the polyfill UDF library

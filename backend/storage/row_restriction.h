@@ -3,7 +3,8 @@
 
 // Row-restriction parser for the Storage Read API.
 //
-// Plan 39 narrows the BigQuery `ReadOptions.row_restriction` surface
+// The parser deliberately narrows the BigQuery
+// `ReadOptions.row_restriction` surface
 // to a single `<column> = <literal>` predicate. Anything more complex
 // (AND, OR, NOT, IN, range, NULL, function calls) is rejected at the
 // gRPC boundary with INVALID_ARGUMENT so the gateway can surface the
@@ -66,7 +67,7 @@ struct EqualityPredicate {
 //   * BOOL         - case-insensitive `true` / `false`
 //   * STRING       - single-quoted, doubled-quote escape (`''` -> `'`)
 // Anything else (FLOAT64, NUMERIC, BYTES, DATE, ARRAY, STRUCT, NULL)
-// is rejected with a clear message; plan 39 ships with the same three
+// is rejected with a clear message; these are the same three
 // literal types BigQuery's `simple_filter` accepts in the public
 // Storage Read API.
 absl::Status ParseRowRestriction(absl::string_view restriction,

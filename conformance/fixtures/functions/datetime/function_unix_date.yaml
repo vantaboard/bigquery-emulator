@@ -14,7 +14,8 @@
 #     documents this explicitly).
 #   * Modern future dates return the expected positive day count.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_unix_date
 description: |
   BigQuery UNIX_DATE lowered through the polyfill UDF library

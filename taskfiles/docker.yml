@@ -1,7 +1,7 @@
 # Build and run the runtime Docker image. The multi-stage Dockerfile
 # ships both the Go gateway and the C++ engine and is what
 # `task docker:smoke` / `.github/workflows/docker-smoke.yml` /
-# the GHCR release path (plan 44) eventually consume.
+# the GHCR release path (`.github/workflows/release.yml`) consume.
 #
 # Usage:
 #   task docker:build   - build the dev tag

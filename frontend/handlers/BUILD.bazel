@@ -132,10 +132,9 @@ cc_test(
     ],
 )
 
-# StorageRead handler (plan 37). Mirrors the `catalog_handler` shape:
-# header + .cc + the storage_read proto stubs. Plan 37 only wires
-# `CreateReadSession`; plan 38 will light up the streaming `ReadRows`
-# reply on the same library.
+# StorageRead handler. Mirrors the `catalog_handler` shape:
+# header + .cc + the storage_read proto stubs. Serves
+# `CreateReadSession` and the streaming `ReadRows` reply.
 cc_library(
     name = "storage_read_internal",
     srcs = ["storage_read_internal.cc"],
@@ -200,9 +199,9 @@ cc_test(
 
 # StorageWrite handler (storage read/write API surface).
 # Mirrors the storage_read_handler shape: header + .cc + the
-# storage_write proto stubs. Plan 15 lights up the _default +
-# COMMITTED stream types end-to-end; BUFFERED / PENDING return
-# UNIMPLEMENTED until the deferred follow-up subagent lands.
+# storage_write proto stubs. Serves the _default, COMMITTED, and
+# BUFFERED stream types end-to-end; PENDING +
+# BatchCommitWriteStreams return UNIMPLEMENTED.
 cc_library(
     name = "storage_write_internal",
     srcs = ["storage_write_internal.cc"],

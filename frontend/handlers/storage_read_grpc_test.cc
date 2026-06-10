@@ -236,8 +236,8 @@ TEST_F(StorageReadGrpcTest, ReadRowsUnknownStreamIsNotFound) {
   CreatePeopleTable();
   ::grpc::ClientContext read_ctx;
   v1::ReadRowsRequest read_req;
-  // Plan 37 mints session names starting at s1; an `s99` session was
-  // never created so the handler MUST surface NOT_FOUND.
+  // The handler mints session names starting at s1; an `s99` session
+  // was never created so the handler MUST surface NOT_FOUND.
   read_req.set_read_stream(
       "projects/proj-test/locations/-/sessions/s99/streams/0");
   auto reader = stub_->ReadRows(&read_ctx, read_req);
@@ -250,7 +250,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsUnknownStreamIsNotFound) {
       << status.error_message();
 }
 
-// Plan 15 (storage-read-write): selected_fields projection
+// selected_fields projection
 // end-to-end. The session is minted with `selected_fields = [id]`,
 // so the response schema lists only `id` and ReadRows yields one
 // cell per row instead of three. The projection survives a
@@ -302,7 +302,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsProjectsToSelectedFields) {
   }
 }
 
-// Plan 39: row_restriction pushdown end-to-end. CreateReadSession
+// row_restriction pushdown end-to-end. CreateReadSession
 // parses the predicate, stashes it on the SessionState, and ReadRows
 // hands it to `CreateReadStream` which filters before paginating.
 TEST_F(StorageReadGrpcTest, ReadRowsHonorsRowRestriction) {
@@ -361,7 +361,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsSchemaDriftIsFailedPrecondition) {
   // Mint a session against the people table, then drop+recreate the
   // table with a different schema. The follow-up ReadRows must
   // detect the drift and return FAILED_PRECONDITION; the gateway
-  // (plan 39) translates that to BigQuery's "schema changed" error.
+  // translates that to BigQuery's "schema changed" error.
   CreatePeopleTable();
   AppendPeople(5);
 

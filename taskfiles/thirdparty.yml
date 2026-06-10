@@ -128,7 +128,7 @@ vars:
     CreateCampaignmanagerTransferIT,CreatePlayTransferIT,CreateRedshiftTransferIT,
     CreateTeradataTransferIT,CreateYoutubeChannelTransferIT,
     CreateYoutubeContentOwnerTransferIT,DisableTransferConfigIT,ReEnableTransferConfigIT
-  # dbt-bigquery functional lane (plan 10). Sync upstream tests first via
+  # dbt-bigquery functional lane. Sync upstream tests first via
   # scripts/sync_dbt_bigquery_tests.sh. Default pytest selector is the full
   # functional tree with emulator skip matrix; override for triage:
   #   DBT_BIGQUERY_PYTEST_ARGS='tests/functional/adapter/test_basic.py::TestSimpleMaterializationsBigQuery -n0'

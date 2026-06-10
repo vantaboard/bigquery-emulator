@@ -27,11 +27,11 @@
 #      `latest` is suppressed for pre-release tags (`v0.0.1-rc1`).
 #      Linux/amd64 only — the engine binary is linux/amd64 only and
 #      the README documents the caveat. Multi-arch is explicitly out
-#      of scope for plan 44.
+#      of scope for the release pipeline today.
 #   5. Run `goreleaser release --clean`. Goreleaser writes the
 #      gateway archives + checksums to the GitHub release the tag
-#      push opened. Engine binary is bundled into all four archives
-#      per the plan-44 user decision. Release notes include the
+#      push opened. Engine binary is deliberately bundled into all
+#      four archives. Release notes include the
 #      pinned GoogleSQL artifact URL + SHA-256 so consumers can
 #      reproduce the build from the same artifact.
 #
@@ -250,8 +250,8 @@ jobs:
 
       - name: Normalize repository owner (lowercase)
         id: owner
-        # GHCR rejects mixed-case owners; the user explicitly noted
-        # this in the plan-44 addendum. `tr` is the cheap, portable
+        # GHCR rejects mixed-case owners, so the owner must be
+        # lowercased before tagging. `tr` is the cheap, portable
         # normalizer.
         run: |
           owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')

@@ -74,7 +74,7 @@ TEST_F(RouteClassifierTest, ApproxQuantilesFunctionRoutesToSemanticExecutor) {
 TEST_F(RouteClassifierTest,
        SemanticExecutorDominatesWhenApproxQuantilesPresent) {
   // `APPROX_QUANTILES` and `SAFE_DIVIDE` are both `semantic_executor`
-  // rows in `functions.yaml` (plan 15 / plan 03). The SELECT promotes
+  // rows in `functions.yaml`. The SELECT promotes
   // to the semantic route; `APPROX_QUANTILES` is recorded as the
   // offending node because it is the higher-priority promotion among
   // the semantic functions in this query shape.
@@ -121,7 +121,7 @@ TEST_F(RouteClassifierTest,
   // has no value-table row shape, so the classifier promotes the
   // route to `kSemanticExecutor` via the
   // `VisitResolvedQueryStmt(is_value_table=true)` override in
-  // `route_classifier.cc`. Plan-2 owner is the semantic executor
+  // `route_classifier.cc`. The semantic executor owns this surface
   // (`docs/ENGINE_POLICY.md`); the stub returns
   // UNIMPLEMENTED today, which is the same end-user-visible
   // outcome as the prior empty-string gate inside `EmitQueryStmt`.
@@ -138,7 +138,7 @@ TEST_F(RouteClassifierTest,
 // NOTE on `ResolvedJoinScan(is_lateral=true)` coverage: the
 // classifier carries a `VisitResolvedJoinScan` override that
 // promotes the lateral join shape to `kSemanticExecutor` (see
-// `route_classifier.cc`'s plan-2 additions). Triggering
+// `route_classifier.cc`). Triggering
 // `is_lateral=true` from a SimpleCatalog-backed SQL query
 // requires the `LATERAL` keyword plus a correlated subquery shape
 // that a minimal in-process catalog cannot easily express:

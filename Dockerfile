@@ -383,7 +383,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM ubuntu:24.04 AS runtime
 
 # Image labels are filled at build time. `VERSION` defaults to `dev`
-# locally and is overridden by the release pipeline (plan 44).
+# locally and is overridden by the release pipeline
+# (`.github/workflows/release.yml`).
 ARG VERSION=dev
 ARG SOURCE_REPO=https://github.com/vantaboard/bigquery-emulator
 
@@ -442,7 +443,7 @@ COPY LICENSE /LICENSE
 COPY docker/gateway_main.sh /usr/local/bin/bigquery-emulator-gateway
 RUN chmod +x /usr/local/bin/bigquery-emulator-gateway
 
-# Bundled public-dataset seed for thirdparty sample tests (plan 09).
+# Bundled public-dataset seed for thirdparty sample tests.
 COPY testdata/public-data/ /opt/bigquery-emulator/testdata/public-data/
 
 # Persistent data dir consumed by the DuckDB storage backend (now the

@@ -20,7 +20,8 @@
 #   BIGQUERY_UTILS_KEEP   Keep the temporary clone on exit (default: cleaned).
 #
 # Refresh contract: the generator wipes known_failing/ each run and rewrites
-# every emitted fixture. passing/ is untouched (plan 02 triage promotes there).
+# every emitted fixture. passing/ is untouched (fixtures are promoted there
+# manually after engine triage).
 
 set -euo pipefail
 

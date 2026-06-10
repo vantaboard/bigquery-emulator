@@ -13,8 +13,9 @@
 #     empty-string element (matching BigQuery's "always split"
 #     contract).
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_split
 description: |
   BigQuery SPLIT lowered through the polyfill UDF library

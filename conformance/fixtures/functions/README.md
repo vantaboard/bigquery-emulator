@@ -31,25 +31,24 @@ Families today:
   `count_if` aggregate; no UDF wrapper needed because v1.5.3's
   `count_if` already matches BQ COUNTIF on NULL / FALSE handling).
 
-Families landed by follow-up commits within the same plan ship one
-fixture per BigQuery function alongside the macro itself (per the
-plan's "no silent approximation" rule).
+New families ship one fixture per BigQuery function alongside the
+macro itself (the "no silent approximation" rule).
 
-## Route-label assertion (planned)
+## Route-label assertion
 
 The fixtures here all resolve to the `duckdb_udf` route once their
 matching `functions.yaml` row flips from `status=planned` to ready.
-`docs/ENGINE_POLICY.md` (plan 16) wires the
-`expected.route` field; until then this directory does not carry a
-hard route-label assertion -- the route is exercised implicitly via
-the live macro registration in `DuckDbExecutor`.
+The runner supports an `expected.route` assertion (see
+`docs/ENGINE_POLICY.md`), but this directory intentionally does not
+carry a hard route-label assertion -- the route is exercised
+implicitly via the live macro registration in `DuckDbExecutor`, and
+routing drift is tracked by `task conformance:routing-matrix`.
 
 ## How this directory is used
 
 `task conformance:run` (full conformance suite) walks every YAML
 under `conformance/fixtures/` so these fixtures are picked up
-alongside the seed set. `task conformance:fastpath`
-(`conformance/fixtures/fastpath/` only) is unchanged today; once
-plan 16 lands its route-label assertion, the fastpath task can
-optionally widen its scope to include this directory (since
-`duckdb_udf` is also a fast-path-compatible route).
+alongside the seed set. `task conformance:fastpath` (the PR-gating
+fast lane) also runs this directory explicitly alongside
+`conformance/fixtures/fastpath/` (since `duckdb_udf` is also a
+fast-path-compatible route).

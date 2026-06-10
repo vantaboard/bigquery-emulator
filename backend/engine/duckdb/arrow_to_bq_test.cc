@@ -223,7 +223,7 @@ TEST_F(ArrowToBqTest, RendersStructAsStructCell) {
 }
 
 // Window SUM over integers often lands as HUGEINT vectors while the
-// analyzer still types the output column INT64 (query port plan 05).
+// analyzer still types the output column INT64.
 TEST_F(ArrowToBqTest, RendersHugeintWindowSumAsInt64) {
   schema::TableSchema s;
   schema::ColumnSchema sum_col;

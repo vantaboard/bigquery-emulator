@@ -88,7 +88,7 @@ bool IsBareIdentifierChar(char c) {
 //   * Backtick-quoted: ``\`my-col\` =`` — anything inside the
 //     backticks is taken verbatim. Embedded backticks are not
 //     supported (BigQuery doubles them as `\`\``; rare enough that
-//     plan 39 punts on it).
+//     the parser punts on it).
 //   * Bare:           `my_col =` — limited to
 //     `[A-Za-z_][A-Za-z0-9_]*` (a leading digit would be ambiguous
 //     with an INT64 literal on the LHS, which the parser also
@@ -185,7 +185,8 @@ absl::Status ParseBoolLiteral(absl::string_view s, bool* out) {
 }
 
 // Parses an INT64 literal. Accepts a leading sign; rejects anything
-// containing a decimal point or exponent because plan 39 limits the
+// containing a decimal point or exponent because the parser
+// deliberately excludes the
 // FLOAT64 axis (BigQuery's `simple_filter` does not support equality
 // on FLOAT64 anyway — the wire shape is lossy enough that "=" rarely
 // does what the caller meant).

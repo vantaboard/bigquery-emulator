@@ -12,8 +12,9 @@
 #   * Case-sensitive by default (no implicit case folding).
 #   * The `(?i)` inline flag triggers case-insensitive matching.
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_regexp_contains
 description: |
   BigQuery REGEXP_CONTAINS lowered through the polyfill UDF

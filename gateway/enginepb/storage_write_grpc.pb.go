@@ -53,34 +53,34 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StorageWriteClient interface {
 	// CreateWriteStream returns a stream handle the caller binds to
-	// `AppendRows`. Plan 15 supports `_default` and `COMMITTED` streams
-	// (every flushed batch becomes immediately visible to readers);
-	// `BUFFERED` / `PENDING` requests fail with UNIMPLEMENTED until
-	// the deferred follow-up lands.
+	// `AppendRows`. The emulator supports `_default` and `COMMITTED`
+	// streams (every flushed batch becomes immediately visible to
+	// readers); `BUFFERED` / `PENDING` requests fail with UNIMPLEMENTED
+	// until the deferred follow-up lands.
 	CreateWriteStream(ctx context.Context, in *CreateWriteStreamRequest, opts ...grpc.CallOption) (*WriteStream, error)
 	// AppendRows is bidirectional-streaming. The first message on a
 	// stream MUST set `write_stream`; subsequent messages may leave it
 	// empty (the handler keeps the binding from the first message) or
-	// re-assert the same name. Plan 15 commits each `proto_rows` batch
-	// through `Storage::AppendRows` synchronously and replies with one
-	// `AppendRowsResponse` per request before reading the next.
+	// re-assert the same name. The handler commits each `proto_rows`
+	// batch through `Storage::AppendRows` synchronously and replies with
+	// one `AppendRowsResponse` per request before reading the next.
 	AppendRows(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AppendRowsRequest, AppendRowsResponse], error)
 	// GetWriteStream returns the stream metadata the engine recorded at
 	// CreateWriteStream time. Used by clients to verify the stream
 	// type / schema before opening an AppendRows session.
 	GetWriteStream(ctx context.Context, in *GetWriteStreamRequest, opts ...grpc.CallOption) (*WriteStream, error)
-	// FinalizeWriteStream marks a stream as closed. Plan 15 returns
-	// UNIMPLEMENTED today; the surface is reserved for the deferred
-	// BUFFERED / PENDING follow-up where finalize is the producer's
-	// signal to the BatchCommitWriteStreams pass.
+	// FinalizeWriteStream marks a stream as closed. The emulator
+	// returns UNIMPLEMENTED today; the surface is reserved for the
+	// deferred BUFFERED / PENDING follow-up where finalize is the
+	// producer's signal to the BatchCommitWriteStreams pass.
 	FinalizeWriteStream(ctx context.Context, in *FinalizeWriteStreamRequest, opts ...grpc.CallOption) (*FinalizeWriteStreamResponse, error)
 	// BatchCommitWriteStreams atomically commits a set of `PENDING`
-	// streams. Plan 15 returns UNIMPLEMENTED today; reserved for the
-	// deferred follow-up.
+	// streams. The emulator returns UNIMPLEMENTED today; reserved for
+	// the deferred follow-up.
 	BatchCommitWriteStreams(ctx context.Context, in *BatchCommitWriteStreamsRequest, opts ...grpc.CallOption) (*BatchCommitWriteStreamsResponse, error)
 	// FlushRows advances the visibility offset on a `BUFFERED` stream.
-	// Plan 15 returns UNIMPLEMENTED today; reserved for the deferred
-	// follow-up.
+	// The emulator returns UNIMPLEMENTED today; reserved for the
+	// deferred follow-up.
 	FlushRows(ctx context.Context, in *FlushRowsRequest, opts ...grpc.CallOption) (*FlushRowsResponse, error)
 }
 
@@ -160,34 +160,34 @@ func (c *storageWriteClient) FlushRows(ctx context.Context, in *FlushRowsRequest
 // for forward compatibility.
 type StorageWriteServer interface {
 	// CreateWriteStream returns a stream handle the caller binds to
-	// `AppendRows`. Plan 15 supports `_default` and `COMMITTED` streams
-	// (every flushed batch becomes immediately visible to readers);
-	// `BUFFERED` / `PENDING` requests fail with UNIMPLEMENTED until
-	// the deferred follow-up lands.
+	// `AppendRows`. The emulator supports `_default` and `COMMITTED`
+	// streams (every flushed batch becomes immediately visible to
+	// readers); `BUFFERED` / `PENDING` requests fail with UNIMPLEMENTED
+	// until the deferred follow-up lands.
 	CreateWriteStream(context.Context, *CreateWriteStreamRequest) (*WriteStream, error)
 	// AppendRows is bidirectional-streaming. The first message on a
 	// stream MUST set `write_stream`; subsequent messages may leave it
 	// empty (the handler keeps the binding from the first message) or
-	// re-assert the same name. Plan 15 commits each `proto_rows` batch
-	// through `Storage::AppendRows` synchronously and replies with one
-	// `AppendRowsResponse` per request before reading the next.
+	// re-assert the same name. The handler commits each `proto_rows`
+	// batch through `Storage::AppendRows` synchronously and replies with
+	// one `AppendRowsResponse` per request before reading the next.
 	AppendRows(grpc.BidiStreamingServer[AppendRowsRequest, AppendRowsResponse]) error
 	// GetWriteStream returns the stream metadata the engine recorded at
 	// CreateWriteStream time. Used by clients to verify the stream
 	// type / schema before opening an AppendRows session.
 	GetWriteStream(context.Context, *GetWriteStreamRequest) (*WriteStream, error)
-	// FinalizeWriteStream marks a stream as closed. Plan 15 returns
-	// UNIMPLEMENTED today; the surface is reserved for the deferred
-	// BUFFERED / PENDING follow-up where finalize is the producer's
-	// signal to the BatchCommitWriteStreams pass.
+	// FinalizeWriteStream marks a stream as closed. The emulator
+	// returns UNIMPLEMENTED today; the surface is reserved for the
+	// deferred BUFFERED / PENDING follow-up where finalize is the
+	// producer's signal to the BatchCommitWriteStreams pass.
 	FinalizeWriteStream(context.Context, *FinalizeWriteStreamRequest) (*FinalizeWriteStreamResponse, error)
 	// BatchCommitWriteStreams atomically commits a set of `PENDING`
-	// streams. Plan 15 returns UNIMPLEMENTED today; reserved for the
-	// deferred follow-up.
+	// streams. The emulator returns UNIMPLEMENTED today; reserved for
+	// the deferred follow-up.
 	BatchCommitWriteStreams(context.Context, *BatchCommitWriteStreamsRequest) (*BatchCommitWriteStreamsResponse, error)
 	// FlushRows advances the visibility offset on a `BUFFERED` stream.
-	// Plan 15 returns UNIMPLEMENTED today; reserved for the deferred
-	// follow-up.
+	// The emulator returns UNIMPLEMENTED today; reserved for the
+	// deferred follow-up.
 	FlushRows(context.Context, *FlushRowsRequest) (*FlushRowsResponse, error)
 }
 

@@ -27,8 +27,8 @@ func TestLoadDirSkipsUnderscoreDirectory(t *testing.T) {
 	}
 }
 
-// TestDriftFixtureFiresRouteMismatch is the safety-net plan 16
-// requires: load the drift fixture directly (bypassing the
+// TestDriftFixtureFiresRouteMismatch is the safety net for the
+// route assertion: load the drift fixture directly (bypassing the
 // walker's quarantine skip), run `routeDiff` with the ACTUAL
 // route the coordinator would emit, and confirm the runner's
 // mismatch diagnostic fires and names both routes.

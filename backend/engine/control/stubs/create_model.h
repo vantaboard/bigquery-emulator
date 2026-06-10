@@ -36,8 +36,9 @@
 // `control_op_executor.cc` is a lint-cap carve-out (see
 // `docs/ENGINE_POLICY.md` "don'ts").
 // The local-stub family explicitly lives outside that file so
-// future stub handlers (JS UDF metadata-only, when plan 13's
-// deferred UDF body storage lands) can extend the surface without
+// future stub handlers (e.g. a metadata-only JS UDF stub —
+// `CREATE FUNCTION ... LANGUAGE js` currently returns UNIMPLEMENTED
+// per `docs/ENGINE_POLICY.md`) can extend the surface without
 // touching the carve-out.
 
 #include "absl/status/status.h"

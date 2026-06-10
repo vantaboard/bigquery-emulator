@@ -152,38 +152,37 @@ class RowIterator {
 
 // ReadFilter constrains the rows a `CreateReadStream` iterator yields.
 //
-// Plan 38 wires the StorageRead gRPC surface (`ReadRows`) on top of
+// The StorageRead gRPC surface (`ReadRows`) is wired on top of
 // `CreateReadStream`, so the filter shape mirrors what the public
 // `bigquery_emulator.v1.ReadOptions` proto can ask for. The DuckDB
 // backend pushes the knobs down natively (a SQL `LIMIT` / `WHERE`)
 // and the iterator surfaces them on the wire so the handler does
 // not have to re-apply them.
 //
-// Plan-39 scope adds `equality_predicate` (the typed parse of
-// `<column> = <literal>` from `ReadOptions.row_restriction`). The raw
+// `equality_predicate` carries the typed parse of
+// `<column> = <literal>` from `ReadOptions.row_restriction`. The raw
 // `row_restriction` string is left in for debugging / introspection
 // but the backends consume the parsed `equality_predicate` slot so
-// the parse happens exactly once per session. `selected_fields` is
-// still deferred to a follow-up plan when the engine wires per-column
-// projection / pushdown.
+// the parse happens exactly once per session. `selected_fields`
+// carries the per-column projection; see the field comments below.
 struct ReadFilter {
   // Maximum number of rows the iterator will yield before signaling
   // end-of-stream. <= 0 means "no limit" (return every row in the
-  // table snapshot). Plan 38 enforces this knob on both backends so
+  // table snapshot). Both backends enforce this knob so
   // ReadRows can honor caller-supplied caps without re-counting at
   // the handler layer.
   std::int64_t row_limit = 0;
 
   // Number of rows to skip from the head of the stream before the
-  // first emitted row. Plan 38 uses this to honor
+  // first emitted row. ReadRows uses this to honor
   // `ReadRowsRequest.offset` so a caller resuming a stream after a
   // transient failure does not re-receive rows it already processed.
   // <= 0 means "start at the first row".
   std::int64_t offset = 0;
 
   // Subset of column names the caller wants returned. Empty means
-  // "all columns". Plan 15 (storage-read-write) wires this on the
-  // DuckDB backend: the backend builds a projected schema from the
+  // "all columns". The DuckDB backend wires this
+  // natively: the backend builds a projected schema from the
   // listed names and the `RowIterator` yields rows in that order.
   // The handler validates the names exist at session-create time, so
   // an unknown column surfaces as INVALID_ARGUMENT before the stream
@@ -201,8 +200,8 @@ struct ReadFilter {
   // Typed parse of `row_restriction` produced by
   // `backend::storage::ParseRowRestriction`. The DuckDB backend
   // appends it to the SELECT as a `WHERE` clause using the same
-  // literal rendering helpers that drive INSERT. Plan 39 lifts the
-  // parse to the handler so a malformed restriction surfaces as
+  // literal rendering helpers that drive INSERT. The parse lives in
+  // the handler so a malformed restriction surfaces as
   // INVALID_ARGUMENT before any rows are read.
   std::optional<EqualityPredicate> equality_predicate;
 };
@@ -314,9 +313,9 @@ class Storage {
   // `RowIterator` so the `StorageReadService` handler does not
   // branch on backend type.
   //
-  // Plan 38 enforces `row_limit` and `offset`; `row_restriction`
-  // is honored as of plan 39 and `selected_fields` as of plan 15
-  // (storage-read-write). See the field comments on `ReadFilter`
+  // `row_limit`, `offset`, `row_restriction` (via its typed
+  // `equality_predicate` parse), and `selected_fields` are all
+  // honored. See the field comments on `ReadFilter`
   // for the per-knob contract. NOT_FOUND if the table does not
   // exist.
   [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>>

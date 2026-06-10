@@ -92,7 +92,7 @@ lint:dispositions`) catches that before main.
   evaluation order for those). `has_using()` is the analyzer's
   marker for `JOIN ... USING(...)`; the analyzer canonicalizes
   USING into ON, but the column-list collapse rule needs a
-  bespoke rewrite the first emit pass does not cover. Plan-2
+  bespoke rewrite the first emit pass does not cover. Follow-up
   action: classifier `VisitResolvedJoinScan` promotes to
   `kSemanticExecutor` for any of these three, and the
   transpiler removes the gate (defensive-only fallback in
@@ -153,11 +153,11 @@ lint:dispositions`) catches that before main.
   CORRESPONDING / CORRESPONDING_BY needs a name-based reshuffle
   the positional projection does not handle. The wrapping shape
   is still `ResolvedSetOperationScan` with disposition
-  `duckdb_native`; plan-2 owner for the classifier promotion
-  is `docs/ENGINE_POLICY.md`. **Deferred**: the
+  `duckdb_native`; the classifier promotion
+  is owned by `docs/ENGINE_POLICY.md`. **Deferred**: the
   CORRESPONDING surface is BigQuery-only and covered by the
-  advanced relational plan; the property-gate stays in the
-  transpiler today and we promote in plan 12.
+  advanced relational work; the property-gate stays in the
+  transpiler today and the promotion lands with that work.
 * **L735** `input_item_list_size < 2` -- defensive-malformed.
 * **L758** `default: return "";` on `op_type` -- defensive-malformed.
 * **L765** -- propagation.
@@ -333,12 +333,12 @@ Every `""` here is one of:
 | defensive-null | 32 | Keep as-is. |
 | defensive-malformed | 22 | Keep as-is. |
 | propagation | 31 | Keep as-is (the classifier walks the tree; the gate short-circuits a partial-emit in defense-in-depth depth). |
-| property-gate (move to classifier in plan 2) | 4 | lands `VisitResolvedQueryStmt` (is_value_table) and `VisitResolvedJoinScan` (is_lateral). |
+| property-gate (move to classifier) | 4 | lands `VisitResolvedQueryStmt` (is_value_table) and `VisitResolvedJoinScan` (is_lateral). |
 | property-gate (deferred to a later plan) | ~14 | Documented per-method above with the owning plan. |
 | child-class-gate | 2 | Keep as defense-in-depth (the classifier already catches via tree walk). |
 | `status=planned` placeholder body | 2 | Keep as-is; the row's `planned` marker drives the runtime UNIMPLEMENTED. |
 
-## What plan 2 lands in C++
+## Classifier-promotion changes in C++
 
 * **Classifier** (`backend/engine/coordinator/route_classifier.cc`):
   * `VisitResolvedQueryStmt`: promote to `kSemanticExecutor` when
@@ -402,7 +402,7 @@ match:
 documented edge-case BigQuery cares about that DuckDB does NOT
 match without a structural rewrite (`duckdb_rewrite`) or a
 polyfill UDF (`duckdb_udf`). Per "no silent approximation" we do
-NOT promote any of these rows in plan 2; the polyfill plan
+NOT promote any of these rows as part of this audit; the polyfill plan
 (`docs/ENGINE_POLICY.md`) and the
 semantic-functions plan
 (`docs/ENGINE_POLICY.md`) own the migration when
@@ -412,7 +412,7 @@ The Done-Criterion 3 (`functions.yaml` has no `(planned)` row
 whose DuckDB target already matches BigQuery semantics; every
 remaining non-`duckdb_*` row carries a planned route from one of
 the new-route plans named in the row's `plan=` field) is
-therefore satisfied today as the baseline -- no plan-2 changes to
+therefore satisfied today as the baseline -- no changes to
 `functions.yaml` were needed.
 
 ## Item 3 -- update from the polyfill UDF library landing

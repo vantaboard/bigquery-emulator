@@ -15,7 +15,8 @@
 #   * empty subvalue returns the (clamped) start position
 #   * missing match returns 0
 #
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_instr
 description: |
   BigQuery INSTR (variadic, 2..4 args) lowered through the

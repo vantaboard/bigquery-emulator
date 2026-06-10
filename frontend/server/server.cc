@@ -46,10 +46,11 @@ void HandleSignal(int /*signo*/) {
 // Catalog + Query are wired end-to-end against the storage backend
 // and the DuckDB engine; StorageRead lights up `CreateReadSession` +
 // `ReadRows`; StorageWrite lights up `CreateWriteStream` /
-// `AppendRows` / `GetWriteStream` for the `_default` + `COMMITTED`
-// stream types (plan 15), with the remaining methods returning
-// UNIMPLEMENTED until the deferred follow-up subagent of
-// `docs/ENGINE_POLICY.md` lands BUFFERED + PENDING.
+// `AppendRows` / `GetWriteStream` for the `_default`, `COMMITTED`,
+// and `BUFFERED` stream types (`FlushRows` / `FinalizeWriteStream`
+// drive BUFFERED visibility), while PENDING +
+// `BatchCommitWriteStreams` return UNIMPLEMENTED per
+// `docs/ENGINE_POLICY.md`.
 class GrpcServer final : public Server {
  public:
   GrpcServer(std::unique_ptr<::grpc::Server> server,
@@ -140,9 +141,8 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
   // a ServerBuilder; the builder snapshots the global flag at
   // construction time. The reflection plugin must be installed in the
   // same pre-builder window so `grpcurl -plaintext :PORT list` works
-  // against the running engine (used by plan 37's storage-read smoke
-  // verification, plan 38's streaming check, and any future ad-hoc
-  // gRPC debugging session).
+  // against the running engine (used by the storage-read smoke
+  // verification scripts and any ad-hoc gRPC debugging session).
   ::grpc::EnableDefaultHealthCheckService(true);
   ::grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 

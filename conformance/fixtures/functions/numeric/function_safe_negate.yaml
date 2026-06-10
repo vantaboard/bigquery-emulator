@@ -6,7 +6,8 @@
 # the same input; SAFE_NEGATE swaps it to NULL via the semantic
 # executor's `WrapSafe` trampoline.
 #
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_safe_negate
 description: |
   BigQuery SAFE_NEGATE lowered through the semantic executor's

@@ -371,7 +371,7 @@ Expected fail states per surface (initial baseline; see `ROADMAP.md`):
 
 | Surface | Expectation |
 |---------|-------------|
-| `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets, see the per-IT verdict in the plan). |
+| `java-bigquery` (6 ITs) | PASS — REST gateway implements these surfaces today (with the caveat that some ITs require additional env vars / pre-seeded datasets; see the per-IT verdict table below). |
 | `bigqueryconnection` (5 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until shallow ConnectionService backend lands (see `ROADMAP.md`). |
 | `bigquerydatatransfer` (11 ITs) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands the shallow DataTransferService backend. |
 | `bigquerystorage` (2 ITs: `WriteBufferedStreamIT`, `StorageArrowSampleIT`) | FAIL with `NOT_IMPLEMENTED`-shaped errors until the shallow-emulators work lands BigQuery Write/Read API parity. |
@@ -470,8 +470,8 @@ deferred-to-gRPC-server-follow-ups root causes:
   zero columns, so `SELECT *` expanded to nothing). The gateway now dry-runs the
   MV query to infer schema on insert; rebuild the compose image to pick up the fix.
 
-See the shallow-emulators plan and the missing-tests follow-up plan for
-the per-IT verdict tables and the queued gRPC-server follow-ups.
+See the Java IT verdict tables below and [`docs/REST_API.md`](../docs/REST_API.md)
+for the per-surface gRPC/REST status and queued follow-ups.
 
 | Sample ID | Vendored class | IT shipped |
 |-----------|----------------|------------|
@@ -653,7 +653,7 @@ DBT_BIGQUERY_RUN_TRIAGE=1 \
 | **GCS `upload_file`** | Skipped unless `STORAGE_EMULATOR_HOST` + fake-gcs wiring lands in this lane |
 | **INFORMATION_SCHEMA / docs generate** | Skipped (`catalog`, `TestDocsGenerateBigQuery`) |
 | **Materialized views** | Skipped (`simple_bigquery_view`, `materialized` paths) |
-| **JS / SQL UDAF functions** | Skipped (engine gaps; see bqutils plans 04–05) |
+| **JS / SQL UDAF functions** | Skipped (engine gaps; JS UDFs and external-language UDFs are unsupported per `docs/ENGINE_POLICY.md`) |
 | **Policy tags / grants / change history** | Skipped (deferred REST surfaces) |
 | **BaseSimpleMaterializations** | Skipped by default; set `DBT_BIGQUERY_RUN_TRIAGE=1` for feasibility |
 

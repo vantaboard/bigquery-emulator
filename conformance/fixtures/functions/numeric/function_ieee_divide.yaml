@@ -12,7 +12,8 @@
 # differ's `canonicalCell` round-trips the wire string through
 # `strconv.ParseFloat`, which accepts "+Inf" / "-Inf" / "NaN".
 #
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_ieee_divide
 description: |
   BigQuery IEEE_DIVIDE lowered through the semantic executor's

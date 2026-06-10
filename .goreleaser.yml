@@ -24,7 +24,7 @@
 #   3. runs `goreleaser release --clean`, which uploads the gateway
 #      archives + checksums to the GitHub release the tag created.
 #
-# Local snapshot verification (this is the plan-44 verification command):
+# Local snapshot verification:
 #
 #   task emulator:build-engine:bazel   # stages bin/emulator_main + bin/libduckdb.so
 #   task release:snapshot              # goreleaser release --snapshot --clean
@@ -56,9 +56,8 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
-      # Plan 45 wires the actual `--version` flag in the gateway; these
-      # `-X main.<sym>=...` injections are forward-compatible no-ops
-      # until those vars exist in `binaries/gateway_main/main.go`.
+      # The gateway's `--version` flag prints these `-X main.<sym>=...`
+      # injections (the vars live in `binaries/gateway_main/main.go`).
       - -X main.version={{ .Version }}
       - -X main.commit={{ .Commit }}
       - -X main.date={{ .Date }}

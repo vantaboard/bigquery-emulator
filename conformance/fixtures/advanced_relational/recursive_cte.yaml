@@ -12,7 +12,8 @@
 #
 # Route: `duckdb_rewrite` via `EmitWithScan` + `EmitRecursiveScan`
 # (`WITH RECURSIVE` is DuckDB-native). Route-label assertion
-# deferred to plan 16.
+# intentionally omitted; routing drift is tracked by
+# `task conformance:routing-matrix`.
 #
 # Fixture shape: a hierarchical-traversal table (manager / employee
 # pairs) is walked recursively to compute every employee's depth

@@ -141,8 +141,8 @@ namespace internal {
 // DDL path: run `ExecuteDdl` and propagate any failure. Successful
 // DDL emits the trailing `statement_type` + `emulator_route` pair
 // (the gateway uses them to populate
-// `Job.statistics.query.{statementType,emulatorRoute}`); pre-plan-47
-// the reply was empty.
+// `Job.statistics.query.{statementType,emulatorRoute}`); before the
+// trailer pair was introduced the DDL reply was empty.
 ::grpc::Status EmitDdlResult(
     backend::engine::Engine* engine,
     const backend::engine::QueryRequest& request,

@@ -19,14 +19,15 @@ namespace bigquery_emulator {
 namespace frontend {
 
 // StorageWriteService is the C++ engine's implementation of the
-// `bigquery_emulator.v1.StorageWrite` gRPC service (plan 15:
+// `bigquery_emulator.v1.StorageWrite` gRPC service (see
 // `docs/ENGINE_POLICY.md`).
 //
-// Plan-15 scope: `_default` + `COMMITTED` stream types end-to-end.
-// Plan-10 (partial): `BUFFERED` streams buffer rows server-side until
-// `FlushRows` advances the visibility offset, then `FinalizeWriteStream`
-// closes the stream. `COMMITTED` / `_default` still commit on every
-// `AppendRows` batch through `DuckDBStorage::AppendRows` (plan 9).
+// Supported surface: `_default` + `COMMITTED` stream types
+// end-to-end, and `BUFFERED` streams that buffer rows server-side
+// until `FlushRows` advances the visibility offset, then
+// `FinalizeWriteStream` closes the stream. `COMMITTED` / `_default`
+// commit on every `AppendRows` batch through the storage append
+// primitive `DuckDBStorage::AppendRows`.
 // `PENDING` + `BatchCommitWriteStreams` remain UNIMPLEMENTED — silent
 // approximation would violate the public two-phase commit contract.
 //
@@ -84,9 +85,9 @@ class StorageWriteService final : public v1::StorageWrite::Service {
                                 const v1::GetWriteStreamRequest* request,
                                 v1::WriteStream* response) override;
 
-  // Plan 15 returns UNIMPLEMENTED for these; the proto + handler
-  // hooks are in place so the deferred follow-up can light them up
-  // without re-routing through the Server::Create plumbing.
+  // FinalizeWriteStream + FlushRows are implemented for BUFFERED
+  // streams (see storage_write_buffered.cc); BatchCommitWriteStreams
+  // returns UNIMPLEMENTED until the PENDING stream type lands.
   ::grpc::Status FinalizeWriteStream(
       ::grpc::ServerContext* context,
       const v1::FinalizeWriteStreamRequest* request,

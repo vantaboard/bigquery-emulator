@@ -7,7 +7,8 @@
 # FLOAT64 / 0, so the SAFE-mode swap must run inside the local
 # semantic executor.
 #
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_safe_divide
 description: |
   BigQuery SAFE_DIVIDE lowered through the semantic executor's

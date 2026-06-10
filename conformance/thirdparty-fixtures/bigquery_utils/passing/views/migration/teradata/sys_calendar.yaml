@@ -1,5 +1,5 @@
 # Source: GoogleCloudPlatform/bigquery-utils views/migration/teradata/sys_calendar.sql
-# License: Apache-2.0. Hand-authored for bqutils plan 08; narrow date range for conformance.
+# License: Apache-2.0. Hand-authored for the bigquery-utils conformance suite; narrow date range for conformance.
 name: bqutils_views_teradata_sys_calendar
 description: bigquery-utils Teradata SYS_CALENDAR.CALENDAR view slice (2024-01-01)
 profiles:

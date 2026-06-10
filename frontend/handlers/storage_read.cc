@@ -35,9 +35,9 @@ StorageReadService::StorageReadService(backend::storage::Storage* storage)
                                                std::string* project_id) const {
   // Accept `projects/{project_id}` and reject anything else. The
   // public BigQuery surface allows a longer path
-  // (`projects/{p}/locations/{l}`) but plan 37 keeps the location
-  // slot synthetic (`-`) because the gateway does not yet route on
-  // location for read sessions.
+  // (`projects/{p}/locations/{l}`) but the emulator keeps the
+  // location slot synthetic (`-`) because the gateway does not yet
+  // route on location for read sessions.
   if (parent.empty()) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
@@ -142,7 +142,7 @@ std::string StorageReadService::StreamIdForSession(
     return AbslToGrpcStatus(schema_or.status());
   }
 
-  // Plan 39: parse the optional row_restriction NOW so a malformed
+  // Parse the optional row_restriction NOW so a malformed
   // predicate fails the CreateReadSession request rather than the
   // downstream ReadRows call (which the caller will not retry on
   // INVALID_ARGUMENT — by then they have already committed the
@@ -161,15 +161,15 @@ std::string StorageReadService::StreamIdForSession(
     predicate = std::move(parsed);
   }
 
-  // Plan 15 (storage-read-write): validate `selected_fields` at
+  // Validate `selected_fields` at
   // session-mint time. Each entry must name a top-level column of
   // the source table; an unknown name surfaces as INVALID_ARGUMENT
   // before any streaming starts. We deliberately reject an empty
   // string entry too — the caller's protobuf `repeated string`
   // would normally only contain non-empty values, but a wire-level
   // bug that smuggled `""` would silently match nothing on the
-  // backend, which is the exact "silent approximation" plan 15
-  // forbids.
+  // backend, which is the exact "silent approximation"
+  // `docs/ENGINE_POLICY.md` forbids.
   std::vector<std::string> selected_fields;
   if (request->read_session().has_read_options() &&
       request->read_session().read_options().selected_fields_size() > 0) {
@@ -210,9 +210,9 @@ std::string StorageReadService::StreamIdForSession(
     sessions_.emplace(session_name, std::move(state));
   }
 
-  // Build the response. Plan 37: one session, one stream, schema
-  // attached, read_options echoed back. Plan 15 (storage-read-write):
-  // when the caller pinned `selected_fields`, the response schema
+  // Build the response: one session, one stream, schema attached,
+  // read_options echoed back.
+  // When the caller pinned `selected_fields`, the response schema
   // reflects the projection — both the ordering and the column list
   // — so a downstream Avro / Arrow decoder reads cells against the
   // same shape ReadRows will emit. The full schema is still stashed
@@ -244,11 +244,11 @@ std::string StorageReadService::StreamIdForSession(
                           "StorageRead.ReadRows: request must be non-null");
   }
 
-  // 1. Recover the session name. Plan 37 mints stream ids of the form
-  // `{session_name}/streams/0`; anything else is a client bug and
+  // 1. Recover the session name. The service mints stream ids of the
+  // form `{session_name}/streams/0`; anything else is a client bug and
   // surfaces as INVALID_ARGUMENT so the gateway can return BigQuery's
   // 400 envelope. We deliberately do NOT accept arbitrary trailing
-  // `/streams/{N}` here because plan 37 only mints stream 0; any
+  // `/streams/{N}` here because we only ever mint stream 0; any
   // other stream id would be one we never created, which is
   // ambiguous between "wrong session" and "wrong stream index".
   //
@@ -295,8 +295,8 @@ std::string StorageReadService::StreamIdForSession(
   // 3. Schema drift check. If the table schema changed between
   // CreateReadSession and ReadRows, the caller is decoding rows with
   // a stale shape and we cannot safely serve the request. BigQuery's
-  // public Storage Read API uses ABORTED here; plan 38 follows the
-  // simpler FAILED_PRECONDITION convention the rest of the engine
+  // public Storage Read API uses ABORTED here; the emulator follows
+  // the simpler FAILED_PRECONDITION convention the rest of the engine
   // already uses for "preconditions of the call have changed."
   absl::StatusOr<backend::schema::TableSchema> live_schema_or =
       storage_->GetSchema(table);
@@ -329,13 +329,12 @@ std::string StorageReadService::StreamIdForSession(
   // request-side offset (per the proto: gateway uses this to resume
   // after a transient failure). row_limit is not on the request
   // surface; we pass 0 so the iterator yields every remaining row.
-  // Plan 39: the parsed row_restriction (if any) lives on the
+  // The parsed row_restriction (if any) lives on the
   // session — both backends apply the predicate before offset/limit
   // so the wire shape matches BigQuery's documented semantics
-  // (offset is over the post-filter row stream). Plan 15
-  // (storage-read-write): the projected `selected_fields` list (if
-  // any) is also session-resident so the same projection applies
-  // verbatim across resumptions.
+  // (offset is over the post-filter row stream). The projected
+  // `selected_fields` list (if any) is also session-resident so the
+  // same projection applies verbatim across resumptions.
   backend::storage::ReadFilter filter;
   filter.offset = request->offset();
   filter.row_limit = 0;

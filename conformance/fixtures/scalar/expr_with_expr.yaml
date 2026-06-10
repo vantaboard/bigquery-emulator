@@ -7,7 +7,7 @@
 # them from the body. Pin the binding-then-body shape here so a
 # regression that double-evaluates `<e1>` (or evaluates `<body>`
 # against an unbound name) surfaces. Rehomed from `fastpath/` to
-# `scalar/` by plan 17 to match the observed route.
+# `scalar/` to match the observed route.
 name: expr_with_expr
 description: |
   Scalar WITH expression. Verifies the engine evaluates the

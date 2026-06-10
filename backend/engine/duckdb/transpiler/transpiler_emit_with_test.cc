@@ -268,7 +268,8 @@ TEST_F(TranspilerTest, EmitSubqueryExprCorrelatedBailsToEmpty) {
 
 TEST_F(TranspilerTest, EmitSubqueryExprUnsupportedTypeBailsToEmpty) {
   // LIKE ANY / LIKE ALL / NOT LIKE ANY / NOT LIKE ALL stay on the
-  // empty-string fallback today (out of plan-10 scope). Pin that
+  // empty-string fallback today (deliberately out of scope for the
+  // transpiler). Pin that
   // the default branch returns "" rather than emitting partial
   // SQL when a non-{SCALAR, IN, EXISTS, ARRAY} type slips through.
   auto inner = ::googlesql::MakeResolvedSingleRowScan();

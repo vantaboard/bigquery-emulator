@@ -10,7 +10,8 @@
 # via a UNION ALL so a regression that always returns the same
 # answer (or that flips boolean polarity) surfaces here.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: subquery_expr_exists
 description: |
   Non-correlated EXISTS subquery exercised on both true and

@@ -31,9 +31,9 @@ bazelisk = "1.27.0"
 # codegen today; buf is the front-end we'll switch to once the
 # generation step lands. `grpcurl` is the manual smoke-test driver for
 # the engine's reflection-enabled gRPC server (see
-# `frontend/server/server.cc`); it's how plans 37+ poke ReadRows /
-# ExecuteQuery against a running `emulator_main` without writing a
-# bespoke client.
+# `frontend/server/server.cc`); storage-read smoke checks use it to
+# poke ReadRows / ExecuteQuery against a running `emulator_main`
+# without writing a bespoke client.
 protoc  = "35.0"
 buf     = "1.69.0"
 grpcurl = "1.9.3"

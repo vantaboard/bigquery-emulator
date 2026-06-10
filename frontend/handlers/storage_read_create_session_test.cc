@@ -23,8 +23,8 @@ TEST_F(StorageReadServiceTest, CreateReadSessionReturnsSessionStreamAndSchema) {
   EXPECT_EQ(resp.table(), "projects/proj-test/datasets/ds/tables/t");
 
   // Schema is attached so a follow-up ReadRows does not have to
-  // round-trip back through DescribeTable. Plan 37 sends every column
-  // in declaration order.
+  // round-trip back through DescribeTable. The handler sends every
+  // column in declaration order.
   ASSERT_EQ(resp.schema().fields_size(), 3);
   EXPECT_EQ(resp.schema().fields(0).name(), "id");
   EXPECT_EQ(resp.schema().fields(0).type(), "INT64");
@@ -35,15 +35,16 @@ TEST_F(StorageReadServiceTest, CreateReadSessionReturnsSessionStreamAndSchema) {
   EXPECT_EQ(resp.schema().fields(2).type(), "STRING");
   EXPECT_EQ(resp.schema().fields(2).mode(), "REPEATED");
 
-  // Exactly one stream today; plan 39+ will parallelize per
-  // `max_stream_count`. The stream id nests under the session name.
+  // Exactly one stream today; `max_stream_count`-driven parallel
+  // streams are not implemented. The stream id nests under the
+  // session name.
   ASSERT_EQ(resp.streams_size(), 1);
   EXPECT_EQ(resp.streams(0).name(),
             "projects/proj-test/locations/-/sessions/s1/streams/0");
 
   // SessionsForTesting reflects the mint we just did (and only that
-  // one). This is the test hook plan 38 will use to assert the
-  // ReadRows lookup actually consults the session map.
+  // one). This is the test hook the ReadRows tests use to assert
+  // the lookup actually consults the session map.
   EXPECT_EQ(service_->SessionsForTesting(), 1u);
 }
 
@@ -53,7 +54,7 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
   auto* options = req.mutable_read_session()->mutable_read_options();
   options->add_selected_fields("id");
   options->add_selected_fields("name");
-  // Plan 39: the handler parses the row_restriction at session-mint
+  // The handler parses the row_restriction at session-mint
   // time. `id = 0` is the canonical happy-path shape (single
   // `<column> = <literal>` equality); range / connective forms now
   // surface INVALID_ARGUMENT from CreateReadSession, which has its
@@ -65,15 +66,15 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
 
   // The proto contract says read_options round-trips on the reply so
   // the gateway can show the caller what shape the session was minted
-  // with. Plan 15 (storage-read-write) honors selected_fields, so the
-  // response *schema* now reflects the projection (id, name only)
+  // with. The handler honors selected_fields, so the
+  // response *schema* reflects the projection (id, name only)
   // while the read_options round-trip still echoes the request.
   ASSERT_EQ(resp.read_options().selected_fields_size(), 2);
   EXPECT_EQ(resp.read_options().selected_fields(0), "id");
   EXPECT_EQ(resp.read_options().selected_fields(1), "name");
   EXPECT_EQ(resp.read_options().row_restriction(), "id = 0");
 
-  // Plan 15: the response schema is now projected to the caller's
+  // The response schema is projected to the caller's
   // selected_fields list, in caller-supplied order. The full table
   // has three columns; pinning "id" + "name" must drop "tags".
   ASSERT_EQ(resp.schema().fields_size(), 2);
@@ -84,7 +85,7 @@ TEST_F(StorageReadServiceTest, CreateReadSessionEchoesReadOptions) {
 TEST_F(StorageReadServiceTest, CreateReadSessionRejectsUnknownSelectedField) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
-  // `phone` is not a column on the people table; plan 15 rejects
+  // `phone` is not a column on the people table; the handler rejects
   // this at session-mint time so the streaming RPC never starts
   // against an invalid projection.
   req.mutable_read_session()->mutable_read_options()->add_selected_fields(
@@ -112,7 +113,8 @@ TEST_F(StorageReadServiceTest, CreateReadSessionRejectsEmptySelectedField) {
 TEST_F(StorageReadServiceTest, CreateReadSessionRejectsRangeRestriction) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
-  // `>` is outside the plan-39 surface; the parser bails with a
+  // `>` is outside the deliberately-narrow row_restriction surface;
+  // the parser bails with a
   // clear "only `<column> = <literal>` supported" message, which the
   // handler maps onto gRPC INVALID_ARGUMENT.
   req.mutable_read_session()->mutable_read_options()->set_row_restriction(
@@ -265,8 +267,8 @@ TEST_F(StorageReadServiceTest, CreateReadSessionMissingDatasetIsNotFound) {
 
 TEST_F(StorageReadServiceTest, ReadRowsRejectsMalformedReadStream) {
   v1::ReadRowsRequest req;
-  // Missing the `/streams/0` suffix entirely. Plan 37 only mints
-  // streams/0; the handler refuses every other shape.
+  // Missing the `/streams/0` suffix entirely. The handler only mints
+  // streams/0 and refuses every other shape.
   req.set_read_stream("projects/proj-test/locations/-/sessions/s1");
   ::grpc::Status status = service_->ReadRows(nullptr, &req, nullptr);
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)

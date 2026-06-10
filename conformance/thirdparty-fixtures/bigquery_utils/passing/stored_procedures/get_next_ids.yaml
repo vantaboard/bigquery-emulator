@@ -1,5 +1,5 @@
 # Source: GoogleCloudPlatform/bigquery-utils stored_procedures README get_next_ids
-# License: Apache-2.0. Hand-authored for bqutils plan 07.
+# License: Apache-2.0. Hand-authored for the bigquery-utils conformance suite.
 name: bqutils_stored_procedures_get_next_ids
 description: bigquery-utils get_next_ids README CALL golden (CREATE PROCEDURE + CALL scripting)
 profiles:

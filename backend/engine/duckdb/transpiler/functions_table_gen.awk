@@ -49,8 +49,9 @@ BEGIN {
     # Dispositions whose runtime emit does not yet exist; only these
     # may carry `status=planned`. `local_stub` rows are eligible too
     # because the stub handler for some families (notably JS UDF
-    # registration, which depends on plan 13's deferred UDF body
-    # storage) may not be in place yet.
+    # registration — `CREATE FUNCTION ... LANGUAGE js` returns
+    # UNIMPLEMENTED per docs/ENGINE_POLICY.md) may not be in place
+    # yet.
     plannable["duckdb_udf"]        = 1
     plannable["semantic_executor"] = 1
     plannable["control_op"]        = 1

@@ -16,9 +16,10 @@
 # so a regression that drops the anchor or swaps column order
 # shows up as a row mismatch.
 #
-# Route-label assertion: deferred to plan 16 (the route-label
+# Route-label assertion: intentionally omitted (the route-label
 # infrastructure does not yet inspect `ResolvedWithScan` promotion
-# decisions; see `conformance/fixtures/functions/README.md`).
+# decisions); routing drift is tracked by
+# `task conformance:routing-matrix`.
 name: with_scan_single_cte
 description: |
   Single-binding non-recursive CTE referenced once. Verifies the

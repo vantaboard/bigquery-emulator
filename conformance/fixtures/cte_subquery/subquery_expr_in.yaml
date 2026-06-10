@@ -10,7 +10,8 @@
 # non-matching rows so the boolean result is exercised on both
 # sides without depending on DuckDB short-circuiting.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: subquery_expr_in
 description: |
   Non-correlated IN subquery against an inline UNNEST relation.

@@ -1,4 +1,4 @@
-# Plan 16 routing-matrix artifact. Pure Go (reads YAML only; no engine).
+# Routing-matrix artifact. Pure Go (reads YAML only; no engine).
 # `continue-on-error: true` because the matrix is documentation — a
 # regression here should not block the conformance fixture gate in
 # conformance.yml (workflow_run only).

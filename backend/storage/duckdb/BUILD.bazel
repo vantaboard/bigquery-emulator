@@ -39,7 +39,7 @@ cc_library(
 )
 
 # Exercises the Parquet round-trip story for AppendRows / ScanRows
-# and the plan-38 CreateReadStream filter knobs (row_limit / offset).
+# and the CreateReadStream filter knobs (row_limit / offset).
 # The cc_test inherits the `-Wl,-rpath,$ORIGIN` linker flag from
 # //third_party/duckdb's cc_import so the libduckdb.so sibling that
 # lands in the runfiles tree is discoverable without LD_LIBRARY_PATH;

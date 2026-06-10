@@ -1,7 +1,7 @@
 // Package external materializes BigQuery external tables into the
 // engine catalog by fetching GCS (fake-gcs) sources and bulk-inserting
-// parsed rows. Google Sheets sources return a structured unsupported
-// error per plan 07.
+// parsed rows. Google Sheets sources are metadata-only: query-time
+// materialization returns a structured unsupported error.
 package external
 
 import (

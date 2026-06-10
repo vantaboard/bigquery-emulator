@@ -1,4 +1,4 @@
-# dbt-bigquery emulator feasibility (plan 10, phase 1)
+# dbt-bigquery emulator feasibility
 
 Verified **2026-06-06** against the docker-compose gateway on `http://localhost:9050`.
 

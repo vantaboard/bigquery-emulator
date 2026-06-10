@@ -138,8 +138,8 @@ func finalizeDeferredDataPlaneJob(job *jobs.Job, cfg *jobs.JobConfiguration, sta
 	job.Status.State = jobs.JobStateDone
 	job.Status.ErrorResult = &bqtypes.ErrorProto{
 		Reason: reasonNotImplemented,
-		Message: "jobs.insert: " + kind + " job data plane not yet implemented; " +
-			"load / copy / extract execution lands in thirdparty-04/05.",
+		Message: "jobs.insert: " + kind + " job data plane is unavailable; " +
+			"load / copy / extract execution requires an engine catalog connection.",
 	}
 	job.Statistics.StartTime = millisString(start)
 	job.Statistics.EndTime = millisString(end)

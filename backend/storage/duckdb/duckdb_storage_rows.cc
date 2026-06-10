@@ -410,11 +410,11 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
         new internal::VectorRowIterator(std::move(rows)));
   }
 
-  // Plan 15 (storage-read-write): when the caller pins a
+  // When the caller pins a
   // `selected_fields` list we project rows down to that subset. The
   // projected schema is what `ExecuteSelect` decodes against, so the
   // `Row.cells` vector matches the projected column order exactly.
-  // An empty list means "all columns" (the legacy plan-38 contract).
+  // An empty list means "all columns".
   schema::TableSchema effective_schema = schema;
   std::string select_cols;
   if (!filter.selected_fields.empty()) {
@@ -428,10 +428,10 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   }
 
   // ORDER BY a stable row identifier so OFFSET / LIMIT yield
-  // deterministic windows across calls. The plan-31 Arrow pipeline
+  // deterministic windows across calls. The Arrow query pipeline
   // uses `read_parquet`'s `file_row_number` extra column for the
   // same purpose; reuse that here so a caller resuming a stream
-  // (plan-39 territory) at offset=N gets the same rows it would
+  // at offset=N gets the same rows it would
   // have received if it had stayed connected. The column is
   // synthesized by DuckDB at scan time and never selected into the
   // result.
@@ -441,7 +441,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
                    " FROM read_parquet('",
                    internal::EscapeStringLiteralInner(parquet_path),
                    "', file_row_number = true)");
-  // Plan 39: push the parsed `<column> = <literal>` predicate down
+  // Push the parsed `<column> = <literal>` predicate down
   // into a SQL WHERE clause. The clause lands before ORDER BY so
   // DuckDB filters on the parquet scan side rather than buffering the
   // full table.

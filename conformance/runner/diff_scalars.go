@@ -21,7 +21,7 @@ const floatRelEpsilon = 1e-9
 // cellsEqual is the type-aware cell equality predicate. It returns
 // false for NULL-vs-non-NULL pairs and otherwise delegates to a
 // per-type comparator. Fall-through for unknown types is the
-// string-form compare used by plan-40.
+// canonical string-form compare.
 func cellsEqual(expected, actual any, fieldType, fieldMode string) bool {
 	expIsNull := isNullExpected(expected)
 	actIsNull := actual == nil
@@ -48,8 +48,8 @@ func cellsEqual(expected, actual any, fieldType, fieldMode string) bool {
 	default:
 		// Unknown / empty type (e.g. STRUCT/REPEATED at the top
 		// level, or the schema is absent): fall back to the
-		// plan-40 stringy compare so nothing regresses for the
-		// existing fixtures.
+		// stringy compare so nothing regresses for the existing
+		// fixtures.
 		return stringForm(expected) == stringForm(actual)
 	}
 }
@@ -355,7 +355,7 @@ func parseUnixSecondsString(s string) (time.Time, bool) {
 }
 
 // stringForm returns the canonical scalar string for the diff
-// renderer. Mirrors plan-40 behaviour for STRING/BYTES, with the
+// renderer. STRING/BYTES compare on this literal form, with the
 // NULL sentinel kept distinct from the literal string "NULL".
 func stringForm(v any) string {
 	if v == nil {

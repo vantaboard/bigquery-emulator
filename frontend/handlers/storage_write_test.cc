@@ -1,5 +1,4 @@
-// Plan 15 (storage-read-write-api-plan): unit + in-process gRPC tests
-// for `StorageWriteService`.
+// Unit + in-process gRPC tests for `StorageWriteService`.
 //
 // The shape mirrors `storage_read_test.cc`: an in-memory DuckDB
 // storage instance is fabricated under SetUp, the service is
@@ -69,8 +68,8 @@ class StorageWriteServiceTest : public ::testing::Test {
     fs::remove_all(data_dir_, ec);
   }
 
-  // Two-column toy schema (id + name). Mirrors the plan-15 happy
-  // path; tests append rows against it and round-trip through
+  // Two-column toy schema (id + name). Mirrors the StorageWrite
+  // happy path; tests append rows against it and round-trip through
   // `Storage::ScanRows` to confirm the rows landed.
   void CreatePeopleTable() {
     backend::schema::TableSchema schema;
@@ -119,7 +118,7 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsCommittedStream) {
 
 TEST_F(StorageWriteServiceTest, CreateWriteStreamDefaultsToCommitted) {
   // BigQuery's documented default for an unspecified stream type is
-  // COMMITTED. Plan 15 follows that.
+  // COMMITTED. The emulator follows that.
   CreatePeopleTable();
   v1::CreateWriteStreamRequest req;
   req.set_parent("projects/proj-test/datasets/ds/tables/t");
@@ -177,8 +176,8 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMissingTableIsNotFound) {
 }
 
 // ---------------------------------------------------------------------------
-// PENDING / BatchCommit remain deferred; BUFFERED flush/finalize land
-// in plan 10.
+// PENDING / BatchCommitWriteStreams remain UNIMPLEMENTED; BUFFERED
+// flush/finalize coverage lives in storage_write_grpc_test.cc.
 // ---------------------------------------------------------------------------
 
 TEST_F(StorageWriteServiceTest, BatchCommitWriteStreamsUnimplemented) {

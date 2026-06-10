@@ -11,7 +11,9 @@
 #
 # Route: `duckdb_rewrite` via `EmitAggregateScan` (the lowering is a
 # structural rewrite of BigQuery's `grouping_set_list` into DuckDB's
-# native keyword form). Route-label assertion deferred to plan 16.
+# native keyword form). Route-label assertion intentionally
+# omitted; routing drift is tracked by
+# `task conformance:routing-matrix`.
 #
 # Fixture shape: a tiny revenue table grouped by ROLLUP(region, kind)
 # pins the regional aggregation pattern that motivates ROLLUP. The

@@ -9,7 +9,8 @@
 #
 # The query is scalar-only (no FROM clause) so the route
 # classifier promotes the SELECT to the `semantic_executor` route
-# unconditionally. Route-label assertion deferred to plan 16.
+# unconditionally. Route-label assertion intentionally omitted;
+# routing drift is tracked by `task conformance:routing-matrix`.
 #
 # Edge cases pinned:
 #   * negative-one returns 64 (full bit pattern)

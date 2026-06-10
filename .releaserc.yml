@@ -1,8 +1,7 @@
 # Parked semantic-release configuration.
 #
 # THIS CONFIG IS NOT WIRED TO ANY GITHUB ACTIONS WORKFLOW TODAY. The
-# project's plan-44 release posture (see the
-# `docs/ENGINE_POLICY.md` addendum) is
+# project's release posture (see `docs/ENGINE_POLICY.md`) is
 # manual tag pushes:
 #
 #   git tag -a v0.0.1 -m 'release: v0.0.1 (preview)'

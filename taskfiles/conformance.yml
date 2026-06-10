@@ -75,10 +75,8 @@ tasks:
       (`conformance/fixtures/fastpath/`) plus the polyfill UDF
       fixtures (`conformance/fixtures/functions/`). Targets `~2
       minutes` of wall time, scoped to the `duckdb_native` /
-      `duckdb_rewrite` shapes plan-2
-      (`docs/ENGINE_POLICY.md`) pins plus the
-      `duckdb_udf` shapes plan-3 lands
-      (`docs/ENGINE_POLICY.md`). Wired into the
+      `duckdb_rewrite` shapes plus the `duckdb_udf` shapes pinned by
+      `docs/ENGINE_POLICY.md`. Wired into the
       PR-gating CI job; run locally before pushing if you touched
       the transpiler, its YAML registries, or the polyfill UDF
       library. Honors EMULATOR_BIN (default `./bin/emulator_main`).
@@ -98,9 +96,9 @@ tasks:
         fi
         # Two invocations because the runner CLI accepts a single
         # --fixtures path (file or directory). The polyfill UDF
-        # fixtures land under conformance/fixtures/functions/ per
-        # plan-3 and use the same fixture format, so the second
-        # call reuses the same flags.
+        # fixtures live under conformance/fixtures/functions/ and
+        # use the same fixture format, so the second call reuses
+        # the same flags.
         # shellcheck disable=SC2086  # intentional word-split for repeated flags
         go run ./conformance/cmd/runner \
           --fixtures conformance/fixtures/fastpath \
@@ -119,8 +117,8 @@ tasks:
         # pin the divergent `ResolvedArrayScan` shapes routed through
         # the semantic executor by `docs/ENGINE_POLICY.md`.
         # Requires `bin/emulator_main` to include the executor's
-        # ArrayScan dispatch (plan 8 +); a pre-plan-8 binary will
-        # surface NOT_IMPLEMENTED here.
+        # ArrayScan dispatch; an outdated engine binary that
+        # predates it will surface NOT_IMPLEMENTED here.
         # shellcheck disable=SC2086  # intentional word-split for repeated flags
         go run ./conformance/cmd/runner \
           --fixtures conformance/fixtures/array_struct \
@@ -165,7 +163,7 @@ tasks:
       Walk every fixture under FIXTURES and emit a Markdown table
       of shape x route. Reads YAML only (no live emulator). The
       table is a deterministic function of the fixture YAMLs;
-      committed to CI as a non-blocking artifact per plan 16
+      committed to CI as a non-blocking artifact
       (`docs/ENGINE_POLICY.md`). Honors
       OUTPUT_FILE; defaults to stdout.
     cmds:

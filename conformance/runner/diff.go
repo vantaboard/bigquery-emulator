@@ -16,7 +16,7 @@ import (
 //   - MatchOrdered: pairwise compare row i ↔ actualRows[i] with typed
 //     cell comparison driven by the gateway-supplied schema (INT64
 //     compares as int, FLOAT64 with a relative epsilon, etc.). This
-//     is the default and matches the plan-40 behavior.
+//     is the default ordered-row comparison.
 //   - MatchUnordered: treats both sides as a multiset and compares
 //     after type-aware canonicalization. Use when the storage engine
 //     does not guarantee row order and the query lacks ORDER BY.
@@ -180,7 +180,7 @@ func renderSchemaDiff(expected []ExpectedColumn, actual *bqtypes.TableSchema) st
 	return b.String()
 }
 
-// orderedRowDiff is the plan-40 default: row i is compared against
+// orderedRowDiff is the default comparison: row i is compared against
 // actualRows[i] cell-by-cell. Typed comparison kicks in based on the
 // column's SQL type from the gateway-supplied schema.
 func orderedRowDiff(expected []map[string]any, schema *bqtypes.TableSchema, actualRows []bqtypes.Row) string {
@@ -395,8 +395,7 @@ func rowMatchesTyped(
 	return true
 }
 
-// schemaColumns returns the schema's column names in declared order
-// (mirrors the plan-40 helper).
+// schemaColumns returns the schema's column names in declared order.
 func schemaColumns(schema *bqtypes.TableSchema) []string {
 	if schema == nil {
 		return nil
@@ -481,8 +480,8 @@ func canonicalActualRow(r bqtypes.Row, cols []string, types []string) string {
 }
 
 // renderExpectedRows is the diff-rendering helper for the ordered
-// path. Mirrors the plan-40 layout (one row per line, sorted keys)
-// so the new typed diff stays scannable.
+// path. Mirrors the ordered-mode layout (one row per line, sorted
+// keys) so the typed diff stays scannable.
 func renderExpectedRows(rows []map[string]any, cols []string, types []string) []string {
 	out := make([]string, 0, len(rows))
 	for i, r := range rows {
@@ -501,9 +500,9 @@ func renderActualRows(rows []bqtypes.Row, cols []string, types []string) []strin
 }
 
 // unifiedDiff is the side-by-side expected-vs-actual renderer used
-// for the ordered-mode mismatch path. See plan-40 for the rationale
-// of not running a full Myers diff: fixture row counts are small and
-// a side-by-side listing is more legible than a hunk-grouped diff.
+// for the ordered-mode mismatch path. A full Myers diff is
+// deliberately not used: fixture row counts are small and a
+// side-by-side listing is more legible than a hunk-grouped diff.
 func unifiedDiff(expected, actual []string) string {
 	var b strings.Builder
 	b.WriteString("expected:\n")

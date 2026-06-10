@@ -7,8 +7,9 @@
 # (BOOLEAN-equality semantics that propagate NULL) would surface
 # the NULL row as NULL instead of "fallback".
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_if
 description: |
   BigQuery IF lowered through the polyfill UDF library

@@ -5,14 +5,15 @@
 // can stream rows back without the entire result set living in the
 // gateway's heap.
 //
-// Plan 37 ships the proto + the `CreateReadSession` handler; plan 38
-// (`storage-read-rows`) lights up the streaming `ReadRows` reply, and
-// plan 39 (`storage-read-gateway-e2e`) wires the gateway to it. The
-// shape here is the **simplified** Storage Read v1 contract: no
-// Arrow/Avro projections (rows ride on the same `DataRow` cells that
+// The engine implements `CreateReadSession` and the streaming
+// `ReadRows` reply, including per-column projection
+// (`selected_fields`) and `row_restriction` pushdown, and the gateway
+// is wired to it (with e2e coverage under `gateway/e2e/`). The shape
+// here is the **simplified** Storage Read v1 contract: no Arrow/Avro
+// projections (rows ride on the same `DataRow` cells that
 // `Catalog.ListRows` already returns), no SplitReadStream RPC, no
 // session liveness extension. Those are documented as "future" so
-// the conformance harness in plan 40 can pin per-feature gaps.
+// the conformance harness can pin per-feature gaps.
 //
 // Code generation:
 //   - Go:  `task proto:gen` writes
@@ -59,8 +60,8 @@ type StorageReadClient interface {
 	CreateReadSession(ctx context.Context, in *CreateReadSessionRequest, opts ...grpc.CallOption) (*ReadSession, error)
 	// ReadRows streams rows off the named stream. The stream id must be
 	// one of the `ReadSession.streams[*].name` values returned by the
-	// matching `CreateReadSession` call (plan 37 hands out exactly one
-	// stream per session; plan 38 fills in the streaming logic).
+	// matching `CreateReadSession` call (the engine hands out exactly
+	// one stream per session).
 	ReadRows(ctx context.Context, in *ReadRowsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadRowsResponse], error)
 }
 
@@ -113,8 +114,8 @@ type StorageReadServer interface {
 	CreateReadSession(context.Context, *CreateReadSessionRequest) (*ReadSession, error)
 	// ReadRows streams rows off the named stream. The stream id must be
 	// one of the `ReadSession.streams[*].name` values returned by the
-	// matching `CreateReadSession` call (plan 37 hands out exactly one
-	// stream per session; plan 38 fills in the streaming logic).
+	// matching `CreateReadSession` call (the engine hands out exactly
+	// one stream per session).
 	ReadRows(*ReadRowsRequest, grpc.ServerStreamingServer[ReadRowsResponse]) error
 }
 

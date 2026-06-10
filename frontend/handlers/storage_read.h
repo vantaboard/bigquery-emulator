@@ -22,10 +22,9 @@ namespace bigquery_emulator {
 namespace frontend {
 
 // StorageReadService is the C++ engine's implementation of the
-// `bigquery_emulator.v1.StorageRead` gRPC service (plan 37). Plan 37
-// lights up `CreateReadSession` (validate the table, mint a session +
-// stream id, attach the schema); plan 38 wires the streaming
-// `ReadRows` reply.
+// `bigquery_emulator.v1.StorageRead` gRPC service. It serves
+// `CreateReadSession` (validate the table, mint a session +
+// stream id, attach the schema) and the streaming `ReadRows` reply.
 //
 // Session lifecycle is in-process: each session is a `SessionState`
 // struct kept in `sessions_` keyed by the server-assigned session id.
@@ -59,7 +58,7 @@ class StorageReadService final : public v1::StorageRead::Service {
   // The handler:
   //   1. Strips the trailing `/streams/{id}` segment from the
   //      `read_stream` request field to recover the session name.
-  //      Plan 37 mints exactly `streams/0`, so anything else is
+  //      The service mints exactly `streams/0`, so anything else is
   //      INVALID_ARGUMENT.
   //   2. Looks the session up in `sessions_`. Missing sessions
   //      surface as NOT_FOUND; the gateway maps that onto the
@@ -70,8 +69,8 @@ class StorageReadService final : public v1::StorageRead::Service {
   //      as FAILED_PRECONDITION because the caller is decoding rows
   //      with a stale schema.
   //   4. Opens a `Storage::CreateReadStream` against the session's
-  //      table with the request's `offset` plumbed through (plan 38
-  //      does not yet honor a request-side row_limit — the proto
+  //      table with the request's `offset` plumbed through (a
+  //      request-side row_limit is not honored — the proto
   //      does not surface one and the gateway is the only caller).
   //   5. Streams batches of up to `kReadRowsBatchSize` rows per
   //      `ReadRowsResponse`, one writer->Write per page. The final
@@ -103,25 +102,26 @@ class StorageReadService final : public v1::StorageRead::Service {
  private:
   struct SessionState {
     // BigQuery resource id of the table the session is pinned to.
-    // Plan 38 reads rows off `storage_->ListRows(table, ...)` and
-    // compares the schema we recorded at create time against the
-    // live `Storage::GetSchema` reply to catch drift.
+    // ReadRows streams rows off this table and compares the schema
+    // we recorded at create time against the live
+    // `Storage::GetSchema` reply to catch drift.
     backend::storage::TableId table;
     // Full schema captured at CreateReadSession time (the schema we
-    // surfaced via `Storage::GetSchema`). Plan 38 compared this to
+    // surfaced via `Storage::GetSchema`). ReadRows compares this to
     // the live schema before streaming so a column rename / drop
-    // during the session surfaces as FAILED_PRECONDITION; plan 15
-    // (storage-read-write) keeps that contract but pins the drift
-    // check to the projected subset when `selected_fields` is set.
+    // during the session surfaces as FAILED_PRECONDITION. The full
+    // source-table schema is stashed even when `selected_fields`
+    // narrows the response schema, so the drift check runs against
+    // the source table.
     backend::schema::TableSchema schema;
     // Typed parse of `read_session.read_options.row_restriction`
-    // captured at CreateReadSession time. Plan 39: the parser runs at
+    // captured at CreateReadSession time. The parser runs at
     // session-mint time so a malformed restriction fails the request
     // up front (INVALID_ARGUMENT), not after the streaming RPC has
     // already started; the typed form is then handed verbatim to
     // `Storage::CreateReadStream` from ReadRows.
     std::optional<backend::storage::EqualityPredicate> equality_predicate;
-    // Plan 15 (storage-read-write): per-session list of column names
+    // Per-session list of column names
     // pinned by `read_session.read_options.selected_fields`. Empty
     // when the caller asked for "all columns". The list is validated
     // against the schema at CreateReadSession time so unknown names
@@ -142,7 +142,7 @@ class StorageReadService final : public v1::StorageRead::Service {
   // ParseTablePath enforces the
   // `projects/{project_id}/datasets/{dataset_id}/tables/{table_id}`
   // shape on `read_session.table` and writes the parsed pieces into
-  // `*out`. Plan 37 only cares about project/dataset/table; the
+  // `*out`. Only project/dataset/table are parsed; the
   // `location` slot the public API exposes is not yet honored.
   ::grpc::Status ParseTablePath(const std::string& table_path,
                                 backend::storage::TableId* out) const;
@@ -160,7 +160,7 @@ class StorageReadService final : public v1::StorageRead::Service {
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // StreamIdForSession builds the canonical stream id of the form
-  // `{session_name}/streams/0`. Plan 37 only mints stream 0 because
+  // `{session_name}/streams/0`. Only stream 0 is minted because
   // we always return exactly one stream per session.
   std::string StreamIdForSession(const std::string& session_name) const;
 

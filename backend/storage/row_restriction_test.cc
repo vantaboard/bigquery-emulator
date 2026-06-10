@@ -1,8 +1,9 @@
 // Unit tests for the `<column> = <literal>` parser that backs the
 // Storage Read API's `ReadOptions.row_restriction` field.
 //
-// Plan 39 ships exactly three literal kinds (INT64 / BOOL / STRING)
-// against top-level scalar columns. Every other shape — connectives,
+// The parser supports exactly three literal kinds (INT64 / BOOL /
+// STRING) against top-level scalar columns. Every other shape —
+// connectives,
 // relational ops, range, IN, NULL, ARRAY / STRUCT columns, FLOAT64 /
 // NUMERIC / DATE literals — is rejected at parse time with
 // INVALID_ARGUMENT so the gateway can surface the BigQuery REST 400

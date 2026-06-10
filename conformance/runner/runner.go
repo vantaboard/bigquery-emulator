@@ -24,7 +24,7 @@ const (
 	StatusSkip Status = "SKIP"
 )
 
-// JSONSchemaVersion is the on-the-wire `schema_version` plan-41 CI
+// JSONSchemaVersion is the on-the-wire `schema_version` the diff CI
 // pivots on. Bumped only on a breaking output-shape change.
 const JSONSchemaVersion = 1
 
@@ -34,7 +34,7 @@ const JSONSchemaVersion = 1
 const outputFormatText = "text"
 
 // Result is one fixture x profile outcome. The JSON tags mirror what
-// plan-41's diff CI consumes; keep them stable.
+// the diff CI consumes; keep them stable.
 type Result struct {
 	Fixture    string `json:"fixture"`
 	Path       string `json:"path"`
@@ -54,7 +54,7 @@ type Summary struct {
 }
 
 // Report is the top-level JSON payload. `schema_version` is the field
-// plan 41's CI key off, so a downstream consumer can refuse a report
+// the diff CI keys off, so a downstream consumer can refuse a report
 // it does not understand without parsing the rest.
 type Report struct {
 	SchemaVersion int      `json:"schema_version"`
@@ -79,9 +79,8 @@ type Options struct {
 
 	// UpdateBaselines overwrites the `expected:` block of every
 	// fixture with the actual response. Used to bootstrap new
-	// fixtures (plan 42 leans on this). When true, every fixture
-	// is reported as PASS regardless of the original expected
-	// block.
+	// fixtures. When true, every fixture is reported as PASS
+	// regardless of the original expected block.
 	UpdateBaselines bool
 
 	// Output controls the renderer: "text" (default) or "json".
@@ -363,9 +362,9 @@ func runRowPath(fx *Fixture, opts Options, result Result, status int, body []byt
 // Three comparison modes, all driven off the same Expectation:
 //
 //  1. No assertion: `route` AND `route_allowlist` both empty. Used
-//     by fixtures that pre-date plan 16 and by the deferred Storage
-//     Read / Write fixture families that don't go through the
-//     coordinator's classifier. Always passes.
+//     by fixtures that pre-date the route-label machinery and by the
+//     deferred Storage Read / Write fixture families that don't go
+//     through the coordinator's classifier. Always passes.
 //
 //  2. Strict: `route_strict=true` (the default) with `route` set.
 //     Actual MUST equal `route` exactly. An empty actual is a

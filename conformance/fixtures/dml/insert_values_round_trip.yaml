@@ -12,8 +12,8 @@
 # This fixture is the per-statement conformance-side artifact the
 # DML local-executor plan requires alongside the per-handler unit
 # test (`backend/engine/semantic/dml/dml_executor_test.cc`).
-# No hard route-label assertion: plan 16
-# (`docs/ENGINE_POLICY.md`) owns those.
+# No hard route-label assertion: intentionally omitted; routing
+# drift is tracked by `task conformance:routing-matrix`.
 name: insert_values_round_trip
 description: |
   CREATE TABLE -> INSERT VALUES (multi-row) -> SELECT round-trip.

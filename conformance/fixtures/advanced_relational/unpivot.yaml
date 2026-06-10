@@ -10,7 +10,8 @@
 # rows with all-NULL value columns don't survive.
 #
 # Route: `duckdb_rewrite` via `EmitUnpivotScan` (UNION ALL). Route-
-# label assertion deferred to plan 16.
+# label assertion intentionally omitted; routing drift is tracked
+# by `task conformance:routing-matrix`.
 #
 # Fixture shape: a wide quarterly table fanned out to a long
 # (region, quarter, value) shape.

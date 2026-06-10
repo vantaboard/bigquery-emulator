@@ -3,7 +3,8 @@
 # Pins the polyfill UDF library's `bq_unix_micros` macro (thin
 # alias around DuckDB's `epoch_us`) through the gateway.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_unix_micros
 description: |
   BigQuery UNIX_MICROS lowered through the polyfill UDF library

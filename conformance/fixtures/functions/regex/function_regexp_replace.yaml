@@ -14,8 +14,9 @@
 #   * `\1` / `\2` backreference round-trip (both engines vendor
 #     RE2 and accept identical replacement syntax).
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_regexp_replace
 description: |
   BigQuery REGEXP_REPLACE lowered through the polyfill UDF

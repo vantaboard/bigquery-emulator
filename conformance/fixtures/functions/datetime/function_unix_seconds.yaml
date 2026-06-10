@@ -9,7 +9,8 @@
 #
 # Edge case pinned: sub-second precision is truncated DOWN.
 #
-# Route-label assertion: deferred to plan 16.
+# Route-label assertion: intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_unix_seconds
 description: |
   BigQuery UNIX_SECONDS lowered through the polyfill UDF library

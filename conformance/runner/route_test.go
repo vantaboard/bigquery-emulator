@@ -38,8 +38,8 @@ func TestKnownRouteNamesMatchesDispositionEnum(t *testing.T) {
 	}
 }
 
-// TestKnownRouteNamesMatchesDispositionHeader is the build-time
-// parity check the plan-16 handoff suggested as a follow-up: parse
+// TestKnownRouteNamesMatchesDispositionHeader is a build-time
+// parity check between the Go and C++ route vocabularies: parse
 // `backend/engine/disposition.h` and assert the resulting set of
 // `kFoo` enum entries (lowercased + snake-cased) matches the Go-side
 // `KnownRouteNames()` letter-for-letter.

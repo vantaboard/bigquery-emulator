@@ -12,7 +12,8 @@
 # executor's native implementation in
 # `backend/engine/semantic/functions/string_funcs.cc::Soundex`.
 #
-# Route-label assertion deferred to plan 16.
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_soundex
 description: |
   BigQuery SOUNDEX lowered through the semantic executor's

@@ -1,6 +1,6 @@
 """Pytest plugin: skip dbt-bigquery functional tests the emulator lacks.
 
-Initial skip matrix (plan 10 conftest sketch). Refine during triage once
+Initial skip matrix. Refine during triage once
 ``task thirdparty:dbt-bigquery-tests`` runs against a live emulator.
 """
 

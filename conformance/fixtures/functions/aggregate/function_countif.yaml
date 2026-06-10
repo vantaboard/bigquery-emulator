@@ -10,8 +10,9 @@
 # false-like, matching BigQuery). A regression that counted NULLs
 # would surface here as 3 instead of 2.
 #
-# Route-label assertion: deferred to plan 16 per
-# `conformance/fixtures/functions/README.md`.
+# Route-label assertion: intentionally omitted per
+# `conformance/fixtures/functions/README.md`; routing drift is
+# tracked by `task conformance:routing-matrix`.
 name: function_countif
 description: |
   BigQuery COUNTIF lowered through `duckdb_native` to DuckDB's

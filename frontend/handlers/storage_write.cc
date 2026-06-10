@@ -136,10 +136,10 @@ std::string StorageWriteService::Rfc3339Now() const {
     return s;
   }
 
-  // Plan 15: only `_default` (the reserved name for an implicit
-  // append-only stream) and explicit COMMITTED streams light up
-  // here. PENDING / BUFFERED return UNIMPLEMENTED with a clear
-  // message so a producer pinning those types fails fast rather
+  // `_default` (the reserved name for an implicit append-only
+  // stream), explicit COMMITTED, and BUFFERED streams light up
+  // here. PENDING returns UNIMPLEMENTED with a clear
+  // message so a producer pinning that type fails fast rather
   // than silently routing through the COMMITTED path.
   v1::WriteStream::Type requested = v1::WriteStream::COMMITTED;
   if (request->has_write_stream()) {
@@ -371,10 +371,11 @@ std::string StorageWriteService::Rfc3339Now() const {
         it->second.buffered_rows.push_back(std::move(row));
       }
     } else {
-      // Forward to the storage append primitive (plan 9). The
-      // DuckDB backend writes a fresh parquet snapshot per call,
-      // committing the rows immediately — that is the
-      // `_default` / `COMMITTED` semantic plan 15 promises.
+      // Forward to the storage append primitive
+      // `DuckDBStorage::AppendRows`. The DuckDB backend writes a
+      // fresh parquet snapshot per call, committing the rows
+      // immediately — that is the documented `_default` /
+      // `COMMITTED` semantic.
       const absl::Status append_status =
           rows.empty() ? absl::OkStatus()
                        : storage_->AppendRows(table, absl::MakeConstSpan(rows));
@@ -452,9 +453,8 @@ std::string StorageWriteService::Rfc3339Now() const {
   return ::grpc::Status(
       ::grpc::StatusCode::UNIMPLEMENTED,
       "StorageWrite.BatchCommitWriteStreams: not implemented in this emulator "
-      "profile (plan 15 lights up _default + COMMITTED only; BatchCommit "
-      "lands with the deferred PENDING follow-up subagent of "
-      "docs/ENGINE_POLICY.md)");
+      "profile (BatchCommit lands together with the deferred PENDING "
+      "stream type; see docs/ENGINE_POLICY.md)");
 }
 
 std::size_t StorageWriteService::StreamsForTesting() const {

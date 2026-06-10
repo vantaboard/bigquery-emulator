@@ -7,8 +7,7 @@
 # We exercise the `->` / `->` chained shape (JSON typed) here; the
 # `JSON_VALUE` / scalar-coerce shape lives in the polyfill plan
 # (`docs/ENGINE_POLICY.md`). Rehomed
-# from `fastpath/` to `scalar/` by plan 17 to match the observed
-# route.
+# from `fastpath/` to `scalar/` to match the observed route.
 name: expr_get_json_field
 description: |
   Field access against a JSON literal. Verifies the engine emits

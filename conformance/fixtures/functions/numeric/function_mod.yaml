@@ -5,11 +5,11 @@
 # the macro on every fresh connection, and the result preserves
 # BigQuery's sign-of-dividend convention plus NULL propagation.
 #
-# Route-label assertion: deliberately omitted today; the
-# `docs/ENGINE_POLICY.md` (plan 16) wires the
-# `expected.route` field. Until then this fixture only pins the
-# observable rows; the duckdb_udf route is exercised implicitly via
-# the live macro registration in `DuckDbExecutor`.
+# Route-label assertion: deliberately omitted today; this fixture
+# only pins the observable rows, and the duckdb_udf route is
+# exercised implicitly via the live macro registration in
+# `DuckDbExecutor`. Routing drift is tracked by
+# `task conformance:routing-matrix`.
 #
 # Edge case pinned: `MOD(-7, 3) == -1` (sign of dividend). A
 # regression that switched the macro body to floor-mod would surface
