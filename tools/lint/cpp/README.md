@@ -56,8 +56,8 @@ go run ./tools/lint/cpp check                       # run source-only checks
 
 The corresponding Task targets (`task lint:cpp:source`) wrap these
 so contributors do not have to remember the binary path;
-`task lint:run` includes `task lint:cpp:source` in the fast
-pre-commit gate.
+`task lint:run` includes `task lint:cpp:source` and
+`task lint:cpp:cppcheck` in the pre-commit gate.
 
 ## Inline suppressions
 

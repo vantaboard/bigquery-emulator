@@ -26,10 +26,9 @@ and [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md).
          v                            v
    clang-format           clang-tidy / cppcheck
 
-                fast lane (task lint:run)
-                slow lane (task ci:cpp-analysis,
-                          task lint:cpp:tidy,
-                          task lint:cpp:cppcheck)
+                fast lane (task lint:run — includes cppcheck)
+                slow lane (task lint:cpp:tidy,
+                          task ci:cpp-analysis)
 ```
 
 The Go binary is the spine: every C++ tool consumes the
@@ -43,13 +42,13 @@ ownership boundary is pinned by
 
 | Use case | Command | Notes |
 |---|---|---|
-| Fast pre-commit gate | `task lint:run` | Go vet, gofmt, clang-format, source-only C++ checks. |
+| Fast pre-commit gate | `task lint:run` | Go vet, gofmt, clang-format, source-only C++ checks, cppcheck. |
 | Apply autofixes | `task lint:fix` | gofmt, clang-format, go vet. |
 | Format C++ only | `task lint:cpp:format` / `task lint:cpp:format-fix` | Reads from `tools/lint/cpp list`. |
 | Source-only C++ checks | `task lint:cpp:source` | File length, banned logging, status anti-patterns. |
 | clang-tidy (slow) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
 | Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
-| cppcheck (slow) | `task lint:cpp:cppcheck` | Secondary-analysis lane. |
+| cppcheck | `task lint:cpp:cppcheck` | Secondary-analysis lane; also runs inside `task lint:run`. |
 | First-party `cc_test` | `task lint:cpp:test` | Discovers via `bazel query` (`--config` aligned with `task bazel:test`); reuses `task bazel:test`. |
 | Match CI locally | `task ci:run` / `task ci:cpp-analysis` | Both lanes — fast (blocking) and slow (warning-only). |
 
@@ -191,8 +190,8 @@ using either: a bare `NOLINT` is rarely the right answer.
 
 | Job | Workflow | Posture |
 |---|---|---|
-| `build-and-test` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++) and `task lint:cpp:test`. |
-| `cpp-analysis` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
+| `build-and-test` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++, cppcheck) and `task lint:cpp:test`. |
+| `cpp-analysis` | [`ci-cpp-analysis.yml`](../../.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
 
 The local mirror is `task ci:run`; the analysis lane on its own is
 `task ci:cpp-analysis`.

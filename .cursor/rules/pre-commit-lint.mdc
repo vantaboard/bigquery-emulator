@@ -15,7 +15,7 @@ task lint:run
 `task lint:run` is the **fast pre-commit gate** for the whole repo, not a Go-only check. It runs (see `taskfiles/lint.yml`):
 
 - **Go:** `gofmt` + `go vet ./...`
-- **First-party C++:** `clang-format` dry-run + the source-only checker (`tools/lint/cpp`)
+- **First-party C++:** `clang-format` dry-run + the source-only checker (`tools/lint/cpp`) + `cppcheck`
 - **Repo policy:** disposition-parity (`tools/check_disposition_parity`)
 
 `task lint:fix` applies auto-fixes for Go (`gofmt`, `golangci-lint --fix`) and first-party C++ (`clang-format -i`).
@@ -28,7 +28,7 @@ Treat a **clean** final `task lint:run` as the default bar before that commit. I
 - First-party C++ sources/headers covered by `go run ./tools/lint/cpp list` (typically `backend/`, `binaries/`, `frontend/`, `tools/googlesql-prebuilt/smoke/`, etc.)
 - Disposition / conformance fixtures checked by `tools/check_disposition_parity`
 
-For the **deep** local pass (golangci-lint + clang-tidy + cppcheck), use `task lint:check` — CI's slow `cpp-analysis` job runs `lint:cpp:cppcheck` separately.
+For the **deep** local pass (golangci-lint + clang-tidy + the same cppcheck lane), use `task lint:check`. CI also runs `lint:cpp:cppcheck` in the dedicated `ci-cpp-analysis` workflow.
 
 ## When to skip this gate (do not block the commit on lint)
 

@@ -3,7 +3,7 @@
 # .golangci.yml, shellcheck over docker/*.sh, and slower compile-aware
 # C++ analysis (clang-tidy, cppcheck) for opt-in lanes.
 #
-# Usage: task lint:run             (fast gate, used by auto-commit + CI)
+# Usage: task lint:run             (pre-commit gate: Go + C++ format/source/cppcheck + dispositions)
 #        task lint:fix             (apply gofmt + golangci-lint --fix +
 #                                   clang-format + re-run vet)
 #        task lint:check           (deep pass: golangci-lint + every C++ lane)
@@ -17,9 +17,10 @@
 #        task lint:cpp:cppcheck    (cppcheck, slow secondary-analysis lane)
 #
 # The fast gate stays snappy so the auto-commit pre-commit hook
-# (.cursor/rules/pre-commit-lint.mdc) does not become a tax. The slower
-# C++ lanes (`task lint:cpp:tidy`, `task lint:cpp:cppcheck`) are opt-in
-# locally and run as a separate CI job; see `taskfiles/ci.yml`.
+# (.cursor/rules/pre-commit-lint.mdc) does not become a tax. The
+# compile-aware lane (`task lint:cpp:tidy`) stays opt-in locally and
+# in a separate CI job; `task lint:cpp:cppcheck` is part of
+# `task lint:run` and mirrored by `taskfiles/ci.yml` / ci-cpp-analysis.
 #
 # `task lint:check` is the deep local pass: golangci-lint for Go plus
 # every first-party C++ lane (clang-format dry-run, source-only checker,
@@ -54,15 +55,16 @@ tasks:
       - task: run
 
   run:
-    desc: Fast pre-commit gate (gofmt + go vet + first-party C++ format/source). Used by the auto-commit workflow.
+    desc: Pre-commit gate (gofmt + go vet + first-party C++ format/source/cppcheck + dispositions). Used by the auto-commit workflow.
     # The Go half scans every .go file under the worktree, so vendored
     # upstream trees in third_party/ would otherwise leak findings here
     # even though `.golangci.yml` already excludes them from the slow
     # pass. Use a find-based pruning list to skip the same paths in the
     # fast gate so `task lint:run` agrees with `task lint:go`. The C++
-    # half delegates to `task lint:cpp:format` / `task lint:cpp:source`,
-    # which both consume the canonical first-party file list from
-    # `tools/lint/cpp` so the same exclude rules apply.
+    # half delegates to `task lint:cpp:format` / `task lint:cpp:source`
+    # / `task lint:cpp:cppcheck`, which all consume the canonical
+    # first-party file list from `tools/lint/cpp` so the same exclude
+    # rules apply.
     cmds:
       - |
         set -eo pipefail
@@ -85,6 +87,7 @@ tasks:
         go vet ./...
       - task: cpp:format
       - task: cpp:source
+      - task: cpp:cppcheck
       - task: dispositions
 
   fix:
@@ -398,8 +401,8 @@ tasks:
     desc: |
       cppcheck on first-party C++ files (secondary-analysis lane).
       Catches uninitialised state, bounds issues, resource leaks, and
-      null-handling mistakes that clang-tidy may miss. Slow; runs
-      outside `task lint:run`.
+      null-handling mistakes that clang-tidy may miss. Included in
+      `task lint:run` and the `ci-cpp-analysis` workflow.
     cmds:
       - |
         set -eo pipefail
