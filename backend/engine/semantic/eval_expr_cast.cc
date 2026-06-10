@@ -15,6 +15,7 @@
 #include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/functions/datetime_funcs_internal.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/functions/cast_date_time.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/functions/string.h"
@@ -173,9 +174,8 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
     }
     if (inner.type_kind() == ::googlesql::TYPE_DATETIME) {
       std::string out;
-      if (absl::Status s =
-              ::googlesql::functions::FormatDatetimeToStringWithOptions(
-                  format_str, inner.datetime_value(), kFormatOpts, &out);
+      if (absl::Status s = ::googlesql::functions::CastFormatDatetimeToString(
+              format_str, inner.datetime_value(), &out);
           !s.ok()) {
         if (cast.return_null_on_error()) return Value::NullString();
         return s;
@@ -184,8 +184,8 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
     }
     if (inner.type_kind() == ::googlesql::TYPE_DATE) {
       std::string out;
-      if (absl::Status s = ::googlesql::functions::FormatDateToString(
-              format_str, inner.date_value(), kFormatOpts, &out);
+      if (absl::Status s = ::googlesql::functions::CastFormatDateToString(
+              format_str, inner.date_value(), &out);
           !s.ok()) {
         if (cast.return_null_on_error()) return Value::NullString();
         return s;
@@ -194,13 +194,21 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
     }
     if (inner.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
       std::string out;
-      if (absl::Status s = ::googlesql::functions::FormatTimestampToString(
-              format_str,
-              inner.ToUnixMicros(),
-              DefaultTimeZone(),
-              kFormatOpts,
-              &out);
-          !s.ok()) {
+      absl::Status s;
+      if (cast.time_zone() != nullptr &&
+          cast.time_zone()->node_kind() == ::googlesql::RESOLVED_LITERAL &&
+          cast.time_zone()->type()->kind() == ::googlesql::TYPE_STRING) {
+        const std::string tz = cast.time_zone()
+                                   ->GetAs<::googlesql::ResolvedLiteral>()
+                                   ->value()
+                                   .string_value();
+        s = ::googlesql::functions::CastFormatTimestampToString(
+            format_str, inner.ToUnixMicros(), tz, &out);
+      } else {
+        s = ::googlesql::functions::CastFormatTimestampToString(
+            format_str, inner.ToUnixMicros(), DefaultTimeZone(), &out);
+      }
+      if (!s.ok()) {
         if (cast.return_null_on_error()) return Value::NullString();
         return s;
       }

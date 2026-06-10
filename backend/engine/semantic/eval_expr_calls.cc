@@ -401,7 +401,16 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   }
   EvalContext inner = ctx;
   inner.arguments = &arg_frames;
-  return EvalExpr(body, inner);
+  auto result = EvalExpr(body, inner);
+  if (!result.ok()) return result;
+  // BigQuery translates NULL ARRAY values to empty ARRAY in query
+  // results (including SQL UDF return values). Keep NULL/empty distinct
+  // inside the UDF body; coerce only at the UDF boundary.
+  const ::googlesql::Type* return_type = call.type();
+  if (result->is_null() && return_type != nullptr && return_type->IsArray()) {
+    return Value::Array(return_type->AsArray(), {});
+  }
+  return *result;
 }
 
 absl::StatusOr<Value> EvalFunctionCall(
