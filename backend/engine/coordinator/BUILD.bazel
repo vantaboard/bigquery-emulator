@@ -129,11 +129,13 @@ cc_library(
         "local_coordinator_analyze.cc",
         "local_coordinator_engine.cc",
         "script_executor.cc",
+        "script_executor_set.cc",
     ],
     hdrs = [
         "local_coordinator_analyze.h",
         "local_coordinator_engine.h",
         "script_executor.h",
+        "script_executor_set.h",
     ],
     deps = [
         ":sql_preprocess",

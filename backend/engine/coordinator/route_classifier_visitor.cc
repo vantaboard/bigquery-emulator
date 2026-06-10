@@ -23,6 +23,19 @@ namespace transpiler = ::bigquery_emulator::backend::engine::duckdb::transpiler;
 constexpr absl::string_view kTemplatedSqlFunctionGroup =
     "Templated_SQL_Function";
 
+bool ArrayExprReferencesNamedConstant(const ::googlesql::ResolvedExpr* expr) {
+  if (expr == nullptr) return false;
+  if (expr->node_kind() == ::googlesql::RESOLVED_ARGUMENT_REF) {
+    return true;
+  }
+  if (expr->node_kind() == ::googlesql::RESOLVED_CONSTANT) {
+    const ::googlesql::Constant* constant =
+        expr->GetAs<::googlesql::ResolvedConstant>()->constant();
+    return constant != nullptr && !constant->Name().empty();
+  }
+  return false;
+}
+
 }  // namespace
 
 int RouteClassifierPriority(Disposition d) {
@@ -171,6 +184,14 @@ absl::Status RouteClassifierVisitor::VisitResolvedArrayScan(
                    ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
       MaybePromote(Disposition::kSemanticExecutor,
                    "ResolvedArrayScan(correlated_input_scan)");
+    } else if (node->array_expr_list_size() > 0 &&
+               ArrayExprReferencesNamedConstant(node->array_expr_list(0))) {
+      // Script variables are registered as named catalog constants.
+      // UNNEST(top_names) over a script binding must evaluate in the
+      // semantic executor (in-memory array + filter/subquery shapes
+      // the DuckDB transpiler does not cover yet).
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedArrayScan(script_constant)");
     }
   }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedArrayScan(node);

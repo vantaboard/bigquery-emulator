@@ -2,6 +2,7 @@
 
 #include "backend/engine/coordinator/route_classifier_test_fixture.h"
 #include "backend/engine/disposition.h"
+#include "googlesql/public/value.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -165,6 +166,34 @@ TEST_F(RouteClassifierTest, UnnestWithOffsetPromotesToSemanticExecutor) {
   RouteDecision d = classifier_.Classify(*stmt);
   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
   EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_offset_column)");
+}
+
+TEST_F(RouteClassifierTest, UnnestNamedConstantPromotesToSemanticExecutor) {
+  const ::googlesql::Type* string_array_type = nullptr;
+  ASSERT_TRUE(
+      type_factory_
+          ->MakeArrayType(type_factory_->get_string(), &string_array_type)
+          .ok());
+  std::unique_ptr<::googlesql::SimpleConstant> top_names;
+  ASSERT_TRUE(::googlesql::SimpleConstant::Create(
+                  {"top_names"},
+                  ::googlesql::Value::EmptyArray(string_array_type->AsArray()),
+                  &top_names)
+                  .ok());
+  catalog_->AddOwnedConstant(top_names.release());
+
+  const auto* stmt = Analyze("SELECT name FROM UNNEST(top_names) AS name");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(script_constant)");
+}
+
+TEST_F(RouteClassifierTest, UnnestInlineArrayStaysOnDuckDbFastPath) {
+  const auto* stmt = Analyze("SELECT n FROM UNNEST([1, 2, 3]) AS n");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
 }
 
 TEST_F(RouteClassifierTest, OuterUnnestPromotesToSemanticExecutor) {

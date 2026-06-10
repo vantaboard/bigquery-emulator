@@ -7,6 +7,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/strip.h"
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/procedure_registry.h"
@@ -47,11 +48,17 @@ LocalCoordinatorEngine::~LocalCoordinatorEngine() = default;
 
 namespace {
 
+bool ContainsSetKeyword(absl::string_view sql) {
+  return absl::StrContains(sql, " SET ") || absl::StrContains(sql, "\nSET ") ||
+         absl::StartsWithIgnoreCase(absl::StripAsciiWhitespace(sql), "SET ");
+}
+
 bool NeedsAllStatements(const QueryRequest& request) {
   return absl::StrContains(request.sql, "DECLARE") ||
          absl::StrContains(request.sql, "CALL ") ||
          absl::StrContains(request.sql, "BEGIN") ||
-         absl::StrContains(request.sql, "CREATE CONSTANT");
+         absl::StrContains(request.sql, "CREATE CONSTANT") ||
+         ContainsSetKeyword(request.sql);
 }
 
 }  // namespace

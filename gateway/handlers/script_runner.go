@@ -297,29 +297,6 @@ func transformScriptDeclares(sql string) string {
 	return strings.Join(out, ";\n")
 }
 
-func runEngineScript(
-	ctx context.Context,
-	deps Dependencies,
-	projectID, defaultDataset, sql string,
-	useLegacy bool,
-) (*scriptExecOutcome, error) {
-	// The analyzer resolves semicolon-separated script statements; outer
-	// BEGIN/END is client sugar. DECLARE is lowered to CREATE CONSTANT.
-	engineSQL := transformScriptDeclares(sql)
-	schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
-		ctx, deps, projectID, defaultDataset, engineSQL, useLegacy)
-	if err != nil {
-		return nil, err
-	}
-	return &scriptExecOutcome{
-		childCount:    1,
-		finalSchema:   schema,
-		finalRows:     rows,
-		finalStmtType: statementType,
-		finalRoute:    emulatorRoute,
-	}, nil
-}
-
 func runLegacySplitScript(
 	ctx context.Context,
 	deps Dependencies,
@@ -394,7 +371,8 @@ func runScriptStatements(
 ) (*scriptExecOutcome, error) {
 	if needsEngineScriptExecution(sql) {
 		return runEngineScript(
-			ctx, deps, projectID, defaultDataset, sql, useLegacy)
+			ctx, deps, r, projectID, parent, posted, cfg,
+			defaultDataset, sql, useLegacy)
 	}
 	return runLegacySplitScript(
 		ctx, deps, r, projectID, parent, posted, cfg,

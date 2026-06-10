@@ -16,6 +16,7 @@
 #include "backend/catalog/stored_procedure.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
+#include "backend/engine/coordinator/script_executor_set.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/executor.h"
@@ -116,57 +117,6 @@ absl::Status RegisterScriptVariablesOnCatalog(
     if (!created.ok()) return created;
     catalog->AddOwnedConstant(constant.release());
     registered->insert(name);
-  }
-  return absl::OkStatus();
-}
-
-absl::StatusOr<semantic::Value> EvalExpressionScalar(
-    const QueryRequest& request,
-    absl::string_view expr,
-    catalog::GoogleSqlCatalog* bq_catalog,
-    ::googlesql::Catalog* catalog,
-    const semantic::FrameStack& variables) {
-  absl::StatusOr<::googlesql::AnalyzerOptions> options =
-      BuildAnalyzerOptionsForRequest(request,
-                                     bq_catalog,
-                                     /*all_statements=*/false);
-  if (!options.ok()) return options.status();
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-  absl::Status analyzed =
-      ::googlesql::AnalyzeExpression(std::string(expr),
-                                     *options,
-                                     catalog,
-                                     bq_catalog->type_factory(),
-                                     &output);
-  if (!analyzed.ok()) return analyzed;
-  if (output == nullptr || output->resolved_expr() == nullptr) {
-    return absl::InternalError(
-        "script::EvalExpressionScalar: analyzer returned null expression");
-  }
-  semantic::EvalContext ctx;
-  ctx.project_id = request.project_id;
-  ctx.script_variables = &variables;
-  ctx.arguments = &variables;
-  return semantic::EvalExpr(*output->resolved_expr(), ctx);
-}
-
-absl::Status ExecuteProcedureSet(const QueryRequest& request,
-                                 absl::string_view target_name,
-                                 absl::string_view expr,
-                                 catalog::GoogleSqlCatalog* bq_catalog,
-                                 ::googlesql::Catalog* catalog,
-                                 semantic::script::ScriptDriver& driver) {
-  absl::StatusOr<semantic::Value> value = EvalExpressionScalar(
-      request, expr, bq_catalog, catalog, driver.variables());
-  if (!value.ok()) return value.status();
-  absl::Status set = driver.variables().Set(target_name, *std::move(value));
-  if (!set.ok()) {
-    return semantic::MakeSemanticError(
-        semantic::SemanticErrorReason::kInvalidArgument,
-        absl::StrCat("script::ExecuteProcedureSet: cannot assign to '",
-                     target_name,
-                     "': ",
-                     set.message()));
   }
   return absl::OkStatus();
 }
@@ -455,6 +405,18 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
     absl::Status registered = RegisterScriptVariablesOnCatalog(
         bq_catalog, driver.variables(), &registered_script_vars);
     if (!registered.ok()) return registered;
+    bool set_handled = false;
+    absl::Status set_status = TryExecuteLeadingSetStatement(
+        request, resume, bq_catalog, catalog, driver, &set_handled);
+    if (!set_status.ok()) return set_status;
+    if (set_handled) {
+      const absl::string_view tail =
+          resume.input().substr(resume.byte_position());
+      if (absl::StripAsciiWhitespace(tail).empty()) {
+        at_end = true;
+      }
+      continue;
+    }
     std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
     absl::Status analyzed = ::googlesql::AnalyzeNextStatement(
         &resume, *options, catalog, type_factory, &output, &at_end);

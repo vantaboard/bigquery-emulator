@@ -401,9 +401,9 @@ allowlist is wired in [`taskfiles/thirdparty.yml`](../taskfiles/thirdparty.yml).
 `QueryMaterializedViewIT` is **not** allowlisted and passes against the
 stabilized engine (2026-06-08).
 
-**Local bar (2026-06-08):** node **green** (107 passing); python **1** failure
-(`test_query_script` / `SET`); golang **1** failure (public-data timestamp
-cast); bigframes gate **3/4**; java **OK** with allowlist.
+**Local bar (2026-06-09):** node **green** (107 passing); python **green**
+(66 passed / 11 skipped); golang **1** failure (public-data timestamp
+cast); bigframes gate **4/4**; java **OK** with allowlist.
 
 ### Emulator wiring
 

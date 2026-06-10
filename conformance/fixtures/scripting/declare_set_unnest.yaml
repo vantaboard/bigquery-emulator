@@ -1,0 +1,16 @@
+# declare_set_unnest: DECLARE + SET script via engine path.
+name: scripting_declare_set_unnest
+description: |
+  DECLARE an ARRAY variable, SET it from a scalar subquery, then read
+  ARRAY_LENGTH in the final SELECT to prove SET updated script scope.
+project_id: proj-scripting-declare-set-unnest
+query: |
+  BEGIN
+    DECLARE top_names ARRAY<INT64>;
+    SET top_names = (SELECT GENERATE_ARRAY(1, 3));
+    SELECT CAST(ARRAY_LENGTH(top_names) AS STRING) AS n;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "3"}

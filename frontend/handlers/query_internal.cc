@@ -102,11 +102,16 @@ namespace internal {
 }
 
 bool NeedsScriptStatementLoop(absl::string_view sql) {
-  return absl::StrContains(sql, ";") &&
-         (absl::StrContains(sql, "DECLARE") ||
-          absl::StrContains(sql, "CALL ") ||
-          absl::StrContains(sql, "CREATE CONSTANT") ||
-          absl::StrContains(sql, "BEGIN"));
+  if (!absl::StrContains(sql, ";")) {
+    return false;
+  }
+  if (absl::StrContains(sql, "DECLARE") || absl::StrContains(sql, "CALL ") ||
+      absl::StrContains(sql, "CREATE CONSTANT") ||
+      absl::StrContains(sql, "BEGIN")) {
+    return true;
+  }
+  return absl::StrContains(sql, " SET ") || absl::StrContains(sql, "\nSET ") ||
+         absl::StartsWithIgnoreCase(absl::StripAsciiWhitespace(sql), "SET ");
 }
 
 // BigQuery REST query results render integer-valued FLOAT64 cells with

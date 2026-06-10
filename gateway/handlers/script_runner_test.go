@@ -1,6 +1,9 @@
 package handlers
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestIsMultiStatementScriptBqutilsFromHexSetup(t *testing.T) {
 	const sql = `/*
@@ -42,5 +45,44 @@ func TestIsMultiStatementScriptDetectsSetScript(t *testing.T) {
 	const sql = `SET x = 1; SELECT x;`
 	if !isMultiStatementScript(sql) {
 		t.Fatal("expected DECLARE/SET script detection")
+	}
+}
+
+func TestNeedsEngineScriptExecutionDetectsDeclare(t *testing.T) {
+	const sql = `DECLARE x INT64; SET x = 1; SELECT x;`
+	if !needsEngineScriptExecution(sql) {
+		t.Fatal("expected DECLARE script to use engine path")
+	}
+}
+
+func TestTransformScriptDeclaresLowersDeclarePreservesSet(t *testing.T) {
+	const sql = `DECLARE top_names ARRAY<STRING>;
+SET top_names = (SELECT ['a']);
+SELECT name FROM UNNEST(top_names) AS name;`
+	got := transformScriptDeclares(sql)
+	if strings.Contains(strings.ToUpper(got), "DECLARE ") {
+		t.Fatalf("DECLARE not lowered: %q", got)
+	}
+	if !strings.Contains(strings.ToUpper(got), "SET TOP_NAMES") {
+		t.Fatalf("SET statement removed: %q", got)
+	}
+}
+
+func TestCountExecutableScriptChildStatements(t *testing.T) {
+	const sql = `DECLARE top_names ARRAY<STRING>;
+SET top_names = (SELECT ['a']);
+SELECT name FROM UNNEST(top_names) AS name;`
+	var childCount int
+	for _, raw := range splitScriptStatements(unwrapBeginEndBlock(sql)) {
+		st := classifyScriptStatement(raw)
+		switch st.kind {
+		case scriptStmtDeclare, scriptStmtCall:
+			continue
+		case scriptStmtSet, scriptStmtQuery:
+			childCount++
+		}
+	}
+	if childCount != 2 {
+		t.Fatalf("childCount = %d, want 2", childCount)
 	}
 }
