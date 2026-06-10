@@ -224,6 +224,15 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
   }
   if (target->kind() == ::googlesql::TYPE_TIMESTAMP) {
     if (inner.type_kind() == ::googlesql::TYPE_TIMESTAMP) return inner;
+    if (inner.type_kind() == ::googlesql::TYPE_DATE) {
+      int64_t micros = 0;
+      if (auto s = ::googlesql::functions::ConvertDateToTimestamp(
+              inner.date_value(), kMicros, DefaultTimeZone(), &micros);
+          !s.ok()) {
+        return s;
+      }
+      return Value::TimestampFromUnixMicros(micros);
+    }
     if (inner.type_kind() == ::googlesql::TYPE_STRING) {
       int64_t micros = 0;
       std::string text(inner.string_value());
@@ -242,6 +251,15 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
               text,
               DefaultTimeZone(),
               /*parse_version2=*/true,
+              &micros);
+          s.ok()) {
+        return Value::TimestampFromUnixMicros(micros);
+      }
+      if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
+              text,
+              DefaultTimeZone(),
+              kMicros,
+              /*allow_tz_in_str=*/true,
               &micros);
           s.ok()) {
         return Value::TimestampFromUnixMicros(micros);

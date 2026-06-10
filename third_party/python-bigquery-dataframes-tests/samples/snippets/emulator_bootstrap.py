@@ -14,6 +14,8 @@ from google.cloud.bigquery_storage_v1.services.big_query_read.transports import 
 
 _PATCHED = False
 _ORIGINAL_PROPERTY = None
+_ADC_PATCHED = False
+_BIGFRAMES_AUTH_PATCHED = False
 
 
 def _insecure_storage_client(endpoint: str) -> BigQueryReadClient:
@@ -44,10 +46,54 @@ def apply_emulator_client_patches() -> None:
     _PATCHED = True
 
 
+def _emulator_project() -> str:
+    return os.environ.get("GOOGLE_CLOUD_PROJECT", "dev")
+
+
+def _patch_anonymous_adc() -> None:
+    global _ADC_PATCHED
+    if _ADC_PATCHED or not os.environ.get("BIGQUERY_EMULATOR_HOST"):
+        return
+
+    import google.auth
+    from google.auth.credentials import AnonymousCredentials
+
+    def _emulator_default(*args, **kwargs):
+        return AnonymousCredentials(), _emulator_project()
+
+    google.auth.default = _emulator_default
+    google.auth._bq_emulator_adc_patched = True  # type: ignore[attr-defined]
+    _ADC_PATCHED = True
+
+
+def _patch_bigframes_anonymous_auth() -> None:
+    global _BIGFRAMES_AUTH_PATCHED
+    if _BIGFRAMES_AUTH_PATCHED or not os.environ.get("BIGQUERY_EMULATOR_HOST"):
+        return
+
+    from google.auth.credentials import AnonymousCredentials
+
+    import bigframes._config.auth as auth_mod
+    import bigframes.pandas as bpd
+
+    project = _emulator_project()
+    creds = AnonymousCredentials()
+
+    def _anon_with_project():
+        return creds, project
+
+    auth_mod.get_default_credentials_with_project = _anon_with_project
+    bpd.options.bigquery.credentials = creds
+    bpd.options.bigquery.project = project
+    _BIGFRAMES_AUTH_PATCHED = True
+
+
 def configure_bigframes_emulator_endpoints() -> None:
     host = os.environ.get("BIGQUERY_EMULATOR_HOST", "")
     if not host:
         return
+    _patch_anonymous_adc()
+    _patch_bigframes_anonymous_auth()
     if not host.startswith("http"):
         host = f"http://{host.lstrip('/')}"
     storage_endpoint: Optional[str] = os.environ.get(

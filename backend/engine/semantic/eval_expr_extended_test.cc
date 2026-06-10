@@ -244,6 +244,23 @@ TEST_F(EvalExprTest, FloatNanArithmeticProducesNan) {
   EXPECT_TRUE(std::isnan(v->double_value()));
 }
 
+TEST_F(EvalExprTest, CastStringDateOnlyToTimestamp) {
+  const auto* expr = AnalyzeExpr("CAST('1800-01-01' AS TIMESTAMP)");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+}
+
+TEST_F(EvalExprTest, DateBetweenOldDatesEvaluates) {
+  const auto* expr = AnalyzeExpr(
+      "DATE('1800-01-01') BETWEEN DATE('1800-01-01') AND DATE('1899-12-31')");
+  ASSERT_NE(expr, nullptr);
+  auto v = EvalExpr(*expr, EvalContext{});
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_TRUE(v->bool_value());
+}
+
 }  // namespace semantic
 }  // namespace engine
 }  // namespace backend

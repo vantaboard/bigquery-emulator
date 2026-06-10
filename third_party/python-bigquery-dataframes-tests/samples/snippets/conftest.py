@@ -49,8 +49,8 @@ def cleanup_datasets(bigquery_client: bigquery.Client) -> None:
 
 @pytest.fixture(scope="session")
 def bigquery_client() -> bigquery.Client:
-    bigquery_client = bigquery.Client()
-    return bigquery_client
+    configure_bigframes_emulator_endpoints()
+    return bigquery.Client()
 
 
 @pytest.fixture(scope="session")

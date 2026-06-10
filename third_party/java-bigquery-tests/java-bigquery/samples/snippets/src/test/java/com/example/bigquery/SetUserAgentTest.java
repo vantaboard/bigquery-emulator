@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -50,6 +51,13 @@ public class SetUserAgentTest {
 
   @BeforeClass
   public static void checkRequirements() {
+    String emu = System.getenv("BIGQUERY_EMULATOR_HOST");
+    if (emu == null || emu.isEmpty()) {
+      emu = System.getProperty("BIGQUERY_EMULATOR_HOST");
+    }
+    Assume.assumeTrue(
+        "SetUserAgentTest requires live BigQuery (BIGQUERY_EMULATOR_HOST unset)",
+        emu == null || emu.isEmpty());
     requireEnvVar("GOOGLE_CLOUD_PROJECT");
   }
 

@@ -1,10 +1,10 @@
-"""Pytest plugin: route BigQuery Storage reads to the emulator gRPC listener.
+"""Pytest plugin: emulator wiring for python-bigquery-tests.
 
-``list_rows(...).to_dataframe()`` and similar paths call
-``Client._ensure_bqstorage_client()``, which otherwise dials production
-``bigquerystorage.googleapis.com``. When ``BIGQUERY_EMULATOR_HOST`` is set,
-patch that hook to use an insecure channel to ``BIGQUERY_STORAGE_GRPC_ENDPOINT``
-(the gateway storage shim on :9060 in docker-compose).
+When ``BIGQUERY_EMULATOR_HOST`` is set:
+
+- Route BigQuery Storage reads to the emulator gRPC listener (insecure channel).
+- Patch ``google.auth.default`` to return ``AnonymousCredentials`` so
+  ``bigquery.Client()`` works without Application Default Credentials.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import grpc
 import pytest
 
 _PATCHED = False
+_ADC_PATCHED = False
 
 
 def _storage_endpoint() -> str:
@@ -51,5 +52,30 @@ def _patch_client_bqstorage() -> None:
     _PATCHED = True
 
 
+def _emulator_project() -> str:
+    return (
+        os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or os.environ.get("GCLOUD_PROJECT")
+        or "dev"
+    )
+
+
+def _patch_anonymous_adc() -> None:
+    global _ADC_PATCHED
+    if _ADC_PATCHED or not os.environ.get("BIGQUERY_EMULATOR_HOST"):
+        return
+
+    import google.auth
+    from google.auth.credentials import AnonymousCredentials
+
+    def _emulator_default(*args, **kwargs):
+        return AnonymousCredentials(), _emulator_project()
+
+    google.auth.default = _emulator_default
+    google.auth._bq_emulator_adc_patched = True  # type: ignore[attr-defined]
+    _ADC_PATCHED = True
+
+
 def pytest_configure(config: pytest.Config) -> None:
+    _patch_anonymous_adc()
     _patch_client_bqstorage()
