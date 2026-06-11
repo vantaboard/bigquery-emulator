@@ -127,7 +127,7 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedFlattenedArg`                        | `semantic_executor`   | (planned) Same.                                                                                     |
 | `ResolvedSubqueryExpr`                        | `duckdb_native` (subset) | `cte-subquery-routing`: non-correlated scalar / IN / EXISTS / ARRAY lower directly to DuckDB (`(<sub>)`, `<lhs> IN (<sub>)`, `EXISTS (<sub>)`, `ARRAY(<sub>)`). Correlated forms (non-empty `parameter_list()`) evaluate on `semantic_executor` via `EvalSubqueryExpr` + `outer_row_eval` (`conformance/fixtures/cte_subquery/subquery_expr_correlated_exists.yaml`). LIKE ANY / ALL / NOT LIKE ANY / ALL list forms evaluate on `semantic_executor` via rewriter-expanded `LOGICAL_OR` / `LOGICAL_AND` + `DispatchLike` (`conformance/fixtures/cte_subquery/subquery_expr_like_any_list.yaml`). Subquery-pattern forms are rejected at analyze time in `PRODUCT_EXTERNAL`. |
 | `ResolvedWithExpr`                            | `duckdb_native`       | `transpiler-expression-core`: `WITH(<a> AS <e1>, ...) <body>` -> `(SELECT <body> FROM (SELECT <e1> AS "a", ...))`. The inner SELECT exposes each binding under its `ResolvedColumn::name()`; the surrounding scalar subquery preserves once-per-row evaluation. |
-| `ResolvedInlineLambda`                        | `semantic_executor`   | (planned) Lambda-arg used by a few BQ-specific function families; `docs/ENGINE_POLICY.md`.              |
+| `ResolvedInlineLambda`                        | `semantic_executor`   | Lambda-arg for `ARRAY_TRANSFORM` / `ARRAY_FILTER`; `EvalArrayTransform` / `EvalArrayFilter` in `eval_expr_calls.cc` bind the parameter via `ColumnBindings` per element. Pinned by `conformance/fixtures/specialized/array_transform_lambda.yaml` and `array_filter_lambda.yaml`. |
 | `ResolvedFilterField`                         | `unsupported`         | Proto-only; `docs/ENGINE_POLICY.md`.                                                           |
 | `ResolvedFilterFieldArg`                      | `unsupported`         | Proto-only.                                                                               |
 | `ResolvedConstant`                            | `duckdb_native`       | `transpiler-emit-expr`: literal constants (including analyzer-bound parameter literals) lower through `EmitLiteral` so aggregate/order-by plans stay on the DuckDB fast path; catalog-backed `CREATE CONSTANT` module registration remains deferred. |
@@ -248,12 +248,11 @@ semantic-executor / control-op code) so the doc stays honest.
     `docs/ENGINE_POLICY.md`. `BIT_COUNT` was on this
     list before `docs/ENGINE_POLICY.md` shipped a
     two's-complement-correct implementation in the semantic
-    executor; `IEEE_DIVIDE` is also owned by the semantic
+    executor;     `IEEE_DIVIDE` is also owned by the semantic
     executor for the IEEE 754 sentinel contract DuckDB's `/`
-    cannot match. `HLL_COUNT.*` and `NET.*` graduated from
-    `unsupported` to `semantic_executor status=planned` by the
-    specialized-feature policy plan; the real implementations
-    land via `docs/ENGINE_POLICY.md`.
+    cannot match. `HLL_COUNT.*` and `NET.*` evaluate on the
+    semantic executor (`hll_funcs.cc`, `net_funcs.cc`); sketches
+    use a local wire format documented in `docs/ENGINE_POLICY.md`.
 * **DuckDB STRUCT / ARRAY quirks the fast path honors:**
   * **BigQuery STRUCT field order is positional**, but DuckDB STRUCTs
     are keyed by name. The transpiler walks the resolved `StructType`

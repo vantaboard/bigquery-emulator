@@ -1,0 +1,19 @@
+# array_transform_lambda: inline lambda via ARRAY_TRANSFORM.
+#
+# Pins `ResolvedInlineLambda` promotion and per-element lambda
+# evaluation in `eval_expr_calls.cc::EvalArrayTransform`.
+name: specialized_array_transform_lambda
+description: |
+  ARRAY_TRANSFORM with an arrow-function lambda maps each array
+  element through the inline lambda body on the semantic executor.
+project_id: proj-specialized-array-transform
+query: |
+  SELECT v
+  FROM UNNEST(ARRAY_TRANSFORM([1, 2, 3], e -> e * 10)) AS v
+  ORDER BY v
+expected:
+  route: semantic_executor
+  rows:
+    - {v: "10"}
+    - {v: "20"}
+    - {v: "30"}

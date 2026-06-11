@@ -408,8 +408,10 @@ handler.
   canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
   `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`,
   `unsupported`); deferred rows carry `status=planned` in the YAML
-  tables. Unsupported families (`APPROX_QUANTILES`, `ML.*`, `NET.*`,
-  `KEYS.*`, `ST_*`, ...) are documented in
+  tables. `NET.*` and `HLL_COUNT.*` evaluate on the semantic executor
+  (`net_funcs.cc`, `hll_funcs.cc`). Unsupported families
+  (`APPROX_QUANTILES`, `ML.*`, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`,
+  `ST_*`, ...) are documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
   `SAFE.<fn>(...)` is handled uniformly regardless of disposition
@@ -817,15 +819,16 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     `docs/ENGINE_POLICY.md` semantic executor so deep
     nested updates don't have to round-trip through JSON to fake
     field-existence semantics.
-  - **Google-specific built-ins.** `APPROX_QUANTILES`, `HLL_COUNT.*`,
-    `ML.*`, `BIT_COUNT`, `NET.*`, `KEYS.NEW_KEYSET`, GIS / GEOGRAPHY
-    functions, and date-arithmetic edge cases (`DATE_ADD(d, INTERVAL 1
-    MONTH)` semantics on month-end) often have no DuckDB analog. The
-    function-disposition table now records a routing disposition per
-    entry; close-enough functions become `duckdb_udf`, BigQuery-exact
-    ones become `semantic_executor`, and entire families
-    (`docs/ENGINE_POLICY.md`) declare a policy of "local
-    implementation now," "deterministic stub with BigQuery-shaped
+  - **Google-specific built-ins.** `APPROX_QUANTILES`, `ML.*`,
+    `BIT_COUNT`, `KEYS.NEW_KEYSET`, GIS / GEOGRAPHY functions, and
+    date-arithmetic edge cases (`DATE_ADD(d, INTERVAL 1 MONTH)` semantics
+    on month-end) often have no DuckDB analog. `HLL_COUNT.*` and
+    `NET.*` are implemented on the semantic executor (local HLL sketch
+    wire format; see ENGINE_POLICY). The function-disposition table
+    records a routing disposition per entry; close-enough functions
+    become `duckdb_udf`, BigQuery-exact ones become `semantic_executor`,
+    and entire families (`docs/ENGINE_POLICY.md`) declare a policy of
+    "local implementation now," "deterministic stub with BigQuery-shaped
     error," or "unsupported by design."
   - **NULL-equality, ordering, and float corner cases** between the two
     engines are subtly different (e.g., NaN ordering, `IS NULL` in joins,

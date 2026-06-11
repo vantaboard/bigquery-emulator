@@ -579,14 +579,19 @@ approx_count_distinct: semantic_executor
 approx_top_count: semantic_executor
 approx_top_sum: semantic_executor
 
+# Inline-lambda array helpers (ARRAY_TRANSFORM / ARRAY_FILTER) evaluate
+# on the semantic executor via `EvalArrayTransform` / `EvalArrayFilter`
+# in `eval_expr_calls.cc`; the transpiler returns "" for inline_lambda
+# argument slots so the route classifier must promote the query.
+array_transform: semantic_executor
+array_filter: semantic_executor
+
 # Internal array subscript helpers (OFFSET/ORDINAL) for semantic path.
 $array_at_offset: semantic_executor
 
-# HLL_COUNT.* graduates to `local_impl` (semantic executor) per the
-# specialized-feature plan. The HLL algorithm is small, deterministic,
-# and seedable; `docs/ENGINE_POLICY.md` owns the
-# actual implementation. Until the handler ships its handler the
-# engine surfaces a per-function `status=planned` UNIMPLEMENTED.
+# HLL_COUNT.* uses a local sketch wire format (not byte-compatible
+# with cloud BigQuery); see `docs/ENGINE_POLICY.md`. Implemented in
+# `backend/engine/semantic/functions/hll_funcs.cc`.
 hll_count.init: semantic_executor
 hll_count.merge: semantic_executor
 hll_count.merge_partial: semantic_executor
@@ -603,12 +608,8 @@ ml.predict: unsupported
 ml.forecast: unsupported
 ml.evaluate: unsupported
 
-# NET.* graduates to `local_impl` (semantic executor) per the
-# specialized-feature plan. The surface is small, deterministic,
-# and a good fit for the semantic executor; the actual
-# implementation lives in `docs/ENGINE_POLICY.md`.
-# Until the handler ships its handler the engine surfaces a per-
-# function `status=planned` UNIMPLEMENTED.
+# NET.* IP / URL parsing on the semantic executor via
+# `backend/engine/semantic/functions/net_funcs.cc`.
 net.ip_from_string: semantic_executor
 net.safe_ip_from_string: semantic_executor
 net.ip_to_string: semantic_executor

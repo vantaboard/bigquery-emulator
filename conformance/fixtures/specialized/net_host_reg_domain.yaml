@@ -1,0 +1,26 @@
+# net_host_reg_domain: NET.HOST / PUBLIC_SUFFIX / REG_DOMAIN.
+#
+# Pins the semantic executor's `net_funcs.cc` dispatch for URL
+# parsing helpers (subset of gateway e2e `net_host`).
+name: specialized_net_host_reg_domain
+description: |
+  NET.HOST, NET.PUBLIC_SUFFIX, and NET.REG_DOMAIN on a small URL
+  table including punycode / public-suffix edge cases.
+project_id: proj-specialized-net-host
+query: |
+  SELECT
+    NET.HOST(url) AS host,
+    NET.PUBLIC_SUFFIX(url) AS public_suffix,
+    NET.REG_DOMAIN(url) AS reg_domain
+  FROM (
+    SELECT 'http://abc.xyz' AS url UNION ALL
+    SELECT '    www.Example.Co.UK    ' UNION ALL
+    SELECT 'amazon.co.uk'
+  )
+  ORDER BY host
+expected:
+  route: semantic_executor
+  rows:
+    - {host: abc.xyz, public_suffix: xyz, reg_domain: abc.xyz}
+    - {host: amazon.co.uk, public_suffix: co.uk, reg_domain: amazon.co.uk}
+    - {host: www.Example.Co.UK, public_suffix: Co.UK, reg_domain: Example.Co.UK}

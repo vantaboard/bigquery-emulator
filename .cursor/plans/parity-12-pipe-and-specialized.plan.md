@@ -7,10 +7,10 @@ isProject: true
 todos:
   - id: inline-lambda
     content: "ResolvedInlineLambda + lambda-arg functions (ARRAY_TRANSFORM, ARRAY_FILTER, ...): evaluate lambdas on the semantic executor binding lambda params via FrameStack; most-used item in this plan, land first."
-    status: pending
+    status: completed
   - id: net-hll
     content: "NET.* (ip/host parsing) and HLL_COUNT.* (INIT/MERGE/EXTRACT with BigQuery-compatible sketch format) bodies on the semantic executor; drop their status=planned markers in functions.yaml."
-    status: pending
+    status: completed
   - id: subpipeline-evaluator
     content: "Generic subpipeline evaluator for ResolvedPipeIfScan / ResolvedPipeForkScan / ResolvedPipeTeeScan replacing the focused kNotImplemented stubs in the semantic executor."
     status: pending
@@ -31,7 +31,7 @@ todos:
     status: pending
   - id: fixtures-trackers
     content: Fixtures per shape; flip SHAPE_TRACKER + node_dispositions.yaml + functions.yaml rows; update ENGINE_POLICY family table rows (NET/HLL move from 'body not yet implemented' to landed).
-    status: pending
+    status: completed
 ---
 
 # Parity 12 — Pipe operators + specialized families
@@ -88,6 +88,17 @@ task conformance:routing-matrix
 task lint:dispositions
 task bazel:shutdown && task bazel:status
 ```
+
+## Blocked todos (2026-06-11)
+
+| Todo | Why blocked |
+|------|-------------|
+| `subpipeline-evaluator` | No `Materialize*` handler for `ResolvedPipeIfScan` / `ForkScan` / `TeeScan`; `scan_eval_scan_impl.cc` default case surfaces generic `kNotImplemented`. Needs a shared subpipeline evaluator that materializes input rows and runs branch/side-effect pipelines. |
+| `pipe-dml-ddl` | `ResolvedPipeInsertScan` is still `status=planned` with no DML path. `RunPipeExportData` delegates to `RunExportData` (local `file://` may work) but pipe CREATE TABLE remains `absl::UnimplementedError` in `pipe_create_table.cc` — needs pipe-input → SELECT lowering before CTAS replay. |
+| `group-rows` | `ResolvedGroupRowsScan` promotes but has no per-group row-set evaluator; aggregate `GROUP_ROWS()` TVF wiring is absent. |
+| `deferred-computed-column` | `ResolvedDeferredComputedColumn` promotes; aggregate path rejects non-function-call exprs. Analyzer does not enable the shape in PRODUCT_EXTERNAL today (hand-built classifier test only). |
+| `match-recognize` | `ResolvedMatchRecognizeScan` is `status=planned`; row-pattern automaton work is out of scope for a single session — defer to a dedicated sub-plan. |
+| `flatten` | `ResolvedFlatten` / `ResolvedFlattenedArg` are `status=planned` with no `eval_expr` handler (comment-only deferral in `array_scan.h`). |
 
 ## Out of scope
 

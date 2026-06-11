@@ -1,0 +1,22 @@
+# hll_count_round_trip: HLL_COUNT INIT / MERGE / EXTRACT vectors.
+#
+# Sketches use the emulator-local wire format in `hll_funcs.cc`
+# (not byte-compatible with cloud BigQuery). Vectors match
+# `hll_funcs_test.cc` and gateway e2e `hll_count.*` cases.
+name: specialized_hll_count_round_trip
+description: |
+  HLL_COUNT.INIT on known customer_id strings, MERGE across three
+  sketches, and EXTRACT on a single-sketch row.
+project_id: proj-specialized-hll-count
+query: |
+  SELECT
+    HLL_COUNT.MERGE(sketch) AS merged_distinct,
+    HLL_COUNT.EXTRACT(HLL_COUNT.INIT('customer_id_3', 10)) AS extract_one
+  FROM (
+    SELECT HLL_COUNT.INIT(customer_id, 10) AS sketch
+    FROM UNNEST(['customer_id_1', 'customer_id_2', 'customer_id_3']) AS customer_id
+  )
+expected:
+  route: semantic_executor
+  rows:
+    - {merged_distinct: "3", extract_one: "1"}
