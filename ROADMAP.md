@@ -540,21 +540,16 @@ public-facing policy.
   `@@error.message` / `@@error.statement_text`, and `RAISE USING MESSAGE`
   (conformance/fixtures/scripting/, 2026-06-10). `LOOP`/`FOR…IN`/`REPEAT`
   and nested exception edge cases remain open where not yet pinned.
-  SQL UDF / TVF body storage + invocation + JS UDF
-  registration-time rejection stay deferred until the per-engine
-  UDF / TVF registry round-trip through `DuckDBStorage` lands
-  (the prerequisite for cross-request function persistence).
-  **Landed (in-process):** `CREATE FUNCTION` with typed or
-  `ANY TYPE` templated scalar parameters registers in the
-  per-project UDF registry and replays into each query catalog
-  (shadowing built-ins on name collision); call-time evaluation
-  routes through the semantic executor. Conformance fixtures under
-  `conformance/fixtures/udf/` gate the scalar path; SQL UDAFs land on
-  the semantic executor via `EvalSqlUdafBody` with fixtures under
-  `conformance/fixtures/aggregate/`. **Landed (in-process):** SQL TVFs
-  register in `tvf_registry` and evaluate via `eval_tvf.cc`
-  (`conformance/fixtures/udf/tvf_simple.yaml`). Durable DuckDB-backed
-  persistence remains open.
+  **Landed:** `CREATE FUNCTION` / `CREATE TABLE FUNCTION` /
+  `CREATE PROCEDURE` write through to `DuckDBStorage` (`__bqemu_routines`)
+  and rehydrate across engine restarts; `DROP FUNCTION` removes registry +
+  storage rows. REST `routines.*` delegates to `Catalog` RPCs backed by
+  the same store. `LANGUAGE js` follows the metadata-only `local_stub`
+  posture (registration + `routines.get` round-trip; call-time stays
+  `UNIMPLEMENTED`). Scalar / `ANY TYPE` UDFs, SQL UDAFs, and SQL TVFs
+  evaluate on the semantic executor; conformance fixtures under
+  `conformance/fixtures/udf/` (+ `gateway/e2e/routine_persistence_test.go`
+  for restart proof). JS call-time execution and Python UDFs remain open.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
   local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
   matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The

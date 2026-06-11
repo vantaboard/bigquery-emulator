@@ -30,7 +30,7 @@ absl::StatusOr<std::vector<size_t>> FilterRowsByHavingModifier(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   const auto* mod = call.having_modifier();
   if (mod == nullptr) return row_indices;
   if (mod->having_expr() == nullptr) {

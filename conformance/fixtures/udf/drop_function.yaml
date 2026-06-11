@@ -1,0 +1,17 @@
+# DROP FUNCTION removes a persisted scalar UDF from registry + storage.
+name: udf_drop_function
+description: |
+  CREATE FUNCTION, DROP FUNCTION, then calling the name fails analysis.
+project_id: proj-udf-drop-fn
+setup:
+  - dataset: ds_drop
+  - sql: |-
+      CREATE FUNCTION ds_drop.add_one(x INT64) AS (x + 1);
+  - sql: DROP FUNCTION ds_drop.add_one
+query: SELECT ds_drop.add_one(1) AS out
+expected:
+  route: semantic_executor
+  route_strict: false
+  error:
+    code: 400
+    message_contains: add_one

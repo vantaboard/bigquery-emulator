@@ -166,7 +166,7 @@ ResolvedConstant: duckdb_native
 ResolvedSystemVariable: semantic_executor
 ResolvedSequence: unsupported
 ResolvedArgumentRef: semantic_executor
-ResolvedArgumentDef: semantic_executor status=planned
+ResolvedArgumentDef: semantic_executor
 ResolvedCatalogColumnRef: control_op
 ResolvedExpressionColumn: unsupported
 ResolvedUpdateConstructor: semantic_executor status=planned

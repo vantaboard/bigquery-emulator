@@ -1,0 +1,15 @@
+# Durable scalar UDF: create in setup, call in query (same process).
+name: udf_persist_scalar
+description: |
+  Pins write-through persistence for CREATE FUNCTION; the query step
+  assumes the setup DDL registered the scalar UDF in-process (durable
+  restart coverage lives in gateway/e2e/routine_persistence_test.go).
+project_id: proj-udf-persist-scalar
+setup:
+  - sql: |-
+      CREATE FUNCTION double_it(n INT64) AS (n * 2);
+query: SELECT double_it(21) AS out
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "42"}

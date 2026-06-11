@@ -106,8 +106,8 @@ absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
 
 absl::StatusOr<std::unique_ptr<RowSource>> BuildReturningRowSource(
     const ::googlesql::ResolvedReturningClause& returning,
-    std::vector<ColumnBindings> row_contexts,
-    std::vector<std::string> actions,
+    const std::vector<ColumnBindings>& row_contexts,
+    const std::vector<std::string>& actions,
     EvalContext& ctx);
 
 absl::StatusOr<DmlStats> ExecuteInsert(

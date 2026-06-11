@@ -7,25 +7,25 @@ isProject: true
 todos:
   - id: storage-schema
     content: "Design the routine persistence schema in catalog.duckdb (project, dataset, name, kind UDF/UDAF/TVF/PROCEDURE, language, signature incl. ANY TYPE markers, body SQL, options); add Storage interface methods + DuckDBStorage impl."
-    status: pending
+    status: completed
   - id: registry-roundtrip
     content: "Rehydrate udf_registry / tvf_registry / procedure_registry from storage at engine startup and on first catalog touch; CREATE [OR REPLACE] / DROP FUNCTION|PROCEDURE write through; keep the replay-into-query-catalog path unchanged."
-    status: pending
+    status: completed
   - id: drop-function
     content: "ResolvedDropFunctionStmt (and procedure drop) through the control-op executor; flip the (planned) SHAPE_TRACKER row."
-    status: pending
+    status: completed
   - id: routines-rest
     content: "Gateway routines REST surface: routines.insert/get/list/delete reflect persisted routines (gateway/routines/ddl.go metadata parsing already accepts ANY TYPE); promote the relevant docs/REST_API.md rows from stub to implemented."
-    status: pending
+    status: completed
   - id: js-udf-posture
     content: "CREATE FUNCTION ... LANGUAGE js: with body storage available, decide the documented posture - register metadata-only (local_stub) so getRoutine round-trips, while call-time evaluation stays UNIMPLEMENTED; update ENGINE_POLICY JS-UDF row + SHAPE_TRACKER ResolvedCreateFunctionStmt note accordingly."
-    status: pending
+    status: completed
   - id: argument-def
     content: "ResolvedArgumentDef executor-side walk for the storage round-trip (signature reconstruction at rehydrate time); drop its status=planned marker."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "Fixtures: udf/ + restart-persistence coverage (engine restart inside a gateway e2e test or a two-phase conformance step); flip tracker rows; update ROADMAP scripting/UDF bullets."
-    status: pending
+    status: completed
 ---
 
 # Parity 08 — UDF/TVF/procedure durable persistence

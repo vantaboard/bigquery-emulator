@@ -137,14 +137,16 @@ succeed; specific-resource methods return 404 (absent) or 501
 
 ### Routines (`bigquery.routines.*`)
 
-Routines (UDFs / TVFs / stored procedures) are stored in the
-gateway's in-memory registry ([`gateway/routines/`][routines-pkg]).
-REST insert/get/list/update/delete round-trip metadata for client
-libraries; `CREATE FUNCTION` / `CREATE PROCEDURE` DDL via `jobs.query`
-also registers routines and surfaces `ddlTargetRoutine` on the job
-statistics envelope. The engine catalog persists UDF definitions for
-SQL execution but does not yet expose a list/describe RPC — the
-gateway registry is the source of truth for the REST surface.
+Routines (UDFs / TVFs / stored procedures) persist in the engine's
+`DuckDBStorage` catalog (`__bqemu_routines` in `catalog.duckdb`) and
+surface through the `Catalog.ListRoutines` / `GetRoutine` /
+`UpsertRoutine` / `DeleteRoutine` gRPC RPCs. REST
+insert/get/list/update/delete delegates to those RPCs when the gateway
+is wired to `emulator_main`; the in-memory [`gateway/routines/`][routines-pkg]
+store mirrors responses for the synchronous query path.
+`CREATE FUNCTION` / `CREATE PROCEDURE` DDL via `jobs.query` also
+registers routines and surfaces `ddlTargetRoutine` on the job
+statistics envelope.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|

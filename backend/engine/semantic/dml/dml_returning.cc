@@ -82,11 +82,11 @@ absl::StatusOr<storage::Row> ProjectReturningRow(
       } else {
         auto cit = row_ctx.find(col_id);
         if (cit == row_ctx.end()) {
-          return absl::InternalError(absl::StrCat(
-              "semantic/dml: returning column '",
-              oc->name(),
-              "' has no binding for column_id=",
-              col_id));
+          return absl::InternalError(
+              absl::StrCat("semantic/dml: returning column '",
+                           oc->name(),
+                           "' has no binding for column_id=",
+                           col_id));
         }
         v = cit->second;
       }
@@ -103,8 +103,8 @@ absl::StatusOr<storage::Row> ProjectReturningRow(
 
 absl::StatusOr<std::unique_ptr<RowSource>> BuildReturningRowSource(
     const ::googlesql::ResolvedReturningClause& returning,
-    std::vector<ColumnBindings> row_contexts,
-    std::vector<std::string> actions,
+    const std::vector<ColumnBindings>& row_contexts,
+    const std::vector<std::string>& actions,
     EvalContext& ctx) {
   if (row_contexts.size() != actions.size()) {
     return absl::InternalError(
@@ -121,8 +121,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> BuildReturningRowSource(
     if (!projected.ok()) return projected.status();
     rows.push_back(*std::move(projected));
   }
-  return std::unique_ptr<RowSource>(new MaterializedRowSource(
-      *std::move(schema_or), std::move(rows)));
+  return std::unique_ptr<RowSource>(
+      new MaterializedRowSource(*std::move(schema_or), std::move(rows)));
 }
 
 }  // namespace dml

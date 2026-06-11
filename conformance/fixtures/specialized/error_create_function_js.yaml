@@ -1,18 +1,19 @@
-# error_create_function_js: LANGUAGE js CREATE FUNCTION surfaces 501.
+# error_create_function_js: LANGUAGE js registers metadata; call-time is 501.
 #
-# docs/ENGINE_POLICY.md pins JavaScript UDFs to clean rejection:
-# CREATE must not register an External_function that would fail
-# unpredictably at call time.
+# docs/ENGINE_POLICY.md pins JavaScript UDFs to local_stub registration
+# with call-time UNIMPLEMENTED (no silent approximation).
 name: specialized_error_create_function_js
 description: |
-  CREATE FUNCTION ... LANGUAGE js returns HTTP 501 notImplemented
-  mentioning JavaScript.
+  CREATE FUNCTION ... LANGUAGE js registers metadata; invoking the
+  function surfaces HTTP 501 mentioning JavaScript.
 project_id: proj-specialized-error-create-function-js
-query: |
-  CREATE FUNCTION js_add(x INT64) RETURNS INT64
-  LANGUAGE js AS "return x + 1;"
+setup:
+  - sql: |-
+      CREATE FUNCTION js_add(x INT64) RETURNS INT64
+      LANGUAGE js AS "return x + 1;"
+query: SELECT js_add(1) AS out
 expected:
-  route: unsupported
+  route: semantic_executor
   route_strict: false
   error:
     code: 501
