@@ -177,6 +177,17 @@ absl::Status RouteClassifierVisitor::VisitResolvedSubqueryExpr(
       MaybePromote(Disposition::kSemanticExecutor,
                    "ResolvedSubqueryExpr(IN_UNNEST)");
     }
+    switch (node->subquery_type()) {
+      case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+      case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+      case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+      case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedSubqueryExpr(LIKE_ANY/ALL)");
+        break;
+      default:
+        break;
+    }
   }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedSubqueryExpr(node);
 }

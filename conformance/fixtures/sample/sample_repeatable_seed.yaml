@@ -1,0 +1,33 @@
+# sample_repeatable_seed: TABLESAMPLE with REPEATABLE(seed).
+name: sample_repeatable_seed
+description: |
+  TABLESAMPLE SYSTEM with REPEATABLE pins deterministic sampling via
+  DuckDB's REPEATABLE clause. Row identity is engine-specific so we
+  assert schema + route only.
+project_id: proj-sample-repeatable
+dataset_id: ds_sample_repeatable
+setup:
+  - dataset: ds_sample_repeatable
+  - table:
+      dataset: ds_sample_repeatable
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_sample_repeatable
+      table: items
+      rows:
+        - {id: 1}
+        - {id: 2}
+        - {id: 3}
+        - {id: 4}
+        - {id: 5}
+query: |
+  SELECT id
+    FROM ds_sample_repeatable.items
+   TABLESAMPLE SYSTEM (50 PERCENT) REPEATABLE (42)
+expected:
+  route: duckdb_native
+  match: schema_only
+  schema:
+    - {name: id, type: INT64}

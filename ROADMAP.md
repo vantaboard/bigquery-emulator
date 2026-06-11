@@ -472,10 +472,17 @@ public-facing policy.
   evaluate per outer row on the semantic executor via
   `EvalSubqueryExpr` + `outer_row_eval` (pinned by
   `conformance/fixtures/cte_subquery/subquery_expr_correlated_exists.yaml`).
-  Recursive CTEs and the LIKE
-  ANY / ALL subquery family remain deliberately out of the DuckDB
-  fast path's scope and surface UNIMPLEMENTED; see
-  `docs/ENGINE_POLICY.md`
+  Recursive CTEs lower through `duckdb_rewrite`, including transpiler
+  support for `WITH DEPTH` depth pseudo-columns when the analyzer
+  supplies `recursion_depth_modifier` (unit-tested; no parse surface
+  in `PRODUCT_EXTERNAL` yet).
+  LIKE ANY / ALL list forms evaluate on the semantic executor
+  (`conformance/fixtures/cte_subquery/subquery_expr_like_any_list.yaml`).
+  Window-frame RANGE on numeric ORDER BY keys and TABLESAMPLE
+  `REPEATABLE` lower on the DuckDB fast path (`conformance/fixtures/window/`,
+  `conformance/fixtures/sample/sample_repeatable_seed.yaml`). Weighted /
+  stratified sampling and DATE/TIMESTAMP RANGE with non-INTERVAL offsets
+  still surface `UNIMPLEMENTED`; see `docs/ENGINE_POLICY.md`
 - 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
   `CAST ... AT TIME ZONE` promote to the semantic executor
   (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);

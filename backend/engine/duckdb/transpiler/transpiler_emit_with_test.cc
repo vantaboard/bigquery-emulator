@@ -143,6 +143,76 @@ TEST_F(TranspilerTest, EmitWithScanRecursivePropagatesKeyword) {
       << "expected UNION ALL between anchor and recursive arm; got: " << sql;
 }
 
+TEST_F(TranspilerTest, EmitRecursiveScanWithDepthThreadsCounter) {
+  ::googlesql::ResolvedColumn n_col(
+      /*column_id=*/200,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("n"),
+      type_factory_->get_int64());
+  ::googlesql::ResolvedColumn depth_col(
+      /*column_id=*/201,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("depth"),
+      type_factory_->get_int64());
+  auto depth_mod = ::googlesql::MakeResolvedRecursionDepthModifier(
+      /*lower_bound=*/nullptr,
+      /*upper_bound=*/nullptr,
+      ::googlesql::MakeResolvedColumnHolder(depth_col));
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
+      anchor_exprs;
+  anchor_exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      n_col,
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1))));
+  auto anchor_project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{n_col},
+      std::move(anchor_exprs),
+      ::googlesql::MakeResolvedSingleRowScan());
+  auto anchor_item = ::googlesql::MakeResolvedSetOperationItem(
+      std::move(anchor_project), /*output_column_list=*/{n_col, depth_col});
+  ::googlesql::ResolvedColumn rec_n_col(
+      /*column_id=*/202,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("n"),
+      type_factory_->get_int64());
+  ::googlesql::ResolvedColumn rec_depth_col(
+      /*column_id=*/203,
+      /*table_name=*/::googlesql::IdString::MakeGlobal("$rec"),
+      /*name=*/::googlesql::IdString::MakeGlobal("depth"),
+      type_factory_->get_int64());
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
+      rec_exprs;
+  rec_exprs.push_back(::googlesql::MakeResolvedComputedColumn(
+      rec_n_col,
+      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(2))));
+  auto rec_project = ::googlesql::MakeResolvedProjectScan(
+      /*column_list=*/{rec_n_col},
+      std::move(rec_exprs),
+      ::googlesql::MakeResolvedSingleRowScan());
+  auto rec_item = ::googlesql::MakeResolvedSetOperationItem(
+      std::move(rec_project), /*output_column_list=*/{rec_n_col, rec_depth_col});
+  auto recursive_scan = ::googlesql::MakeResolvedRecursiveScan(
+      /*column_list=*/{n_col, depth_col},
+      ::googlesql::ResolvedRecursiveScan::UNION_ALL,
+      std::move(anchor_item),
+      std::move(rec_item),
+      std::move(depth_mod));
+  auto entry =
+      ::googlesql::MakeResolvedWithEntry("r", std::move(recursive_scan));
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedWithEntry>> entries;
+  entries.push_back(std::move(entry));
+  auto with_scan = ::googlesql::MakeResolvedWithScan(
+      /*column_list=*/{},
+      std::move(entries),
+      ::googlesql::MakeResolvedSingleRowScan(),
+      /*recursive=*/true);
+  TestTranspiler t;
+  std::string sql = t.EmitWithScan(with_scan.get());
+  EXPECT_NE(sql.find("0 AS \"_cte_1\""), std::string::npos)
+      << "expected anchor depth 0; got: " << sql;
+  EXPECT_NE(sql.find("\"depth\" + 1 AS \"_cte_1\""), std::string::npos)
+      << "expected recursive depth increment; got: " << sql;
+}
+
 TEST_F(TranspilerTest, EmitWithRefScanBareDirect) {
   // Direct-construction of a ResolvedWithRefScan so we can pin the
   // per-column rename without depending on the surrounding

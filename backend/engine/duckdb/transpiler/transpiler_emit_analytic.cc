@@ -108,9 +108,10 @@ bool AnalyticScanIsOnlyPercentileDiscRespectNulls(
 std::string Transpiler::BuildPartitionClause(
     const ::googlesql::ResolvedWindowPartitioning* p) {
   if (p == nullptr) return "";
-  // PARTITION BY hints and collations are BQ-specific; bail so the
-  // engine surfaces UNIMPLEMENTED.
-  if (!p->collation_list().empty() || p->hint_list_size() > 0) {
+  // PARTITION BY collations are BQ-specific; bail so the engine
+  // surfaces UNIMPLEMENTED. Optimizer hints are no-ops locally.
+  (void)p->hint_list_size();
+  if (!p->collation_list().empty()) {
     return std::string(kAnalyticBail);
   }
   std::vector<std::string> cols;
@@ -136,7 +137,7 @@ std::string Transpiler::BuildOrderClause(
     bool bigquery_null_defaults,
     bool append_input_rn) {
   if (o == nullptr) return "";
-  if (o->hint_list_size() > 0) return std::string(kAnalyticBail);
+  (void)o->hint_list_size();
   std::vector<std::string> items;
   items.reserve(o->order_by_item_list_size() + 1);
   for (int i = 0; i < o->order_by_item_list_size(); ++i) {
@@ -241,8 +242,8 @@ void Transpiler::CaptureAnalyticOutputOrder(
   const ::googlesql::ResolvedWindowPartitioning* partition =
       group->partition_by();
   if (partition != nullptr) {
-    if (!partition->collation_list().empty() ||
-        partition->hint_list_size() > 0) {
+    (void)partition->hint_list_size();
+    if (!partition->collation_list().empty()) {
       return;
     }
     for (int i = 0; i < partition->partition_by_list_size(); ++i) {
@@ -269,7 +270,7 @@ void Transpiler::CaptureAnalyticOutputOrder(
   }
 
   if (order_by != nullptr) {
-    if (order_by->hint_list_size() > 0) return;
+    (void)order_by->hint_list_size();
     for (int i = 0; i < order_by->order_by_item_list_size(); ++i) {
       const ::googlesql::ResolvedOrderByItem* item =
           order_by->order_by_item_list(i);

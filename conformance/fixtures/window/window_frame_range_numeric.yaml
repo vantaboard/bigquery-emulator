@@ -1,0 +1,32 @@
+# window_frame_range_numeric: RANGE BETWEEN numeric offsets on INT ORDER BY.
+name: window_frame_range_numeric
+description: |
+  COUNT(*) OVER (ORDER BY population RANGE BETWEEN 1 PRECEDING AND 1
+  FOLLOWING) on an inline relation. Pins DuckDB-native RANGE frames
+  when the ORDER BY key is numeric.
+project_id: proj-window-range-numeric
+query: |
+  WITH farm AS (
+    SELECT 'cat' AS animal, 23 AS population, 'mammal' AS category
+    UNION ALL SELECT 'duck', 3, 'bird'
+    UNION ALL SELECT 'dog', 2, 'mammal'
+    UNION ALL SELECT 'goose', 1, 'bird'
+    UNION ALL SELECT 'ox', 2, 'mammal'
+    UNION ALL SELECT 'goat', 2, 'mammal'
+  )
+  SELECT animal, population, category,
+         COUNT(*) OVER (
+           ORDER BY population
+           RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
+         ) AS similar_population
+    FROM farm
+   ORDER BY population, animal
+expected:
+  route: duckdb_native
+  rows:
+    - {animal: "goose", population: "1", category: "bird", similar_population: "4"}
+    - {animal: "dog", population: "2", category: "mammal", similar_population: "5"}
+    - {animal: "goat", population: "2", category: "mammal", similar_population: "5"}
+    - {animal: "ox", population: "2", category: "mammal", similar_population: "5"}
+    - {animal: "duck", population: "3", category: "bird", similar_population: "4"}
+    - {animal: "cat", population: "23", category: "mammal", similar_population: "1"}

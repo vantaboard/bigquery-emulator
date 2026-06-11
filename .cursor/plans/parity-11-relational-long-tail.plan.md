@@ -7,19 +7,19 @@ isProject: true
 todos:
   - id: window-frames
     content: "ResolvedWindowFrame non-literal bound offsets + RANGE over non-numeric ORDER BY (DATE/TIMESTAMP ranges): lower natively where DuckDB's RANGE with INTERVAL offsets is exact; otherwise semantic executor; also clear analytic hint/collation-list bails where they are no-ops."
-    status: pending
+    status: completed
   - id: tablesample
     content: "ResolvedSampleScan deferred matrix: REPEATABLE(seed) via DuckDB's REPEATABLE, plus the method/unit combos currently bailing; stratified partition lists + weight columns route duckdb_rewrite or stay documented-deferred if DuckDB has no exact analog - decide per shape and record it."
-    status: pending
+    status: completed
   - id: with-depth
     content: "Recursive CTE WITH DEPTH (recursion_depth_modifier): emit the depth pseudo-column through the recursive union arms (duckdb_rewrite: thread a depth counter column through EmitRecursiveScan)."
-    status: pending
+    status: completed
   - id: like-any-all
     content: "LIKE ANY / LIKE ALL subquery + list forms: currently on the empty-string fallback; lower to conjunction/disjunction of LIKEs for list form, semantic-executor per-outer-row eval for the subquery form (reuses parity-01 primitive)."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Fixtures under window/ sample/ cte_subquery/; flip SHAPE_TRACKER rows (ResolvedWindowFrame*, ResolvedSampleScan, ResolvedRecursiveScan WITH DEPTH note, ResolvedSubqueryExpr LIKE ANY/ALL note); update node_dispositions.yaml.
-    status: pending
+    status: completed
 ---
 
 # Parity 11 — Relational long tail

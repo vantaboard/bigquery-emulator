@@ -1,0 +1,17 @@
+# subquery_expr_like_any_list: LIKE ANY with a pattern list.
+name: subquery_expr_like_any_list
+description: |
+  `word LIKE ANY ('Int%', '%ion')` expands to OR-of-LIKEs and evaluates
+  on the semantic executor.
+project_id: proj-like-any-list
+query: |
+  SELECT word,
+         word LIKE ANY ('Int%', '%ion') AS matches
+    FROM UNNEST(['Intention', 'Fusion', 'Intent']) AS word
+   ORDER BY word
+expected:
+  route: semantic_executor
+  rows:
+    - {word: "Fusion", matches: "true"}
+    - {word: "Intent", matches: "true"}
+    - {word: "Intention", matches: "true"}

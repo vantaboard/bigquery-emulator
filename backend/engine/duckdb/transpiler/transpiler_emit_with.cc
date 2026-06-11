@@ -63,15 +63,10 @@ std::string Transpiler::EmitSampleScan(
   // method/unit combination DuckDB rejects at parse time. The plan
   // also asks us to bail on:
   //
-  //   * `repeatable_argument()` -- DuckDB has REPEATABLE (<seed>),
-  //     but the seed-derived PRNG is not byte-equivalent to BQ's
-  //     `REPEATABLE`; rather than silently producing a different
-  //     sample for the same seed, we defer to a follow-up plan.
   //   * `weight_column()` -- DuckDB has no `WITH WEIGHT` analog.
   //   * `partition_by_list()` -- BigQuery's STRATIFY BY surface; no
   //     DuckDB analog.
   if (node == nullptr || node->input_scan() == nullptr) return "";
-  if (node->repeatable_argument() != nullptr) return "";
   if (node->weight_column() != nullptr) return "";
   if (node->partition_by_list_size() > 0) return "";
 
@@ -102,13 +97,17 @@ std::string Transpiler::EmitSampleScan(
     default:
       return "";
   }
+  std::string sample_suffix = absl::StrCat(" (", method_lower, ")");
+  if (node->repeatable_argument() != nullptr) {
+    std::string seed = EmitExpr(node->repeatable_argument());
+    if (seed.empty()) return "";
+    sample_suffix = absl::StrCat(" (", method_lower, ", ", seed, ")");
+  }
   return absl::StrCat("SELECT * FROM (",
                       input,
                       ") USING SAMPLE ",
                       sample_amount,
-                      " (",
-                      method_lower,
-                      ")");
+                      sample_suffix);
 }
 
 // Synthesize a stable positional column name for the i-th column
@@ -292,11 +291,20 @@ std::string Transpiler::EmitRecursiveScan(
   if (static_cast<int>(ctx.column_names.size()) != node->column_list_size()) {
     return "";
   }
-  // The recursion depth modifier is a BigQuery-specific extension
-  // (`WITH DEPTH ...`) that DuckDB does not have a clean analog
-  // for; bail to "" and let the engine surface UNIMPLEMENTED so
-  // downstream code can pick up the shape later.
-  if (node->recursion_depth_modifier() != nullptr) return "";
+  const ::googlesql::ResolvedRecursionDepthModifier* depth_mod =
+      node->recursion_depth_modifier();
+  int depth_col_idx = -1;
+  if (depth_mod != nullptr && depth_mod->recursion_depth_column() != nullptr) {
+    const int depth_id =
+        depth_mod->recursion_depth_column()->column().column_id();
+    for (int j = 0; j < node->column_list_size(); ++j) {
+      if (node->column_list(j).column_id() == depth_id) {
+        depth_col_idx = j;
+        break;
+      }
+    }
+    if (depth_col_idx < 0) return "";
+  }
 
   // Build one recursive-CTE arm. Each item's `output_column_list[j]`
   // names the recursive scan's `column_list(j)` CTE column; the
@@ -321,7 +329,8 @@ std::string Transpiler::EmitRecursiveScan(
     return std::string(out_col.name());
   };
   auto build_arm =
-      [&](const ::googlesql::ResolvedSetOperationItem* item) -> std::string {
+      [&](const ::googlesql::ResolvedSetOperationItem* item,
+          bool is_recursive_arm) -> std::string {
     if (item == nullptr || item->scan() == nullptr) return "";
     if (item->output_column_list_size() != node->column_list_size()) {
       return "";
@@ -332,6 +341,9 @@ std::string Transpiler::EmitRecursiveScan(
     std::vector<std::string> normalized;
     normalized.reserve(node->column_list_size());
     for (int j = 0; j < node->column_list_size(); ++j) {
+      if (j == depth_col_idx && !is_recursive_arm) {
+        continue;
+      }
       const ::googlesql::ResolvedColumn& out_col = item->output_column_list(j);
       const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
       const std::string src_name = child_emit_column_name(child, out_col, j);
@@ -349,8 +361,23 @@ std::string Transpiler::EmitRecursiveScan(
     anchor_projs.reserve(node->column_list_size());
     for (int j = 0; j < node->column_list_size(); ++j) {
       const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
-      std::string src_q = internal::QuoteIdent(cte_col.name());
       std::string dst_q = internal::QuoteIdent(ctx.column_names[j]);
+      if (j == depth_col_idx) {
+        std::string depth_expr;
+        if (is_recursive_arm) {
+          depth_expr = absl::StrCat(
+              internal::QuoteIdent(cte_col.name()), " + 1");
+        } else if (depth_mod != nullptr &&
+                   depth_mod->lower_bound() != nullptr) {
+          depth_expr = EmitExpr(depth_mod->lower_bound());
+          if (depth_expr.empty()) return "";
+        } else {
+          depth_expr = "0";
+        }
+        anchor_projs.push_back(absl::StrCat(depth_expr, " AS ", dst_q));
+        continue;
+      }
+      std::string src_q = internal::QuoteIdent(cte_col.name());
       anchor_projs.push_back(cte_col.name() == ctx.column_names[j]
                                  ? src_q
                                  : absl::StrCat(src_q, " AS ", dst_q));
@@ -362,9 +389,11 @@ std::string Transpiler::EmitRecursiveScan(
                         ")");
   };
 
-  std::string anchor = build_arm(node->non_recursive_term());
+  std::string anchor = build_arm(node->non_recursive_term(),
+                                 /*is_recursive_arm=*/false);
   if (anchor.empty()) return "";
-  std::string recursive_arm = build_arm(node->recursive_term());
+  std::string recursive_arm = build_arm(node->recursive_term(),
+                                        /*is_recursive_arm=*/true);
   if (recursive_arm.empty()) return "";
 
   absl::string_view op;

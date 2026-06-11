@@ -10,6 +10,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/functions/operator_funcs.h"
 #include "backend/engine/semantic/outer_row_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
@@ -221,6 +222,66 @@ absl::StatusOr<Value> EvalSubqueryExpr(
         if (lhs->Equals(*rv)) return Value::Bool(true);
       }
       return Value::Bool(false);
+    }
+    case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+    case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL: {
+      if (node.in_expr() == nullptr) {
+        return absl::InvalidArgumentError(
+            "semantic: LIKE ANY/ALL subquery missing in_expr");
+      }
+      auto lhs = EvalExpr(*node.in_expr(), ctx);
+      if (!lhs.ok()) return lhs.status();
+      if (lhs->is_null()) return Value::NullBool();
+      if (rows.empty()) {
+        switch (node.subquery_type()) {
+          case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+          case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+            return Value::Bool(false);
+          case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+          case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+            return Value::Bool(true);
+          default:
+            break;
+        }
+      }
+      bool any_match = false;
+      bool all_match = true;
+      for (const ColumnBindings& row : rows) {
+        auto pattern = value_from_row(row);
+        if (!pattern.ok()) return pattern.status();
+        if (pattern->is_null()) {
+          all_match = false;
+          continue;
+        }
+        auto matched =
+            functions::DispatchLike("$like", {*lhs, *pattern});
+        if (!matched.ok()) return matched.status();
+        if (matched->is_null()) {
+          all_match = false;
+          continue;
+        }
+        if (matched->bool_value()) {
+          any_match = true;
+        } else {
+          all_match = false;
+        }
+      }
+      switch (node.subquery_type()) {
+        case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+          return Value::Bool(any_match);
+        case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+          return Value::Bool(all_match);
+        case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+          return Value::Bool(!any_match);
+        case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+          return Value::Bool(!all_match);
+        default:
+          break;
+      }
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               "semantic: LIKE ANY/ALL subquery type");
     }
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,

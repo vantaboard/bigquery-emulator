@@ -135,6 +135,32 @@ absl::StatusOr<Value> EvalAggregateCall(
   if (name == "array_concat_agg") {
     return finish(ArrayConcatAgg(call, input_column_values, call.type()));
   }
+  if (name == "logical_or") {
+    bool any = false;
+    if (!input_column_values.empty()) {
+      for (const Value& v : input_column_values[0]) {
+        if (v.is_null()) continue;
+        if (v.bool_value()) {
+          any = true;
+          break;
+        }
+      }
+    }
+    return finish(Value::Bool(any));
+  }
+  if (name == "logical_and") {
+    if (input_column_values.empty() || input_column_values[0].empty()) {
+      return finish(Value::Bool(false));
+    }
+    bool all = true;
+    for (const Value& v : input_column_values[0]) {
+      if (v.is_null() || !v.bool_value()) {
+        all = false;
+        break;
+      }
+    }
+    return finish(Value::Bool(all));
+  }
   return finish(MakeSemanticError(
       SemanticErrorReason::kNotImplemented,
       absl::StrCat("semantic: aggregate '", name, "' is not implemented")));

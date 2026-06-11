@@ -153,11 +153,10 @@ TEST_F(TranspilerTest, EmitSampleScanUnknownMethodFallsBack) {
   EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
 }
 
-TEST_F(TranspilerTest, EmitSampleScanWithRepeatableSeedFallsBack) {
-  // `REPEATABLE (<seed>)` has a DuckDB analog but the seed-derived
-  // PRNG is not byte-equivalent to BQ's. Falling back keeps the
-  // conformance harness from pinning sample tests onto the DuckDB
-  // engine with a different sampled set.
+TEST_F(TranspilerTest, EmitSampleScanWithRepeatableSeed) {
+  // DuckDB's `REPEATABLE (<seed>)` clause pins the PRNG for
+  // deterministic sampling; the transpiler forwards the seed
+  // expression verbatim.
   TestSampleScanArgs args;
   args.method = "SYSTEM";
   args.unit = ::googlesql::ResolvedSampleScan::PERCENT;
@@ -167,7 +166,8 @@ TEST_F(TranspilerTest, EmitSampleScanWithRepeatableSeedFallsBack) {
   auto sample = MakeTestSampleScan(std::move(args));
   ASSERT_NE(sample, nullptr);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitSampleScan(sample.get()), "");
+  EXPECT_EQ(t.EmitSampleScan(sample.get()),
+            "SELECT * FROM (SELECT 1) USING SAMPLE 10 PERCENT (system, 42)");
 }
 
 TEST_F(TranspilerTest, EmitSampleScanWithWeightColumnFallsBack) {
