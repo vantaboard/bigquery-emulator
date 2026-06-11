@@ -525,12 +525,14 @@ stage_bazel() {
         //googlesql/public:evaluator_table_iterator
         //googlesql/public:function
         //googlesql/public:language_options
+        //googlesql/public:parse_resume_location
         //googlesql/public:options_cc_proto
         //googlesql/public:simple_catalog
         //googlesql/public:type
         //googlesql/public:value
         //googlesql/resolved_ast
         //googlesql/resolved_ast:resolved_node_kind_cc_proto
+        //googlesql/scripting:script_executor
     )
 
     # Trap-driven shutdown — releases the daemon JVM on signal or

@@ -19,12 +19,13 @@
 #include <cstdint>
 
 #include "googlesql/public/error_helpers.h"
+#include "googlesql/scripting/script_executor.h"
 
 int main(int /*argc*/, char** /*argv*/) {
-  // Just take the address of one symbol from the included header so
-  // the linker is FORCED to resolve at least one googlesql object.
-  // FormatError is part of googlesql/public/error_helpers.h's
-  // public surface (per the GoogleSQL prebuilt label inventory).
-  auto* fn = &::googlesql::FormatError;
-  return reinterpret_cast<std::intptr_t>(fn) != 0 ? 0 : 1;
+  auto* format_fn = &::googlesql::FormatError;
+  auto* create_fn = &::googlesql::ScriptExecutor::Create;
+  return reinterpret_cast<std::intptr_t>(format_fn) != 0 &&
+                 reinterpret_cast<std::intptr_t>(create_fn) != 0
+             ? 0
+             : 1;
 }

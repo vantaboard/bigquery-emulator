@@ -119,8 +119,8 @@ env:
   # Leave empty for now (see the file header). The first published
   # GoogleSQL prebuilt populates these on its release commit.
   # ------------------------------------------------------------------
-  RELEASE_GOOGLESQL_PREBUILT_URL: "https://github.com/vantaboard/bigquery-emulator/releases/download/googlesql-prebuilt/v0.1.1+gs-36dd14aa0657/googlesql-prebuilt-linux-amd64-clang18-36dd14aa0657-v0.1.1.tar.gz"
-  RELEASE_GOOGLESQL_PREBUILT_SHA256: "90d5e3f8c46f538952dbede87967c6e7753afd45cf19b988c89a16a5d570dfff"
+  RELEASE_GOOGLESQL_PREBUILT_URL: "https://github.com/vantaboard/bigquery-emulator/releases/download/googlesql-prebuilt/v0.1.2+gs-36dd14aa0657/googlesql-prebuilt-linux-amd64-clang18-36dd14aa0657-v0.1.2.tar.gz"
+  RELEASE_GOOGLESQL_PREBUILT_SHA256: "e3240f63803efc7fc0e6da0c17f7125b2a319c4505c73f67368f338513c82888"
 
 jobs:
   release:

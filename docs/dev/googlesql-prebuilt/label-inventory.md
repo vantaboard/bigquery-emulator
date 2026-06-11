@@ -29,7 +29,7 @@ roadmap):
 | `backend/engine/semantic/array_struct/BUILD.bazel`                  | `array_scan`                          |
 | `backend/engine/semantic/dml/BUILD.bazel`                           | `dml_executor`                        |
 | `backend/engine/semantic/functions/BUILD.bazel`                     | `dispatch`, `dispatch_test`           |
-| `backend/engine/coordinator/BUILD.bazel`                            | `route_classifier`, `route_classifier_test` |
+| `backend/engine/coordinator/BUILD.bazel`                            | `route_classifier`, `local_coordinator_engine`, scripting runner (`script_executor`, `parse_resume_location`) |
 | `frontend/handlers/BUILD.bazel`                                     | `query_handler`                       |
 
 If a future commit lands a new direct label not in [§ Direct labels](#direct-labels),
@@ -61,6 +61,7 @@ archive but skip the wrapper), and **why** the emulator needs the label today.
 | `@googlesql//googlesql/public:function`               | `function.h`, `function_signature.h`, `input_argument_type.h`, `procedure.h`, `table_valued_function.h` | Expose | Transpiler walks `Function::Name()` on `ResolvedFunctionCall` nodes. |
 | `@googlesql//googlesql/public:interval_value`         | `interval_value.h`                                                        | Expose | `semantic/value` round-trips BigQuery `INTERVAL` literals through GoogleSQL's `IntervalValue`. |
 | `@googlesql//googlesql/public:language_options`       | `language_options.h`                                                      | Expose | All engines + handler + transpiler tests snapshot the same `LanguageOptions` between analyzer and evaluator. |
+| `@googlesql//googlesql/public:parse_resume_location`  | `parse_resume_location.h`, `parse_resume_location.pb.h` (generated)       | Expose | `ExecuteScriptViaAnalyzeNext` and `googlesql::ScriptExecutor` resume parsing across multi-statement scripts. |
 | `@googlesql//googlesql/public:numeric_value`          | `numeric_value.h`                                                         | Expose | `semantic/value` and the semantic dispatch tables route BigQuery `NUMERIC` / `BIGNUMERIC` arithmetic through GoogleSQL's `NumericValue`. |
 | `@googlesql//googlesql/public:options_cc_proto`       | `options.pb.h` (generated)                                                | Expose | Carries `ProductMode::PRODUCT_EXTERNAL` and `LanguageFeature` enums into every engine + the transpiler. |
 | `@googlesql//googlesql/public:simple_catalog`         | `simple_catalog.h`, `simple_property_graph.h`, `table_from_proto.h`       | Expose | Concrete catalog the adapter subclasses. Also (intentionally) transitively re-exports `type_factory.h` / `struct_type.h` because `@googlesql//googlesql/public/types:types` is package-visibility-restricted. |
@@ -75,6 +76,12 @@ archive but skip the wrapper), and **why** the emulator needs the label today.
 |--------------------------------------------------------------------------|-------------------------------------------------------|----------------------|--------------------------------|
 | `@googlesql//googlesql/resolved_ast` (default target)                   | `resolved_ast.h`, `resolved_ast_visitor.h`, `resolved_node.h`, `resolved_column.h`, `resolved_collation.h`, … (generated `resolved_ast.{h,cc}` from `gen_resolved_ast.py`) | Expose | All resolved-AST node types + the visitor base the transpiler subclasses. |
 | `@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto`         | `resolved_node_kind.pb.h` (generated)                | Expose | `ResolvedNodeKind` enum used in engine dispatch. |
+
+### Package `@googlesql//googlesql/scripting`
+
+| Label                                              | Upstream `hdrs`        | Prebuilt disposition | Why the emulator depends on it |
+|----------------------------------------------------|------------------------|----------------------|--------------------------------|
+| `@googlesql//googlesql/scripting:script_executor`  | `script_executor.h`    | Expose | Structured script control flow (`IF`/`WHILE`/`LOOP`/`FOR`/`EXCEPTION`/`RAISE`/`EXECUTE IMMEDIATE`) via `ExecuteScriptViaGoogleSql`. |
 
 ## Indirect (transitive-only) labels
 
@@ -109,9 +116,9 @@ purposes of this inventory, are:
 ## Counts (must match `rg` output)
 
 - 10 emulator BUILD files reference GoogleSQL directly.
-- 21 unique direct `@googlesql//` labels (19 in `googlesql/public`, 2 in
-  `googlesql/resolved_ast`).
-- All 21 are classified **Expose** in this inventory (no Alias / Defer).
+- 20 unique direct `@googlesql//` labels (17 in `googlesql/public`, 2 in
+  `googlesql/resolved_ast`, 1 in `googlesql/scripting`).
+- All 20 are classified **Expose** in this inventory (no Alias / Defer).
 
 The "all Expose" decision is deliberate: the emulator BUILDs already name these
 labels, the surface is small, and the consumer-wiring track must not silently

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Emit the wrapper-package BUILD.bazel files for the GoogleSQL prebuilt artifact.
 
-The compatibility surface freezes 18 direct `@googlesql//` labels
-(16 in `googlesql/public`, 2 in `googlesql/resolved_ast`) — see
+The compatibility surface freezes 20 direct `@googlesql//` labels
+(18 in `googlesql/public`, 2 in `googlesql/resolved_ast`, 1 in
+`googlesql/scripting`) — see
 `docs/dev/googlesql-prebuilt/label-inventory.md` and `repo-layout.md`.
 
 The label inventory is STATIC, but the `hdrs = [...]` lists for the
@@ -13,8 +14,8 @@ package-relative, and those headers ship under the prebuilt repo's
 root `include/` tree, so the wrapper packages can't glob them in.
 
 This script walks the staged include tree and emits the
-`googlesql/public/BUILD.bazel` and `googlesql/resolved_ast/BUILD.bazel`
-files with EXPLICIT hdrs lists derived from the actual files present
+`googlesql/public/BUILD.bazel`, `googlesql/resolved_ast/BUILD.bazel`,
+and `googlesql/scripting/BUILD.bazel` files with EXPLICIT hdrs lists derived from the actual files present
 in the artifact. The root `BUILD.bazel` is shipped verbatim from
 `templates/BUILD.bazel`; everything dynamic lives here.
 
@@ -162,6 +163,12 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         ["@com_google_absl//absl/container:flat_hash_set"],
     ),
     (
+        "parse_resume_location",
+        ["parse_resume_location.h", "parse_resume_location.pb.h"],
+        None,
+        ["@com_google_protobuf//:protobuf"],
+    ),
+    (
         "numeric_value",
         ["numeric_value.h"],
         None,
@@ -222,6 +229,19 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
             "@com_google_absl//absl/status:statusor",
             "@com_google_absl//absl/strings",
             "@com_google_absl//absl/time",
+            "@com_google_protobuf//:protobuf",
+        ],
+    ),
+]
+
+
+# `@googlesql//googlesql/scripting:*` wrappers.
+SCRIPTING_WRAPPERS: list[tuple[str, list[str], list[str]]] = [
+    (
+        "script_executor",
+        ["script_executor.h"],
+        [
+            "@com_google_absl//absl/status:statusor",
             "@com_google_protobuf//:protobuf",
         ],
     ),
@@ -380,6 +400,36 @@ def render_resolved_ast_build(repo_root: pathlib.Path) -> str:
     )
 
 
+def render_scripting_build(repo_root: pathlib.Path) -> str:
+    """Render `googlesql/scripting/BUILD.bazel` for the artifact at repo_root."""
+    scripting_dir = repo_root / "include" / "googlesql" / "scripting"
+    if not scripting_dir.is_dir():
+        raise SystemExit(f"missing include/googlesql/scripting/ under {repo_root}")
+    rules: list[str] = []
+    for name, static_hdrs, deps in SCRIPTING_WRAPPERS:
+        rooted = [f"include/googlesql/scripting/{h}" for h in static_hdrs]
+        for p in rooted:
+            if not (repo_root / p).is_file():
+                raise SystemExit(
+                    f"declared header {p} is missing under {repo_root}"
+                )
+        rules.append(
+            "cc_library(\n"
+            f'    name = "{name}",\n'
+            f"{render_hdrs(rooted)}\n"
+            '    strip_include_prefix = "/include",\n'
+            f"{render_deps(deps)}\n"
+            ")"
+        )
+    body = "\n\n".join(rules)
+    return (
+        f"{HEADER_DEPS_COMMENT}\n"
+        'load("@rules_cc//cc:defs.bzl", "cc_library")\n\n'
+        'package(default_visibility = ["//visibility:public"])\n\n'
+        f"{body}\n"
+    )
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -395,14 +445,18 @@ def main(argv: list[str]) -> int:
         return 2
     public_build = render_public_build(root)
     resolved_build = render_resolved_ast_build(root)
+    scripting_build = render_scripting_build(root)
     (root / "googlesql" / "public").mkdir(parents=True, exist_ok=True)
     (root / "googlesql" / "resolved_ast").mkdir(parents=True, exist_ok=True)
+    (root / "googlesql" / "scripting").mkdir(parents=True, exist_ok=True)
     (root / "googlesql" / "public" / "BUILD.bazel").write_text(public_build)
     (root / "googlesql" / "resolved_ast" / "BUILD.bazel").write_text(
         resolved_build
     )
+    (root / "googlesql" / "scripting" / "BUILD.bazel").write_text(scripting_build)
     print(f"wrote {root}/googlesql/public/BUILD.bazel")
     print(f"wrote {root}/googlesql/resolved_ast/BUILD.bazel")
+    print(f"wrote {root}/googlesql/scripting/BUILD.bazel")
     return 0
 
 

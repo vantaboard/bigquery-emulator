@@ -59,14 +59,17 @@ googlesql_prebuilt_linux_amd64/                            # repo root after unp
 │       │       ├── struct_type.h
 │       │       ├── type_factory.h
 │       │       └── ...                                    # full closure
-│       └── resolved_ast/
-│           ├── resolved_ast.h
-│           ├── resolved_ast_visitor.h
-│           ├── resolved_collation.h
-│           ├── resolved_column.h
-│           ├── resolved_node.h
-│           ├── resolved_node_kind.pb.h
-│           └── ...                                        # full closure
+│       ├── resolved_ast/
+│       │   ├── resolved_ast.h
+│       │   ├── resolved_ast_visitor.h
+│       │   ├── resolved_collation.h
+│       │   ├── resolved_column.h
+│       │   ├── resolved_node.h
+│       │   ├── resolved_node_kind.pb.h
+│       │   └── ...                                        # full closure
+│       └── scripting/
+│           ├── script_executor.h
+│           └── ...                                        # transitive scripting headers
 └── lib/
     ├── libgooglesql.a                                     # combined static archive
     └── libgooglesql_protos.a                              # generated .pb.cc objects

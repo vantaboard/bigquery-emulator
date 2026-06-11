@@ -58,7 +58,7 @@ SCHEMA_VERSION = "1"
 
 # Frozen `compat.labels` set. Per the compatibility surface
 # (`docs/dev/googlesql-prebuilt/label-inventory.md` + `manifest.md`),
-# these are the 18 direct labels the prebuilt artifact must expose.
+# these are the 20 direct labels the prebuilt artifact must expose.
 # Adding or removing a row here without also touching the label
 # inventory and the wrapper BUILD files breaks the compatibility surface.
 COMPAT_LABELS: list[str] = [
@@ -74,12 +74,14 @@ COMPAT_LABELS: list[str] = [
     "//googlesql/public:evaluator_table_iterator",
     "//googlesql/public:function",
     "//googlesql/public:language_options",
+    "//googlesql/public:parse_resume_location",
     "//googlesql/public:options_cc_proto",
     "//googlesql/public:simple_catalog",
     "//googlesql/public:type",
     "//googlesql/public:value",
     "//googlesql/resolved_ast:resolved_ast",
     "//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    "//googlesql/scripting:script_executor",
 ]
 
 

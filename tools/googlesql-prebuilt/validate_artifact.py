@@ -75,6 +75,7 @@ WRAPPER_REQUIRED_FILES = (
     "BUILD.bazel",
     "googlesql/public/BUILD.bazel",
     "googlesql/resolved_ast/BUILD.bazel",
+    "googlesql/scripting/BUILD.bazel",
 )
 
 # Frozen by docs/dev/googlesql-prebuilt/label-inventory.md § Direct labels.
@@ -96,6 +97,7 @@ WRAPPER_REQUIRED_TARGETS: dict[str, tuple[str, ...]] = {
         "language_options",
         "numeric_value",
         "options_cc_proto",
+        "parse_resume_location",
         "simple_catalog",
         "type",
         "type_cc_proto",
@@ -105,6 +107,9 @@ WRAPPER_REQUIRED_TARGETS: dict[str, tuple[str, ...]] = {
     "googlesql/resolved_ast/BUILD.bazel": (
         "resolved_ast",
         "resolved_node_kind_cc_proto",
+    ),
+    "googlesql/scripting/BUILD.bazel": (
+        "script_executor",
     ),
 }
 

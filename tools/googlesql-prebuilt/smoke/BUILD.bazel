@@ -10,12 +10,11 @@ cc_binary(
     name = "smoke",
     srcs = ["smoke_wrappers.cc"],
     deps = [
-        # Compatibility-surface inventory row: `:error_helpers` is one
-        # of the 18 frozen direct labels. Linking against this wrapper
-        # exercises
-        # the strict-deps narrowing (only `error_helpers.h` is
-        # visible), the `:_archive` private cc_import, and the third-
-        # party absl/strings deps the wrapper exposes.
+        # Compatibility-surface inventory rows: `:error_helpers` and
+        # `:script_executor` are frozen direct labels. Linking against
+        # these wrappers exercises strict-deps narrowing, the `:_archive`
+        # private cc_import, and the third-party deps the wrappers expose.
         "@googlesql_prebuilt_linux_amd64//googlesql/public:error_helpers",
+        "@googlesql_prebuilt_linux_amd64//googlesql/scripting:script_executor",
     ],
 )
