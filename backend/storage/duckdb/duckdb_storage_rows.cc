@@ -379,6 +379,31 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
       new internal::VectorRowIterator(std::move(rows)));
 }
 
+absl::StatusOr<std::int64_t> DuckDBStorage::CountRows(
+    const TableId& id) const {
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return absl::NotFoundError(
+        absl::StrCat("dataset not found: ", id.project_id, ".", id.dataset_id));
+  }
+  const fs::path meta_path = TableMetaPath(id);
+  if (!fs::exists(meta_path, ec)) {
+    return absl::NotFoundError(absl::StrCat("table not found: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
+  }
+  const std::string parquet_path = TableParquetPath(id);
+  if (!fs::exists(parquet_path, ec)) {
+    return std::int64_t{0};
+  }
+  return internal::CountParquetRows(impl_.get(), parquet_path, "");
+}
+
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     const TableId& id, const ReadFilter& filter) const {
   absl::MutexLock lock(&mu_);
@@ -441,13 +466,30 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
                    " FROM read_parquet('",
                    internal::EscapeStringLiteralInner(parquet_path),
                    "', file_row_number = true)");
-  // Push the parsed `<column> = <literal>` predicate down
-  // into a SQL WHERE clause. The clause lands before ORDER BY so
-  // DuckDB filters on the parquet scan side rather than buffering the
-  // full table.
-  if (filter.equality_predicate.has_value()) {
+  // Push the analyzer-transpiled restriction (or legacy equality
+  // predicate) down into a SQL WHERE clause before ORDER BY.
+  if (filter.where_sql.has_value() && !filter.where_sql->empty()) {
+    absl::StrAppend(&sql, internal::RenderWhereSqlClause(*filter.where_sql));
+  } else if (filter.equality_predicate.has_value()) {
     absl::StrAppend(
         &sql, internal::RenderPredicateClause(*filter.equality_predicate));
+  }
+  // Merge partition bounds on `file_row_number`. When a predicate WHERE
+  // already exists, append with AND; otherwise emit a fresh WHERE.
+  if (filter.row_start > 0 || filter.row_end >= 0) {
+    const bool has_where = sql.find(" WHERE ") != std::string::npos;
+    if (has_where) {
+      if (filter.row_start > 0) {
+        absl::StrAppend(&sql, " AND file_row_number >= ", filter.row_start);
+      }
+      if (filter.row_end >= 0) {
+        absl::StrAppend(&sql, " AND file_row_number < ", filter.row_end);
+      }
+    } else {
+      absl::StrAppend(&sql,
+                      internal::RenderRowPartitionClause(filter.row_start,
+                                                         filter.row_end));
+    }
   }
   absl::StrAppend(&sql, " ORDER BY file_row_number");
   if (filter.row_limit > 0) {

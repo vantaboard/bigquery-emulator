@@ -110,19 +110,15 @@ TEST_F(StorageReadServiceTest, CreateReadSessionRejectsEmptySelectedField) {
       << status.error_message();
 }
 
-TEST_F(StorageReadServiceTest, CreateReadSessionRejectsRangeRestriction) {
+TEST_F(StorageReadServiceTest, CreateReadSessionAcceptsRangeRestriction) {
   CreatePeopleTable();
   v1::CreateReadSessionRequest req = MakePeopleRequest();
-  // `>` is outside the deliberately-narrow row_restriction surface;
-  // the parser bails with a
-  // clear "only `<column> = <literal>` supported" message, which the
-  // handler maps onto gRPC INVALID_ARGUMENT.
   req.mutable_read_session()->mutable_read_options()->set_row_restriction(
       "id > 0");
   v1::ReadSession resp;
   ::grpc::Status status = service_->CreateReadSession(nullptr, &req, &resp);
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
-      << status.error_message();
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  EXPECT_EQ(resp.read_options().row_restriction(), "id > 0");
 }
 
 TEST_F(StorageReadServiceTest,

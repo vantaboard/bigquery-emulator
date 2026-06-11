@@ -205,10 +205,27 @@ func readRowsResponseForFormat(
 }
 
 func (s *ReadServer) SplitReadStream(
-	context.Context,
-	*storagepb.SplitReadStreamRequest,
+	ctx context.Context,
+	req *storagepb.SplitReadStreamRequest,
 ) (*storagepb.SplitReadStreamResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "SplitReadStream is not implemented by the emulator storage shim")
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	resp, err := s.engine.StorageRead.SplitReadStream(ctx, &enginepb.SplitReadStreamRequest{
+		Name:     req.GetName(),
+		Fraction: req.GetFraction(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := &storagepb.SplitReadStreamResponse{}
+	if primary := resp.GetPrimaryStream(); primary != nil {
+		out.PrimaryStream = &storagepb.ReadStream{Name: primary.GetName()}
+	}
+	if remainder := resp.GetRemainderStream(); remainder != nil {
+		out.RemainderStream = &storagepb.ReadStream{Name: remainder.GetName()}
+	}
+	return out, nil
 }
 
 func inferSchemaFromRow(row *enginepb.DataRow) *enginepb.TableSchema {

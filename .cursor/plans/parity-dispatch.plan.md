@@ -4,19 +4,19 @@ overview: How to spin off subagents to execute the parity 01-13 plans. Defines d
 todos:
   - id: wave1
     content: "Wave 1 high-frequency engine lane (SERIALIZED on bazel): dispatch 01 unnest/lateral -> 02 polyfills -> 03 agg modifiers -> 04 insert-select -> 05 scripting, one at a time; parent cleanup + status update between each."
-    status: pending
+    status: completed
   - id: bglane
     content: "Background lane: dispatch 13 googlesql-corpus (Go runner + CI; no engine changes) once a built bin/emulator_main exists; gate its conformance-execution steps to bazel-quiet windows."
-    status: pending
+    status: completed
   - id: wave2
     content: "Wave 2 dependent engine lane (SERIALIZED): dispatch 06 merge/returning (needs 04) -> 07 cast/collate/value -> 08 udf persistence (needs 05) -> 09 ddl control-op."
-    status: pending
+    status: completed
   - id: wave3
     content: "Wave 3 tail (SERIALIZED): dispatch 10 storage-api -> 11 relational long tail (needs 01) -> 12 pipe/specialized (needs 01+04+09)."
-    status: pending
+    status: in_progress
   - id: track
     content: After each subagent returns, run the parent cleanup block, update the parity-00 status table, flip the matching wave todo here, and verify SHAPE_TRACKER/disposition parity stayed green on main.
-    status: pending
+    status: in_progress
 isProject: true
 ---
 

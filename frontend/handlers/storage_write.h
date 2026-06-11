@@ -28,8 +28,8 @@ namespace frontend {
 // `FinalizeWriteStream` closes the stream. `COMMITTED` / `_default`
 // commit on every `AppendRows` batch through the storage append
 // primitive `DuckDBStorage::AppendRows`.
-// `PENDING` + `BatchCommitWriteStreams` remain UNIMPLEMENTED — silent
-// approximation would violate the public two-phase commit contract.
+// `PENDING` + `BatchCommitWriteStreams` buffer rows server-side until
+// finalize + batch commit lands them through `DuckDBStorage::AppendRows`.
 //
 // Stream lifecycle is in-process:
 //   * `CreateWriteStream` mints a `StreamState` keyed by stream name

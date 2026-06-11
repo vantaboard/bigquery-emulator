@@ -11,6 +11,7 @@
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
+#include "duckdb.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -63,6 +64,60 @@ std::string RenderPredicateClause(const EqualityPredicate& pred) {
       return out;
   }
   return out;
+}
+
+std::string RenderWhereSqlClause(absl::string_view where_sql) {
+  if (where_sql.empty()) return "";
+  return absl::StrCat(" WHERE (", where_sql, ")");
+}
+
+std::string RenderRowPartitionClause(std::int64_t row_start,
+                                     std::int64_t row_end) {
+  std::string out;
+  if (row_start > 0 || row_end >= 0) {
+    absl::StrAppend(&out, " WHERE ");
+    bool need_and = false;
+    if (row_start > 0) {
+      absl::StrAppend(&out, "file_row_number >= ", row_start);
+      need_and = true;
+    }
+    if (row_end >= 0) {
+      if (need_and) absl::StrAppend(&out, " AND ");
+      absl::StrAppend(&out, "file_row_number < ", row_end);
+    }
+  }
+  return out;
+}
+
+absl::StatusOr<std::int64_t> CountParquetRows(DuckDBStorage::Impl* impl,
+                                              absl::string_view parquet_path,
+                                              absl::string_view where_sql) {
+  if (impl == nullptr) {
+    return absl::InternalError("CountParquetRows: impl must be non-null");
+  }
+  std::string sql = absl::StrCat(
+      "SELECT COUNT(*) FROM read_parquet('",
+      EscapeStringLiteralInner(parquet_path),
+      "', file_row_number = true)");
+  absl::StrAppend(&sql, RenderWhereSqlClause(where_sql));
+  ::duckdb_result result;
+  const std::string sql_str(sql);
+  const auto state = ::duckdb_query(impl->connection, sql_str.c_str(), &result);
+  if (state != ::DuckDBSuccess) {
+    const auto* err = ::duckdb_result_error(&result);
+    std::string detail = err == nullptr ? std::string("") : std::string(err);
+    ::duckdb_destroy_result(&result);
+    return absl::InternalError(
+        absl::StrCat("CountParquetRows: duckdb_query failed: ", detail));
+  }
+  if (::duckdb_row_count(&result) != 1 || ::duckdb_column_count(&result) != 1) {
+    ::duckdb_destroy_result(&result);
+    return absl::InternalError(
+        "CountParquetRows: unexpected COUNT(*) result shape");
+  }
+  const std::int64_t count = ::duckdb_value_int64(&result, 0, 0);
+  ::duckdb_destroy_result(&result);
+  return count;
 }
 
 // Just the bare comma-separated identifier list (no type info, no

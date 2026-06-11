@@ -338,23 +338,107 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsRowRestriction) {
   EXPECT_EQ(rows[0].cells(1).string_value(), "person-5");
 }
 
-TEST_F(StorageReadGrpcTest, CreateReadSessionRejectsMalformedRowRestriction) {
+TEST_F(StorageReadGrpcTest, ReadRowsHonorsRangeRowRestriction) {
   CreatePeopleTable();
+  AppendPeople(/*n=*/10);
 
   ::grpc::ClientContext create_ctx;
   v1::CreateReadSessionRequest create_req;
   create_req.set_parent("projects/proj-test");
   create_req.mutable_read_session()->set_table(
       "projects/proj-test/datasets/ds/tables/t");
-  // `id > 0` is a range predicate — the parser only accepts `=`.
   create_req.mutable_read_session()
       ->mutable_read_options()
-      ->set_row_restriction("id > 0");
+      ->set_row_restriction("id > 7");
   v1::ReadSession session;
-  ::grpc::Status status =
-      stub_->CreateReadSession(&create_ctx, create_req, &session);
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT)
-      << status.error_message();
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+
+  ::grpc::ClientContext read_ctx;
+  v1::ReadRowsRequest read_req;
+  read_req.set_read_stream(session.streams(0).name());
+  auto reader = stub_->ReadRows(&read_ctx, read_req);
+  std::vector<v1::DataRow> rows;
+  v1::ReadRowsResponse page;
+  while (reader->Read(&page)) {
+    for (const auto& row : page.rows()) rows.push_back(row);
+  }
+  ASSERT_TRUE(reader->Finish().ok());
+  ASSERT_EQ(rows.size(), 2u);
+  EXPECT_EQ(rows[0].cells(0).string_value(), "8");
+  EXPECT_EQ(rows[1].cells(0).string_value(), "9");
+}
+
+TEST_F(StorageReadGrpcTest, CreateReadSessionMintsMultipleStreams) {
+  CreatePeopleTable();
+  AppendPeople(/*n=*/8);
+
+  ::grpc::ClientContext create_ctx;
+  v1::CreateReadSessionRequest create_req;
+  create_req.set_parent("projects/proj-test");
+  create_req.mutable_read_session()->set_table(
+      "projects/proj-test/datasets/ds/tables/t");
+  create_req.set_max_stream_count(4);
+  v1::ReadSession session;
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  ASSERT_EQ(session.streams_size(), 4);
+
+  std::vector<v1::DataRow> all_rows;
+  for (int i = 0; i < session.streams_size(); ++i) {
+    ::grpc::ClientContext read_ctx;
+    v1::ReadRowsRequest read_req;
+    read_req.set_read_stream(session.streams(i).name());
+    auto reader = stub_->ReadRows(&read_ctx, read_req);
+    v1::ReadRowsResponse page;
+    while (reader->Read(&page)) {
+      for (const auto& row : page.rows()) all_rows.push_back(row);
+    }
+    ASSERT_TRUE(reader->Finish().ok());
+  }
+  ASSERT_EQ(all_rows.size(), 8u);
+}
+
+TEST_F(StorageReadGrpcTest, SplitReadStreamPartitionsRemainingRange) {
+  CreatePeopleTable();
+  AppendPeople(/*n=*/10);
+
+  ::grpc::ClientContext create_ctx;
+  v1::CreateReadSessionRequest create_req;
+  create_req.set_parent("projects/proj-test");
+  create_req.mutable_read_session()->set_table(
+      "projects/proj-test/datasets/ds/tables/t");
+  v1::ReadSession session;
+  ASSERT_TRUE(stub_->CreateReadSession(&create_ctx, create_req, &session).ok());
+  const std::string stream_name = session.streams(0).name();
+
+  ::grpc::ClientContext split_ctx;
+  v1::SplitReadStreamRequest split_req;
+  split_req.set_name(stream_name);
+  split_req.set_fraction(0.5);
+  v1::SplitReadStreamResponse split_resp;
+  ASSERT_TRUE(
+      stub_->SplitReadStream(&split_ctx, split_req, &split_resp).ok());
+
+  auto drain = [&](const std::string& name) {
+    ::grpc::ClientContext read_ctx;
+    v1::ReadRowsRequest read_req;
+    read_req.set_read_stream(name);
+    auto reader = stub_->ReadRows(&read_ctx, read_req);
+    std::vector<int64_t> ids;
+    v1::ReadRowsResponse page;
+    while (reader->Read(&page)) {
+      for (const auto& row : page.rows()) {
+        ids.push_back(std::stoll(row.cells(0).string_value()));
+      }
+    }
+    EXPECT_TRUE(reader->Finish().ok());
+    return ids;
+  };
+
+  const auto primary = drain(split_resp.primary_stream().name());
+  const auto remainder = drain(split_resp.remainder_stream().name());
+  ASSERT_EQ(primary.size() + remainder.size(), 10u);
+  EXPECT_EQ(primary.front(), 0);
+  EXPECT_EQ(remainder.back(), 9);
 }
 
 TEST_F(StorageReadGrpcTest, ReadRowsSchemaDriftIsFailedPrecondition) {

@@ -75,6 +75,16 @@ std::string RenderColumnList(const schema::TableSchema& schema);
 
 std::string RenderPredicateClause(const EqualityPredicate& pred);
 
+std::string RenderWhereSqlClause(absl::string_view where_sql);
+
+std::string RenderRowPartitionClause(std::int64_t row_start,
+                                     std::int64_t row_end);
+
+absl::StatusOr<std::int64_t> CountParquetRows(
+    DuckDBStorage::Impl* impl,
+    absl::string_view parquet_path,
+    absl::string_view where_sql);
+
 std::string RenderColumnIdentList(const schema::TableSchema& schema);
 
 std::string RenderSelectedColumnIdentList(const schema::TableSchema& schema,

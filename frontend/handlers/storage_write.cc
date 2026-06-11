@@ -148,17 +148,9 @@ std::string StorageWriteService::Rfc3339Now() const {
       requested = v1::WriteStream::COMMITTED;
     }
   }
-  if (requested == v1::WriteStream::PENDING) {
-    return ::grpc::Status(
-        ::grpc::StatusCode::UNIMPLEMENTED,
-        absl::StrCat("StorageWrite.CreateWriteStream: stream type ",
-                     v1::WriteStream::Type_Name(requested),
-                     " is not implemented in this emulator profile "
-                     "(PENDING + BatchCommitWriteStreams deferred); see "
-                     "docs/ENGINE_POLICY.md"));
-  }
   if (requested != v1::WriteStream::COMMITTED &&
-      requested != v1::WriteStream::BUFFERED) {
+      requested != v1::WriteStream::BUFFERED &&
+      requested != v1::WriteStream::PENDING) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageWrite.CreateWriteStream: unknown stream type ",
@@ -354,9 +346,10 @@ std::string StorageWriteService::Rfc3339Now() const {
     }
 
     std::int64_t prior_offset = 0;
-    if (stream_type == v1::WriteStream::BUFFERED) {
-      // BUFFERED streams hold rows server-side until FlushRows advances
-      // the visibility offset; no storage write on append.
+    if (stream_type == v1::WriteStream::BUFFERED ||
+        stream_type == v1::WriteStream::PENDING) {
+      // BUFFERED / PENDING streams hold rows server-side until
+      // FlushRows / BatchCommitWriteStreams makes them visible.
       absl::MutexLock lock(&mu_);
       auto it = streams_.find(bound_stream_name);
       if (it == streams_.end()) {
@@ -448,13 +441,92 @@ std::string StorageWriteService::Rfc3339Now() const {
 
 ::grpc::Status StorageWriteService::BatchCommitWriteStreams(
     ::grpc::ServerContext* /*context*/,
-    const v1::BatchCommitWriteStreamsRequest* /*request*/,
-    v1::BatchCommitWriteStreamsResponse* /*response*/) {
-  return ::grpc::Status(
-      ::grpc::StatusCode::UNIMPLEMENTED,
-      "StorageWrite.BatchCommitWriteStreams: not implemented in this emulator "
-      "profile (BatchCommit lands together with the deferred PENDING "
-      "stream type; see docs/ENGINE_POLICY.md)");
+    const v1::BatchCommitWriteStreamsRequest* request,
+    v1::BatchCommitWriteStreamsResponse* response) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INTERNAL,
+        "StorageWrite.BatchCommitWriteStreams: storage backend is not "
+        "configured");
+  }
+  if (request == nullptr || response == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INTERNAL,
+        "StorageWrite.BatchCommitWriteStreams: request and response must "
+        "be non-null");
+  }
+  if (request->write_streams().empty()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        "StorageWrite.BatchCommitWriteStreams: write_streams is required");
+  }
+
+  backend::storage::TableId parent_table;
+  if (!request->parent().empty()) {
+    if (auto s = ParseTableParent(request->parent(), &parent_table); !s.ok()) {
+      return s;
+    }
+  }
+
+  struct PendingCommit {
+    backend::storage::TableId table;
+    std::vector<backend::storage::Row> rows;
+  };
+  std::vector<PendingCommit> commits;
+
+  {
+    absl::MutexLock lock(&mu_);
+    for (const auto& stream_name : request->write_streams()) {
+      auto it = streams_.find(stream_name);
+      if (it == streams_.end()) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::NOT_FOUND,
+            absl::StrCat("StorageWrite.BatchCommitWriteStreams: no such "
+                         "stream: ",
+                         stream_name));
+      }
+      if (it->second.type != v1::WriteStream::PENDING) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::INVALID_ARGUMENT,
+            absl::StrCat("StorageWrite.BatchCommitWriteStreams: stream is not "
+                         "PENDING: ",
+                         stream_name));
+      }
+      if (!it->second.finalized) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::FAILED_PRECONDITION,
+            absl::StrCat("StorageWrite.BatchCommitWriteStreams: stream is not "
+                         "finalized: ",
+                         stream_name));
+      }
+      if (!request->parent().empty() &&
+          (it->second.table.project_id != parent_table.project_id ||
+           it->second.table.dataset_id != parent_table.dataset_id ||
+           it->second.table.table_id != parent_table.table_id)) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::INVALID_ARGUMENT,
+            absl::StrCat("StorageWrite.BatchCommitWriteStreams: stream does "
+                         "not belong to parent table: ",
+                         stream_name));
+      }
+      PendingCommit commit;
+      commit.table = it->second.table;
+      commit.rows = it->second.buffered_rows;
+      commits.push_back(std::move(commit));
+    }
+  }
+
+  for (const auto& commit : commits) {
+    if (commit.rows.empty()) continue;
+    const absl::Status append_status = storage_->AppendRows(
+        commit.table, absl::MakeConstSpan(commit.rows));
+    if (!append_status.ok()) {
+      return AbslToGrpcStatus(append_status);
+    }
+  }
+
+  response->set_commit_time(Rfc3339Now());
+  return ::grpc::Status::OK;
 }
 
 std::size_t StorageWriteService::StreamsForTesting() const {

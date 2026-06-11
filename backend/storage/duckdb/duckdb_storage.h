@@ -104,6 +104,7 @@ class DuckDBStorage : public Storage {
       const TableId& id) const override;
   absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
       const TableId& id, const ReadFilter& filter) const override;
+  absl::StatusOr<std::int64_t> CountRows(const TableId& id) const override;
 
   absl::Status UpsertRoutine(const RoutineRecord& record) override;
   absl::Status DeleteRoutine(const RoutineId& id) override;

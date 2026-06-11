@@ -6,10 +6,9 @@
 // commit rows through the same `DuckDBStorage::AppendRows` primitive
 // the local DML executor already uses.
 //
-// Storage Read/Write API handlers for `_default` and `COMMITTED` stream types
-// ship first; `BUFFERED`, `PENDING`, `FlushRows`, `FinalizeWriteStream`, and
-// `BatchCommitWriteStreams` reserve proto slots for deferred follow-up (see
-// `ROADMAP.md`). Matching handler methods return UNIMPLEMENTED today.
+// Storage Read/Write API handlers for `_default`, `COMMITTED`, `BUFFERED`,
+// and `PENDING` stream types ship end-to-end; see `ROADMAP.md` for the
+// posture matrix.
 //
 // Code generation:
 //   - Go:  `task proto:gen` writes

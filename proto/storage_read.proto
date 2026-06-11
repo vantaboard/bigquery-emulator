@@ -46,10 +46,10 @@ option cc_enable_arenas = true;
 //   * `ReadRows` streams `DataRow` messages off one of the session's
 //     streams.
 //
-// The initial cut (this proto + the session-creation handler) keeps
-// the session shape minimal: one session, one stream, no parallel
-// reads. Parallel reads will follow once the conformance suite asks
-// for them.
+// Sessions mint one or more parallel streams when `max_stream_count`
+// requests it; each stream covers a disjoint `file_row_number` range
+// snapshotted at `CreateReadSession` time. `SplitReadStream` can
+// further subdivide a stream's remaining range.
 // ---------------------------------------------------------------------------
 
 service StorageRead {
@@ -62,9 +62,13 @@ service StorageRead {
 
   // ReadRows streams rows off the named stream. The stream id must be
   // one of the `ReadSession.streams[*].name` values returned by the
-  // matching `CreateReadSession` call (the engine hands out exactly
-  // one stream per session).
+  // matching `CreateReadSession` call (or a child stream minted by
+  // `SplitReadStream`).
   rpc ReadRows(ReadRowsRequest) returns (stream ReadRowsResponse);
+
+  // SplitReadStream subdivides an existing stream's remaining row
+  // range into a primary stream (head) and a residual stream (tail).
+  rpc SplitReadStream(SplitReadStreamRequest) returns (SplitReadStreamResponse);
 }
 
 message CreateReadSessionRequest {
@@ -80,8 +84,9 @@ message CreateReadSessionRequest {
   ReadSession read_session = 2;
 
   // Maximum number of streams the caller is willing to drain in
-  // parallel. The engine always returns exactly one stream (no
-  // parallel reads), regardless of this value.
+  // parallel. When unset or zero the engine returns one stream. The
+  // server may return fewer streams than requested depending on table
+  // size (each stream must cover at least one row when possible).
   int32 max_stream_count = 3;
 }
 
@@ -121,10 +126,10 @@ message ReadOptions {
   repeated string selected_fields = 1;
 
   // SQL-shaped filter expression the engine pushes down. The
-  // supported surface is a single `<column> = <literal>` equality
-  // (INT64 / STRING / BOOL literals); anything else is rejected with
-  // INVALID_ARGUMENT at CreateReadSession time. The predicate is
-  // applied before `offset`, matching BigQuery's documented
+  // restriction is analyzed with GoogleSQL against the table schema
+  // and transpiled into a DuckDB `WHERE` clause; unsupported shapes
+  // reject at CreateReadSession with INVALID_ARGUMENT. The predicate
+  // is applied before `offset`, matching BigQuery's documented
   // semantics.
   string row_restriction = 2;
 }
@@ -158,4 +163,21 @@ message ReadRowsResponse {
   // Number of rows in this page. Convenience field so callers do not
   // have to count `rows.size()` on every reply.
   int64 row_count = 2;
+}
+
+message SplitReadStreamRequest {
+  // Stream id to split (`{session_name}/streams/{id}`).
+  string name = 1;
+
+  // Fraction in (0.0, 1.0) of the stream's remaining row range at
+  // which to split. Values outside that open interval are rejected.
+  double fraction = 2;
+}
+
+message SplitReadStreamResponse {
+  // Head portion of the split stream's remaining range.
+  ReadStream primary_stream = 1;
+
+  // Tail portion of the split stream's remaining range.
+  ReadStream remainder_stream = 2;
 }

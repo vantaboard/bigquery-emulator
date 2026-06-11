@@ -228,17 +228,25 @@ struct ReadFilter {
   std::vector<std::string> selected_fields;
 
   // Raw SQL-shaped predicate the caller supplied. Retained on the
-  // filter for debugging / log lines; the typed
-  // `equality_predicate` below is what the backends consume.
+  // filter for debugging / log lines.
   std::string row_restriction;
 
-  // Typed parse of `row_restriction` produced by
-  // `backend::storage::ParseRowRestriction`. The DuckDB backend
-  // appends it to the SELECT as a `WHERE` clause using the same
-  // literal rendering helpers that drive INSERT. The parse lives in
-  // the handler so a malformed restriction surfaces as
-  // INVALID_ARGUMENT before any rows are read.
+  // DuckDB `WHERE` body produced by `TranspileRowRestriction` (analyzer
+  // + transpiler). Empty when no restriction was supplied.
+  std::optional<std::string> where_sql;
+
+  // Legacy typed parse of single-equality restrictions. Prefer
+  // `where_sql`; kept so existing unit tests can exercise the narrow
+  // parser without pulling in the analyzer.
   std::optional<EqualityPredicate> equality_predicate;
+
+  // Inclusive lower bound on DuckDB `file_row_number` for this stream
+  // partition. Defaults to 0 (table head).
+  std::int64_t row_start = 0;
+
+  // Exclusive upper bound on `file_row_number`. Negative means
+  // unbounded (read through table tail).
+  std::int64_t row_end = -1;
 };
 
 // Storage is the abstract interface every backend implements.
@@ -355,6 +363,12 @@ class Storage {
   // exist.
   [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>>
   CreateReadStream(const TableId& id, const ReadFilter& filter) const = 0;
+
+  // Returns the row count of `id`'s on-disk snapshot at call time
+  // (DuckDB: `COUNT(*)` over `read_parquet(..., file_row_number=true)`).
+  // Used by Storage Read session minting to partition streams.
+  [[nodiscard]] virtual absl::StatusOr<std::int64_t> CountRows(
+      const TableId& id) const = 0;
 
   // ------------------------------------------------------------------
   // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the

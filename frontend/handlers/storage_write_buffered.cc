@@ -100,9 +100,14 @@ using internal::AbslToGrpcStatus;
                                        request->name()));
   }
   it->second.finalized = true;
-  response->set_row_count(it->second.type == v1::WriteStream::BUFFERED
-                              ? it->second.flushed_rows
-                              : it->second.committed_rows);
+  if (it->second.type == v1::WriteStream::BUFFERED) {
+    response->set_row_count(it->second.flushed_rows);
+  } else if (it->second.type == v1::WriteStream::PENDING) {
+    response->set_row_count(
+        static_cast<std::int64_t>(it->second.buffered_rows.size()));
+  } else {
+    response->set_row_count(it->second.committed_rows);
+  }
   return ::grpc::Status::OK;
 }
 

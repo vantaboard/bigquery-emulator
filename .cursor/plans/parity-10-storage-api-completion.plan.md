@@ -6,19 +6,19 @@ isProject: true
 todos:
   - id: multi-stream
     content: "max_stream_count > 1 on CreateReadSession: deterministic row-boundary partitioning over the DuckDB scan (ROADMAP notes parquet-row-boundary design is the open piece); each stream serves a disjoint partition; keep single-stream as the degenerate case."
-    status: pending
+    status: completed
   - id: split-read-stream
     content: "SplitReadStream RPC: split an existing stream's remaining range into primary + residual per the public contract; reject when fraction is out of range."
-    status: pending
+    status: completed
   - id: row-restriction
     content: "row_restriction beyond single equality: analyze the restriction with the GoogleSQL analyzer against the table schema (the ENGINE_POLICY-compliant route - no parser-only approximation), then transpile the resolved boolean expr through the existing transpiler expression emit into the DuckDB scan WHERE clause; reject still-unsupported constructs at CreateReadSession with INVALID_ARGUMENT."
-    status: pending
+    status: completed
   - id: write-pending
     content: "PENDING stream type: CreateWriteStream(PENDING), AppendRows buffering to a per-stream staging area, FinalizeWriteStream, BatchCommitWriteStreams atomically committing finalized streams through DuckDBStorage::AppendRows; update proto/storage_write.proto reserved slots + gateway shim."
-    status: pending
+    status: completed
   - id: fixtures-suites
     content: "Coverage: Go thirdparty Storage Read multi-stream subtests + Java WritePendingStreamIT-style sample; remove the matching skip-matrix rows; update ROADMAP Storage sections + ENGINE_POLICY Storage gRPC posture table."
-    status: pending
+    status: completed
 ---
 
 # Parity 10 — Storage Read/Write API completion

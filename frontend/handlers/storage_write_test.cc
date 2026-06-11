@@ -128,16 +128,16 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamDefaultsToCommitted) {
   EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);
 }
 
-TEST_F(StorageWriteServiceTest, CreateWriteStreamRejectsPending) {
+TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsPendingStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest req;
   req.set_parent("projects/proj-test/datasets/ds/tables/t");
   req.mutable_write_stream()->set_type(v1::WriteStream::PENDING);
   v1::WriteStream resp;
   ::grpc::Status status = service_->CreateWriteStream(nullptr, &req, &resp);
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED)
-      << status.error_message();
-  EXPECT_EQ(service_->StreamsForTesting(), 0u);
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  EXPECT_EQ(resp.type(), v1::WriteStream::PENDING);
+  EXPECT_EQ(service_->StreamsForTesting(), 1u);
 }
 
 TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsBufferedStream) {
@@ -175,18 +175,21 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMissingTableIsNotFound) {
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);
 }
 
-// ---------------------------------------------------------------------------
-// PENDING / BatchCommitWriteStreams remain UNIMPLEMENTED; BUFFERED
-// flush/finalize coverage lives in storage_write_grpc_test.cc.
-// ---------------------------------------------------------------------------
+TEST_F(StorageWriteServiceTest, BatchCommitRequiresFinalizedPendingStream) {
+  CreatePeopleTable();
+  v1::CreateWriteStreamRequest create_req;
+  create_req.set_parent("projects/proj-test/datasets/ds/tables/t");
+  create_req.mutable_write_stream()->set_type(v1::WriteStream::PENDING);
+  v1::WriteStream stream;
+  ASSERT_TRUE(service_->CreateWriteStream(nullptr, &create_req, &stream).ok());
 
-TEST_F(StorageWriteServiceTest, BatchCommitWriteStreamsUnimplemented) {
-  v1::BatchCommitWriteStreamsRequest req;
-  req.set_parent("projects/p/datasets/d/tables/t");
-  v1::BatchCommitWriteStreamsResponse resp;
-  ::grpc::Status status =
-      service_->BatchCommitWriteStreams(nullptr, &req, &resp);
-  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::UNIMPLEMENTED);
+  v1::BatchCommitWriteStreamsRequest commit_req;
+  commit_req.set_parent("projects/proj-test/datasets/ds/tables/t");
+  commit_req.add_write_streams(stream.name());
+  v1::BatchCommitWriteStreamsResponse commit_resp;
+  ::grpc::Status status = service_->BatchCommitWriteStreams(
+      nullptr, &commit_req, &commit_resp);
+  EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 
 }  // namespace

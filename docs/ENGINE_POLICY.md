@@ -246,8 +246,8 @@ local emulator; Connection + DataTransfer ITs remain allowlisted.
 |---|---|
 | Storage Write `COMMITTED` / `_default` | Engine `AppendRows` commit path; shim decodes public proto rows |
 | Storage Write `BUFFERED` | Engine buffered hold + `FlushRows` / `FinalizeWriteStream`; shim caches proto descriptors and reuses the emulator `BigQueryWriteClient` in samples |
-| Storage Write `PENDING` | `UNIMPLEMENTED` (`BatchCommitWriteStreams` deferred) |
-| Storage Read sessions | `CreateReadSession` with projection + `row_restriction` (single-quoted or double-quoted string literals); public-data tables readable with a caller-scoped parent project |
+| Storage Write `PENDING` | Engine buffered hold + `FinalizeWriteStream` + `BatchCommitWriteStreams` through `DuckDBStorage::AppendRows`; gateway shim forwards public RPCs |
+| Storage Read sessions | `CreateReadSession` with projection + analyzer-transpiled `row_restriction`, multi-stream `max_stream_count`, and `SplitReadStream`; public-data tables readable with a caller-scoped parent project |
 | Storage Read Arrow | Arrow schema + IPC record batches via gateway shim |
 | Storage Read Avro | Arrow read from engine, Avro OCF encoding in gateway shim (`gateway/handlers/bqstorage/avro.go`) |
 

@@ -158,10 +158,18 @@ cc_library(
 
 cc_library(
     name = "storage_read_handler",
-    srcs = ["storage_read.cc"],
-    hdrs = ["storage_read.h"],
+    srcs = [
+        "storage_read.cc",
+        "storage_row_restriction_analyze.cc",
+    ],
+    hdrs = [
+        "storage_read.h",
+        "storage_row_restriction_analyze.h",
+    ],
     deps = [
         ":storage_read_internal",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine/duckdb/transpiler",
         "//backend/schema",
         "//backend/storage",
         # The handler converts `backend::storage::Value` cells onto
@@ -177,6 +185,14 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ],
 )
 

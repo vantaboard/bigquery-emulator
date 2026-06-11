@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -168,13 +170,29 @@ func (s *WriteServer) FinalizeWriteStream(
 }
 
 func (s *WriteServer) BatchCommitWriteStreams(
-	context.Context,
-	*storagepb.BatchCommitWriteStreamsRequest,
+	ctx context.Context,
+	req *storagepb.BatchCommitWriteStreamsRequest,
 ) (*storagepb.BatchCommitWriteStreamsResponse, error) {
-	return nil, status.Error(
-		codes.Unimplemented,
-		"BatchCommitWriteStreams is not implemented by the emulator storage shim",
+	if err := s.requireEngine(); err != nil {
+		return nil, err
+	}
+	resp, err := s.engine.StorageWrite.BatchCommitWriteStreams(
+		ctx,
+		&enginepb.BatchCommitWriteStreamsRequest{
+			Parent:       req.GetParent(),
+			WriteStreams: append([]string(nil), req.GetWriteStreams()...),
+		},
 	)
+	if err != nil {
+		return nil, err
+	}
+	out := &storagepb.BatchCommitWriteStreamsResponse{}
+	if ts := resp.GetCommitTime(); ts != "" {
+		if t, parseErr := time.Parse(time.RFC3339, ts); parseErr == nil {
+			out.CommitTime = timestamppb.New(t)
+		}
+	}
+	return out, nil
 }
 
 func (s *WriteServer) FlushRows(

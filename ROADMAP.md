@@ -563,37 +563,33 @@ public-facing policy.
 Goal: support BigQuery client libraries that prefer the Storage Read API
 (`google.cloud.bigquery.storage.v1`) for fast reads.
 
-- 🟡 `BigQueryRead` gRPC service implemented
+- ✅ `BigQueryRead` gRPC service implemented
   ([`frontend/handlers/storage_read.{h,cc}`](./frontend/handlers/));
-  `CreateReadSession` and `ReadRows` are wired, `SplitReadStream`
-  is still pending (single-stream sessions only — see below)
+  `CreateReadSession`, `ReadRows`, and `SplitReadStream` are wired;
+  multi-stream sessions partition on deterministic `file_row_number`
+  ranges snapshotted at session mint time
 - ✅ Public `google.cloud.bigquery.storage.v1.BigQueryRead` service
   registered on `:9060` by the gateway shim
   ([`gateway/handlers/bqstorage/`](./gateway/handlers/bqstorage/)),
   adapting the engine's internal `DataRow` stream to the public
   wire formats: Arrow schema + IPC record batches
   (`arrow.go` / `arrow_ipc.go`) and Avro OCF encoding (`avro.go`)
-- 🟡 `ReadOptions.row_restriction`: a single `<column> = <literal>`
-  equality clause is pushed down into the DuckDB `read_parquet(...)`
-  scan as a `WHERE` clause. Range / inequality ops, connectives,
-  `IN`, `NULL`, and array/struct columns reject at `CreateReadSession`
-  with `INVALID_ARGUMENT` (see "Supported `ReadOptions`" in
-  [`docs/REST_API.md`](./docs/REST_API.md)). Multi-clause expansion
-  is deliberately deferred
-  (see [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md))
-  because doing it half-right (parser-only, no analyzer-resolved
-  boolean expression) is exactly the silent-approximation hazard
-  the execution policy forbids
+- ✅ `ReadOptions.row_restriction`: restrictions are analyzed with
+  GoogleSQL against the table schema and transpiled into a DuckDB
+  `WHERE` clause on the `read_parquet(...)` scan (comparisons,
+  connectives, `IS NULL`, and other transpiler-supported shapes).
+  Unsupported constructs reject at `CreateReadSession` with
+  `INVALID_ARGUMENT` (see "Supported `ReadOptions`" in
+  [`docs/REST_API.md`](./docs/REST_API.md))
 - ✅ `ReadOptions.selected_fields` enforced. CreateReadSession
   validates each name against the table's top-level columns
   (unknowns surface as `INVALID_ARGUMENT` before any streaming RPC
   starts) and the DuckDB backend emits a projected SELECT so the
   `ReadRows` stream yields rows in caller-pinned column order. The
   `ReadSession.schema` reply reflects the projection too
-- ⏳ Single-stream sessions only — `max_stream_count > 1` is rejected.
-  DuckDB's parallel scan + Arrow output makes multi-stream a
-  tractable follow-up, pending a deterministic
-  parquet-row-boundary partition design
+- ✅ Multi-stream sessions — `max_stream_count > 1` mints disjoint
+  `file_row_number` partitions (server may return fewer streams than
+  requested). `SplitReadStream` subdivides a stream's remaining range
 
 ## Storage Write API (gRPC)
 
@@ -623,7 +619,11 @@ already uses.
   against the local emulator (see
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) Storage gRPC
   section).
-- ⏳ `PENDING` + `BatchCommitWriteStreams` not implemented.
+- ✅ `PENDING` + `BatchCommitWriteStreams`: `CreateWriteStream`,
+  buffered `AppendRows`, `FinalizeWriteStream`, and atomic
+  `BatchCommitWriteStreams` commit through `DuckDBStorage::AppendRows`.
+  Java `WritePendingStreamIT` and Go `PendingStream` managedwriter
+  subtests run against the local emulator when Storage gRPC is set.
 
 ## Conformance harness
 
