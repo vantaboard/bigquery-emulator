@@ -16,6 +16,7 @@ todos:
   - id: load-data-local
     content: "LOAD DATA LOCAL <local-uri> (ResolvedAuxLoadDataStmt): control-op reader for CSV/JSON/Parquet local files into Storage (reuse the jobs.insert media-upload load-job machinery where possible); gs:// stays unsupported per ENGINE_POLICY."
     status: completed
+    note: "ResolvedCatalogColumnRef stays (planned): no plan-09 DDL shape emitted that node; ALTER/LOAD use ResolvedColumnDefinition instead."
   - id: reconcile-planned-rows
     content: "Reconcile tracker rows that say (planned) but may already be landed (ResolvedDropStmt - DROP TABLE is implemented; ResolvedAnalyzeStmt - ROADMAP says ANALYZE flows through control op): verify behavior, fix the row or the code, keep parity gate green. Implement ResolvedCatalogColumnRef if any landed DDL shape needs it."
     status: completed

@@ -298,6 +298,8 @@ StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
     case ::googlesql::RESOLVED_ASSERT_STMT:
     case ::googlesql::RESOLVED_ASSIGNMENT_STMT:
     case ::googlesql::RESOLVED_CALL_STMT:
+    case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
+    case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
       return StatementClass::kDdl;
     default:
       return StatementClass::kOther;
