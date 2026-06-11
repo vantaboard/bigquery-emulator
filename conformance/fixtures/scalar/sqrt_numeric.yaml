@@ -1,0 +1,12 @@
+# sqrt_numeric: SQRT(NUMERIC) via semantic_executor dispatch.
+name: sqrt_numeric
+description: |
+  SQRT over NUMERIC reroutes from duckdb_native to the semantic executor so
+  BigQuery NUMERIC sqrt semantics apply.
+project_id: proj-scalar-sqrt-numeric
+query: |
+  SELECT SQRT(CAST('9' AS NUMERIC)) AS r
+expected:
+  route: semantic_executor
+  rows:
+    - {r: "3"}

@@ -100,9 +100,19 @@ absl::Status CheckAssertRowsModified(
 ColumnBindings MergeColumnBindings(const ColumnBindings& target,
                                    const ColumnBindings& from);
 
-absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
-                                          int generated_column_count,
+absl::Status RejectUnsupportedDmlFeatures(int generated_column_count,
                                           absl::string_view kind);
+
+absl::StatusOr<Value> ApplyNestedArrayDeleteItem(
+    const ::googlesql::ResolvedUpdateItem& item,
+    const Value& array_value,
+    const ColumnBindings& row_ctx,
+    EvalContext& ctx);
+
+absl::StatusOr<DmlStats> ExecuteMerge(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    storage::Storage& storage,
+    EvalContext& ctx);
 
 absl::StatusOr<std::unique_ptr<RowSource>> BuildReturningRowSource(
     const ::googlesql::ResolvedReturningClause& returning,
@@ -127,11 +137,6 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     storage::Storage& storage,
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out);
-
-absl::StatusOr<DmlStats> ExecuteMerge(
-    const ::googlesql::ResolvedMergeStmt& merge,
-    storage::Storage& storage,
-    EvalContext& ctx);
 
 }  // namespace dml
 }  // namespace semantic

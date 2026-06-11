@@ -336,6 +336,18 @@ std::string Transpiler::EmitFunctionCall(
                  : absl::StrCat("(", args[0], " ->> ", args[1], ")");
     }
   }
+  if (name == "sqrt" && node->argument_list_size() > 0) {
+    const ::googlesql::ResolvedExpr* arg0 = node->argument_list(0);
+    if (arg0 != nullptr && arg0->type() != nullptr) {
+      const auto arg_kind = arg0->type()->kind();
+      if (arg_kind == ::googlesql::TYPE_NUMERIC ||
+          arg_kind == ::googlesql::TYPE_BIGNUMERIC) {
+        LOG(INFO) << "duckdb transpiler: SQRT(NUMERIC) routes to "
+                     "semantic_executor";
+        return "";
+      }
+    }
+  }
   const auto* entry = LookupFunction(name);
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: function '" << name

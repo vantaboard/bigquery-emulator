@@ -400,9 +400,9 @@ handler.
   categories). Polyfill UDF lane (`duckdb_udf`) covers
   IF/ISNULL/MOD/DIV/LOG, regex wrappers, and unix-epoch helpers;
   interval datetime arithmetic, `FORMAT_*`, and `CONTAINS_SUBSTR`
-  route through the semantic executor. Remaining `status=planned`
-  scalar: `sqrt_numeric` (blocked on signature-aware transpiler
-  dispatch). A Bazel `genrule` materializes the table into
+  route through the semantic executor. `SQRT(NUMERIC)` routes to
+  `semantic_executor` via signature-aware dispatch (pinned by
+  `conformance/fixtures/scalar/sqrt_numeric.yaml`). A Bazel `genrule` materializes the table into
   `functions_table.inc`, which `functions.cc` includes inside an
   `absl::flat_hash_map`. Each entry records one of the seven
   canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
@@ -488,7 +488,9 @@ public-facing policy.
 - 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
   `CAST ... AT TIME ZONE` promote to the semantic executor
   (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);
-  extended-cast / type-modifier shapes still surface `UNIMPLEMENTED`.
+  `STRING(n)` / `NUMERIC(p,s)` type modifiers evaluate on the same path
+  (pinned by `cast_type_modifiers.yaml`); extended-cast shapes still
+  surface `UNIMPLEMENTED`.
   `ORDER BY ... COLLATE 'und:ci'` sorts case-insensitively on the
   semantic path (`scan_eval_scan_impl.cc`). `SELECT AS VALUE`
   (`is_value_table()`) evaluates on the semantic executor. Set-op
@@ -509,9 +511,11 @@ public-facing policy.
   `UPDATE`, `UPDATE ... FROM`, `DELETE`, `THEN RETURN` on
   INSERT/UPDATE/DELETE, and `ASSERT_ROWS_MODIFIED` also route through
   the semantic DML executor and populate `numDmlAffectedRows`
-  correctly. `DELETE`/`UPDATE` with `array_offset_column` and
-  `ResolvedPipeInsertScan` continue to surface `UNIMPLEMENTED` and
-  stay tracked under `docs/ENGINE_POLICY.md`. Conformance fixtures
+  correctly. Nested `(DELETE ... WITH OFFSET ...)` inside `UPDATE SET`
+  lands on `ApplyNestedArrayDeleteItem` (pinned by
+  `update_delete_array_offset.yaml`). `ResolvedPipeInsertScan` and MERGE
+  `THEN RETURN` continue to surface `UNIMPLEMENTED` where not yet
+  landed; see `docs/ENGINE_POLICY.md`. Conformance fixtures
   may seed rows via either `tabledata.insertAll` or `INSERT VALUES`
   `sql:` steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape

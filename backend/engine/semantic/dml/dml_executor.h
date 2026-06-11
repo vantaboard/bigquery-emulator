@@ -11,12 +11,9 @@
 //   * `ResolvedDeleteStmt` -- `DELETE FROM t WHERE <pred>`.
 //   * `ResolvedUpdateStmt` -- scalar SET, deep-STRUCT SET, and
 //     `UPDATE ... FROM ...`.
-//   * `ASSERT_ROWS_MODIFIED` on INSERT / UPDATE / DELETE.
+//   * `ASSERT_ROWS_MODIFIED` on INSERT / UPDATE / DELETE / MERGE.
 //
-// Still deferred: DML with `array_offset_column`,
-// `ResolvedPipeInsertScan`. MERGE harder matrix, `THEN RETURN`, and
-// `ASSERT_ROWS_MODIFIED` on MERGE land here when routed by the
-// classifier.
+// Still deferred: `ResolvedPipeInsertScan`.
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"

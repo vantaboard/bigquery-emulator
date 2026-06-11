@@ -1,0 +1,13 @@
+# cast_type_modifiers: CAST with STRING(n) / NUMERIC(p,s) type modifiers.
+name: cast_type_modifiers
+description: |
+  ResolvedCast type_modifiers evaluate on the semantic executor: STRING max
+  length validation and NUMERIC precision/scale rounding.
+project_id: proj-scalar-cast-type-modifiers
+query: |
+  SELECT CAST('ab' AS STRING(10)) AS s_ok,
+         CAST('123.456' AS NUMERIC(5, 2)) AS n_ok
+expected:
+  route: semantic_executor
+  rows:
+    - {s_ok: "ab", n_ok: "123.46"}

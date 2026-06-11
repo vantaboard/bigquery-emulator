@@ -11,6 +11,7 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/operator_funcs.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/functions/math.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 
@@ -320,6 +321,28 @@ absl::StatusOr<Value> Log(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> Sqrt(const std::vector<Value>& args) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        "semantic: SQRT expects exactly one argument");
+  }
+  if (args[0].is_null()) return Value::Null(args[0].type());
+  if (args[0].type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
+    ::googlesql::BigNumericValue out;
+    absl::Status error;
+    if (!::googlesql::functions::Sqrt(args[0].bignumeric_value(), &out,
+                                      &error)) {
+      return error;
+    }
+    return Value::BigNumeric(out);
+  }
+  if (args[0].type_kind() == ::googlesql::TYPE_NUMERIC) {
+    ::googlesql::NumericValue out;
+    absl::Status error;
+    if (!::googlesql::functions::Sqrt(args[0].numeric_value(), &out, &error)) {
+      return error;
+    }
+    return Value::Numeric(out);
+  }
   return UnaryMathOnNumeric(
       args, "SQRT", static_cast<double (*)(double)>(std::sqrt));
 }

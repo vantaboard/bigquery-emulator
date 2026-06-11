@@ -1,0 +1,32 @@
+# update_delete_array_offset: nested DELETE ... WITH OFFSET in UPDATE SET.
+name: update_delete_array_offset
+description: |
+  UPDATE with nested `(DELETE arr WITH OFFSET WHERE ...)` removes matching
+  array elements per row on the semantic DML executor.
+project_id: proj-dml-update-delete-offset
+dataset_id: ds_dml_update_delete_offset
+setup:
+  - dataset: ds_dml_update_delete_offset
+  - sql: |
+      CREATE TABLE ds_dml_update_delete_offset.items (
+        id INT64,
+        tags ARRAY<STRING>
+      )
+  - sql: |
+      INSERT INTO ds_dml_update_delete_offset.items (id, tags) VALUES
+        (1, ['a', 'b', 'c']),
+        (2, ['x'])
+  - sql: |
+      UPDATE ds_dml_update_delete_offset.items
+      SET (DELETE tags WITH OFFSET AS offset WHERE offset = 1)
+      WHERE id = 1
+query: |
+  SELECT id, tag
+    FROM ds_dml_update_delete_offset.items, UNNEST(tags) AS tag
+   ORDER BY id, tag
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", tag: "a"}
+    - {id: "1", tag: "c"}
+    - {id: "2", tag: "x"}

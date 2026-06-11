@@ -340,22 +340,10 @@ ColumnBindings MergeColumnBindings(const ColumnBindings& target,
 // Reject DML shapes the executor does not yet handle. Surfaces
 // `kNotImplemented` so the gateway envelope is the same as for
 // any other planned-but-not-landed route. Specific deferred
-// shapes: `RETURNING` clause (Family 7), generated columns
-// (BigQuery doesn't expose CREATE TABLE generated columns
-// today). `array_offset_column` on UPDATE/DELETE without a
-// landed unnest-DML evaluator still surfaces `kNotImplemented`.
-absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
-                                          int generated_column_count,
+// shapes: generated columns (BigQuery doesn't expose CREATE TABLE
+// generated columns today).
+absl::Status RejectUnsupportedDmlFeatures(int generated_column_count,
                                           absl::string_view kind) {
-  if (has_array_offset_column) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat(
-            "semantic/dml: ",
-            kind,
-            " WITH OFFSET requires correlated lateral evaluation owned by "
-            "deferred work tracked in docs/ENGINE_POLICY.md"));
-  }
   if (generated_column_count > 0) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -364,6 +352,106 @@ absl::Status RejectUnsupportedDmlFeatures(bool has_array_offset_column,
                      " on tables with GENERATED columns is not yet supported"));
   }
   return absl::OkStatus();
+}
+
+namespace {
+
+enum class ArrayElementState {
+  kKeep,
+  kDelete,
+};
+
+absl::StatusOr<Value> ApplyNestedArrayDeleteStmt(
+    const ::googlesql::ResolvedDeleteStmt& nested_delete,
+    const ::googlesql::ResolvedColumn& element_column,
+    const Value& array_value,
+    const ColumnBindings& row_ctx,
+    EvalContext& ctx,
+    std::vector<ArrayElementState>* element_states) {
+  if (nested_delete.where_expr() == nullptr) {
+    return absl::InternalError(
+        "semantic/dml: nested DELETE requires a WHERE clause");
+  }
+  if (array_value.is_null()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic/dml: cannot execute nested DELETE on a NULL array value");
+  }
+  if (!array_value.type()->IsArray()) {
+    return absl::InternalError(
+        "semantic/dml: nested DELETE target is not an ARRAY");
+  }
+  const int n = array_value.num_elements();
+  if (static_cast<int>(element_states->size()) != n) {
+    element_states->assign(n, ArrayElementState::kKeep);
+  }
+  for (int i = 0; i < n; ++i) {
+    if ((*element_states)[i] == ArrayElementState::kDelete) {
+      continue;
+    }
+    ColumnBindings local = row_ctx;
+    local.emplace(element_column.column_id(), array_value.element(i));
+    if (nested_delete.array_offset_column() != nullptr) {
+      local.emplace(nested_delete.array_offset_column()->column().column_id(),
+                    Value::Int64(i));
+    }
+    ctx.columns = &local;
+    auto pred = EvalExpr(*nested_delete.where_expr(), ctx);
+    ctx.columns = nullptr;
+    if (!pred.ok()) return pred.status();
+    const bool matched = pred->is_valid() && !pred->is_null() &&
+                         pred->type_kind() == ::googlesql::TYPE_BOOL &&
+                         pred->bool_value();
+    if (matched) {
+      (*element_states)[i] = ArrayElementState::kDelete;
+    }
+  }
+  return array_value;
+}
+
+}  // namespace
+
+absl::StatusOr<Value> ApplyNestedArrayDeleteItem(
+    const ::googlesql::ResolvedUpdateItem& item,
+    const Value& array_value,
+    const ColumnBindings& row_ctx,
+    EvalContext& ctx) {
+  if (item.element_column() == nullptr) {
+    return absl::InternalError(
+        "semantic/dml: nested DELETE update item missing element_column");
+  }
+  if (item.delete_list().empty()) {
+    return absl::InternalError(
+        "semantic/dml: nested DELETE update item has empty delete_list");
+  }
+  const ::googlesql::ResolvedColumn& element_column =
+      item.element_column()->column();
+  std::vector<ArrayElementState> element_states;
+  if (!array_value.is_null()) {
+    element_states.assign(array_value.num_elements(), ArrayElementState::kKeep);
+  }
+  for (int i = 0; i < item.delete_list_size(); ++i) {
+    const ::googlesql::ResolvedDeleteStmt* nested = item.delete_list(i);
+    if (nested == nullptr) {
+      return absl::InternalError(
+          "semantic/dml: nested DELETE list contains null entry");
+    }
+    auto status = ApplyNestedArrayDeleteStmt(*nested, element_column,
+                                             array_value, row_ctx, ctx,
+                                             &element_states);
+    if (!status.ok()) return status.status();
+  }
+  if (array_value.is_null()) {
+    return array_value;
+  }
+  std::vector<Value> kept;
+  kept.reserve(array_value.num_elements());
+  for (int i = 0; i < array_value.num_elements(); ++i) {
+    if (element_states[i] == ArrayElementState::kKeep) {
+      kept.push_back(array_value.element(i));
+    }
+  }
+  return Value::Array(array_value.type()->AsArray(), kept);
 }
 
 }  // namespace dml

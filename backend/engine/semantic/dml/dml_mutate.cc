@@ -36,7 +36,6 @@ absl::StatusOr<DmlStats> ExecuteDelete(
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      /*has_array_offset_column=*/del.array_offset_column() != nullptr,
       /*generated_column_count=*/0,
       "DELETE");
   if (!guard.ok()) return guard;
@@ -131,7 +130,6 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      /*has_array_offset_column=*/upd.array_offset_column() != nullptr,
       upd.generated_column_expr_list_size(),
       "UPDATE");
   if (!guard.ok()) return guard;
@@ -146,8 +144,15 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedExpr* set_expr = nullptr;
     const ::googlesql::Type* root_column_type = nullptr;
   };
+  struct NestedArrayDeleteAssignment {
+    UpdateTarget target;
+    const ::googlesql::Type* root_column_type = nullptr;
+    const ::googlesql::ResolvedUpdateItem* item = nullptr;
+  };
   std::vector<SetAssignment> sets;
+  std::vector<NestedArrayDeleteAssignment> nested_deletes;
   sets.reserve(upd.update_item_list_size());
+  nested_deletes.reserve(upd.update_item_list_size());
   for (int i = 0; i < upd.update_item_list_size(); ++i) {
     const ::googlesql::ResolvedUpdateItem* item = upd.update_item_list(i);
     if (item == nullptr) {
@@ -155,8 +160,35 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
           "semantic/dml: UPDATE update_item_list contains a null entry");
     }
     if (!item->update_item_element_list().empty() ||
-        !item->delete_list().empty() || !item->update_list().empty() ||
-        !item->insert_list().empty() || item->element_column() != nullptr) {
+        !item->update_list().empty() || !item->insert_list().empty()) {
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          "semantic/dml: nested UPDATE (array element / sub-record) is "
+          "deferred; see docs/ENGINE_POLICY.md");
+    }
+    if (!item->delete_list().empty()) {
+      if (item->target() == nullptr || item->element_column() == nullptr) {
+        return absl::InternalError(
+            "semantic/dml: nested DELETE item missing target/element_column");
+      }
+      auto parsed = ParseUpdateTarget(*item->target(), schema);
+      if (!parsed.ok()) return parsed.status();
+      const ::googlesql::Type* root_type = nullptr;
+      for (int c = 0; c < upd.table_scan()->column_list_size(); ++c) {
+        const ::googlesql::ResolvedColumn& col = upd.table_scan()->column_list(c);
+        if (IndexOfColumn(schema, col.name()) == parsed->column_idx) {
+          root_type = col.type();
+          break;
+        }
+      }
+      if (root_type == nullptr) {
+        return absl::InternalError(
+            "semantic/dml: nested DELETE target column missing from table scan");
+      }
+      nested_deletes.push_back({*std::move(parsed), root_type, item});
+      continue;
+    }
+    if (item->element_column() != nullptr) {
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
           "semantic/dml: nested UPDATE (array element / sub-record) is "
@@ -224,6 +256,24 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       auto cell = ToStorageValue(*rewritten);
       if (!cell.ok()) return cell.status();
       mutated.cells[s.target.column_idx] = *std::move(cell);
+    }
+    for (const NestedArrayDeleteAssignment& nested : nested_deletes) {
+      auto current = catalog::StorageValueToGoogleSqlValue(
+          mutated.cells[nested.target.column_idx],
+          nested.root_column_type,
+          schema.columns[nested.target.column_idx]);
+      if (!current.ok()) return current.status();
+      if (!nested.target.struct_field_path.empty()) {
+        return MakeSemanticError(
+            SemanticErrorReason::kNotImplemented,
+            "semantic/dml: nested DELETE on nested STRUCT arrays is deferred");
+      }
+      auto rewritten = ApplyNestedArrayDeleteItem(*nested.item, *current,
+                                                  row_ctx, ctx);
+      if (!rewritten.ok()) return rewritten.status();
+      auto cell = ToStorageValue(*rewritten);
+      if (!cell.ok()) return cell.status();
+      mutated.cells[nested.target.column_idx] = *std::move(cell);
     }
     ctx.columns = nullptr;
     return absl::OkStatus();

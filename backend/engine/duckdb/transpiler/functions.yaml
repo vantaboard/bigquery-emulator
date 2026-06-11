@@ -160,19 +160,7 @@ log: duckdb_udf duckdb_name=bq_log
 mod: duckdb_udf duckdb_name=bq_mod
 pow: duckdb_native duckdb_name=POW
 power: duckdb_native duckdb_name=POW
-# `sqrt_numeric` is a placeholder row for the case where BigQuery
-# SQRT is called with a NUMERIC argument and the transpiler needs
-# to insert an explicit cast (the analyzer resolves it to the
-# bare `sqrt` function, not `sqrt_numeric`, so this row is
-# effectively unreachable today). Closing this gap requires
-# signature-aware function dispatch in the transpiler -- the
-# current emit path looks up by lowercase function NAME only and
-# does not discriminate by argument type. That's a transpiler
-# architecture change, not a thin polyfill macro, so the row
-# re-points at the semantic-functions plan where the
-# argument-type-aware emit can be addressed alongside the other
-# NUMERIC / BIGNUMERIC dispatch cases.
-sqrt_numeric: semantic_executor status=planned
+sqrt_numeric: semantic_executor
 cbrt: duckdb_native duckdb_name=CBRT
 is_inf: duckdb_native duckdb_name=ISINF
 is_nan: duckdb_native duckdb_name=ISNAN
