@@ -5,7 +5,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/row_source.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
@@ -15,8 +19,9 @@ namespace engine {
 namespace control {
 
 absl::StatusOr<std::unique_ptr<RowSource>> RunPipeExportData(
-    const QueryRequest& request, const ::googlesql::ResolvedStatement& stmt) {
-  (void)request;
+    storage::Storage& storage,
+    const QueryRequest& request,
+    const ::googlesql::ResolvedStatement& stmt) {
   const ::googlesql::ResolvedScan* query = nullptr;
   if (stmt.node_kind() == ::googlesql::RESOLVED_QUERY_STMT) {
     query = stmt.GetAs<::googlesql::ResolvedQueryStmt>()->query();
@@ -38,20 +43,19 @@ absl::StatusOr<std::unique_ptr<RowSource>> RunPipeExportData(
         query == nullptr ? "null" : query->node_kind_string(),
         ")"));
   }
-  // Mark the inner statement as accessed so the analyzer's
-  // field-access tracker doesn't trip when the analyzer-output
-  // owner runs `CheckFieldsAccessed()` against the resolved AST.
-  // The actual semantics are still deferred (see header / message
-  // below).
   const auto* pipe_scan =
       query->GetAs<::googlesql::ResolvedPipeExportDataScan>();
-  (void)pipe_scan->export_data_stmt();
-  return absl::UnimplementedError(
-      "control op executor: pipe-form EXPORT DATA is not implemented yet; "
-      "needs the same Arrow / Parquet / CSV / JSON writers and URI scheme "
-      "dispatch surface the statement-form EXPORT DATA needs. Tracked by "
-      "docs/ENGINE_POLICY.md follow-up: 'add EXPORT DATA writer "
-      "family'.");
+  const ::googlesql::ResolvedExportDataStmt* export_stmt =
+      pipe_scan->export_data_stmt();
+  if (export_stmt == nullptr) {
+    return absl::InternalError(
+        "RunPipeExportData: pipe EXPORT DATA scan has null export_data_stmt");
+  }
+  absl::Status exported =
+      internal::RunExportData(storage, request, export_stmt, stmt);
+  if (!exported.ok()) return exported;
+  return std::make_unique<semantic::MaterializedRowSource>(
+      schema::TableSchema{}, std::vector<storage::Row>{});
 }
 
 }  // namespace control

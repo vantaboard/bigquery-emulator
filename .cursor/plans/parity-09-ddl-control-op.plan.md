@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: alter-table
     content: "Migrate ALTER TABLE (ADD/DROP/RENAME COLUMN, SET OPTIONS) from the DuckDB transpiler lowering to ControlOpExecutor mutating Storage directly, emitting the BigQuery statementType envelope; per ROADMAP this is the last DDL still lowering through DuckDB SQL."
-    status: pending
+    status: completed
   - id: materialized-view
     content: "CREATE MATERIALIZED VIEW with full-refresh execution: register like a view, materialize via the coordinator into a storage table at creation (and on a manual refresh path); document the no-incremental-refresh posture in ENGINE_POLICY."
-    status: pending
+    status: completed
   - id: export-data
     content: "EXPORT DATA writer family (ResolvedExportDataStmt): local-filesystem URI export (CSV/JSON/Parquet via DuckDB COPY) through a control-op handler; gs:// URIs follow the fake-gcs-server convention the third-party lane already uses or surface the documented unsupported envelope."
-    status: pending
+    status: completed
   - id: load-data-local
     content: "LOAD DATA LOCAL <local-uri> (ResolvedAuxLoadDataStmt): control-op reader for CSV/JSON/Parquet local files into Storage (reuse the jobs.insert media-upload load-job machinery where possible); gs:// stays unsupported per ENGINE_POLICY."
-    status: pending
+    status: completed
   - id: reconcile-planned-rows
     content: "Reconcile tracker rows that say (planned) but may already be landed (ResolvedDropStmt - DROP TABLE is implemented; ResolvedAnalyzeStmt - ROADMAP says ANALYZE flows through control op): verify behavior, fix the row or the code, keep parity gate green. Implement ResolvedCatalogColumnRef if any landed DDL shape needs it."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: Fixtures under conformance/fixtures/ddl/ (alter round-trip via tables.get schema, matview query-after-create, export file content assertion, load-data row count); flip SHAPE_TRACKER rows; update ROADMAP Schema-and-DDL bullet.
-    status: pending
+    status: completed
 ---
 
 # Parity 09 — DDL control-op completion

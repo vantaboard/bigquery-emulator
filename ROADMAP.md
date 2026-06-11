@@ -290,17 +290,17 @@ behind each, and the multi-strategy coordinator is the only
   type metadata, conversion to/from
   `google.cloud.bigquery.v2.TableSchema` and to DuckDB schema strings
   (`backend/schema/googlesql_to_bq.{h,cc}`)
-- 🟡 BigQuery DDL routed to the control-op executor: `CREATE TABLE`,
-  `CREATE TABLE AS SELECT`, `DROP TABLE`, and `ANALYZE` flow through
-  `backend/engine/control/control_op_executor.{h,cc}` and mutate
-  `Storage` directly (no longer through the DuckDB SQL evaluator).
+- ✅ BigQuery DDL routed to the control-op executor: `CREATE TABLE`,
+  `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`, `ANALYZE`,
+  `CREATE MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA`
+  (local `file://` writers), and `LOAD DATA` (local `file://` readers)
+  flow through `backend/engine/control/control_op_executor.{h,cc}` and
+  mutate `Storage` directly (no longer through the DuckDB SQL evaluator).
   `CREATE VIEW` registers in the per-project view registry, and
   `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
-  the UDF registry (see "DML / DDL" below). `ALTER TABLE` still
-  lowers through the DuckDB transpiler pending its own migration;
-  `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`,
-  partitioning / clustering hints, and direct external-Parquet
-  drop-in still pending
+  the UDF registry (see "DML / DDL" below). Partitioning / clustering
+  hints are accepted as metadata; direct external-Parquet drop-in
+  remains an open question
 
 ### Catalog wiring
 
@@ -508,20 +508,20 @@ public-facing policy.
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
-  SELECT`, `DROP TABLE`, and `ANALYZE` are wired today via a
-  dedicated `ControlOpExecutor` that mutates `Storage` directly and
-  emits a BigQuery-shaped envelope (`Job.statistics.query.statementType`
+  SELECT`, `DROP TABLE`, `ALTER TABLE`, `ANALYZE`, `CREATE
+  MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA` (local
+  `file://`), and `LOAD DATA` (local `file://`) are wired via
+  `ControlOpExecutor`, which mutates `Storage` directly and emits a
+  BigQuery-shaped envelope (`Job.statistics.query.statementType`
   populated per the BigQuery REST reference). The DuckDB SQL evaluator
   no longer carries any DDL paths — the route classifier dispatches
   every `control_op` statement root to `ControlOpExecutor`.
   `CREATE VIEW` registers in the per-project view registry and replays
   into each query catalog (`sys_calendar` bqutils fixture promoted).
   `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
-  the UDF registry (next bullet). `CREATE MATERIALIZED VIEW`
-  (full-refresh execution) and `EXPORT DATA` still surface
-  `UNIMPLEMENTED` from the dedicated handlers; `ALTER TABLE`
-  continues to lower through the DuckDB engine pending its own
-  migration to the control-op executor.
+  the UDF registry (next bullet). Cloud-storage `gs://` URIs for
+  `EXPORT DATA` / `LOAD DATA` remain unsupported per
+  `docs/ENGINE_POLICY.md`.
 - 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and

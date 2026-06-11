@@ -41,7 +41,8 @@ namespace engine {
 namespace coordinator {
 
 LocalCoordinatorEngine::LocalCoordinatorEngine(storage::Storage* storage)
-    : duckdb_executor_(storage),
+    : storage_(storage),
+      duckdb_executor_(storage),
       semantic_executor_(storage),
       control_op_executor_(storage) {}
 
@@ -135,7 +136,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
     }
     if (body != nullptr) {
       if (body->node_kind() == ::googlesql::RESOLVED_PIPE_EXPORT_DATA_SCAN) {
-        return control::RunPipeExportData(request, *stmt);
+        return control::RunPipeExportData(*storage_, request, *stmt);
       }
       if (body->node_kind() == ::googlesql::RESOLVED_PIPE_CREATE_TABLE_SCAN) {
         return control::RunPipeCreateTable(request, *stmt);

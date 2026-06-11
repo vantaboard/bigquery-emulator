@@ -15,6 +15,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
@@ -25,9 +26,13 @@
 
 namespace googlesql {
 class ResolvedAnalyzeStmt;
+class ResolvedAlterTableStmt;
+class ResolvedAuxLoadDataStmt;
+class ResolvedCreateMaterializedViewStmt;
 class ResolvedCreateTableAsSelectStmt;
 class ResolvedCreateTableStmt;
 class ResolvedDropStmt;
+class ResolvedExportDataStmt;
 class Table;
 }  // namespace googlesql
 
@@ -120,6 +125,28 @@ absl::Status RunDropTable(storage::Storage& storage,
 absl::Status RunAnalyze(storage::Storage& storage,
                         absl::string_view project_id,
                         const ::googlesql::ResolvedAnalyzeStmt* stmt);
+
+absl::Status RunAlterTable(storage::Storage& storage,
+                           absl::string_view project_id,
+                           absl::string_view default_dataset_id,
+                           const ::googlesql::ResolvedAlterTableStmt* stmt);
+
+absl::Status RunCreateMaterializedView(
+    storage::Storage& storage,
+    absl::string_view project_id,
+    const QueryRequest& request,
+    const ::googlesql::ResolvedCreateMaterializedViewStmt* stmt,
+    const ::googlesql::ResolvedStatement& root_stmt);
+
+absl::Status RunExportData(storage::Storage& storage,
+                           const QueryRequest& request,
+                           const ::googlesql::ResolvedExportDataStmt* stmt,
+                           const ::googlesql::ResolvedStatement& root_stmt);
+
+absl::Status RunLoadData(storage::Storage& storage,
+                         absl::string_view project_id,
+                         absl::string_view default_dataset_id,
+                         const ::googlesql::ResolvedAuxLoadDataStmt* stmt);
 
 }  // namespace internal
 }  // namespace control

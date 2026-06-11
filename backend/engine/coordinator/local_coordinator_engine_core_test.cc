@@ -146,9 +146,8 @@ TEST_F(LocalCoordinatorEngineTest,
 // `DuckDbExecutor`; CREATE TABLE / CTAS / DROP TABLE classify to
 // `kControlOp` and dispatch through
 // `backend/engine/control/control_op_executor.cc`; ALTER TABLE
-// has no registry row so it falls through to `kDuckdbNative` and
-// stays on `DuckDbExecutor::ExecuteDdl` until a future plan lands
-// it on the control-op executor. The gateway/e2e suite leans on
+// classifies to `kControlOp` and dispatches through
+// `RunAlterTable`. The gateway/e2e suite leans on
 // the same paths; pinning them at the engine surface lets a
 // regression here surface as a unit-test failure first.
 // ---------------------------------------------------------------------------

@@ -22,7 +22,6 @@
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 
 namespace googlesql {
-class ResolvedAlterTableStmt;
 class ResolvedQueryStmt;
 class Table;
 }  // namespace googlesql
@@ -92,11 +91,6 @@ absl::StatusOr<DmlStats> RunInsertSelect(
     const QueryRequest& request,
     storage::Storage* storage,
     const ::googlesql::ResolvedInsertStmt& insert);
-
-absl::Status RunAlterTableAddColumn(
-    storage::Storage& storage,
-    absl::string_view project_id,
-    const ::googlesql::ResolvedAlterTableStmt* stmt);
 
 }  // namespace internal
 }  // namespace duckdb

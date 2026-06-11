@@ -1,0 +1,18 @@
+# alter_add_column_round_trip: ALTER TABLE ADD COLUMN via control-op.
+name: ddl_alter_add_column_round_trip
+description: |
+  CREATE TABLE -> INSERT -> ALTER TABLE ADD COLUMN -> SELECT round-trip.
+  Pins that ADD COLUMN mutates Storage through ControlOpExecutor and
+  pads existing rows with NULL for the new column.
+project_id: proj-ddl-alter
+dataset_id: ds_ddl_alter
+setup:
+  - dataset: ds_ddl_alter
+  - sql: CREATE TABLE ds_ddl_alter.people (id INT64, name STRING)
+  - sql: INSERT INTO ds_ddl_alter.people (id, name) VALUES (1, 'ada')
+  - sql: ALTER TABLE ds_ddl_alter.people ADD COLUMN age INT64
+query: SELECT id, name, age FROM ds_ddl_alter.people
+expected:
+  route: duckdb_native
+  rows:
+    - {id: 1, name: ada, age: null}

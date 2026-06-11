@@ -94,6 +94,7 @@ class LocalCoordinatorEngine : public Engine {
   Executor* RouteFor(const ::googlesql::ResolvedStatement& stmt);
 
   RouteClassifier classifier_{};
+  storage::Storage* storage_ = nullptr;  // not owned
   duckdb::DuckDbExecutor duckdb_executor_;
   semantic::SemanticExecutor semantic_executor_;
   control::ControlOpExecutor control_op_executor_;

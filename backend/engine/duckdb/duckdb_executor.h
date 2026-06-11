@@ -65,9 +65,8 @@ class DuckDbExecutor : public coordinator::Executor {
       const ::googlesql::ResolvedStatement& stmt,
       ::googlesql::Catalog* catalog) override;
 
-  // Execute a DDL statement (CREATE TABLE / CREATE TABLE AS SELECT
-  // / DROP TABLE / ALTER TABLE ADD COLUMN). Other DDL shapes surface
-  // UNIMPLEMENTED.
+  // Execute a DDL statement. All DDL routes to ControlOpExecutor;
+  // reaching this surface indicates a routing regression.
   [[nodiscard]] absl::Status ExecuteDdl(
       const QueryRequest& request,
       const ::googlesql::ResolvedStatement& stmt,

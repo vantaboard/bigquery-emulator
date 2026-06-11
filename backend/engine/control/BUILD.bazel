@@ -15,13 +15,19 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "control_op_executor",
     srcs = [
+        "control_op_alter_table.cc",
         "control_op_ddl.cc",
         "control_op_executor.cc",
+        "control_op_export_data.cc",
+        "control_op_load_data.cc",
         "control_op_literals.cc",
+        "control_op_materialized_view.cc",
+        "control_op_options.cc",
     ],
     hdrs = [
         "control_op_executor.h",
         "control_op_internal.h",
+        "control_op_options.h",
     ],
     deps = [
         "//backend/catalog:create_function_util",
@@ -69,7 +75,11 @@ cc_library(
         "pipe_export_data.h",
     ],
     deps = [
+        ":control_op_executor",
         "//backend/engine",
+        "//backend/engine/semantic:row_source",
+        "//backend/schema",
+        "//backend/storage",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

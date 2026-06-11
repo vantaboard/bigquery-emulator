@@ -1,0 +1,19 @@
+# materialized_view_query: CREATE MATERIALIZED VIEW full refresh.
+name: ddl_materialized_view_query
+description: |
+  CREATE TABLE -> INSERT -> CREATE MATERIALIZED VIEW (full refresh at
+  creation) -> SELECT from the materialized table.
+project_id: proj-ddl-mv
+dataset_id: ds_ddl_mv
+setup:
+  - dataset: ds_ddl_mv
+  - sql: CREATE TABLE ds_ddl_mv.src (id INT64)
+  - sql: INSERT INTO ds_ddl_mv.src (id) VALUES (1), (2)
+  - sql: CREATE MATERIALIZED VIEW ds_ddl_mv.mv AS SELECT id FROM ds_ddl_mv.src
+query: SELECT id FROM ds_ddl_mv.mv ORDER BY id
+expected:
+  route: duckdb_native
+  match: ordered
+  rows:
+    - {id: 1}
+    - {id: 2}

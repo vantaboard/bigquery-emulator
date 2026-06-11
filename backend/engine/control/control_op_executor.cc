@@ -134,11 +134,19 @@ absl::Status ControlOpExecutor::ExecuteDdl(
       // Registered in `LocalCoordinatorEngine::ExecuteDdl` via
       // `view_registry` (SQLView inlining at analyze time).
       return absl::OkStatus();
+    case ::googlesql::RESOLVED_ALTER_TABLE_STMT:
+      return internal::RunAlterTable(
+          *storage_,
+          project_id,
+          request.default_dataset_id,
+          stmt.GetAs<::googlesql::ResolvedAlterTableStmt>());
     case ::googlesql::RESOLVED_CREATE_MATERIALIZED_VIEW_STMT:
-      return absl::UnimplementedError(
-          "control op executor: CREATE MATERIALIZED VIEW is not "
-          "implemented yet; the metadata side requires the same view-"
-          "CRUD surface CREATE VIEW needs. See docs/ENGINE_POLICY.md.");
+      return internal::RunCreateMaterializedView(
+          *storage_,
+          project_id,
+          request,
+          stmt.GetAs<::googlesql::ResolvedCreateMaterializedViewStmt>(),
+          stmt);
     case ::googlesql::RESOLVED_CREATE_FUNCTION_STMT:
       // Registered in `LocalCoordinatorEngine::ExecuteDdl` with pinned
       // `AnalyzerOutput` so UDF type pointers stay valid across RPCs.
@@ -193,32 +201,17 @@ absl::Status ControlOpExecutor::ExecuteDdl(
       return catalog::DeletePersistedRoutine(storage_, rid);
     }
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
-      // LOAD DATA splits by URI scheme at implementation time:
-      // `LOAD DATA LOCAL ...` belongs on the control-op route
-      // (local filesystem reader; deferred to the follow-up below).
-      // `LOAD DATA <gs://...>` (cloud-storage) is `unsupported`
-      // per `docs/ENGINE_POLICY.md` -- the emulator
-      // deliberately does NOT model the BigQuery cloud-storage
-      // ingest surface. `ResolvedAuxLoadDataStmt` carries no
-      // `is_local` flag; the differentiation happens when the
-      // reader inspects the URI. Today both shapes share this
-      // UNIMPLEMENTED envelope; when the LOCAL reader family
-      // lands, the cloud-storage URIs will surface the
-      // unsupported-family envelope from the unsupported stub
-      // executor instead. See docs/ENGINE_POLICY.md.
-      return absl::UnimplementedError(
-          "control op executor: LOAD DATA is not implemented yet; "
-          "needs source-file readers (CSV / JSON / Avro / Parquet / "
-          "ORC) for `LOAD DATA LOCAL <local-uri>` plus URI-scheme "
-          "differentiation so cloud-storage `LOAD DATA <gs://...>` "
-          "falls through to the unsupported route. "
-          "See docs/ENGINE_POLICY.md.");
+      return internal::RunLoadData(
+          *storage_,
+          project_id,
+          request.default_dataset_id,
+          stmt.GetAs<::googlesql::ResolvedAuxLoadDataStmt>());
     case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
-      return absl::UnimplementedError(
-          "control op executor: EXPORT DATA is not implemented yet; "
-          "needs Arrow / Parquet / CSV / JSON writers and the "
-          "fake-gcs-server / local-filesystem URI scheme dispatch. "
-          "See docs/ENGINE_POLICY.md.");
+      return internal::RunExportData(
+          *storage_,
+          request,
+          stmt.GetAs<::googlesql::ResolvedExportDataStmt>(),
+          stmt);
     default:
       return absl::UnimplementedError(
           absl::StrCat("control op executor: ExecuteDdl does not implement ",

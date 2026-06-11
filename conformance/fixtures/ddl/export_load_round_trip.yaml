@@ -1,0 +1,29 @@
+# export_load_round_trip: EXPORT DATA then LOAD DATA LOCAL round-trip.
+name: ddl_export_load_round_trip
+description: |
+  Seed rows, EXPORT DATA to a local CSV, LOAD DATA into a fresh table,
+  and assert the row count matches.
+project_id: proj-ddl-export-load
+dataset_id: ds_ddl_export_load
+setup:
+  - dataset: ds_ddl_export_load
+  - sql: CREATE TABLE ds_ddl_export_load.src (id INT64, name STRING)
+  - sql: INSERT INTO ds_ddl_export_load.src (id, name) VALUES (1, 'a'), (2, 'b')
+  - sql: |
+      EXPORT DATA OPTIONS(
+        uri='file:///tmp/bqemu_conformance_export_load.csv',
+        format='CSV'
+      ) AS
+      SELECT id, name FROM ds_ddl_export_load.src ORDER BY id
+  - sql: CREATE TABLE ds_ddl_export_load.dst (id INT64, name STRING)
+  - sql: |
+      LOAD DATA OVERWRITE ds_ddl_export_load.dst (id INT64, name STRING)
+      FROM FILES (
+        format = 'CSV',
+        uris = ['file:///tmp/bqemu_conformance_export_load.csv']
+      )
+query: SELECT COUNT(*) AS n FROM ds_ddl_export_load.dst
+expected:
+  route: duckdb_native
+  rows:
+    - {n: 2}

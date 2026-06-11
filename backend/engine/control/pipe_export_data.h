@@ -51,6 +51,7 @@
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
 
 namespace googlesql {
 class ResolvedStatement;
@@ -67,10 +68,12 @@ namespace control {
 // `ResolvedGeneralizedQueryStmt` whose body is a
 // `ResolvedPipeExportDataScan` before invoking this function.
 //
-// Returns `UNIMPLEMENTED` until the EXPORT DATA writer family lands
-// (see file header for the deferred plan).
+// Delegates to `internal::RunExportData` on the inner
+// `ResolvedExportDataStmt`. Returns an empty `RowSource` on success.
 absl::StatusOr<std::unique_ptr<RowSource>> RunPipeExportData(
-    const QueryRequest& request, const ::googlesql::ResolvedStatement& stmt);
+    storage::Storage& storage,
+    const QueryRequest& request,
+    const ::googlesql::ResolvedStatement& stmt);
 
 }  // namespace control
 }  // namespace engine

@@ -106,8 +106,10 @@ summary the unsupported error envelope points at. Per-family posture
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` | No Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/` as a documented external-language gap (same disposition as JS UDFs). |
 | SQL scalar UDFs (`CREATE FUNCTION ... AS (...)`), including `ANY TYPE` templated parameters                  | `semantic_executor`     | `CREATE FUNCTION` registers through the per-project UDF registry (`backend/catalog/udf_registry.cc`), writes through to `DuckDBStorage` (`__bqemu_routines`), and replays into each query's `GoogleSqlCatalog` (including after engine restart via `RehydrateRoutinesFromStorage`), shadowing a built-in when the names collide. Templated bodies evaluate on the semantic executor via `EvalSqlUdfBody`; SQL UDAFs evaluate via `EvalSqlUdafBody`. SQL TVFs and procedures follow the same persistence path through `tvf_registry` / `procedure_registry`. `DROP FUNCTION` deletes registry + storage rows. Conformance fixtures under `conformance/fixtures/udf/`. |
 | Scripting (`DECLARE`, `SET`, `CALL`, `BEGIN…END` multi-stmt blocks)                                          | `semantic_executor`     | Gateway sends DECLARE/SET/CALL scripts in one engine `ExecuteQuery` round-trip (`script_runner_engine.go`); control-flow scripts register a single child job for the final SELECT result. Simple statements (`CREATE CONSTANT`/`SET`/`CALL`/`ASSERT`/`EXECUTE IMMEDIATE` literals) run via `ExecuteScriptViaAnalyzeNext`; scripts with structured control flow (`IF`/`WHILE`/`LOOP`/`FOR`/`EXECUTE IMMEDIATE`/`EXCEPTION`/`RAISE` in blocks) delegate to `googlesql::ScriptExecutor` through `EmulatorStatementEvaluator` when `BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1` (`GOOGLESQL_SOURCE=local`). `@@error.*` reads resolve through `EvalContext::script_system_variables` (populated by the ScriptExecutor during `EXCEPTION` handlers). Prebuilt artifacts without scripting still surface `UNIMPLEMENTED` for control flow. Conformance fixtures under `conformance/fixtures/scripting/`. |
-| `LOAD DATA LOCAL <local-uri>`                                                                                | `control_op` (deferred) | Belongs on the control-op route; the local-filesystem reader family is deferred. Currently surfaces `UNIMPLEMENTED`.             |
+| `LOAD DATA LOCAL <local-uri>` / `LOAD DATA ... FROM FILES (uris = ['file://...'])`                           | `control_op`  | Local CSV/JSON/Parquet readers via DuckDB (`RunLoadData`); `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
 | `LOAD DATA <gs://...>` (cloud storage)                                                                       | `unsupported` | The emulator does not model BigQuery's cloud-storage ingest surface.                                                                                                                                        |
+| `EXPORT DATA` (local `file://` URI)                                                                          | `control_op`  | DuckDB `COPY (SELECT ...) TO` for CSV/JSON/Parquet; `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
+| `CREATE MATERIALIZED VIEW`                                                                                   | `control_op`  | Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by `conformance/fixtures/ddl/materialized_view_query.yaml`. |
 
 The two halves of the `local_stub` posture are load-bearing:
 
@@ -145,8 +147,10 @@ running the route classifier in their head.
    Simple `MERGE` (`WHEN MATCHED` + single `WHEN NOT MATCHED BY
    TARGET`) stays on the DuckDB fast path. Use `tabledata.insertAll`
    to seed rows for tests and fixtures while gaps are closed.
-   `CREATE TABLE`, `CREATE TABLE AS SELECT`, and `DROP TABLE` are
-   implemented today.
+   `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
+   `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
+   `LOAD DATA` (local files) are implemented today on the control-op
+   route.
 
 3. **Storage follows the same single-implementation rule.** The
    in-memory storage backend is gone; every persistent state path

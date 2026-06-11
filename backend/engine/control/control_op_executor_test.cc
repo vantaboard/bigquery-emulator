@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <filesystem>
 #include <memory>
 #include <random>
@@ -460,24 +461,39 @@ TEST_F(ControlOpExecutorTest, CreateViewRegisteredByCoordinator) {
   EXPECT_TRUE(s.ok()) << s;
 }
 
-TEST_F(ControlOpExecutorTest, CreateMaterializedViewSurfacesUnimplemented) {
-  absl::Status s = RunDdl("CREATE MATERIALIZED VIEW ds.mv AS SELECT 1 AS id");
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("docs/ENGINE_POLICY.md"),
-            std::string::npos)
-      << s.message();
+TEST_F(ControlOpExecutorTest, CreateMaterializedViewMaterializesRows) {
+  CreatePeopleTable();
+  absl::Status s =
+      RunDdl("CREATE MATERIALIZED VIEW ds.mv AS SELECT id, name FROM ds.people");
+  ASSERT_TRUE(s.ok()) << s;
+  auto scan = storage_->ScanRows({"proj-test", "ds", "mv"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    ++rows;
+  }
+  EXPECT_EQ(rows, 3);
 }
 
-TEST_F(ControlOpExecutorTest, ExportDataSurfacesUnimplemented) {
+TEST_F(ControlOpExecutorTest, ExportDataWritesLocalCsv) {
   CreatePeopleTable();
-  absl::Status s = RunDdl(
-      "EXPORT DATA OPTIONS(uri='file:///tmp/out.csv', format='CSV') AS "
-      "SELECT id, name FROM ds.people");
-  ASSERT_FALSE(s.ok());
-  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
-  EXPECT_NE(std::string(s.message()).find("EXPORT DATA"), std::string::npos)
-      << s.message();
+  const std::string path = absl::StrCat(
+      std::getenv("TEST_TMPDIR") != nullptr ? std::getenv("TEST_TMPDIR") : "/tmp",
+      "/bqemu_export_test.csv");
+  absl::Status s = RunDdl(absl::StrCat(
+      "EXPORT DATA OPTIONS(uri='file://", path, "', format='CSV') AS ",
+      "SELECT id, name FROM ds.people ORDER BY id"));
+  ASSERT_TRUE(s.ok()) << s;
+  std::ifstream in(path);
+  ASSERT_TRUE(in.good()) << "expected export file at " << path;
+  std::string line;
+  ASSERT_TRUE(std::getline(in, line));
+  EXPECT_EQ(line, "id,name");
 }
 
 }  // namespace

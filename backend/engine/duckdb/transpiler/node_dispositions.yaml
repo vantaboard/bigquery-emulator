@@ -70,6 +70,7 @@ ResolvedCreateTableFunctionStmt: control_op
 # libraries that probe BigQuery ML availability by issuing
 # `CREATE MODEL` do not fail at startup.
 ResolvedCreateModelStmt: local_stub
+ResolvedAlterTableStmt: control_op
 ResolvedDropStmt: control_op
 ResolvedDropFunctionStmt: control_op
 ResolvedInsertStmt: semantic_executor
