@@ -1,0 +1,21 @@
+# for_in_sum: FOR...IN iterates query rows and accumulates a column.
+name: scripting_for_in_sum
+description: |
+  FOR row IN (SELECT ...) binds each result row as a struct; the loop body
+  sums the val column and the final SELECT returns the total.
+project_id: proj-scripting-for-in
+query: |
+  BEGIN
+    DECLARE total INT64 DEFAULT 0;
+    FOR row IN (
+      SELECT val
+      FROM UNNEST([1, 2, 3]) AS val
+    ) DO
+      SET total = total + row.val;
+    END FOR;
+    SELECT CAST(total AS STRING) AS total;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {total: "6"}

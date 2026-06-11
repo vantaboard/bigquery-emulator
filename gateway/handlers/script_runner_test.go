@@ -119,6 +119,19 @@ END;`
 	}
 }
 
+func TestScriptNeedsGoogleSQLExecutorDetectsRepeat(t *testing.T) {
+	const sql = `BEGIN
+  DECLARE i INT64 DEFAULT 0;
+  REPEAT
+    SET i = i + 1;
+  UNTIL i >= 1
+  END REPEAT;
+END;`
+	if !scriptNeedsGoogleSQLExecutor(unwrapBeginEndBlock(sql)) {
+		t.Fatal("expected REPEAT script detection")
+	}
+}
+
 func TestScriptNeedsGoogleSQLExecutorDetectsException(t *testing.T) {
 	const sql = `BEGIN SELECT 1; EXCEPTION WHEN ERROR THEN SELECT 1; END;`
 	if !scriptNeedsGoogleSQLExecutor(sql) {

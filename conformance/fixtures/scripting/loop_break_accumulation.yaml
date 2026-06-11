@@ -1,0 +1,23 @@
+# loop_break_accumulation: LOOP with BREAK exits after three iterations.
+name: scripting_loop_break_accumulation
+description: |
+  LOOP increments a counter and BREAKs once the target is reached; final
+  SELECT returns the accumulated total (0 + 1 + 2 = 3).
+project_id: proj-scripting-loop-break
+query: |
+  BEGIN
+    DECLARE total INT64 DEFAULT 0;
+    DECLARE i INT64 DEFAULT 0;
+    LOOP
+      SET total = total + i;
+      SET i = i + 1;
+      IF i >= 3 THEN
+        BREAK;
+      END IF;
+    END LOOP;
+    SELECT CAST(total AS STRING) AS total;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {total: "3"}

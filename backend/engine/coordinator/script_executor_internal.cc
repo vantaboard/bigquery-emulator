@@ -105,7 +105,7 @@ bool ScriptNeedsGoogleSqlExecutor(absl::string_view sql) {
   if (absl::StartsWithIgnoreCase(trimmed, "IF ") ||
       absl::StartsWithIgnoreCase(trimmed, "WHILE ") ||
       absl::StartsWithIgnoreCase(trimmed, "LOOP ") ||
-      absl::StartsWithIgnoreCase(trimmed, "REPEAT ") ||
+      absl::StartsWithIgnoreCase(trimmed, "REPEAT") ||
       absl::StartsWithIgnoreCase(trimmed, "FOR ") ||
       absl::StartsWithIgnoreCase(trimmed, "RAISE ") ||
       absl::StartsWithIgnoreCase(trimmed, "EXECUTE IMMEDIATE") ||
@@ -120,8 +120,8 @@ bool ScriptNeedsGoogleSqlExecutor(absl::string_view sql) {
          ScriptKeywordPresent(sql, "\nWHILE ") ||
          ScriptKeywordPresent(sql, " LOOP ") ||
          ScriptKeywordPresent(sql, "\nLOOP ") ||
-         ScriptKeywordPresent(sql, " REPEAT ") ||
-         ScriptKeywordPresent(sql, "\nREPEAT ") ||
+         ScriptKeywordPresent(sql, " REPEAT") ||
+         ScriptKeywordPresent(sql, "\nREPEAT") ||
          (ScriptKeywordPresent(sql, " FOR ") &&
           ScriptKeywordPresent(sql, " IN ")) ||
          (ScriptKeywordPresent(sql, "\nFOR ") &&

@@ -1,0 +1,25 @@
+# exception_in_while: EXCEPTION handler nested inside a WHILE loop.
+name: scripting_exception_in_while
+description: |
+  A WHILE loop catches division-by-zero via an inner EXCEPTION block and
+  breaks out once the handler fires; final SELECT proves recovery.
+project_id: proj-scripting-exception-in-while
+query: |
+  BEGIN
+    DECLARE n INT64 DEFAULT 0;
+    DECLARE result STRING DEFAULT 'pending';
+    WHILE n < 2 DO
+      BEGIN
+        SET n = n + 1;
+        SELECT 1 / 0;
+      EXCEPTION WHEN ERROR THEN
+        SET result = 'caught';
+        BREAK;
+      END;
+    END WHILE;
+    SELECT result;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {result: caught}
