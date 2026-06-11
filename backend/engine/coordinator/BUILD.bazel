@@ -123,33 +123,24 @@ cc_library(
     ],
 )
 
-_GOOGLESQL_SCRIPTING_SRCS = select({
-    "//:googlesql_source": [
-        "script_googlesql_runner.cc",
-        "script_row_iterator.cc",
-        "script_statement_evaluator.cc",
-    ],
-    "//conditions:default": [],
-})
+_GOOGLESQL_SCRIPTING_SRCS = [
+    "script_googlesql_runner.cc",
+    "script_row_iterator.cc",
+    "script_statement_evaluator.cc",
+]
 
-_GOOGLESQL_SCRIPTING_HDRS = select({
-    "//:googlesql_source": [
-        "script_googlesql_runner.h",
-        "script_row_iterator.h",
-        "script_statement_evaluator.h",
-    ],
-    "//conditions:default": [],
-})
+_GOOGLESQL_SCRIPTING_HDRS = [
+    "script_googlesql_runner.h",
+    "script_row_iterator.h",
+    "script_statement_evaluator.h",
+]
 
-_GOOGLESQL_SCRIPTING_DEPS = select({
-    "//:googlesql_source": [
-        "@googlesql//googlesql/public:evaluator_table_iterator",
-        "@googlesql//googlesql/public:function",
-        "@googlesql//googlesql/public:parse_resume_location",
-        "@googlesql//googlesql/scripting:script_executor",
-    ],
-    "//conditions:default": [],
-})
+_GOOGLESQL_SCRIPTING_DEPS = [
+    "@googlesql//googlesql/public:evaluator_table_iterator",
+    "@googlesql//googlesql/public:function",
+    "@googlesql//googlesql/public:parse_resume_location",
+    "@googlesql//googlesql/scripting:script_executor",
+]
 
 cc_library(
     name = "local_coordinator_analyze",
@@ -216,10 +207,7 @@ cc_library(
         "script_executor_set.h",
         "script_execute_immediate.h",
     ] + _GOOGLESQL_SCRIPTING_HDRS,
-    local_defines = select({
-        "//:googlesql_source": ["BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1"],
-        "//conditions:default": [],
-    }),
+    local_defines = ["BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1"],
     deps = [
         ":local_coordinator_analyze",
         ":sql_preprocess",
