@@ -75,8 +75,7 @@ absl::StatusOr<std::vector<MergeSetAssignment>> ParseMergeUpdateItems(
       return absl::InternalError(
           "semantic/dml: MERGE UPDATE target column missing from table scan");
     }
-    sets.push_back(
-        {*std::move(parsed), item->set_value()->value(), root_type});
+    sets.push_back({*std::move(parsed), item->set_value()->value(), root_type});
   }
   return sets;
 }
@@ -134,19 +133,12 @@ absl::StatusOr<DmlStats> ExecuteMerge(
     const ::googlesql::ResolvedMergeStmt& merge,
     storage::Storage& storage,
     EvalContext& ctx) {
-  if (merge.returning() != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic/dml: MERGE THEN RETURN is deferred; INSERT/UPDATE/DELETE "
-        "returning is landed on dml_returning.cc");
-  }
   auto target_or = StorageTargetFor(merge, "MERGE");
   if (!target_or.ok()) return target_or.status();
   const catalog::StorageTable* target = *target_or;
   const schema::TableSchema& schema = target->bq_schema();
 
-  auto target_by_id =
-      BuildColumnIndexByColumnId(*merge.table_scan(), schema);
+  auto target_by_id = BuildColumnIndexByColumnId(*merge.table_scan(), schema);
   if (!target_by_id.ok()) return target_by_id.status();
 
   auto target_rows_or = ScanAllRows(storage, target->storage_table_id());
@@ -191,8 +183,8 @@ absl::StatusOr<DmlStats> ExecuteMerge(
   bool matched_mutates = false;
   for (int i = 0; i < merge.when_clause_list_size(); ++i) {
     const ::googlesql::ResolvedMergeWhen* when = merge.when_clause_list(i);
-    if (when != nullptr && when->match_type() ==
-                               ::googlesql::ResolvedMergeWhen::MATCHED &&
+    if (when != nullptr &&
+        when->match_type() == ::googlesql::ResolvedMergeWhen::MATCHED &&
         (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE ||
          when->action_type() == ::googlesql::ResolvedMergeWhen::DELETE)) {
       matched_mutates = true;
@@ -237,10 +229,11 @@ absl::StatusOr<DmlStats> ExecuteMerge(
             continue;
           }
           if (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
-            auto sets = ParseMergeUpdateItems(*when, schema, *merge.table_scan());
+            auto sets =
+                ParseMergeUpdateItems(*when, schema, *merge.table_scan());
             if (!sets.ok()) return sets.status();
-            absl::Status applied = ApplyMergeSets(st.row, *sets, st.matched_bind,
-                                                 schema, ctx);
+            absl::Status applied =
+                ApplyMergeSets(st.row, *sets, st.matched_bind, schema, ctx);
             if (!applied.ok()) return applied;
             st.acted = true;
             ++stats.updated_row_count;
@@ -276,15 +269,15 @@ absl::StatusOr<DmlStats> ExecuteMerge(
             const int idx =
                 IndexOfColumn(schema, when->insert_column_list(c).name());
             if (idx < 0) {
-              return absl::InternalError(absl::StrCat(
-                  "semantic/dml: MERGE INSERT column '",
-                  when->insert_column_list(c).name(),
-                  "' not found in target schema"));
+              return absl::InternalError(
+                  absl::StrCat("semantic/dml: MERGE INSERT column '",
+                               when->insert_column_list(c).name(),
+                               "' not found in target schema"));
             }
             column_idx.push_back(idx);
           }
-          auto built = BuildInsertRow(*when->insert_row(), column_idx, schema,
-                                      ctx);
+          auto built =
+              BuildInsertRow(*when->insert_row(), column_idx, schema, ctx);
           if (!built.ok()) return built.status();
           inserts.push_back(*std::move(built));
           src.acted = true;
@@ -308,10 +301,11 @@ absl::StatusOr<DmlStats> ExecuteMerge(
             continue;
           }
           if (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
-            auto sets = ParseMergeUpdateItems(*when, schema, *merge.table_scan());
+            auto sets =
+                ParseMergeUpdateItems(*when, schema, *merge.table_scan());
             if (!sets.ok()) return sets.status();
-            absl::Status applied = ApplyMergeSets(st.row, *sets, st.target_bind,
-                                                 schema, ctx);
+            absl::Status applied =
+                ApplyMergeSets(st.row, *sets, st.target_bind, schema, ctx);
             if (!applied.ok()) return applied;
             st.acted = true;
             ++stats.updated_row_count;
