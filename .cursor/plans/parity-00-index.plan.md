@@ -91,7 +91,7 @@ Plans 01–05 are independent of each other and can run in parallel
 | 08 | done | 134→136 pass (+2 udf fixtures; 6 scripting pre-existing) | 2b474a4, 6528457, bc4520b, a01a9fa | DuckDBStorage `__bqemu_routines`, write-through CREATE/DROP, startup rehydrate, routines catalog RPC/REST, JS local_stub + call-time UNIMPLEMENTED; restart e2e in gateway/e2e |
 | 09 | done | 142→145 total, 136→139 pass (+3 ddl fixtures; 6 scripting pre-existing) | 674bffb, 61ad17e | ALTER TABLE→control_op, MV full refresh, EXPORT/LOAD local file://, tracker+ROADMAP flips; gateway kDdl classify for EXPORT/LOAD; ResolvedCatalogColumnRef still (planned) |
 | 10 | done | 145 total / 139 pass (no regression) | 097d334 | multi-stream + SplitReadStream + analyzer row_restriction + PENDING/BatchCommit; Go PendingStream unskipped |
-| 11 | done | 145→148 total, 139→142 pass (+3 fixtures; 6 scripting pre-existing) | (pending commit) | RANGE numeric frames, REPEATABLE sample, WITH DEPTH transpiler, LIKE ANY list; weight/stratify + DATE RANGE + LIKE ANY subquery parse blocked |
+| 11 | done | 145→148 total, 139→142 pass (+3 fixtures; 6 scripting pre-existing) | 4501478 | RANGE numeric frames, REPEATABLE sample, WITH DEPTH transpiler, LIKE ANY list; weight/stratify + DATE RANGE + LIKE ANY subquery parse blocked |
 | 12 | pending | — | | |
 | 13 | done | 55 pinned (logical_functions.test) | 72a586a, c5e02ba | Go runner + CI wired; starter corpus subset gated |
 
