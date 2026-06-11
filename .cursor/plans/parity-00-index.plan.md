@@ -89,7 +89,7 @@ Plans 01–05 are independent of each other and can run in parallel
 | 06 | done | 129→134 pass (+5 DML fixtures) | 489c0ee, d41c299 | semantic MERGE matrix + DML RETURNING; compile fix for invalid merge.returning(); MERGE THEN RETURN deferred |
 | 07 | done | 134→140 pass (+6 fixtures) | f6ceec7 | CAST FORMAT/AT TIME ZONE, COLLATE und:ci, SELECT AS VALUE, CORRESPONDING; extended_cast/type_modifiers deferred |
 | 08 | done | 134→136 pass (+2 udf fixtures; 6 scripting pre-existing) | 2b474a4, 6528457, bc4520b, a01a9fa | DuckDBStorage `__bqemu_routines`, write-through CREATE/DROP, startup rehydrate, routines catalog RPC/REST, JS local_stub + call-time UNIMPLEMENTED; restart e2e in gateway/e2e |
-| 09 | done | 142→145 total, 136→139 pass (+3 ddl fixtures; 6 scripting pre-existing) | 674bffb | ALTER TABLE→control_op, MV full refresh, EXPORT/LOAD local file://, tracker+ROADMAP flips; ResolvedCatalogColumnRef still (planned) — no landed DDL shape references it |
+| 09 | done | 142→145 total, 136→139 pass (+3 ddl fixtures; 6 scripting pre-existing) | 674bffb, 61ad17e | ALTER TABLE→control_op, MV full refresh, EXPORT/LOAD local file://, tracker+ROADMAP flips; gateway kDdl classify for EXPORT/LOAD; ResolvedCatalogColumnRef still (planned) |
 | 10 | pending | — | | |
 | 11 | pending | — | | |
 | 12 | pending | — | | |
