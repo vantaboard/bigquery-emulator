@@ -102,6 +102,38 @@ func (f *materializeFakeCatalog) ListTables(
 	return &enginepb.ListTablesResponse{}, nil
 }
 
+func (f *materializeFakeCatalog) ListRoutines(
+	_ context.Context,
+	_ *enginepb.ListRoutinesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRoutinesResponse, error) {
+	return &enginepb.ListRoutinesResponse{}, nil
+}
+
+func (f *materializeFakeCatalog) GetRoutine(
+	_ context.Context,
+	_ *enginepb.GetRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.GetRoutineResponse, error) {
+	return nil, status.Error(codes.NotFound, "routine not found")
+}
+
+func (f *materializeFakeCatalog) UpsertRoutine(
+	_ context.Context,
+	_ *enginepb.UpsertRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UpsertRoutineResponse, error) {
+	return &enginepb.UpsertRoutineResponse{}, nil
+}
+
+func (f *materializeFakeCatalog) DeleteRoutine(
+	_ context.Context,
+	_ *enginepb.DeleteRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DeleteRoutineResponse, error) {
+	return &enginepb.DeleteRoutineResponse{}, nil
+}
+
 func TestExternalMaterializeCSVFromFakeGCS(t *testing.T) {
 	const csvBody = "name,post_abbr\nWashington,WA\nWyoming,WY\nWisconsin,WI\nWest Virginia,WV\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

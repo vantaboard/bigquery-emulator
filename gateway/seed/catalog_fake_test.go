@@ -106,3 +106,35 @@ func (f *fakeCatalogClient) ListTables(
 ) (*enginepb.ListTablesResponse, error) {
 	return &enginepb.ListTablesResponse{}, nil
 }
+
+func (f *fakeCatalogClient) ListRoutines(
+	_ context.Context,
+	_ *enginepb.ListRoutinesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRoutinesResponse, error) {
+	return &enginepb.ListRoutinesResponse{}, nil
+}
+
+func (f *fakeCatalogClient) GetRoutine(
+	_ context.Context,
+	_ *enginepb.GetRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.GetRoutineResponse, error) {
+	return &enginepb.GetRoutineResponse{}, nil
+}
+
+func (f *fakeCatalogClient) UpsertRoutine(
+	_ context.Context,
+	_ *enginepb.UpsertRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UpsertRoutineResponse, error) {
+	return &enginepb.UpsertRoutineResponse{}, nil
+}
+
+func (f *fakeCatalogClient) DeleteRoutine(
+	_ context.Context,
+	_ *enginepb.DeleteRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DeleteRoutineResponse, error) {
+	return &enginepb.DeleteRoutineResponse{}, nil
+}

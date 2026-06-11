@@ -71,6 +71,22 @@ class CatalogService final : public v1::Catalog::Service {
                           const v1::ListRowsRequest* request,
                           v1::ListRowsResponse* response) override;
 
+  ::grpc::Status ListRoutines(::grpc::ServerContext* context,
+                              const v1::ListRoutinesRequest* request,
+                              v1::ListRoutinesResponse* response) override;
+
+  ::grpc::Status GetRoutine(::grpc::ServerContext* context,
+                            const v1::GetRoutineRequest* request,
+                            v1::GetRoutineResponse* response) override;
+
+  ::grpc::Status UpsertRoutine(::grpc::ServerContext* context,
+                               const v1::UpsertRoutineRequest* request,
+                               v1::UpsertRoutineResponse* response) override;
+
+  ::grpc::Status DeleteRoutine(::grpc::ServerContext* context,
+                               const v1::DeleteRoutineRequest* request,
+                               v1::DeleteRoutineResponse* response) override;
+
  private:
   backend::storage::Storage* storage_;
 };

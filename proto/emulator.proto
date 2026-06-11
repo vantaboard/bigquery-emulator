@@ -56,6 +56,13 @@ service Catalog {
   // gateway can synthesize BigQuery's pageToken semantics.
   rpc InsertRows(InsertRowsRequest) returns (InsertRowsResponse);
   rpc ListRows(ListRowsRequest) returns (ListRowsResponse);
+
+  // Routine metadata persisted in `catalog.duckdb` for REST
+  // round-trip and cross-restart SQL UDF / TVF / procedure replay.
+  rpc ListRoutines(ListRoutinesRequest) returns (ListRoutinesResponse);
+  rpc GetRoutine(GetRoutineRequest) returns (GetRoutineResponse);
+  rpc UpsertRoutine(UpsertRoutineRequest) returns (UpsertRoutineResponse);
+  rpc DeleteRoutine(DeleteRoutineRequest) returns (DeleteRoutineResponse);
 }
 
 message DatasetRef {
@@ -157,6 +164,46 @@ message ListRowsRequest {
   // returns every remaining row from `start_index`.
   int64 max_results = 3;
 }
+message RoutineRef {
+  string project_id = 1;
+  string dataset_id = 2;
+  string routine_id = 3;
+}
+
+message RoutineDescriptor {
+  RoutineRef routine = 1;
+  // SCALAR_FUNCTION | AGGREGATE_FUNCTION | TABLE_VALUED_FUNCTION | PROCEDURE
+  string routine_type = 2;
+  string language = 3;
+  string definition_body = 4;
+  string ddl_sql = 5;
+  string signature_json = 6;
+}
+
+message ListRoutinesRequest {
+  DatasetRef dataset = 1;
+}
+message ListRoutinesResponse {
+  repeated RoutineDescriptor routines = 1;
+}
+
+message GetRoutineRequest {
+  RoutineRef routine = 1;
+}
+message GetRoutineResponse {
+  RoutineDescriptor routine = 1;
+}
+
+message UpsertRoutineRequest {
+  RoutineDescriptor routine = 1;
+}
+message UpsertRoutineResponse {}
+
+message DeleteRoutineRequest {
+  RoutineRef routine = 1;
+}
+message DeleteRoutineResponse {}
+
 message ListRowsResponse {
   repeated DataRow rows = 1;
   // Total number of rows in the table at the moment the request was

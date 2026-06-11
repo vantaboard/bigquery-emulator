@@ -5,6 +5,8 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // fakeCatalogClient is a hand-rolled stub of [enginepb.CatalogClient]
@@ -177,4 +179,36 @@ func (f *fakeCatalogClient) ListTables(
 		return f.listTablesFn(ctx, in)
 	}
 	return &enginepb.ListTablesResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListRoutines(
+	_ context.Context,
+	_ *enginepb.ListRoutinesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRoutinesResponse, error) {
+	return &enginepb.ListRoutinesResponse{}, nil
+}
+
+func (f *fakeCatalogClient) GetRoutine(
+	_ context.Context,
+	_ *enginepb.GetRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.GetRoutineResponse, error) {
+	return nil, status.Error(codes.NotFound, "routine not found")
+}
+
+func (f *fakeCatalogClient) UpsertRoutine(
+	_ context.Context,
+	_ *enginepb.UpsertRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UpsertRoutineResponse, error) {
+	return &enginepb.UpsertRoutineResponse{}, nil
+}
+
+func (f *fakeCatalogClient) DeleteRoutine(
+	_ context.Context,
+	_ *enginepb.DeleteRoutineRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DeleteRoutineResponse, error) {
+	return &enginepb.DeleteRoutineResponse{}, nil
 }

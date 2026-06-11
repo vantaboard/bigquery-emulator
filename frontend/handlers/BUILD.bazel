@@ -24,9 +24,18 @@ cc_library(
 
 cc_library(
     name = "catalog_handler",
-    srcs = ["catalog.cc"],
+    srcs = [
+        "catalog.cc",
+        "catalog_routines.cc",
+    ],
     hdrs = ["catalog.h"],
     deps = [
+        ":handler_common",
+        "//backend/catalog:procedure_registry",
+        "//backend/catalog:routine_persistence",
+        "//backend/catalog:tvf_registry",
+        "//backend/catalog:udf_registry",
+        "//backend/engine/coordinator:routine_rehydrate",
         "//backend/schema",
         "//backend/storage",
         "//proto:emulator_cc_grpc",

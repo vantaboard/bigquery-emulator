@@ -91,7 +91,12 @@ func RoutineList(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
-		all := routineStore(&deps).List(projectID, datasetID, r.URL.Query().Get("filter"))
+		var all []bqtypes.Routine
+		if routineCatalogEnabled(&deps) {
+			all = catalogListRoutines(r.Context(), &deps, projectID, datasetID)
+		} else {
+			all = routineStore(&deps).List(projectID, datasetID, r.URL.Query().Get("filter"))
+		}
 		items := make([]bqtypes.Routine, 0, len(all))
 		for _, rt := range all {
 			items = append(items, routineListEntry(rt))
@@ -116,7 +121,13 @@ func RoutineList(deps Dependencies) http.HandlerFunc {
 func RoutineGet(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, routineID := routineIDFromPath(r)
-		rt, ok := routineStore(&deps).Get(projectID, datasetID, routineID)
+		var rt bqtypes.Routine
+		var ok bool
+		if routineCatalogEnabled(&deps) {
+			rt, ok = catalogGetRoutine(r.Context(), &deps, projectID, datasetID, routineID)
+		} else {
+			rt, ok = routineStore(&deps).Get(projectID, datasetID, routineID)
+		}
 		if !ok {
 			writeError(w, http.StatusNotFound, reasonNotFound,
 				"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
@@ -155,11 +166,24 @@ func RoutineInsert(deps Dependencies) http.HandlerFunc {
 			rt.Language = defaultRoutineLanguage
 		}
 		out := routineResource(projectID, datasetID, routineID, rt)
-		if !routineStore(&deps).Insert(out) {
+		if routineCatalogEnabled(&deps) {
+			if _, exists := catalogGetRoutine(r.Context(), &deps, projectID, datasetID, routineID); exists {
+				writeError(w, http.StatusConflict, reasonDuplicate,
+					"Already Exists: Routine "+projectID+":"+datasetID+"."+routineID)
+				return
+			}
+			if err := catalogUpsertRoutine(r.Context(), &deps, out); err != nil {
+				if grpcToHTTPError(w, err) {
+					return
+				}
+				return
+			}
+		} else if !routineStore(&deps).Insert(out) {
 			writeError(w, http.StatusConflict, reasonDuplicate,
 				"Already Exists: Routine "+projectID+":"+datasetID+"."+routineID)
 			return
 		}
+		routineStore(&deps).Upsert(out)
 		writeJSON(w, http.StatusOK, out)
 	}
 }
@@ -183,6 +207,14 @@ func RoutineUpdate(deps Dependencies) http.HandlerFunc {
 		out := routineResource(projectID, datasetID, routineID, rt)
 		out.CreationTime = existing.CreationTime
 		out.Etag = routines.MintEtag()
+		if routineCatalogEnabled(&deps) {
+			if err := catalogUpsertRoutine(r.Context(), &deps, out); err != nil {
+				if grpcToHTTPError(w, err) {
+					return
+				}
+				return
+			}
+		}
 		routineStore(&deps).Upsert(out)
 		writeJSON(w, http.StatusOK, out)
 	}
@@ -194,10 +226,20 @@ func RoutineUpdate(deps Dependencies) http.HandlerFunc {
 func RoutineDelete(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, routineID := routineIDFromPath(r)
+		if routineCatalogEnabled(&deps) {
+			if err := catalogDeleteRoutine(r.Context(), &deps, projectID, datasetID, routineID); err != nil {
+				if grpcToHTTPError(w, err) {
+					return
+				}
+				return
+			}
+		}
 		if !routineStore(&deps).Delete(projectID, datasetID, routineID) {
-			writeError(w, http.StatusNotFound, reasonNotFound,
-				"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
-			return
+			if !routineCatalogEnabled(&deps) {
+				writeError(w, http.StatusNotFound, reasonNotFound,
+					"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
+				return
+			}
 		}
 		writeJSON(w, http.StatusOK, struct{}{})
 	}

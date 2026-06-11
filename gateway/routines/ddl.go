@@ -14,6 +14,7 @@ const (
 	routineLanguageSQL        = "SQL"
 	sqlTypeArray              = "ARRAY"
 	sqlTypeStruct             = "STRUCT"
+	sqlTypeAnyType            = "ANY TYPE"
 )
 
 // RegisterFromDDL parses CREATE FUNCTION / CREATE PROCEDURE DDL and
@@ -27,6 +28,12 @@ func RegisterFromDDL(store *Store, projectID, defaultDatasetID, sql string) *bqt
 	store.Upsert(rt)
 	ref := rt.RoutineReference
 	return &ref
+}
+
+// ParseCreateRoutineDDL parses CREATE FUNCTION / PROCEDURE DDL into a
+// Routine snapshot (used by REST/catalog round-trip helpers).
+func ParseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Routine, bool) {
+	return parseCreateRoutineDDL(projectID, defaultDatasetID, sql)
 }
 
 func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Routine, bool) {
