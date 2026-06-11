@@ -107,19 +107,15 @@ std::string Transpiler::EmitSetOperationScan(
   // semantics are documented on the row in `SHAPE_TRACKER.md`.
   //
   // Fallbacks (return ""):
-  //   * `column_match_mode != BY_POSITION` -- `CORRESPONDING` /
-  //     `CORRESPONDING_BY` need name-based reshuffling that the
-  //     positional projection in `EmitSetOperationItem` does not
-  //     handle yet.
   //   * Fewer than two inputs (a malformed AST the analyzer would
   //     not produce, but the GoogleSQL contract says "at least
   //     two", so we guard defensively).
   //   * Any item whose child scan is on the empty-string fallback.
+  //
+  // `CORRESPONDING` / `CORRESPONDING_BY` rely on the analyzer's
+  // per-item `output_column_list` mapping; `EmitSetOperationItem`
+  // projects each arm onto the parent's `column_list` names.
   if (node == nullptr) return "";
-  if (node->column_match_mode() !=
-      ::googlesql::ResolvedSetOperationScan::BY_POSITION) {
-    return "";
-  }
   // `column_propagation_mode` is documented as informational for
   // engines; for BY_POSITION matching it is essentially
   // load-bearing only when CORRESPONDING is in play. Touch the

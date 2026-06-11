@@ -110,12 +110,6 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     const ::googlesql::ResolvedQueryStmt& query_stmt,
     const FrameStack* script_variables,
     const ::googlesql::SystemVariableValuesMap* script_system_variables) {
-  if (query_stmt.is_value_table()) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: SELECT AS VALUE / VALUE TABLE shapes are owned by "
-        "docs/ENGINE_POLICY.md");
-  }
   const ::googlesql::ResolvedScan* query = query_stmt.query();
   if (query == nullptr) {
     return absl::InvalidArgumentError(

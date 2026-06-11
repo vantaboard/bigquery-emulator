@@ -1,0 +1,14 @@
+# cast_timestamp_at_timezone: CAST(TIMESTAMP ... AT TIME ZONE) with FORMAT.
+name: cast_timestamp_at_timezone
+description: |
+  CAST with AT TIME ZONE promotes to semantic_executor. The analyzer surfaces
+  AT TIME ZONE only after FORMAT in this parser generation; TIMESTAMP→DATETIME
+  AT TIME ZONE without FORMAT is implemented in eval_expr_cast.cc but lacks a
+  parseable SQL surface today.
+project_id: proj-scalar-cast-tz
+query: |
+  SELECT CAST(TIMESTAMP '2008-12-25 00:00:00+00:00' AS STRING FORMAT 'YYYY-MM-DD HH24:MI:SS' AT TIME ZONE 'UTC') AS ts
+expected:
+  route: semantic_executor
+  rows:
+    - {ts: "2008-12-25 00:00:00"}

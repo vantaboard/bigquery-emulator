@@ -1,0 +1,12 @@
+# cast_format_date_to_string: CAST(... AS STRING FORMAT '...').
+name: cast_format_date_to_string
+description: |
+  CAST(DATE AS STRING FORMAT) uses the semantic executor's
+  googlesql CastFormatDateToString path.
+project_id: proj-scalar-cast-format-date
+query: |
+  SELECT CAST(DATE '2018-01-30' AS STRING FORMAT 'YYYY') AS formatted
+expected:
+  route: semantic_executor
+  rows:
+    - {formatted: "2018"}

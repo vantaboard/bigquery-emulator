@@ -8,6 +8,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
 #include "backend/engine/semantic/error.h"
@@ -195,6 +196,23 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
                 return !nulls_first;
               }
               bool less = ValueLess(va, vb);
+              if (item->collation_name() != nullptr &&
+                  item->collation_name()->node_kind() ==
+                      ::googlesql::RESOLVED_LITERAL &&
+                  item->collation_name()->type()->kind() ==
+                      ::googlesql::TYPE_STRING &&
+                  va.type_kind() == ::googlesql::TYPE_STRING &&
+                  vb.type_kind() == ::googlesql::TYPE_STRING) {
+                const std::string collation =
+                    item->collation_name()
+                        ->GetAs<::googlesql::ResolvedLiteral>()
+                        ->value()
+                        .string_value();
+                if (collation == "und:ci") {
+                  less = absl::AsciiStrToLower(va.string_value()) <
+                         absl::AsciiStrToLower(vb.string_value());
+                }
+              }
               if (item->is_descending()) less = !less;
               return less;
             }

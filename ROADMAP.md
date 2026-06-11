@@ -476,6 +476,18 @@ public-facing policy.
   ANY / ALL subquery family remain deliberately out of the DuckDB
   fast path's scope and surface UNIMPLEMENTED; see
   `docs/ENGINE_POLICY.md`
+- 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
+  `CAST ... AT TIME ZONE` promote to the semantic executor
+  (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);
+  extended-cast / type-modifier shapes still surface `UNIMPLEMENTED`.
+  `ORDER BY ... COLLATE 'und:ci'` sorts case-insensitively on the
+  semantic path (`scan_eval_scan_impl.cc`). `SELECT AS VALUE`
+  (`is_value_table()`) evaluates on the semantic executor. Set-op
+  `CORRESPONDING` / `CORRESPONDING BY` reuse the analyzer's per-item
+  column projection on `duckdb_native` (pinned by
+  `conformance/fixtures/scalar/cast_*`, `order_by_collate_und_ci.yaml`,
+  `select_as_value_scalar.yaml`, and
+  `conformance/fixtures/setops/set_op_corresponding_union_all.yaml`).
 
 ## DML / DDL
 
@@ -633,7 +645,7 @@ and
   diffs `expected.rows` against the gateway's wire response with
   typed cell comparison (INT64 as `*big.Rat`, FLOAT64 with epsilon,
   RFC3339 / SQL-form timestamps, ...), supports `ordered` /
-  `unordered` / `schema_only` matching modes. 100 fixtures today
+  `unordered` / `schema_only` matching modes. 140 fixtures today
   spanning SELECT shapes, GROUP BY / aggregates, JOINs, CTEs /
   subqueries, DML / DDL round-trips, functions, scripting / UDFs,
   structural errors, and schema-only smokes (plus the

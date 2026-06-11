@@ -1,0 +1,17 @@
+# set_op_corresponding_union_all: UNION ALL CORRESPONDING column match.
+name: set_op_corresponding_union_all
+description: |
+  CORRESPONDING set operations project each arm by name via the analyzer's
+  output_column_list mapping before the DuckDB UNION ALL keyword.
+project_id: proj-setop-corresponding
+query: |
+  SELECT x, y FROM (
+    SELECT 1 AS x, 'a' AS y
+    UNION ALL CORRESPONDING
+    SELECT 'b' AS y, 2 AS x
+  )
+expected:
+  route: duckdb_native
+  rows:
+    - {x: "1", y: "a"}
+    - {x: "2", y: "b"}

@@ -1,0 +1,12 @@
+# select_as_value_scalar: SELECT AS VALUE scalar value table.
+name: select_as_value_scalar
+description: |
+  SELECT AS VALUE promotes ResolvedQueryStmt(is_value_table=true) to
+  semantic_executor and returns the anonymous single-column value directly.
+project_id: proj-scalar-select-as-value
+query: |
+  SELECT AS VALUE 42 AS n
+expected:
+  route: semantic_executor
+  rows:
+    - {$value_column: "42"}

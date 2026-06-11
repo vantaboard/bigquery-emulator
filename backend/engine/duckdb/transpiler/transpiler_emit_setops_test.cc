@@ -320,16 +320,25 @@ std::unique_ptr<::googlesql::ResolvedSetOperationScan> MakeTestSetOperationScan(
   return scan;
 }
 
-TEST_F(TranspilerTest, EmitSetOperationScanCorrespondingFallsBack) {
-  // `CORRESPONDING` reshuffles columns by name -- our positional
-  // projection in `EmitSetOperationItem` does not implement the
-  // reshuffle, so the emit propagates "" and the engine surfaces
-  // UNIMPLEMENTED.
-  auto scan = MakeTestSetOperationScan(
-      ::googlesql::ResolvedSetOperationScan::UNION_ALL,
-      ::googlesql::ResolvedSetOperationScan::CORRESPONDING);
+TEST_F(TranspilerTest, EmitSetOperationScanCorrespondingEmitsKeyword) {
+  // `CORRESPONDING` uses the analyzer's per-item `output_column_list`
+  // mapping; `EmitSetOperationItem` projects each arm before the keyword.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT x, y FROM (SELECT 1 AS x, 'a' AS y UNION ALL CORRESPONDING "
+      "SELECT 'b' AS y, 2 AS x)");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);
+  const auto* set_op = scan->GetAs<::googlesql::ResolvedSetOperationScan>();
+  ASSERT_EQ(set_op->column_match_mode(),
+            ::googlesql::ResolvedSetOperationScan::CORRESPONDING);
   TestTranspiler t;
-  EXPECT_EQ(t.EmitSetOperationScan(scan.get()), "");
+  const std::string sql = t.EmitSetOperationScan(set_op);
+  EXPECT_FALSE(sql.empty());
+  EXPECT_NE(sql.find(" UNION ALL "), std::string::npos);
+  EXPECT_NE(sql.find("\"x\""), std::string::npos);
+  EXPECT_NE(sql.find("\"y\""), std::string::npos);
 }
 
 TEST_F(TranspilerTest, EmitSetOperationScanIntersectAllEmitsKeyword) {

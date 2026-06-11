@@ -1,0 +1,31 @@
+# order_by_collate_und_ci: ORDER BY ... COLLATE 'und:ci'.
+name: order_by_collate_und_ci
+description: |
+  COLLATE in ORDER BY promotes the query to semantic_executor; und:ci
+  sorts STRING case-insensitively while preserving NULL ordering defaults.
+project_id: proj-scalar-order-by-collate
+dataset_id: ds_scalar_order_by_collate
+setup:
+  - dataset: ds_scalar_order_by_collate
+  - table:
+      dataset: ds_scalar_order_by_collate
+      id: words
+      schema:
+        - {name: name, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_scalar_order_by_collate
+      table: words
+      rows:
+        - {name: foo}
+        - {name: Bar}
+        - {name: apple}
+query: |
+  SELECT name
+  FROM ds_scalar_order_by_collate.words
+  ORDER BY name COLLATE 'und:ci'
+expected:
+  route: semantic_executor
+  rows:
+    - {name: apple}
+    - {name: Bar}
+    - {name: foo}

@@ -80,6 +80,11 @@ std::optional<absl::StatusOr<Value>> TryCastValueToType(
     const ::googlesql::Type* target,
     bool return_null_on_error);
 
+std::optional<absl::StatusOr<Value>> TryEvalCastFormatAndTimezone(
+    const ::googlesql::ResolvedCast& cast,
+    Value inner,
+    const ::googlesql::Type* target);
+
 absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);

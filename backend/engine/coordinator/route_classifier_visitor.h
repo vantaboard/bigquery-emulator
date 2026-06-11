@@ -49,6 +49,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedArrayScan* node) override;
   absl::Status VisitResolvedCast(
       const ::googlesql::ResolvedCast* node) override;
+  absl::Status VisitResolvedOrderByScan(
+      const ::googlesql::ResolvedOrderByScan* node) override;
   absl::Status VisitResolvedInsertStmt(
       const ::googlesql::ResolvedInsertStmt* node) override;
   absl::Status VisitResolvedUpdateStmt(

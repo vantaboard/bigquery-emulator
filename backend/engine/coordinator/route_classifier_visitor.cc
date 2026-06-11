@@ -8,6 +8,7 @@
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
+#include "googlesql/resolved_ast/resolved_collation.h"
 #include "googlesql/resolved_ast/resolved_node.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
@@ -222,6 +223,23 @@ absl::Status RouteClassifierVisitor::VisitResolvedCast(
     MaybePromote(Disposition::kSemanticExecutor, "ResolvedCast(extended)");
   }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedCast(node);
+}
+
+absl::Status RouteClassifierVisitor::VisitResolvedOrderByScan(
+    const ::googlesql::ResolvedOrderByScan* node) {
+  if (node != nullptr) {
+    for (int i = 0; i < node->order_by_item_list_size(); ++i) {
+      const ::googlesql::ResolvedOrderByItem* item =
+          node->order_by_item_list(i);
+      if (item != nullptr && (item->collation_name() != nullptr ||
+                              item->collation().HasCollation())) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "ResolvedOrderByScan(collation)");
+        break;
+      }
+    }
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedOrderByScan(node);
 }
 
 bool RouteClassifierVisitor::MergeRequiresSemanticExecutor(

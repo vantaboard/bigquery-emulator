@@ -292,6 +292,24 @@ fast path keeps the standalone cases on `duckdb_native`.
 | Lateral join scan | `... JOIN LATERAL (...)` (`is_lateral`) | `semantic_executor` | unit tests (`MaterializeJoinScan`) |
 | Correlated subquery | `EXISTS (SELECT 1 FROM r WHERE r.k = o.k)` | `semantic_executor` | `cte_subquery/subquery_expr_correlated_exists.yaml` |
 
+## Cast extensions, COLLATE, value tables, set-op CORRESPONDING
+
+These expression / projection edges promote divergent subsets off the
+DuckDB fast path; the semantic executor owns exact BigQuery semantics
+where noted.
+
+| Family | Representative SQL | Route | Conformance |
+|---|---|---|---|
+| CAST FORMAT | `CAST(DATE '2018-01-30' AS STRING FORMAT 'YYYY')` | `semantic_executor` | `scalar/cast_format_date_to_string.yaml`, `cast_format_parse_date.yaml` |
+| CAST AT TIME ZONE | `CAST(TIMESTAMP ... AS STRING AT TIME ZONE 'UTC')` | `semantic_executor` | `scalar/cast_timestamp_at_timezone.yaml` |
+| COLLATE in ORDER BY | `ORDER BY name COLLATE 'und:ci'` | `semantic_executor` | `scalar/order_by_collate_und_ci.yaml` |
+| SELECT AS VALUE | `SELECT AS VALUE 42 AS n` | `semantic_executor` | `scalar/select_as_value_scalar.yaml` |
+| Set-op CORRESPONDING | `UNION ALL CORRESPONDING` | `duckdb_native` (subset) | `setops/set_op_corresponding_union_all.yaml` |
+
+Extended-cast / type-modifier casts (`STRING(n)`, `NUMERIC(p,s)`, …)
+still surface `UNIMPLEMENTED` on the semantic path until a follow-up
+plan lands them.
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).
