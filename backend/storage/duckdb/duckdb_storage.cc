@@ -86,8 +86,13 @@ absl::StatusOr<std::unique_ptr<DuckDBStorage>> DuckDBStorage::Open(
         absl::StrCat("DuckDBStorage::Open: duckdb_connect failed for ",
                      catalog_path.string()));
   }
-  return std::unique_ptr<DuckDBStorage>(
+  auto storage = std::unique_ptr<DuckDBStorage>(
       new DuckDBStorage(std::string(data_dir), std::move(impl)));
+  absl::Status init = storage->InitCatalogTables();
+  if (!init.ok()) {
+    return init;
+  }
+  return storage;
 }
 
 std::string DuckDBStorage::DatasetDir(absl::string_view project_id,

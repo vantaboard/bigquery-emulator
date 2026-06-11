@@ -55,6 +55,41 @@ inline bool operator==(const TableId& a, const TableId& b) {
          a.table_id == b.table_id;
 }
 
+// Stable identifiers for persisted routines (UDF / UDAF / TVF /
+// procedure). Mirrors the BigQuery `RoutineReference` REST shape.
+struct RoutineId {
+  std::string project_id;
+  std::string dataset_id;
+  std::string routine_id;
+};
+
+inline bool operator==(const RoutineId& a, const RoutineId& b) {
+  return a.project_id == b.project_id && a.dataset_id == b.dataset_id &&
+         a.routine_id == b.routine_id;
+}
+
+// Kind of routine stored in `catalog.duckdb`. Values are persisted as
+// the lowercase snake strings below (see duckdb_storage_routines.cc).
+enum class RoutineKind {
+  kScalarFunction = 0,
+  kAggregateFunction,
+  kTableValuedFunction,
+  kProcedure,
+};
+
+// Durable routine metadata. `ddl_sql` carries the original CREATE
+// statement (the source of truth for re-analysis at rehydrate time);
+// `signature_json` stores argument metadata (including ANY TYPE
+// markers) for REST round-trip without re-parsing the DDL body.
+struct RoutineRecord {
+  RoutineId id;
+  RoutineKind kind = RoutineKind::kScalarFunction;
+  std::string language;
+  std::string ddl_sql;
+  bool is_temp = false;
+  std::string signature_json;
+};
+
 // Engine-agnostic cell value. The variant covers the BigQuery scalar
 // types plus ARRAY and STRUCT containers.
 //
@@ -320,6 +355,23 @@ class Storage {
   // exist.
   [[nodiscard]] virtual absl::StatusOr<std::unique_ptr<RowIterator>>
   CreateReadStream(const TableId& id, const ReadFilter& filter) const = 0;
+
+  // ------------------------------------------------------------------
+  // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the
+  // per-project registries can rehydrate across engine restarts.
+  // `UpsertRoutine` replaces an existing row keyed by
+  // (project_id, dataset_id, routine_id). Temp routines (`is_temp`)
+  // are accepted for API symmetry but rehydration skips them.
+  // ------------------------------------------------------------------
+  [[nodiscard]] virtual absl::Status UpsertRoutine(
+      const RoutineRecord& record) = 0;
+  [[nodiscard]] virtual absl::Status DeleteRoutine(const RoutineId& id) = 0;
+  [[nodiscard]] virtual absl::StatusOr<RoutineRecord> GetRoutine(
+      const RoutineId& id) const = 0;
+  [[nodiscard]] virtual absl::StatusOr<std::vector<RoutineRecord>> ListRoutines(
+      const DatasetId& dataset_id) const = 0;
+  [[nodiscard]] virtual absl::StatusOr<std::vector<RoutineRecord>>
+  ListAllRoutines() const = 0;
 };
 
 }  // namespace storage

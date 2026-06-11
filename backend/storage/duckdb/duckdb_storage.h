@@ -105,6 +105,17 @@ class DuckDBStorage : public Storage {
   absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
       const TableId& id, const ReadFilter& filter) const override;
 
+  absl::Status UpsertRoutine(const RoutineRecord& record) override;
+  absl::Status DeleteRoutine(const RoutineId& id) override;
+  absl::StatusOr<RoutineRecord> GetRoutine(const RoutineId& id) const override;
+  absl::StatusOr<std::vector<RoutineRecord>> ListRoutines(
+      const DatasetId& dataset_id) const override;
+  absl::StatusOr<std::vector<RoutineRecord>> ListAllRoutines() const override;
+
+  // Ensures catalog metadata tables (e.g. `__bqemu_routines`) exist.
+  // Called from `Open` and idempotently before routine CRUD.
+  absl::Status InitCatalogTables();
+
   // Pimpl: keeps the DuckDB C handles out of this header so the
   // engine-agnostic Storage signatures stay enforceable from the
   // include graph alone (callers cannot accidentally reach into
