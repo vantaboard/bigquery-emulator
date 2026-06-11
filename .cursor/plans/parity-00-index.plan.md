@@ -88,7 +88,7 @@ Plans 01–05 are independent of each other and can run in parallel
 | 05 | done | 122→129 pass (scripting lane 11/11) | 396ea98, ca99944 | IF/WHILE/EXECUTE IMMEDIATE (396ea98); EXCEPTION/@@error.*/RAISE + tracker flips + gateway child-job fix |
 | 06 | done | 129→134 pass (+5 DML fixtures) | 489c0ee, d41c299 | semantic MERGE matrix + DML RETURNING; compile fix for invalid merge.returning(); MERGE THEN RETURN deferred |
 | 07 | done | 134→140 pass (+6 fixtures) | f6ceec7 | CAST FORMAT/AT TIME ZONE, COLLATE und:ci, SELECT AS VALUE, CORRESPONDING; extended_cast/type_modifiers deferred |
-| 08 | done | 134→136 pass (+2 udf fixtures; 6 scripting pre-existing) | (pending commit) | DuckDBStorage `__bqemu_routines`, write-through CREATE/DROP, startup rehydrate, routines catalog RPC/REST, JS local_stub + call-time UNIMPLEMENTED; restart e2e in gateway/e2e |
+| 08 | done | 134→136 pass (+2 udf fixtures; 6 scripting pre-existing) | 2b474a4, 6528457, bc4520b, a01a9fa | DuckDBStorage `__bqemu_routines`, write-through CREATE/DROP, startup rehydrate, routines catalog RPC/REST, JS local_stub + call-time UNIMPLEMENTED; restart e2e in gateway/e2e |
 | 09 | pending | — | | |
 | 10 | pending | — | | |
 | 11 | pending | — | | |
