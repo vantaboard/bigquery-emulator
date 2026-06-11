@@ -551,9 +551,10 @@ public-facing policy.
   are in `passing/stored_procedures/` (2026-06-07). **Landed:** `SET`
   assignment, `IF`/`WHILE`, `EXECUTE IMMEDIATE`, `BEGIN…EXCEPTION` with
   `@@error.message` / `@@error.statement_text`, and `RAISE USING MESSAGE`
-  (conformance/fixtures/scripting/, 2026-06-10). `LOOP`/`FOR…IN`/`REPEAT`
-  and nested exception edge cases remain open where not yet pinned.
-  **Landed:** `CREATE FUNCTION` / `CREATE TABLE FUNCTION` /
+  (conformance/fixtures/scripting/, 2026-06-10). **Landed:** `LOOP`/`BREAK`,
+  `FOR…IN`, `REPEAT…UNTIL`, and nested `EXCEPTION` inside `WHILE` (pinned by
+  `loop_break_accumulation.yaml`, `for_in_sum.yaml`, `repeat_until.yaml`,
+  `exception_in_while.yaml`). **Landed:** `CREATE FUNCTION` / `CREATE TABLE FUNCTION` /
   `CREATE PROCEDURE` write through to `DuckDBStorage` (`__bqemu_routines`)
   and rehydrate across engine restarts; `DROP FUNCTION` removes registry +
   storage rows. REST `routines.*` delegates to `Catalog` RPCs backed by
