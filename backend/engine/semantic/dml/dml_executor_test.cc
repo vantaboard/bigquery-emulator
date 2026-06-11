@@ -147,6 +147,25 @@ class FakeStorage : public storage::Storage {
       const storage::ReadFilter& /*filter*/) const override {
     return ScanRows(id);
   }
+  absl::Status UpsertRoutine(
+      const storage::RoutineRecord& /*record*/) override {
+    return absl::UnimplementedError("FakeStorage::UpsertRoutine");
+  }
+  absl::Status DeleteRoutine(const storage::RoutineId& /*id*/) override {
+    return absl::UnimplementedError("FakeStorage::DeleteRoutine");
+  }
+  absl::StatusOr<storage::RoutineRecord> GetRoutine(
+      const storage::RoutineId& /*id*/) const override {
+    return absl::UnimplementedError("FakeStorage::GetRoutine");
+  }
+  absl::StatusOr<std::vector<storage::RoutineRecord>> ListRoutines(
+      const storage::DatasetId& /*dataset_id*/) const override {
+    return absl::UnimplementedError("FakeStorage::ListRoutines");
+  }
+  absl::StatusOr<std::vector<storage::RoutineRecord>> ListAllRoutines()
+      const override {
+    return absl::UnimplementedError("FakeStorage::ListAllRoutines");
+  }
 
  private:
   static std::string Key(const storage::TableId& id) {

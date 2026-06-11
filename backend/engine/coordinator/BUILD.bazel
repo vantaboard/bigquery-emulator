@@ -152,9 +152,57 @@ _GOOGLESQL_SCRIPTING_DEPS = select({
 })
 
 cc_library(
+    name = "local_coordinator_analyze",
+    srcs = ["local_coordinator_analyze.cc"],
+    hdrs = ["local_coordinator_analyze.h"],
+    deps = [
+        ":sql_preprocess",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/engine/semantic:system_variables",
+        "//backend/engine/semantic:value",
+        "//backend/schema",
+        "//backend/schema:googlesql_to_bq",
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "routine_rehydrate",
+    srcs = ["routine_rehydrate.cc"],
+    hdrs = ["routine_rehydrate.h"],
+    deps = [
+        ":local_coordinator_analyze",
+        "//backend/catalog:create_function_util",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:procedure_registry",
+        "//backend/catalog:tvf_registry",
+        "//backend/catalog:udf_registry",
+        "//backend/catalog:udf_registration_catalog",
+        "//backend/engine",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "local_coordinator_engine",
     srcs = [
-        "local_coordinator_analyze.cc",
         "local_coordinator_engine.cc",
         "script_executor.cc",
         "script_executor_internal.cc",
@@ -162,7 +210,6 @@ cc_library(
         "script_execute_immediate.cc",
     ] + _GOOGLESQL_SCRIPTING_SRCS,
     hdrs = [
-        "local_coordinator_analyze.h",
         "local_coordinator_engine.h",
         "script_executor.h",
         "script_executor_internal.h",
@@ -174,13 +221,16 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
+        ":local_coordinator_analyze",
         ":sql_preprocess",
         ":executor",
+        ":routine_rehydrate",
         ":route_classifier",
         ":stub_executors",
         "//backend/catalog:create_function_util",
         "//backend/catalog:googlesql_catalog",
         "//backend/catalog:procedure_registry",
+        "//backend/catalog:routine_persistence",
         "//backend/catalog:tvf_registry",
         "//backend/catalog:udf_registry",
         "//backend/catalog:udf_registration_catalog",

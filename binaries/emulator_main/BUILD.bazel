@@ -73,6 +73,7 @@ cc_binary(
         ":version",
         "//backend/engine",
         "//backend/engine/coordinator:local_coordinator_engine",
+        "//backend/engine/coordinator:routine_rehydrate",
         "//backend/storage",
         "//backend/storage/duckdb:duckdb_storage",
         "//frontend/server:server",

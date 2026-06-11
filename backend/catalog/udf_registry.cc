@@ -8,6 +8,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "googlesql/public/analyzer_output.h"
@@ -102,6 +103,27 @@ bool IsProjectRegisteredFunction(absl::string_view project_id,
     }
   }
   return false;
+}
+
+absl::Status DropProjectFunction(absl::string_view project_id,
+                                 absl::string_view fn_name) {
+  if (project_id.empty() || fn_name.empty()) {
+    return absl::InvalidArgumentError(
+        "udf_registry: project_id and fn_name must be non-empty");
+  }
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) {
+    return absl::NotFoundError(absl::StrCat("function not found: ", fn_name));
+  }
+  auto& fns = it->second.functions;
+  for (auto nit = fns.begin(); nit != fns.end(); ++nit) {
+    if (*nit != nullptr && absl::EqualsIgnoreCase((*nit)->Name(), fn_name)) {
+      fns.erase(nit);
+      return absl::OkStatus();
+    }
+  }
+  return absl::NotFoundError(absl::StrCat("function not found: ", fn_name));
 }
 
 void ReplayFunctionsIntoCatalog(absl::string_view project_id,

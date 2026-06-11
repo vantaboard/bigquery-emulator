@@ -16,6 +16,8 @@
 #include "absl/types/span.h"
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/routine_persistence.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registry.h"
@@ -149,11 +151,28 @@ absl::Status ControlOpExecutor::ExecuteDdl(
       // Registered in `LocalCoordinatorEngine::ExecuteDdl` via
       // `procedure_registry`.
       return absl::OkStatus();
-    case ::googlesql::RESOLVED_DROP_FUNCTION_STMT:
-      return absl::UnimplementedError(
-          "control op executor: DROP FUNCTION is not implemented yet; "
-          "needs the functions registry CREATE FUNCTION will land. "
-          "See docs/ENGINE_POLICY.md.");
+    case ::googlesql::RESOLVED_DROP_FUNCTION_STMT: {
+      const auto* drop_fn = stmt.GetAs<::googlesql::ResolvedDropFunctionStmt>();
+      if (drop_fn == nullptr || drop_fn->name_path().empty()) {
+        return absl::InternalError(
+            "control op executor: DROP FUNCTION has null stmt or empty "
+            "name_path");
+      }
+      const storage::RoutineId rid = catalog::RoutineIdFromNamePath(
+          drop_fn->name_path(), project_id, request.default_dataset_id);
+      const std::string routine_name = drop_fn->name_path().back();
+      absl::Status dropped =
+          catalog::DropProjectFunction(project_id, routine_name);
+      if (!dropped.ok()) {
+        dropped = catalog::DropProjectProcedure(project_id, routine_name);
+      }
+      if (!dropped.ok() && drop_fn->is_if_exists() &&
+          dropped.code() == absl::StatusCode::kNotFound) {
+        return absl::OkStatus();
+      }
+      if (!dropped.ok()) return dropped;
+      return catalog::DeletePersistedRoutine(storage_, rid);
+    }
     case ::googlesql::RESOLVED_DROP_TABLE_FUNCTION_STMT: {
       const auto* drop_tvf =
           stmt.GetAs<::googlesql::ResolvedDropTableFunctionStmt>();
@@ -162,13 +181,16 @@ absl::Status ControlOpExecutor::ExecuteDdl(
             "control op executor: DROP TABLE FUNCTION has null stmt or "
             "empty name_path");
       }
+      const storage::RoutineId rid = catalog::RoutineIdFromNamePath(
+          drop_tvf->name_path(), project_id, request.default_dataset_id);
       absl::Status dropped =
           catalog::DropProjectTvf(project_id, drop_tvf->name_path().back());
       if (!dropped.ok() && drop_tvf->is_if_exists() &&
           dropped.code() == absl::StatusCode::kNotFound) {
         return absl::OkStatus();
       }
-      return dropped;
+      if (!dropped.ok()) return dropped;
+      return catalog::DeletePersistedRoutine(storage_, rid);
     }
     case ::googlesql::RESOLVED_AUX_LOAD_DATA_STMT:
       // LOAD DATA splits by URI scheme at implementation time:

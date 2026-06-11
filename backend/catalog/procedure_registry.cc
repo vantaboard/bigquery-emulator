@@ -75,6 +75,30 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
   }
 }
 
+absl::Status DropProjectProcedure(absl::string_view project_id,
+                                  absl::string_view procedure_name) {
+  if (project_id.empty() || procedure_name.empty()) {
+    return absl::InvalidArgumentError(
+        "procedure_registry: project_id and procedure_name must be non-empty");
+  }
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) {
+    return absl::NotFoundError(
+        absl::StrCat("procedure not found: ", procedure_name));
+  }
+  auto& procs = it->second.procedures;
+  for (auto nit = procs.begin(); nit != procs.end(); ++nit) {
+    if (*nit != nullptr &&
+        absl::EqualsIgnoreCase((*nit)->Name(), procedure_name)) {
+      procs.erase(nit);
+      return absl::OkStatus();
+    }
+  }
+  return absl::NotFoundError(
+      absl::StrCat("procedure not found: ", procedure_name));
+}
+
 const StoredSQLProcedure* FindProjectProcedure(
     absl::string_view project_id, absl::string_view procedure_name) {
   if (project_id.empty() || procedure_name.empty()) return nullptr;

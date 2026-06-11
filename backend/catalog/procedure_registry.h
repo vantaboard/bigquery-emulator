@@ -26,6 +26,9 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
 const StoredSQLProcedure* FindProjectProcedure(
     absl::string_view project_id, absl::string_view procedure_name);
 
+absl::Status DropProjectProcedure(absl::string_view project_id,
+                                  absl::string_view procedure_name);
+
 }  // namespace catalog
 }  // namespace backend
 }  // namespace bigquery_emulator

@@ -241,6 +241,13 @@ absl::StatusOr<Value> EvalFunctionCall(
       return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);
     }
   }
+  if (fn != nullptr && fn->GetGroup() == "External_function" &&
+      catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
+    return absl::UnimplementedError(
+        "JavaScript UDF call-time evaluation is not implemented; "
+        "CREATE FUNCTION ... LANGUAGE js registers metadata only "
+        "(see docs/ENGINE_POLICY.md).");
+  }
   const std::string name = LowerFunctionDispatchName(call.function());
   if (name == "emu_format_t") {
     std::vector<Value> args;

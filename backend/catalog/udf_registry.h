@@ -57,6 +57,10 @@ bool IsProjectRegisteredFunction(absl::string_view project_id,
 ::googlesql::TypeFactory* EnsureProjectTypeFactory(
     absl::string_view project_id);
 
+// Removes a user-defined function from the per-project registry.
+absl::Status DropProjectFunction(absl::string_view project_id,
+                                 absl::string_view fn_name);
+
 }  // namespace catalog
 }  // namespace backend
 }  // namespace bigquery_emulator

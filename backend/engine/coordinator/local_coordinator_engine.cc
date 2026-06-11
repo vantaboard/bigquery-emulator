@@ -11,6 +11,7 @@
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/routine_persistence.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
 #include "backend/catalog/udf_registry.h"
@@ -233,22 +234,17 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
           "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION has null "
           "resolved stmt");
     }
-    // JavaScript UDFs are intentionally unsupported: registering an
-    // External_function body that is not persisted would silently
-    // diverge from BigQuery. See docs/ENGINE_POLICY.md.
-    if (absl::EqualsIgnoreCase(create_fn->language(), "js")) {
-      return absl::UnimplementedError(
-          "JavaScript UDFs (CREATE FUNCTION ... LANGUAGE js) are not "
-          "implemented");
-    }
     absl::StatusOr<std::unique_ptr<const ::googlesql::Function>> fn_or =
         catalog::MakeFunctionFromCreateFunction(*create_fn,
                                                 /*function_options=*/nullptr);
     if (!fn_or.ok()) return fn_or.status();
     const bool is_temp = create_fn->create_scope() ==
                          ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
-    return catalog::RegisterProjectFunction(
+    absl::Status registered = catalog::RegisterProjectFunction(
         request.project_id, is_temp, std::move(*reg_output), std::move(*fn_or));
+    if (!registered.ok()) return registered;
+    return catalog::PersistRoutineDdl(
+        bq_catalog->storage(), request, *reg_stmt);
   }
   if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_VIEW_STMT ||
       stmt->node_kind() == ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT ||
@@ -302,8 +298,11 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
             "null "
             "resolved stmt");
       }
-      return catalog::RegisterProjectTvf(
+      absl::Status registered = catalog::RegisterProjectTvf(
           request.project_id, *create_tvf, std::move(*reg_output));
+      if (!registered.ok()) return registered;
+      return catalog::PersistRoutineDdl(
+          bq_catalog->storage(), request, *reg_stmt);
     }
     const auto* create_proc =
         reg_stmt->GetAs<::googlesql::ResolvedCreateProcedureStmt>();
@@ -312,8 +311,11 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
           "LocalCoordinatorEngine::ExecuteDdl: CREATE PROCEDURE has null "
           "resolved stmt");
     }
-    return catalog::RegisterProjectProcedure(
+    absl::Status registered = catalog::RegisterProjectProcedure(
         request.project_id, *create_proc, std::move(*reg_output));
+    if (!registered.ok()) return registered;
+    return catalog::PersistRoutineDdl(
+        bq_catalog->storage(), request, *reg_stmt);
   }
   if (stmt->node_kind() == ::googlesql::RESOLVED_CALL_STMT) {
     semantic::script::ScriptDriver driver;
