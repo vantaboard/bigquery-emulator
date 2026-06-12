@@ -1,5 +1,125 @@
 {
-  "captured_at": "1970-01-01T00:00:00Z",
-  "project": "",
-  "cases": {}
+  "captured_at": "2026-06-12T21:17:04.272238706Z",
+  "project": "bigquery-emulator",
+  "cases": {
+    "agg_group_by_100k": {
+      "content_hash": "e848c6bdd551d61b",
+      "total_p50_ms": 1600,
+      "execution_p50_ms": 194,
+      "bytes_processed": 1600000,
+      "result_hash": "f54d06497d2ddf4e23a401c71969568fbacb35b06fca354ae5fd6b5aa4724fa3",
+      "row_count": 100
+    },
+    "agg_group_by_1m": {
+      "content_hash": "c70e89f2d686c77a",
+      "total_p50_ms": 1653,
+      "execution_p50_ms": 225,
+      "bytes_processed": 16000000,
+      "result_hash": "c2d0ef35a711abe38d96fc03def5c6b0990e9f2cd721d28fe62ed7c1bead18a2",
+      "row_count": 100
+    },
+    "case_when": {
+      "content_hash": "96fa558b3887315e",
+      "total_p50_ms": 1385,
+      "execution_p50_ms": 198,
+      "bytes_processed": 800000,
+      "result_hash": "0af3eb68030bfe5a943d13d7240c37a7d18f6ff612cbee833859bfdfa957c676",
+      "row_count": 10
+    },
+    "date_funcs": {
+      "content_hash": "18c02aa66d6851f4",
+      "total_p50_ms": 1541,
+      "execution_p50_ms": 177,
+      "bytes_processed": 800000,
+      "result_hash": "60c543264906dd6e893fae1936095b640b841625f3a6820dc99c734b658196b4",
+      "row_count": 274
+    },
+    "distinct_count": {
+      "content_hash": "83f09fed445cd42d",
+      "total_p50_ms": 1379,
+      "execution_p50_ms": 194,
+      "bytes_processed": 1600000,
+      "result_hash": "e606f4af0746016102bd590b7da254eda26d025cc80f5f9857ad4697ae507ad8",
+      "row_count": 1
+    },
+    "filter_100k": {
+      "content_hash": "54fa26574f9f51b7",
+      "total_p50_ms": 1536,
+      "execution_p50_ms": 179,
+      "bytes_processed": 800000,
+      "result_hash": "cf72948231b0966ffe006c881e6e3550df59fd53be74bf34d179d3cad78d2a88",
+      "row_count": 10
+    },
+    "join_hash_100k": {
+      "content_hash": "8ee5c27da2ae4d87",
+      "total_p50_ms": 1330,
+      "execution_p50_ms": 184,
+      "bytes_processed": 816000,
+      "result_hash": "f4f62bcc5a7196a257bfdb26b9de1ce8c1eee2889766f26d3d7527344734edc0",
+      "row_count": 1
+    },
+    "multi_agg": {
+      "content_hash": "3591f7b432ebb5c2",
+      "total_p50_ms": 1342,
+      "execution_p50_ms": 176,
+      "bytes_processed": 2400000,
+      "result_hash": "0f3e12c8a94822a592dd4a437b59d6df6f02f7f6dca952352df2b273a2e2b787",
+      "row_count": 50
+    },
+    "order_by_100k": {
+      "content_hash": "a2795c8e54130557",
+      "total_p50_ms": 1425,
+      "execution_p50_ms": 181,
+      "bytes_processed": 1600000,
+      "result_hash": "15ba3999e4d5df5c02f66a991c5126415beb732f90be03ece78e6c9ad3b41495",
+      "row_count": 1000
+    },
+    "scan_100k": {
+      "content_hash": "524cac105f4d37cb",
+      "total_p50_ms": 1388,
+      "execution_p50_ms": 173,
+      "bytes_processed": 800000,
+      "result_hash": "f6b0d4b46f7fc3d907745b13a56110c29a4df8301d49c938e2da57f46420267f",
+      "row_count": 1
+    },
+    "select_literal": {
+      "content_hash": "629926275b6c017b",
+      "total_p50_ms": 1236,
+      "execution_p50_ms": 140,
+      "result_hash": "7c472ead5a6861e11e2f529fc047b073fafe27fb5a0cac449dfa1e78efaf455a",
+      "row_count": 1
+    },
+    "string_funcs": {
+      "content_hash": "13ed931136fa3a45",
+      "total_p50_ms": 1326,
+      "execution_p50_ms": 177,
+      "bytes_processed": 588894,
+      "result_hash": "ffe0e9b93ce7bbd8083f7594e5a1ab05523bdf0f40529f822efc0ce91619afb6",
+      "row_count": 1
+    },
+    "subquery_in": {
+      "content_hash": "5ccbed48b1ffed36",
+      "total_p50_ms": 1473,
+      "execution_p50_ms": 228,
+      "bytes_processed": 800000,
+      "result_hash": "8ed31b36da017123530fc051f3200c31881b3f99838363fa5f58c5bc91872905",
+      "row_count": 1
+    },
+    "unnest_array": {
+      "content_hash": "5bac8205c493adbf",
+      "total_p50_ms": 1296,
+      "execution_p50_ms": 170,
+      "bytes_processed": 480000,
+      "result_hash": "b836f83b193691e548248e8a9386862517a9f5dd21966ddd65a505037725ecd4",
+      "row_count": 1
+    },
+    "window_row_number": {
+      "content_hash": "3ca94cdd189ae175",
+      "total_p50_ms": 1400,
+      "execution_p50_ms": 180,
+      "bytes_processed": 800000,
+      "result_hash": "fb86f59850a9fd4010e537cda8b766d9d271036b13b6df8bf6370fbdc1ec0c03",
+      "row_count": 300
+    }
+  }
 }
