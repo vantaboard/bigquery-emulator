@@ -61,16 +61,72 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 	}
 
 	for ci, c := range cases {
-		dataset := datasetForCase(c.Name)
-		for _, target := range opts.Targets {
-			opts.logf("[%d/%d] %s on %s: setup...", ci+1, len(cases), c.Name, target.Name())
-			cr := runCase(ctx, opts, target, c, dataset, timeout)
-			logCaseResult(opts, ci+1, len(cases), c, target, cr)
-			cr = enrichWithBaseline(opts, target, c, cr)
-			report.Results = append(report.Results, cr)
-		}
+		runCaseAcrossTargets(ctx, opts, &report, cases, ci, c, timeout)
 	}
 	return report, nil
+}
+
+func runCaseAcrossTargets(
+	ctx context.Context,
+	opts RunOptions,
+	report *RunReport,
+	cases []Case,
+	ci int,
+	c Case,
+	timeout time.Duration,
+) {
+	dataset := datasetForCase(c.Name)
+	for _, target := range opts.Targets {
+		cr, run := prepareCaseRun(ctx, opts, ci, len(cases), c, target)
+		if !run {
+			report.Results = append(report.Results, cr)
+			continue
+		}
+		opts.logf("[%d/%d] %s on %s: setup...", ci+1, len(cases), c.Name, target.Name())
+		cr = runCase(ctx, opts, target, c, dataset, timeout)
+		if gt, ok := target.(*GoccyTarget); ok && cr.Outcome == OutcomeError {
+			_ = gt.EnsureReady(ctx)
+		}
+		logCaseResult(opts, ci+1, len(cases), c, target, cr)
+		cr = enrichWithBaseline(opts, target, c, cr)
+		report.Results = append(report.Results, cr)
+	}
+}
+
+// prepareCaseRun handles skip and goccy health checks. The bool is
+// false when the caller should append cr and continue without running.
+func prepareCaseRun(
+	ctx context.Context,
+	opts RunOptions,
+	index, total int,
+	c Case,
+	target Target,
+) (CaseResult, bool) {
+	if skipped, reason := c.SkippedFor(target.Name()); skipped {
+		cr := CaseResult{
+			CaseName:    c.Name,
+			Target:      target.Name(),
+			ContentHash: c.ContentHash,
+			Outcome:     OutcomeSkipped,
+			Error:       reason,
+		}
+		logCaseResult(opts, index+1, total, c, target, cr)
+		return cr, false
+	}
+	if gt, ok := target.(*GoccyTarget); ok {
+		if err := gt.EnsureReady(ctx); err != nil {
+			cr := CaseResult{
+				CaseName:    c.Name,
+				Target:      target.Name(),
+				ContentHash: c.ContentHash,
+				Outcome:     OutcomeError,
+				Error:       fmt.Sprintf("goccy not ready: %v", err),
+			}
+			logCaseResult(opts, index+1, total, c, target, cr)
+			return cr, false
+		}
+	}
+	return CaseResult{}, true
 }
 
 func filterCases(cases []Case, name string) ([]Case, error) {
@@ -95,6 +151,9 @@ func logCaseResult(opts RunOptions, index, total int, c Case, target Target, cr 
 		opts.logf("[%d/%d] %s on %s: done (p50 %s, %d rows)",
 			index, total, c.Name, target.Name(),
 			cr.Latency.P50.Round(time.Millisecond), cr.RowCount)
+	case OutcomeSkipped:
+		opts.logf("[%d/%d] %s on %s: skipped (%s)",
+			index, total, c.Name, target.Name(), cr.Error)
 	default:
 		opts.logf("[%d/%d] %s on %s: %s (%s)",
 			index, total, c.Name, target.Name(), cr.Outcome, cr.Error)
@@ -160,9 +219,10 @@ func runCase(
 	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
 		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
 	_, query := c.Substitute(dsRef, project)
+	caseTimeout := c.QueryTimeout(timeout)
 
 	samples, execSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
-		ctx, opts, target, c, query, timeout)
+		ctx, opts, target, c, query, caseTimeout)
 
 	cr := CaseResult{
 		CaseName:       c.Name,

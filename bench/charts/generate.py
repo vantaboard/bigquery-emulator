@@ -16,6 +16,7 @@ OUTCOMES = {
     "error": "#d62728",
     "wrong_result": "#ff7f0e",
     "timeout": "#9467bd",
+    "skipped": "#7f7f7f",
 }
 
 

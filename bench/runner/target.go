@@ -22,6 +22,7 @@ const (
 	OutcomeError       Outcome = "error"
 	OutcomeWrongResult Outcome = "wrong_result"
 	OutcomeTimeout     Outcome = "timeout"
+	OutcomeSkipped     Outcome = "skipped"
 )
 
 // QueryResult holds one query execution sample.

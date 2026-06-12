@@ -6,25 +6,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Case is one YAML benchmark definition under bench/cases/.
 type Case struct {
-	Name        string   `yaml:"name"`
-	Tags        []string `yaml:"tags,omitempty"`
-	SetupSQL    []string `yaml:"-"`
-	Query       string   `yaml:"query"`
-	Iterations  int      `yaml:"iterations,omitempty"`
-	Warmup      int      `yaml:"warmup,omitempty"`
-	MaxRatio    float64  `yaml:"max_ratio,omitempty"`
-	MaxMS       int64    `yaml:"max_ms,omitempty"`
-	ProjectID   string   `yaml:"project_id,omitempty"`
-	Path        string   `yaml:"-"`
-	ContentHash string   `yaml:"-"`
+	Name        string       `yaml:"name"`
+	Tags        []string     `yaml:"tags,omitempty"`
+	SetupSQL    []string     `yaml:"-"`
+	Query       string       `yaml:"query"`
+	Iterations  int          `yaml:"iterations,omitempty"`
+	Warmup      int          `yaml:"warmup,omitempty"`
+	MaxRatio    float64      `yaml:"max_ratio,omitempty"`
+	MaxMS       int64        `yaml:"max_ms,omitempty"`
+	ProjectID   string       `yaml:"project_id,omitempty"`
+	SkipTargets []TargetName `yaml:"skip_targets,omitempty"`
+	SkipReason  string       `yaml:"skip_reason,omitempty"`
+	Path        string       `yaml:"-"`
+	ContentHash string       `yaml:"-"`
 }
 
 const (
@@ -99,6 +103,18 @@ func LoadCase(path string) (Case, error) {
 	return c, nil
 }
 
+// SkippedFor reports whether a target should not run this case.
+func (c Case) SkippedFor(target TargetName) (bool, string) {
+	if slices.Contains(c.SkipTargets, target) {
+		reason := c.SkipReason
+		if reason == "" {
+			reason = "skipped for " + string(target)
+		}
+		return true, reason
+	}
+	return false, ""
+}
+
 // Substitute replaces {{ds}} and {{project}} placeholders.
 func (c Case) Substitute(dataset, project string) (setup []string, query string) {
 	repl := func(s string) string {
@@ -116,15 +132,17 @@ func (c Case) Substitute(dataset, project string) (setup []string, query string)
 // UnmarshalYAML accepts setup as {sql: ...} objects.
 func (c *Case) UnmarshalYAML(value *yaml.Node) error {
 	type plain struct {
-		Name       string   `yaml:"name"`
-		Tags       []string `yaml:"tags,omitempty"`
-		Query      string   `yaml:"query"`
-		Iterations int      `yaml:"iterations,omitempty"`
-		Warmup     int      `yaml:"warmup,omitempty"`
-		MaxRatio   float64  `yaml:"max_ratio,omitempty"`
-		MaxMS      int64    `yaml:"max_ms,omitempty"`
-		ProjectID  string   `yaml:"project_id,omitempty"`
-		Setup      []struct {
+		Name        string       `yaml:"name"`
+		Tags        []string     `yaml:"tags,omitempty"`
+		Query       string       `yaml:"query"`
+		Iterations  int          `yaml:"iterations,omitempty"`
+		Warmup      int          `yaml:"warmup,omitempty"`
+		MaxRatio    float64      `yaml:"max_ratio,omitempty"`
+		MaxMS       int64        `yaml:"max_ms,omitempty"`
+		ProjectID   string       `yaml:"project_id,omitempty"`
+		SkipTargets []TargetName `yaml:"skip_targets,omitempty"`
+		SkipReason  string       `yaml:"skip_reason,omitempty"`
+		Setup       []struct {
 			SQL string `yaml:"sql"`
 		} `yaml:"setup"`
 	}
@@ -140,6 +158,8 @@ func (c *Case) UnmarshalYAML(value *yaml.Node) error {
 	c.MaxRatio = aux.MaxRatio
 	c.MaxMS = aux.MaxMS
 	c.ProjectID = aux.ProjectID
+	c.SkipTargets = aux.SkipTargets
+	c.SkipReason = aux.SkipReason
 	c.SetupSQL = make([]string, 0, len(aux.Setup))
 	for _, step := range aux.Setup {
 		if step.SQL != "" {
@@ -152,4 +172,14 @@ func (c *Case) UnmarshalYAML(value *yaml.Node) error {
 func hashContent(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:8])
+}
+
+// QueryTimeout returns the wall-clock cap for query iterations. Cases
+// that set max_ms above the default baseline cap use that value so
+// slow targets (notably goccy on large joins) can finish.
+func (c Case) QueryTimeout(fallback time.Duration) time.Duration {
+	if c.MaxMS > defaultMaxMS {
+		return time.Duration(c.MaxMS) * time.Millisecond
+	}
+	return fallback
 }

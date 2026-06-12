@@ -1,5 +1,7 @@
 name: scan_100k
 tags: [duckdb, scan]
+skip_targets: [goccy]
+skip_reason: "goccy 0.7.2 hangs on CTAS with CAST(id AS FLOAT64)/N at 100k rows (sqlite3: interrupted)"
 setup:
   - sql: |
       CREATE TABLE {{ds}}.t AS

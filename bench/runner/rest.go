@@ -27,6 +27,42 @@ func NewRESTClient(baseURL, projectID string) *RESTClient {
 	}
 }
 
+// CreateDataset registers a dataset on the emulator. HTTP 409 (already exists)
+// is treated as success so repeated case setup is idempotent.
+func (c *RESTClient) CreateDataset(ctx context.Context, datasetID string) error {
+	body, err := json.Marshal(map[string]any{
+		"datasetReference": map[string]string{
+			"datasetId": datasetID,
+			"projectId": c.ProjectID,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	url := fmt.Sprintf("%s/bigquery/v2/projects/%s/datasets", c.BaseURL, c.ProjectID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("create dataset %s -> HTTP %d: %s", datasetID, resp.StatusCode, snippet(data))
+	}
+	return nil
+}
+
 func (c *RESTClient) PostQuery(ctx context.Context, sql string) (int, []byte, error) {
 	body, err := json.Marshal(map[string]any{
 		"query":        sql,

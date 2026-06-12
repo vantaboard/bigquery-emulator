@@ -1,9 +1,12 @@
 package runner
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -26,6 +29,7 @@ type GoccyTarget struct {
 	hostPort   int
 	client     *RESTClient
 	httpClient *http.Client
+	logsCancel context.CancelFunc
 }
 
 func NewGoccyTarget(opts TargetOptions) *GoccyTarget {
@@ -51,12 +55,14 @@ func (t *GoccyTarget) Start(ctx context.Context) error {
 		"-p", fmt.Sprintf("127.0.0.1:%d:9050", port),
 		image,
 		"--project=" + goccyProject,
+		"--log-level=debug",
 	}
 	cmd := exec.CommandContext(ctx, "docker", args...) //nolint:gosec // bench operator supplies the image ref
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker run %s: %w: %s", image, err, strings.TrimSpace(string(out)))
 	}
 	t.container = name
+	t.startLogFollower()
 	t.httpClient = &http.Client{Timeout: 0}
 	if err := t.waitReady(ctx); err != nil {
 		_ = t.Cleanup(ctx)
@@ -95,9 +101,40 @@ func (t *GoccyTarget) waitReady(ctx context.Context) error {
 	return fmt.Errorf("goccy emulator on port %d not ready", t.hostPort)
 }
 
+func (t *GoccyTarget) EnsureReady(ctx context.Context) error {
+	if t.client == nil {
+		return t.Start(ctx)
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := t.ping(pingCtx); err == nil {
+		return nil
+	}
+	return t.restart(ctx)
+}
+
+func (t *GoccyTarget) ping(ctx context.Context) error {
+	status, body, err := t.client.PostQuery(ctx, "SELECT 1")
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("ping HTTP %d: %s", status, snippet(body))
+	}
+	return nil
+}
+
+func (t *GoccyTarget) restart(ctx context.Context) error {
+	_ = t.Cleanup(ctx)
+	return t.Start(ctx)
+}
+
 func (t *GoccyTarget) SetupCase(ctx context.Context, c Case, dataset string) error {
 	setup, _ := c.Substitute(dataset, goccyProject)
 	t.client.ProjectID = goccyProject
+	if err := t.client.CreateDataset(ctx, dataset); err != nil {
+		return err
+	}
 	for _, sql := range setup {
 		status, body, err := t.client.PostQuery(ctx, sql)
 		if err != nil {
@@ -138,7 +175,45 @@ func (t *GoccyTarget) RunQuery(ctx context.Context, c Case, sql string, timeout 
 	}, timeout)
 }
 
+func (t *GoccyTarget) startLogFollower() {
+	if t.container == "" {
+		return
+	}
+	logCtx, cancel := context.WithCancel(context.Background())
+	t.logsCancel = cancel
+	go func() {
+		cmd := exec.CommandContext(
+			logCtx,
+			"docker",
+			"logs",
+			"-f",
+			t.container,
+		) //nolint:gosec // container name is bench-owned
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return
+		}
+		if err := cmd.Start(); err != nil {
+			return
+		}
+		defer func() { _ = stdout.Close() }()
+		streamPrefixedLines(stdout, "[goccy] ")
+		_ = cmd.Wait()
+	}()
+}
+
+func streamPrefixedLines(r io.Reader, prefix string) {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		_, _ = fmt.Fprintf(os.Stderr, "%s%s\n", prefix, sc.Text())
+	}
+}
+
 func (t *GoccyTarget) Cleanup(ctx context.Context) error {
+	if t.logsCancel != nil {
+		t.logsCancel()
+		t.logsCancel = nil
+	}
 	if t.container == "" {
 		return nil
 	}

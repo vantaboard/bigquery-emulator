@@ -3,6 +3,7 @@ package runner
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadCases(t *testing.T) {
@@ -28,5 +29,29 @@ func TestCaseSubstitute(t *testing.T) {
 	}
 	if query != "SELECT * FROM ds_x.t" {
 		t.Fatalf("query: %q", query)
+	}
+}
+
+func TestCaseSkippedFor(t *testing.T) {
+	c := Case{
+		SkipTargets: []TargetName{TargetGoccy},
+		SkipReason:  "upstream bug",
+	}
+	if skipped, _ := c.SkippedFor(TargetEmulator); skipped {
+		t.Fatal("emulator should not be skipped")
+	}
+	skipped, reason := c.SkippedFor(TargetGoccy)
+	if !skipped || reason != "upstream bug" {
+		t.Fatalf("goccy skip: %v %q", skipped, reason)
+	}
+}
+
+func TestCaseQueryTimeout(t *testing.T) {
+	fallback := 60 * time.Second
+	if got := (Case{}).QueryTimeout(fallback); got != fallback {
+		t.Fatalf("default: got %v", got)
+	}
+	if got := (Case{MaxMS: 180_000}).QueryTimeout(fallback); got != 180*time.Second {
+		t.Fatalf("raised max_ms: got %v", got)
 	}
 }

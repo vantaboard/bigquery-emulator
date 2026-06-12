@@ -33,7 +33,7 @@ query: SELECT COUNT(*) AS cnt FROM {{ds}}.t
 iterations: 10
 warmup: 2
 max_ratio: 1.5   # optional; default 1.5x BigQuery p50
-max_ms: 30000    # optional absolute cap
+max_ms: 180000  # optional; query wall cap when above 30s default (also baseline ratio cap)
 ```
 
 `{{ds}}` is substituted per target (emulator dataset id, or `project.dataset` on BigQuery).
@@ -59,6 +59,14 @@ Each (case, target) records:
 - `error` — setup or query rejected (unsupported feature on goccy is expected data)
 - `wrong_result` — hash mismatch vs BigQuery golden
 - `timeout` — exceeded per-case wall cap (default 60s)
+- `skipped` — case opts out of a target via `skip_targets` in the case YAML (upstream goccy bugs, etc.)
+
+Per-case skips:
+
+```yaml
+skip_targets: [goccy]
+skip_reason: "goccy 0.7.2 hangs on CTAS with CAST(id AS FLOAT64)/N at 100k rows"
+```
 
 The pass/fail **gate applies only to vantaboard**. Goccy numbers are competitive evidence, not CI failures.
 
