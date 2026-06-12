@@ -4,13 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 )
+
+// isNotFound reports whether err is a BigQuery 404 (dataset absent).
+func isNotFound(err error) bool {
+	var apiErr *googleapi.Error
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusNotFound
+}
 
 // BigQueryTarget runs cases against real BigQuery via ADC.
 type BigQueryTarget struct {
@@ -49,6 +57,12 @@ func (t *BigQueryTarget) ProjectID() string { return t.project }
 
 func (t *BigQueryTarget) SetupCase(ctx context.Context, c Case, dataset string) error {
 	dsID := strings.TrimPrefix(dataset, t.project+".")
+	// Drop any leftover dataset from a previous (interrupted) run so
+	// setup always starts from a clean slate. NotFound is the normal
+	// case and is ignored.
+	if err := t.client.Dataset(dsID).DeleteWithContents(ctx); err != nil && !isNotFound(err) {
+		return fmt.Errorf("delete stale dataset %s: %w", dsID, err)
+	}
 	meta := &bigquery.DatasetMetadata{
 		Location:               t.location,
 		DefaultTableExpiration: 24 * time.Hour,
