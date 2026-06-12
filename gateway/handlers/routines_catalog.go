@@ -142,3 +142,24 @@ func catalogDeleteRoutine(ctx context.Context, deps *Dependencies, projectID, da
 	})
 	return err
 }
+
+// persistRoutineFromDDL registers a routine parsed from CREATE FUNCTION /
+// PROCEDURE DDL in the in-memory store and mirrors it to the catalog when
+// enabled so RoutineGet sees the same metadata as RoutineInsert.
+func persistRoutineFromDDL(
+	ctx context.Context,
+	deps *Dependencies,
+	projectID, defaultDatasetID, sql string,
+) *bqtypes.RoutineReference {
+	store := routineStore(deps)
+	ref := routines.RegisterFromDDL(store, projectID, defaultDatasetID, sql)
+	if ref == nil || !routineCatalogEnabled(deps) {
+		return ref
+	}
+	rt, ok := store.Get(ref.ProjectID, ref.DatasetID, ref.RoutineID)
+	if !ok {
+		return ref
+	}
+	_ = catalogUpsertRoutine(ctx, deps, rt)
+	return ref
+}

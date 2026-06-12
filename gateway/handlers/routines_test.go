@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -188,5 +189,24 @@ func TestRoutineDeleteReturnsNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRoutineGetFallsBackToInMemoryAfterDDL(t *testing.T) {
+	deps := Dependencies{Routines: NewRoutineStore(), Catalog: &fakeCatalogClient{}}
+	const ddl = `CREATE FUNCTION myfunc(x INT64) RETURNS INT64 AS (x * 3);`
+	ref := persistRoutineFromDDL(
+		context.Background(), &deps, routineTestProjectID, routineTestDatasetID, ddl)
+	if ref == nil || ref.RoutineID != "myfunc" {
+		t.Fatalf("ref = %+v", ref)
+	}
+	rec := httptest.NewRecorder()
+	RoutineGet(deps)(rec, newRoutineReq(http.MethodGet, "myfunc", ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	got := decodeRoutineResponse(t, deps, "myfunc", "x * 3")
+	if got.DefinitionBody != "x * 3" {
+		t.Errorf("body = %q", got.DefinitionBody)
 	}
 }

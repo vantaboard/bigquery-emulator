@@ -18,9 +18,11 @@ type engineScriptFinalResult struct {
 }
 
 func registerEngineScriptChildJobs(
+	ctx context.Context,
 	deps Dependencies,
 	r *http.Request,
-	projectID string,
+	projectID, defaultDataset string,
+	useLegacy bool,
 	parent *jobs.Job,
 	posted *jobs.Job,
 	cfg *jobs.JobConfiguration,
@@ -32,39 +34,75 @@ func registerEngineScriptChildJobs(
 		if final.schema == nil && len(final.rows) == 0 {
 			return 0
 		}
-		return registerFinalSelectChildJob(
+		registerFinalSelectChildJob(
 			deps, r, projectID, parent, posted, cfg, final)
+		return 1
+	}
+	statements := splitScriptStatements(inner)
+	lastQueryIdx := -1
+	for i, raw := range statements {
+		if classifyScriptStatement(raw).kind == scriptStmtQuery {
+			lastQueryIdx = i
+		}
 	}
 	childCount := 0
-	for _, raw := range splitScriptStatements(inner) {
+	for i, raw := range statements {
 		st := classifyScriptStatement(raw)
 		switch st.kind {
-		case scriptStmtDeclare, scriptStmtCall, scriptStmtSet:
-			// DECLARE/CALL/SET already ran in the parent engine script round-trip.
+		case scriptStmtDeclare, scriptStmtCall:
 			continue
-		case scriptStmtQuery:
-			childPosted := *posted
-			childPosted.JobReference.JobID = ""
-			childCfg := *cfg
-			qCopy := *cfg.Query
-			stmtSQL := substituteScriptVars(raw, nil)
-			qCopy.Query = stmtSQL
-			childCfg.Query = &qCopy
-			child := newPendingJob(deps, projectID, &childPosted, &childCfg)
-			stampChildJobParent(child, parent.JobReference.JobID)
-			childStart := time.Now().UTC()
-			childSchema := final.schema
-			childRows := final.rows
-			childStmtType := final.statementType
-			childRoute := final.emulatorRoute
-			childEnd := time.Now().UTC()
-			finalizeDoneJob(deps, child, childStart, childEnd,
-				childSchema, nil, childRows, childStmtType, childRoute, nil, nil, r)
-			stampChildJobParent(child, parent.JobReference.JobID)
+		case scriptStmtSet:
+			registerReExecutedEngineScriptChild(
+				ctx, deps, r, projectID, defaultDataset, useLegacy,
+				parent, posted, cfg, st.sql)
 			childCount++
+		case scriptStmtQuery:
+			if i == lastQueryIdx {
+				registerFinalSelectChildJob(
+					deps, r, projectID, parent, posted, cfg, final)
+				childCount++
+			} else {
+				registerReExecutedEngineScriptChild(
+					ctx, deps, r, projectID, defaultDataset, useLegacy,
+					parent, posted, cfg, st.sql)
+				childCount++
+			}
 		}
 	}
 	return childCount
+}
+
+func registerReExecutedEngineScriptChild(
+	ctx context.Context,
+	deps Dependencies,
+	r *http.Request,
+	projectID, defaultDataset string,
+	useLegacy bool,
+	parent *jobs.Job,
+	posted *jobs.Job,
+	cfg *jobs.JobConfiguration,
+	stmtSQL string,
+) {
+	childPosted := *posted
+	childPosted.JobReference.JobID = ""
+	childCfg := *cfg
+	qCopy := *cfg.Query
+	qCopy.Query = stmtSQL
+	childCfg.Query = &qCopy
+	child := newPendingJob(deps, projectID, &childPosted, &childCfg)
+	stampChildJobParent(child, parent.JobReference.JobID)
+	childStart := time.Now().UTC()
+	schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
+		ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy)
+	childEnd := time.Now().UTC()
+	if err != nil {
+		finalizeFailedJob(deps, child, childStart, err)
+		stampChildJobParent(child, parent.JobReference.JobID)
+		return
+	}
+	finalizeDoneJob(deps, child, childStart, childEnd,
+		schema, nil, rows, statementType, emulatorRoute, nil, nil, r)
+	stampChildJobParent(child, parent.JobReference.JobID)
 }
 
 func registerFinalSelectChildJob(
@@ -75,7 +113,7 @@ func registerFinalSelectChildJob(
 	posted *jobs.Job,
 	cfg *jobs.JobConfiguration,
 	final engineScriptFinalResult,
-) int {
+) {
 	childPosted := *posted
 	childPosted.JobReference.JobID = ""
 	childCfg := *cfg
@@ -89,7 +127,6 @@ func registerFinalSelectChildJob(
 		final.schema, nil, final.rows, final.statementType, final.emulatorRoute,
 		nil, nil, r)
 	stampChildJobParent(child, parent.JobReference.JobID)
-	return 1
 }
 
 func runEngineScript(
@@ -110,7 +147,8 @@ func runEngineScript(
 		return nil, err
 	}
 	childCount := registerEngineScriptChildJobs(
-		deps, r, projectID, parent, posted, cfg, sql,
+		ctx, deps, r, projectID, defaultDataset, useLegacy,
+		parent, posted, cfg, sql,
 		engineScriptFinalResult{
 			schema:        schema,
 			rows:          rows,

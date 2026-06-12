@@ -87,6 +87,40 @@ SELECT name FROM UNNEST(top_names) AS name;`
 	}
 }
 
+func TestEngineScriptChildJobsCountsSetAndQuery(t *testing.T) {
+	const sql = `DECLARE top_names ARRAY<STRING>;
+SET top_names = (SELECT ['a']);
+SELECT name FROM UNNEST(top_names) AS name;`
+	inner := unwrapBeginEndBlock(sql)
+	if scriptNeedsGoogleSQLExecutor(inner) {
+		t.Fatal("expected DECLARE script without control flow")
+	}
+	statements := splitScriptStatements(inner)
+	lastQueryIdx := -1
+	for i, raw := range statements {
+		if classifyScriptStatement(raw).kind == scriptStmtQuery {
+			lastQueryIdx = i
+		}
+	}
+	childCount := 0
+	for i, raw := range statements {
+		st := classifyScriptStatement(raw)
+		switch st.kind {
+		case scriptStmtDeclare, scriptStmtCall:
+			continue
+		case scriptStmtSet:
+			childCount++
+		case scriptStmtQuery:
+			if i == lastQueryIdx {
+				childCount++
+			}
+		}
+	}
+	if childCount != 2 {
+		t.Fatalf("childCount = %d, want 2", childCount)
+	}
+}
+
 func TestRegisterEngineScriptChildJobsControlFlowSingleChild(t *testing.T) {
 	const sql = `BEGIN
   DECLARE total INT64 DEFAULT 0;

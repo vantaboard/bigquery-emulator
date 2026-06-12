@@ -125,6 +125,9 @@ func RoutineGet(deps Dependencies) http.HandlerFunc {
 		var ok bool
 		if routineCatalogEnabled(&deps) {
 			rt, ok = catalogGetRoutine(r.Context(), &deps, projectID, datasetID, routineID)
+			if !ok {
+				rt, ok = routineStore(&deps).Get(projectID, datasetID, routineID)
+			}
 		} else {
 			rt, ok = routineStore(&deps).Get(projectID, datasetID, routineID)
 		}

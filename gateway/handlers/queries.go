@@ -14,7 +14,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 	"github.com/vantaboard/bigquery-emulator/gateway/query"
-	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 )
 
 // queryResponseKind is the value the BigQuery REST API returns for the
@@ -238,8 +237,8 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	var ddlTarget *bqtypes.RoutineReference
 	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" ||
 		statementType == "CREATE_TABLE_FUNCTION" {
-		store := routineStore(&deps)
-		ddlTarget = routines.RegisterFromDDL(store, projectID, defaultDataset, req.Query)
+		ddlTarget = persistRoutineFromDDL(
+			r.Context(), &deps, projectID, defaultDataset, req.Query)
 	}
 	result := &jobs.QueryResult{
 		Schema:           restSchema,

@@ -13,7 +13,6 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 	"github.com/vantaboard/bigquery-emulator/gateway/query"
-	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 )
 
 // jobListKind is the value the BigQuery REST API returns for the
@@ -435,8 +434,8 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	var ddlTarget *bqtypes.RoutineReference
 	if statementType == "CREATE_FUNCTION" || statementType == "CREATE_PROCEDURE" ||
 		statementType == "CREATE_TABLE_FUNCTION" {
-		ddlTarget = routines.RegisterFromDDL(
-			routineStore(&deps), projectID, defaultDataset, cfg.Query.Query)
+		ddlTarget = persistRoutineFromDDL(
+			r.Context(), &deps, projectID, defaultDataset, cfg.Query.Query)
 	}
 	if cfg.Query.DestinationTable == nil && deps.Catalog != nil && len(rows) > 0 &&
 		(statementType == "" || statementType == "SELECT") {
