@@ -116,13 +116,13 @@ func snippet(b []byte) string {
 
 func resolveEngineBinary() string {
 	if p := os.Getenv("BIGQUERY_EMULATOR_BIN"); p != "" {
-		if _, err := os.Stat(p); err == nil {
+		if _, err := os.Stat(p); err == nil { //nolint:gosec // engine binary path is operator-supplied
 			return p
 		}
 	}
 	candidates := []string{defaultEngineBinary, filepath.Join("bin", "emulator_main")}
 	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
+		if _, err := os.Stat(c); err == nil { //nolint:gosec // candidate paths are bench-owned defaults
 			return c
 		}
 	}

@@ -438,7 +438,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 			r.Context(), &deps, projectID, defaultDataset, cfg.Query.Query)
 	}
 	if cfg.Query.DestinationTable == nil && deps.Catalog != nil && len(rows) > 0 &&
-		(statementType == "" || statementType == "SELECT") {
+		(statementType == "" || statementType == statementTypeSelect) {
 		if dest, err := query.MaterializeImplicitDestination(
 			r.Context(), deps.Catalog, projectID, defaultDataset,
 			job.JobReference.JobID, restSchema, rows); err == nil {

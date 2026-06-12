@@ -40,17 +40,16 @@ func runQueryWithDeps(t *testing.T, projectID string, deps Dependencies, body st
 // `gateway/middleware/loopback.go`.
 func runQueryWithLoopback(
 	t *testing.T,
-	projectID string,
 	deps Dependencies,
-	body string,
 	loopback bool,
 ) bqtypes.QueryResponse {
 	t.Helper()
+	const queryBody = `{"query":"SELECT 1","useLegacySql":false}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost,
-		"/bigquery/v2/projects/"+projectID+"/queries", strings.NewReader(body))
+		"/bigquery/v2/projects/"+testProjectID+"/queries", strings.NewReader(queryBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.SetPathValue("projectId", projectID)
+	req.SetPathValue("projectId", testProjectID)
 	if loopback {
 		req.RemoteAddr = "127.0.0.1:12345"
 	} else {

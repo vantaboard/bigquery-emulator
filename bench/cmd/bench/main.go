@@ -77,17 +77,9 @@ func run(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	var baseline *runner.BaselineFile
-	if cfg.compare || cfg.capture {
-		b, err := runner.LoadBaseline(cfg.baselinePath)
-		if err != nil && cfg.compare {
-			baseline = &runner.BaselineFile{Cases: map[string]runner.BaselineCase{}}
-		} else if err == nil {
-			baseline = &b
-		}
-	}
+	baseline := loadBaseline(cfg)
 	progress := func(format string, args ...any) {
-		fmt.Fprintf(os.Stderr, "%s bench: %s\n",
+		_, _ = fmt.Fprintf(os.Stderr, "%s bench: %s\n",
 			time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
 	}
 	if cfg.quiet {
@@ -104,6 +96,32 @@ func run(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
+	if err := writeRunOutputs(cfg, targets, report, baseline); err != nil {
+		return err
+	}
+	return enforceCompareGate(cfg, report)
+}
+
+func loadBaseline(cfg config) *runner.BaselineFile {
+	if !cfg.compare && !cfg.capture {
+		return nil
+	}
+	loaded, loadErr := runner.LoadBaseline(cfg.baselinePath)
+	if loadErr != nil && cfg.compare {
+		return &runner.BaselineFile{Cases: map[string]runner.BaselineCase{}}
+	}
+	if loadErr == nil {
+		return &loaded
+	}
+	return nil
+}
+
+func writeRunOutputs(
+	cfg config,
+	targets []runner.Target,
+	report runner.RunReport,
+	baseline *runner.BaselineFile,
+) error {
 	if cfg.goccyImage != "" {
 		report.GoccyImage = cfg.goccyImage
 	} else if !cfg.skipGoccy && containsTarget(targets, runner.TargetGoccy) {
@@ -115,26 +133,32 @@ func run(ctx context.Context, cfg config) error {
 			return err
 		}
 	}
-	if cfg.capture {
-		if cfg.project == "" {
-			return errors.New("--project or BENCH_BQ_PROJECT required for capture")
-		}
-		b := runner.BuildBaselineFromResults(cfg.project, report.Results)
-		if err := runner.SaveBaseline(cfg.baselinePath, b); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stdout, "wrote baseline %s (%d cases)\n", cfg.baselinePath, len(b.Cases))
+	if !cfg.capture {
+		return nil
 	}
-	if cfg.compare {
-		fail := 0
-		for _, r := range report.Results {
-			if r.Target == runner.TargetEmulator && r.Pass != nil && !*r.Pass {
-				fail++
-			}
+	if cfg.project == "" {
+		return errors.New("--project or BENCH_BQ_PROJECT required for capture")
+	}
+	b := runner.BuildBaselineFromResults(cfg.project, report.Results)
+	if err := runner.SaveBaseline(cfg.baselinePath, b); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "wrote baseline %s (%d cases)\n", cfg.baselinePath, len(b.Cases))
+	return nil
+}
+
+func enforceCompareGate(cfg config, report runner.RunReport) error {
+	if !cfg.compare {
+		return nil
+	}
+	fail := 0
+	for _, r := range report.Results {
+		if r.Target == runner.TargetEmulator && r.Pass != nil && !*r.Pass {
+			fail++
 		}
-		if fail > 0 {
-			return fmt.Errorf("%d emulator case(s) failed compare gate", fail)
-		}
+	}
+	if fail > 0 {
+		return fmt.Errorf("%d emulator case(s) failed compare gate", fail)
 	}
 	return nil
 }

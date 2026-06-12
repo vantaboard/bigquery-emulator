@@ -62,7 +62,7 @@ func LoadCases(dir string) ([]Case, error) {
 
 // LoadCase parses a single benchmark case file.
 func LoadCase(path string) (Case, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // case path comes from bench/cases discovery
 	if err != nil {
 		return Case{}, fmt.Errorf("read %s: %w", path, err)
 	}

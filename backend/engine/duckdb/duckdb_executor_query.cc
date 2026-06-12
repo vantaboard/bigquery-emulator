@@ -186,8 +186,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   std::string sql = t.Transpile(query_stmt);
   if (request.phase_recorder != nullptr) {
     request.phase_recorder->Record(
-        "transpile",
-        absl::ToInt64Microseconds(absl::Now() - transpile_start));
+        "transpile", absl::ToInt64Microseconds(absl::Now() - transpile_start));
   }
   if (sql.empty()) {
     const std::string kind = query_stmt->query()->node_kind_string();
@@ -275,8 +274,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
 
   if (request.phase_recorder != nullptr) {
     request.phase_recorder->Record(
-        "duckdb_setup",
-        absl::ToInt64Microseconds(absl::Now() - setup_start));
+        "duckdb_setup", absl::ToInt64Microseconds(absl::Now() - setup_start));
   }
 
   // 6. Execute the transpiled SQL. A DuckDB rejection folds into

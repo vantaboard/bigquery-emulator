@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -20,6 +19,11 @@ import (
 // `kind` field of a QueryResponse resource. See
 // docs/bigquery/docs/reference/rest/v2/jobs/query.md.
 const queryResponseKind = "bigquery#queryResponse"
+
+// statementTypeSelect is the engine-reported statement type for read
+// queries. Promoted to a package constant so goconst does not flag the
+// repeated literal across handlers.
+const statementTypeSelect = "SELECT"
 
 // QueryRun implements `bigquery.jobs.query`:
 //
@@ -254,7 +258,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
 	if deps.Catalog != nil && len(rows) > 0 &&
-		(statementType == "" || statementType == "SELECT") {
+		(statementType == "" || statementType == statementTypeSelect) {
 		if dest, err := query.MaterializeImplicitDestination(
 			r.Context(), deps.Catalog, projectID, defaultDataset,
 			job.JobReference.JobID, restSchema, rows); err == nil {
@@ -579,25 +583,7 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 // cyclomatic budget below the funlen cap once the
 // loopback-gated `emulatorRoute` replay landed.
 func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.QueryResponse {
-	var (
-		schema           *bqtypes.TableSchema
-		allRows          []bqtypes.Row
-		dmlStats         *bqtypes.DmlStats
-		statementType    string
-		emulatorRoute    string
-		emulatorPhases   map[string]int64
-		ddlTargetRoutine *bqtypes.RoutineReference
-	)
-	if result := job.Result; result != nil {
-		schema = result.Schema
-		allRows = result.Rows
-		dmlStats = result.DmlStats
-		statementType = result.StatementType
-		emulatorRoute = result.EmulatorRoute
-		emulatorPhases = result.EmulatorPhases
-		ddlTargetRoutine = result.DdlTargetRoutine
-	}
-
+	schema, allRows, dmlStats, statementType, emulatorRoute, emulatorPhases, ddlTargetRoutine := queryResultFields(job)
 	pageRows, pageToken := paginateResults(allRows, r.URL.Query())
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
@@ -611,101 +597,13 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		TotalBytesProcessed: job.Statistics.TotalBytesProcessed,
 		Location:            jobRef.Location,
 	}
-	// Replay the loopback-only `emulatorRoute` debug field on
-	// `Job.statistics.query` the same way `QueryRun` surfaced it
-	// on the original `jobs.query` response: only when the
-	// follow-up `getQueryResults` caller is also loopback. The
-	// `statementType` field stays unconditional (it's a public
-	// BigQuery REST field).
-	visibleRoute := ""
-	visiblePhases := map[string]int64(nil)
-	if middleware.IsLoopback(r.Context()) {
-		visibleRoute = emulatorRoute
-		visiblePhases = emulatorPhases
-	}
-	if statementType != "" || visibleRoute != "" || len(visiblePhases) > 0 ||
-		ddlTargetRoutine != nil || job.Statistics.SessionInfo != nil {
-		stats := &bqtypes.JobStatistics{SessionInfo: job.Statistics.SessionInfo}
-		if statementType != "" || visibleRoute != "" || len(visiblePhases) > 0 || ddlTargetRoutine != nil {
-			stats.Query = &bqtypes.JobStatistics2{
-				StatementType:    statementType,
-				EmulatorRoute:    visibleRoute,
-				EmulatorPhases:   visiblePhases,
-				DdlTargetRoutine: ddlTargetRoutine,
-			}
-		}
-		out.Statistics = stats
-	}
+	out.Statistics = getQueryResultsStatistics(
+		r, statementType, emulatorRoute, emulatorPhases, ddlTargetRoutine, job.Statistics.SessionInfo)
 	if job.Statistics.SessionInfo != nil {
 		out.SessionInfo = job.Statistics.SessionInfo
 	}
 	if dmlStats != nil {
-		// DML replay: re-emit the same `dmlStats` /
-		// `numDmlAffectedRows` envelope `jobs.query` sent
-		// at submit time, and strip the SELECT-shape fields
-		// (schema, rows, totalRows) the same way the
-		// synchronous response does.
-		out.DmlStats = dmlStats
-		inserted, _ := strconv.ParseInt(dmlStats.InsertedRowCount, 10, 64)
-		updated, _ := strconv.ParseInt(dmlStats.UpdatedRowCount, 10, 64)
-		deleted, _ := strconv.ParseInt(dmlStats.DeletedRowCount, 10, 64)
-		out.NumDmlAffectedRows = strconv.FormatInt(
-			inserted+updated+deleted, 10)
-		out.Schema = nil
-		out.Rows = nil
-		out.TotalRows = "0"
+		applyDmlStatsToGetQueryResults(&out, dmlStats)
 	}
 	return out
-}
-
-// defaultQueryResultsPageSize mirrors BigQuery's documented default
-// `maxResults` for jobs.getQueryResults when the caller omits it.
-const defaultQueryResultsPageSize uint64 = 10000
-
-// paginateResults slices cached query rows using startIndex,
-// maxResults, and pageToken. pageToken (when set) is a decimal string
-// encoding the next start row index, matching tabledata.list.
-func paginateResults(allRows []bqtypes.Row, q url.Values) ([]bqtypes.Row, string) {
-	total := uint64(len(allRows))
-	start := parseUintQuery(q, "startIndex", 0)
-	if tok := q.Get("pageToken"); tok != "" {
-		if off, err := strconv.ParseUint(tok, 10, 64); err == nil {
-			start = off
-		} else {
-			return nil, ""
-		}
-	}
-	limit := defaultQueryResultsPageSize
-	if q.Get("maxResults") != "" {
-		limit = parseUintQuery(q, "maxResults", defaultQueryResultsPageSize)
-	}
-	// maxResults=0 means "wait for completion, return zero rows" (browseTable
-	// sample). Never mint a pageToken in that case or Node polls forever.
-	if limit == 0 {
-		return nil, ""
-	}
-	if start >= total {
-		return nil, ""
-	}
-	end := min(start+limit, total)
-	var nextToken string
-	if end < total {
-		nextToken = strconv.FormatUint(end, 10)
-	}
-	return allRows[start:end], nextToken
-}
-
-// parseUintQuery returns the named query parameter as a uint64,
-// falling back to defaultVal when the value is missing or unparsable.
-// Pulled out so the pagination helper stops nesting if-inside-if.
-func parseUintQuery(q url.Values, key string, defaultVal uint64) uint64 {
-	s := q.Get(key)
-	if s == "" {
-		return defaultVal
-	}
-	v, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return defaultVal
-	}
-	return v
 }

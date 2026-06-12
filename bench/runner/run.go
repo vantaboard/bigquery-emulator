@@ -34,17 +34,9 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 	if err != nil {
 		return RunReport{}, err
 	}
-	if opts.CaseFilter != "" {
-		filtered := cases[:0]
-		for _, c := range cases {
-			if c.Name == opts.CaseFilter {
-				filtered = append(filtered, c)
-			}
-		}
-		if len(filtered) == 0 {
-			return RunReport{}, fmt.Errorf("case %q not found", opts.CaseFilter)
-		}
-		cases = filtered
+	cases, err = filterCases(cases, opts.CaseFilter)
+	if err != nil {
+		return RunReport{}, err
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -72,52 +64,81 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 		dataset := datasetForCase(c.Name)
 		for _, target := range opts.Targets {
 			opts.logf("[%d/%d] %s on %s: setup...", ci+1, len(cases), c.Name, target.Name())
-			cr, err := runCase(ctx, opts, target, c, dataset, timeout)
-			if err != nil {
-				return report, err
-			}
-			switch cr.Outcome {
-			case OutcomeOK:
-				opts.logf("[%d/%d] %s on %s: done (p50 %s, %d rows)",
-					ci+1, len(cases), c.Name, target.Name(),
-					cr.Latency.P50.Round(time.Millisecond), cr.RowCount)
-			default:
-				opts.logf("[%d/%d] %s on %s: %s (%s)",
-					ci+1, len(cases), c.Name, target.Name(), cr.Outcome, cr.Error)
-			}
-			if opts.Compare && opts.Baseline != nil && target.Name() == TargetEmulator {
-				if base, ok := opts.Baseline.Cases[c.Name]; ok {
-					pass, reason := CompareToBaseline(c, base, cr)
-					cr.Pass = &pass
-					cr.CompareReason = reason
-					cr.BQTotalP50MS = base.TotalP50MS
-					if base.TotalP50MS > 0 && cr.Latency.P50 > 0 {
-						cr.Ratio = float64(cr.Latency.P50.Milliseconds()) / float64(base.TotalP50MS)
-					}
-				} else {
-					pass := false
-					cr.Pass = &pass
-					cr.CompareReason = "no baseline for case"
-				}
-			}
-			if opts.Baseline != nil && cr.Outcome == OutcomeOK && cr.ResultHash != "" {
-				if base, ok := opts.Baseline.Cases[c.Name]; ok && base.ResultHash != "" &&
-					base.ResultHash != cr.ResultHash {
-					cr.Outcome = OutcomeWrongResult
-					if target.Name() == TargetEmulator && cr.Pass != nil {
-						pass := false
-						cr.Pass = &pass
-						cr.CompareReason = "result hash mismatch vs baseline"
-					}
-				}
-			}
+			cr := runCase(ctx, opts, target, c, dataset, timeout)
+			logCaseResult(opts, ci+1, len(cases), c, target, cr)
+			cr = enrichWithBaseline(opts, target, c, cr)
 			report.Results = append(report.Results, cr)
 		}
 	}
 	return report, nil
 }
 
-func runCase(ctx context.Context, opts RunOptions, target Target, c Case, dataset string, timeout time.Duration) (CaseResult, error) {
+func filterCases(cases []Case, name string) ([]Case, error) {
+	if name == "" {
+		return cases, nil
+	}
+	filtered := cases[:0]
+	for _, c := range cases {
+		if c.Name == name {
+			filtered = append(filtered, c)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("case %q not found", name)
+	}
+	return filtered, nil
+}
+
+func logCaseResult(opts RunOptions, index, total int, c Case, target Target, cr CaseResult) {
+	switch cr.Outcome {
+	case OutcomeOK:
+		opts.logf("[%d/%d] %s on %s: done (p50 %s, %d rows)",
+			index, total, c.Name, target.Name(),
+			cr.Latency.P50.Round(time.Millisecond), cr.RowCount)
+	default:
+		opts.logf("[%d/%d] %s on %s: %s (%s)",
+			index, total, c.Name, target.Name(), cr.Outcome, cr.Error)
+	}
+}
+
+func enrichWithBaseline(opts RunOptions, target Target, c Case, cr CaseResult) CaseResult {
+	if opts.Compare && opts.Baseline != nil && target.Name() == TargetEmulator {
+		if base, ok := opts.Baseline.Cases[c.Name]; ok {
+			pass, reason := CompareToBaseline(c, base, cr)
+			cr.Pass = &pass
+			cr.CompareReason = reason
+			cr.BQTotalP50MS = base.TotalP50MS
+			if base.TotalP50MS > 0 && cr.Latency.P50 > 0 {
+				cr.Ratio = float64(cr.Latency.P50.Milliseconds()) / float64(base.TotalP50MS)
+			}
+		} else {
+			pass := false
+			cr.Pass = &pass
+			cr.CompareReason = "no baseline for case"
+		}
+	}
+	if opts.Baseline != nil && cr.Outcome == OutcomeOK && cr.ResultHash != "" {
+		if base, ok := opts.Baseline.Cases[c.Name]; ok && base.ResultHash != "" &&
+			base.ResultHash != cr.ResultHash {
+			cr.Outcome = OutcomeWrongResult
+			if target.Name() == TargetEmulator && cr.Pass != nil {
+				pass := false
+				cr.Pass = &pass
+				cr.CompareReason = "result hash mismatch vs baseline"
+			}
+		}
+	}
+	return cr
+}
+
+func runCase(
+	ctx context.Context,
+	opts RunOptions,
+	target Target,
+	c Case,
+	dataset string,
+	timeout time.Duration,
+) CaseResult {
 	project := c.ProjectID
 	switch tt := target.(type) {
 	case *BigQueryTarget:
@@ -127,26 +148,50 @@ func runCase(ctx context.Context, opts RunOptions, target Target, c Case, datase
 	}
 	dsRef := datasetRef(target.Name(), project, dataset)
 	setupBegan := time.Now()
-	if err := target.SetupCase(ctx, c, dsRef); err != nil {
+	if setupErr := target.SetupCase(ctx, c, dsRef); setupErr != nil {
 		return CaseResult{
 			CaseName:    c.Name,
 			Target:      target.Name(),
 			ContentHash: c.ContentHash,
 			Outcome:     OutcomeError,
-			Error:       err.Error(),
-		}, nil
+			Error:       setupErr.Error(),
+		}
 	}
 	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
 		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
 	_, query := c.Substitute(dsRef, project)
 
-	var samples []time.Duration
-	var execSamples []time.Duration
-	var phaseIters []map[string]int64
-	var last QueryResult
-	var lastErr string
-	outcome := OutcomeOK
+	samples, execSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
+		ctx, opts, target, c, query, timeout)
 
+	cr := CaseResult{
+		CaseName:       c.Name,
+		Target:         target.Name(),
+		ContentHash:    c.ContentHash,
+		Outcome:        outcome,
+		Error:          lastErr,
+		Latency:        ComputeLatencyStats(samples, c.Warmup),
+		Phases:         ComputePhaseStats(phaseIters, c.Warmup),
+		Route:          last.Route,
+		ResultHash:     last.ResultHash,
+		RowCount:       last.RowCount,
+		BytesProcessed: last.BytesProcessed,
+	}
+	if len(execSamples) > 0 {
+		cr.ExecutionP50 = ComputeLatencyStats(execSamples, c.Warmup).P50
+	}
+	return cr
+}
+
+func runQueryIterations(
+	ctx context.Context,
+	opts RunOptions,
+	target Target,
+	c Case,
+	query string,
+	timeout time.Duration,
+) (samples, execSamples []time.Duration, phaseIters []map[string]int64, last QueryResult, outcome Outcome, lastErr string) {
+	outcome = OutcomeOK
 	for i := 0; i < c.Iterations; i++ {
 		res, err := target.RunQuery(ctx, c, query, timeout)
 		last = res
@@ -178,24 +223,7 @@ func runCase(ctx context.Context, opts RunOptions, target Target, c Case, datase
 			phaseIters = append(phaseIters, res.Phases)
 		}
 	}
-
-	cr := CaseResult{
-		CaseName:       c.Name,
-		Target:         target.Name(),
-		ContentHash:    c.ContentHash,
-		Outcome:        outcome,
-		Error:          lastErr,
-		Latency:        ComputeLatencyStats(samples, c.Warmup),
-		Phases:         ComputePhaseStats(phaseIters, c.Warmup),
-		Route:          last.Route,
-		ResultHash:     last.ResultHash,
-		RowCount:       last.RowCount,
-		BytesProcessed: last.BytesProcessed,
-	}
-	if len(execSamples) > 0 {
-		cr.ExecutionP50 = ComputeLatencyStats(execSamples, c.Warmup).P50
-	}
-	return cr, nil
+	return samples, execSamples, phaseIters, last, outcome, lastErr
 }
 
 func datasetForCase(name string) string {

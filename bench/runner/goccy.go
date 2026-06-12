@@ -52,7 +52,7 @@ func (t *GoccyTarget) Start(ctx context.Context) error {
 		image,
 		"--project=" + goccyProject,
 	}
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := exec.CommandContext(ctx, "docker", args...) //nolint:gosec // bench operator supplies the image ref
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker run %s: %w: %s", image, err, strings.TrimSpace(string(out)))
 	}
@@ -85,7 +85,7 @@ func (t *GoccyTarget) waitReady(ctx context.Context) error {
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := t.httpClient.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 500 {
 				return nil
 			}
@@ -142,7 +142,7 @@ func (t *GoccyTarget) Cleanup(ctx context.Context) error {
 	if t.container == "" {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", t.container)
+	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", t.container) //nolint:gosec // container name is bench-owned
 	_ = cmd.Run()
 	t.container = ""
 	return nil

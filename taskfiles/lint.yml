@@ -3,10 +3,12 @@
 # .golangci.yml, shellcheck over docker/*.sh, and slower compile-aware
 # C++ analysis (clang-tidy, cppcheck) for opt-in lanes.
 #
-# Usage: task lint:run             (pre-commit gate: Go + C++ format/source/cppcheck + dispositions)
-#        task lint:fix             (apply gofmt + golangci-lint --fix +
-#                                   clang-format + re-run vet)
-#        task lint:check           (deep pass: golangci-lint + every C++ lane)
+# Usage: task lint:run             (pre-commit gate: Go + C++ format/source/cppcheck + dispositions;
+#                                   runs every lane even when one fails, then summarizes)
+#        task lint:fix             (apply gofmt + golangci-lint --fix + clang-format;
+#                                   runs every fix lane even when one fails, then summarizes)
+#        task lint:check           (deep pass: golangci-lint + every C++ lane;
+#                                   runs every lane even when one fails, then summarizes)
 #        task lint:go / lint:go-fix
 #                                  (full golangci-lint pass)
 #        task lint:shell           (shellcheck on docker/*.sh)
@@ -65,61 +67,128 @@ tasks:
     # / `task lint:cpp:cppcheck`, which all consume the canonical
     # first-party file list from `tools/lint/cpp` so the same exclude
     # rules apply.
+    #
+    # Every lane runs to completion even when an earlier lane fails; a
+    # summary of failed lanes is printed at the end so one invocation
+    # surfaces Go and C++ findings together.
     cmds:
       - |
-        set -eo pipefail
+        set +e
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        gofmt_targets=$(find . \
-          \( -path './third_party' -o -path './gen' -o -path './vendor' -o -path './node_modules' -o -path './bazel-*' \) -prune -o \
-          -type f -name '*.go' -print)
-        if [ -z "$gofmt_targets" ]; then
-          echo "lint:run: no .go files outside excluded paths" >&2
-        else
+        failures=0
+        failed_lanes=()
+
+        run_lane() {
+          local lane="$1"
+          shift
+          echo ""
+          echo "========== lint:run: ${lane} =========="
+          "$@"
+          local rc=$?
+          if [ "$rc" -ne 0 ]; then
+            failures=$((failures + 1))
+            failed_lanes+=("$lane")
+            echo "========== lint:run: ${lane}: FAILED (exit ${rc}) ==========" >&2
+          else
+            echo "========== lint:run: ${lane}: OK =========="
+          fi
+        }
+
+        run_lane go-gofmt bash -c '
+          set -eo pipefail
+          gofmt_targets=$(find . \
+            \( -path "./third_party" -o -path "./gen" -o -path "./vendor" -o -path "./node_modules" -o -path "./bazel-*" \) -prune -o \
+            -type f -name "*.go" -print)
+          if [ -z "$gofmt_targets" ]; then
+            echo "lint:run: no .go files outside excluded paths" >&2
+            exit 0
+          fi
           # shellcheck disable=SC2086  # word-split is intentional for the target list
-          if [ -n "$(printf '%s\n' $gofmt_targets | xargs gofmt -s -l)" ]; then
-            echo 'gofmt would reformat:' >&2
-            printf '%s\n' $gofmt_targets | xargs gofmt -s -l >&2
+          if [ -n "$(printf "%s\n" $gofmt_targets | xargs gofmt -s -l)" ]; then
+            echo "gofmt would reformat:" >&2
+            printf "%s\n" $gofmt_targets | xargs gofmt -s -l >&2
             exit 1
           fi
+        '
+
+        run_lane go-vet go vet ./...
+        run_lane cpp:format task -s lint:cpp:format
+        run_lane cpp:source task -s lint:cpp:source
+        run_lane cpp:cppcheck task -s lint:cpp:cppcheck
+        run_lane dispositions task -s lint:dispositions
+
+        echo ""
+        if [ "$failures" -gt 0 ]; then
+          echo "lint:run: ${failures} lane(s) failed:" >&2
+          printf '  - %s\n' "${failed_lanes[@]}" >&2
+          exit 1
         fi
-        go vet ./...
-      - task: cpp:format
-      - task: cpp:source
-      - task: cpp:cppcheck
-      - task: dispositions
+        echo "lint:run: all lanes passed"
 
   fix:
     desc: Apply auto-fixable lints (gofmt -s -w, golangci-lint --fix, go vet, clang-format -i)
     # Match `lint:run`'s exclusions so we never reformat vendored
     # upstream trees in third_party/ (or generated code under gen/).
     # Step order:
-    #   1. Inline gofmt + go vet — cheap, fast-fail on gross issues
-    #      before the slower golangci-lint pass starts.
+    #   1. Inline gofmt + go vet — cheap baseline before the slower
+    #      golangci-lint pass starts.
     #   2. `task: go-fix`        — `golangci-lint run --fix ./...`,
     #      applies formatters + every auto-fixable linter declared in
-    #      `.golangci.yml`. Subsumes most of step 1 but is far slower;
-    #      we keep step 1 so a syntactically broken tree fails the
-    #      cheap check first.
+    #      `.golangci.yml`.
     #   3. `task: cpp:format-fix` — clang-format -i on the first-party
     #      C++ file list.
+    #
+    # Like `lint:run`, every fix lane runs even when an earlier lane
+    # fails; a summary of failed lanes is printed at the end.
     cmds:
       - |
-        set -eo pipefail
+        set +e
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        gofmt_targets=$(find . \
-          \( -path './third_party' -o -path './gen' -o -path './vendor' -o -path './node_modules' -o -path './bazel-*' \) -prune -o \
-          -type f -name '*.go' -print)
-        if [ -n "$gofmt_targets" ]; then
-          # shellcheck disable=SC2086  # word-split is intentional for the target list
-          printf '%s\n' $gofmt_targets | xargs gofmt -s -w
+        failures=0
+        failed_lanes=()
+
+        run_lane() {
+          local lane="$1"
+          shift
+          echo ""
+          echo "========== lint:fix: ${lane} =========="
+          "$@"
+          local rc=$?
+          if [ "$rc" -ne 0 ]; then
+            failures=$((failures + 1))
+            failed_lanes+=("$lane")
+            echo "========== lint:fix: ${lane}: FAILED (exit ${rc}) ==========" >&2
+          else
+            echo "========== lint:fix: ${lane}: OK =========="
+          fi
+        }
+
+        run_lane go-gofmt bash -c '
+          set -eo pipefail
+          gofmt_targets=$(find . \
+            \( -path "./third_party" -o -path "./gen" -o -path "./vendor" -o -path "./node_modules" -o -path "./bazel-*" \) -prune -o \
+            -type f -name "*.go" -print)
+          if [ -n "$gofmt_targets" ]; then
+            # shellcheck disable=SC2086  # word-split is intentional for the target list
+            printf "%s\n" $gofmt_targets | xargs gofmt -s -w
+          fi
+        '
+
+        run_lane go-vet go vet ./...
+        run_lane go-fix task -s lint:go-fix
+        run_lane cpp:format-fix task -s lint:cpp:format-fix
+
+        echo ""
+        if [ "$failures" -gt 0 ]; then
+          echo "lint:fix: ${failures} lane(s) failed:" >&2
+          printf '  - %s\n' "${failed_lanes[@]}" >&2
+          exit 1
         fi
-        go vet ./...
-      - task: go-fix
-      - task: cpp:format-fix
+        echo "lint:fix: all lanes passed"
 
   check:
     desc: |
@@ -128,7 +197,7 @@ tasks:
       source-only checker, clang-tidy, and cppcheck. Distinct from
       `task lint:run` (the fast pre-commit gate); use `check` when you
       want the same coverage CI's slow lane provides.
-    # Order is cheap-to-expensive so the first failure shows up quickly:
+    # Order is cheap-to-expensive:
     #   1. `lint:go`          — golangci-lint (Go formatters + vet +
     #                            every linter declared in .golangci.yml).
     #   2. `lint:cpp:format`  — clang-format dry-run on the first-party
@@ -142,18 +211,52 @@ tasks:
     #                            `task lint:cpp:compile-commands`
     #                            first if missing).
     #   5. `lint:cpp:cppcheck`— secondary-analysis lane.
+    #   6. `lint:dispositions`— disposition parity gate.
     #
-    # Each sub-task already errors with a helpful "install X" /
-    # "generate compile DB first" message when its prerequisite is
-    # missing, so this aggregator inherits that behaviour rather than
-    # silently skipping a lane.
+    # Every lane runs to completion even when an earlier lane fails; a
+    # summary of failed lanes is printed at the end so one invocation
+    # surfaces Go and C++ findings together. Each sub-task already
+    # errors with a helpful "install X" / "generate compile DB first"
+    # message when its prerequisite is missing.
     cmds:
-      - task: go
-      - task: cpp:format
-      - task: cpp:source
-      - task: cpp:tidy
-      - task: cpp:cppcheck
-      - task: dispositions
+      - |
+        set +e
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        failures=0
+        failed_lanes=()
+
+        run_lane() {
+          local lane="$1"
+          shift
+          echo ""
+          echo "========== lint:check: ${lane} =========="
+          "$@"
+          local rc=$?
+          if [ "$rc" -ne 0 ]; then
+            failures=$((failures + 1))
+            failed_lanes+=("$lane")
+            echo "========== lint:check: ${lane}: FAILED (exit ${rc}) ==========" >&2
+          else
+            echo "========== lint:check: ${lane}: OK =========="
+          fi
+        }
+
+        run_lane go task -s lint:go
+        run_lane cpp:format task -s lint:cpp:format
+        run_lane cpp:source task -s lint:cpp:source
+        run_lane cpp:tidy task -s lint:cpp:tidy
+        run_lane cpp:cppcheck task -s lint:cpp:cppcheck
+        run_lane dispositions task -s lint:dispositions
+
+        echo ""
+        if [ "$failures" -gt 0 ]; then
+          echo "lint:check: ${failures} lane(s) failed:" >&2
+          printf '  - %s\n' "${failed_lanes[@]}" >&2
+          exit 1
+        fi
+        echo "lint:check: all lanes passed"
 
   go:
     desc: Run golangci-lint with the project's .golangci.yml (slow, full check)

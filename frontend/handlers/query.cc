@@ -8,16 +8,16 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/udf_registry.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/udf_registry.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
-#include "backend/engine/phase_recorder.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/coordinator/sql_preprocess.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/engine/semantic/system_variables.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
@@ -198,7 +198,8 @@ QueryService::QueryService(backend::storage::Storage* storage,
                                              request.default_dataset_id());
 
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
-  engine_request.phase_recorder = std::make_shared<backend::engine::PhaseRecorder>();
+  engine_request.phase_recorder =
+      std::make_shared<backend::engine::PhaseRecorder>();
   const absl::Time engine_start = absl::Now();
   if (absl::Status param_status =
           backend::engine::coordinator::PopulateAnalyzerParameters(

@@ -45,12 +45,12 @@ func SaveReport(path string, r RunReport) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(raw, '\n'), 0o644)
+	return os.WriteFile(path, append(raw, '\n'), 0o644) //nolint:gosec // 0o644 is fine for benchmark output JSON
 }
 
 // LoadReport reads a results JSON file.
 func LoadReport(path string) (RunReport, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // report path is CLI-controlled
 	if err != nil {
 		return RunReport{}, err
 	}

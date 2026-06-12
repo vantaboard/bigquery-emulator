@@ -287,7 +287,6 @@ func TestQueryRunExecuteRegistersJob(t *testing.T) {
 // libraries see the same JSON shape they would against the public
 // REST surface.
 func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
-	const stmtSelect = "SELECT"
 	makeStream := func() *fakeQueryResultStream {
 		return &fakeQueryResultStream{
 			msgs: []*enginepb.QueryResultRow{
@@ -299,7 +298,7 @@ func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
 				{Cells: []*enginepb.Cell{
 					{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
 				}},
-				{StatementType: stmtSelect},
+				{StatementType: statementTypeSelect},
 				{EmulatorRoute: "semantic_executor"},
 			},
 		}
@@ -314,8 +313,7 @@ func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
 		return Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
 	}
 
-	loopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
-		`{"query":"SELECT 1","useLegacySql":false}`, true)
+	loopbackResp := runQueryWithLoopback(t, makeDeps(), true)
 	if loopbackResp.Statistics == nil || loopbackResp.Statistics.Query == nil {
 		t.Fatalf("loopback caller: statistics.query missing; resp=%+v", loopbackResp)
 	}
@@ -323,13 +321,12 @@ func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
 		t.Errorf("loopback caller: statistics.query.emulatorRoute = %q, want %q",
 			got, "semantic_executor")
 	}
-	if got := loopbackResp.Statistics.Query.StatementType; got != stmtSelect {
+	if got := loopbackResp.Statistics.Query.StatementType; got != statementTypeSelect {
 		t.Errorf("loopback caller: statistics.query.statementType = %q, want %q",
-			got, stmtSelect)
+			got, statementTypeSelect)
 	}
 
-	nonLoopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
-		`{"query":"SELECT 1","useLegacySql":false}`, false)
+	nonLoopbackResp := runQueryWithLoopback(t, makeDeps(), false)
 	if nonLoopbackResp.Statistics == nil || nonLoopbackResp.Statistics.Query == nil {
 		t.Fatalf("non-loopback caller: statistics.query missing; resp=%+v", nonLoopbackResp)
 	}
@@ -339,9 +336,9 @@ func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
 	}
 	// statementType is a public BigQuery REST field; it stays
 	// visible to every caller, loopback or not.
-	if got := nonLoopbackResp.Statistics.Query.StatementType; got != stmtSelect {
+	if got := nonLoopbackResp.Statistics.Query.StatementType; got != statementTypeSelect {
 		t.Errorf("non-loopback caller: statistics.query.statementType = %q, want %q",
-			got, stmtSelect)
+			got, statementTypeSelect)
 	}
 }
 
@@ -362,7 +359,7 @@ func TestQueryRunExecuteSurfacesEmulatorPhasesOnlyToLoopback(t *testing.T) {
 						{Name: "transpile", DurationUs: 1200},
 					},
 				}},
-				{StatementType: "SELECT"},
+				{StatementType: statementTypeSelect},
 				{EmulatorRoute: "duckdb_native"},
 			},
 		}
@@ -376,16 +373,14 @@ func TestQueryRunExecuteSurfacesEmulatorPhasesOnlyToLoopback(t *testing.T) {
 		}
 		return Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
 	}
-	loopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
-		`{"query":"SELECT 1","useLegacySql":false}`, true)
+	loopbackResp := runQueryWithLoopback(t, makeDeps(), true)
 	if loopbackResp.Statistics == nil || loopbackResp.Statistics.Query == nil {
 		t.Fatal("missing statistics.query")
 	}
 	if got := loopbackResp.Statistics.Query.EmulatorPhases["transpile"]; got != 1200 {
 		t.Fatalf("emulatorPhases[transpile]=%d want 1200", got)
 	}
-	nonLoopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
-		`{"query":"SELECT 1","useLegacySql":false}`, false)
+	nonLoopbackResp := runQueryWithLoopback(t, makeDeps(), false)
 	if nonLoopbackResp.Statistics == nil || nonLoopbackResp.Statistics.Query == nil {
 		t.Fatal("missing statistics.query")
 	}

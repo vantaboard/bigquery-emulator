@@ -181,8 +181,8 @@ namespace internal {
         "QueryService::ExecuteQuery: client cancelled stream before "
         "dml_stats");
   }
-  return EmitTrailers(statement_type, emulator_route,
-                      request.phase_recorder.get(), write);
+  return EmitTrailers(
+      statement_type, emulator_route, request.phase_recorder.get(), write);
 }
 
 // DDL path: run `ExecuteDdl` and propagate any failure. Successful
@@ -199,8 +199,8 @@ namespace internal {
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::Status ddl_status = engine->ExecuteDdl(request, catalog);
   if (!ddl_status.ok()) return AnalyzeStatusToGrpc(ddl_status);
-  return EmitTrailers(statement_type, emulator_route,
-                      request.phase_recorder.get(), write);
+  return EmitTrailers(
+      statement_type, emulator_route, request.phase_recorder.get(), write);
 }
 
 // SELECT path: emit the schema message, then one row message per
@@ -262,8 +262,8 @@ namespace internal {
   if (request.phase_recorder != nullptr) {
     request.phase_recorder->Record("row_stream", row_stream_us);
   }
-  return EmitTrailers(statement_type, emulator_route,
-                      request.phase_recorder.get(), write);
+  return EmitTrailers(
+      statement_type, emulator_route, request.phase_recorder.get(), write);
 }
 }  // namespace internal
 }  // namespace frontend

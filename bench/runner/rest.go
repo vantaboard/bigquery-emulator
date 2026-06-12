@@ -45,7 +45,7 @@ func (c *RESTClient) PostQuery(ctx context.Context, sql string) (int, []byte, er
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	return resp.StatusCode, data, err
 }

@@ -17,11 +17,11 @@
 #include <utility>
 #include <vector>
 
-#include "gtest/gtest.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
+#include "gtest/gtest.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -49,7 +49,8 @@ TEST(UdfRegistryTest, ReRegisterKeepsOldPointerValidAndReplaysNewFunction) {
   ::googlesql::TypeFactory type_factory;
   ::googlesql::SimpleCatalog catalog(project, &type_factory);
 
-  ASSERT_TRUE(RegisterProjectFunction(project, /*is_temp=*/false,
+  ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
                   .ok());
@@ -61,7 +62,8 @@ TEST(UdfRegistryTest, ReRegisterKeepsOldPointerValidAndReplaysNewFunction) {
 
   // Routine update path: re-register the same name. The old object
   // must stay alive because `catalog` still holds a raw pointer.
-  ASSERT_TRUE(RegisterProjectFunction(project, /*is_temp=*/false,
+  ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
                   .ok());
@@ -84,7 +86,8 @@ TEST(UdfRegistryTest, DropRemovesFunctionFromCatalogOnNextReplay) {
   ::googlesql::TypeFactory type_factory;
   ::googlesql::SimpleCatalog catalog(project, &type_factory);
 
-  ASSERT_TRUE(RegisterProjectFunction(project, /*is_temp=*/false,
+  ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
                   .ok());

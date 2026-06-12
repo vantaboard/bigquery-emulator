@@ -27,7 +27,7 @@ type BaselineCase struct {
 
 // LoadBaseline reads bench/baselines/bigquery.json.
 func LoadBaseline(path string) (BaselineFile, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // baseline path is CLI-controlled
 	if err != nil {
 		return BaselineFile{}, err
 	}
@@ -42,13 +42,19 @@ func LoadBaseline(path string) (BaselineFile, error) {
 }
 
 // SaveBaseline writes a baseline file.
+//
+//nolint:gosec // baseline path and 0o644 mode are CLI-controlled benchmark artifacts.
 func SaveBaseline(path string, b BaselineFile) error {
 	b.CapturedAt = b.CapturedAt.UTC()
 	raw, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(raw, '\n'), 0o644)
+	return os.WriteFile(
+		path,
+		append(raw, '\n'),
+		0o644,
+	)
 }
 
 // BuildBaselineFromResults constructs a baseline from a BQ benchmark run.
