@@ -292,6 +292,8 @@ tasks:
         # forward into the container) and only dumps a diagnostic
         # bundle if the overall deadline fires.
         bash "${root}/scripts/wait_for_healthz.sh" "http://localhost:${port}/healthz" 120 bigquery-emulator
+        grpc_port="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
+        bash "${root}/scripts/wait_for_tcp.sh" "${grpc_port}" 120
 
   emulator-down:
     desc: Stop the bigquery-emulator docker compose service (named volume preserved; use emulator-down:fresh to also wipe data)
@@ -449,7 +451,7 @@ tasks:
         _log="$(mktemp)"
         trap 'rm -f "$_log"' EXIT
         set +e
-        go test ./... -count=1 -v {{.GO_TEST_FLAGS}} >"$_log" 2>&1
+        go test ./... -count=1 -p 1 -v {{.GO_TEST_FLAGS}} >"$_log" 2>&1
         _rc=$?
         set -e
         cat "$_log"

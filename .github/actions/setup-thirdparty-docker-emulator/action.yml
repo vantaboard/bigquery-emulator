@@ -85,13 +85,17 @@ runs:
         docker compose up -d bigquery-emulator
         for _ in $(seq 1 120); do
           if curl -fsS -o /dev/null http://localhost:9050/healthz 2>/dev/null; then
-            echo "emulator ready"
-            exit 0
+            echo "emulator REST ready"
+            break
           fi
           sleep 2
         done
-        echo "emulator did not become ready on :9050" >&2
-        exit 1
+        if ! curl -fsS -o /dev/null http://localhost:9050/healthz 2>/dev/null; then
+          echo "emulator did not become ready on :9050" >&2
+          exit 1
+        fi
+        grpc_port="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
+        bash scripts/wait_for_tcp.sh "${grpc_port}" 120
 
     - name: Bring up fake-gcs (thirdparty profile)
       if: inputs.seed-fake-gcs == 'true'
