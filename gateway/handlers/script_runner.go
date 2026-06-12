@@ -238,7 +238,7 @@ func executeScriptStatement(
 	if err != nil {
 		return nil, nil, "", "", err
 	}
-	schema, _, rows, statementType, emulatorRoute, streamErr := drainSyncStream(stream)
+	schema, _, rows, statementType, emulatorRoute, _, streamErr := drainSyncStream(stream)
 	if streamErr != nil {
 		return nil, nil, "", "", streamErr
 	}
@@ -349,7 +349,7 @@ func runLegacySplitScript(
 			}
 			childEnd := time.Now().UTC()
 			finalizeDoneJob(deps, child, childStart, childEnd,
-				schema, nil, rows, statementType, emulatorRoute, nil, nil, r)
+				schema, nil, rows, statementType, emulatorRoute, nil, nil, nil, r)
 			stampChildJobParent(child, parent.JobReference.JobID)
 			out.childCount++
 			if st.kind == scriptStmtQuery {
@@ -487,6 +487,6 @@ func runQueryScriptExecute(
 	stampJobSessionInfo(parent, sessionInfo)
 	outResp := assembleQueryResponse(
 		parent, restSchema, out.finalRows, nil, nil,
-		out.finalStmtType, visibleRoute, nil, sessionInfo)
+		out.finalStmtType, visibleRoute, nil, nil, sessionInfo)
 	writeJSON(w, http.StatusOK, outResp)
 }

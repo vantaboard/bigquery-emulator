@@ -113,6 +113,10 @@ type JobStatistics2 struct {
 	// field omitted entirely.
 	EmulatorRoute string `json:"emulatorRoute,omitempty"`
 
+	// EmulatorPhases maps engine-internal phase names to p50-equivalent
+	// wall times in microseconds for loopback callers only.
+	EmulatorPhases map[string]int64 `json:"emulatorPhases,omitempty"`
+
 	// DdlTargetRoutine is populated on CREATE_FUNCTION /
 	// CREATE_PROCEDURE DDL statements. Mirrors upstream
 	// JobStatistics2.ddlTargetRoutine.

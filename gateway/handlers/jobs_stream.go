@@ -14,12 +14,13 @@ import (
 // `ok=false` short-circuit, this helper returns the raw stream error
 // so the caller can fold it into the Job's status.
 func drainSyncStream(stream enginepb.Query_ExecuteQueryClient) (
-	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, string, error,
+	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, string, map[string]int64, error,
 ) {
 	var schema *enginepb.TableSchema
 	var dmlStats *enginepb.DmlStats
 	var statementType string
 	var emulatorRoute string
+	var emulatorPhases map[string]int64
 	rows := make([]bqtypes.Row, 0)
 	for {
 		msg, err := stream.Recv()
@@ -27,7 +28,7 @@ func drainSyncStream(stream enginepb.Query_ExecuteQueryClient) (
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, nil, nil, "", "", err
+			return nil, nil, nil, "", "", nil, err
 		}
 		if s := msg.GetSchema(); s != nil {
 			if schema == nil {
@@ -53,9 +54,20 @@ func drainSyncStream(stream enginepb.Query_ExecuteQueryClient) (
 			}
 			continue
 		}
+		if pt := msg.GetPhaseTimings(); pt != nil && len(pt.GetPhases()) > 0 {
+			if emulatorPhases == nil {
+				emulatorPhases = make(map[string]int64, len(pt.GetPhases()))
+			}
+			for _, phase := range pt.GetPhases() {
+				if phase.GetName() != "" {
+					emulatorPhases[phase.GetName()] = phase.GetDurationUs()
+				}
+			}
+			continue
+		}
 		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema))
 	}
-	return schema, dmlStats, rows, statementType, emulatorRoute, nil
+	return schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, nil
 }
 
 // defaultDatasetID extracts the dataset ID from an optional

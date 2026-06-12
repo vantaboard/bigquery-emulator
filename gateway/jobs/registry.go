@@ -325,6 +325,9 @@ type QueryResult struct {
 	// `middleware.IsLoopback`) so the public REST shape stays the
 	// same.
 	EmulatorRoute string
+	// EmulatorPhases carries per-phase timings (microseconds) from the
+	// engine's phase_timings trailer for loopback replay.
+	EmulatorPhases map[string]int64
 	// DdlTargetRoutine is set when a CREATE_FUNCTION /
 	// CREATE_PROCEDURE DDL statement registers a routine.
 	DdlTargetRoutine *bqtypes.RoutineReference

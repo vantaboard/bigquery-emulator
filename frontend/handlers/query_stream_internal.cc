@@ -1,6 +1,9 @@
 #include <string>
 
 #include "absl/strings/str_cat.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/schema/schema.h"
 #include "frontend/handlers/query_internal.h"
 
@@ -96,11 +99,30 @@ namespace internal {
 // unrecognized statement kind or an unmapped disposition) and is
 // then skipped, leaving the gateway free to omit the corresponding
 // JSON envelope.
+::grpc::Status EmitPhaseTimings(
+    const backend::engine::PhaseRecorder* recorder,
+    const std::function<bool(const v1::QueryResultRow&)>& write) {
+  if (recorder == nullptr) return ::grpc::Status::OK;
+  v1::QueryResultRow msg;
+  recorder->ToProto(msg.mutable_phase_timings());
+  if (msg.phase_timings().phases().empty()) return ::grpc::Status::OK;
+  if (!write(msg)) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::CANCELLED,
+        "QueryService::ExecuteQuery: client cancelled stream before "
+        "phase_timings trailer");
+  }
+  return ::grpc::Status::OK;
+}
+
 ::grpc::Status EmitTrailers(
     absl::string_view statement_type,
     absl::string_view emulator_route,
+    const backend::engine::PhaseRecorder* phase_recorder,
     const std::function<bool(const v1::QueryResultRow&)>& write) {
-  ::grpc::Status st = EmitStatementType(statement_type, write);
+  ::grpc::Status st = EmitPhaseTimings(phase_recorder, write);
+  if (!st.ok()) return st;
+  st = EmitStatementType(statement_type, write);
   if (!st.ok()) return st;
   return EmitEmulatorRoute(emulator_route, write);
 }
@@ -159,7 +181,8 @@ namespace internal {
         "QueryService::ExecuteQuery: client cancelled stream before "
         "dml_stats");
   }
-  return EmitTrailers(statement_type, emulator_route, write);
+  return EmitTrailers(statement_type, emulator_route,
+                      request.phase_recorder.get(), write);
 }
 
 // DDL path: run `ExecuteDdl` and propagate any failure. Successful
@@ -176,7 +199,8 @@ namespace internal {
     const std::function<bool(const v1::QueryResultRow&)>& write) {
   absl::Status ddl_status = engine->ExecuteDdl(request, catalog);
   if (!ddl_status.ok()) return AnalyzeStatusToGrpc(ddl_status);
-  return EmitTrailers(statement_type, emulator_route, write);
+  return EmitTrailers(statement_type, emulator_route,
+                      request.phase_recorder.get(), write);
 }
 
 // SELECT path: emit the schema message, then one row message per
@@ -218,8 +242,11 @@ namespace internal {
   // mid-stream failure; both surface to the caller through the
   // standard gRPC status code mapping.
   backend::storage::Row row;
+  int64_t row_stream_us = 0;
   while (true) {
+    const absl::Time row_start = absl::Now();
     absl::StatusOr<bool> next = source->Next(&row);
+    row_stream_us += absl::ToInt64Microseconds(absl::Now() - row_start);
     if (!next.ok()) return AnalyzeStatusToGrpc(next.status());
     if (!*next) break;
     v1::QueryResultRow row_message;
@@ -232,7 +259,11 @@ namespace internal {
           "QueryService::ExecuteQuery: client cancelled stream mid-row");
     }
   }
-  return EmitTrailers(statement_type, emulator_route, write);
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record("row_stream", row_stream_us);
+  }
+  return EmitTrailers(statement_type, emulator_route,
+                      request.phase_recorder.get(), write);
 }
 }  // namespace internal
 }  // namespace frontend

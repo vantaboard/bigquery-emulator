@@ -54,9 +54,14 @@ absl::string_view StatementTypeFor(const ::googlesql::ResolvedStatement& stmt);
     absl::string_view emulator_route,
     const std::function<bool(const v1::QueryResultRow&)>& write);
 
+::grpc::Status EmitPhaseTimings(
+    const backend::engine::PhaseRecorder* recorder,
+    const std::function<bool(const v1::QueryResultRow&)>& write);
+
 ::grpc::Status EmitTrailers(
     absl::string_view statement_type,
     absl::string_view emulator_route,
+    const backend::engine::PhaseRecorder* phase_recorder,
     const std::function<bool(const v1::QueryResultRow&)>& write);
 
 ::grpc::Status EmitDmlStats(

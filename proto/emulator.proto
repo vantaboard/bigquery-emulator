@@ -275,6 +275,11 @@ message QueryResultRow {
   //     produce no recognizable BigQuery shape (today: nothing in
   //     the supported surface) leave the field empty so the gateway
   //     omits the envelope entirely.
+  //   * `phase_timings` only — emitted after the last data row (or
+  //     dml_stats) and before the `statement_type` trailer. Carries
+  //     per-phase wall times in microseconds for emulator-internal
+  //     performance debugging; the gateway surfaces this on loopback
+  //     callers only as `Job.statistics.query.emulatorPhases`.
   //   * `emulator_route` only — emitted alongside `statement_type`
   //     as the trailing pair of every successful reply. The value
   //     is the canonical lowercase-snake spelling of the
@@ -294,6 +299,16 @@ message QueryResultRow {
   DmlStats dml_stats = 3;
   string statement_type = 4;
   string emulator_route = 5;
+  PhaseTimings phase_timings = 6;
+}
+
+message PhaseTiming {
+  string name = 1;
+  int64 duration_us = 2;
+}
+
+message PhaseTimings {
+  repeated PhaseTiming phases = 1;
 }
 
 // DmlStats is the engine's report of how many rows a DML statement

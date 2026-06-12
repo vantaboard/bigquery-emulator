@@ -215,7 +215,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if queryGRPCToHTTPError(w, err) {
 		return
 	}
-	schema, dmlStats, rows, statementType, emulatorRoute, ok := streamQueryResults(w, stream)
+	schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, ok := streamQueryResults(w, stream)
 	if !ok {
 		return
 	}
@@ -246,6 +246,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		DmlStats:         restDmlStats,
 		StatementType:    statementType,
 		EmulatorRoute:    emulatorRoute,
+		EmulatorPhases:   emulatorPhases,
 		DdlTargetRoutine: ddlTarget,
 	}
 	sessionInfo := sessionStore(&deps).Resolve(
@@ -276,12 +277,14 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	// `omitempty`. See
 	// `docs/ENGINE_POLICY.md`.
 	visibleRoute := ""
+	visiblePhases := map[string]int64(nil)
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
+		visiblePhases = emulatorPhases
 	}
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType,
-		visibleRoute, ddlTarget, sessionInfo)
+		visibleRoute, visiblePhases, ddlTarget, sessionInfo)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -345,12 +348,13 @@ func parametersToEngineMap(in []bqtypes.QueryParameter) map[string]*enginepb.Que
 // resends are ignored); the two trailers are each emitted at most
 // once at end-of-stream.
 func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQueryClient) (
-	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, string, bool,
+	*enginepb.TableSchema, *enginepb.DmlStats, []bqtypes.Row, string, string, map[string]int64, bool,
 ) {
 	var schema *enginepb.TableSchema
 	var dmlStats *enginepb.DmlStats
 	var statementType string
 	var emulatorRoute string
+	var emulatorPhases map[string]int64
 	rows := make([]bqtypes.Row, 0)
 	for {
 		msg, err := stream.Recv()
@@ -358,7 +362,7 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			break
 		}
 		if queryGRPCToHTTPError(w, err) {
-			return nil, nil, nil, "", "", false
+			return nil, nil, nil, "", "", nil, false
 		}
 		if s := msg.GetSchema(); s != nil {
 			// Per proto contract the first message carries the
@@ -405,9 +409,20 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			}
 			continue
 		}
+		if pt := msg.GetPhaseTimings(); pt != nil && len(pt.GetPhases()) > 0 {
+			if emulatorPhases == nil {
+				emulatorPhases = make(map[string]int64, len(pt.GetPhases()))
+			}
+			for _, phase := range pt.GetPhases() {
+				if phase.GetName() != "" {
+					emulatorPhases[phase.GetName()] = phase.GetDurationUs()
+				}
+			}
+			continue
+		}
 		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema))
 	}
-	return schema, dmlStats, rows, statementType, emulatorRoute, true
+	return schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, true
 }
 
 // dmlStatsFromProto converts an engine-side DmlStats message into
@@ -437,6 +452,7 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 	dmlStats *enginepb.DmlStats, restDmlStats *bqtypes.DmlStats,
 	statementType string,
 	emulatorRoute string,
+	emulatorPhases map[string]int64,
 	ddlTargetRoutine *bqtypes.RoutineReference,
 	sessionInfo *bqtypes.SessionInfo,
 ) bqtypes.QueryResponse {
@@ -457,12 +473,15 @@ func assembleQueryResponse(job *jobs.Job, restSchema *bqtypes.TableSchema, rows 
 	if sessionInfo != nil {
 		out.SessionInfo = sessionInfo
 	}
-	if sessionInfo != nil || statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
+	if sessionInfo != nil || statementType != "" || emulatorRoute != "" ||
+		len(emulatorPhases) > 0 || ddlTargetRoutine != nil {
 		stats := &bqtypes.JobStatistics{SessionInfo: sessionInfo}
-		if statementType != "" || emulatorRoute != "" || ddlTargetRoutine != nil {
+		if statementType != "" || emulatorRoute != "" || len(emulatorPhases) > 0 ||
+			ddlTargetRoutine != nil {
 			stats.Query = &bqtypes.JobStatistics2{
 				StatementType:    statementType,
 				EmulatorRoute:    emulatorRoute,
+				EmulatorPhases:   emulatorPhases,
 				DdlTargetRoutine: ddlTargetRoutine,
 			}
 		}
@@ -566,6 +585,7 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		dmlStats         *bqtypes.DmlStats
 		statementType    string
 		emulatorRoute    string
+		emulatorPhases   map[string]int64
 		ddlTargetRoutine *bqtypes.RoutineReference
 	)
 	if result := job.Result; result != nil {
@@ -574,6 +594,7 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 		dmlStats = result.DmlStats
 		statementType = result.StatementType
 		emulatorRoute = result.EmulatorRoute
+		emulatorPhases = result.EmulatorPhases
 		ddlTargetRoutine = result.DdlTargetRoutine
 	}
 
@@ -597,15 +618,19 @@ func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.Que
 	// `statementType` field stays unconditional (it's a public
 	// BigQuery REST field).
 	visibleRoute := ""
+	visiblePhases := map[string]int64(nil)
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
+		visiblePhases = emulatorPhases
 	}
-	if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil || job.Statistics.SessionInfo != nil {
+	if statementType != "" || visibleRoute != "" || len(visiblePhases) > 0 ||
+		ddlTargetRoutine != nil || job.Statistics.SessionInfo != nil {
 		stats := &bqtypes.JobStatistics{SessionInfo: job.Statistics.SessionInfo}
-		if statementType != "" || visibleRoute != "" || ddlTargetRoutine != nil {
+		if statementType != "" || visibleRoute != "" || len(visiblePhases) > 0 || ddlTargetRoutine != nil {
 			stats.Query = &bqtypes.JobStatistics2{
 				StatementType:    statementType,
 				EmulatorRoute:    visibleRoute,
+				EmulatorPhases:   visiblePhases,
 				DdlTargetRoutine: ddlTargetRoutine,
 			}
 		}

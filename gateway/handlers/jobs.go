@@ -390,7 +390,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		end := start
 		sessionInfo := sessionStore(&deps).Resolve(
 			projectID, posted.JobReference.Location, false, cfg.Query.ConnectionProperties)
-		finalizeDoneJob(deps, job, start, end, nil, nil, nil, "", "", nil, sessionInfo, r)
+		finalizeDoneJob(deps, job, start, end, nil, nil, nil, "", "", nil, nil, sessionInfo, r)
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
@@ -418,7 +418,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
-	schema, dmlStats, rows, statementType, emulatorRoute, streamErr := drainSyncStream(stream)
+	schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, streamErr := drainSyncStream(stream)
 	if streamErr != nil {
 		finalizeFailedJob(deps, job, start, streamErr)
 		writeJSON(w, http.StatusOK, job)
@@ -460,6 +460,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		rows,
 		statementType,
 		emulatorRoute,
+		emulatorPhases,
 		ddlTarget,
 		sessionInfo,
 		r,
@@ -601,7 +602,8 @@ func finalizeFailedJobWithReason(job *jobs.Job, start time.Time, err error, reas
 // `QueryRun` does: only loopback callers see the debug field.
 func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 	schema *enginepb.TableSchema, dmlStats *enginepb.DmlStats, rows []bqtypes.Row,
-	statementType, emulatorRoute string, ddlTarget *bqtypes.RoutineReference,
+	statementType, emulatorRoute string, emulatorPhases map[string]int64,
+	ddlTarget *bqtypes.RoutineReference,
 	sessionInfo *bqtypes.SessionInfo, r *http.Request,
 ) {
 	job.Status.State = jobs.JobStateDone
@@ -613,13 +615,16 @@ func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 	restSchema := schemaFromProto(schema)
 	restDmlStats := dmlStatsFromProto(dmlStats)
 	visibleRoute := ""
+	visiblePhases := map[string]int64(nil)
 	if middleware.IsLoopback(r.Context()) {
 		visibleRoute = emulatorRoute
+		visiblePhases = emulatorPhases
 	}
-	if statementType != "" || visibleRoute != "" || ddlTarget != nil {
+	if statementType != "" || visibleRoute != "" || len(visiblePhases) > 0 || ddlTarget != nil {
 		job.Statistics.Query = &bqtypes.JobStatistics2{
 			StatementType:    statementType,
 			EmulatorRoute:    visibleRoute,
+			EmulatorPhases:   visiblePhases,
 			DdlTargetRoutine: ddlTarget,
 		}
 	}
@@ -629,6 +634,7 @@ func finalizeDoneJob(_ Dependencies, job *jobs.Job, start, end time.Time,
 		DmlStats:         restDmlStats,
 		StatementType:    statementType,
 		EmulatorRoute:    visibleRoute,
+		EmulatorPhases:   visiblePhases,
 		DdlTargetRoutine: ddlTarget,
 	}
 }

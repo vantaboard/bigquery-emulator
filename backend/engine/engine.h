@@ -23,6 +23,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 
@@ -67,6 +68,9 @@ struct QueryRequest {
   // belt-and-braces field so the engine can also error out if the
   // gateway ever stops enforcing.
   bool use_legacy_sql = false;
+  // Optional per-query phase recorder populated by the frontend and
+  // filled by coordinator / executor paths for loopback diagnostics.
+  PhaseRecorderPtr phase_recorder;
 };
 
 // Opaque handle for a parsed + name-resolved query. The DuckDB engine

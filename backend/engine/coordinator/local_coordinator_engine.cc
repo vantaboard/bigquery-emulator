@@ -8,6 +8,8 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/strip.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/procedure_registry.h"
@@ -109,8 +111,14 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
   if (all_statements && absl::StrContains(request.sql, ";")) {
     return ExecuteScriptViaAnalyzeNext(*this, request, catalog);
   }
+  const absl::Time analyze_start = absl::Now();
   absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>> output =
       AnalyzeStatementImpl(request, catalog, all_statements);
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "analyze_coordinator",
+        absl::ToInt64Microseconds(absl::Now() - analyze_start));
+  }
   if (!output.ok()) return output.status();
   const ::googlesql::ResolvedStatement* stmt = (*output)->resolved_statement();
   if (stmt->node_kind() == ::googlesql::RESOLVED_MULTI_STMT) {
@@ -120,7 +128,13 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
         *stmt->GetAs<::googlesql::ResolvedMultiStmt>(),
         catalog);
   }
+  const absl::Time route_start = absl::Now();
   Executor* executor = RouteFor(*stmt);
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "route_classify_coordinator",
+        absl::ToInt64Microseconds(absl::Now() - route_start));
+  }
   if (executor == nullptr) {
     return absl::InternalError(
         "LocalCoordinatorEngine::ExecuteQuery: classifier returned an "

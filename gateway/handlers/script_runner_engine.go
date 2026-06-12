@@ -101,7 +101,7 @@ func registerReExecutedEngineScriptChild(
 		return
 	}
 	finalizeDoneJob(deps, child, childStart, childEnd,
-		schema, nil, rows, statementType, emulatorRoute, nil, nil, r)
+		schema, nil, rows, statementType, emulatorRoute, nil, nil, nil, r)
 	stampChildJobParent(child, parent.JobReference.JobID)
 }
 
@@ -125,7 +125,7 @@ func registerFinalSelectChildJob(
 	childEnd := time.Now().UTC()
 	finalizeDoneJob(deps, child, childStart, childEnd,
 		final.schema, nil, final.rows, final.statementType, final.emulatorRoute,
-		nil, nil, r)
+		nil, nil, nil, r)
 	stampChildJobParent(child, parent.JobReference.JobID)
 }
 

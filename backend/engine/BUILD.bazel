@@ -9,10 +9,22 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "phase_recorder",
+    srcs = ["phase_recorder.cc"],
+    hdrs = ["phase_recorder.h"],
+    deps = [
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
     name = "engine",
     srcs = ["engine.cc"],
     hdrs = ["engine.h"],
     deps = [
+        ":phase_recorder",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/status",

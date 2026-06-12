@@ -10,7 +10,10 @@
 #include "absl/strings/str_cat.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/udf_registry.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/coordinator/sql_preprocess.h"
 #include "backend/engine/disposition.h"
@@ -195,6 +198,8 @@ QueryService::QueryService(backend::storage::Storage* storage,
                                              request.default_dataset_id());
 
   backend::engine::QueryRequest engine_request = ProtoToEngineRequest(request);
+  engine_request.phase_recorder = std::make_shared<backend::engine::PhaseRecorder>();
+  const absl::Time engine_start = absl::Now();
   if (absl::Status param_status =
           backend::engine::coordinator::PopulateAnalyzerParameters(
               engine_request, analyzer_options, type_factory);
@@ -225,12 +230,16 @@ QueryService::QueryService(backend::storage::Storage* storage,
   const std::string preprocessed_sql =
       backend::engine::coordinator::PreprocessSqlForAnalyzer(request.sql());
   std::unique_ptr<const ::googlesql::AnalyzerOutput> classify_output;
+  const absl::Time analyze_start = absl::Now();
   absl::Status classify_status =
       ::googlesql::AnalyzeStatement(preprocessed_sql,
                                     analyzer_options,
                                     &catalog,
                                     type_factory,
                                     &classify_output);
+  engine_request.phase_recorder->Record(
+      "analyze_frontend",
+      absl::ToInt64Microseconds(absl::Now() - analyze_start));
   if (!classify_status.ok()) return AnalyzeStatusToGrpc(classify_status);
   if (classify_output == nullptr ||
       classify_output->resolved_statement() == nullptr) {
@@ -263,33 +272,45 @@ QueryService::QueryService(backend::storage::Storage* storage,
   // keep the frontend's per-query bookkeeping independent of any
   // future engine-side metadata channel).
   const backend::engine::coordinator::RouteClassifier route_classifier;
+  const absl::Time route_start = absl::Now();
   const backend::engine::coordinator::RouteDecision decision =
       route_classifier.Classify(*stmt);
+  engine_request.phase_recorder->Record(
+      "route_classify_frontend",
+      absl::ToInt64Microseconds(absl::Now() - route_start));
   const absl::string_view emulator_route =
       backend::engine::DispositionToString(decision.disposition);
 
+  auto finish = [&](::grpc::Status st) -> ::grpc::Status {
+    if (engine_request.phase_recorder != nullptr) {
+      engine_request.phase_recorder->Record(
+          "total_engine",
+          absl::ToInt64Microseconds(absl::Now() - engine_start));
+    }
+    return st;
+  };
   switch (cls) {
     case StatementClass::kSelect:
-      return StreamRows(engine,
-                        engine_request,
-                        &catalog,
-                        statement_type,
-                        emulator_route,
-                        write);
+      return finish(StreamRows(engine,
+                               engine_request,
+                               &catalog,
+                               statement_type,
+                               emulator_route,
+                               write));
     case StatementClass::kDml:
-      return EmitDmlStats(engine,
-                          engine_request,
-                          &catalog,
-                          statement_type,
-                          emulator_route,
-                          write);
+      return finish(EmitDmlStats(engine,
+                                 engine_request,
+                                 &catalog,
+                                 statement_type,
+                                 emulator_route,
+                                 write));
     case StatementClass::kDdl:
-      return EmitDdlResult(engine,
-                           engine_request,
-                           &catalog,
-                           statement_type,
-                           emulator_route,
-                           write);
+      return finish(EmitDdlResult(engine,
+                                  engine_request,
+                                  &catalog,
+                                  statement_type,
+                                  emulator_route,
+                                  write));
     case StatementClass::kOther:
       return ::grpc::Status(
           ::grpc::StatusCode::UNIMPLEMENTED,

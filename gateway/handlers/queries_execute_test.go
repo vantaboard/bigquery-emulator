@@ -345,6 +345,55 @@ func TestQueryRunExecuteSurfacesEmulatorRouteOnlyToLoopback(t *testing.T) {
 	}
 }
 
+func TestQueryRunExecuteSurfacesEmulatorPhasesOnlyToLoopback(t *testing.T) {
+	makeStream := func() *fakeQueryResultStream {
+		return &fakeQueryResultStream{
+			msgs: []*enginepb.QueryResultRow{
+				{Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{
+						{Name: "v", Type: sqlTypeINT64, Mode: sqlModeRequired},
+					},
+				}},
+				{Cells: []*enginepb.Cell{
+					{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
+				}},
+				{PhaseTimings: &enginepb.PhaseTimings{
+					Phases: []*enginepb.PhaseTiming{
+						{Name: "transpile", DurationUs: 1200},
+					},
+				}},
+				{StatementType: "SELECT"},
+				{EmulatorRoute: "duckdb_native"},
+			},
+		}
+	}
+	makeDeps := func() Dependencies {
+		s := makeStream()
+		fake := &fakeQueryClient{
+			executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+				return s, nil
+			},
+		}
+		return Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	}
+	loopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
+		`{"query":"SELECT 1","useLegacySql":false}`, true)
+	if loopbackResp.Statistics == nil || loopbackResp.Statistics.Query == nil {
+		t.Fatal("missing statistics.query")
+	}
+	if got := loopbackResp.Statistics.Query.EmulatorPhases["transpile"]; got != 1200 {
+		t.Fatalf("emulatorPhases[transpile]=%d want 1200", got)
+	}
+	nonLoopbackResp := runQueryWithLoopback(t, testProjectID, makeDeps(),
+		`{"query":"SELECT 1","useLegacySql":false}`, false)
+	if nonLoopbackResp.Statistics == nil || nonLoopbackResp.Statistics.Query == nil {
+		t.Fatal("missing statistics.query")
+	}
+	if len(nonLoopbackResp.Statistics.Query.EmulatorPhases) != 0 {
+		t.Fatalf("non-loopback emulatorPhases=%v want empty", nonLoopbackResp.Statistics.Query.EmulatorPhases)
+	}
+}
+
 // TestQueryRunExecuteUnimplementedFromEngine asserts UNIMPLEMENTED
 // from the engine (`--googlesql=off` build, etc.) surfaces as HTTP
 // 501 notImplemented rather than the generic 400 invalidQuery

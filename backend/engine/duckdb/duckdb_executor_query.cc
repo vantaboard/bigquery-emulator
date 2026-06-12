@@ -8,6 +8,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/virtual_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
@@ -179,8 +181,14 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   if (query_stmt->query() == nullptr) {
     return absl::UnimplementedError("duckdb engine: query has no scan tree");
   }
+  const absl::Time transpile_start = absl::Now();
   transpiler::Transpiler t;
   std::string sql = t.Transpile(query_stmt);
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "transpile",
+        absl::ToInt64Microseconds(absl::Now() - transpile_start));
+  }
   if (sql.empty()) {
     const std::string kind = query_stmt->query()->node_kind_string();
     return absl::UnimplementedError(absl::StrCat(
@@ -203,6 +211,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   absl::Status visit_status = stmt.Accept(&collector);
   if (!visit_status.ok()) return visit_status;
 
+  const absl::Time setup_start = absl::Now();
   // 4. Open a fresh in-memory DuckDB. The connection / database are
   // per-query: tables we materialize live only for this RPC and
   // are torn down when the returned RowSource is destroyed.
@@ -264,10 +273,17 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
     }
   }
 
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "duckdb_setup",
+        absl::ToInt64Microseconds(absl::Now() - setup_start));
+  }
+
   // 6. Execute the transpiled SQL. A DuckDB rejection folds into
   // UNIMPLEMENTED instead of INTERNAL because a transpiled SQL that
   // DuckDB cannot run is, by definition, a query the DuckDB engine
   // "cannot yet execute".
+  const absl::Time execute_start = absl::Now();
   ::duckdb_result result;
   if (::duckdb_query(conn, sql.c_str(), &result) != ::DuckDBSuccess) {
     const char* err = ::duckdb_result_error(&result);
@@ -281,6 +297,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
                      " (sql=",
                      sql,
                      ")"));
+  }
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "duckdb_execute",
+        absl::ToInt64Microseconds(absl::Now() - execute_start));
   }
   return std::unique_ptr<RowSource>(
       new DuckDBRowSource(db, conn, result, std::move(*output_schema)));

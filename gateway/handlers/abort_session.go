@@ -32,6 +32,6 @@ func handleAbortSessionQuery(
 	sessionInfo := sessionStore(&deps).Resolve(projectID, location, false, connProps)
 	job := deps.Jobs.CompleteQueryWithResult(projectID, location, 0, start, end, &jobs.QueryResult{})
 	stampJobSessionInfo(job, sessionInfo)
-	out := assembleQueryResponse(job, nil, nil, nil, nil, "", "", nil, sessionInfo)
+	out := assembleQueryResponse(job, nil, nil, nil, nil, "", "", nil, nil, sessionInfo)
 	writeJSON(w, http.StatusOK, out)
 }
