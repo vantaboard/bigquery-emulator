@@ -123,22 +123,6 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
   return absl::InternalError("ReadCell: unreachable column type");
 }
 
-class VectorRowIterator : public RowIterator {
- public:
-  explicit VectorRowIterator(std::vector<Row> rows)
-      : rows_(std::move(rows)), pos_(0) {}
-
-  absl::StatusOr<bool> Next(Row* row) override {
-    if (pos_ >= rows_.size()) return false;
-    *row = rows_[pos_++];
-    return true;
-  }
-
- private:
-  std::vector<Row> rows_{};
-  size_t pos_ = 0;
-};
-
 }  // namespace internal
 
 absl::Status DuckDBStorage::AppendRows(const TableId& id,

@@ -138,6 +138,24 @@ absl::Status ExecuteSelect(DuckDBStorage::Impl* impl,
                            absl::string_view parquet_path,
                            std::vector<Row>* out);
 
+// In-memory RowIterator over a materialized vector; shared by ScanRows and
+// CreateReadStream when returning empty or fully-loaded result sets.
+class VectorRowIterator : public RowIterator {
+ public:
+  explicit VectorRowIterator(std::vector<Row> rows)
+      : rows_(std::move(rows)), pos_(0) {}
+
+  absl::StatusOr<bool> Next(Row* row) override {
+    if (pos_ >= rows_.size()) return false;
+    *row = rows_[pos_++];
+    return true;
+  }
+
+ private:
+  std::vector<Row> rows_{};
+  size_t pos_ = 0;
+};
+
 }  // namespace internal
 }  // namespace duckdb
 }  // namespace storage

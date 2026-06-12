@@ -147,6 +147,15 @@ class FakeStorage : public storage::Storage {
       const storage::ReadFilter& /*filter*/) const override {
     return ScanRows(id);
   }
+  absl::StatusOr<std::int64_t> CountRows(
+      const storage::TableId& id) const override {
+    auto it = rows_.find(Key(id));
+    if (it == rows_.end()) {
+      return absl::NotFoundError(
+          "FakeStorage::CountRows: table not registered");
+    }
+    return static_cast<std::int64_t>(it->second.size());
+  }
   absl::Status UpsertRoutine(
       const storage::RoutineRecord& /*record*/) override {
     return absl::UnimplementedError("FakeStorage::UpsertRoutine");
