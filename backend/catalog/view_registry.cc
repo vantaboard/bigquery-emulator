@@ -31,6 +31,11 @@ struct ProjectViews {
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
       analyzer_outputs;
   std::vector<RegisteredViewEntry> views;
+  // Replaced/dropped views are retired instead of destroyed: catalogs
+  // hold raw pointers handed out via AddTable, and destroying the
+  // object on re-registration leaves them dangling (same
+  // use-after-free class as udf_registry.cc).
+  std::vector<RegisteredViewEntry> retired_views;
 };
 
 absl::Mutex mu;
@@ -68,6 +73,7 @@ absl::Status RegisterProjectView(
         absl::EqualsIgnoreCase(it->view->Name(), view_name) &&
         (dataset_id.empty() ||
          absl::EqualsIgnoreCase(it->dataset_id, dataset_id))) {
+      bucket.retired_views.push_back(std::move(*it));
       bucket.views.erase(it);
       break;
     }
@@ -124,6 +130,7 @@ absl::Status DropProjectView(absl::string_view project_id,
   for (auto vit = views.begin(); vit != views.end(); ++vit) {
     if (vit->view != nullptr &&
         absl::EqualsIgnoreCase(vit->view->Name(), view_name)) {
+      it->second.retired_views.push_back(std::move(*vit));
       views.erase(vit);
       return absl::OkStatus();
     }

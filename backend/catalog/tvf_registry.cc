@@ -26,6 +26,12 @@ struct ProjectTvfs {
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
       analyzer_outputs;
   std::vector<std::unique_ptr<const ::googlesql::TableValuedFunction>> tvfs;
+  // Replaced/dropped TVFs are retired instead of destroyed: catalogs
+  // hold raw pointers handed out via AddTableValuedFunction, and
+  // destroying the object on re-registration leaves them dangling
+  // (same use-after-free class as udf_registry.cc).
+  std::vector<std::unique_ptr<const ::googlesql::TableValuedFunction>>
+      retired_tvfs;
 };
 
 absl::Mutex mu;
@@ -50,6 +56,7 @@ absl::Status RegisterProjectTvf(
   ProjectTvfs& bucket = by_project[std::string(project_id)];
   for (auto it = bucket.tvfs.begin(); it != bucket.tvfs.end(); ++it) {
     if (*it != nullptr && absl::EqualsIgnoreCase((*it)->Name(), tvf_name)) {
+      bucket.retired_tvfs.push_back(std::move(*it));
       bucket.tvfs.erase(it);
       break;
     }
@@ -86,6 +93,7 @@ absl::Status DropProjectTvf(absl::string_view project_id,
   auto& tvfs = it->second.tvfs;
   for (auto nit = tvfs.begin(); nit != tvfs.end(); ++nit) {
     if (*nit != nullptr && absl::EqualsIgnoreCase((*nit)->Name(), tvf_name)) {
+      it->second.retired_tvfs.push_back(std::move(*nit));
       tvfs.erase(nit);
       return absl::OkStatus();
     }

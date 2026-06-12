@@ -222,11 +222,24 @@ cc_library(
     hdrs = ["udf_registry.h"],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@googlesql//googlesql/public:analyzer_output",
         "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_test(
+    name = "udf_registry_test",
+    srcs = ["udf_registry_test.cc"],
+    deps = [
+        ":udf_registry",
+        "@com_google_googletest//:gtest_main",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -28,6 +29,15 @@ struct ProjectFunctions {
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
       analyzer_outputs;
   std::vector<std::unique_ptr<const ::googlesql::Function>> functions;
+  // Replaced/dropped functions are retired here instead of destroyed:
+  // long-lived catalogs (the per-project registration catalog in
+  // udf_registration_catalog.cc and any in-flight query catalogs) hold
+  // raw pointers handed out via SimpleCatalog::AddFunction, and
+  // ReplayFunctionsIntoCatalog dereferences them when deciding what to
+  // remove. Destroying the object on re-registration left those
+  // pointers dangling, which crashed the engine on the next replay
+  // (use-after-free -> InsertOrDie duplicate key / SIGSEGV).
+  std::vector<std::unique_ptr<const ::googlesql::Function>> retired_functions;
 };
 
 absl::Mutex mu;
@@ -61,6 +71,7 @@ absl::Status RegisterProjectFunction(
   const std::string fn_name = function->Name();
   for (auto it = bucket.functions.begin(); it != bucket.functions.end(); ++it) {
     if (*it != nullptr && absl::EqualsIgnoreCase((*it)->Name(), fn_name)) {
+      bucket.retired_functions.push_back(std::move(*it));
       bucket.functions.erase(it);
       break;
     }
@@ -119,6 +130,7 @@ absl::Status DropProjectFunction(absl::string_view project_id,
   auto& fns = it->second.functions;
   for (auto nit = fns.begin(); nit != fns.end(); ++nit) {
     if (*nit != nullptr && absl::EqualsIgnoreCase((*nit)->Name(), fn_name)) {
+      it->second.retired_functions.push_back(std::move(*nit));
       fns.erase(nit);
       return absl::OkStatus();
     }
@@ -131,6 +143,19 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
   absl::MutexLock lock(&mu);
   auto it = by_project.find(std::string(project_id));
   if (it == by_project.end()) return;
+  // Purge entries that point at retired (replaced or dropped)
+  // functions so a long-lived catalog does not keep resolving a
+  // dropped routine or shadow the re-registered one.
+  if (!it->second.retired_functions.empty()) {
+    absl::flat_hash_set<const ::googlesql::Function*> retired;
+    retired.reserve(it->second.retired_functions.size());
+    for (const auto& fn : it->second.retired_functions) {
+      retired.insert(fn.get());
+    }
+    catalog.RemoveFunctions([&retired](const ::googlesql::Function* fn) {
+      return retired.contains(fn);
+    });
+  }
   for (const auto& fn : it->second.functions) {
     if (fn == nullptr) continue;
     const std::string name = fn->Name();
