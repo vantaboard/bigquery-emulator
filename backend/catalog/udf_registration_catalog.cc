@@ -14,6 +14,7 @@ namespace catalog {
 namespace {
 
 struct RegistrationCatalogEntry {
+  storage::Storage* storage = nullptr;
   std::unique_ptr<GoogleSqlCatalog> catalog;
 };
 
@@ -34,9 +35,16 @@ GoogleSqlCatalog* GetOrCreateRegistrationCatalog(
   }
   absl::MutexLock lock(&mu);
   RegistrationCatalogEntry& entry = by_project[std::string(project_id)];
-  if (entry.catalog == nullptr) {
+  const bool need_new_catalog =
+      entry.catalog == nullptr || entry.storage != storage;
+  if (need_new_catalog) {
+    entry.storage = storage;
     entry.catalog = std::make_unique<GoogleSqlCatalog>(
         project_id, storage, type_factory, language, default_dataset_id);
+    // GoogleSqlCatalog's constructor replays project UDFs once; skip a
+    // second replay here so AddFunction does not InsertOrDie on a name
+    // that was just registered during construction.
+    return entry.catalog.get();
   }
   ReplayFunctionsIntoCatalog(project_id, *entry.catalog);
   return entry.catalog.get();

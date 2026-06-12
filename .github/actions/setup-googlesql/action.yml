@@ -223,11 +223,8 @@ runs:
       working-directory: ${{ github.workspace }}
       run: |
         set -euo pipefail
-        # MODULE.bazel:module(version = "2026.01.1") trips gazelle's
-        # strict semver parser ("leading zero"); see the long note at
-        # the top of //MODULE.bazel for the rationale.
         mv googlesql-sibling ../googlesql
-        sed -i 's/version = "2026.01.1"/version = "2026.1.1"/' ../googlesql/MODULE.bazel
+        bash scripts/patch_googlesql_source_checkout.sh ../googlesql
 
     - name: Surface GoogleSQL identity
       id: identity

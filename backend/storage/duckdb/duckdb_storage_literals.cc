@@ -212,7 +212,12 @@ absl::StatusOr<std::string> RenderScalarLiteral(
       return absl::StrCat(
           "TIMESTAMP '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kTimestamp: {
-      std::string ts = cell.string_value();
+      std::string ts;
+      if (cell.kind() == Value::Kind::kInt64) {
+        ts = absl::StrCat(cell.int64_value());
+      } else {
+        ts = cell.string_value();
+      }
       if (auto micros = TryFormatMicrosTimestampString(ts);
           micros.has_value()) {
         ts = *micros;

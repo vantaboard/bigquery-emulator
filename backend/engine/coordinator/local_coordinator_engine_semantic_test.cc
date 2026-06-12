@@ -109,18 +109,9 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
-// Pipe-operator DDL control-op routing tests.
-// forms (`FROM ... |> EXPORT DATA ...` and `FROM ... |> CREATE
-// TABLE ...`) arrive at the engine as a `ResolvedQueryStmt`
-// whose body is a `ResolvedPipeExportDataScan` /
-// `ResolvedPipeCreateTableScan` scan. The classifier routes
-// them to the control-op surface, but
-// `ControlOpExecutor::ExecuteQuery` rejects every
-// ResolvedStatement (control-op is contractually a no-row-stream
-// surface). The coordinator pre-dispatches these two shapes to
-// `backend/engine/control/pipe_{export_data,create_table}.cc`
-// so the per-shape UNIMPLEMENTED message reaches the gateway
-// without going through the misleading executor error.
+// Pipe-operator DDL control-op routing: pipe EXPORT DATA is rejected
+// by the export handler (cloud-storage URIs are unsupported); pipe
+// CREATE TABLE materializes the pipe input into a new table.
 TEST_F(LocalCoordinatorEngineTest,
        ExecuteQueryPipeExportDataRoutesToControlOpHandler) {
   CreatePeopleTable();
@@ -131,12 +122,9 @@ TEST_F(LocalCoordinatorEngineTest,
                   "format = 'CSV')"),
       bundle.catalog.get());
   ASSERT_FALSE(source.ok());
-  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
-  EXPECT_TRUE(
-      absl::StrContains(source.status().message(), "pipe-form EXPORT DATA"))
-      << source.status();
-  EXPECT_TRUE(
-      absl::StrContains(source.status().message(), "EXPORT DATA writer family"))
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_TRUE(absl::StrContains(source.status().message(),
+                                "cloud-storage URI 'gs://b/o.csv'"))
       << source.status();
 }
 
@@ -147,14 +135,10 @@ TEST_F(LocalCoordinatorEngineTest,
   auto source = engine_->ExecuteQuery(
       MakeRequest("FROM ds.people |> CREATE TABLE ds.people_copy"),
       bundle.catalog.get());
-  ASSERT_FALSE(source.ok());
-  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
-  EXPECT_TRUE(
-      absl::StrContains(source.status().message(), "pipe-form CREATE TABLE"))
-      << source.status();
-  EXPECT_TRUE(absl::StrContains(source.status().message(),
-                                "pipe-form CREATE TABLE adapter"))
-      << source.status();
+  ASSERT_TRUE(source.ok()) << source.status();
+  auto count_or = storage_->CountRows({"proj-test", "ds", "people_copy"});
+  ASSERT_TRUE(count_or.ok()) << count_or.status();
+  EXPECT_EQ(*count_or, 3);
 }
 
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureUdf) {

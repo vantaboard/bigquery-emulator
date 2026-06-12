@@ -134,10 +134,14 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
   for (const auto& fn : it->second.functions) {
     if (fn == nullptr) continue;
     const std::string name = fn->Name();
+    const ::googlesql::Function* existing = nullptr;
+    if (catalog.GetFunction(name, &existing).ok() && existing == fn.get()) {
+      continue;
+    }
     // User-defined functions shadow built-ins with the same name
     // (e.g. migration `nullifzero` / community `typeof` UDFs).
-    catalog.RemoveFunctions([&name](const ::googlesql::Function* existing) {
-      return absl::EqualsIgnoreCase(existing->Name(), name);
+    catalog.RemoveFunctions([&name](const ::googlesql::Function* existing_fn) {
+      return absl::EqualsIgnoreCase(existing_fn->Name(), name);
     });
     catalog.AddFunction(fn.get());
   }

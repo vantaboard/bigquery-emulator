@@ -132,7 +132,11 @@ func engineTypeToProtoType(t string) *descriptorpb.FieldDescriptorProto_Type {
 		return descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
 	case bqTypeBYTES:
 		return descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum()
-	case bqTypeTIMESTAMP, bqTypeDATETIME, bqTypeDATE, bqTypeTIME:
+	case bqTypeDATE:
+		return descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()
+	case bqTypeTIMESTAMP:
+		return descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
+	case bqTypeDATETIME, bqTypeTIME:
 		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
 	default:
 		return descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
