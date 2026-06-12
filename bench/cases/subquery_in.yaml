@@ -1,0 +1,12 @@
+name: subquery_in
+tags: [duckdb, subquery]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 100) AS k FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+query: |
+  SELECT COUNT(*) AS cnt
+  FROM {{ds}}.t
+  WHERE k IN (SELECT k FROM UNNEST(GENERATE_ARRAY(0, 9)) AS k)
+iterations: 10
+warmup: 2

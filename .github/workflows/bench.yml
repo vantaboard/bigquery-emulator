@@ -1,0 +1,85 @@
+# Benchmark CI: three-way comparison charts after engine build.
+name: bench
+
+on:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.event.workflow_run.head_branch || github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  engine-build-failed:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::build-engine failed; bench cannot run"
+          exit 1
+
+  bench:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - uses: astral-sh/setup-uv@v8.2.0
+
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up engine from build-engine artifact
+        if: github.event_name == 'workflow_run'
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Pull goccy emulator image
+        run: docker pull ghcr.io/goccy/bigquery-emulator:0.7.2
+
+      - name: Run benchmarks
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          BENCH_SKIP_GOCCY: "0"
+        run: |
+          task bench:run
+
+      - name: Compare against baseline (advisory)
+        continue-on-error: true
+        run: task bench:compare
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: bench-results
+          path: |
+            bench/results.json
+            bench/charts/out/*.svg
+
+      - name: Publish gh-pages history
+        if: github.ref == 'refs/heads/main' || (github.event.workflow_run.head_branch == 'main')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: bench/charts/out
+          destination_dir: bench
+          keep_files: true

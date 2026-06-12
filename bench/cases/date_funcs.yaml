@@ -1,0 +1,14 @@
+name: date_funcs
+tags: [duckdb, functions]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, DATE '2020-01-01' + id AS d
+      FROM UNNEST(GENERATE_ARRAY(0, 99999)) AS id
+query: |
+  SELECT EXTRACT(YEAR FROM d) AS yr, COUNT(*) AS cnt
+  FROM {{ds}}.t
+  GROUP BY yr
+  ORDER BY yr
+iterations: 10
+warmup: 2

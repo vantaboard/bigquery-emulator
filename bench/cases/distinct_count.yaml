@@ -1,0 +1,9 @@
+name: distinct_count
+tags: [duckdb, aggregate]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 1000) AS k FROM UNNEST(GENERATE_ARRAY(1, 200000)) AS id
+query: SELECT COUNT(DISTINCT k) AS distinct_k FROM {{ds}}.t
+iterations: 10
+warmup: 2

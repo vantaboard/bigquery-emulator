@@ -19,6 +19,11 @@ cloud-spanner-emulator/
 # match files like `.cursor/rules/bazel-process-hygiene.mdc`.
 /bazel-*
 
+# Benchmark outputs (profiles and local result JSON)
+/bench/profiles/
+/bench/results.json
+/bench/charts/out/
+
 # Go
 *.test
 # Vendored GoogleSQL compliance corpus (not Go test binaries).

@@ -1,0 +1,11 @@
+name: agg_group_by_1m
+tags: [duckdb, aggregate]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 100) AS k, CAST(id AS FLOAT64) / 7 AS v
+      FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS id
+query: SELECT k, COUNT(*) AS cnt, SUM(v) AS total FROM {{ds}}.t GROUP BY k ORDER BY k
+iterations: 5
+warmup: 1
+max_ms: 60000

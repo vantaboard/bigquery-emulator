@@ -23,6 +23,7 @@ includes:
   testdata: ./taskfiles/testdata.yml
   compose: ./taskfiles/compose.yml
   coverage: ./taskfiles/coverage.yml
+  bench: ./taskfiles/bench.yml
 
 tasks:
   default:

@@ -1,0 +1,10 @@
+name: scan_100k
+tags: [duckdb, scan]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, CAST(id AS FLOAT64) / 3.0 AS v
+      FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+query: SELECT COUNT(*) AS cnt, SUM(v) AS total FROM {{ds}}.t
+iterations: 10
+warmup: 2

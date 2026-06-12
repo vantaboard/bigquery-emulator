@@ -1,0 +1,16 @@
+name: window_row_number
+tags: [duckdb, analytic]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 100) AS k FROM UNNEST(GENERATE_ARRAY(1, 50000)) AS id
+query: |
+  SELECT k, rn FROM (
+    SELECT k, ROW_NUMBER() OVER (PARTITION BY k ORDER BY id) AS rn
+    FROM {{ds}}.t
+  )
+  WHERE rn <= 3
+  ORDER BY k, rn
+  LIMIT 500
+iterations: 10
+warmup: 2

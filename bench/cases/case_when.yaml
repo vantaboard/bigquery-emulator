@@ -1,0 +1,15 @@
+name: case_when
+tags: [duckdb, expressions]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 10) AS bucket FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+query: |
+  SELECT bucket,
+         SUM(CASE WHEN bucket < 3 THEN 1 ELSE 0 END) AS low,
+         SUM(CASE WHEN bucket >= 3 THEN 1 ELSE 0 END) AS high
+  FROM {{ds}}.t
+  GROUP BY bucket
+  ORDER BY bucket
+iterations: 10
+warmup: 2

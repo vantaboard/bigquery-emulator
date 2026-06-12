@@ -1,0 +1,6 @@
+name: select_literal
+tags: [smoke]
+setup: []
+query: SELECT 1 AS n, 'hello' AS s
+iterations: 5
+warmup: 1

@@ -1,0 +1,13 @@
+name: string_funcs
+tags: [duckdb, functions]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, CONCAT('user_', CAST(id AS STRING)) AS name
+      FROM UNNEST(GENERATE_ARRAY(1, 50000)) AS id
+query: |
+  SELECT COUNT(*) AS cnt
+  FROM {{ds}}.t
+  WHERE STARTS_WITH(name, 'user_1') AND LENGTH(name) > 5
+iterations: 10
+warmup: 2

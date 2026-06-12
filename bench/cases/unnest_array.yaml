@@ -1,0 +1,12 @@
+name: unnest_array
+tags: [duckdb, unnest]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, [id, id + 1, id + 2] AS arr
+      FROM UNNEST(GENERATE_ARRAY(1, 20000)) AS id
+query: |
+  SELECT COUNT(*) AS cnt, SUM(x) AS total
+  FROM {{ds}}.t, UNNEST(arr) AS x
+iterations: 10
+warmup: 2

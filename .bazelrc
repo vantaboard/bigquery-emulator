@@ -270,3 +270,11 @@ build --per_file_copt=//tools/googlesql-prebuilt/smoke/[/:].*@-Wall,-Wextra,-Wer
 # ---------------------------------------------------------------------------
 common --experimental_repository_downloader_retries=5
 common --http_connector_attempts=5
+
+# ---------------------------------------------------------------------------
+# Profiling builds (bench:build-profile)
+# ---------------------------------------------------------------------------
+build:profile -c opt
+build:profile --copt=-g
+build:profile --copt=-fno-omit-frame-pointer
+build:profile --strip=never

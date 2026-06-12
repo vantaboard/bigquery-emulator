@@ -1,0 +1,129 @@
+# Benchmark harness: emulator vs goccy vs BigQuery golden baselines.
+version: "3"
+
+vars:
+  BENCH_CASES: '{{.ROOT_DIR}}/bench/cases'
+  BENCH_BASELINE: '{{.ROOT_DIR}}/bench/baselines/bigquery.json'
+  BENCH_JSON: '{{.ROOT_DIR}}/bench/results.json'
+  BENCH_CHARTS_OUT: '{{.ROOT_DIR}}/bench/charts/out'
+
+tasks:
+  run:
+    desc: Run benchmarks (vantaboard + goccy by default) and print report
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        if [ ! -x ./bin/emulator_main ]; then
+          task emulator:build-engine:bazel
+        fi
+        ARGS=(--target=all --json-out "{{.BENCH_JSON}}")
+        if [ -n "${BENCH_EXTRA_ARGS:-}" ]; then
+          # shellcheck disable=SC2206
+          EXTRA=(${BENCH_EXTRA_ARGS})
+          ARGS+=("${EXTRA[@]}")
+        fi
+        go run ./bench/cmd/bench "${ARGS[@]}"
+        task bench:charts
+      - task: cleanup
+
+  baseline:
+    desc: Capture BigQuery golden baseline (requires ADC + BENCH_BQ_PROJECT)
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        if [ -z "${BENCH_BQ_PROJECT:-}" ]; then
+          echo "BENCH_BQ_PROJECT is required" >&2
+          exit 1
+        fi
+        go run ./bench/cmd/bench \
+          --target=bigquery \
+          --project="${BENCH_BQ_PROJECT}" \
+          --capture \
+          --baseline "{{.BENCH_BASELINE}}" \
+          --json-out "{{.BENCH_JSON}}"
+
+  compare:
+    desc: Run emulator benchmarks and compare against committed baseline
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        if [ ! -x ./bin/emulator_main ]; then
+          task emulator:build-engine:bazel
+        fi
+        go run ./bench/cmd/bench \
+          --target=emulator \
+          --compare \
+          --baseline "{{.BENCH_BASELINE}}" \
+          --json-out "{{.BENCH_JSON}}"
+        task bench:charts
+      - task: cleanup
+
+  charts:
+    desc: Generate SVG charts from bench/results.json
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        if [ ! -f "{{.BENCH_JSON}}" ]; then
+          echo "missing {{.BENCH_JSON}}; run task bench:run first" >&2
+          exit 1
+        fi
+        uv run --project bench/charts python bench/charts/generate.py \
+          --results "{{.BENCH_JSON}}" \
+          --baseline "{{.BENCH_BASELINE}}" \
+          --out "{{.BENCH_CHARTS_OUT}}"
+
+  build-profile:
+    desc: Build emulator_main with debug symbols for profiling
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        task bazel:build -- --config=profile //binaries/emulator_main:emulator_main
+
+  profile:
+    desc: "Profile one case (CASE=name MODE=cpu|heap)"
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        CASE="${CASE:-select_literal}"
+        MODE="${MODE:-cpu}"
+        mkdir -p bench/profiles
+        if [ "$MODE" = "cpu" ]; then
+          command -v perf >/dev/null || { echo "install perf"; exit 1; }
+          go run ./bench/cmd/bench --target=emulator --case="$CASE" --skip-goccy &
+          BENCH_PID=$!
+          sleep 3
+          ENGINE_PID=$(pgrep -n emulator_main || true)
+          if [ -z "$ENGINE_PID" ]; then
+            kill "$BENCH_PID" 2>/dev/null || true
+            echo "emulator_main not found" >&2
+            exit 1
+          fi
+          perf record -g -p "$ENGINE_PID" -o "bench/profiles/${CASE}.perf.data" -- sleep 30 || true
+          wait "$BENCH_PID" || true
+          echo "wrote bench/profiles/${CASE}.perf.data (perf report -i ...)"
+        elif [ "$MODE" = "heap" ]; then
+          command -v heaptrack >/dev/null || { echo "install heaptrack"; exit 1; }
+          export BIGQUERY_EMULATOR_BIN="heaptrack -o bench/profiles/${CASE}.heaptrack.gz $(pwd)/bin/emulator_main"
+          go run ./bench/cmd/bench --target=emulator --case="$CASE" --skip-goccy
+        else
+          echo "MODE must be cpu or heap" >&2
+          exit 1
+        fi
+      - task: cleanup
+
+  cleanup:
+    desc: Stop benchmark-related processes
+    internal: true
+    cmds:
+      - |
+        pgrep -af 'emulator_main|bq-bench-goccy' | grep -v grep | awk '{print $1}' | xargs -r kill -TERM 2>/dev/null || true
+        sleep 1
+        pgrep -af 'emulator_main|bq-bench-goccy' | grep -v grep | awk '{print $1}' | xargs -r kill -KILL 2>/dev/null || true
+        docker ps -q --filter 'name=bq-bench-goccy' | xargs -r docker rm -f >/dev/null 2>&1 || true
+        task bazel:shutdown 2>/dev/null || true

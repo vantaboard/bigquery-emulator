@@ -1,0 +1,15 @@
+name: join_hash_100k
+tags: [duckdb, join]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.a AS
+      SELECT id, MOD(id, 1000) AS k FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+  - sql: |
+      CREATE TABLE {{ds}}.b AS
+      SELECT k, k * 2 AS v FROM UNNEST(GENERATE_ARRAY(0, 999)) AS k
+query: |
+  SELECT COUNT(*) AS cnt, SUM(b.v) AS total
+  FROM {{ds}}.a AS a
+  JOIN {{ds}}.b AS b ON a.k = b.k
+iterations: 10
+warmup: 2
