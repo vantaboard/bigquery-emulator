@@ -13,10 +13,10 @@ todos:
     status: completed
   - id: wave3
     content: "Wave 3 tail (SERIALIZED): dispatch 10 storage-api -> 11 relational long tail (needs 01) -> 12 pipe/specialized (needs 01+04+09)."
-    status: in_progress
+    status: completed
   - id: track
     content: After each subagent returns, run the parent cleanup block, update the parity-00 status table, flip the matching wave todo here, and verify SHAPE_TRACKER/disposition parity stayed green on main.
-    status: in_progress
+    status: completed
 isProject: true
 ---
 
