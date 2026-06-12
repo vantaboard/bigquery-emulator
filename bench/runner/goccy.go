@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
 
 const defaultGoccyImage = "ghcr.io/goccy/bigquery-emulator:0.7.2"
+
+// goccyProject is the single project the goccy container is started
+// with. goccy/bigquery-emulator 404s on any other project id, so every
+// case runs under this one (dataset names are unique per case).
+const goccyProject = "bench"
 
 // DefaultGoccyImage returns the pinned goccy container reference.
 func DefaultGoccyImage() string { return defaultGoccyImage }
@@ -46,11 +50,9 @@ func (t *GoccyTarget) Start(ctx context.Context) error {
 		"--name", name,
 		"-p", fmt.Sprintf("127.0.0.1:%d:9050", port),
 		image,
-		"--project=bench",
+		"--project=" + goccyProject,
 	}
 	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker run %s: %w: %s", image, err, strings.TrimSpace(string(out)))
 	}
@@ -94,8 +96,8 @@ func (t *GoccyTarget) waitReady(ctx context.Context) error {
 }
 
 func (t *GoccyTarget) SetupCase(ctx context.Context, c Case, dataset string) error {
-	setup, _ := c.Substitute(dataset, c.ProjectID)
-	t.client.ProjectID = c.ProjectID
+	setup, _ := c.Substitute(dataset, goccyProject)
+	t.client.ProjectID = goccyProject
 	for _, sql := range setup {
 		status, body, err := t.client.PostQuery(ctx, sql)
 		if err != nil {
@@ -109,7 +111,7 @@ func (t *GoccyTarget) SetupCase(ctx context.Context, c Case, dataset string) err
 }
 
 func (t *GoccyTarget) RunQuery(ctx context.Context, c Case, sql string, timeout time.Duration) (QueryResult, error) {
-	t.client.ProjectID = c.ProjectID
+	t.client.ProjectID = goccyProject
 	if timeout <= 0 {
 		timeout = time.Duration(defaultTimeoutMS) * time.Millisecond
 	}

@@ -119,8 +119,11 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 
 func runCase(ctx context.Context, opts RunOptions, target Target, c Case, dataset string, timeout time.Duration) (CaseResult, error) {
 	project := c.ProjectID
-	if bt, ok := target.(*BigQueryTarget); ok {
-		project = bt.ProjectID()
+	switch tt := target.(type) {
+	case *BigQueryTarget:
+		project = tt.ProjectID()
+	case *GoccyTarget:
+		project = goccyProject
 	}
 	dsRef := datasetRef(target.Name(), project, dataset)
 	setupBegan := time.Now()
@@ -135,7 +138,7 @@ func runCase(ctx context.Context, opts RunOptions, target Target, c Case, datase
 	}
 	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
 		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
-	_, query := c.Substitute(dsRef, c.ProjectID)
+	_, query := c.Substitute(dsRef, project)
 
 	var samples []time.Duration
 	var execSamples []time.Duration
