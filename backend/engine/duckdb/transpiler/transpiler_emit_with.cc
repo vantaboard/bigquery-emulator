@@ -328,9 +328,8 @@ std::string Transpiler::EmitRecursiveScan(
     }
     return std::string(out_col.name());
   };
-  auto build_arm =
-      [&](const ::googlesql::ResolvedSetOperationItem* item,
-          bool is_recursive_arm) -> std::string {
+  auto build_arm = [&](const ::googlesql::ResolvedSetOperationItem* item,
+                       bool is_recursive_arm) -> std::string {
     if (item == nullptr || item->scan() == nullptr) return "";
     if (item->output_column_list_size() != node->column_list_size()) {
       return "";
@@ -365,8 +364,8 @@ std::string Transpiler::EmitRecursiveScan(
       if (j == depth_col_idx) {
         std::string depth_expr;
         if (is_recursive_arm) {
-          depth_expr = absl::StrCat(
-              internal::QuoteIdent(cte_col.name()), " + 1");
+          depth_expr =
+              absl::StrCat(internal::QuoteIdent(cte_col.name()), " + 1");
         } else if (depth_mod != nullptr &&
                    depth_mod->lower_bound() != nullptr) {
           depth_expr = EmitExpr(depth_mod->lower_bound());

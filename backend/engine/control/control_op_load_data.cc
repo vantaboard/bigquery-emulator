@@ -28,7 +28,7 @@ namespace internal {
 namespace {
 
 std::string EscapePathLiteral(absl::string_view path) {
-  return absl::StrReplaceAll(path, {{ "'", "''" }});
+  return absl::StrReplaceAll(path, {{"'", "''"}});
 }
 
 absl::StatusOr<std::string> BuildReadSql(absl::string_view path,
@@ -125,8 +125,7 @@ absl::Status RunLoadData(storage::Storage& storage,
   ::duckdb_connection conn = nullptr;
   if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "control op executor: duckdb_connect failed");
+    return absl::InternalError("control op executor: duckdb_connect failed");
   }
   if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
@@ -142,12 +141,12 @@ absl::Status RunLoadData(storage::Storage& storage,
   }
 
   const std::string staging = "__bqemu_load_staging";
-  absl::Status staged = RunSqlNoResult(
-      conn,
-      absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
-                   QuoteIdent(staging),
-                   " AS ",
-                   *read_sql));
+  absl::Status staged =
+      RunSqlNoResult(conn,
+                     absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
+                                  QuoteIdent(staging),
+                                  " AS ",
+                                  *read_sql));
   if (!staged.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);

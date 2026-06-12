@@ -262,8 +262,7 @@ absl::StatusOr<Value> EvalSubqueryExpr(
           all_match = false;
           continue;
         }
-        auto matched =
-            functions::DispatchLike("$like", {*lhs, *pattern});
+        auto matched = functions::DispatchLike("$like", {*lhs, *pattern});
         if (!matched.ok()) return matched.status();
         if (matched->is_null()) {
           all_match = false;

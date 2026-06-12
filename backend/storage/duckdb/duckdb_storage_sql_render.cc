@@ -95,10 +95,9 @@ absl::StatusOr<std::int64_t> CountParquetRows(DuckDBStorage::Impl* impl,
   if (impl == nullptr) {
     return absl::InternalError("CountParquetRows: impl must be non-null");
   }
-  std::string sql = absl::StrCat(
-      "SELECT COUNT(*) FROM read_parquet('",
-      EscapeStringLiteralInner(parquet_path),
-      "', file_row_number = true)");
+  std::string sql = absl::StrCat("SELECT COUNT(*) FROM read_parquet('",
+                                 EscapeStringLiteralInner(parquet_path),
+                                 "', file_row_number = true)");
   absl::StrAppend(&sql, RenderWhereSqlClause(where_sql));
   ::duckdb_result result;
   const std::string sql_str(sql);

@@ -104,8 +104,7 @@ absl::Status RunCreateMaterializedView(
   ::duckdb_connection conn = nullptr;
   if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "control op executor: duckdb_connect failed");
+    return absl::InternalError("control op executor: duckdb_connect failed");
   }
   if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
@@ -132,10 +131,10 @@ absl::Status RunCreateMaterializedView(
     if (source_table == nullptr) {
       ::duckdb_disconnect(&conn);
       ::duckdb_close(&db);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "control op executor: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "' for CREATE MATERIALIZED VIEW"));
+      return absl::FailedPreconditionError(
+          absl::StrCat("control op executor: cannot attach non-StorageTable '",
+                       tbl->Name(),
+                       "' for CREATE MATERIALIZED VIEW"));
     }
     absl::Status attach = AttachStorageTableAt(
         conn, &storage, *source_table, QuoteIdent(tbl->Name()));

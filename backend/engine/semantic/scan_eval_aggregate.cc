@@ -112,7 +112,7 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
     const std::vector<Value>* group_keys,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   ColumnBindings out_row;
   if (group_keys != nullptr) {
     if (static_cast<int>(group_keys->size()) !=

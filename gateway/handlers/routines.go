@@ -167,15 +167,7 @@ func RoutineInsert(deps Dependencies) http.HandlerFunc {
 		}
 		out := routineResource(projectID, datasetID, routineID, rt)
 		if routineCatalogEnabled(&deps) {
-			if _, exists := catalogGetRoutine(r.Context(), &deps, projectID, datasetID, routineID); exists {
-				writeError(w, http.StatusConflict, reasonDuplicate,
-					"Already Exists: Routine "+projectID+":"+datasetID+"."+routineID)
-				return
-			}
-			if err := catalogUpsertRoutine(r.Context(), &deps, out); err != nil {
-				if grpcToHTTPError(w, err) {
-					return
-				}
+			if catalogInsertRoutine(r.Context(), w, &deps, projectID, datasetID, routineID, out) {
 				return
 			}
 		} else if !routineStore(&deps).Insert(out) {

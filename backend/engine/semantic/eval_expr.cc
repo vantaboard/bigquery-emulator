@@ -34,9 +34,9 @@ namespace backend {
 namespace engine {
 namespace semantic {
 
-using eval_expr_internal::EvalResolvedCast;
 using eval_expr_internal::EvalFlatten;
 using eval_expr_internal::EvalFlattenedArg;
+using eval_expr_internal::EvalResolvedCast;
 using eval_expr_internal::NullOfType;
 using eval_expr_internal::ToDouble;
 

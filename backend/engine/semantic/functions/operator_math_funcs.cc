@@ -329,8 +329,8 @@ absl::StatusOr<Value> Sqrt(const std::vector<Value>& args) {
   if (args[0].type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
     ::googlesql::BigNumericValue out;
     absl::Status error;
-    if (!::googlesql::functions::Sqrt(args[0].bignumeric_value(), &out,
-                                      &error)) {
+    if (!::googlesql::functions::Sqrt(
+            args[0].bignumeric_value(), &out, &error)) {
       return error;
     }
     return Value::BigNumeric(out);

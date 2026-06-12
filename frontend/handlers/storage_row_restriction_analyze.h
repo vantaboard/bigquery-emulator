@@ -10,11 +10,10 @@
 namespace bigquery_emulator {
 namespace frontend {
 
-absl::Status TranspileRowRestriction(
-    absl::string_view restriction,
-    const backend::storage::TableId& table,
-    backend::storage::Storage* storage,
-    std::string* where_sql);
+absl::Status TranspileRowRestriction(absl::string_view restriction,
+                                     const backend::storage::TableId& table,
+                                     backend::storage::Storage* storage,
+                                     std::string* where_sql);
 
 }  // namespace frontend
 }  // namespace bigquery_emulator

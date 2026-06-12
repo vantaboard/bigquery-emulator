@@ -436,9 +436,8 @@ absl::StatusOr<Value> ApplyNestedArrayDeleteItem(
       return absl::InternalError(
           "semantic/dml: nested DELETE list contains null entry");
     }
-    auto status = ApplyNestedArrayDeleteStmt(*nested, element_column,
-                                             array_value, row_ctx, ctx,
-                                             &element_states);
+    auto status = ApplyNestedArrayDeleteStmt(
+        *nested, element_column, array_value, row_ctx, ctx, &element_states);
     if (!status.ok()) return status.status();
   }
   if (array_value.is_null()) {

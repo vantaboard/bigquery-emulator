@@ -160,6 +160,7 @@ cc_library(
     name = "storage_read_handler",
     srcs = [
         "storage_read.cc",
+        "storage_read_streams.cc",
         "storage_row_restriction_analyze.cc",
     ],
     hdrs = [
@@ -242,6 +243,7 @@ cc_library(
     name = "storage_write_handler",
     srcs = [
         "storage_write.cc",
+        "storage_write_append_rows.cc",
         "storage_write_buffered.cc",
     ],
     hdrs = ["storage_write.h"],

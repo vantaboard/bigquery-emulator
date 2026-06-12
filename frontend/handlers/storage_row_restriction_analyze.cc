@@ -23,8 +23,10 @@ namespace frontend {
 namespace {
 
 absl::string_view Trim(absl::string_view s) {
-  while (!s.empty() && absl::ascii_isspace(s.front())) s.remove_prefix(1);
-  while (!s.empty() && absl::ascii_isspace(s.back())) s.remove_suffix(1);
+  while (!s.empty() && absl::ascii_isspace(s.front()))
+    s.remove_prefix(1);
+  while (!s.empty() && absl::ascii_isspace(s.back()))
+    s.remove_suffix(1);
   return s;
 }
 
@@ -64,11 +66,10 @@ const ::googlesql::ResolvedExpr* FindFilterExpr(
 
 }  // namespace
 
-absl::Status TranspileRowRestriction(
-    absl::string_view restriction,
-    const backend::storage::TableId& table,
-    backend::storage::Storage* storage,
-    std::string* where_sql) {
+absl::Status TranspileRowRestriction(absl::string_view restriction,
+                                     const backend::storage::TableId& table,
+                                     backend::storage::Storage* storage,
+                                     std::string* where_sql) {
   if (where_sql == nullptr) {
     return absl::InternalError(
         "row_restriction: where_sql out parameter must be non-null");
@@ -92,16 +93,15 @@ absl::Status TranspileRowRestriction(
                                              language,
                                              table.dataset_id);
 
-  const std::string sql = absl::StrCat(
-      "SELECT * FROM `",
-      table.project_id,
-      ".",
-      table.dataset_id,
-      ".",
-      table.table_id,
-      "` WHERE (",
-      trimmed,
-      ")");
+  const std::string sql = absl::StrCat("SELECT * FROM `",
+                                       table.project_id,
+                                       ".",
+                                       table.dataset_id,
+                                       ".",
+                                       table.table_id,
+                                       "` WHERE (",
+                                       trimmed,
+                                       ")");
 
   ::googlesql::AnalyzerOptions options = MakeRowRestrictionAnalyzerOptions();
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;

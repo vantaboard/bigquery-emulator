@@ -34,9 +34,10 @@ class StorageReadService final : public v1::StorageRead::Service {
       const v1::ReadRowsRequest* request,
       ::grpc::ServerWriter<v1::ReadRowsResponse>* writer) override;
 
-  ::grpc::Status SplitReadStream(::grpc::ServerContext* context,
-                                 const v1::SplitReadStreamRequest* request,
-                                 v1::SplitReadStreamResponse* response) override;
+  ::grpc::Status SplitReadStream(
+      ::grpc::ServerContext* context,
+      const v1::SplitReadStreamRequest* request,
+      v1::SplitReadStreamResponse* response) override;
 
   static constexpr int kReadRowsBatchSize = 100;
 

@@ -42,10 +42,10 @@ absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
     const storage::TableId& target) {
   if (action == nullptr) return std::optional<schema::ColumnSchema>{};
   if (action->node_kind() != ::googlesql::RESOLVED_ADD_COLUMN_ACTION) {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: ALTER TABLE action ",
-        action->node_kind_string(),
-        " is not implemented"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: ALTER TABLE action ",
+                     action->node_kind_string(),
+                     " is not implemented"));
   }
   const auto* add = action->GetAs<::googlesql::ResolvedAddColumnAction>();
   const ::googlesql::ResolvedColumnDefinition* def = add->column_definition();
@@ -80,22 +80,22 @@ absl::StatusOr<std::optional<schema::ColumnSchema>> ProcessAddColumnAction(
   return std::optional<schema::ColumnSchema>{*std::move(column)};
 }
 
-absl::Status ApplyDropColumnAction(const ::googlesql::ResolvedAlterAction* action,
-                                   schema::TableSchema* schema,
-                                   const storage::TableId& target) {
+absl::Status ApplyDropColumnAction(
+    const ::googlesql::ResolvedAlterAction* action,
+    schema::TableSchema* schema,
+    const storage::TableId& target) {
   if (action == nullptr) return absl::OkStatus();
   if (action->node_kind() != ::googlesql::RESOLVED_DROP_COLUMN_ACTION) {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: ALTER TABLE action ",
-        action->node_kind_string(),
-        " is not implemented"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: ALTER TABLE action ",
+                     action->node_kind_string(),
+                     " is not implemented"));
   }
   const auto* drop = action->GetAs<::googlesql::ResolvedDropColumnAction>();
-  auto it = std::find_if(schema->columns.begin(),
-                         schema->columns.end(),
-                         [&](const schema::ColumnSchema& c) {
-                           return c.name == drop->name();
-                         });
+  auto it = std::find_if(
+      schema->columns.begin(),
+      schema->columns.end(),
+      [&](const schema::ColumnSchema& c) { return c.name == drop->name(); });
   if (it == schema->columns.end()) {
     if (drop->is_if_exists()) return absl::OkStatus();
     return absl::NotFoundError(
@@ -118,28 +118,27 @@ absl::Status ApplyRenameColumnAction(
     const storage::TableId& target) {
   if (action == nullptr) return absl::OkStatus();
   if (action->node_kind() != ::googlesql::RESOLVED_RENAME_COLUMN_ACTION) {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: ALTER TABLE action ",
-        action->node_kind_string(),
-        " is not implemented"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: ALTER TABLE action ",
+                     action->node_kind_string(),
+                     " is not implemented"));
   }
   const auto* rename = action->GetAs<::googlesql::ResolvedRenameColumnAction>();
-  auto it = std::find_if(schema->columns.begin(),
-                         schema->columns.end(),
-                         [&](const schema::ColumnSchema& c) {
-                           return c.name == rename->name();
-                         });
+  auto it = std::find_if(
+      schema->columns.begin(),
+      schema->columns.end(),
+      [&](const schema::ColumnSchema& c) { return c.name == rename->name(); });
   if (it == schema->columns.end()) {
     if (rename->is_if_exists()) return absl::OkStatus();
-    return absl::NotFoundError(absl::StrCat(
-        "control op executor: ALTER TABLE RENAME COLUMN: column '",
-        rename->name(),
-        "' not found on table ",
-        target.project_id,
-        ".",
-        target.dataset_id,
-        ".",
-        target.table_id));
+    return absl::NotFoundError(
+        absl::StrCat("control op executor: ALTER TABLE RENAME COLUMN: column '",
+                     rename->name(),
+                     "' not found on table ",
+                     target.project_id,
+                     ".",
+                     target.dataset_id,
+                     ".",
+                     target.table_id));
   }
   it->name = rename->new_name();
   return absl::OkStatus();
@@ -149,10 +148,10 @@ absl::Status ApplySetOptionsAction(
     const ::googlesql::ResolvedAlterAction* action) {
   if (action == nullptr) return absl::OkStatus();
   if (action->node_kind() != ::googlesql::RESOLVED_SET_OPTIONS_ACTION) {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: ALTER TABLE action ",
-        action->node_kind_string(),
-        " is not implemented"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: ALTER TABLE action ",
+                     action->node_kind_string(),
+                     " is not implemented"));
   }
   // Table options are metadata-only in the emulator today.
   return absl::OkStatus();
@@ -204,17 +203,15 @@ absl::StatusOr<std::vector<storage::Row>> CopyRowsWithSchema(
     storage::Row projected;
     projected.cells.reserve(new_schema.columns.size());
     for (const schema::ColumnSchema& col : new_schema.columns) {
-      auto it = std::find_if(old_schema.columns.begin(),
-                             old_schema.columns.end(),
-                             [&](const schema::ColumnSchema& c) {
-                               return c.name == col.name;
-                             });
+      auto it = std::find_if(
+          old_schema.columns.begin(),
+          old_schema.columns.end(),
+          [&](const schema::ColumnSchema& c) { return c.name == col.name; });
       if (it == old_schema.columns.end()) {
         projected.cells.push_back(storage::Value::Null());
         continue;
       }
-      const size_t idx =
-          static_cast<size_t>(it - old_schema.columns.begin());
+      const size_t idx = static_cast<size_t>(it - old_schema.columns.begin());
       projected.cells.push_back(row.cells[idx]);
     }
     rows.push_back(std::move(projected));
@@ -242,7 +239,8 @@ absl::Status RunAlterTable(storage::Storage& storage,
                            const ::googlesql::ResolvedAlterTableStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
-        "ControlOpExecutor::ExecuteDdl: ALTER TABLE has null resolved statement");
+        "ControlOpExecutor::ExecuteDdl: ALTER TABLE has null resolved "
+        "statement");
   }
   absl::StatusOr<storage::TableId> target =
       NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
@@ -295,10 +293,10 @@ absl::Status RunAlterTable(storage::Storage& storage,
         break;
       }
       default:
-        return absl::UnimplementedError(absl::StrCat(
-            "control op executor: ALTER TABLE action ",
-            action->node_kind_string(),
-            " is not implemented"));
+        return absl::UnimplementedError(
+            absl::StrCat("control op executor: ALTER TABLE action ",
+                         action->node_kind_string(),
+                         " is not implemented"));
     }
   }
 

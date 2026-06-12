@@ -187,8 +187,8 @@ TEST_F(StorageWriteServiceTest, BatchCommitRequiresFinalizedPendingStream) {
   commit_req.set_parent("projects/proj-test/datasets/ds/tables/t");
   commit_req.add_write_streams(stream.name());
   v1::BatchCommitWriteStreamsResponse commit_resp;
-  ::grpc::Status status = service_->BatchCommitWriteStreams(
-      nullptr, &commit_req, &commit_resp);
+  ::grpc::Status status =
+      service_->BatchCommitWriteStreams(nullptr, &commit_req, &commit_resp);
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);
 }
 

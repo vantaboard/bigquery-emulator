@@ -37,7 +37,7 @@ absl::StatusOr<std::vector<ColumnBindings>> ProjectRowsToColumnList(
   return out;
 }
 
-SubpipelineEvalScope* ActiveSubpipelineScope(EvalContext& ctx,
+SubpipelineEvalScope* ActiveSubpipelineScope(const EvalContext& ctx,
                                              SubpipelineEvalScope& local) {
   if (ctx.subpipeline == nullptr) {
     return &local;
@@ -48,7 +48,8 @@ SubpipelineEvalScope* ActiveSubpipelineScope(EvalContext& ctx,
 }  // namespace
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSubpipelineInputScan(
-    const ::googlesql::ResolvedSubpipelineInputScan& scan, EvalContext& ctx) {
+    const ::googlesql::ResolvedSubpipelineInputScan& scan,
+    const EvalContext& ctx) {
   if (ctx.subpipeline == nullptr || ctx.subpipeline->input_stack.empty()) {
     return absl::InternalError(
         "semantic: SubpipelineInputScan without active subpipeline input");
@@ -99,8 +100,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeIfScan(
     return absl::InternalError(
         "semantic: selected PipeIfCase missing resolved subpipeline");
   }
-  auto sub_or =
-      MaterializeSubpipeline(*if_case->subpipeline(), *input_or, ctx);
+  auto sub_or = MaterializeSubpipeline(*if_case->subpipeline(), *input_or, ctx);
   if (!sub_or.ok()) return sub_or.status();
   return ProjectRowsToColumnList(*sub_or, pipe.column_list());
 }

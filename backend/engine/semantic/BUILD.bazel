@@ -115,6 +115,7 @@ cc_library(
         "eval_expr_cast.cc",
         "eval_expr_cast_format.cc",
         "eval_expr_cast_helpers.cc",
+        "eval_expr_cast_modifiers.cc",
         "eval_expr_dispatch.cc",
         "eval_expr_flatten.cc",
         "eval_expr_fn_dispatch.cc",

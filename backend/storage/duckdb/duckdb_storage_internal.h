@@ -80,10 +80,9 @@ std::string RenderWhereSqlClause(absl::string_view where_sql);
 std::string RenderRowPartitionClause(std::int64_t row_start,
                                      std::int64_t row_end);
 
-absl::StatusOr<std::int64_t> CountParquetRows(
-    DuckDBStorage::Impl* impl,
-    absl::string_view parquet_path,
-    absl::string_view where_sql);
+absl::StatusOr<std::int64_t> CountParquetRows(DuckDBStorage::Impl* impl,
+                                              absl::string_view parquet_path,
+                                              absl::string_view where_sql);
 
 std::string RenderColumnIdentList(const schema::TableSchema& schema);
 

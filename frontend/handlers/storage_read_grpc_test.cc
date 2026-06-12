@@ -360,7 +360,8 @@ TEST_F(StorageReadGrpcTest, ReadRowsHonorsRangeRowRestriction) {
   std::vector<v1::DataRow> rows;
   v1::ReadRowsResponse page;
   while (reader->Read(&page)) {
-    for (const auto& row : page.rows()) rows.push_back(row);
+    for (const auto& row : page.rows())
+      rows.push_back(row);
   }
   ASSERT_TRUE(reader->Finish().ok());
   ASSERT_EQ(rows.size(), 2u);
@@ -390,7 +391,8 @@ TEST_F(StorageReadGrpcTest, CreateReadSessionMintsMultipleStreams) {
     auto reader = stub_->ReadRows(&read_ctx, read_req);
     v1::ReadRowsResponse page;
     while (reader->Read(&page)) {
-      for (const auto& row : page.rows()) all_rows.push_back(row);
+      for (const auto& row : page.rows())
+        all_rows.push_back(row);
     }
     ASSERT_TRUE(reader->Finish().ok());
   }
@@ -415,8 +417,7 @@ TEST_F(StorageReadGrpcTest, SplitReadStreamPartitionsRemainingRange) {
   split_req.set_name(stream_name);
   split_req.set_fraction(0.5);
   v1::SplitReadStreamResponse split_resp;
-  ASSERT_TRUE(
-      stub_->SplitReadStream(&split_ctx, split_req, &split_resp).ok());
+  ASSERT_TRUE(stub_->SplitReadStream(&split_ctx, split_req, &split_resp).ok());
 
   auto drain = [&](const std::string& name) {
     ::grpc::ClientContext read_ctx;

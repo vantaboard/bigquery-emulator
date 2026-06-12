@@ -31,7 +31,7 @@ namespace internal {
 namespace {
 
 std::string EscapePathLiteral(absl::string_view path) {
-  return absl::StrReplaceAll(path, {{ "'", "''" }});
+  return absl::StrReplaceAll(path, {{"'", "''"}});
 }
 
 absl::StatusOr<std::string> BuildCopyToSql(absl::string_view select_sql,
@@ -40,43 +40,35 @@ absl::StatusOr<std::string> BuildCopyToSql(absl::string_view select_sql,
   const std::string escaped = EscapePathLiteral(path);
   const std::string upper = absl::AsciiStrToUpper(format);
   if (upper == "CSV") {
-    return absl::StrCat("COPY (",
-                        select_sql,
-                        ") TO '",
-                        escaped,
-                        "' (FORMAT CSV, HEADER TRUE)");
+    return absl::StrCat(
+        "COPY (", select_sql, ") TO '", escaped, "' (FORMAT CSV, HEADER TRUE)");
   }
   if (upper == "JSON" || upper == "NEWLINE_DELIMITED_JSON") {
-    return absl::StrCat("COPY (",
-                        select_sql,
-                        ") TO '",
-                        escaped,
-                        "' (FORMAT JSON)");
+    return absl::StrCat(
+        "COPY (", select_sql, ") TO '", escaped, "' (FORMAT JSON)");
   }
   if (upper == "PARQUET") {
-    return absl::StrCat("COPY (",
-                        select_sql,
-                        ") TO '",
-                        escaped,
-                        "' (FORMAT PARQUET)");
+    return absl::StrCat(
+        "COPY (", select_sql, ") TO '", escaped, "' (FORMAT PARQUET)");
   }
   return absl::InvalidArgumentError(absl::StrCat(
       "control op executor: EXPORT DATA unsupported format '", format, "'"));
 }
 
-absl::Status AttachReferencedTables(::duckdb_connection conn,
-                                    storage::Storage& storage,
-                                    const ::googlesql::ResolvedStatement& root) {
+absl::Status AttachReferencedTables(
+    ::duckdb_connection conn,
+    storage::Storage& storage,
+    const ::googlesql::ResolvedStatement& root) {
   TableScanCollector collector;
   absl::Status visit_status = root.Accept(&collector);
   if (!visit_status.ok()) return visit_status;
   for (const ::googlesql::Table* tbl : collector.tables()) {
     const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (source_table == nullptr) {
-      return absl::FailedPreconditionError(absl::StrCat(
-          "control op executor: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "' for EXPORT DATA"));
+      return absl::FailedPreconditionError(
+          absl::StrCat("control op executor: cannot attach non-StorageTable '",
+                       tbl->Name(),
+                       "' for EXPORT DATA"));
     }
     absl::Status attach = AttachStorageTableAt(
         conn, &storage, *source_table, QuoteIdent(tbl->Name()));
@@ -111,11 +103,13 @@ absl::Status RunExportData(storage::Storage& storage,
   std::string select_sql = transpiler.TranspileScan(stmt->query());
   if (select_sql.empty()) {
     return absl::UnimplementedError(
-        "control op executor: EXPORT DATA query did not transpile to DuckDB SQL");
+        "control op executor: EXPORT DATA query did not transpile to DuckDB "
+        "SQL");
   }
   if (!transpiler.parameter_order().empty()) {
-    auto substituted = SubstituteDuckdbParameters(
-        std::move(select_sql), transpiler.parameter_order(), request.parameters);
+    auto substituted = SubstituteDuckdbParameters(std::move(select_sql),
+                                                  transpiler.parameter_order(),
+                                                  request.parameters);
     if (!substituted.ok()) return substituted.status();
     select_sql = *std::move(substituted);
   }
@@ -128,8 +122,7 @@ absl::Status RunExportData(storage::Storage& storage,
   ::duckdb_connection conn = nullptr;
   if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "control op executor: duckdb_connect failed");
+    return absl::InternalError("control op executor: duckdb_connect failed");
   }
   if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);

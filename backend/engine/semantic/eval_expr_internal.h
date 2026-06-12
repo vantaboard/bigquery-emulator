@@ -85,6 +85,11 @@ std::optional<absl::StatusOr<Value>> TryEvalCastFormatAndTimezone(
     Value inner,
     const ::googlesql::Type* target);
 
+absl::StatusOr<Value> ApplyCastTypeModifiers(
+    Value value,
+    const ::googlesql::TypeModifiers& modifiers,
+    bool return_null_on_error);
+
 absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);
@@ -95,8 +100,8 @@ absl::StatusOr<Value> DispatchFunctionByName(
     const ::googlesql::Type* return_type,
     const EvalContext* ctx = nullptr);
 
-absl::StatusOr<Value> EvalFlatten(
-    const ::googlesql::ResolvedFlatten& flatten, const EvalContext& ctx);
+absl::StatusOr<Value> EvalFlatten(const ::googlesql::ResolvedFlatten& flatten,
+                                  const EvalContext& ctx);
 absl::StatusOr<Value> EvalFlattenedArg(const EvalContext& ctx);
 
 }  // namespace eval_expr_internal

@@ -17,7 +17,7 @@ using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeGroupRowsScan(
-    const ::googlesql::ResolvedGroupRowsScan& scan, EvalContext& ctx) {
+    const ::googlesql::ResolvedGroupRowsScan& scan, const EvalContext& ctx) {
   if (ctx.group_rows == nullptr || ctx.group_rows->rows == nullptr) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -38,8 +38,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeGroupRowsScan(
     ColumnBindings row;
     row.reserve(scan.column_list_size());
     for (int i = 0; i < scan.input_column_list_size(); ++i) {
-      const ::googlesql::ResolvedComputedColumn* cc =
-          scan.input_column_list(i);
+      const ::googlesql::ResolvedComputedColumn* cc = scan.input_column_list(i);
       if (cc == nullptr || cc->expr() == nullptr) {
         return absl::InternalError(
             "semantic: GroupRowsScan input_column_list has null expr");

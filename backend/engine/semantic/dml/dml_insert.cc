@@ -47,8 +47,7 @@ absl::StatusOr<DmlStats> ExecuteInsert(
         "semantic/dml: INSERT ... ON CONFLICT is not yet supported");
   }
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      insert.generated_column_expr_list_size(),
-      "INSERT");
+      insert.generated_column_expr_list_size(), "INSERT");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(insert, "INSERT");

@@ -36,8 +36,7 @@ absl::StatusOr<DmlStats> ExecuteDelete(
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      /*generated_column_count=*/0,
-      "DELETE");
+      /*generated_column_count=*/0, "DELETE");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(del, "DELETE");
@@ -130,8 +129,7 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out) {
   absl::Status guard = RejectUnsupportedDmlFeatures(
-      upd.generated_column_expr_list_size(),
-      "UPDATE");
+      upd.generated_column_expr_list_size(), "UPDATE");
   if (!guard.ok()) return guard;
 
   auto target_or = StorageTargetFor(upd, "UPDATE");
@@ -175,7 +173,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       if (!parsed.ok()) return parsed.status();
       const ::googlesql::Type* root_type = nullptr;
       for (int c = 0; c < upd.table_scan()->column_list_size(); ++c) {
-        const ::googlesql::ResolvedColumn& col = upd.table_scan()->column_list(c);
+        const ::googlesql::ResolvedColumn& col =
+            upd.table_scan()->column_list(c);
         if (IndexOfColumn(schema, col.name()) == parsed->column_idx) {
           root_type = col.type();
           break;
@@ -183,7 +182,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       }
       if (root_type == nullptr) {
         return absl::InternalError(
-            "semantic/dml: nested DELETE target column missing from table scan");
+            "semantic/dml: nested DELETE target column missing from table "
+            "scan");
       }
       nested_deletes.push_back({*std::move(parsed), root_type, item});
       continue;
@@ -268,8 +268,8 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
             SemanticErrorReason::kNotImplemented,
             "semantic/dml: nested DELETE on nested STRUCT arrays is deferred");
       }
-      auto rewritten = ApplyNestedArrayDeleteItem(*nested.item, *current,
-                                                  row_ctx, ctx);
+      auto rewritten =
+          ApplyNestedArrayDeleteItem(*nested.item, *current, row_ctx, ctx);
       if (!rewritten.ok()) return rewritten.status();
       auto cell = ToStorageValue(*rewritten);
       if (!cell.ok()) return cell.status();
@@ -453,23 +453,22 @@ absl::StatusOr<DmlResult> ExecuteDml(const QueryRequest& request,
       return out;
     }
     case ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT: {
-      const auto* gq =
-          stmt.GetAs<::googlesql::ResolvedGeneralizedQueryStmt>();
-      const ::googlesql::ResolvedScan* body = gq == nullptr ? nullptr : gq->query();
+      const auto* gq = stmt.GetAs<::googlesql::ResolvedGeneralizedQueryStmt>();
+      const ::googlesql::ResolvedScan* body =
+          gq == nullptr ? nullptr : gq->query();
       if (body == nullptr ||
           body->node_kind() != ::googlesql::RESOLVED_PIPE_INSERT_SCAN) {
         return MakeSemanticError(
             SemanticErrorReason::kNotImplemented,
             "semantic/dml: generalized query statement is not a pipe INSERT");
       }
-      const auto* pipe =
-          body->GetAs<::googlesql::ResolvedPipeInsertScan>();
+      const auto* pipe = body->GetAs<::googlesql::ResolvedPipeInsertScan>();
       if (pipe == nullptr || pipe->insert_stmt() == nullptr) {
         return absl::InternalError(
             "semantic/dml: ResolvedPipeInsertScan missing insert_stmt");
       }
-      auto stats = ExecuteInsert(*pipe->insert_stmt(), *storage, ctx,
-                                 &out.returning_rows);
+      auto stats = ExecuteInsert(
+          *pipe->insert_stmt(), *storage, ctx, &out.returning_rows);
       if (!stats.ok()) return stats.status();
       out.stats = *std::move(stats);
       return out;

@@ -1,7 +1,3 @@
-#include "frontend/handlers/catalog.h"
-
-#include "frontend/handlers/handler_common.h"
-
 #include <string>
 #include <vector>
 
@@ -14,6 +10,8 @@
 #include "backend/catalog/udf_registry.h"
 #include "backend/engine/coordinator/routine_rehydrate.h"
 #include "backend/storage/storage.h"
+#include "frontend/handlers/catalog.h"
+#include "frontend/handlers/handler_common.h"
 
 namespace bigquery_emulator {
 namespace frontend {
@@ -34,8 +32,8 @@ namespace {
 }
 
 backend::storage::RoutineId RoutineIdFromProto(const v1::RoutineRef& ref) {
-  return backend::storage::RoutineId{ref.project_id(), ref.dataset_id(),
-                                     ref.routine_id()};
+  return backend::storage::RoutineId{
+      ref.project_id(), ref.dataset_id(), ref.routine_id()};
 }
 
 std::string RoutineTypeFromKind(backend::storage::RoutineKind kind) {
@@ -114,10 +112,9 @@ backend::storage::RoutineRecord RecordFromProto(
   return ::grpc::Status::OK;
 }
 
-::grpc::Status CatalogService::GetRoutine(
-    ::grpc::ServerContext* /*context*/,
-    const v1::GetRoutineRequest* request,
-    v1::GetRoutineResponse* response) {
+::grpc::Status CatalogService::GetRoutine(::grpc::ServerContext* /*context*/,
+                                          const v1::GetRoutineRequest* request,
+                                          v1::GetRoutineResponse* response) {
   if (storage_ == nullptr) {
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "CatalogService: storage backend is not configured");
@@ -166,8 +163,7 @@ backend::storage::RoutineRecord RecordFromProto(
       !v.ok()) {
     return v;
   }
-  const backend::storage::RoutineId id =
-      RoutineIdFromProto(request->routine());
+  const backend::storage::RoutineId id = RoutineIdFromProto(request->routine());
   absl::Status dropped =
       backend::catalog::DropProjectFunction(id.project_id, id.routine_id);
   if (!dropped.ok()) {

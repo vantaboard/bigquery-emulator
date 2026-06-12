@@ -40,8 +40,8 @@ absl::StatusOr<Value> EvalFlattenedArg(const EvalContext& ctx) {
   return *ctx.flatten->current;
 }
 
-absl::StatusOr<Value> EvalFlatten(
-    const ::googlesql::ResolvedFlatten& flatten, const EvalContext& ctx) {
+absl::StatusOr<Value> EvalFlatten(const ::googlesql::ResolvedFlatten& flatten,
+                                  const EvalContext& ctx) {
   if (flatten.expr() == nullptr) {
     return absl::InvalidArgumentError("semantic: FLATTEN missing input expr");
   }

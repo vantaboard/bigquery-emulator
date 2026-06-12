@@ -13,6 +13,7 @@ cc_library(
         "duckdb_storage_sql_render.cc",
         "duckdb_storage_list_literals.cc",
         "duckdb_storage_meta.cc",
+        "duckdb_storage_read_stream.cc",
         "duckdb_storage_rows.cc",
         "duckdb_storage_routines.cc",
     ],

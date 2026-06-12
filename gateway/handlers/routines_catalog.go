@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -35,27 +36,34 @@ func routineFromDescriptor(desc *enginepb.RoutineDescriptor) bqtypes.Routine {
 		Language:       bqtypes.RoutineLanguage(desc.GetLanguage()),
 		DefinitionBody: desc.GetDefinitionBody(),
 	}
-	if desc.GetDdlSql() != "" {
-		if parsed, ok := routines.ParseCreateRoutineDDL(
-			ref.GetProjectId(), ref.GetDatasetId(), desc.GetDdlSql()); ok {
-			if parsed.DefinitionBody != "" {
-				rt.DefinitionBody = parsed.DefinitionBody
-			}
-			if len(parsed.Arguments) > 0 {
-				rt.Arguments = parsed.Arguments
-			}
-			if parsed.ReturnType != nil {
-				rt.ReturnType = parsed.ReturnType
-			}
-			if parsed.RoutineType != "" {
-				rt.RoutineType = parsed.RoutineType
-			}
-			if parsed.Language != "" {
-				rt.Language = parsed.Language
-			}
-		}
+	ddl := desc.GetDdlSql()
+	if ddl == "" {
+		return rt
 	}
+	parsed, ok := routines.ParseCreateRoutineDDL(ref.GetProjectId(), ref.GetDatasetId(), ddl)
+	if !ok {
+		return rt
+	}
+	applyRoutineFromDDL(&rt, parsed)
 	return rt
+}
+
+func applyRoutineFromDDL(rt *bqtypes.Routine, parsed bqtypes.Routine) {
+	if parsed.DefinitionBody != "" {
+		rt.DefinitionBody = parsed.DefinitionBody
+	}
+	if len(parsed.Arguments) > 0 {
+		rt.Arguments = parsed.Arguments
+	}
+	if parsed.ReturnType != nil {
+		rt.ReturnType = parsed.ReturnType
+	}
+	if parsed.RoutineType != "" {
+		rt.RoutineType = parsed.RoutineType
+	}
+	if parsed.Language != "" {
+		rt.Language = parsed.Language
+	}
 }
 
 func catalogGetRoutine(
@@ -87,6 +95,27 @@ func catalogListRoutines(ctx context.Context, deps *Dependencies, projectID, dat
 		out = append(out, routineFromDescriptor(desc))
 	}
 	return out
+}
+
+// catalogInsertRoutine persists a new routine via the catalog. Returns true when
+// the HTTP response has been written (conflict or engine error).
+func catalogInsertRoutine(
+	ctx context.Context,
+	w http.ResponseWriter,
+	deps *Dependencies,
+	projectID, datasetID, routineID string,
+	out bqtypes.Routine,
+) bool {
+	if _, exists := catalogGetRoutine(ctx, deps, projectID, datasetID, routineID); exists {
+		writeError(w, http.StatusConflict, reasonDuplicate,
+			"Already Exists: Routine "+projectID+":"+datasetID+"."+routineID)
+		return true
+	}
+	if err := catalogUpsertRoutine(ctx, deps, out); err != nil {
+		grpcToHTTPError(w, err)
+		return true
+	}
+	return false
 }
 
 func catalogUpsertRoutine(ctx context.Context, deps *Dependencies, rt bqtypes.Routine) error {

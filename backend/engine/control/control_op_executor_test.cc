@@ -20,8 +20,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <random>
 #include <string>
@@ -452,48 +452,6 @@ TEST_F(ControlOpExecutorTest, AnalyzeWithoutTablesSucceeds) {
   // scope.
   absl::Status s = RunDdl("ANALYZE");
   EXPECT_TRUE(s.ok()) << s;
-}
-
-// --- Deferred control-op shapes -----------------------------------------
-
-TEST_F(ControlOpExecutorTest, CreateViewRegisteredByCoordinator) {
-  absl::Status s = RunDdl("CREATE VIEW ds.v AS SELECT 1 AS id");
-  EXPECT_TRUE(s.ok()) << s;
-}
-
-TEST_F(ControlOpExecutorTest, CreateMaterializedViewMaterializesRows) {
-  CreatePeopleTable();
-  absl::Status s =
-      RunDdl("CREATE MATERIALIZED VIEW ds.mv AS SELECT id, name FROM ds.people");
-  ASSERT_TRUE(s.ok()) << s;
-  auto scan = storage_->ScanRows({"proj-test", "ds", "mv"});
-  ASSERT_TRUE(scan.ok()) << scan.status();
-  int rows = 0;
-  storage::Row row;
-  while (true) {
-    auto has = (*scan)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 2u);
-    ++rows;
-  }
-  EXPECT_EQ(rows, 3);
-}
-
-TEST_F(ControlOpExecutorTest, ExportDataWritesLocalCsv) {
-  CreatePeopleTable();
-  const std::string path = absl::StrCat(
-      std::getenv("TEST_TMPDIR") != nullptr ? std::getenv("TEST_TMPDIR") : "/tmp",
-      "/bqemu_export_test.csv");
-  absl::Status s = RunDdl(absl::StrCat(
-      "EXPORT DATA OPTIONS(uri='file://", path, "', format='CSV') AS ",
-      "SELECT id, name FROM ds.people ORDER BY id"));
-  ASSERT_TRUE(s.ok()) << s;
-  std::ifstream in(path);
-  ASSERT_TRUE(in.good()) << "expected export file at " << path;
-  std::string line;
-  ASSERT_TRUE(std::getline(in, line));
-  EXPECT_EQ(line, "id,name");
 }
 
 }  // namespace

@@ -47,10 +47,10 @@ absl::StatusOr<std::string> OptionStringValue(
   if (auto s = TryLiteralString(opt->value()); s.has_value()) {
     return *s;
   }
-  return absl::InvalidArgumentError(absl::StrCat(
-      "control op executor: option '",
-      opt->name(),
-      "' must be a STRING literal"));
+  return absl::InvalidArgumentError(
+      absl::StrCat("control op executor: option '",
+                   opt->name(),
+                   "' must be a STRING literal"));
 }
 
 absl::StatusOr<std::string> FindOptionString(
@@ -62,8 +62,8 @@ absl::StatusOr<std::string> FindOptionString(
     if (!absl::EqualsIgnoreCase(opt->name(), name)) continue;
     return OptionStringValue(opt.get());
   }
-  return absl::NotFoundError(
-      absl::StrCat("control op executor: required option '", name, "' missing"));
+  return absl::NotFoundError(absl::StrCat(
+      "control op executor: required option '", name, "' missing"));
 }
 
 absl::StatusOr<std::vector<std::string>> ExtractStringArrayLiteral(
@@ -124,12 +124,12 @@ absl::StatusOr<std::string> LocalPathFromUri(absl::string_view uri) {
         "control op executor: URI must be non-empty");
   }
   if (absl::StartsWith(uri, "gs://")) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "control op executor: cloud-storage URI '",
-        uri,
-        "' is unsupported (family: ResolvedAuxLoadDataStmt / "
-        "ResolvedExportDataStmt); use a local file:// URI. "
-        "See docs/ENGINE_POLICY.md."));
+    return absl::InvalidArgumentError(
+        absl::StrCat("control op executor: cloud-storage URI '",
+                     uri,
+                     "' is unsupported (family: ResolvedAuxLoadDataStmt / "
+                     "ResolvedExportDataStmt); use a local file:// URI. "
+                     "See docs/ENGINE_POLICY.md."));
   }
   if (absl::StartsWith(uri, "file://")) {
     return std::string(uri.substr(strlen("file://")));

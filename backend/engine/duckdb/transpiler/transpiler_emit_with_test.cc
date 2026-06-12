@@ -161,8 +161,7 @@ TEST_F(TranspilerTest, EmitRecursiveScanWithDepthThreadsCounter) {
   std::vector<std::unique_ptr<const ::googlesql::ResolvedComputedColumn>>
       anchor_exprs;
   anchor_exprs.push_back(::googlesql::MakeResolvedComputedColumn(
-      n_col,
-      ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1))));
+      n_col, ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(1))));
   auto anchor_project = ::googlesql::MakeResolvedProjectScan(
       /*column_list=*/{n_col},
       std::move(anchor_exprs),
@@ -189,7 +188,8 @@ TEST_F(TranspilerTest, EmitRecursiveScanWithDepthThreadsCounter) {
       std::move(rec_exprs),
       ::googlesql::MakeResolvedSingleRowScan());
   auto rec_item = ::googlesql::MakeResolvedSetOperationItem(
-      std::move(rec_project), /*output_column_list=*/{rec_n_col, rec_depth_col});
+      std::move(rec_project),
+      /*output_column_list=*/{rec_n_col, rec_depth_col});
   auto recursive_scan = ::googlesql::MakeResolvedRecursiveScan(
       /*column_list=*/{n_col, depth_col},
       ::googlesql::ResolvedRecursiveScan::UNION_ALL,

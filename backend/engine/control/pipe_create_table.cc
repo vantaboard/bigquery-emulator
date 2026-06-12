@@ -141,7 +141,9 @@ absl::StatusOr<std::unique_ptr<RowSource>> RunPipeCreateTable(
       storage.CreateTable(*target, *bq_schema), ctas->create_mode());
   if (!created.ok()) return created;
   if (!rows->empty()) {
-    absl::Status appended = storage.AppendRows(*target, absl::MakeConstSpan(*rows));
+    absl::Status appended =
+        // cpp-lint:allow(status-discarded) -- captured into appended
+        storage.AppendRows(*target, absl::MakeConstSpan(*rows));
     if (!appended.ok()) return appended;
   }
   return std::make_unique<semantic::MaterializedRowSource>(
