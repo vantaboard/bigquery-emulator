@@ -29,7 +29,7 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
     absl::StrAppend(&out,
                     QuoteIdent(schema.columns[i].name),
                     " ",
-                    schema::ColumnSchemaToDuckDBType(schema.columns[i]));
+                    schema::ColumnSchemaToDuckDBStorageType(schema.columns[i]));
   }
   absl::StrAppend(&out, ")");
   return out;

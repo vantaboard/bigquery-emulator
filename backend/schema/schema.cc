@@ -229,6 +229,13 @@ absl::string_view ToDuckDBType(ColumnType type) {
   return "VARCHAR";
 }
 
+absl::string_view ToDuckDBStorageType(ColumnType type) {
+  if (type == ColumnType::kBignumeric) {
+    return "VARCHAR";
+  }
+  return ToDuckDBType(type);
+}
+
 namespace {
 
 // Returns the head identifier of a DuckDB type expression — the
@@ -357,43 +364,53 @@ std::string QuoteStructFieldName(absl::string_view name) {
 
 }  // namespace
 
-std::string ColumnSchemaToDuckDBType(const ColumnSchema& column) {
+namespace {
+
+using TypeFn = absl::string_view (*)(ColumnType);
+
+std::string ColumnSchemaToDuckDBTypeWithFn(const ColumnSchema& column,
+                                           TypeFn scalar_type) {
   std::string inner;
   if (column.type == ColumnType::kStruct) {
     inner = "STRUCT(";
     for (size_t i = 0; i < column.fields.size(); ++i) {
       if (i > 0) absl::StrAppend(&inner, ", ");
-      absl::StrAppend(&inner,
-                      QuoteStructFieldName(column.fields[i].name),
-                      " ",
-                      ColumnSchemaToDuckDBType(column.fields[i]));
+      absl::StrAppend(
+          &inner,
+          QuoteStructFieldName(column.fields[i].name),
+          " ",
+          ColumnSchemaToDuckDBTypeWithFn(column.fields[i], scalar_type));
     }
     absl::StrAppend(&inner, ")");
   } else if (column.type == ColumnType::kArray) {
-    // BigQuery treats ARRAY as a top-level kind only on REST-side
-    // StandardSqlDataType payloads. Inside our internal ColumnSchema,
-    // ARRAY columns are usually expressed by `mode = kRepeated` on
-    // the element row. We still handle a literal `kArray` here for
-    // the rare round-trip case: a one-element `fields` list carries
-    // the element schema.
     if (column.fields.empty()) {
       inner = "VARCHAR";
     } else {
-      inner = ColumnSchemaToDuckDBType(column.fields.front());
+      inner =
+          ColumnSchemaToDuckDBTypeWithFn(column.fields.front(), scalar_type);
     }
     absl::StrAppend(&inner, "[]");
     if (column.mode == ColumnMode::kRepeated) {
-      // Doubly-arrayed (REPEATED ARRAY) — rare but well-defined.
       absl::StrAppend(&inner, "[]");
     }
     return inner;
   } else {
-    inner = std::string(ToDuckDBType(column.type));
+    inner = std::string(scalar_type(column.type));
   }
   if (column.mode == ColumnMode::kRepeated) {
     absl::StrAppend(&inner, "[]");
   }
   return inner;
+}
+
+}  // namespace
+
+std::string ColumnSchemaToDuckDBType(const ColumnSchema& column) {
+  return ColumnSchemaToDuckDBTypeWithFn(column, ToDuckDBType);
+}
+
+std::string ColumnSchemaToDuckDBStorageType(const ColumnSchema& column) {
+  return ColumnSchemaToDuckDBTypeWithFn(column, ToDuckDBStorageType);
 }
 
 }  // namespace schema

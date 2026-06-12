@@ -353,6 +353,45 @@ TEST_F(DuckDBStorageTest, CreateReadStreamPredicateBeforeOffsetLimit) {
   EXPECT_EQ(scanned[1].cells[0].int64_value(), 5);
 }
 
+TEST(SchemaToDuckDBStorageType, MapsBignumericToVarchar) {
+  EXPECT_EQ(schema::ToDuckDBStorageType(schema::ColumnType::kBignumeric),
+            "VARCHAR");
+  schema::ColumnSchema col;
+  col.name = "amount";
+  col.type = schema::ColumnType::kBignumeric;
+  EXPECT_EQ(schema::ColumnSchemaToDuckDBStorageType(col), "VARCHAR");
+}
+
+TEST_F(DuckDBStorageTest, AppendRowsRoundTripsExtremeBignumericLiteral) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const TableId table{"proj-1", "ds_1", "amounts"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  schema::TableSchema schema;
+  schema::ColumnSchema amount;
+  amount.name = "amount";
+  amount.type = schema::ColumnType::kBignumeric;
+  schema.columns.push_back(amount);
+  ASSERT_TRUE(store.CreateTable(table, schema).ok());
+
+  const char* kManagedWriterLiteral =
+      "578960446186580977117854925043439539266."
+      "34992332820282019728792003956564819967";
+  Row row;
+  row.cells.push_back(Value::String(kManagedWriterLiteral));
+  ASSERT_TRUE(store.AppendRows(table, absl::MakeConstSpan({row})).ok());
+
+  auto iter_or = store.CreateReadStream(table, ReadFilter{});
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::vector<Row> scanned = Drain(std::move(*iter_or));
+  ASSERT_EQ(scanned.size(), 1u);
+  ASSERT_EQ(scanned[0].cells[0].string_value(), kManagedWriterLiteral);
+}
+
 TEST(SchemaToDuckDBType, RoundTripsAllPlanCoveredTypes) {
   struct Case {
     schema::ColumnType bq = schema::ColumnType::kUnknown;

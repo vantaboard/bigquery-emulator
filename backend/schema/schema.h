@@ -135,16 +135,18 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out);
 //   DATETIME       TIMESTAMP
 //   TIMESTAMP      TIMESTAMP WITH TIME ZONE
 //   NUMERIC        DECIMAL(38, 9)
-//   BIGNUMERIC     DECIMAL(38, 38)
-//   JSON           JSON
-//   GEOGRAPHY      VARCHAR (no native; round-tripped as WKT)
+//   BIGNUMERIC     DECIMAL(38, 38) in query paths; VARCHAR in storage append
+//                  tables (full decimal strings exceed DECIMAL(38,38)).
 //
 // Container types do not have a stable scalar name — use
 // `ColumnSchemaToDuckDBType` for the full type expression
 // (`BIGINT[]`, `STRUCT(a BIGINT, b VARCHAR)`, ...).
+// Storage append/read uses `ColumnSchemaToDuckDBStorageType` when the
+// DuckDB column must preserve lossless BIGNUMERIC text.
 // ---------------------------------------------------------------------------
 
 absl::string_view ToDuckDBType(ColumnType type);
+absl::string_view ToDuckDBStorageType(ColumnType type);
 ColumnType FromDuckDBType(absl::string_view duckdb_type);
 
 // Renders the full DuckDB type expression for `column`, honoring both
@@ -153,6 +155,7 @@ ColumnType FromDuckDBType(absl::string_view duckdb_type);
 // escaped so column names with hyphens / unicode round-trip safely
 // through a `CREATE TABLE` statement.
 std::string ColumnSchemaToDuckDBType(const ColumnSchema& column);
+std::string ColumnSchemaToDuckDBStorageType(const ColumnSchema& column);
 
 }  // namespace schema
 }  // namespace backend

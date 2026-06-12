@@ -220,14 +220,16 @@ absl::StatusOr<std::string> RenderScalarLiteral(
       return absl::StrCat("TIMESTAMPTZ '", EscapeStringLiteralInner(ts), "'");
     }
     case schema::ColumnType::kNumeric:
-    case schema::ColumnType::kBignumeric:
-      // Stored as a textual decimal in our Value union; let DuckDB
-      // re-parse it under the declared precision/scale so out-of-
-      // range values surface as an INTERNAL from RunSql.
       return absl::StrCat("CAST('",
                           EscapeStringLiteralInner(cell.string_value()),
                           "' AS ",
                           schema::ToDuckDBType(column.type),
+                          ")");
+    case schema::ColumnType::kBignumeric:
+      return absl::StrCat("CAST('",
+                          EscapeStringLiteralInner(cell.string_value()),
+                          "' AS ",
+                          schema::ToDuckDBStorageType(column.type),
                           ")");
     case schema::ColumnType::kStruct:
       return RenderStructLiteral(cell, column);
@@ -259,7 +261,7 @@ absl::StatusOr<std::string> RenderCellLiteral(
     element.mode = schema::ColumnMode::kNullable;
     const auto& elems = cell.array_value();
     const std::string duckdb_list_type =
-        schema::ColumnSchemaToDuckDBType(column);
+        schema::ColumnSchemaToDuckDBStorageType(column);
     if (elems.empty()) {
       return absl::StrCat("CAST([] AS ", duckdb_list_type, ")");
     }
