@@ -16,6 +16,16 @@ type RunOptions struct {
 	Timeout    time.Duration
 	Baseline   *BaselineFile
 	Compare    bool
+	// Progress receives human-readable progress lines as the run
+	// advances (target startup, per-case setup, per-iteration
+	// completions). nil disables progress output.
+	Progress func(format string, args ...any)
+}
+
+func (o RunOptions) logf(format string, args ...any) {
+	if o.Progress != nil {
+		o.Progress(format, args...)
+	}
 }
 
 // Run executes all cases against the configured targets.
@@ -49,18 +59,31 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 	}
 
 	for _, target := range opts.Targets {
+		opts.logf("starting target %s...", target.Name())
+		startBegan := time.Now()
 		if err := target.Start(ctx); err != nil {
 			return report, fmt.Errorf("start %s: %w", target.Name(), err)
 		}
+		opts.logf("target %s ready in %s", target.Name(), time.Since(startBegan).Round(time.Millisecond))
 		defer func(t Target) { _ = t.Cleanup(ctx) }(target)
 	}
 
-	for _, c := range cases {
+	for ci, c := range cases {
 		dataset := datasetForCase(c.Name)
 		for _, target := range opts.Targets {
-			cr, err := runCase(ctx, target, c, dataset, timeout)
+			opts.logf("[%d/%d] %s on %s: setup...", ci+1, len(cases), c.Name, target.Name())
+			cr, err := runCase(ctx, opts, target, c, dataset, timeout)
 			if err != nil {
 				return report, err
+			}
+			switch cr.Outcome {
+			case OutcomeOK:
+				opts.logf("[%d/%d] %s on %s: done (p50 %s, %d rows)",
+					ci+1, len(cases), c.Name, target.Name(),
+					cr.Latency.P50.Round(time.Millisecond), cr.RowCount)
+			default:
+				opts.logf("[%d/%d] %s on %s: %s (%s)",
+					ci+1, len(cases), c.Name, target.Name(), cr.Outcome, cr.Error)
 			}
 			if opts.Compare && opts.Baseline != nil && target.Name() == TargetEmulator {
 				if base, ok := opts.Baseline.Cases[c.Name]; ok {
@@ -94,12 +117,13 @@ func Run(ctx context.Context, opts RunOptions) (RunReport, error) {
 	return report, nil
 }
 
-func runCase(ctx context.Context, target Target, c Case, dataset string, timeout time.Duration) (CaseResult, error) {
+func runCase(ctx context.Context, opts RunOptions, target Target, c Case, dataset string, timeout time.Duration) (CaseResult, error) {
 	project := c.ProjectID
 	if bt, ok := target.(*BigQueryTarget); ok {
 		project = bt.ProjectID()
 	}
 	dsRef := datasetRef(target.Name(), project, dataset)
+	setupBegan := time.Now()
 	if err := target.SetupCase(ctx, c, dsRef); err != nil {
 		return CaseResult{
 			CaseName:    c.Name,
@@ -109,6 +133,8 @@ func runCase(ctx context.Context, target Target, c Case, dataset string, timeout
 			Error:       err.Error(),
 		}, nil
 	}
+	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
+		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
 	_, query := c.Substitute(dsRef, c.ProjectID)
 
 	var samples []time.Duration
@@ -134,6 +160,13 @@ func runCase(ctx context.Context, target Target, c Case, dataset string, timeout
 			}
 			break
 		}
+		label := ""
+		if i < c.Warmup {
+			label = " (warmup)"
+		}
+		opts.logf("    %s on %s: iteration %d/%d%s took %s",
+			c.Name, target.Name(), i+1, c.Iterations, label,
+			res.Elapsed.Round(time.Millisecond))
 		samples = append(samples, res.Elapsed)
 		if res.ExecutionOnly > 0 {
 			execSamples = append(execSamples, res.ExecutionOnly)

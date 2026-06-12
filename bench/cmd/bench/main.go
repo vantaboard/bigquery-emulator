@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/vantaboard/bigquery-emulator/bench/runner"
 )
@@ -29,6 +30,7 @@ func main() {
 			os.Getenv("BENCH_SKIP_GOCCY") == "1",
 			"skip goccy target when --target=all",
 		)
+		quiet = flag.Bool("quiet", false, "suppress per-case progress logging on stderr")
 	)
 	flag.Parse()
 	if err := run(context.Background(), config{
@@ -43,6 +45,7 @@ func main() {
 		caseFilter:   *caseFilter,
 		engineBin:    *engineBin,
 		skipGoccy:    *skipGoccy,
+		quiet:        *quiet,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "bench: %v\n", err)
 		os.Exit(1)
@@ -61,6 +64,7 @@ type config struct {
 	caseFilter   string
 	engineBin    string
 	skipGoccy    bool
+	quiet        bool
 }
 
 func run(ctx context.Context, cfg config) error {
@@ -82,12 +86,20 @@ func run(ctx context.Context, cfg config) error {
 			baseline = &b
 		}
 	}
+	progress := func(format string, args ...any) {
+		fmt.Fprintf(os.Stderr, "%s bench: %s\n",
+			time.Now().Format("15:04:05"), fmt.Sprintf(format, args...))
+	}
+	if cfg.quiet {
+		progress = nil
+	}
 	report, err := runner.Run(ctx, runner.RunOptions{
 		CasesDir:   cfg.casesDir,
 		CaseFilter: cfg.caseFilter,
 		Targets:    targets,
 		Baseline:   baseline,
 		Compare:    cfg.compare,
+		Progress:   progress,
 	})
 	if err != nil {
 		return err
