@@ -78,6 +78,8 @@ cc_library(
         ":control_op_executor",
         "//backend/engine",
         "//backend/engine/semantic:row_source",
+        "//backend/engine/semantic:scan_eval",
+        "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/status",

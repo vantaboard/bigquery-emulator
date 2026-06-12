@@ -95,6 +95,10 @@ absl::StatusOr<Value> DispatchFunctionByName(
     const ::googlesql::Type* return_type,
     const EvalContext* ctx = nullptr);
 
+absl::StatusOr<Value> EvalFlatten(
+    const ::googlesql::ResolvedFlatten& flatten, const EvalContext& ctx);
+absl::StatusOr<Value> EvalFlattenedArg(const EvalContext& ctx);
+
 }  // namespace eval_expr_internal
 }  // namespace semantic
 }  // namespace engine

@@ -139,7 +139,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
         return control::RunPipeExportData(*storage_, request, *stmt);
       }
       if (body->node_kind() == ::googlesql::RESOLVED_PIPE_CREATE_TABLE_SCAN) {
-        return control::RunPipeCreateTable(request, *stmt);
+        return control::RunPipeCreateTable(*storage_, catalog, request, *stmt);
       }
     }
   }

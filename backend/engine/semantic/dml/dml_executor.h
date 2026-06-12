@@ -12,8 +12,8 @@
 //   * `ResolvedUpdateStmt` -- scalar SET, deep-STRUCT SET, and
 //     `UPDATE ... FROM ...`.
 //   * `ASSERT_ROWS_MODIFIED` on INSERT / UPDATE / DELETE / MERGE.
-//
-// Still deferred: `ResolvedPipeInsertScan`.
+//   * Pipe INSERT via `ResolvedGeneralizedQueryStmt` +
+//     `ResolvedPipeInsertScan` (pipe input in `insert_stmt()->query()`).
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"

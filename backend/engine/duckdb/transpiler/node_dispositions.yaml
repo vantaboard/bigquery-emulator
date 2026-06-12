@@ -119,7 +119,7 @@ ResolvedPipeForkScan: semantic_executor
 ResolvedPipeTeeScan: semantic_executor
 ResolvedPipeExportDataScan: control_op
 ResolvedPipeCreateTableScan: control_op
-ResolvedPipeInsertScan: semantic_executor status=planned
+ResolvedPipeInsertScan: semantic_executor
 # `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
 # query (GQL) surface is deliberately out of scope locally; every
 # graph scan class enumerated in
@@ -152,8 +152,8 @@ ResolvedGetProtoOneof: unsupported
 ResolvedReplaceField: unsupported
 ResolvedGetJsonField: duckdb_rewrite
 ResolvedGetRowField: unsupported
-ResolvedFlatten: semantic_executor status=planned
-ResolvedFlattenedArg: semantic_executor status=planned
+ResolvedFlatten: semantic_executor
+ResolvedFlattenedArg: semantic_executor
 ResolvedSubqueryExpr: duckdb_native
 ResolvedWithExpr: duckdb_native
 ResolvedInlineLambda: semantic_executor

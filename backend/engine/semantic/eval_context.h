@@ -37,6 +37,24 @@ struct UdafEvalScope {
   const absl::flat_hash_map<int, size_t>* agg_column_to_arg = nullptr;
 };
 
+// Active while materializing a `ResolvedSubpipeline`. The inner
+// `ResolvedSubpipelineInputScan` consumes the most recent pushed row batch.
+struct SubpipelineEvalScope {
+  std::vector<std::vector<ColumnBindings>> input_stack;
+};
+
+// Active while evaluating a `ResolvedFlatten` get-field step. Inner
+// `ResolvedFlattenedArg` nodes read the current array element.
+struct FlattenEvalScope {
+  const ::googlesql::Value* current = nullptr;
+};
+
+// Active while materializing `ResolvedGroupRowsScan` for the current
+// aggregate group row batch.
+struct GroupRowsEvalScope {
+  const std::vector<ColumnBindings>* rows = nullptr;
+};
+
 struct EvalContext {
   absl::string_view project_id;
   const ParameterBindings* parameters = nullptr;
@@ -48,6 +66,9 @@ struct EvalContext {
   const ::googlesql::SystemVariableValuesMap* script_system_variables = nullptr;
   const UdafEvalScope* udaf = nullptr;
   const absl::flat_hash_map<std::string, CteTable>* with_tables = nullptr;
+  SubpipelineEvalScope* subpipeline = nullptr;
+  FlattenEvalScope* flatten = nullptr;
+  GroupRowsEvalScope* group_rows = nullptr;
   mutable std::optional<std::string> bignumeric_render_override;
 };
 

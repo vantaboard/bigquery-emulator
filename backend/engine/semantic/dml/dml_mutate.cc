@@ -452,6 +452,28 @@ absl::StatusOr<DmlResult> ExecuteDml(const QueryRequest& request,
       out.stats = *std::move(stats);
       return out;
     }
+    case ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT: {
+      const auto* gq =
+          stmt.GetAs<::googlesql::ResolvedGeneralizedQueryStmt>();
+      const ::googlesql::ResolvedScan* body = gq == nullptr ? nullptr : gq->query();
+      if (body == nullptr ||
+          body->node_kind() != ::googlesql::RESOLVED_PIPE_INSERT_SCAN) {
+        return MakeSemanticError(
+            SemanticErrorReason::kNotImplemented,
+            "semantic/dml: generalized query statement is not a pipe INSERT");
+      }
+      const auto* pipe =
+          body->GetAs<::googlesql::ResolvedPipeInsertScan>();
+      if (pipe == nullptr || pipe->insert_stmt() == nullptr) {
+        return absl::InternalError(
+            "semantic/dml: ResolvedPipeInsertScan missing insert_stmt");
+      }
+      auto stats = ExecuteInsert(*pipe->insert_stmt(), *storage, ctx,
+                                 &out.returning_rows);
+      if (!stats.ok()) return stats.status();
+      out.stats = *std::move(stats);
+      return out;
+    }
     case ::googlesql::RESOLVED_TRUNCATE_STMT:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

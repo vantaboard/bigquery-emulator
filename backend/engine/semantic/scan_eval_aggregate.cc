@@ -125,6 +125,16 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
                       (*group_keys)[static_cast<size_t>(g)]);
     }
   }
+  GroupRowsEvalScope group_rows_scope;
+  std::vector<ColumnBindings> group_row_batch;
+  group_row_batch.reserve(row_indices.size());
+  for (size_t idx : row_indices) {
+    group_row_batch.push_back(input_rows[idx]);
+  }
+  group_rows_scope.rows = &group_row_batch;
+  EvalContext agg_ctx = ctx;
+  agg_ctx.group_rows = &group_rows_scope;
+
   for (int i = 0; i < aggregate.aggregate_list_size(); ++i) {
     const ::googlesql::ResolvedComputedColumnBase* cc =
         aggregate.aggregate_list(i);
@@ -139,7 +149,7 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
           "semantic: aggregate expression is not a function call");
     }
     auto result = EvalAggregateForRows(
-        *agg, aggregate.input_scan(), input_rows, row_indices, ctx);
+        *agg, aggregate.input_scan(), input_rows, row_indices, agg_ctx);
     if (!result.ok()) return result.status();
     out_row.emplace(cc->column().column_id(), *std::move(result));
   }

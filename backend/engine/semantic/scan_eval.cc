@@ -121,6 +121,13 @@ absl::StatusOr<const ::googlesql::ResolvedProjectScan*> FindOutputProjectScan(
       }
       return nullptr;
     }
+    case ::googlesql::RESOLVED_PIPE_IF_SCAN: {
+      const auto* pipe = scan->GetAs<::googlesql::ResolvedPipeIfScan>();
+      return FindOutputProjectScan(pipe->GetSelectedCaseScan());
+    }
+    case ::googlesql::RESOLVED_PIPE_TEE_SCAN:
+      return FindOutputProjectScan(
+          scan->GetAs<::googlesql::ResolvedPipeTeeScan>()->input_scan());
     default:
       return nullptr;
   }

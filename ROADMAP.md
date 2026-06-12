@@ -513,9 +513,10 @@ public-facing policy.
   the semantic DML executor and populate `numDmlAffectedRows`
   correctly. Nested `(DELETE ... WITH OFFSET ...)` inside `UPDATE SET`
   lands on `ApplyNestedArrayDeleteItem` (pinned by
-  `update_delete_array_offset.yaml`). `ResolvedPipeInsertScan` and MERGE
-  `THEN RETURN` continue to surface `UNIMPLEMENTED` where not yet
-  landed; see `docs/ENGINE_POLICY.md`. Conformance fixtures
+  `update_delete_array_offset.yaml`). Pipe INSERT (`ResolvedPipeInsertScan`
+  via `ExecuteDml` on generalized query statements) is landed on the
+  semantic DML executor. MERGE `THEN RETURN` continues to surface
+  `UNIMPLEMENTED` where not yet landed; see `docs/ENGINE_POLICY.md`. Conformance fixtures
   may seed rows via either `tabledata.insertAll` or `INSERT VALUES`
   `sql:` steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
@@ -569,8 +570,7 @@ public-facing policy.
   matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
   gateway folds `dmlStats` into the legacy aggregate
   (inserted + updated + deleted) per the BigQuery REST contract.
-  `ResolvedPipeInsertScan` and other deferred shapes keep the field
-  absent until they land.
+  Pipe INSERT populates stats via the same DML executor path.
 
 ## Storage Read API (gRPC)
 

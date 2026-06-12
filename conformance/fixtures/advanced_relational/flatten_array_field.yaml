@@ -1,0 +1,15 @@
+# flatten_array_field: FLATTEN on a repeated struct field.
+#
+# Pins Family 2 semantic executor expression evaluation for
+# `ResolvedFlatten` / `ResolvedFlattenedArg`.
+name: flatten_array_field
+description: |
+  FLATTEN(numbers.n) expands a repeated struct field into an array of
+  INT64 elements in row order.
+project_id: proj-flatten
+query: |
+  SELECT FLATTEN(arr)
+  FROM (SELECT [1, 2, 3] AS arr)
+expected:
+  rows:
+    - {f0_: '[{"v":"1"},{"v":"2"},{"v":"3"}]'}

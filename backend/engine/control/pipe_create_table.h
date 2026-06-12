@@ -53,8 +53,11 @@
 
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
+#include "googlesql/public/catalog.h"
 
 namespace googlesql {
+class Catalog;
 class ResolvedStatement;
 }  // namespace googlesql
 
@@ -69,10 +72,13 @@ namespace control {
 // `ResolvedGeneralizedQueryStmt` whose body is a
 // `ResolvedPipeCreateTableScan` before invoking this function.
 //
-// Returns `UNIMPLEMENTED` until the pipe-input transpiler surface
-// lands (see file header for the deferred plan).
+// Materializes the pipe-input scan via the semantic executor and
+// persists rows through the storage layer CTAS path.
 absl::StatusOr<std::unique_ptr<RowSource>> RunPipeCreateTable(
-    const QueryRequest& request, const ::googlesql::ResolvedStatement& stmt);
+    storage::Storage& storage,
+    ::googlesql::Catalog* catalog,
+    const QueryRequest& request,
+    const ::googlesql::ResolvedStatement& stmt);
 
 }  // namespace control
 }  // namespace engine

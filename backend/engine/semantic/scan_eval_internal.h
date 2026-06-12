@@ -80,6 +80,20 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan& analytic, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeSubpipelineInputScan(
+    const ::googlesql::ResolvedSubpipelineInputScan& scan, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeSubpipeline(
+    const ::googlesql::ResolvedSubpipeline& subpipeline,
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeIfScan(
+    const ::googlesql::ResolvedPipeIfScan& pipe, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeTeeScan(
+    const ::googlesql::ResolvedPipeTeeScan& tee, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeForkScan(
+    const ::googlesql::ResolvedPipeForkScan& fork, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeGroupRowsScan(
+    const ::googlesql::ResolvedGroupRowsScan& scan, EvalContext& ctx);
 
 }  // namespace scan_eval_internal
 }  // namespace semantic

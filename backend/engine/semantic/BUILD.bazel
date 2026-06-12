@@ -116,6 +116,7 @@ cc_library(
         "eval_expr_cast_format.cc",
         "eval_expr_cast_helpers.cc",
         "eval_expr_dispatch.cc",
+        "eval_expr_flatten.cc",
         "eval_expr_fn_dispatch.cc",
         "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
@@ -183,6 +184,8 @@ cc_library(
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
         "scan_eval_analytic.cc",
+        "scan_eval_pipe.cc",
+        "scan_eval_group_rows.cc",
         "scan_eval_scan_impl.cc",
     ],
     hdrs = [

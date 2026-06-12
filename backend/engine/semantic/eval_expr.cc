@@ -35,6 +35,8 @@ namespace engine {
 namespace semantic {
 
 using eval_expr_internal::EvalResolvedCast;
+using eval_expr_internal::EvalFlatten;
+using eval_expr_internal::EvalFlattenedArg;
 using eval_expr_internal::NullOfType;
 using eval_expr_internal::ToDouble;
 
@@ -328,6 +330,10 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
     case ::googlesql::RESOLVED_SUBQUERY_EXPR:
       return EvalSubqueryExpr(*expr.GetAs<::googlesql::ResolvedSubqueryExpr>(),
                               ctx);
+    case ::googlesql::RESOLVED_FLATTEN:
+      return EvalFlatten(*expr.GetAs<::googlesql::ResolvedFlatten>(), ctx);
+    case ::googlesql::RESOLVED_FLATTENED_ARG:
+      return EvalFlattenedArg(ctx);
     case ::googlesql::RESOLVED_SYSTEM_VARIABLE: {
       const auto& node = *expr.GetAs<::googlesql::ResolvedSystemVariable>();
       if (ctx.script_system_variables != nullptr) {
