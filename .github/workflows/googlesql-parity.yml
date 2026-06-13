@@ -516,6 +516,19 @@ jobs:
 
   # ---------------------------------------------------------------------
   # GoogleSQL .test corpus lane (pinned semantic regression net).
+  #
+  # The lane runs the *widened* vendored subset under
+  # `conformance/googlesql-corpus/corpus/` — `logical_functions`,
+  # `arithmetic_functions`, `math_functions`, `cast_format_validation`,
+  # and `regexp_functions` (see SURVEY.md). `task
+  # conformance:googlesql-corpus` walks the corpus dir and runs only the
+  # `pinned` cases in `manifest/pinned.json`, so vendoring a new `.test`
+  # file + repinning automatically widens this job with no YAML change.
+  #
+  # Non-flaky by construction: cases are pure inline `SELECT`s (no
+  # `prepare_database`, no public-data tables, no network), the runner
+  # walks files in lexical order, and case order within a file is the
+  # vendored file order — so the pass/skip set is deterministic.
   # ---------------------------------------------------------------------
   googlesql-corpus:
     name: googlesql corpus (pinned)

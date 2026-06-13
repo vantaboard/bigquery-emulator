@@ -679,9 +679,11 @@ and
   skip matrices
 - ✅ Vendor a subset of the GoogleSQL `.test` corpus and run it
   against the engine via `jobs.query` (catches semantic
-  regressions whenever GoogleSQL is upgraded). Starter subset:
-  `conformance/googlesql-corpus/corpus/logical_functions.test`
-  (55 pinned cases); widen via [`conformance/googlesql-corpus/README.md`](./conformance/googlesql-corpus/README.md).
+  regressions whenever GoogleSQL is upgraded). Vendored subset:
+  `logical_functions`, `arithmetic_functions`, `math_functions`,
+  `cast_format_validation`, and `regexp_functions` under
+  `conformance/googlesql-corpus/corpus/` (85 pinned cases); widen
+  further via [`conformance/googlesql-corpus/README.md`](./conformance/googlesql-corpus/README.md).
   CI: `googlesql-corpus` job in
   [`.github/workflows/googlesql-parity.yml`](./.github/workflows/googlesql-parity.yml);
   local: `task conformance:googlesql-corpus`

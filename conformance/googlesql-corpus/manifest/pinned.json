@@ -1,5 +1,30 @@
 {
   "pinned": [
+    "arithmetic_functions.test::arithmetic_functions_1",
+    "arithmetic_functions.test::arithmetic_functions_2",
+    "arithmetic_functions.test::arithmetic_functions_4",
+    "arithmetic_functions.test::arithmetic_functions_5",
+    "arithmetic_functions.test::arithmetic_functions_6",
+    "arithmetic_functions.test::arithmetic_functions_7",
+    "arithmetic_functions.test::arithmetic_functions_8",
+    "arithmetic_functions.test::arithmetic_functions_8_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_9",
+    "arithmetic_functions.test::arithmetic_functions_9_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_10_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_11_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_12_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_13_safe_divide",
+    "arithmetic_functions.test::arithmetic_functions_15_safe_divide",
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_literal_with_timezone",
+    "cast_format_validation.test::safe_cast_date_to_string_format_invalid_literal_hh",
+    "cast_format_validation.test::safe_cast_datetime_to_string_format_invalid_literal_tzh",
+    "cast_format_validation.test::safe_cast_time_to_string_format_invalid_literal_mm",
+    "cast_format_validation.test::safe_cast_timestamp_to_string_format_invalid_literal",
+    "cast_format_validation.test::safe_cast_string_to_date_format_invalid_literal",
+    "cast_format_validation.test::safe_cast_string_to_datetime_format_invalid_literal",
+    "cast_format_validation.test::safe_cast_string_to_time_format_invalid_literal",
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_literal",
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_timezone",
     "logical_functions.test::logical_and_true_true",
     "logical_functions.test::logical_and_true_false",
     "logical_functions.test::logical_and_false_true",
@@ -54,9 +79,185 @@
     "logical_functions.test::logical_is_true_null",
     "logical_functions.test::logical_is_true_false",
     "logical_functions.test::logical_is_false_false",
-    "logical_functions.test::logical_is_false_null"
+    "logical_functions.test::logical_is_false_null",
+    "math_functions.test::math_abs_zero",
+    "regexp_functions.test::regexp_functions_1",
+    "regexp_functions.test::regexp_functions_2",
+    "regexp_functions.test::regexp_functions_newline",
+    "regexp_functions.test::regexp_functions_case"
   ],
   "triage": {
+    "arithmetic_functions.test::arithmetic_functions_1": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_10": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_10_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_11": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_11_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_12": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_12_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_13": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_13_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_14": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_14_safe_divide": {
+      "bucket": "engine-bug",
+      "message": "row mismatch"
+    },
+    "arithmetic_functions.test::arithmetic_functions_15": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_15_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_2": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_3": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "arithmetic_functions.test::arithmetic_functions_4": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_5": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_6": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_7": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_8": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_8_div_int32": {
+      "bucket": "engine-bug",
+      "message": "query failed HTTP 400"
+    },
+    "arithmetic_functions.test::arithmetic_functions_8_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_8_safe_divide_int32": {
+      "bucket": "engine-bug",
+      "message": "query failed HTTP 400"
+    },
+    "arithmetic_functions.test::arithmetic_functions_9": {
+      "bucket": "pinned-pass"
+    },
+    "arithmetic_functions.test::arithmetic_functions_9_safe_divide": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::cast_date_to_string_format_invalid_literal_hh": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_datetime_to_string_format_invalid_literal_tzh": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_invalid_numeric_format": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_bytes_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_date_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_datetime_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_time_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_timestamp_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_timestamp_format_invalid_literal_with_timezone": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_string_to_timestamp_format_invalid_timezone": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_time_to_string_format_invalid_literal_mm": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::cast_timestamp_to_string_format_invalid_literal": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "error-expectation cases deferred in starter lane"
+    },
+    "cast_format_validation.test::safe_cast_date_to_string_format_invalid_literal_hh": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_datetime_to_string_format_invalid_literal_tzh": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_invalid_numeric_format": {
+      "bucket": "engine-bug",
+      "message": "query failed HTTP 400"
+    },
+    "cast_format_validation.test::safe_cast_string_to_bytes_format_invalid_literal": {
+      "bucket": "engine-bug",
+      "message": "row mismatch"
+    },
+    "cast_format_validation.test::safe_cast_string_to_date_format_invalid_literal": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_string_to_datetime_format_invalid_literal": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_string_to_time_format_invalid_literal": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_literal": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_literal_with_timezone": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_string_to_timestamp_format_invalid_timezone": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_time_to_string_format_invalid_literal_mm": {
+      "bucket": "pinned-pass"
+    },
+    "cast_format_validation.test::safe_cast_timestamp_to_string_format_invalid_literal": {
+      "bucket": "pinned-pass"
+    },
     "logical_functions.test::logical_and_false_false": {
       "bucket": "pinned-pass"
     },
@@ -237,6 +438,136 @@
     },
     "logical_functions.test::logical_or_true_true": {
       "bucket": "pinned-pass"
+    },
+    "math_functions.test::DEGREES_bignumeric_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_double_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_double_min_denorm": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_float_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_inf": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_nan": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_negative_outside_range_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_negative_simple_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_null": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_numeric_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_outside_range_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_simple_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::DEGREES_zero": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::math_abs_zero": {
+      "bucket": "pinned-pass"
+    },
+    "math_functions.test::radians_bignumeric_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_double_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_double_max": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_double_min": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_double_min_denorm": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_float_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_inf": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_nan": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_negative_outside_range_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_negative_simple_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_null": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_numeric_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_outside_range_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_simple_case": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "math_functions.test::radians_zero": {
+      "bucket": "corpus-feature-out-of-scope",
+      "message": "required feature out of scope: RADIANS_DEGREES_FUNCTIONS"
+    },
+    "regexp_functions.test::regexp_functions_1": {
+      "bucket": "pinned-pass"
+    },
+    "regexp_functions.test::regexp_functions_2": {
+      "bucket": "pinned-pass"
+    },
+    "regexp_functions.test::regexp_functions_case": {
+      "bucket": "pinned-pass"
+    },
+    "regexp_functions.test::regexp_functions_newline": {
+      "bucket": "pinned-pass"
     }
-  }
+  },
+  "unsupported_features": [
+    "RADIANS_DEGREES_FUNCTIONS"
+  ]
 }
