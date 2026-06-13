@@ -25,7 +25,7 @@ query: |
     FROM ds_dml_update_delete_offset.items, UNNEST(tags) AS tag
    ORDER BY id, tag
 expected:
-  route: semantic_executor
+  route: duckdb_native
   rows:
     - {id: "1", tag: "a"}
     - {id: "1", tag: "c"}

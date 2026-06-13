@@ -13,12 +13,12 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
-  // Four messages: schema, one row, then the trailing
+  // Five messages: schema, one row, phase_timings, then the trailing
   // `statement_type` + `emulator_route` pair the gateway folds into
   // `Job.statistics.query.{statementType,emulatorRoute}`. See
   // `docs/ENGINE_POLICY.md` Item 5 and
   // `docs/ENGINE_POLICY.md`.
-  ASSERT_EQ(messages.size(), 4u);
+  ASSERT_EQ(messages.size(), 5u);
 
   EXPECT_TRUE(messages[0].has_schema());
   EXPECT_EQ(messages[0].cells_size(), 0);
@@ -30,12 +30,15 @@ TEST_F(QueryServiceTest, ExecuteQuerySelect1StreamsSchemaThenRow) {
   ASSERT_EQ(messages[1].cells_size(), 1);
   EXPECT_EQ(messages[1].cells(0).string_value(), "1");
 
-  EXPECT_FALSE(messages[2].has_schema());
-  EXPECT_EQ(messages[2].cells_size(), 0);
-  EXPECT_EQ(messages[2].statement_type(), "SELECT");
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "SELECT");
   // `SELECT 1` has no FROM clause -> semantic executor (see
   // `docs/ENGINE_POLICY.md`).
-  EXPECT_EQ(messages[3].emulator_route(), "semantic_executor");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "semantic_executor");
 }
 
 TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
@@ -64,9 +67,9 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   ASSERT_TRUE(status.ok()) << status.error_message();
 
   const auto& messages = collector.messages();
-  // Six messages: schema, three rows, plus the trailing
-  // `statement_type` + `emulator_route` pair.
-  ASSERT_EQ(messages.size(), 6u);
+  // Seven messages: schema, three rows, phase_timings, plus the
+  // trailing `statement_type` + `emulator_route` pair.
+  ASSERT_EQ(messages.size(), 7u);
 
   ASSERT_TRUE(messages[0].has_schema());
   ASSERT_EQ(messages[0].schema().fields_size(), 2);
@@ -85,8 +88,13 @@ TEST_F(QueryServiceTest, ExecuteQuerySelectFromTableStreamsAllRows) {
   EXPECT_EQ(messages[3].cells(0).string_value(), "3");
   EXPECT_EQ(messages[3].cells(1).string_value(), "grace");
 
-  EXPECT_EQ(messages[4].statement_type(), "SELECT");
-  EXPECT_EQ(messages[5].emulator_route(), "duckdb_native");
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "SELECT");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "duckdb_native");
 }
 
 TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaThenStatementType) {
@@ -96,13 +104,18 @@ TEST_F(QueryServiceTest, ExecuteQueryEmptyTableEmitsSchemaThenStatementType) {
   ::grpc::Status status = StreamQueryResults(
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
-  // Three messages: the schema (always emitted, even for zero-row
-  // results) and the trailing `statement_type` + `emulator_route`
-  // pair.
-  ASSERT_EQ(collector.messages().size(), 3u);
+  // Four messages: the schema (always emitted, even for zero-row
+  // results), phase_timings, and the trailing `statement_type` +
+  // `emulator_route` pair.
+  ASSERT_EQ(collector.messages().size(), 4u);
   EXPECT_TRUE(collector.messages()[0].has_schema());
-  EXPECT_EQ(collector.messages()[1].statement_type(), "SELECT");
-  EXPECT_EQ(collector.messages()[2].emulator_route(), "duckdb_native");
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "SELECT");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "duckdb_native");
 }
 
 TEST_F(QueryServiceTest, ExecuteQuerySyntaxErrorIsInvalidArgument) {
@@ -191,20 +204,25 @@ TEST_F(QueryServiceTest, ExecuteQueryInsertEmitsDmlStats) {
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
 
-  // DML response shape: dml_stats followed by the trailing
+  // DML response shape: dml_stats, phase_timings, then the trailing
   // statement_type + emulator_route pair.
   const auto& messages = collector.messages();
-  ASSERT_EQ(messages.size(), 3u);
+  ASSERT_EQ(messages.size(), 4u);
   EXPECT_FALSE(messages[0].has_schema());
   EXPECT_EQ(messages[0].cells_size(), 0);
   ASSERT_TRUE(messages[0].has_dml_stats());
   EXPECT_EQ(messages[0].dml_stats().inserted_row_count(), 2);
   EXPECT_EQ(messages[0].dml_stats().updated_row_count(), 0);
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
-  EXPECT_EQ(messages[1].statement_type(), "INSERT");
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "INSERT");
   // INSERT against a user table routes through the semantic
   // executor's DML path (/ `docs/ENGINE_POLICY.md`).
-  EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "semantic_executor");
 
   // Storage round-trip: the rows actually landed.
   auto scan = storage_->ScanRows({"proj-test", "ds", "t"});
@@ -237,9 +255,14 @@ TEST_F(QueryServiceTest, ExecuteQueryDdlEmitsStatementType) {
   ::grpc::Status status = StreamQueryResults(
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
-  ASSERT_EQ(collector.messages().size(), 2u);
-  EXPECT_EQ(collector.messages()[0].statement_type(), "CREATE_TABLE");
-  EXPECT_EQ(collector.messages()[1].emulator_route(), "control_op");
+  ASSERT_EQ(collector.messages().size(), 3u);
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "CREATE_TABLE");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "control_op");
 
   auto sch = storage_->GetSchema({"proj-test", "ds", "new_table"});
   ASSERT_TRUE(sch.ok()) << sch.status();
@@ -291,13 +314,18 @@ TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
       storage_.get(), req, collector.Writer(), engine_.get());
   ASSERT_TRUE(status.ok()) << status.error_message();
   const auto& messages = collector.messages();
-  // dml_stats followed by the trailing statement_type +
+  // dml_stats, phase_timings, then the trailing statement_type +
   // emulator_route pair.
-  ASSERT_EQ(messages.size(), 3u);
+  ASSERT_EQ(messages.size(), 4u);
   ASSERT_TRUE(messages[0].has_dml_stats());
   EXPECT_EQ(messages[0].dml_stats().deleted_row_count(), 0);
-  EXPECT_EQ(messages[1].statement_type(), "DELETE");
-  EXPECT_EQ(messages[2].emulator_route(), "semantic_executor");
+  ASSERT_NE(collector.PhaseTimingsTrailer(), nullptr);
+  const v1::QueryResultRow* stmt = collector.StatementTypeTrailer();
+  ASSERT_NE(stmt, nullptr);
+  EXPECT_EQ(stmt->statement_type(), "DELETE");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "semantic_executor");
 }
 }  // namespace
 }  // namespace frontend

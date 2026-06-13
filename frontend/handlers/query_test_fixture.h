@@ -105,6 +105,33 @@ class MessageCollector {
     return messages_;
   }
 
+  const v1::QueryResultRow* PhaseTimingsTrailer() const {
+    for (auto it = messages_.rbegin(); it != messages_.rend(); ++it) {
+      if (it->has_phase_timings() && !it->phase_timings().phases().empty()) {
+        return &(*it);
+      }
+    }
+    return nullptr;
+  }
+
+  const v1::QueryResultRow* StatementTypeTrailer() const {
+    for (auto it = messages_.rbegin(); it != messages_.rend(); ++it) {
+      if (!it->statement_type().empty()) {
+        return &(*it);
+      }
+    }
+    return nullptr;
+  }
+
+  const v1::QueryResultRow* EmulatorRouteTrailer() const {
+    for (auto it = messages_.rbegin(); it != messages_.rend(); ++it) {
+      if (!it->emulator_route().empty()) {
+        return &(*it);
+      }
+    }
+    return nullptr;
+  }
+
  private:
   std::vector<v1::QueryResultRow> messages_{};
 };
