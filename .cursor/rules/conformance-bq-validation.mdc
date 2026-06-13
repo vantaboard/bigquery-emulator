@@ -1,0 +1,49 @@
+---
+description: Validate conformance fixture SQL against production BigQuery with the bq CLI when it misbehaves in the emulator
+globs: conformance/fixtures/**/*.yaml
+alwaysApply: false
+---
+
+# Conformance fixtures: validate SQL against production BigQuery
+
+When a conformance fixture's `query` **fails, errors, or produces unexpected
+results in the emulator**, do not assume the emulator is wrong. First confirm
+the SQL is actually valid on **production BigQuery** using the `bq` CLI. This
+distinguishes a real emulator bug from a fixture that encodes invalid /
+non-portable SQL.
+
+## How to validate
+
+Run the fixture's `query` through `bq query` (Standard SQL) and compare:
+
+```bash
+bq query <<'EOF'
+  WITH events AS (
+    SELECT DATE '2020-01-01' AS event_date
+    UNION ALL SELECT DATE '2020-01-02'
+    UNION ALL SELECT DATE '2020-01-03'
+    UNION ALL SELECT DATE '2020-01-04'
+  )
+  SELECT event_date,
+         COUNT(*) OVER (
+           ORDER BY event_date
+           RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND INTERVAL 1 DAY FOLLOWING
+         ) AS cnt
+    FROM events
+   ORDER BY event_date
+EOF
+```
+
+## Interpreting the result
+
+- **`bq` returns an error** → the fixture SQL is invalid / non-portable. Fix the
+  fixture to match what BigQuery actually accepts (e.g. the example above is
+  rejected because BigQuery requires a numeric `ORDER BY` for `RANGE` offsets;
+  rewrite using `UNIX_DATE(event_date)` with numeric `1 PRECEDING/FOLLOWING`).
+  Do **not** "fix" the emulator to accept SQL production rejects.
+- **`bq` succeeds** → the SQL is valid; the discrepancy is an emulator bug.
+  Use `bq`'s output rows as the source of truth for the fixture's `expected`.
+
+When a fixture intentionally diverges from a literal production query (e.g. a
+`UNIX_DATE` rewrite), note the production behavior in the fixture comment so the
+intent is clear, as in `conformance/fixtures/window/window_frame_range_date.yaml`.
