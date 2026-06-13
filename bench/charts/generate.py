@@ -25,6 +25,10 @@ EXPECTED_TARGETS = ("emulator", "goccy")
 DEFAULT_RATIO_THRESHOLD = 1.5
 RATIO_Y_CAP = 10.0
 LOG_FLOOR_MS = 0.05
+LOG_AXIS_FLOOR_MS = 0.02
+SKIPPED_MARKER_MS = 0.15
+SKIPPED_RATIO_Y = 0.03
+RATIO_AXIS_FLOOR = 0.008
 
 
 def _save_chart(fig: plt.Figure, out: Path) -> None:
@@ -43,6 +47,28 @@ def _legend_outside(
     if not handles:
         return
     fig.legend(handles, labels, loc=loc, **kwargs)
+
+
+def _legend_outside_right(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    *,
+    margin: float = 0.24,
+    **kwargs,
+) -> None:
+    """Legend in a right margin strip so it does not overlap a centered title."""
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    fig.subplots_adjust(right=1.0 - margin)
+    fig.legend(
+        handles,
+        labels,
+        loc="center left",
+        bbox_to_anchor=(1.0 - margin + 0.01, 0.5),
+        borderaxespad=0,
+        **kwargs,
+    )
 
 
 def _legend_below(
@@ -192,12 +218,13 @@ def _plot_skipped_markers(
         linewidths=1.5,
         label=label,
         zorder=2,
+        clip_on=False,
     )
 
 
 def _configure_ratio_axes(ax: plt.Axes, labels: list[str], *, title: str, ylabel: str) -> None:
     ax.set_yscale("log")
-    ax.set_ylim(bottom=max(LOG_FLOOR_MS / 1000, 0.01))
+    ax.set_ylim(bottom=RATIO_AXIS_FLOOR)
     ax.axhline(DEFAULT_RATIO_THRESHOLD, color="red", linestyle="--", label=f"threshold ({DEFAULT_RATIO_THRESHOLD}×)")
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=45, ha="right")
@@ -236,7 +263,7 @@ def ratio_vantaboard_chart(results: dict, baseline: dict, out: Path) -> None:
         title=f"Vantaboard latency ratio vs BigQuery (capped at {RATIO_Y_CAP:.0f}×, log scale)",
         ylabel="ratio vs BigQuery execution p50",
     )
-    _legend_outside(fig, ax)
+    _legend_outside_right(fig, ax)
     _save_chart(fig, out)
 
 
@@ -274,7 +301,7 @@ def ratio_goccy_chart(results: dict, baseline: dict, out: Path) -> None:
     _plot_skipped_markers(
         ax,
         skipped_x,
-        y=0.05,
+        y=SKIPPED_RATIO_Y,
         label="goccy skipped",
     )
     _configure_ratio_axes(
@@ -283,7 +310,7 @@ def ratio_goccy_chart(results: dict, baseline: dict, out: Path) -> None:
         title=f"Goccy latency ratio vs BigQuery (capped at {RATIO_Y_CAP:.0f}×, log scale)",
         ylabel="ratio vs BigQuery execution p50",
     )
-    _legend_outside(fig, ax)
+    _legend_outside_right(fig, ax)
     _save_chart(fig, out)
 
 
@@ -317,16 +344,17 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     if goccy_skipped_x:
         ax.scatter(
             goccy_skipped_x,
-            [LOG_FLOOR_MS] * len(goccy_skipped_x),
+            [SKIPPED_MARKER_MS] * len(goccy_skipped_x),
             marker="x",
             color=OUTCOMES["skipped"],
             s=50,
             linewidths=1.5,
             label="goccy skipped",
             zorder=5,
+            clip_on=False,
         )
     ax.set_yscale("log")
-    ax.set_ylim(bottom=LOG_FLOOR_MS)
+    ax.set_ylim(bottom=LOG_AXIS_FLOOR_MS)
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylabel("server p50 latency (ms)")
