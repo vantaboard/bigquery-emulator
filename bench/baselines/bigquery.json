@@ -7,7 +7,7 @@
       "total_p50_ms": 1638,
       "execution_p50_ms": 241,
       "bytes_processed": 1600000,
-      "result_hash": "ebc9beb428f962c5175291ec2f974e7d118c25dd805cae0c5c3403f376ecac35",
+      "result_hash": "d8b9a4af0a48677179d8a83c6e23d520affe2037657775e84a194f80bf936bba",
       "row_count": 100
     },
     "agg_group_by_1m": {
@@ -15,7 +15,7 @@
       "total_p50_ms": 1558,
       "execution_p50_ms": 213,
       "bytes_processed": 16000000,
-      "result_hash": "7477e082f4a48dd3831ec8c2f80453b24b04bc92e2607908b7cf754efcc6f8ac",
+      "result_hash": "c7a985db5fe045334a1d712f8325302964e9afe3a319ff7923c0483dd88206ff",
       "row_count": 100
     },
     "case_when": {
@@ -63,7 +63,7 @@
       "total_p50_ms": 1330,
       "execution_p50_ms": 178,
       "bytes_processed": 2400000,
-      "result_hash": "8c2ab2b202a98585c427c8dbb505743fe157492504be84010c0d83df22eef559",
+      "result_hash": "0b9f4e17061d3c5a907c3441213124498bdd9af8428c12fc581409d36bdbdd7c",
       "row_count": 50
     },
     "order_by_100k": {
@@ -79,7 +79,7 @@
       "total_p50_ms": 1397,
       "execution_p50_ms": 161,
       "bytes_processed": 800000,
-      "result_hash": "ec8e3a29c09acd4d2e4dcd6238e47c984777e5ddf60b8694936503e03ac994de",
+      "result_hash": "a20f5df64b5c5ab8241f90046593fcf32ef6b89eab79d94b4efa5a25fad2ce1c",
       "row_count": 1
     },
     "select_literal": {

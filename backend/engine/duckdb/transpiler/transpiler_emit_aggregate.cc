@@ -156,6 +156,7 @@ std::string Transpiler::EmitAggregateScan(
       if (!arr.empty()) {
         const absl::string_view col = arr_scan->element_column_list(0).name();
         const std::string quoted_col = internal::QuoteIdent(col);
+        join_output_uses_id_aliases_ = false;
         return absl::StrCat("SELECT (SELECT list(",
                             quoted_col,
                             " ORDER BY min_ord) FROM (SELECT ",
@@ -239,6 +240,7 @@ std::string Transpiler::EmitAggregateScan(
         delim = EmitExpr(agg->argument_list(1));
         if (delim.empty()) return "";
       }
+      join_output_uses_id_aliases_ = false;
       return absl::StrCat("SELECT array_to_string(list(",
                           val,
                           " ORDER BY ",
@@ -345,6 +347,7 @@ std::string Transpiler::EmitAggregateScan(
   } else if (!group_by_exprs.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
+  join_output_uses_id_aliases_ = false;
   return sql;
 }
 

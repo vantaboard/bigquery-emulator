@@ -20,8 +20,7 @@ using ::googlesql::functions::DateTimestampPart;
 
 namespace {
 
-std::optional<int> TryIntervalPartEnum(
-    const ::googlesql::ResolvedExpr* expr) {
+std::optional<int> TryIntervalPartEnum(const ::googlesql::ResolvedExpr* expr) {
   if (expr == nullptr || expr->node_kind() != ::googlesql::RESOLVED_LITERAL) {
     return std::nullopt;
   }
@@ -140,13 +139,8 @@ std::optional<std::string> TryEmitDateTimeFunctionCall(
       std::string amount_sql = emit_expr(node->argument_list(1));
       const auto part = TryIntervalPartEnum(node->argument_list(2));
       if (!date_sql.empty() && !amount_sql.empty() && part.has_value()) {
-        return absl::StrCat("bq_date_add(",
-                            date_sql,
-                            ", ",
-                            amount_sql,
-                            ", ",
-                            *part,
-                            ")");
+        return absl::StrCat(
+            "bq_date_add(", date_sql, ", ", amount_sql, ", ", *part, ")");
       }
       return std::nullopt;
     }

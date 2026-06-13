@@ -208,11 +208,6 @@ absl::Status RouteClassifierVisitor::VisitResolvedArrayScan(
     } else if (node->join_expr() != nullptr) {
       MaybePromote(Disposition::kSemanticExecutor,
                    "ResolvedArrayScan(join_expr)");
-    } else if (node->input_scan() != nullptr &&
-               node->input_scan()->node_kind() !=
-                   ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
-      MaybePromote(Disposition::kSemanticExecutor,
-                   "ResolvedArrayScan(correlated_input_scan)");
     } else if (node->array_expr_list_size() > 0 &&
                ArrayExprReferencesNamedConstant(node->array_expr_list(0))) {
       // Script variables are registered as named catalog constants.

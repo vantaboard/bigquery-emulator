@@ -225,6 +225,16 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
     return absl::InternalError(
         "DuckDbExecutor::ExecuteQuery: duckdb_connect failed");
   }
+  // Parallel float aggregates (e.g. SUM over 1M DOUBLE rows) can
+  // produce run-to-run bit differences when DuckDB fans out partial
+  // sums across threads. Single-thread execution keeps IEEE
+  // accumulation order stable for bench hash gates.
+  if (absl::Status threads = internal::RunSqlNoResult(conn, "PRAGMA threads=1");
+      !threads.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return threads;
+  }
 
   // 4b. Register the BigQuery polyfill UDF library on the fresh
   // connection. Every BigQuery function whose disposition is

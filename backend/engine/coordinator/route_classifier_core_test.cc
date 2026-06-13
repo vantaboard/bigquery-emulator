@@ -234,16 +234,31 @@ TEST_F(RouteClassifierTest, MultiArrayUnnestZipPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_zip_mode)");
 }
 
-TEST_F(RouteClassifierTest, CorrelatedColumnUnnestPromotesToSemanticExecutor) {
-  // `FROM t, UNNEST(t.arr)` still routes to the semantic executor until
-  // the DuckDB transpiler covers aggregate/project shapes over lateral
-  // UNNEST.
+TEST_F(RouteClassifierTest, CorrelatedColumnUnnestWithOffsetStaysSemantic) {
+  const auto* stmt = Analyze(
+      "SELECT id, n, idx FROM arr_table, UNNEST(arr_table.arr) AS n WITH "
+      "OFFSET AS idx");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_offset_column)");
+}
+
+TEST_F(RouteClassifierTest, UnnestArrayBenchShapeRoutesToDuckDbNative) {
+  const auto* stmt = Analyze(
+      "SELECT COUNT(*) AS cnt, SUM(x) AS total FROM arr_table, "
+      "UNNEST(arr_table.arr) AS x");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
+}
+
+TEST_F(RouteClassifierTest, CorrelatedColumnUnnestRoutesToDuckDbNative) {
   const auto* stmt =
       Analyze("SELECT id, n FROM arr_table, UNNEST(arr_table.arr) AS n");
   ASSERT_NE(stmt, nullptr);
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
-  EXPECT_EQ(d.offending_node, "ResolvedArrayScan(correlated_input_scan)");
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
 }
 
 TEST_F(RouteClassifierTest, RowNumberOverFarmFingerprintStaysOnDuckDb) {

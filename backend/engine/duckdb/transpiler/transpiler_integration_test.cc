@@ -273,6 +273,29 @@ TEST_F(TranspilerTest, TranspileDateFuncsBenchShape) {
   EXPECT_EQ(sql.find(" DAY"), std::string::npos) << sql;
 }
 
+TEST_F(TranspilerTest, TranspileFloatSumCastsAggregateToDouble) {
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT SUM(CAST(id AS FLOAT64)) AS total FROM people");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "transpile failed";
+  EXPECT_NE(sql.find("SUM("), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileUnnestArrayBenchShape) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT COUNT(*) AS cnt, SUM(x) AS total FROM arr_table, "
+      "UNNEST(arr_table.arr) AS x");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "transpile failed";
+  EXPECT_NE(sql.find("unnest("), std::string::npos) << sql;
+  EXPECT_NE(sql.find("__bq_l"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("\"cnt\""), std::string::npos) << sql;
+}
+
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

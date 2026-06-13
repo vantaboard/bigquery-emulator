@@ -119,6 +119,7 @@ cc_library(
         "transpiler_scan_tree.cc",
         "transpiler_emit_query.cc",
         "transpiler_emit_join.cc",
+        "transpiler_emit_array_scan.cc",
         "transpiler_emit_aggregate.cc",
         "transpiler_emit_pivot.cc",
         "transpiler_emit_setops.cc",

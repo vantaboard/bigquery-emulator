@@ -1,8 +1,7 @@
-# cross_join_unnest: FROM t, UNNEST(t.arr) via semantic_executor.
+# cross_join_unnest: FROM t, UNNEST(t.arr) via duckdb_native.
 #
-# Pins the correlated cross-join UNNEST shape promoted by
-# `VisitResolvedArrayScan(correlated_input_scan)` and evaluated
-# through `MaterializeArrayScan` + `outer_row_eval`.
+# Pins the correlated cross-join UNNEST shape lowered through the DuckDB
+# transpiler's lateral unnest emit.
 name: cross_join_unnest
 description: |
   Cross-join UNNEST of a table column. Verifies one output row per
@@ -28,7 +27,7 @@ query: |
     FROM ds_array_struct_cross_join.items, UNNEST(items.vals) AS n
    ORDER BY id, n
 expected:
-  route: semantic_executor
+  route: duckdb_native
   rows:
     - {id: "1", n: "10"}
     - {id: "1", n: "20"}

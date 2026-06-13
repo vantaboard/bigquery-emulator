@@ -405,61 +405,6 @@ std::string Transpiler::EmitJoinScan(
                       on);
 }
 
-std::string Transpiler::EmitArrayScan(
-    const ::googlesql::ResolvedArrayScan* node) {
-  // Standalone UNNEST subset. Emit
-  // `SELECT unnest(<arr>) AS "<col>"`, which DuckDB lowers to one row
-  // per array element with the column carrying `<col>` as its name.
-  //
-  // The full BigQuery `ResolvedArrayScan` surface is wider than what
-  // we lower today; everything outside the standalone case surfaces
-  // UNIMPLEMENTED via the empty-string contract:
-  //
-  //   * `FROM t, UNNEST(t.arr)` (`input_scan != nullptr` and the
-  //     input is not a `SingleRowScan`) needs DuckDB's lateral
-  //     `CROSS JOIN unnest(...)` rewrite; we defer that to a
-  //     follow-up plan so the column-aliasing contract for the
-  //     cross-join side stays focused.
-  //   * `UNNEST(arr) WITH OFFSET pos` (`array_offset_column`) needs
-  //     a `generate_subscripts(...)` shape with a positional join,
-  //     which BigQuery's ordinal semantics make load-bearing.
-  //   * Multi-array `UNNEST(a, b, c)` (`array_zip_mode`) is the BQ
-  //     array-zip extension; DuckDB's only analog (`list_zip`) does
-  //     not match the PAD / TRUNCATE / STRICT modes exactly.
-  //   * LEFT/RIGHT-style outer UNNEST (`is_outer` / `join_expr`)
-  //     also needs the lateral rewrite plus a literal `NULL` row
-  //     fixup for empty arrays.
-  if (node == nullptr) return "";
-  if (node->array_expr_list_size() != 1 ||
-      node->element_column_list_size() != 1 ||
-      node->array_offset_column() != nullptr || node->join_expr() != nullptr ||
-      node->is_outer() || node->array_zip_mode() != nullptr) {
-    return "";
-  }
-  // Standalone UNNEST either has no input_scan or a SingleRowScan
-  // (the analyzer's stand-in for "no FROM clause"). Anything else is
-  // the lateral / cross-join shape we defer above.
-  if (node->input_scan() != nullptr &&
-      node->input_scan()->node_kind() !=
-          ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
-    return "";
-  }
-  std::string arr = EmitExpr(node->array_expr_list(0));
-  if (arr.empty()) return "";
-  const std::string quoted_col =
-      internal::QuoteIdent(node->element_column_list(0).name());
-  input_has_rn_column_ = true;
-  return absl::StrCat("SELECT ",
-                      quoted_col,
-                      ", ord AS ",
-                      internal::QuoteIdent(internal::kBqInputRnCol),
-                      " FROM unnest(",
-                      arr,
-                      ") WITH ORDINALITY AS __bq_unnest__(",
-                      quoted_col,
-                      ", ord)");
-}
-
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

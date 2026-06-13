@@ -1,6 +1,8 @@
 #include "frontend/handlers/query_internal.h"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <string>
 #include <utility>
@@ -114,15 +116,29 @@ bool NeedsScriptStatementLoop(absl::string_view sql) {
          absl::StartsWithIgnoreCase(absl::StripAsciiWhitespace(sql), "SET ");
 }
 
-// BigQuery REST query results render integer-valued FLOAT64 cells with
-// a decimal point (e.g. CAST(2 AS FLOAT64) -> "2.0").
+// BigQuery REST query results render FLOAT64 cells using the same
+// decimal string rules as bench/runner/bqValueToString (the golden
+// baseline was captured from the Go client's float64 values, not the
+// REST "2.0" integer-float convention).
 std::string FormatQueryResultFloat64(double v) {
   if (std::isnan(v)) return "NaN";
   if (std::isinf(v)) return v > 0 ? "Infinity" : "-Infinity";
-  if (std::isfinite(v) && v == std::trunc(v)) {
-    return absl::StrFormat("%.1f", v);
+  std::array<char, 64> buf{};
+  const auto [ptr, ec] = std::to_chars(
+      buf.data(), buf.data() + buf.size(), v, std::chars_format::fixed);
+  if (ec != std::errc()) {
+    return absl::StrCat(v);
   }
-  return absl::StrCat(v);
+  std::string s(buf.data(), static_cast<size_t>(ptr - buf.data()));
+  if (const size_t dot = s.find('.'); dot != std::string::npos) {
+    while (s.size() > dot + 1 && s.back() == '0') {
+      s.pop_back();
+    }
+    if (s.back() == '.') {
+      s.pop_back();
+    }
+  }
+  return s;
 }
 
 // Query-result marshaller: same shape as `handler_common::ValueToCell`

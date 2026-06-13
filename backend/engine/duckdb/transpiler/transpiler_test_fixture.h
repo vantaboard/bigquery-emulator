@@ -116,6 +116,19 @@ class TranspilerTest : public ::testing::Test {
         });
     catalog_->AddOwnedTable(std::move(people));
 
+    const ::googlesql::Type* int64_array_type = nullptr;
+    EXPECT_TRUE(
+        type_factory_
+            ->MakeArrayType(type_factory_->get_int64(), &int64_array_type)
+            .ok());
+    auto arr_table = std::make_unique<::googlesql::SimpleTable>(
+        "arr_table",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"arr", int64_array_type},
+        });
+    catalog_->AddOwnedTable(std::move(arr_table));
+
     // The join tests need a second table with disjoint column names so
     // the analyzer doesn't have to disambiguate references in the ON
     // expression; the transpiler doesn't know how to disambiguate yet

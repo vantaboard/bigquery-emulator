@@ -251,15 +251,6 @@ void RecordPhase(PhaseRecorder* recorder,
   }
 }
 
-bool SchemaHasFloat64Column(const schema::TableSchema& schema) {
-  for (const auto& column : schema.columns) {
-    if (column.type == schema::ColumnType::kFloat64) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Runs `sql` on `conn`; returns OK or INTERNAL with the DuckDB
 // error message attached. Use this for INSERT / CREATE statements
 // where the result rowset is uninteresting.
@@ -297,8 +288,7 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
   const std::string table_name(quoted_table_name);
   const storage::TableId& id = table.storage_table_id();
 
-  if (auto parquet_path = storage->ParquetSnapshotPath(id);
-      parquet_path && !SchemaHasFloat64Column(schema)) {
+  if (auto parquet_path = storage->ParquetSnapshotPath(id); parquet_path) {
     const absl::Time attach_start = absl::Now();
     const std::string select_cols =
         storage::duckdb::internal::RenderColumnIdentList(schema);
