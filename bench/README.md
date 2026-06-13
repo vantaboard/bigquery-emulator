@@ -50,7 +50,26 @@ task bench:baseline
 
 This writes [`bench/baselines/bigquery.json`](baselines/bigquery.json) with per-case p50 latency, result hash, and row count. Commit that file after capture.
 
+Baseline capture sets `DisableQueryCache = true` and rejects cache hits so execution times are not artificially zero.
+
 Until a baseline exists, `task bench:compare` reports `no baseline for case` per case instead of failing the gate.
+
+### Latency metrics
+
+Comparisons and the pass/fail gate use **server-side** latency on both sides where available:
+
+| Field | Meaning |
+|-------|---------|
+| `execution_p50_ms` | BQ `endTime − startTime` (console **Duration**; excludes queue + client) |
+| `total_p50_ms` | BQ client wall-clock incl. poll + fetch (diagnostic only) |
+| `queue_p50_ms` | BQ `startTime − creationTime` (slot queue wait; diagnostic) |
+| `total_slot_ms_p50` | BQ slot-milliseconds consumed (resource metric, not used in latency gate) |
+| `engine_p50` / `phases.total_engine` | Emulator server-side engine path (compare numerator) |
+| `latency.p50` | Emulator HTTP round-trip (diagnostic) |
+
+BQ `execution_p50_ms` excludes queue time (`creationTime → startTime`) and all client-side overhead. It matches the console Duration column, not "time from click to results."
+
+Goccy has no `total_engine` phase; goccy chart bars use HTTP wall-clock only.
 
 ## Outcomes
 

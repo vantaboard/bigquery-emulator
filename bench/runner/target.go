@@ -29,6 +29,9 @@ const (
 type QueryResult struct {
 	Elapsed        time.Duration
 	ExecutionOnly  time.Duration
+	ExecutionValid bool // true when BQ startTime/endTime were present
+	QueueOnly      time.Duration
+	SlotMs         int64
 	BytesProcessed int64
 	Rows           []map[string]string
 	RowCount       int

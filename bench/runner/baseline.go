@@ -20,6 +20,8 @@ type BaselineCase struct {
 	ContentHash    string `json:"content_hash"`
 	TotalP50MS     int64  `json:"total_p50_ms"`
 	ExecutionP50MS int64  `json:"execution_p50_ms"`
+	QueueP50MS     int64  `json:"queue_p50_ms,omitempty"`
+	TotalSlotMsP50 int64  `json:"total_slot_ms_p50,omitempty"`
 	BytesProcessed int64  `json:"bytes_processed,omitempty"`
 	ResultHash     string `json:"result_hash"`
 	RowCount       int    `json:"row_count"`
@@ -72,6 +74,8 @@ func BuildBaselineFromResults(project string, results []CaseResult) BaselineFile
 			ContentHash:    r.ContentHash,
 			TotalP50MS:     r.Latency.P50.Milliseconds(),
 			ExecutionP50MS: r.ExecutionP50.Milliseconds(),
+			QueueP50MS:     r.QueueP50.Milliseconds(),
+			TotalSlotMsP50: r.TotalSlotMsP50,
 			BytesProcessed: r.BytesProcessed,
 			ResultHash:     r.ResultHash,
 			RowCount:       r.RowCount,
@@ -91,17 +95,19 @@ func CompareToBaseline(c Case, base BaselineCase, r CaseResult) (pass bool, reas
 	if r.Outcome != OutcomeOK {
 		return false, string(r.Outcome) + ": " + r.Error
 	}
+	emuLatency := r.CompareLatencyP50()
 	threshold := time.Duration(c.MaxMS) * time.Millisecond
-	if base.TotalP50MS > 0 {
-		bq := time.Duration(base.TotalP50MS) * time.Millisecond
+	bqMS := base.LatencyP50ForRatio()
+	if bqMS > 0 {
+		bq := time.Duration(bqMS) * time.Millisecond
 		ratioThreshold := time.Duration(float64(bq) * c.MaxRatio)
 		if ratioThreshold > threshold {
 			threshold = ratioThreshold
 		}
 	}
-	if r.Latency.P50 > threshold {
-		return false, fmt.Sprintf("p50 %s > threshold %s (bq p50 %dms, ratio %.2f)",
-			r.Latency.P50, threshold, base.TotalP50MS, c.MaxRatio)
+	if emuLatency > threshold {
+		return false, fmt.Sprintf("p50 %s > threshold %s (bq execution p50 %dms, ratio %.2f)",
+			emuLatency, threshold, base.LatencyP50MS(), c.MaxRatio)
 	}
 	return true, ""
 }

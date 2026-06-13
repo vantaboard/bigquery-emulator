@@ -10,22 +10,25 @@ import (
 
 // CaseResult is the aggregated outcome for one (case, target) pair.
 type CaseResult struct {
-	CaseName       string        `json:"case_name"`
-	Target         TargetName    `json:"target"`
-	ContentHash    string        `json:"content_hash,omitempty"`
-	Outcome        Outcome       `json:"outcome"`
-	Error          string        `json:"error,omitempty"`
-	Latency        LatencyStats  `json:"latency"`
-	ExecutionP50   time.Duration `json:"execution_p50,omitempty"`
-	BytesProcessed int64         `json:"bytes_processed,omitempty"`
-	Route          string        `json:"route,omitempty"`
-	Phases         PhaseStats    `json:"phases,omitempty"`
-	ResultHash     string        `json:"result_hash,omitempty"`
-	RowCount       int           `json:"row_count,omitempty"`
-	Pass           *bool         `json:"pass,omitempty"`
-	CompareReason  string        `json:"compare_reason,omitempty"`
-	BQTotalP50MS   int64         `json:"bq_total_p50_ms,omitempty"`
-	Ratio          float64       `json:"ratio_vs_bq,omitempty"`
+	CaseName         string        `json:"case_name"`
+	Target           TargetName    `json:"target"`
+	ContentHash      string        `json:"content_hash,omitempty"`
+	Outcome          Outcome       `json:"outcome"`
+	Error            string        `json:"error,omitempty"`
+	Latency          LatencyStats  `json:"latency"`
+	EngineP50        time.Duration `json:"engine_p50,omitempty"`
+	ExecutionP50     time.Duration `json:"execution_p50,omitempty"`
+	QueueP50         time.Duration `json:"queue_p50,omitempty"`
+	TotalSlotMsP50   int64         `json:"total_slot_ms_p50,omitempty"`
+	BytesProcessed   int64         `json:"bytes_processed,omitempty"`
+	Route            string        `json:"route,omitempty"`
+	Phases           PhaseStats    `json:"phases,omitempty"`
+	ResultHash       string        `json:"result_hash,omitempty"`
+	RowCount         int           `json:"row_count,omitempty"`
+	Pass             *bool         `json:"pass,omitempty"`
+	CompareReason    string        `json:"compare_reason,omitempty"`
+	BQExecutionP50MS int64         `json:"bq_execution_p50_ms,omitempty"`
+	Ratio            float64       `json:"ratio_vs_bq,omitempty"`
 }
 
 // RunReport is the machine-readable benchmark output.

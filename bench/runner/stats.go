@@ -69,6 +69,27 @@ func ComputePhaseStats(iterations []map[string]int64, warmup int) PhaseStats {
 	return out
 }
 
+// ComputeInt64P50 returns the p50 of int64 samples after warmup.
+func ComputeInt64P50(samples []int64, warmup int) int64 {
+	if len(samples) == 0 {
+		return 0
+	}
+	start := warmup
+	if start >= len(samples) {
+		start = len(samples) - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	used := append([]int64(nil), samples[start:]...)
+	slices.Sort(used)
+	idx := max(int(math.Round(0.50*float64(len(used)-1))), 0)
+	if idx >= len(used) {
+		idx = len(used) - 1
+	}
+	return used[idx]
+}
+
 func percentile(sorted []time.Duration, p float64) time.Duration {
 	if len(sorted) == 0 {
 		return 0

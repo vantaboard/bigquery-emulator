@@ -58,7 +58,30 @@ def _missing_targets(results: dict) -> list[str]:
     return [t for t in EXPECTED_TARGETS if t not in present]
 
 
-def _latency_or_nan(row: dict | None) -> float:
+def _bq_latency_ms(case_baseline: dict | None) -> float | None:
+    if not case_baseline:
+        return None
+    ms = case_baseline.get("execution_p50_ms")
+    if not ms or ms <= 0:
+        ms = case_baseline.get("total_p50_ms")
+    return ms
+
+
+def _emu_server_ms(row: dict | None) -> float:
+    if not row or row.get("outcome") != "ok":
+        return math.nan
+    engine_p50 = row.get("engine_p50")
+    if isinstance(engine_p50, (int, float)) and engine_p50 > 0:
+        return float(engine_p50) / 1_000_000.0
+    phases = row.get("phases") or {}
+    te = phases.get("total_engine") or {}
+    p50 = te.get("p50")
+    if isinstance(p50, (int, float)) and p50 > 0:
+        return float(p50) / 1_000_000.0
+    return _p50_ms(row)
+
+
+def _goccy_wall_ms(row: dict | None) -> float:
     if not row or row.get("outcome") != "ok":
         return math.nan
     ms = _p50_ms(row)
@@ -74,20 +97,21 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     labels, emu_ms, goccy_ms, bq_ms = [], [], [], []
     for case in cases:
         labels.append(case)
-        emu_ms.append(_latency_or_nan(emu.get(case)))
-        goccy_ms.append(_latency_or_nan(goccy.get(case)))
-        bq_ms.append(bq.get(case, {}).get("total_p50_ms"))
+        emu_ms.append(_emu_server_ms(emu.get(case)))
+        goccy_ms.append(_goccy_wall_ms(goccy.get(case)))
+        bq_val = _bq_latency_ms(bq.get(case))
+        bq_ms.append(bq_val if bq_val is not None else math.nan)
 
     x = range(len(labels))
     width = 0.25
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 6))
-    ax.bar([i - width for i in x], emu_ms, width, label="vantaboard")
-    ax.bar(x, goccy_ms, width, label="goccy")
-    ax.bar([i + width for i in x], bq_ms, width, label="bigquery baseline")
+    ax.bar([i - width for i in x], emu_ms, width, label="vantaboard (total_engine)")
+    ax.bar(x, goccy_ms, width, label="goccy (wall)")
+    ax.bar([i + width for i in x], bq_ms, width, label="bigquery (job duration)")
     ax.set_yscale("log")
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_ylabel("p50 latency (ms)")
+    ax.set_ylabel("server p50 latency (ms)")
     title = "Benchmark comparison"
     missing = _missing_targets(results)
     if missing:
@@ -105,22 +129,25 @@ def ratio_chart(results: dict, baseline: dict, out: Path) -> None:
 
     labels, emu_ratio, goccy_ratio = [], [], []
     for case in cases:
-        bq_ms = bq.get(case, {}).get("total_p50_ms") or 0
+        bq_ms = _bq_latency_ms(bq.get(case)) or 0
         if bq_ms <= 0:
             continue
+        bq_denom = max(bq_ms, 1)
         labels.append(case)
-        emu_ratio.append(_p50_ms(emu.get(case)) / bq_ms if emu.get(case) and emu.get(case).get("outcome") == "ok" else math.nan)
-        goccy_ratio.append(_p50_ms(goccy.get(case)) / bq_ms if goccy.get(case) and goccy.get(case).get("outcome") == "ok" else math.nan)
+        emu_val = _emu_server_ms(emu.get(case))
+        goccy_val = _p50_ms(goccy.get(case)) if goccy.get(case) and goccy.get(case).get("outcome") == "ok" else math.nan
+        emu_ratio.append(emu_val / bq_denom if emu_val == emu_val and emu_val > 0 else math.nan)
+        goccy_ratio.append(goccy_val / bq_denom if goccy_val == goccy_val and goccy_val > 0 else math.nan)
 
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 5))
     x = range(len(labels))
-    ax.plot(x, emu_ratio, marker="o", label="vantaboard / BQ")
-    ax.plot(x, goccy_ratio, marker="s", label="goccy / BQ")
+    ax.plot(x, emu_ratio, marker="o", label="vantaboard / BQ (server)")
+    ax.plot(x, goccy_ratio, marker="s", label="goccy / BQ (wall vs server)")
     ax.axhline(1.5, color="red", linestyle="--", label="default threshold (1.5x)")
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_ylabel("ratio vs BigQuery p50")
-    ax.set_title("Latency ratio vs BigQuery baseline")
+    ax.set_ylabel("ratio vs BigQuery execution p50")
+    ax.set_title("Latency ratio vs BigQuery job duration")
     _legend_outside(fig, ax)
     _save_chart(fig, out)
 

@@ -103,7 +103,10 @@ func run(ctx context.Context, cfg config) error {
 }
 
 func loadBaseline(cfg config) *runner.BaselineFile {
-	if !cfg.compare && !cfg.capture {
+	if cfg.capture {
+		return nil
+	}
+	if !cfg.compare {
 		return nil
 	}
 	loaded, loadErr := runner.LoadBaseline(cfg.baselinePath)

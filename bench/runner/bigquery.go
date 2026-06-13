@@ -90,26 +90,42 @@ func (t *BigQueryTarget) RunQuery(ctx context.Context, c Case, sql string, timeo
 			return QueryResult{Error: err.Error()}, err
 		}
 		status := job.LastStatus()
-		var execOnly time.Duration
-		var bytesProcessed int64
-		if status != nil && status.Statistics != nil {
-			st := status.Statistics.EndTime.Sub(status.Statistics.StartTime)
-			execOnly = st
-			bytesProcessed = status.Statistics.TotalBytesProcessed
+		metrics, err := extractBQJobMetrics(status)
+		if err != nil {
+			return QueryResult{Error: err.Error()}, err
+		}
+		if metrics.cacheHit {
+			err := errors.New("bigquery query cache hit (DisableQueryCache ineffective)")
+			return QueryResult{Error: err.Error()}, err
 		}
 		it, err := job.Read(ctx)
 		if err != nil {
-			return QueryResult{Error: err.Error(), ExecutionOnly: execOnly}, err
+			return QueryResult{
+				Error:          err.Error(),
+				ExecutionOnly:  metrics.execution,
+				ExecutionValid: true,
+				QueueOnly:      metrics.queue,
+				SlotMs:         metrics.slotMs,
+			}, err
 		}
 		rows, err := readAllRows(it)
 		if err != nil {
-			return QueryResult{Error: err.Error(), ExecutionOnly: execOnly}, err
+			return QueryResult{
+				Error:          err.Error(),
+				ExecutionOnly:  metrics.execution,
+				ExecutionValid: true,
+				QueueOnly:      metrics.queue,
+				SlotMs:         metrics.slotMs,
+			}, err
 		}
 		maps := bqRowsToMaps(rows)
 		hash, _ := HashRows(maps)
 		return QueryResult{
-			ExecutionOnly:  execOnly,
-			BytesProcessed: bytesProcessed,
+			ExecutionOnly:  metrics.execution,
+			ExecutionValid: true,
+			QueueOnly:      metrics.queue,
+			SlotMs:         metrics.slotMs,
+			BytesProcessed: metrics.bytesProcessed,
 			Rows:           maps,
 			RowCount:       len(maps),
 			ResultHash:     hash,
@@ -147,6 +163,7 @@ func (t *BigQueryTarget) runSQL(ctx context.Context, sql string) error {
 
 func (t *BigQueryTarget) runJob(ctx context.Context, sql string) (*bigquery.Job, error) {
 	q := t.client.Query(sql)
+	// Benchmarks must never read cached results; cache hits yield ~0ms execution.
 	q.DisableQueryCache = true
 	q.Location = t.location
 	job, err := q.Run(ctx)
@@ -161,6 +178,39 @@ func (t *BigQueryTarget) runJob(ctx context.Context, sql string) (*bigquery.Job,
 		return nil, err
 	}
 	return job, nil
+}
+
+type bqJobMetrics struct {
+	execution      time.Duration
+	queue          time.Duration
+	slotMs         int64
+	cacheHit       bool
+	bytesProcessed int64
+}
+
+func extractBQJobMetrics(status *bigquery.JobStatus) (bqJobMetrics, error) {
+	if status == nil || status.Statistics == nil {
+		return bqJobMetrics{}, errors.New("missing BigQuery job statistics")
+	}
+	st := status.Statistics
+	if st.StartTime.IsZero() || st.EndTime.IsZero() {
+		return bqJobMetrics{}, errors.New("missing BigQuery startTime or endTime")
+	}
+	m := bqJobMetrics{
+		execution:      st.EndTime.Sub(st.StartTime),
+		bytesProcessed: st.TotalBytesProcessed,
+	}
+	if !st.CreationTime.IsZero() && st.StartTime.After(st.CreationTime) {
+		m.queue = st.StartTime.Sub(st.CreationTime)
+	}
+	if qs, ok := st.Details.(*bigquery.QueryStatistics); ok {
+		m.cacheHit = qs.CacheHit
+		m.slotMs = qs.SlotMillis
+	}
+	if m.slotMs == 0 && st.TotalSlotDuration > 0 {
+		m.slotMs = st.TotalSlotDuration.Milliseconds()
+	}
+	return m, nil
 }
 
 func readAllRows(it *bigquery.RowIterator) ([]map[string]bigquery.Value, error) {

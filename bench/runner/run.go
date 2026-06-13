@@ -166,9 +166,11 @@ func enrichWithBaseline(opts RunOptions, target Target, c Case, cr CaseResult) C
 			pass, reason := CompareToBaseline(c, base, cr)
 			cr.Pass = &pass
 			cr.CompareReason = reason
-			cr.BQTotalP50MS = base.TotalP50MS
-			if base.TotalP50MS > 0 && cr.Latency.P50 > 0 {
-				cr.Ratio = float64(cr.Latency.P50.Milliseconds()) / float64(base.TotalP50MS)
+			cr.BQExecutionP50MS = base.LatencyP50MS()
+			bqDenom := base.LatencyP50ForRatio()
+			emuNum := cr.CompareLatencyMSForRatio()
+			if bqDenom > 0 && emuNum > 0 {
+				cr.Ratio = float64(emuNum) / float64(bqDenom)
 			}
 		} else {
 			pass := false
@@ -221,9 +223,10 @@ func runCase(
 	_, query := c.Substitute(dsRef, project)
 	caseTimeout := c.QueryTimeout(timeout)
 
-	samples, execSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
+	samples, execSamples, queueSamples, slotSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
 		ctx, opts, target, c, query, caseTimeout)
 
+	phases := ComputePhaseStats(phaseIters, c.Warmup)
 	cr := CaseResult{
 		CaseName:       c.Name,
 		Target:         target.Name(),
@@ -231,7 +234,8 @@ func runCase(
 		Outcome:        outcome,
 		Error:          lastErr,
 		Latency:        ComputeLatencyStats(samples, c.Warmup),
-		Phases:         ComputePhaseStats(phaseIters, c.Warmup),
+		Phases:         phases,
+		EngineP50:      EngineP50FromPhases(phases),
 		Route:          last.Route,
 		ResultHash:     last.ResultHash,
 		RowCount:       last.RowCount,
@@ -239,6 +243,12 @@ func runCase(
 	}
 	if len(execSamples) > 0 {
 		cr.ExecutionP50 = ComputeLatencyStats(execSamples, c.Warmup).P50
+	}
+	if len(queueSamples) > 0 {
+		cr.QueueP50 = ComputeLatencyStats(queueSamples, c.Warmup).P50
+	}
+	if len(slotSamples) > 0 {
+		cr.TotalSlotMsP50 = ComputeInt64P50(slotSamples, c.Warmup)
 	}
 	return cr
 }
@@ -250,7 +260,14 @@ func runQueryIterations(
 	c Case,
 	query string,
 	timeout time.Duration,
-) (samples, execSamples []time.Duration, phaseIters []map[string]int64, last QueryResult, outcome Outcome, lastErr string) {
+) (
+	samples, execSamples, queueSamples []time.Duration,
+	slotSamples []int64,
+	phaseIters []map[string]int64,
+	last QueryResult,
+	outcome Outcome,
+	lastErr string,
+) {
 	outcome = OutcomeOK
 	for i := 0; i < c.Iterations; i++ {
 		res, err := target.RunQuery(ctx, c, query, timeout)
@@ -275,15 +292,29 @@ func runQueryIterations(
 		opts.logf("    %s on %s: iteration %d/%d%s took %s",
 			c.Name, target.Name(), i+1, c.Iterations, label,
 			res.Elapsed.Round(time.Millisecond))
+		if target.Name() == TargetBigQuery && res.ExecutionValid {
+			clientOverhead := res.Elapsed - res.ExecutionOnly
+			opts.logf("      bq stats: execution=%s queue=%s slot_ms=%d client_overhead=%s",
+				res.ExecutionOnly.Round(time.Millisecond),
+				res.QueueOnly.Round(time.Millisecond),
+				res.SlotMs,
+				clientOverhead.Round(time.Millisecond))
+		}
 		samples = append(samples, res.Elapsed)
-		if res.ExecutionOnly > 0 {
+		if res.ExecutionValid {
 			execSamples = append(execSamples, res.ExecutionOnly)
+		}
+		if res.QueueOnly > 0 {
+			queueSamples = append(queueSamples, res.QueueOnly)
+		}
+		if res.ExecutionValid {
+			slotSamples = append(slotSamples, res.SlotMs)
 		}
 		if len(res.Phases) > 0 {
 			phaseIters = append(phaseIters, res.Phases)
 		}
 	}
-	return samples, execSamples, phaseIters, last, outcome, lastErr
+	return samples, execSamples, queueSamples, slotSamples, phaseIters, last, outcome, lastErr
 }
 
 func datasetForCase(name string) string {
