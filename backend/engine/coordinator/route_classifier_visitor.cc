@@ -8,6 +8,8 @@
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
+#include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_collation.h"
 #include "googlesql/resolved_ast/resolved_node.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
@@ -426,6 +428,27 @@ void RouteClassifierVisitor::CheckFunction(
     return;
   }
   if (entry->planned) return;
+  // AVG(NUMERIC/BIGNUMERIC) is exact in BigQuery, but DuckDB's avg()
+  // widens a DECIMAL input to DOUBLE (wrong type + lost precision), so
+  // route it to the semantic executor's exact-decimal AVG instead of
+  // approximating. SUM/MIN/MAX keep DuckDB's DECIMAL output.
+  if (absl::AsciiStrToLower(name) == "avg" &&
+      node->Is<::googlesql::ResolvedAggregateFunctionCall>()) {
+    const auto* agg = node->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
+    for (int i = 0; i < agg->argument_list_size(); ++i) {
+      const ::googlesql::ResolvedExpr* arg = agg->argument_list(i);
+      if (arg == nullptr || arg->type() == nullptr) continue;
+      if (arg->type()->IsBigNumericType()) {
+        MaybePromote(Disposition::kSemanticExecutor,
+                     "function:avg(bignumeric)");
+        return;
+      }
+      if (arg->type()->IsNumericType()) {
+        MaybePromote(Disposition::kSemanticExecutor, "function:avg(numeric)");
+        return;
+      }
+    }
+  }
   MaybePromote(entry->disposition,
                absl::StrCat("function:", absl::AsciiStrToLower(name)));
 }

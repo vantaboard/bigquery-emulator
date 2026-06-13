@@ -1,0 +1,44 @@
+# aggregate_numeric_avg: AVG over NUMERIC / BIGNUMERIC columns.
+#
+# AVG(NUMERIC) -> NUMERIC and AVG(BIGNUMERIC) -> BIGNUMERIC are exact in
+# BigQuery, but DuckDB computes AVG(DECIMAL) through a DOUBLE
+# accumulator (arrow_to_bq sees a DOUBLE-typed result for a NUMERIC
+# column), which loses precision and violates the no-silent-approximation
+# rule. The route classifier therefore promotes AVG over an exact-decimal
+# column to the semantic executor, which accumulates exactly with
+# NumericValue / BigNumericValue and divides by the non-null count
+# (NumericValue::Divide rounds to NUMERIC/BIGNUMERIC scale).
+#
+# The chosen values divide to a repeating decimal so the result
+# exercises scale rounding (round half away from zero): AVG over NUMERIC
+# rounds to 9 fractional digits, AVG over BIGNUMERIC to 38.
+name: aggregate_numeric_avg
+description: |
+  AVG over NUMERIC and BIGNUMERIC columns must preserve BigQuery's
+  exact-decimal semantics via the semantic executor, not DuckDB's
+  DOUBLE-widened AVG.
+project_id: proj-aggregate-numeric-avg
+dataset_id: ds_aggregate_numeric_avg
+setup:
+  - dataset: ds_aggregate_numeric_avg
+  - table:
+      dataset: ds_aggregate_numeric_avg
+      id: ledger
+      schema:
+        - {name: amount, type: NUMERIC, mode: REQUIRED}
+        - {name: big_amount, type: BIGNUMERIC, mode: REQUIRED}
+  - rows:
+      dataset: ds_aggregate_numeric_avg
+      table: ledger
+      rows:
+        - {amount: "1", big_amount: "1"}
+        - {amount: "2", big_amount: "2"}
+        - {amount: "2", big_amount: "4"}
+query: |
+  SELECT AVG(amount) AS mean,
+         AVG(big_amount) AS big_mean
+    FROM ds_aggregate_numeric_avg.ledger
+expected:
+  route: semantic_executor
+  rows:
+    - {mean: "1.666666667", big_mean: "2.33333333333333333333333333333333333333"}

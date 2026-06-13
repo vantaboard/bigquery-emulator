@@ -14,6 +14,7 @@
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/evaluator_table_iterator.h"
+#include "googlesql/public/numeric_value.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
@@ -70,6 +71,41 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
     const ::googlesql::Type* type,
     const schema::ColumnSchema& column) {
   using Kind = storage::Value::Kind;
+  // NUMERIC / BIGNUMERIC are persisted as decimal text (DuckDB
+  // VARCHAR storage type preserves the full magnitude), so the
+  // storage cell arrives as kString. The semantic executor's
+  // decimal path (arithmetic, AVG, MIN/MAX) needs a real
+  // NumericValue / BigNumericValue, not a STRING, so parse against
+  // the analyzer's target type here rather than mis-typing the cell
+  // as STRING.
+  if (type != nullptr && value.kind() == Kind::kString) {
+    if (type->kind() == ::googlesql::TYPE_NUMERIC) {
+      auto n = ::googlesql::NumericValue::FromString(value.string_value());
+      if (!n.ok()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("StorageTable iterator: column '",
+                         column.name,
+                         "': invalid NUMERIC value '",
+                         value.string_value(),
+                         "': ",
+                         n.status().message()));
+      }
+      return ::googlesql::Value::Numeric(*n);
+    }
+    if (type->kind() == ::googlesql::TYPE_BIGNUMERIC) {
+      auto n = ::googlesql::BigNumericValue::FromString(value.string_value());
+      if (!n.ok()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("StorageTable iterator: column '",
+                         column.name,
+                         "': invalid BIGNUMERIC value '",
+                         value.string_value(),
+                         "': ",
+                         n.status().message()));
+      }
+      return ::googlesql::Value::BigNumeric(*n);
+    }
+  }
   switch (value.kind()) {
     case Kind::kNull:
       return ::googlesql::Value::Null(type);

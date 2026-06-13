@@ -33,6 +33,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@googlesql//googlesql/public:evaluator_table_iterator",
+        "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",

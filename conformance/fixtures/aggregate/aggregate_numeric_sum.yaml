@@ -1,0 +1,45 @@
+# aggregate_numeric_sum: SUM/MIN/MAX/COUNT over a NUMERIC column.
+#
+# Pins exact-decimal aggregate results round-tripping through the
+# DuckDB DECIMAL aggregate -> Arrow -> REST path. SUM over NUMERIC
+# widens DuckDB's DECIMAL to a HUGEINT-backed internal type; the
+# result must still come back as a decimal string with NUMERIC scale,
+# not a float or an UNIMPLEMENTED error. This is the exact shape the
+# Go `SkipEmulatorNumericAggregateQuery` skip guarded
+# (queryClusteredTable: SUM(amount) + COUNT over a NUMERIC column).
+#
+# SUM/MIN/MAX/COUNT stay on the duckdb_native route: DuckDB keeps the
+# accumulator a DECIMAL and the arrow_to_bq int128 reader renders it
+# exactly. (AVG is the only decimal aggregate DuckDB widens to DOUBLE,
+# so it routes to the semantic executor -- see aggregate_numeric_avg.)
+name: aggregate_numeric_sum
+description: |
+  SUM/MIN/MAX/COUNT over a NUMERIC column must preserve BigQuery's
+  exact-decimal semantics and encode as decimal strings via the
+  duckdb_native route.
+project_id: proj-aggregate-numeric-sum
+dataset_id: ds_aggregate_numeric_sum
+setup:
+  - dataset: ds_aggregate_numeric_sum
+  - table:
+      dataset: ds_aggregate_numeric_sum
+      id: ledger
+      schema:
+        - {name: amount, type: NUMERIC, mode: REQUIRED}
+  - rows:
+      dataset: ds_aggregate_numeric_sum
+      table: ledger
+      rows:
+        - {amount: "1.50"}
+        - {amount: "2.25"}
+        - {amount: "3.75"}
+query: |
+  SELECT SUM(amount) AS total,
+         MIN(amount) AS lo,
+         MAX(amount) AS hi,
+         COUNT(1) AS n
+    FROM ds_aggregate_numeric_sum.ledger
+expected:
+  route: duckdb_native
+  rows:
+    - {total: "7.5", lo: "1.5", hi: "3.75", n: 3}

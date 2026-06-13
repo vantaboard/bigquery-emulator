@@ -30,6 +30,8 @@ absl::StatusOr<Value> NullOfAggregateType(const ::googlesql::Type* type) {
       return Value::NullDouble();
     case ::googlesql::TYPE_NUMERIC:
       return Value::NullNumeric();
+    case ::googlesql::TYPE_BIGNUMERIC:
+      return Value::NullBigNumeric();
     default:
       return Value::NullInt64();
   }
@@ -234,6 +236,83 @@ absl::StatusOr<Value> AvgAggregateImpl(
       if (count == 0) return NullOfAggregateType(call.type());
       return Value::Double(total / static_cast<double>(count));
     }
+    case ::googlesql::TYPE_NUMERIC: {
+      // AVG(NUMERIC) -> NUMERIC. Accumulate exactly, then divide by the
+      // non-null count. NumericValue::Divide rounds to NUMERIC scale (9
+      // fractional digits), matching BigQuery's exact-decimal AVG.
+      std::optional<::googlesql::NumericValue> total;
+      for (const Value& v : cells) {
+        if (v.is_null()) continue;
+        if (v.type_kind() != ::googlesql::TYPE_NUMERIC) {
+          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                   "semantic: AVG argument type mismatch");
+        }
+        ++count;
+        if (!total.has_value()) {
+          total = v.numeric_value();
+        } else {
+          auto sum = total->Add(v.numeric_value());
+          if (!sum.ok()) {
+            if (sum.status().code() == absl::StatusCode::kOutOfRange) {
+              return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                       sum.status().message());
+            }
+            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                     sum.status().message());
+          }
+          total = *sum;
+        }
+      }
+      if (count == 0) return NullOfAggregateType(call.type());
+      auto avg = total->Divide(::googlesql::NumericValue(count));
+      if (!avg.ok()) {
+        if (avg.status().code() == absl::StatusCode::kOutOfRange) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   avg.status().message());
+        }
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 avg.status().message());
+      }
+      return Value::Numeric(*avg);
+    }
+    case ::googlesql::TYPE_BIGNUMERIC: {
+      // AVG(BIGNUMERIC) -> BIGNUMERIC, same exact-decimal contract as
+      // NUMERIC but with the 38-fractional-digit BigNumericValue.
+      std::optional<::googlesql::BigNumericValue> total;
+      for (const Value& v : cells) {
+        if (v.is_null()) continue;
+        if (v.type_kind() != ::googlesql::TYPE_BIGNUMERIC) {
+          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                   "semantic: AVG argument type mismatch");
+        }
+        ++count;
+        if (!total.has_value()) {
+          total = v.bignumeric_value();
+        } else {
+          auto sum = total->Add(v.bignumeric_value());
+          if (!sum.ok()) {
+            if (sum.status().code() == absl::StatusCode::kOutOfRange) {
+              return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                       sum.status().message());
+            }
+            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                     sum.status().message());
+          }
+          total = *sum;
+        }
+      }
+      if (count == 0) return NullOfAggregateType(call.type());
+      auto avg = total->Divide(::googlesql::BigNumericValue(count));
+      if (!avg.ok()) {
+        if (avg.status().code() == absl::StatusCode::kOutOfRange) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   avg.status().message());
+        }
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 avg.status().message());
+      }
+      return Value::BigNumeric(*avg);
+    }
     default:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,
@@ -290,6 +369,19 @@ absl::StatusOr<Value> MinMaxAggregateImpl(
       case ::googlesql::TYPE_DOUBLE: {
         const bool take = pick_max ? v.double_value() > cur.double_value()
                                    : v.double_value() < cur.double_value();
+        if (take) best = v;
+        break;
+      }
+      case ::googlesql::TYPE_NUMERIC: {
+        const bool take = pick_max ? v.numeric_value() > cur.numeric_value()
+                                   : v.numeric_value() < cur.numeric_value();
+        if (take) best = v;
+        break;
+      }
+      case ::googlesql::TYPE_BIGNUMERIC: {
+        const bool take = pick_max
+                              ? v.bignumeric_value() > cur.bignumeric_value()
+                              : v.bignumeric_value() < cur.bignumeric_value();
         if (take) best = v;
         break;
       }

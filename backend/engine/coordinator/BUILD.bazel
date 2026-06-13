@@ -51,6 +51,7 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ] + GOOGLESQL_SQL_FUNCTION_DEPS,
