@@ -4,7 +4,7 @@ overview: How to spin off subagents to execute the full 01-11 plans to completio
 todos:
   - id: wave1
     content: "Wave 1 foundational catalog + correctness (SERIALIZED on bazel): dispatch 01 info_schema -> 02 numeric precision -> 04 wildcard tables, one at a time; parent cleanup + status update between each. 04 reuses the VirtualCatalogTable machinery 01 generalizes."
-    status: in_progress
+    status: completed
   - id: wave2
     content: "Wave 2 feature surfaces (SERIALIZED): dispatch 03 time travel -> 05 js udf runtime -> 06 geography/gis. Each is independent; order is by value/effort."
     status: pending
@@ -19,11 +19,15 @@ todos:
     status: completed
   - id: track
     content: After each subagent returns, run the parent cleanup block, update the full-00 status table, flip the matching wave todo here, and verify SHAPE_TRACKER/disposition parity stayed green on main.
-    status: in_progress
+    status: completed
 isProject: true
 ---
 
 # Full — Subagent dispatch / orchestration
+
+> **Remaining execution** (waves 2–4, carryover from 01/02/04/11): use
+> [full-continue.plan.md](full-continue.plan.md). This file remains the
+> constraint reference and historical wave-1 playbook.
 
 Execution playbook for [full-00-index](full-00-index.plan.md). This file
 says **who runs, in what order, in parallel or not, with what prompt,

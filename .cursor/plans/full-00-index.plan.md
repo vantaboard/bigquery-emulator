@@ -74,18 +74,13 @@ are independent. Everything else is logically independent.
 
 ## Dispatch (serialized engine lane)
 
-Full orchestration — waves, ordering, prompts, and parent hygiene — is
-in [full-dispatch.plan.md](full-dispatch.plan.md) (the `full-*` analog
-of [parity-dispatch.plan.md](parity-dispatch.plan.md), which it inherits
-its rules from). The dominant constraint is unchanged: **every plan here
-except 11's authoring phase
-modifies the C++ engine and must rebuild + re-run conformance, so plans
-01-10 are serialized end-to-end** (one bazel invocation per workspace;
-two concurrent engine builds OOM the box). Plans also share the same
-hot files (`route_classifier_visitor.cc`, `functions.yaml` /
-`node_dispositions.yaml`, `SHAPE_TRACKER.md`, `googlesql_catalog.cc`,
-conformance fixture dirs), so serialization on main is also the
-merge-sanity answer.
+- **Wave 1 (complete):** [full-dispatch.plan.md](full-dispatch.plan.md)
+- **Waves 2–4 + carryover backlog:** [full-continue.plan.md](full-continue.plan.md) — **live runbook; start here**
+
+Constraints (bazel single-invocation, hot files, process hygiene) are documented in
+full-dispatch (the `full-*` analog of [parity-dispatch.plan.md](parity-dispatch.plan.md)).
+**Every plan except 11's authoring phase modifies the C++ engine and must rebuild +
+re-run conformance**, so plans 01–10 stay serialized end-to-end.
 
 - `subagent_type: generalPurpose`, `run_in_background: false` for 01-10.
 - 11's corpus-vendoring + CI-YAML authoring may run in the background
@@ -96,9 +91,9 @@ merge-sanity answer.
   subagent; confirm the prior plan's work is committed and
   `task lint:dispositions` is green on main before dispatching the next.
 
-Use the per-subagent prompt template in
-[full-dispatch.plan.md](full-dispatch.plan.md) "Per-subagent prompt
-template" (plan path `.cursor/plans/full-<NN>-*.plan.md`).
+Use the session protocol and subagent prompt in
+[full-continue.plan.md](full-continue.plan.md) (supersedes the per-subagent
+template in full-dispatch for remaining work).
 
 ## Verification matrix (run after each plan)
 
@@ -117,9 +112,9 @@ template" (plan path `.cursor/plans/full-<NN>-*.plan.md`).
 | Plan | State | Conformance delta | Commits | Notes |
 |------|-------|-------------------|---------|-------|
 | 01 | done (JOBS* deferred to 10) | 161→168 pass (+7 fixtures) | c2757d5 | VIEWS/ROUTINES/TABLE_OPTIONS/COLUMN_FIELD_PATHS/PARTITIONS/TABLE_STORAGE/KEY_COLUMN_USAGE; table-driven view descriptor; region-* selector. JOBS/JOBS_BY_PROJECT left NOT_FOUND (job state lives in gateway) — companion to plan 10 |
-| 02 | done | 168→170 pass (+2 fixtures) | 601de83, 7078290, a613650 | Exact-decimal HUGEINT/BIGNUMERIC rendering in arrow_to_bq; materialized query-table type aligned with BIGNUMERIC storage; semantic-executor exact AVG/MIN/MAX over NUMERIC/BIGNUMERIC. Verified 170/170 conformance + lint:run green. Landed by the concurrent runner; Go skip-row removal still pending |
-| 03 | pending | — | | |
-| 04 | pending | — | | |
+| 02 | done (carryover: storage write) | 168→170 pass (+2 fixtures) | 601de83, 7078290, a613650, d0ee6e8, dfc54d9 | Exact-decimal path + routing; NUMERIC aggregate skip removed. **Pending:** ManagedWriter DefaultStream / full proto type matrix (see full-continue carryover-02) |
+| 03 | pending | — | | Next engine plan after carryover (full-continue) |
+| 04 | done (carryover: suffix prune opt) | 172→175 pass (+3 fixtures) | b1e9e88 | WildcardTable union + _TABLE_SUFFIX + NULL-pad; dbt wildcard skip removed |
 | 05 | pending | — | | |
 | 06 | pending | — | | |
 | 07 | pending | — | | |

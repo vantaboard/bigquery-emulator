@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: assess-scaffold
     content: "Read backend/catalog/wildcard_table.{h,cc} and determine what's wired vs missing: table-set resolution from a prefix pattern, schema unification across matched tables, MaterializeInDuckDB union, and _TABLE_SUFFIX synthesis."
-    status: pending
+    status: completed
   - id: resolve-match-set
     content: "Resolve the wildcard pattern (`prefix*`) to the matching tables in the dataset at analyze time; register the WildcardTable as a googlesql::Table whose schema is the unified column set (BigQuery uses the most-recent matching table's schema as the basis)."
-    status: pending
+    status: completed
   - id: union-materialize
     content: "MaterializeInDuckDB unions the matched tables' rows, padding columns absent from individual tables with NULL, and adds the _TABLE_SUFFIX column carrying each row's source-table suffix."
-    status: pending
+    status: completed
   - id: suffix-pruning
     content: "Honor `WHERE _TABLE_SUFFIX BETWEEN/=/IN ...` by pruning the matched-table set before materializing (correctness-preserving optimization; required for the BigQuery idiom to be usable on large date-sharded sets)."
     status: pending
   - id: empty-and-errors
     content: "Match BigQuery edge behavior: zero matches -> error referencing the pattern; schema-incompatible matches -> documented behavior; pseudo-column only present for wildcard scans."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "conformance/fixtures/wildcard/ fixtures (multi-table union, _TABLE_SUFFIX filter, single-match); update SHAPE_TRACKER (TableScan note / new virtual-table row), ROADMAP, ENGINE_POLICY; drop dbt `wildcard` skip-matrix entry and re-run."
-    status: pending
+    status: completed
 ---
 
 # Full 04 — Wildcard tables & _TABLE_SUFFIX
