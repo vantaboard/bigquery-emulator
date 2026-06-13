@@ -120,7 +120,7 @@ tasks:
           if ! command -v genhtml >/dev/null 2>&1; then
             echo "coverage:html: genhtml not on PATH; install 'lcov' to render the C++ report." >&2
           else
-            genhtml --quiet --output-directory {{.HTML_DIR}}/cpp {{.LCOV_PROFILE}}
+            genhtml --ignore-errors empty,source --quiet --output-directory {{.HTML_DIR}}/cpp {{.LCOV_PROFILE}}
             echo "wrote {{.HTML_DIR}}/cpp/index.html"
           fi
         else

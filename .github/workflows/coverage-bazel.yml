@@ -76,6 +76,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang \
+            llvm \
             libprotobuf-dev \
             protobuf-compiler \
             libgrpc++-dev \
@@ -156,7 +157,7 @@ jobs:
           echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
           task bazel:coverage \
             TARGETS="${{ steps.targets.outputs.targets }}" \
-            COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors"
+            COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
 
       # Hand off the LCOV combined report to coverage-publish.yml.
       # That workflow_run-triggered consumer pairs this artifact with

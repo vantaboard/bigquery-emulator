@@ -159,9 +159,21 @@ jobs:
         run: |
           set -eo pipefail
           has_go=false
-          has_cpp=false
+          lcov_path=""
           [ -f artifacts/go/coverage.out ] && has_go=true
-          [ -f artifacts/cpp/_coverage_report.dat ] && has_cpp=true
+          for candidate in \
+            artifacts/cpp/_coverage_report.dat \
+            artifacts/cpp/bazel-out/_coverage/_coverage_report.dat; do
+            if [ -f "$candidate" ]; then
+              lcov_path="$candidate"
+              break
+            fi
+          done
+          has_cpp=false
+          if [ -n "$lcov_path" ]; then
+            has_cpp=true
+            echo "lcov_path=$lcov_path" >> "$GITHUB_OUTPUT"
+          fi
           {
             echo "has_go=$has_go"
             echo "has_cpp=$has_cpp"
@@ -188,7 +200,7 @@ jobs:
             args+=("--go=artifacts/go/coverage.out")
           fi
           if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
-            args+=("--lcov=artifacts/cpp/_coverage_report.dat")
+            args+=("--lcov=${{ steps.inputs.outputs.lcov_path }}")
           fi
           /tmp/coverage summarize \
             "${args[@]}" \
@@ -232,8 +244,10 @@ jobs:
             go tool cover -html=artifacts/go/coverage.out -o html/go.html
           fi
           if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
-            genhtml --quiet --output-directory html/cpp \
-              artifacts/cpp/_coverage_report.dat
+            # Bazel's combined lcov report often omits per-line DA records;
+            # tolerate empty/summary-only tracefiles so publish still lands.
+            genhtml --ignore-errors empty,source --quiet --output-directory html/cpp \
+              "${{ steps.inputs.outputs.lcov_path }}"
           fi
           cat > html/index.html <<'INDEX'
           <!doctype html>

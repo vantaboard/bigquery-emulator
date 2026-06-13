@@ -47,26 +47,56 @@ func parseLCOVReader(r io.Reader) (hits, total int64, err error) {
 	// than silently miscount.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
+	var daHits, daTotal int64
+	var lhLfHits, lhLfTotal int64
+	var recordLH, recordLF int64
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
 		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "DA:") {
-			continue
-		}
-		count, perr := parseDARecord(line)
-		if perr != nil {
-			return 0, 0, fmt.Errorf("line %d: %w", lineNo, perr)
-		}
-		total++
-		if count > 0 {
-			hits++
+		switch {
+		case strings.HasPrefix(line, "DA:"):
+			count, perr := parseDARecord(line)
+			if perr != nil {
+				return 0, 0, fmt.Errorf("line %d: %w", lineNo, perr)
+			}
+			daTotal++
+			if count > 0 {
+				daHits++
+			}
+		case strings.HasPrefix(line, "LH:"):
+			recordLH, err = parseSummaryCount(line, "LH:")
+			if err != nil {
+				return 0, 0, fmt.Errorf("line %d: %w", lineNo, err)
+			}
+		case strings.HasPrefix(line, "LF:"):
+			recordLF, err = parseSummaryCount(line, "LF:")
+			if err != nil {
+				return 0, 0, fmt.Errorf("line %d: %w", lineNo, err)
+			}
+		case line == "end_of_record":
+			lhLfHits += recordLH
+			lhLfTotal += recordLF
+			recordLH = 0
+			recordLF = 0
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return 0, 0, fmt.Errorf("scan: %w", err)
 	}
-	return hits, total, nil
+	if daTotal > 0 {
+		return daHits, daTotal, nil
+	}
+	return lhLfHits, lhLfTotal, nil
+}
+
+func parseSummaryCount(line, prefix string) (int64, error) {
+	value := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	count, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s record %q: %w", strings.TrimSuffix(prefix, ":"), line, err)
+	}
+	return count, nil
 }
 
 // parseDARecord pulls the execution count off a `DA:<line>,<count>[,<checksum>]`

@@ -86,6 +86,33 @@ func TestParseLCOVReader_BadDA(t *testing.T) {
 	}
 }
 
+// TestParseLCOVReader_LHLFOnly documents the Bazel combined-report
+// shape that lists SF records with LH/LF summaries but no DA lines.
+// genhtml rejects that tracefile unless --ignore-errors empty is set;
+// the summarizer still counts the summary totals.
+func TestParseLCOVReader_LHLFOnly(t *testing.T) {
+	const input = `SF:backend/foo.cc
+FNF:0
+FNH:0
+LH:3
+LF:10
+end_of_record
+SF:backend/bar.cc
+FNF:0
+FNH:0
+LH:0
+LF:5
+end_of_record
+`
+	h, total, err := parseLCOVReader(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("parseLCOVReader: %v", err)
+	}
+	if h != 3 || total != 15 {
+		t.Errorf("hits=%d total=%d, want 3/15", h, total)
+	}
+}
+
 // TestParseLCOVFile_Fixture covers the file-backed entry point
 // against the checked-in fixture so a regression in path handling
 // surfaces as a real test failure.

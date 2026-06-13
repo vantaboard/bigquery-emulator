@@ -202,6 +202,13 @@ test  --disk_cache=.cache/bazel-disk
 run   --disk_cache=.cache/bazel-disk
 coverage --disk_cache=.cache/bazel-disk
 
+# Clang/llvm coverage: keep the merge action local (remote executors do
+# not always wire per-test .profraw outputs back) and use the native
+# llvm-cov path Bazel expects when --config=clang is active.
+coverage --strategy=CoverageReport=local
+coverage --action_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
+coverage --instrumentation_filter=^//backend[/:],^//binaries[/:],^//frontend[/:],^//tools/googlesql-prebuilt/smoke[/:]
+
 # ---------------------------------------------------------------------------
 # Output quieting.
 #
