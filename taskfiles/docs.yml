@@ -1,0 +1,34 @@
+# MkDocs documentation site tasks.
+version: "3"
+
+vars:
+  DOCS_VENV: '{{.ROOT_DIR}}/.venv-docs'
+
+tasks:
+  install:
+    desc: Install MkDocs Material into a local venv
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        uv venv "{{.DOCS_VENV}}" --clear
+        uv pip install --python "{{.DOCS_VENV}}/bin/python" \
+          -r docs/requirements.txt
+
+  build:
+    desc: Build the documentation site (strict mode)
+    deps: [install]
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        "{{.DOCS_VENV}}/bin/mkdocs" build --strict
+
+  serve:
+    desc: Live-preview the documentation site
+    deps: [install]
+    cmds:
+      - |
+        set -eo pipefail
+        cd "{{.ROOT_DIR}}"
+        "{{.DOCS_VENV}}/bin/mkdocs" serve -a 127.0.0.1:8000

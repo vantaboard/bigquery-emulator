@@ -227,7 +227,7 @@ jobs:
         if: steps.inputs.outputs.skip != 'true'
         run: |
           set -eo pipefail
-          mkdir -p html
+          mkdir -p html/coverage
           /tmp/coverage badge --in=summary.json --field=total \
             --label=coverage --out=html/badge.json
           /tmp/coverage badge --in=summary.json --field=go \
@@ -248,16 +248,17 @@ jobs:
         if: steps.inputs.outputs.skip != 'true'
         run: |
           set -eo pipefail
+          mkdir -p html/coverage
           if [ "${{ steps.inputs.outputs.has_go }}" = true ]; then
-            go tool cover -html=artifacts/go/coverage.out -o html/go.html
+            go tool cover -html=artifacts/go/coverage.out -o html/coverage/go.html
           fi
           if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
             # Bazel's combined LCOV report is often summary-only; lcov 2.x
             # genhtml aborts on those tracefiles even with --ignore-errors.
             tools/coverage/render_cpp_html.sh \
-              "${{ steps.inputs.outputs.lcov_path }}" html/cpp
+              "${{ steps.inputs.outputs.lcov_path }}" html/coverage/cpp
           fi
-          cat > html/index.html <<'INDEX'
+          cat > html/coverage/index.html <<'INDEX'
           <!doctype html>
           <html lang="en">
             <head>
@@ -284,14 +285,14 @@ jobs:
               </ul>
               <h2>Badge endpoints (shields.io)</h2>
               <ul>
-                <li><a href="badge.json">badge.json</a> &mdash; combined</li>
-                <li><a href="badge-go.json">badge-go.json</a> &mdash; Go suite</li>
-                <li><a href="badge-cpp.json">badge-cpp.json</a> &mdash; C++ engine</li>
+                <li><a href="../badge.json">badge.json</a> &mdash; combined</li>
+                <li><a href="../badge-go.json">badge-go.json</a> &mdash; Go suite</li>
+                <li><a href="../badge-cpp.json">badge-cpp.json</a> &mdash; C++ engine</li>
               </ul>
               <h2>Raw data</h2>
               <ul>
-                <li><a href="summary.json">summary.json</a> &mdash; current commit</li>
-                <li><a href="baseline.json">baseline.json</a> &mdash; last main publish</li>
+                <li><a href="../summary.json">summary.json</a> &mdash; current commit</li>
+                <li><a href="../baseline.json">baseline.json</a> &mdash; last main publish</li>
               </ul>
             </body>
           </html>

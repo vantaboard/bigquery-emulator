@@ -1,6 +1,6 @@
 # Development setup
 
-Most of the toolchain is pinned in [`mise.toml`](../mise.toml) and fetched by a
+Most of the toolchain is pinned in [`mise.toml`](https://github.com/vantaboard/bigquery-emulator/blob/main/mise.toml) and fetched by a
 single command:
 
 ```bash
@@ -22,7 +22,7 @@ sudo apt install clang-format clang-tidy cppcheck
 
 These are required for the C++ lint gates (`task lint:cpp:format`,
 `task lint:cpp:tidy`, `task lint:cpp:cppcheck`) and for matching what runs in
-[CI](../.github/workflows/ci.yml). On macOS use Homebrew
+[CI](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml). On macOS use Homebrew
 (`brew install clang-format llvm cppcheck`); other distributions ship equivalent
 packages under similar names.
 
@@ -108,7 +108,7 @@ serves `Query.DryRun` and `Query.ExecuteQuery` end-to-end. The integration tests
 under `gateway/e2e/` drive this binary directly.
 
 GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a prebuilt
-tarball through `http_archive` (see [`third_party/duckdb/`](../third_party/duckdb/)).
+tarball through `http_archive` (see [`third_party/duckdb/`](https://github.com/vantaboard/bigquery-emulator/tree/main/third_party/duckdb)).
 
 Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain does not
 cross-build cleanly to linux/arm64 yet, so the engine binary ships only for
@@ -181,11 +181,11 @@ If the build refuses to start, the diagnostic line names the gate that tripped.
 Common shapes:
 
 - `GOOGLESQL_SOURCE=prebuilt (default) but the cache is empty at: <path>` — the cache has not been populated. Run `task googlesql:fetch-prebuilt URL=... SHA256=...` or fall back to source mode explicitly.
-- `validate_artifact: FAIL_PAYLOAD_SHA` (or any other `FAIL_*` token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The [GoogleSQL prebuilt troubleshooting guide](./dev/googlesql-prebuilt/troubleshooting.md) maps every `FAIL_*` token to the likely owner and the next step; the [rollback playbook](./dev/googlesql-prebuilt/rollback.md) covers the matching repin / revert procedures.
+- `validate_artifact: FAIL_PAYLOAD_SHA` (or any other `FAIL_*` token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The [GoogleSQL prebuilt troubleshooting guide](https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/troubleshooting.md) maps every `FAIL_*` token to the likely owner and the next step; the [rollback playbook](https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/rollback.md) covers the matching repin / revert procedures.
 
 For the full maintainer flow (publishing new artifacts, bumping the GoogleSQL
 pin, releasing) start at the
-[GoogleSQL prebuilt docs index](./dev/googlesql-prebuilt/README.md).
+[GoogleSQL prebuilt docs index](https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/README.md).
 
 ## Runtime configuration
 
@@ -224,5 +224,5 @@ See [`docs/ENGINE_POLICY.md`](./ENGINE_POLICY.md) for the local-only execution
 policy, the per-shape route catalog (DuckDB fast path / DuckDB rewrite / DuckDB UDF
 / semantic executor / control op / unsupported-by-design), and which DML / DDL
 shapes are still UNIMPLEMENTED, and the conformance harness
-([`conformance/README.md`](../conformance/README.md)) for the shape of the
+([`conformance/README.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md)) for the shape of the
 per-fixture diff.

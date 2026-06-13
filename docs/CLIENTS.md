@@ -1,5 +1,8 @@
 # Client libraries
 
+For tabbed per-language setup (Go, Python, Java, Node.js, bq CLI), see
+[Languages & tools](guides/multi-language.md).
+
 Two equivalent ways to redirect a BigQuery client at the emulator:
 
 1. **Endpoint override** (works in every official client). In Go:
@@ -22,7 +25,7 @@ Two equivalent ways to redirect a BigQuery client at the emulator:
 Bearer tokens in `Authorization` headers are accepted but never validated,
 identical to `cloud-spanner-emulator`'s posture. The full upstream auth model
 (ADC, service-account keys, OAuth scopes) documented under
-[`docs/bigquery/docs/authentication.md`](./bigquery/docs/authentication.md) is
+[BigQuery authentication](https://cloud.google.com/bigquery/docs/authentication) is
 intentionally **not** modeled.
 
 ## SQL dialect
@@ -74,11 +77,11 @@ The repository runs two parallel conformance lanes against the same gateway:
    coordinator (the single `local` profile today, which covers every routed
    strategy: DuckDB fast path, DuckDB rewrites, DuckDB UDFs, semantic executor,
    and control ops). See [`docs/ENGINE_POLICY.md`](./ENGINE_POLICY.md) for the
-   route catalog and [`conformance/README.md`](../conformance/README.md) for the
+   route catalog and [`conformance/README.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md) for the
    fixture schema, profile matrix, and authoring guide.
 2. **Third-party client conformance** — `task thirdparty:*` runs the imported
    BigQuery client-library sample suites (Go, Node.js, Python, BigQuery
    DataFrames) end-to-end against the gateway's REST + gRPC surface and
    (optionally) `fake-gcs-server`. See
-   [`third_party/README.md`](../third_party/README.md) for the per-language
+   [`third_party/README.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/third_party/README.md) for the per-language
    wiring contract, env-var matrix, and skip rules.

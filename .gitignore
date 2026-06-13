@@ -27,6 +27,10 @@ cloud-spanner-emulator/
 /bench/charts/out/*
 !/bench/charts/out/*.svg
 
+# MkDocs documentation site
+/site/
+/.venv-docs/
+
 # Go
 *.test
 # Vendored GoogleSQL compliance corpus (not Go test binaries).

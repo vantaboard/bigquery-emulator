@@ -2,15 +2,15 @@
 
 > **Preview-grade.** The `v0.x` series is an explicit preview: the REST surface,
 > gRPC contract, and on-disk format may break across releases. Stable promises
-> arrive at `v1.0.0`. See [`ROADMAP.md`](../ROADMAP.md) for the active plan.
+> arrive at `v1.0.0`. See [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md) for the active plan.
 
 Releases are cut by tag push today. Tag the commit you want to release with
 `vX.Y.Z` and push the tag; that triggers
-[`.github/workflows/release.yml`](../.github/workflows/release.yml), which
+[`.github/workflows/release.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/release.yml), which
 builds the engine via Bazel, publishes the runtime Docker image to
 [GHCR](https://github.com/users/vantaboard/packages/container/package/bigquery-emulator),
 and uses [goreleaser](https://goreleaser.com) (config:
-[`.goreleaser.yml`](../.goreleaser.yml)) to upload the gateway archives + SHA-256
+[`.goreleaser.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.goreleaser.yml)) to upload the gateway archives + SHA-256
 checksums to the GitHub release page.
 
 ```bash
@@ -23,7 +23,7 @@ git push origin v0.0.1
 prints the exact `git tag` + `git push` lines and only executes them when
 `CONFIRM=yes` is set (`task release:tag VERSION=v0.0.1 CONFIRM=yes`).
 
-The semantic-release config at [`.releaserc.yml`](../.releaserc.yml) is parked
+The semantic-release config at [`.releaserc.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.releaserc.yml) is parked
 for the eventual switch to auto-release on push to `main`. It is not currently
 driving any GitHub Actions job; the file exists so the conventional-commits
 format documented in `.cursor/rules/auto-commit.mdc` has a target for the

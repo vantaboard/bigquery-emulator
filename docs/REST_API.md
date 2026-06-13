@@ -2,14 +2,14 @@
 
 This is the emulator's canonical mapping from the public BigQuery v2 REST
 API to the Go handler that backs each endpoint, derived from the upstream
-documentation under [`docs/bigquery/docs/reference/rest/v2/`][refdir].
+documentation under [BigQuery REST v2 reference](https://cloud.google.com/bigquery/docs/reference/rest/v2).
 
 The goal of this document is operational: when you're staring at a client
 library that's failing against the emulator, you want to know exactly
 which file to open. Keep this in sync with `gateway/server.go` and the
 gateway-HTTP-surface section of `ROADMAP.md`.
 
-[refdir]: ./bigquery/docs/reference/rest/v2/
+[refdir]: https://cloud.google.com/bigquery/docs/reference/rest/v2/
 
 > Status legend: `done` = end-to-end implemented · `wired` = route
 > registered, returns a structurally-valid stub or 501 · `todo` = not yet
@@ -76,7 +76,7 @@ omits `defaultDataset`, definitions are registered under internal dataset
 `_bq_external_temp` and that dataset is forwarded as
 `default_dataset_id` so unqualified table ids in SQL resolve.
 
-[metadata-store]: ../gateway/handlers/metadata_store.go
+[metadata-store]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go
 
 ### Tabledata (`bigquery.tabledata.*`)
 
@@ -99,7 +99,7 @@ omits `defaultDataset`, definitions are registered under internal dataset
 
 The literal `/delete` segment after `{jobId}` is not a typo — that is
 the upstream URL template, see
-[`docs/bigquery/docs/reference/rest/v2/jobs/delete.md`][delete-md].
+[`jobs.delete` reference](https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/delete).
 
 **COPY / EXTRACT / undelete:** `configuration.copy` copies rows
 from `sourceTable` / `sourceTables` into `destinationTable`, honoring
@@ -112,7 +112,7 @@ Table undelete (python `test_undelete_table`, node `undeleteTable`) is a
 COPY job from a snapshot decorator after `tables.delete`; there is no
 separate `tables.undelete` RPC.
 
-[delete-md]: ./bigquery/docs/reference/rest/v2/jobs/delete.md
+[delete-md]: https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/delete
 
 ### Queries (synchronous query API)
 
@@ -156,7 +156,7 @@ statistics envelope.
 | `routines.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | done | [`gateway/handlers/routines.go::RoutineUpdate`][routines] |
 | `routines.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}` | done | [`gateway/handlers/routines.go::RoutineDelete`][routines] |
 
-[routines-pkg]: ../gateway/routines/
+[routines-pkg]: https://github.com/vantaboard/bigquery-emulator/tree/main/gateway/routines/
 
 ### Row-access policies (`bigquery.rowAccessPolicies.*`)
 
@@ -218,19 +218,19 @@ libraries pick whichever the user's API region demands).
 | Discovery doc | `GET /discovery/v1/apis/bigquery/v2/rest` | wired | [`gateway/handlers/discovery.go::Discovery`][discovery] |
 | Health (emulator-only) | `GET /` and `GET /healthz` | done | [`gateway/handlers/handlers.go::Health`][handlers] |
 
-[projects]: ../gateway/handlers/projects.go
-[datasets]: ../gateway/handlers/datasets.go
-[tables]: ../gateway/handlers/tables.go
-[tabledata]: ../gateway/handlers/tabledata.go
-[jobs]: ../gateway/handlers/jobs.go
-[queries]: ../gateway/handlers/queries.go
-[models]: ../gateway/handlers/models.go
-[routines]: ../gateway/handlers/routines.go
-[rowaccess]: ../gateway/handlers/row_access_policies.go
-[migration]: ../gateway/handlers/migration.go
-[datatransfer]: ../gateway/handlers/data_transfer.go
-[handlers]: ../gateway/handlers/handlers.go
-[discovery]: ../gateway/handlers/discovery.go
+[projects]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/projects.go
+[datasets]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go
+[tables]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go
+[tabledata]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tabledata.go
+[jobs]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go
+[queries]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/queries.go
+[models]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/models.go
+[routines]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go
+[rowaccess]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go
+[migration]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go
+[datatransfer]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go
+[handlers]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/handlers.go
+[discovery]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/discovery.go
 
 ## Routing notes (Go specifics)
 
@@ -251,7 +251,7 @@ endpoints.
 ## Error envelope
 
 All non-2xx responses use BigQuery's documented JSON shape (see
-[`docs/bigquery/docs/error-messages.md`][errors]):
+[error messages doc][errors]):
 
 ```json
 {
@@ -276,7 +276,7 @@ include `notFound`, `notImplemented`, `invalid`, `invalidQuery`,
 subset of the table in the upstream
 [error messages doc][errors].
 
-[errors]: ./bigquery/docs/error-messages.md
+[errors]: https://cloud.google.com/bigquery/docs/error-messages
 
 ## SQL dialect
 
@@ -305,7 +305,7 @@ Clients that default to legacy via older library versions may still set
 For result marshaling, types follow
 [`StandardSqlDataType.TypeKind`][sqltype]:
 
-[sqltype]: ./bigquery/docs/reference/rest/v2/StandardSqlDataType.md
+[sqltype]: https://cloud.google.com/bigquery/docs/reference/rest/v2/StandardSqlDataType
 
 | TypeKind | Wire encoding |
 |---|---|
@@ -334,11 +334,11 @@ should never emit numeric types as JSON numbers except for `FLOAT64`.
 The Storage Read API surface implements
 `google.cloud.bigquery.storage.v1.BigQueryRead`. The
 gRPC service surface and the Avro/Arrow type tables are documented in
-[`docs/bigquery/docs/reference/storage.md`][storage] and the per-method
-RPC reference under [`docs/bigquery/docs/reference/storage/rpc/`][storagerpc].
+[Storage Read API][storage] and the per-method
+RPC reference under [Storage Read RPC][storagerpc].
 
-[storage]: ./bigquery/docs/reference/storage.md
-[storagerpc]: ./bigquery/docs/reference/storage/rpc/
+[storage]: https://cloud.google.com/bigquery/docs/reference/storage
+[storagerpc]: https://cloud.google.com/bigquery/docs/reference/storage/rpc
 
 ### Transport: gRPC-only, served by the engine
 
@@ -438,9 +438,9 @@ the `Anonymous` and `Bearer` fields.
 
 The full upstream auth model (ADC, service-account keys, IAM scopes) is
 documented under
-[`docs/bigquery/docs/authentication.md`][auth] and is intentionally
+[BigQuery authentication][auth] and is intentionally
 **not** modeled by the emulator.
 
-[authmw]: ../gateway/middleware/auth.go
+[authmw]: https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/middleware/auth.go
 
-[auth]: ./bigquery/docs/authentication.md
+[auth]: https://cloud.google.com/bigquery/docs/authentication

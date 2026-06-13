@@ -3,13 +3,13 @@
 This guide is the developer-facing reference for the C++ lint stack
 that ships with the BigQuery emulator. It covers commands,
 thresholds, and the suppression / baseline policy. The runner
-implementations live in [`tools/lint/cpp/`](../../tools/lint/cpp/);
-the rollout history and rationale live in [`ROADMAP.md`](../../ROADMAP.md)
-and [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md).
+implementations live in [`tools/lint/cpp/`](https://github.com/vantaboard/bigquery-emulator/tree/main/tools/lint/cpp/);
+the rollout history and rationale live in [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
+and [`ENGINE_POLICY.md`](../ENGINE_POLICY.md).
 
 ## Architecture at a glance
 
-```
+```text
                    .clang-format
                       │
 +-----------------+   │   +-----------------------+
@@ -35,7 +35,7 @@ The Go binary is the spine: every C++ tool consumes the
 first-party file list it produces, so vendored / generated /
 cached trees can never sneak into a lint run by accident. The
 ownership boundary is pinned by
-[`tools/lint/cpp/sources_test.go`](../../tools/lint/cpp/sources_test.go)'s
+[`tools/lint/cpp/sources_test.go`](https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/sources_test.go)'s
 `TestFilterFirstParty` table.
 
 ## Commands
@@ -56,7 +56,7 @@ ownership boundary is pinned by
 
 ### `clang-format` (`task lint:cpp:format`)
 
-Profile: [`.clang-format`](../../.clang-format) — Google style,
+Profile: [`.clang-format`](https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-format) — Google style,
 80-column limit, two-space indent, paren-aligned continuation
 arguments, includes regrouped, namespace closers required. Editor
 format-on-save picks it up via clangd's integration; CI runs the
@@ -64,7 +64,7 @@ dry-run / `--Werror` variant on every PR.
 
 ### `clang-tidy` (`task lint:cpp:tidy`)
 
-Profile: [`.clang-tidy`](../../.clang-tidy). Checks pulled from
+Profile: [`.clang-tidy`](https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-tidy). Checks pulled from
 four buckets:
 
 | Bucket | Examples |
@@ -83,12 +83,12 @@ Posture: every configured check runs as an error
 on the CLI in `task lint:cpp:tidy`). A finding fails CI; clear it
 in-tree or scope a `// NOLINT(check-name)` suppression with a
 reason. The CI job
-([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml))
+([`.github/workflows/ci.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml))
 gates on this lane (no `continue-on-error`).
 
 ### `cppcheck` (`task lint:cpp:cppcheck`)
 
-Profile in [`taskfiles/lint.yml`](../../taskfiles/lint.yml):
+Profile in [`taskfiles/lint.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/taskfiles/lint.yml):
 `--enable=warning,style,performance,portability` with
 `--inline-suppr` and `--error-exitcode=1`. Runs in the same slow
 CI lane as clang-tidy and is likewise blocking. cppcheck is
@@ -98,7 +98,7 @@ abstractions in clang-tidy can occasionally miss.
 
 ### Source-only checker (`task lint:cpp:source`)
 
-Implemented in [`tools/lint/cpp/`](../../tools/lint/cpp/). Three
+Implemented in [`tools/lint/cpp/`](https://github.com/vantaboard/bigquery-emulator/tree/main/tools/lint/cpp/). Three
 rules:
 
 1. **`file-length`** — first-party `.cc`/`.h` files over 500 lines
@@ -117,10 +117,10 @@ rules:
 
 The same rules are reinforced at the compiler boundary by the
 `[[nodiscard]]` attributes on the abstract
-[`Storage`](../../backend/storage/storage.h) and
-[`Engine`](../../backend/engine/engine.h) interfaces, and by the
+[`Storage`](https://github.com/vantaboard/bigquery-emulator/blob/main/backend/storage/storage.h) and
+[`Engine`](https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/engine.h) interfaces, and by the
 scoped `-Wall -Wextra` profile in
-[`.bazelrc`](../../.bazelrc) (`--per_file_copt`).
+[`.bazelrc`](https://github.com/vantaboard/bigquery-emulator/blob/main/.bazelrc) (`--per_file_copt`).
 
 ## Thresholds
 
@@ -179,7 +179,7 @@ std::fprintf(stderr, "[frontend::Server] failed to bind\n");
 
 The marker contract is enforced by the source-only checker's
 test suite
-([`tools/lint/cpp/checks_test.go`](../../tools/lint/cpp/checks_test.go)).
+([`tools/lint/cpp/checks_test.go`](https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/checks_test.go)).
 
 `clang-tidy` and `cppcheck` keep their own suppression mechanisms
 (`// NOLINT(check-name)` and `// cppcheck-suppress`, respectively).
@@ -190,8 +190,8 @@ using either: a bare `NOLINT` is rarely the right answer.
 
 | Job | Workflow | Posture |
 |---|---|---|
-| `build-and-test` | [`ci.yml`](../../.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++, cppcheck) and `task lint:cpp:test`. |
-| `cpp-analysis` | [`ci-cpp-analysis.yml`](../../.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
+| `build-and-test` | [`ci.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++, cppcheck) and `task lint:cpp:test`. |
+| `cpp-analysis` | [`ci-cpp-analysis.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
 
 The local mirror is `task ci:run`; the analysis lane on its own is
 `task ci:cpp-analysis`.
@@ -200,16 +200,16 @@ The local mirror is `task ci:run`; the analysis lane on its own is
 
 1. Add the new top-level directory to
    `firstPartyIncludeRoots` in
-   [`tools/lint/cpp/sources.go`](../../tools/lint/cpp/sources.go).
+   [`tools/lint/cpp/sources.go`](https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/sources.go).
 2. Pin the new path in `TestFilterFirstParty` so the ownership
    boundary stays auditable.
 3. Mirror the path in
-   [`.bazelrc`](../../.bazelrc)'s `--per_file_copt` block so
+   [`.bazelrc`](https://github.com/vantaboard/bigquery-emulator/blob/main/.bazelrc)'s `--per_file_copt` block so
    `-Wall -Wextra` apply to the new tree.
 4. Mirror the path in
-   [`.clang-tidy`](../../.clang-tidy)'s `HeaderFilterRegex`.
+   [`.clang-tidy`](https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-tidy)'s `HeaderFilterRegex`.
 5. Mirror the path in
-   [`tools/lint/cpp/compile_db.py`](../../tools/lint/cpp/compile_db.py)'s
+   [`tools/lint/cpp/compile_db.py`](https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/compile_db.py)'s
    `FIRST_PARTY_PREFIXES`.
 
 The five places must stay in sync; a missing edit usually

@@ -1,6 +1,6 @@
 # Docker
 
-The repo ships a multi-stage [`Dockerfile`](../Dockerfile) that builds both the
+The repo ships a multi-stage [`Dockerfile`](https://github.com/vantaboard/bigquery-emulator/blob/main/Dockerfile) that builds both the
 Go gateway and the C++ engine (the canonical Bazel
 `//binaries/emulator_main:emulator_main` target, which links the full GoogleSQL
 analyzer + the local execution coordinator + DuckDB storage) and packages them
@@ -18,7 +18,7 @@ reachable from the host without forcing every caller to remember the flag.
 
 ## Quickstart with `docker compose`
 
-The fastest path is the top-level [`docker-compose.yml`](../docker-compose.yml):
+The fastest path is the top-level [`docker-compose.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/docker-compose.yml):
 
 ```bash
 docker compose up -d --build
@@ -41,8 +41,8 @@ docker compose down -v
 ```
 
 The same recipe is wired up as `task docker:smoke` (see
-[`taskfiles/docker.yml`](../taskfiles/docker.yml)) and runs in CI via
-[`.github/workflows/docker-smoke.yml`](../.github/workflows/docker-smoke.yml).
+[`taskfiles/docker.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/taskfiles/docker.yml)) and runs in CI via
+[`.github/workflows/docker-smoke.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/docker-smoke.yml).
 
 ## Plain `docker run`
 

@@ -24,6 +24,7 @@ includes:
   compose: ./taskfiles/compose.yml
   coverage: ./taskfiles/coverage.yml
   bench: ./taskfiles/bench.yml
+  docs: ./taskfiles/docs.yml
 
 tasks:
   default:

@@ -46,7 +46,7 @@ with `./.bigquery-emulator` as the fallback when `HOME` is unset).
 
 The route classifier maps every `ResolvedAST` shape (and every
 built-in function) to exactly one route. The same vocabulary appears
-in [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
+in [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md)
 on a per-node basis.
 
 | Route                | Meaning                                                                                                              | What it does at runtime                                                                                |
@@ -72,7 +72,7 @@ A few rules the router obeys:
    the semantic executor at planning time instead of mixing strategies
    mid-execution.
 3. **Route labels are observable in tests.** Conformance fixtures may
-   assert which route served a query (see [`conformance/README.md`](../conformance/README.md)),
+   assert which route served a query (see [`conformance/README.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md)),
    so a passing fixture cannot silently drift from `duckdb_native` to
    `semantic_executor`.
 4. **`unsupported` is intentional.** Promoting a row out of
@@ -341,7 +341,7 @@ decimals exactly (`backend/engine/duckdb/arrow_to_bq_*.cc`).
 
 ## Cross-references
 
-- [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).
-- [`ROADMAP.md`](../ROADMAP.md) — work tracking and high-level milestone status.
-- [`conformance/README.md`](../conformance/README.md) — fixture authoring guide; references this document from its "Contributing a new fixture" section.
+- [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).
+- [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md) — work tracking and high-level milestone status.
+- [`conformance/README.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md) — fixture authoring guide; references this document from its "Contributing a new fixture" section.
 - [`DEVELOPMENT.md` "Runtime configuration"](./DEVELOPMENT.md#runtime-configuration) — the user-facing version of the flag surface this document governs.
