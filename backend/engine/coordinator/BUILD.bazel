@@ -38,6 +38,7 @@ cc_library(
     name = "route_classifier",
     srcs = [
         "route_classifier.cc",
+        "route_classifier_functions.cc",
         "route_classifier_visitor.cc",
     ],
     hdrs = [

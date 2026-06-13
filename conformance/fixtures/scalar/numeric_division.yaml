@@ -1,0 +1,35 @@
+# numeric_division: NUMERIC / NUMERIC must stay exact NUMERIC.
+#
+# BigQuery types NUMERIC / NUMERIC as NUMERIC, but DuckDB widens
+# DECIMAL division to DOUBLE (the result column comes back as a
+# float, which both changes the type and loses precision). The route
+# classifier reroutes `$divide` over a NUMERIC/BIGNUMERIC result to
+# the semantic executor, which divides with NumericValue::Divide
+# (rounds to NUMERIC scale 9) rather than approximating in DuckDB.
+name: numeric_division
+description: |
+  NUMERIC division must produce an exact NUMERIC (scale 9, rounded),
+  not a DOUBLE, via the semantic executor.
+project_id: proj-numeric-division
+dataset_id: ds_numeric_division
+setup:
+  - dataset: ds_numeric_division
+  - table:
+      dataset: ds_numeric_division
+      id: t
+      schema:
+        - {name: a, type: NUMERIC, mode: REQUIRED}
+        - {name: b, type: NUMERIC, mode: REQUIRED}
+  - rows:
+      dataset: ds_numeric_division
+      table: t
+      rows:
+        - {a: "1", b: "3"}
+        - {a: "15", b: "3"}
+query: |
+  SELECT a / b AS q FROM ds_numeric_division.t ORDER BY a
+expected:
+  route: semantic_executor
+  rows:
+    - {q: "0.333333333"}
+    - {q: "5"}

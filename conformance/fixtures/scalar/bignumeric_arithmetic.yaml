@@ -1,0 +1,36 @@
+# bignumeric_arithmetic: BIGNUMERIC +/-/*/ must evaluate exactly.
+#
+# BIGNUMERIC is persisted as VARCHAR (DuckDB's max DECIMAL precision is
+# 38, which cannot even hold DECIMAL(38,38) >= 1.0), so DuckDB cannot
+# do BIGNUMERIC arithmetic at all (`+(VARCHAR, VARCHAR)` binder error).
+# The route classifier reroutes BIGNUMERIC `+`/`-`/`*`/`/` to the
+# semantic executor's BigNumericValue path.
+name: bignumeric_arithmetic
+description: |
+  BIGNUMERIC add/subtract/multiply/divide evaluate exactly via the
+  semantic executor (DuckDB stores BIGNUMERIC as VARCHAR).
+project_id: proj-bignumeric-arithmetic
+dataset_id: ds_bignumeric_arithmetic
+setup:
+  - dataset: ds_bignumeric_arithmetic
+  - table:
+      dataset: ds_bignumeric_arithmetic
+      id: t
+      schema:
+        - {name: a, type: BIGNUMERIC, mode: REQUIRED}
+        - {name: b, type: BIGNUMERIC, mode: REQUIRED}
+  - rows:
+      dataset: ds_bignumeric_arithmetic
+      table: t
+      rows:
+        - {a: "1.5", b: "0.3"}
+query: |
+  SELECT a + b AS sum,
+         a - b AS diff,
+         a * b AS prod,
+         a / b AS quot
+    FROM ds_bignumeric_arithmetic.t
+expected:
+  route: semantic_executor
+  rows:
+    - {sum: "1.8", diff: "1.2", prod: "0.45", quot: "5"}
