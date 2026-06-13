@@ -319,4 +319,4 @@ plan lands them.
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).
 - [`ROADMAP.md`](../ROADMAP.md) — work tracking and high-level milestone status.
 - [`conformance/README.md`](../conformance/README.md) — fixture authoring guide; references this document from its "Contributing a new fixture" section.
-- [`README.md` "Runtime configuration"](../README.md#runtime-configuration) — the user-facing version of the flag surface this document governs.
+- [`DEVELOPMENT.md` "Runtime configuration"](./DEVELOPMENT.md#runtime-configuration) — the user-facing version of the flag surface this document governs.

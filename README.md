@@ -31,10 +31,8 @@ BigQuery REST API.
 > `MERGE`) execute locally; a few harder DML branches (e.g. deep
 > STRUCT updates) still surface `UNIMPLEMENTED`.
 > See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
-> narrative, [`docs/REST_API.md`](./docs/REST_API.md) for the
-> per-endpoint mapping + current status, and
-> [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the
-> local-only execution policy and route catalog.
+> narrative and [`docs/README.md`](./docs/README.md) for the full
+> documentation index.
 
 ## Architecture
 
@@ -58,129 +56,28 @@ This emulator is modeled directly on Google's
 - The **engine is C++** so it can link [GoogleSQL](https://github.com/google/googlesql)
   directly. SQL parsing, name resolution, and type inference come from
   upstream; execution dispatches through a local route classifier that
-  picks the right local strategy for each resolved-AST shape. We do
-  **not** re-port any of GoogleSQL's surface to Go.
+  picks the right local strategy for each resolved-AST shape.
 - DuckDB is the **fast analytical path**, not the whole engine. Shapes
   that lower cleanly run there; shapes that need exact BigQuery
   semantics run on a local semantic executor; DDL and metadata ops go
-  through the catalog/storage layer directly. The router is internal —
-  callers only see one `Engine` gRPC service.
-- The **REST gateway is Go** because that is where the BigQuery-specific
-  value lives: REST routes, jobs lifecycle, datasets/tables/projects model,
-  streaming inserts, error envelope, discovery doc.
+  through the catalog/storage layer directly.
+- The **REST gateway is Go** — REST routes, jobs lifecycle, datasets/tables/projects
+  model, streaming inserts, error envelope, discovery doc.
 - The Go gateway spawns the C++ engine as a subprocess on startup and
   shuts it down cleanly on exit, identical to how `gateway_main` spawns
   `emulator_main` in the Spanner emulator.
-- The whole stack runs **local-only**. The emulator never forwards
-  query work to a real BigQuery project; full local coverage is the
-  explicit non-goal that drives the multi-strategy execution layout.
+- The whole stack runs **local-only** — query work never forwards to a
+  real BigQuery project.
 
-This split is the same one Google's own emulator team picked for Spanner,
-and the same one [`goccy/bigquery-emulator`][goccy] has converged on (via
-WASM) for similar reasons. See [`ROADMAP.md`](./ROADMAP.md) for the design
-rationale.
+See [`ROADMAP.md`](./ROADMAP.md) for the design rationale and
+[`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the route catalog.
 
 [goccy]: https://github.com/goccy/bigquery-emulator
-
-## Repo layout
-
-```
-bigquery-emulator/
-  binaries/
-    gateway_main/         # Go REST gateway entrypoint (cli.go, main.go)
-    emulator_main/        # C++ engine entrypoint (main.cc + version glue)
-  gateway/              # Go: HTTP server + subprocess manager
-    gateway.go            # Lifecycle: spawn engine, run HTTP, shutdown
-    server.go             # HTTP routing
-    handlers/             # BigQuery REST handlers (one file per resource)
-    middleware/           # Auth + request logging middleware
-    bqtypes/              # Wire-compatible BigQuery REST types
-    enginepb/             # Generated Go bindings for proto/*.proto
-    engine/               # gRPC client wrapper for emulator_main
-    jobs/                 # In-process job lifecycle (creation -> done)
-    seed/, seedfile/      # Seed-data REST API + YAML applier
-    e2e/                  # Integration tests against a real engine
-  frontend/             # C++: gRPC server that fronts the engine
-    server/                 # gRPC plumbing
-    handlers/               # Catalog + Query + StorageRead services
-  backend/              # C++: catalog / schema / storage / engine
-    catalog/, schema/       # GoogleSQL catalog adapter + type mapping
-    storage/duckdb/         # DuckDB-backed catalog.duckdb persistence
-    engine/                 # Engine interface + local execution coordinator
-    engine/duckdb/          # DuckDB fast path: AST -> DuckDB SQL transpiler
-                            # (additional strategies — semantic executor,
-                            # DuckDB UDF/polyfill library, control-op
-                            # executor — live alongside duckdb/ as they
-                            # land; see ROADMAP.md "Execution strategies")
-  proto/                # Internal Go <-> C++ contract
-    emulator.proto        # Catalog + Query services
-    storage_read.proto    # bigquery_emulator.v1.StorageRead
-  conformance/          # YAML fixture runner + diff harness
-    cmd/runner/             # `go run ./conformance/cmd/runner`
-    fixtures/               # YAML fixtures (SELECT / GROUP BY / JOIN / DDL / ...)
-  third_party/          # Vendored upstream client-library sample suites
-    golang-bigquery-tests/, node-bigquery-tests/,
-    python-bigquery-tests/, python-bigquery-dataframes-tests/,
-    java-bigquery-tests/, duckdb/  # DuckDB pin
-  docs/                 # Documentation
-    REST_API.md           # Endpoint -> handler mapping (read this when
-                          # debugging a specific BigQuery REST call)
-    ENGINE_POLICY.md      # Local-only execution policy + route catalog
-    SEEDING.md            # Declarative + template + REST seeding
-    dev/                  # C++ lint policy, prebuilt GoogleSQL playbooks
-    bigquery/             # Vendored copy of the upstream BigQuery docs
-                          # corpus, used as the source of truth when
-                          # verifying request/response shapes
-  taskfiles/            # Per-namespace Task includes (emulator:, lint:,
-                        # test:, docker:, conformance:, thirdparty:, ...)
-  Taskfile.yml          # Common dev commands (build, run, test, lint)
-  Makefile              # Same as Taskfile, for users who prefer make
-  BUILD.bazel           # Bazel root
-  MODULE.bazel          # Bzlmod root (GoogleSQL via local_path_override,
-                        # DuckDB via http_archive)
-  Dockerfile            # Multi-stage build: engine-builder-bazel + runtime
-  docker-compose.yml    # `docker compose up` runtime + smoke recipe
-  go.mod / go.sum       # Go module
-  ROADMAP.md            # Capability-area plan (read this first)
-  README.md
-  LICENSE               # MIT
-```
-
-## Local development setup
-
-Most of the toolchain is pinned in [`mise.toml`](./mise.toml) and
-fetched by a single command:
-
-```bash
-mise install   # or: task tools:install
-```
-
-That covers Go, Bazel, `task`, `clang` (the build toolchain `mise`
-materializes for editor / dev use; Bazel itself still pins the system
-`/usr/bin/clang` for hermeticity), `buf`, `golangci-lint`,
-`shellcheck`, `goreleaser`, `gcloud`, `hadolint`, the Maven / Java
-JDK, and the Python interpreter used by the third-party harnesses.
-
-A few C++ tooling packages are **not** distributed via `mise` and have
-to be installed through the system package manager. On Ubuntu / Debian:
-
-```bash
-sudo apt install clang-format clang-tidy cppcheck
-```
-
-These are required for the C++ lint gates (`task lint:cpp:format`,
-`task lint:cpp:tidy`, `task lint:cpp:cppcheck`) and for matching what
-runs in [CI](./.github/workflows/ci.yml). On macOS use Homebrew
-(`brew install clang-format llvm cppcheck`); other distributions
-ship equivalent packages under similar names.
-
-For the full lint policy — commands, thresholds, baselines, and
-suppression markers — see [`docs/dev/cpp-lint.md`](./docs/dev/cpp-lint.md).
 
 ## Quickstart
 
 The fastest path is the published Docker image — no Bazel build, no
-GoogleSQL toolchain, just `docker run`:
+GoogleSQL toolchain:
 
 ```bash
 docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:latest
@@ -192,339 +89,20 @@ curl -fsS -X POST http://localhost:9050/bigquery/v2/projects/test/queries \
     -d '{"query":"SELECT 1 AS n","useLegacySql":false}'
 ```
 
-To build and run locally instead:
+To build and run locally:
 
 ```bash
-# One-time toolchain setup (Go, Bazel, task, clang, buf, ...).
 mise install                              # or: task tools:install
-
-# Build the C++ engine (consumes a prebuilt GoogleSQL artifact by
-# default, so cold builds finish in a few minutes once the cache is
-# warm). Stages bin/emulator_main + bin/libduckdb.so.
-task emulator:build-engine:bazel
-
-# Build the gateway and run the pair locally (gateway on :9050,
-# engine on :9060). The gateway spawns the engine as a subprocess
-# and shuts it down on exit.
-task emulator:run-full
-
-# Smoke it.
-curl -fsS http://localhost:9050/healthz
-curl -fsS http://localhost:9050/bigquery/v2/projects/test/datasets
+task emulator:build-engine:bazel          # stages bin/emulator_main + bin/libduckdb.so
+task emulator:run-full                    # gateway on :9050, engine on :9060
 ```
 
-The engine binary discovery defaults to looking for `emulator_main`
-next to `bigquery-emulator-gateway` (or its parent directory). Pass
-`--engine_binary=<path>` to point at a specific build, or
-`--engine_binary=""` to skip the engine subprocess entirely (useful
-when you only want to hit the gateway's REST routes that don't talk
-to the engine — e.g. health, discovery, the wired-stub surfaces).
-
-Run `task --list` for the full set of namespaces (`emulator:`,
-`lint:`, `test:`, `docker:`, `conformance:`, `thirdparty:`,
-`googlesql:`, `release:`, `ci:`, `tools:`).
-
-### Building the engine
-
-The C++ engine is built with Bazel. Run
-`task emulator:build-engine:bazel` (alias: `task emulator:build-engine`).
-This links GoogleSQL's analyzer with the local execution coordinator
-(DuckDB fast path today, with the semantic executor / control-op
-executor / DuckDB UDF polyfills slotting in behind the same `Engine`
-interface), the DuckDB storage backend, and gRPC. The output binary
-serves `Query.DryRun` and `Query.ExecuteQuery` end-to-end. The
-integration tests under `gateway/e2e/` drive this binary directly.
-
-GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a
-prebuilt tarball through `http_archive` (see
-[`third_party/duckdb/`](./third_party/duckdb/)).
-
-Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain does
-not cross-build cleanly to linux/arm64 yet, so the engine binary
-ships only for amd64. Non-amd64 hosts should use the published
-Docker image.
-
-#### GoogleSQL build mode (prebuilt by default)
-
-`task emulator:build-engine:bazel` consumes a **prebuilt GoogleSQL
-artifact** by default — it does not recompile GoogleSQL on every
-build. Cold builds drop from the multi-hour source link to a few
-minutes once the cache is warm.
-
-`GOOGLESQL_SOURCE` selects the mode (defaulted to `prebuilt`):
-
-```bash
-# Default — prebuilt GoogleSQL from .cache/googlesql-prebuilt/.
-task emulator:build-engine:bazel
-
-# Explicit source rebuild from a sibling ../googlesql/ checkout.
-# Use this when iterating on a GoogleSQL upgrade or producer change.
-GOOGLESQL_SOURCE=local task emulator:build-engine:bazel
-```
-
-There is **no silent fallback**: if `GOOGLESQL_SOURCE=prebuilt` is
-selected (or defaulted) and the prebuilt cache is empty or stale,
-the build refuses to start with an actionable diagnostic instead
-of silently doing the wrong thing.
-
-Populate the cache once with either:
-
-```bash
-# Published artifact (URL + SHA-256 from the producer release notes).
-task googlesql:fetch-prebuilt URL=<asset url> SHA256=<64 hex chars>
-
-# Or a locally-built real artifact (uses your sibling ../googlesql/
-# checkout; ~25-55 min cold cache).
-task googlesql:stage-bazel
-```
-
-Inspect or revalidate the cache without rebuilding:
-
-```bash
-task googlesql:status    # what's currently staged
-task googlesql:validate  # re-run the safety validator over the cache
-```
-
-Escape hatch for the validator only (cache contents are still
-expected to be correct; **never** use this to mask a SHA mismatch):
-
-```bash
-BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1 \
-    task emulator:build-engine:bazel
-```
-
-#### Prebuilt GoogleSQL vs prebuilt emulator engine binary
-
-Two unrelated "prebuilt" surfaces both ship with releases — don't
-confuse them:
-
-| Asset | What it is | Who consumes it |
-|-------|------------|-----------------|
-| **Prebuilt GoogleSQL artifact** (`googlesql-prebuilt/v<...>+gs-<...>` GitHub release) | The `@googlesql//...` Bazel external repo packaged as a `.tar.gz` with `manifest.json`. Lets `task emulator:build-engine:bazel` link GoogleSQL without compiling its ~8K C++ TUs. | Engine **builders** (this repo's CI, Docker `engine-builder-bazel` stage, release.yml) — anyone who needs to link `emulator_main` from source. |
-| **Prebuilt emulator engine binary** (`bin/emulator_main` + `bin/libduckdb.so` inside the release archives and Docker image) | The already-linked C++ engine binary itself. Skips the Bazel build entirely. | Engine **users** — anyone who just wants to run the emulator (`docker run ghcr.io/...:vX.Y.Z`, the goreleaser tarballs, the Docker `ENGINE_SOURCE=prebuilt` stage). |
-
-If you are not running `bazel build` or `task emulator:build-engine:bazel`,
-you are using the prebuilt engine binary and the GoogleSQL artifact
-is irrelevant to you. The Docker image and the release archives both
-ship the prebuilt binary; the GoogleSQL artifact surface only matters
-if you are building the engine yourself.
-
-#### When the prebuilt artifact fetch or validation fails
-
-If the build refuses to start, the diagnostic line names the gate
-that tripped. Common shapes:
-
-- `GOOGLESQL_SOURCE=prebuilt (default) but the cache is empty at: <path>` — the cache has not been populated. Run `task googlesql:fetch-prebuilt URL=... SHA256=...` or fall back to source mode explicitly.
-- `validate_artifact: FAIL_PAYLOAD_SHA` (or any other `FAIL_*` token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The [GoogleSQL prebuilt troubleshooting guide](./docs/dev/googlesql-prebuilt/troubleshooting.md) maps every `FAIL_*` token to the likely owner and the next step; the [rollback playbook](./docs/dev/googlesql-prebuilt/rollback.md) covers the matching repin / revert procedures.
-
-For the full maintainer flow (publishing new artifacts, bumping the
-GoogleSQL pin, releasing) start at the
-[GoogleSQL prebuilt docs index](./docs/dev/googlesql-prebuilt/README.md).
-
-### Docker
-
-The repo ships a multi-stage [`Dockerfile`](./Dockerfile) that builds
-both the Go gateway and the C++ engine (the canonical Bazel
-`//binaries/emulator_main:emulator_main` target, which links the full
-GoogleSQL analyzer + the local execution coordinator + DuckDB
-storage) and packages them into a single runtime image. The layout mirrors the
-`gcr.io/cloud-spanner-emulator/emulator` image. A
-`docker/gateway_main.sh` shim injects `--hostname=0.0.0.0` inside the
-container so the published port is reachable from the host without
-forcing every caller to remember the flag.
-
-> **Cold-cache build is slow.** The Bazel engine link pulls in
-> GoogleSQL's source tree (~8K C++ TUs); a first-time `docker build`
-> on a fresh runner can run 25–55 minutes. The `engine-builder` stage
-> uses a BuildKit cache mount on `/root/.cache/bazel`, so warm
-> rebuilds typically land in well under two minutes. Set
-> `DOCKER_BUILDKIT=1` (default on Docker Desktop / recent Engine) and
-> let the cache do its job.
-
-#### Quickstart with `docker compose`
-
-The fastest path is the top-level [`docker-compose.yml`](./docker-compose.yml):
-
-```bash
-docker compose up -d --build
-
-# Liveness:
-#   {"service":"bigquery-emulator","status":"ok"}
-curl -fsS http://localhost:9050/healthz
-
-# Synchronous SELECT 1 round-trip. Returns:
-#   {"kind":"bigquery#queryResponse","jobReference":{...},
-#    "schema":{"fields":[{"name":"n","type":"INTEGER",...}]},
-#    "rows":[{"f":[{"v":"1"}]}],
-#    "totalRows":"1","jobComplete":true}
-curl -fsS -X POST http://localhost:9050/bigquery/v2/projects/test/queries \
-    -H 'Content-Type: application/json' \
-    -d '{"query":"SELECT 1 AS n","useLegacySql":false}'
-
-# Tear down + drop the persistent volume:
-docker compose down -v
-```
-
-The same recipe is wired up as `task docker:smoke` (see
-[`taskfiles/docker.yml`](./taskfiles/docker.yml)) and runs in CI via
-[`.github/workflows/docker-smoke.yml`](./.github/workflows/docker-smoke.yml).
-
-#### Plain `docker run`
-
-```bash
-# Build the image. Tag whatever you like; `bigquery-emulator:dev` here.
-docker build -t bigquery-emulator:dev .
-
-# Run it. Publish the REST gateway (9050) and, optionally, the internal
-# engine gRPC port (9060) for debugging.
-docker run --rm -p 9050:9050 -p 9060:9060 bigquery-emulator:dev
-
-# In another shell, hit the REST surface on the host:
-curl -sS http://localhost:9050/healthz
-curl -sS http://localhost:9050/bigquery/v2/projects/test/datasets
-```
-
-To override container defaults, pass extra flags after the image name —
-they are forwarded to `gateway_main`:
-
-```bash
-docker run --rm -p 9050:9050 bigquery-emulator:dev \
-    --log_requests --hostname=0.0.0.0 --http_port=9050
-```
-
-## Runtime configuration
-
-`emulator_main` runs a single local emulator process with a single
-`Engine` interface and a single persistent storage backend
-(`DuckDBStorage`, `catalog.duckdb` under `--data_dir`). Query
-execution behind that interface is multi-strategy — the local
-coordinator chooses DuckDB-native SQL, a DuckDB rewrite/UDF, the
-semantic executor, or a catalog/control handler per query — but the
-runtime surface stays a single emulator binary with no runtime
-backend selector. There are no `--engine` / `--storage` /
-`--on_unknown_fn` flags (those were removed when the ReferenceImpl
-engine and in-memory storage backends were deleted, and the new
-multi-strategy coordinator intentionally keeps the same single-knob
-posture). The only flags are `--host_port` and `--data_dir`:
-
-```bash
-# Default: bind to 127.0.0.1:9060, use $HOME/.bigquery-emulator as the
-# DuckDB catalog root.
-./bin/emulator_main
-
-# Pick a port + hermetic data dir (used by tests, conformance,
-# `docker compose up`).
-./bin/emulator_main --host_port=127.0.0.1:9060 --data_dir=/tmp/bq-emu
-```
-
-The gateway forwards `--data_dir` (and any of its hyphen-aliased
-equivalents — see `docs/SEEDING.md`) to `emulator_main` on spawn, so
-all of the following set the same DuckDB catalog root:
-
-```bash
-./bin/bigquery-emulator-gateway --data-dir /var/lib/bq-emu
-docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1 \
-    --data-dir /var/lib/bq-emu
-```
-
-See [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the
-local-only execution policy, the per-shape route catalog (DuckDB
-fast path / DuckDB rewrite / DuckDB UDF / semantic executor /
-control op / unsupported-by-design), and which DML / DDL shapes
-are still UNIMPLEMENTED, and the conformance harness
-([`conformance/README.md`](./conformance/README.md)) for the shape of
-the per-fixture diff.
-
-## Seeding & CLI compatibility
-
-The gateway accepts both the legacy underscore flag names this
-repository started with (`--http_port`) and the hyphen-separated
-names documented for `gateway_main` (`--http-port`),
-so existing scripts keep working and operators can lift invocation
-snippets from the upstream docs unchanged. The full alias table
-and the seeding workflows live in
-[`docs/SEEDING.md`](./docs/SEEDING.md):
-
-1. **Declarative YAML seed files** via `--seed-data-file FILE.yaml`
-   (repeatable). Loaded after the engine reports SERVING but before
-   the gateway accepts public traffic, so any client that hits the
-   REST API sees the seeded datasets/tables/rows from request one.
-2. **Initial-data template directory** via `--initial-data-dir DIR`.
-   The gateway copies the tree into `--data-dir` on first boot
-   (when no `catalog.duckdb` is present) and never on subsequent
-   boots, so operator writes are protected.
-3. **Production seed REST API** via `--enable-seed-api`. Hits
-   `POST /api/emulator/seed` to mirror live BigQuery metadata + rows
-   into the local emulator; the polling endpoint is
-   `GET /api/emulator/seed/operations/{id}`. Off by default;
-   loopback-only by default; optional shared-secret header for
-   defense in depth. The production reader is opt-in via the
-   `seed_production_live` build tag so the default gateway build
-   stays free of the cloud BigQuery client deps.
-
-## Pointing client libraries at the emulator
-
-Two equivalent ways to redirect a BigQuery client at the emulator:
-
-1. **Endpoint override** (works in every official client). In Go:
-
-   ```go
-   client, err := bigquery.NewClient(ctx, "test-project",
-       option.WithEndpoint("http://localhost:9050"),
-       option.WithoutAuthentication(),
-   )
-   ```
-
-2. **`BIGQUERY_EMULATOR_HOST` environment variable** (mirrors the
-   `STORAGE_EMULATOR_HOST` and `SPANNER_EMULATOR_HOST` conventions used by
-   other Google emulators):
-
-   ```bash
-   export BIGQUERY_EMULATOR_HOST=localhost:9050
-   ```
-
-Bearer tokens in `Authorization` headers are accepted but never
-validated, identical to `cloud-spanner-emulator`'s posture. The full
-upstream auth model (ADC, service-account keys, OAuth scopes) documented
-under [`docs/bigquery/docs/authentication.md`](./docs/bigquery/docs/authentication.md)
-is intentionally **not** modeled.
-
-### SQL dialect
-
-BigQuery's `useLegacySql` field defaults to `true` on the wire (older
-clients still rely on this). The emulator only supports GoogleSQL,
-because the engine is GoogleSQL's analyzer feeding the local
-execution coordinator. The query handlers will:
-
-- Treat `useLegacySql` unset or `false` as GoogleSQL.
-- Reject `useLegacySql=true` with HTTP 400 + `reason: invalidQuery`.
-
-If you're using the official Go client, explicitly set
-`Query.UseLegacySQL = false` to be safe.
-
-Python (`google-cloud-bigquery`), Java, and Node.js clients all support
-the analogous endpoint override. We document each one as the relevant
-smoke tests pass under the conformance harness.
-
-### Test lanes
-
-The repository runs two parallel conformance lanes against the same
-gateway:
-
-1. **Fixture conformance** — `task conformance:*` drives YAML fixtures
-   through the in-repo runner and pins SQL semantics against the local
-   execution coordinator (the single `local` profile today, which
-   covers every routed strategy: DuckDB fast path, DuckDB rewrites,
-   DuckDB UDFs, semantic executor, and control ops). See
-   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the route
-   catalog and [`conformance/README.md`](./conformance/README.md) for
-   the fixture schema, profile matrix, and authoring guide.
-2. **Third-party client conformance** — `task thirdparty:*` runs the
-   imported BigQuery client-library sample suites (Go, Node.js, Python,
-   BigQuery DataFrames) end-to-end against the gateway's REST + gRPC
-   surface and (optionally) `fake-gcs-server`. See
-   [`third_party/README.md`](./third_party/README.md) for the
-   per-language wiring contract, env-var matrix, and skip rules.
+The engine binary discovery defaults to looking for `emulator_main` next to
+`bigquery-emulator-gateway`. Pass `--engine_binary=<path>` to override, or
+`--engine_binary=""` to skip the engine subprocess entirely.
+
+**Next steps:** [Docker](./docs/DOCKER.md) · [Client libraries](./docs/CLIENTS.md) ·
+[Development setup](./docs/DEVELOPMENT.md) · [Releases](./docs/RELEASES.md)
 
 ## Benchmarks
 
@@ -556,91 +134,19 @@ Charts below are regenerated by `task bench:charts` (and CI on `main` via
 
 ![Stacked p50 phase timings for vantaboard cases](./bench/charts/out/phases.svg)
 
-## Releases
+## Documentation
 
-> **Preview-grade.** The `v0.x` series is an explicit preview: the REST
-> surface, gRPC contract, and on-disk format may break across releases.
-> Stable promises arrive at `v1.0.0`. See [`ROADMAP.md`](./ROADMAP.md)
-> for the active plan.
-
-Releases are cut by tag push today. Tag the commit you want to release
-with `vX.Y.Z` and push the tag; that triggers
-[`.github/workflows/release.yml`](./.github/workflows/release.yml),
-which builds the engine via Bazel, publishes the runtime Docker image
-to [GHCR](https://github.com/users/vantaboard/packages/container/package/bigquery-emulator),
-and uses [goreleaser](https://goreleaser.com) (config:
-[`.goreleaser.yml`](./.goreleaser.yml)) to upload the gateway archives
-+ SHA-256 checksums to the GitHub release page.
-
-```bash
-# Cut the very first release (preview).
-git tag -a v0.0.1 -m 'release: v0.0.1 (preview)'
-git push origin v0.0.1
-```
-
-`task release:tag VERSION=v0.0.1` is a foot-gun guard around the
-above: it prints the exact `git tag` + `git push` lines and only
-executes them when `CONFIRM=yes` is set
-(`task release:tag VERSION=v0.0.1 CONFIRM=yes`).
-
-The semantic-release config at [`.releaserc.yml`](./.releaserc.yml)
-is parked for the eventual switch to auto-release on push to `main`.
-It is not currently driving any GitHub Actions job; the file exists so
-the conventional-commits format documented in
-`.cursor/rules/auto-commit.mdc` has a target for the future flip.
-
-### Install via release archive
-
-```bash
-# Pick the right tarball for your OS/arch from the releases page:
-# https://github.com/vantaboard/bigquery-emulator/releases
-curl -fL https://github.com/vantaboard/bigquery-emulator/releases/download/v0.0.1/bigquery-emulator_0.0.1_linux_amd64.tar.gz \
-    | tar xz
-./bigquery-emulator-gateway --help
-```
-
-Each archive bundles `bigquery-emulator-gateway` (the Go REST gateway)
-plus `bin/emulator_main` and `bin/libduckdb.so` (the C++ engine). The
-gateway's `--engine_binary` flag defaults to discovering the engine
-beside the gateway binary, so `./bigquery-emulator-gateway` works
-out of the tarball without extra flags.
-
-> **Engine binary is linux/amd64 only.** Upstream GoogleSQL's
-> hermetic LLVM toolchain does not yet cross-build cleanly to
-> linux/arm64, and macOS engine builds are out of scope for the
-> preview series. The macOS + linux/arm64 archives still bundle the
-> linux/amd64 engine binary so the layout stays uniform, but you
-> cannot run those engine binaries on a non-linux/amd64 host. The
-> recommended path on macOS or linux/arm64 is the published Docker
-> image (next section).
-
-### Install via Docker
-
-```bash
-docker pull ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-```
-
-Each release publishes four tags to GHCR:
-
-- `vX.Y.Z` — exact version (immutable).
-- `vX.Y` — minor track (moves on patch releases).
-- `vX` — major track (moves on minor + patch releases).
-- `latest` — newest non-pre-release.
-
-Pre-release tags (`v0.0.1-rc1`) skip the `latest` tag promotion so
-`docker pull ...:latest` always lands on a non-pre-release version.
-The Docker image is `linux/amd64` only for the same engine-binary
-reason as above.
-
-## Why C++ for the engine
-
-See the rationale captured at the top of [`ROADMAP.md`](./ROADMAP.md). The
-short version: GoogleSQL is a 700+-file, monthly-releasing C++ library with
-no idiomatic Go equivalent. `cloud-spanner-emulator` and Google's own
-non-C++ GoogleSQL bindings (Java) all wrap the C++ implementation rather
-than porting it. We do the same and put our effort into the
-BigQuery-specific surface.
+| Topic | Guide |
+|-------|-------|
+| Full index | [`docs/README.md`](./docs/README.md) |
+| REST API surface | [`docs/REST_API.md`](./docs/REST_API.md) |
+| Engine execution policy | [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) |
+| Seeding & CLI flags | [`docs/SEEDING.md`](./docs/SEEDING.md) |
+| Development & building | [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) |
+| Docker | [`docs/DOCKER.md`](./docs/DOCKER.md) |
+| Client libraries | [`docs/CLIENTS.md`](./docs/CLIENTS.md) |
+| Releases & install | [`docs/RELEASES.md`](./docs/RELEASES.md) |
+| Capability roadmap | [`ROADMAP.md`](./ROADMAP.md) |
 
 ## License
 

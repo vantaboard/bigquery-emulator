@@ -416,7 +416,7 @@ client, err := bigquery.NewClient(ctx, "test-project",
 
 or by setting `BIGQUERY_EMULATOR_HOST=localhost:9050` in the
 environment. The README's
-[Quickstart](../README.md#pointing-client-libraries-at-the-emulator)
+[Client libraries](./CLIENTS.md)
 documents both forms for end users; this file documents the server-side
 posture.
 
