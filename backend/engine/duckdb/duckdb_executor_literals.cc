@@ -183,10 +183,16 @@ absl::StatusOr<std::string> RenderScalarLiteral(
           "TIMESTAMPTZ '", EscapeStringLiteralInner(cell.string_value()), "'");
     case schema::ColumnType::kNumeric:
     case schema::ColumnType::kBignumeric:
+      // Use the storage type so BIGNUMERIC stays VARCHAR: DuckDB's max
+      // DECIMAL precision is 38 (DECIMAL(38, 38) cannot even hold 1.0),
+      // so casting an extreme-magnitude BIGNUMERIC to DECIMAL overflows.
+      // NUMERIC's storage type is still DECIMAL(38, 9). The materialized
+      // table column type (RenderColumnList) uses the same storage type
+      // so the literal and the column agree.
       return absl::StrCat("CAST('",
                           EscapeStringLiteralInner(cell.string_value()),
                           "' AS ",
-                          schema::ToDuckDBType(column.type),
+                          schema::ToDuckDBStorageType(column.type),
                           ")");
     case schema::ColumnType::kStruct:
       return RenderStructLiteral(cell, column);
@@ -225,10 +231,15 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
   std::string out = "(";
   for (size_t i = 0; i < schema.columns.size(); ++i) {
     if (i > 0) absl::StrAppend(&out, ", ");
+    // Storage type so the materialized query table matches the
+    // Parquet snapshot the storage layer wrote (BIGNUMERIC -> VARCHAR,
+    // which preserves the full magnitude; NUMERIC stays DECIMAL(38, 9)).
+    // Attaching the table with the query type DECIMAL(38, 38) for
+    // BIGNUMERIC overflows on read-back of extreme values.
     absl::StrAppend(&out,
                     QuoteIdent(schema.columns[i].name),
                     " ",
-                    schema::ColumnSchemaToDuckDBType(schema.columns[i]));
+                    schema::ColumnSchemaToDuckDBStorageType(schema.columns[i]));
   }
   absl::StrAppend(&out, ")");
   return out;
