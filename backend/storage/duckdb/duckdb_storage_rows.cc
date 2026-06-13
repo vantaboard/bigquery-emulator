@@ -387,6 +387,25 @@ absl::StatusOr<std::int64_t> DuckDBStorage::CountRows(const TableId& id) const {
   return internal::CountParquetRows(impl_.get(), parquet_path, "");
 }
 
+std::optional<std::string> DuckDBStorage::ParquetSnapshotPath(
+    const TableId& id) const {
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return std::nullopt;
+  }
+  const fs::path meta_path = TableMetaPath(id);
+  if (!fs::exists(meta_path, ec)) {
+    return std::nullopt;
+  }
+  const std::string parquet_path = TableParquetPath(id);
+  if (!fs::exists(parquet_path, ec)) {
+    return std::nullopt;
+  }
+  return parquet_path;
+}
+
 }  // namespace duckdb
 }  // namespace storage
 }  // namespace backend

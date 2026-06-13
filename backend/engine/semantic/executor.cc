@@ -12,6 +12,8 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/dml/dml_executor.h"
 #include "backend/engine/semantic/error.h"
@@ -110,6 +112,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     const ::googlesql::ResolvedQueryStmt& query_stmt,
     const FrameStack* script_variables,
     const ::googlesql::SystemVariableValuesMap* script_system_variables) {
+  const absl::Time execute_start = absl::Now();
   const ::googlesql::ResolvedScan* query = query_stmt.query();
   if (query == nullptr) {
     return absl::InvalidArgumentError(
@@ -167,6 +170,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     auto row = ProjectOneRow(query_stmt, expr_by_column_id, bind, ctx);
     if (!row.ok()) return row.status();
     rows.push_back(*std::move(row));
+  }
+
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "semantic_execute",
+        absl::ToInt64Microseconds(absl::Now() - execute_start));
   }
 
   return std::unique_ptr<RowSource>(

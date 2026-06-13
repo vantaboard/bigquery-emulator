@@ -15,6 +15,7 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
@@ -44,11 +45,13 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql);
 absl::Status AttachStorageTableAt(::duckdb_connection conn,
                                   storage::Storage* storage,
                                   const catalog::StorageTable& table,
-                                  absl::string_view quoted_table_name);
+                                  absl::string_view quoted_table_name,
+                                  PhaseRecorder* phase_recorder = nullptr);
 
 absl::Status AttachStorageTable(::duckdb_connection conn,
                                 storage::Storage* storage,
-                                const catalog::StorageTable& table);
+                                const catalog::StorageTable& table,
+                                PhaseRecorder* phase_recorder = nullptr);
 
 absl::StatusOr<schema::TableSchema> ReflectOutputSchema(
     const ::googlesql::ResolvedQueryStmt& stmt);

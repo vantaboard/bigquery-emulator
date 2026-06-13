@@ -370,6 +370,15 @@ class Storage {
   [[nodiscard]] virtual absl::StatusOr<std::int64_t> CountRows(
       const TableId& id) const = 0;
 
+  // When the backend persists table data as a Parquet snapshot, returns
+  // the absolute path to that file so the DuckDB executor can attach it
+  // via `read_parquet` without a row round-trip. Default: no snapshot.
+  [[nodiscard]] virtual std::optional<std::string> ParquetSnapshotPath(
+      const TableId& id) const {
+    (void)id;
+    return std::nullopt;
+  }
+
   // ------------------------------------------------------------------
   // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the
   // per-project registries can rehydrate across engine restarts.

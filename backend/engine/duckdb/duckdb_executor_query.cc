@@ -233,15 +233,21 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // call below. Registration failure is fail-fast: there is no
   // runtime "missing UDF -> fall back to another route" path
   // (per `docs/ENGINE_POLICY.md`'s Done Criterion 2).
+  const absl::Time udf_start = absl::Now();
   if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
     return reg;
   }
+  if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "udf_register", absl::ToInt64Microseconds(absl::Now() - udf_start));
+  }
 
   // 5. Materialize each storage table inside the DuckDB connection.
   // The transpiler assumes `Table::Name()` resolves to a relation
   // already present in the connection's default schema.
+  const absl::Time attach_start = absl::Now();
   for (const ::googlesql::Table* tbl : collector.tables()) {
     if (const auto* virtual_table =
             dynamic_cast<const catalog::VirtualCatalogTable*>(tbl)) {
@@ -263,8 +269,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
           tbl->Name(),
           "'; rebuild against a GoogleSqlCatalog-backed analyzer"));
     }
-    absl::Status status =
-        internal::AttachStorageTable(conn, storage_, *storage_table);
+    absl::Status status = internal::AttachStorageTable(
+        conn, storage_, *storage_table, request.phase_recorder.get());
     if (!status.ok()) {
       ::duckdb_disconnect(&conn);
       ::duckdb_close(&db);
@@ -273,6 +279,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   }
 
   if (request.phase_recorder != nullptr) {
+    request.phase_recorder->Record(
+        "table_attach", absl::ToInt64Microseconds(absl::Now() - attach_start));
     request.phase_recorder->Record(
         "duckdb_setup", absl::ToInt64Microseconds(absl::Now() - setup_start));
   }

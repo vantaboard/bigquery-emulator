@@ -62,6 +62,7 @@ cc_library(
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",
         "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
         "//proto:emulator_cc_proto",
         "//third_party/duckdb",
         "@com_google_absl//absl/container:flat_hash_map",

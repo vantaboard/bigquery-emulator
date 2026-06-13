@@ -32,6 +32,7 @@
 // lockstep with catalog rows.
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,9 @@ class DuckDBStorage : public Storage {
   absl::StatusOr<std::unique_ptr<RowIterator>> CreateReadStream(
       const TableId& id, const ReadFilter& filter) const override;
   absl::StatusOr<std::int64_t> CountRows(const TableId& id) const override;
+
+  std::optional<std::string> ParquetSnapshotPath(
+      const TableId& id) const override;
 
   absl::Status UpsertRoutine(const RoutineRecord& record) override;
   absl::Status DeleteRoutine(const RoutineId& id) override;

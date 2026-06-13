@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -14,14 +15,19 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/virtual_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -228,6 +234,32 @@ std::string RenderColumnList(const schema::TableSchema& schema) {
   return out;
 }
 
+std::string RenderColumnIdentList(const schema::TableSchema& schema) {
+  std::string out;
+  for (size_t i = 0; i < schema.columns.size(); ++i) {
+    if (i > 0) absl::StrAppend(&out, ", ");
+    absl::StrAppend(&out, QuoteIdent(schema.columns[i].name));
+  }
+  return out;
+}
+
+void RecordPhase(PhaseRecorder* recorder,
+                 absl::string_view name,
+                 absl::Duration elapsed) {
+  if (recorder != nullptr) {
+    recorder->Record(name, absl::ToInt64Microseconds(elapsed));
+  }
+}
+
+bool SchemaHasFloat64Column(const schema::TableSchema& schema) {
+  for (const auto& column : schema.columns) {
+    if (column.type == schema::ColumnType::kFloat64) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Runs `sql` on `conn`; returns OK or INTERNAL with the DuckDB
 // error message attached. Use this for INSERT / CREATE statements
 // where the result rowset is uninteresting.
@@ -259,17 +291,45 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
 absl::Status AttachStorageTableAt(::duckdb_connection conn,
                                   storage::Storage* storage,
                                   const catalog::StorageTable& table,
-                                  absl::string_view quoted_table_name) {
+                                  absl::string_view quoted_table_name,
+                                  PhaseRecorder* phase_recorder) {
   const schema::TableSchema& schema = table.bq_schema();
   const std::string table_name(quoted_table_name);
+  const storage::TableId& id = table.storage_table_id();
+
+  if (auto parquet_path = storage->ParquetSnapshotPath(id);
+      parquet_path && !SchemaHasFloat64Column(schema)) {
+    const absl::Time attach_start = absl::Now();
+    const std::string select_cols =
+        storage::duckdb::internal::RenderColumnIdentList(schema);
+    const std::string escaped = EscapeStringLiteralInner(*parquet_path);
+    const std::string columns = RenderColumnList(schema);
+    absl::Status status = RunSqlNoResult(
+        conn,
+        absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ", columns));
+    if (!status.ok()) return status;
+    status = RunSqlNoResult(conn,
+                            absl::StrCat("INSERT INTO ",
+                                         table_name,
+                                         " SELECT ",
+                                         select_cols,
+                                         " FROM read_parquet('",
+                                         escaped,
+                                         "')"));
+    RecordPhase(
+        phase_recorder, "table_attach_parquet", absl::Now() - attach_start);
+    return status;
+  }
+
   const std::string columns = RenderColumnList(schema);
 
   absl::Status status = RunSqlNoResult(
       conn, absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ", columns));
   if (!status.ok()) return status;
 
+  const absl::Time scan_start = absl::Now();
   absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
-      storage->ScanRows(table.storage_table_id());
+      storage->ScanRows(id);
   if (!iter.ok()) return iter.status();
 
   std::unique_ptr<storage::RowIterator> rows_iter = std::move(iter).value();
@@ -281,8 +341,10 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
     if (!*has) break;
     rows.push_back(row);
   }
+  RecordPhase(phase_recorder, "scan_rows", absl::Now() - scan_start);
   if (rows.empty()) return absl::OkStatus();
 
+  const absl::Time insert_start = absl::Now();
   std::string insert_sql;
   absl::StrAppend(&insert_sql, "INSERT INTO ", table_name, " VALUES ");
   const size_t ncols = schema.columns.size();
@@ -308,7 +370,9 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
     }
     absl::StrAppend(&insert_sql, ")");
   }
-  return RunSqlNoResult(conn, insert_sql);
+  status = RunSqlNoResult(conn, insert_sql);
+  RecordPhase(phase_recorder, "insert_render_exec", absl::Now() - insert_start);
+  return status;
 }
 
 // Convenience wrapper around `AttachStorageTableAt` used by the
@@ -317,8 +381,10 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
 // (`FROM "people"`) resolves in the connection's default schema.
 absl::Status AttachStorageTable(::duckdb_connection conn,
                                 storage::Storage* storage,
-                                const catalog::StorageTable& table) {
-  return AttachStorageTableAt(conn, storage, table, QuoteIdent(table.Name()));
+                                const catalog::StorageTable& table,
+                                PhaseRecorder* phase_recorder) {
+  return AttachStorageTableAt(
+      conn, storage, table, QuoteIdent(table.Name()), phase_recorder);
 }
 
 absl::StatusOr<std::string> RenderSemanticParameterLiteral(
