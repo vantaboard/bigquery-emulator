@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -98,7 +99,7 @@ func TestModelDeleteRemovesRegisteredModel(t *testing.T) {
 func TestPersistModelFromDDL(t *testing.T) {
 	t.Parallel()
 	deps := Dependencies{Models: models.NewStore()}
-	ref := persistModelFromDDL(nil, &deps, "p", "d",
+	ref := persistModelFromDDL(context.TODO(), &deps, "p", "d",
 		"CREATE MODEL `p.d.linear` OPTIONS(model_type='linear_reg') AS SELECT 1")
 	if ref == nil || ref.ModelID != "linear" {
 		t.Fatalf("ref = %#v", ref)
