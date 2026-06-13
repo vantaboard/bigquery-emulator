@@ -125,12 +125,14 @@ cc_library(
         "transpiler_emit_analytic.cc",
         "transpiler_emit_with.cc",
         "transpiler_emit_expr_literals.cc",
+        "transpiler_emit_datetime.cc",
         "transpiler_emit_function_call.cc",
         "transpiler_emit_aggregate_function.cc",
         "transpiler_emit_expr.cc",
     ],
     hdrs = [
         "transpiler.h",
+        "transpiler_emit_datetime.h",
         "transpiler_internal.h",
     ],
     deps = [

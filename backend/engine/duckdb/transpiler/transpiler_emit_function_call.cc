@@ -15,6 +15,7 @@
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_emit_datetime.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
@@ -52,6 +53,9 @@ static std::string TryEmitInternalOperator(
   if (name == "$not") {
     if (args.size() != 1) return "";
     return absl::StrCat("(NOT ", args[0], ")");
+  }
+  if (name == "$interval") {
+    return "";
   }
   if (name == "$unary_minus") {
     if (args.size() != 1) return "";
@@ -124,6 +128,15 @@ std::string Transpiler::EmitFunctionCall(
     return "";
   }
   const std::string name = internal::ResolveFunctionName(node->function());
+  if (auto dt = internal::TryEmitDateTimeFunctionCall(
+          name,
+          node,
+          [this](const ::googlesql::ResolvedExpr* expr) {
+            return EmitExpr(expr);
+          });
+      dt.has_value()) {
+    return *dt;
+  }
   std::vector<std::string> args;
   args.reserve(node->argument_list_size());
   for (int i = 0; i < node->argument_list_size(); ++i) {

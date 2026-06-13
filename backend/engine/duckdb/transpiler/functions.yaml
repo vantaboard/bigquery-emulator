@@ -115,7 +115,7 @@ $bitwise_xor: semantic_executor
 $bitwise_not: semantic_executor
 $bitwise_left_shift: semantic_executor
 $bitwise_right_shift: semantic_executor
-$interval: semantic_executor
+$interval: duckdb_native duckdb_name=INTERVAL
 justify_days: semantic_executor
 justify_hours: semantic_executor
 
@@ -379,7 +379,7 @@ timestamp: duckdb_native duckdb_name=TIMESTAMP
 # `DATE_ADD(DATE '2020-02-29', INTERVAL 1 YEAR) == DATE
 # '2021-02-28'`). The semantic executor owns this rewrite
 # alongside the rest of BigQuery-exact date arithmetic.
-date_add: semantic_executor
+date_add: duckdb_udf duckdb_name=bq_date_add
 date_sub: semantic_executor
 # BQ DATE_DIFF / DATETIME_DIFF / TIMESTAMP_DIFF count CALENDAR
 # BOUNDARIES (not whole units): `DATE_DIFF(DATE '2024-01-31',
@@ -417,7 +417,7 @@ timestamp_bucket: semantic_executor
 # subset and uses ISO-8601 conventions where BQ uses the
 # Sunday-start convention. A thin macro cannot translate the
 # part token between dialects without losing edge cases.
-extract: semantic_executor
+extract: duckdb_udf duckdb_name=bq_extract
 # BQ FORMAT_TIMESTAMP / FORMAT_DATE / FORMAT_DATETIME use BigQuery's
 # extended strftime specification (`%E4Y`, `%E*S`, `%Q`, `%Ez`, `%Z`).
 # DuckDB's `strftime` / `strptime` implement the POSIX core but not
@@ -528,7 +528,7 @@ percentile_cont: duckdb_native duckdb_name=quantile_cont
 percentile_disc: duckdb_native duckdb_name=quantile_disc
 
 # Internal extract/subscript operators lowered by the semantic executor.
-$extract: semantic_executor
+$extract: duckdb_udf duckdb_name=bq_extract
 $subscript: duckdb_rewrite duckdb_name=$subscript
 
 # --- Specialized families: stub-and-defer -----------------------------

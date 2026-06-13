@@ -234,12 +234,10 @@ TEST_F(RouteClassifierTest, MultiArrayUnnestZipPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_zip_mode)");
 }
 
-TEST_F(RouteClassifierTest, CorrelatedArrayScanPromotesToSemanticExecutor) {
-  // `FROM t, UNNEST(t.arr)` (the cross-join form) resolves to a
-  // `ResolvedArrayScan` whose `input_scan` is the `t` TableScan
-  // (not a SingleRowScan). The DuckDB fast path's standalone-UNNEST
-  // emit returns "" for this shape; the classifier promotes the
-  // query to `kSemanticExecutor`. See   // `docs/ENGINE_POLICY.md`.
+TEST_F(RouteClassifierTest, CorrelatedColumnUnnestPromotesToSemanticExecutor) {
+  // `FROM t, UNNEST(t.arr)` still routes to the semantic executor until
+  // the DuckDB transpiler covers aggregate/project shapes over lateral
+  // UNNEST.
   const auto* stmt =
       Analyze("SELECT id, n FROM arr_table, UNNEST(arr_table.arr) AS n");
   ASSERT_NE(stmt, nullptr);
@@ -269,6 +267,17 @@ TEST_F(RouteClassifierTest, StandaloneUnnestStaysOnFastPath) {
   ASSERT_NE(stmt, nullptr);
   RouteDecision d = classifier_.Classify(*stmt);
   EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);
+}
+
+TEST_F(RouteClassifierTest, DateFuncsBenchShapeRoutesToDuckDbNative) {
+  const auto* stmt = Analyze(
+      "SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id "
+      "DAY)) AS yr, COUNT(*) AS cnt FROM arr_table GROUP BY yr ORDER BY yr");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_TRUE(d.disposition == Disposition::kDuckdbNative ||
+              d.disposition == Disposition::kDuckdbUdf)
+      << d.offending_node;
 }
 
 TEST_F(RouteClassifierTest, InsertSelectQualifyRoutesToDuckdbNative) {

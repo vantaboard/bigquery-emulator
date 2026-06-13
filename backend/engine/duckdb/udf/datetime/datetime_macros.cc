@@ -26,6 +26,8 @@
 // differences between BQ's `%E*S` extensions and DuckDB's
 // strftime).
 
+#include <string>
+
 #include "absl/status/status.h"
 #include "backend/engine/duckdb/udf/internal/run_macro.h"
 #include "duckdb.h"
@@ -113,6 +115,49 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
                                 "date_diff('day', DATE '1970-01-01', d)");
       !s.ok()) {
     return s;
+  }
+
+  // `bq_date_add(d, n, part)` --- BigQuery DATE_ADD for DATE values.
+  // `part` is the analyzer's DateTimestampPart enum (YEAR=1, MONTH=2,
+  // DAY=3, WEEK=14). DAY/WEEK use DuckDB interval arithmetic;
+  // MONTH/YEAR apply BigQuery's month-end snap via `last_day` when the
+  // naive addition would overflow the target month's length.
+  {
+    const std::string sql =
+        "CREATE OR REPLACE MACRO bq_date_add(d, n, part) AS ("
+        "CASE "
+        "WHEN part = 3 THEN d + (CAST(n AS BIGINT) * INTERVAL 1 DAY) "
+        "WHEN part = 14 THEN d + (CAST(n AS BIGINT) * INTERVAL 1 WEEK) "
+        "WHEN part = 2 THEN ("
+        "  CASE WHEN day(d) != day(d + (CAST(n AS BIGINT) * INTERVAL 1 MONTH)) "
+        "    THEN last_day(d + (CAST(n AS BIGINT) * INTERVAL 1 MONTH)) "
+        "    ELSE d + (CAST(n AS BIGINT) * INTERVAL 1 MONTH) "
+        "  END) "
+        "WHEN part = 1 THEN ("
+        "  CASE WHEN day(d) != day(d + (CAST(n AS BIGINT) * INTERVAL 1 YEAR)) "
+        "    THEN last_day(d + (CAST(n AS BIGINT) * INTERVAL 1 YEAR)) "
+        "    ELSE d + (CAST(n AS BIGINT) * INTERVAL 1 YEAR) "
+        "  END) "
+        "ELSE d + (CAST(n AS BIGINT) * INTERVAL 1 DAY) "
+        "END)";
+    absl::Status s = internal::RunMacroDdl(conn, sql);
+    if (!s.ok()) return s;
+  }
+
+  {
+    const std::string sql =
+        "CREATE OR REPLACE MACRO bq_extract(part, value) AS ("
+        "CASE "
+        "WHEN part = 1 THEN year(CAST(value AS DATE)) "
+        "WHEN part = 2 THEN month(CAST(value AS DATE)) "
+        "WHEN part = 3 THEN day(CAST(value AS DATE)) "
+        "WHEN part = 4 THEN dayofweek(CAST(value AS DATE)) "
+        "WHEN part = 5 THEN dayofyear(CAST(value AS DATE)) "
+        "WHEN part = 6 THEN quarter(CAST(value AS DATE)) "
+        "ELSE year(CAST(value AS DATE)) "
+        "END)";
+    absl::Status s = internal::RunMacroDdl(conn, sql);
+    if (!s.ok()) return s;
   }
 
   return absl::OkStatus();

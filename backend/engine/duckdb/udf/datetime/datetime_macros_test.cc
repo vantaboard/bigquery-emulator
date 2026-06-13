@@ -150,6 +150,20 @@ TEST_F(DatetimeMacrosTest, UnixDateNullPropagation) {
   EXPECT_TRUE(RunBool("SELECT bq_unix_date(NULL::DATE) IS NULL"));
 }
 
+TEST_F(DatetimeMacrosTest, DateAddDay) {
+  EXPECT_TRUE(RunBool(
+      "SELECT bq_date_add(DATE '2020-09-22', 1, 3) = DATE '2020-09-23'"));
+}
+
+TEST_F(DatetimeMacrosTest, DateAddMonthEndSnap) {
+  EXPECT_TRUE(RunBool(
+      "SELECT bq_date_add(DATE '2024-01-31', 1, 2) = DATE '2024-02-29'"));
+}
+
+TEST_F(DatetimeMacrosTest, ExtractYear) {
+  EXPECT_EQ(RunInt64("SELECT bq_extract(1, DATE '2020-06-15')"), 2020);
+}
+
 }  // namespace
 }  // namespace udf
 }  // namespace duckdb

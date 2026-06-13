@@ -247,6 +247,32 @@ WHERE timestamp > TIMESTAMP('2015-01-01')
   EXPECT_NE(sql.find("COUNT(DISTINCT"), std::string::npos);
 }
 
+TEST_F(TranspilerTest, TranspileDateAddIntervalColumnRef) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id "
+      "DAY)) AS yr FROM people");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "transpile failed";
+  EXPECT_NE(sql.find("bq_date_add"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("bq_extract"), std::string::npos) << sql;
+  EXPECT_EQ(sql.find(" DAY"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileDateFuncsBenchShape) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id "
+      "DAY)) AS yr, COUNT(*) AS cnt FROM people GROUP BY yr ORDER BY yr");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "transpile failed";
+  EXPECT_NE(sql.find("bq_date_add"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("bq_extract"), std::string::npos) << sql;
+  EXPECT_EQ(sql.find(" DAY"), std::string::npos) << sql;
+}
+
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine
