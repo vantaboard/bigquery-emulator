@@ -1,9 +1,7 @@
 ---
 description: Validate conformance fixture SQL against production BigQuery with the bq CLI when it misbehaves in the emulator
-globs: conformance/fixtures/**/*.yaml
 alwaysApply: false
 ---
-
 # Conformance fixtures: validate SQL against production BigQuery
 
 When a conformance fixture's `query` **fails, errors, or produces unexpected
