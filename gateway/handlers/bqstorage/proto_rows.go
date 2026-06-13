@@ -126,7 +126,7 @@ func engineTypeToProtoType(t string) *descriptorpb.FieldDescriptorProto_Type {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
 	case bqTypeBOOL:
 		return descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
-	case bqTypeINT64:
+	case bqTypeINT64, bqTypeINTEGER:
 		return descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
 	case bqTypeFLOAT64, "DOUBLE":
 		return descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()

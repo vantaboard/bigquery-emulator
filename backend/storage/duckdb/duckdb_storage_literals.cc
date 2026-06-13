@@ -11,6 +11,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
@@ -94,7 +95,26 @@ std::optional<std::string> TryFormatMicrosTimestampString(absl::string_view s) {
   int64_t micros = 0;
   if (!absl::SimpleAtoi(s, &micros)) return std::nullopt;
   const absl::Time t = absl::FromUnixMicros(micros);
-  return absl::FormatTime("%E4S", t, absl::UTCTimeZone());
+  const absl::TimeZone utc = absl::UTCTimeZone();
+  const absl::CivilSecond cs = absl::ToCivilSecond(t, utc);
+  if (micros % 1'000'000 == 0) {
+    return absl::StrFormat("%04d-%02d-%02d %02d:%02d:%02d+00",
+                           cs.year(),
+                           cs.month(),
+                           cs.day(),
+                           cs.hour(),
+                           cs.minute(),
+                           cs.second());
+  }
+  const int64_t frac = micros >= 0 ? micros % 1'000'000 : -micros % 1'000'000;
+  return absl::StrFormat("%04d-%02d-%02d %02d:%02d:%02d.%06d+00",
+                         cs.year(),
+                         cs.month(),
+                         cs.day(),
+                         cs.hour(),
+                         cs.minute(),
+                         cs.second(),
+                         static_cast<int>(frac));
 }
 
 }  // namespace
