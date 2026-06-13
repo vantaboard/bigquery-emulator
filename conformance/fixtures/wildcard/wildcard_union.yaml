@@ -57,7 +57,7 @@ setup:
         - {region: us, amount: 999}
 query: |
   SELECT amount
-    FROM ds_wildcard_union.sales_*
+    FROM `ds_wildcard_union.sales_*`
    ORDER BY amount
 expected:
   route: duckdb_native

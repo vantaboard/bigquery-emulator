@@ -30,7 +30,7 @@ setup:
         - {id: 2}
 query: |
   SELECT id, note
-    FROM ds_wildcard_null_pad.logs_*
+    FROM `ds_wildcard_null_pad.logs_*`
    ORDER BY id
 expected:
   route: duckdb_native

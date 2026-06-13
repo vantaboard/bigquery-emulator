@@ -28,7 +28,7 @@ setup:
         - {payload: bravo}
 query: |
   SELECT payload, _TABLE_SUFFIX AS suffix
-    FROM ds_wildcard_suffix.events_*
+    FROM `ds_wildcard_suffix.events_*`
    WHERE _TABLE_SUFFIX = 'a'
    ORDER BY payload
 expected:
