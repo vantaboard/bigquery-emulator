@@ -27,7 +27,6 @@ _MODULE_SKIP_SUBSTRINGS: tuple[str, ...] = (
     "grant_access",
     "change_history",
     "catalog",
-    "wildcard",
     "override_database",
     "quota_project",
     "json_keyfile",

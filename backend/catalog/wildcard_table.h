@@ -8,6 +8,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/virtual_table.h"
+#include "backend/catalog/wildcard_table_util.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/evaluator_table_iterator.h"
@@ -24,7 +25,8 @@ class WildcardTable : public VirtualCatalogTable {
   WildcardTable(absl::string_view wildcard_table_id,
                 absl::string_view full_name,
                 storage::TableId wildcard_id,
-                std::vector<storage::TableId> matched_tables,
+                std::string table_prefix,
+                std::vector<WildcardColumnMap> matched_tables,
                 schema::TableSchema union_schema,
                 absl::Span<const NameAndType> columns,
                 const storage::Storage* storage,
@@ -40,8 +42,11 @@ class WildcardTable : public VirtualCatalogTable {
       absl::string_view quoted_table_name) const override;
 
  private:
+  absl::StatusOr<std::vector<storage::Row>> CollectUnionRows() const;
+
   storage::TableId wildcard_id_;
-  std::vector<storage::TableId> matched_tables_;
+  std::string table_prefix_;
+  std::vector<WildcardColumnMap> matched_tables_;
   schema::TableSchema union_schema_;
   const storage::Storage* storage_;
   ::googlesql::TypeFactory* type_factory_;

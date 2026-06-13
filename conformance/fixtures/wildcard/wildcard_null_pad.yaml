@@ -1,0 +1,39 @@
+# wildcard_null_pad: union schema pads missing columns with NULL.
+name: wildcard_null_pad
+description: |
+  When matched tables differ in column sets, absent columns are NULL in
+  the wildcard union.
+project_id: proj-wildcard-null-pad
+dataset_id: ds_wildcard_null_pad
+setup:
+  - dataset: ds_wildcard_null_pad
+  - table:
+      dataset: ds_wildcard_null_pad
+      id: logs_1
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: note, type: STRING, mode: NULLABLE}
+  - table:
+      dataset: ds_wildcard_null_pad
+      id: logs_2
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_wildcard_null_pad
+      table: logs_1
+      rows:
+        - {id: 1, note: one}
+  - rows:
+      dataset: ds_wildcard_null_pad
+      table: logs_2
+      rows:
+        - {id: 2}
+query: |
+  SELECT id, note
+    FROM ds_wildcard_null_pad.logs_*
+   ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", note: one}
+    - {id: "2", note: null}

@@ -1,0 +1,67 @@
+# wildcard_union: multi-table wildcard scan unions matching tables.
+#
+# `FROM dataset.sales_*` resolves every table whose name starts with
+# `sales_`, materializes a UNION ALL with NULL padding for missing
+# columns, and exposes `_TABLE_SUFFIX` for each row's matched suffix.
+name: wildcard_union
+description: |
+  Wildcard table union across three prefix-matched tables; a non-matching
+  table must not contribute rows.
+project_id: proj-wildcard-union
+dataset_id: ds_wildcard_union
+setup:
+  - dataset: ds_wildcard_union
+  - table:
+      dataset: ds_wildcard_union
+      id: sales_2020
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_wildcard_union
+      id: sales_2021
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_wildcard_union
+      id: sales_2022
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - table:
+      dataset: ds_wildcard_union
+      id: other_table
+      schema:
+        - {name: region, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_wildcard_union
+      table: sales_2020
+      rows:
+        - {region: us, amount: 100}
+  - rows:
+      dataset: ds_wildcard_union
+      table: sales_2021
+      rows:
+        - {region: us, amount: 200}
+  - rows:
+      dataset: ds_wildcard_union
+      table: sales_2022
+      rows:
+        - {region: us, amount: 300}
+  - rows:
+      dataset: ds_wildcard_union
+      table: other_table
+      rows:
+        - {region: us, amount: 999}
+query: |
+  SELECT amount
+    FROM ds_wildcard_union.sales_*
+   ORDER BY amount
+expected:
+  route: duckdb_native
+  rows:
+    - {amount: "100"}
+    - {amount: "200"}
+    - {amount: "300"}

@@ -82,12 +82,27 @@ cc_library(
 )
 
 cc_library(
+    name = "wildcard_table_util",
+    srcs = ["wildcard_table_util.cc"],
+    hdrs = ["wildcard_table_util.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "wildcard_table",
     srcs = ["wildcard_table.cc"],
     hdrs = ["wildcard_table.h"],
     deps = [
         ":storage_table",
         ":virtual_table",
+        ":wildcard_table_util",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/status",

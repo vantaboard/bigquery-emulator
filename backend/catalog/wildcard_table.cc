@@ -24,6 +24,9 @@ namespace {
 
 using ::googlesql::Type;
 using ::googlesql::Value;
+using schema::ColumnSchema;
+using schema::ColumnType;
+using schema::TableSchema;
 
 std::string QuoteIdent(absl::string_view ident) {
   std::string escaped;
@@ -52,40 +55,44 @@ std::string EscapeStringLiteral(absl::string_view s) {
 }
 
 std::string RenderCellLiteral(const storage::Value& cell,
-                              const schema::ColumnSchema& column) {
+                              const ColumnSchema& column) {
   if (cell.is_null()) return "NULL";
   switch (column.type) {
-    case schema::ColumnType::kBool:
+    case ColumnType::kBool:
       return cell.bool_value() ? "TRUE" : "FALSE";
-    case schema::ColumnType::kInt64:
+    case ColumnType::kInt64:
       return std::to_string(cell.int64_value());
-    case schema::ColumnType::kFloat64:
+    case ColumnType::kFloat64:
       return absl::StrCat(cell.float64_value());
-    case schema::ColumnType::kString:
-    case schema::ColumnType::kBytes:
+    case ColumnType::kString:
+    case ColumnType::kBytes:
+    case ColumnType::kNumeric:
+    case ColumnType::kBignumeric:
       return absl::StrCat("'", EscapeStringLiteral(cell.string_value()), "'");
     default:
       return "NULL";
   }
 }
 
-std::string DuckDbTypeForColumn(const schema::ColumnSchema& column) {
+std::string DuckDbTypeForColumn(const ColumnSchema& column) {
   switch (column.type) {
-    case schema::ColumnType::kBool:
+    case ColumnType::kBool:
       return "BOOLEAN";
-    case schema::ColumnType::kInt64:
+    case ColumnType::kInt64:
       return "BIGINT";
-    case schema::ColumnType::kFloat64:
+    case ColumnType::kFloat64:
       return "DOUBLE";
-    case schema::ColumnType::kString:
-    case schema::ColumnType::kBytes:
+    case ColumnType::kString:
+    case ColumnType::kBytes:
+    case ColumnType::kNumeric:
+    case ColumnType::kBignumeric:
       return "VARCHAR";
     default:
       return "VARCHAR";
   }
 }
 
-std::string RenderColumnList(const schema::TableSchema& schema) {
+std::string RenderColumnList(const TableSchema& schema) {
   std::string out = "(";
   for (size_t i = 0; i < schema.columns.size(); ++i) {
     if (i > 0) out.append(", ");
@@ -109,6 +116,33 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
   }
   ::duckdb_destroy_result(&result);
   return absl::OkStatus();
+}
+
+storage::Value NullStorageCell(const ColumnSchema& column) {
+  return storage::Value::Null();
+}
+
+storage::Row BuildUnionRow(const storage::Row& physical,
+                           const WildcardColumnMap& map,
+                           const TableSchema& union_schema,
+                           absl::string_view table_suffix) {
+  storage::Row out;
+  out.cells.resize(union_schema.columns.size(), storage::Value::Null());
+  for (size_t u = 0; u < union_schema.columns.size(); ++u) {
+    const ColumnSchema& col = union_schema.columns[u];
+    if (col.name == kTableSuffixColumnName) {
+      out.cells[u] = storage::Value::String(std::string(table_suffix));
+      continue;
+    }
+    const int physical_idx = map.union_to_physical[u];
+    if (physical_idx < 0 ||
+        static_cast<size_t>(physical_idx) >= physical.cells.size()) {
+      out.cells[u] = NullStorageCell(col);
+      continue;
+    }
+    out.cells[u] = physical.cells[physical_idx];
+  }
+  return out;
 }
 
 class WildcardEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
@@ -187,13 +221,15 @@ class WildcardEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
 WildcardTable::WildcardTable(absl::string_view wildcard_table_id,
                              absl::string_view full_name,
                              storage::TableId wildcard_id,
-                             std::vector<storage::TableId> matched_tables,
+                             std::string table_prefix,
+                             std::vector<WildcardColumnMap> matched_tables,
                              schema::TableSchema union_schema,
                              absl::Span<const NameAndType> columns,
                              const storage::Storage* storage,
                              ::googlesql::TypeFactory* type_factory)
     : VirtualCatalogTable(std::string(wildcard_table_id), columns),
       wildcard_id_(std::move(wildcard_id)),
+      table_prefix_(std::move(table_prefix)),
       matched_tables_(std::move(matched_tables)),
       union_schema_(std::move(union_schema)),
       storage_(storage),
@@ -202,26 +238,35 @@ WildcardTable::WildcardTable(absl::string_view wildcard_table_id,
   (void)type_factory_;
 }
 
-absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>
-WildcardTable::CreateEvaluatorTableIterator(
-    absl::Span<const int> column_idxs) const {
+absl::StatusOr<std::vector<storage::Row>> WildcardTable::CollectUnionRows()
+    const {
   if (storage_ == nullptr) {
     return absl::FailedPreconditionError(
         "WildcardTable: storage backend is not configured");
   }
   std::vector<storage::Row> rows;
-  for (const storage::TableId& id : matched_tables_) {
+  for (const WildcardColumnMap& map : matched_tables_) {
     absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
-        storage_->ScanRows(id);
+        storage_->ScanRows(map.table_id);
     if (!iter.ok()) return iter.status();
-    storage::Row row;
+    const std::string suffix =
+        TableSuffixFor(map.table_id.table_id, table_prefix_);
+    storage::Row physical;
     while (true) {
-      absl::StatusOr<bool> has = (*iter)->Next(&row);
+      absl::StatusOr<bool> has = (*iter)->Next(&physical);
       if (!has.ok()) return has.status();
       if (!*has) break;
-      rows.push_back(row);
+      rows.push_back(BuildUnionRow(physical, map, union_schema_, suffix));
     }
   }
+  return rows;
+}
+
+absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>
+WildcardTable::CreateEvaluatorTableIterator(
+    absl::Span<const int> column_idxs) const {
+  absl::StatusOr<std::vector<storage::Row>> rows = CollectUnionRows();
+  if (!rows.ok()) return rows.status();
 
   std::vector<int> idxs;
   std::vector<std::string> names;
@@ -242,7 +287,7 @@ WildcardTable::CreateEvaluatorTableIterator(
     names.push_back(GetColumn(idx)->Name());
     types.push_back(GetColumn(idx)->GetType());
   }
-  return std::make_unique<WildcardEvaluatorIterator>(std::move(rows),
+  return std::make_unique<WildcardEvaluatorIterator>(std::move(*rows),
                                                      union_schema_,
                                                      std::move(idxs),
                                                      std::move(names),
@@ -266,33 +311,22 @@ absl::Status WildcardTable::MaterializeInDuckDB(
                                   RenderColumnList(union_schema_)));
   if (!create.ok()) return create;
 
+  absl::StatusOr<std::vector<storage::Row>> rows = CollectUnionRows();
+  if (!rows.ok()) return rows.status();
+  if (rows->empty()) return absl::OkStatus();
+
   std::string insert_sql;
-  bool first_row = true;
-  for (const storage::TableId& id : matched_tables_) {
-    absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
-        storage->ScanRows(id);
-    if (!iter.ok()) return iter.status();
-    storage::Row row;
-    while (true) {
-      absl::StatusOr<bool> has = (*iter)->Next(&row);
-      if (!has.ok()) return has.status();
-      if (!*has) break;
-      if (first_row) {
-        absl::StrAppend(&insert_sql, "INSERT INTO ", table_name, " VALUES ");
-        first_row = false;
-      } else {
-        insert_sql.append(", ");
-      }
-      insert_sql.push_back('(');
-      for (size_t c = 0; c < union_schema_.columns.size(); ++c) {
-        if (c > 0) insert_sql.append(", ");
-        insert_sql.append(
-            RenderCellLiteral(row.cells[c], union_schema_.columns[c]));
-      }
-      insert_sql.push_back(')');
+  absl::StrAppend(&insert_sql, "INSERT INTO ", table_name, " VALUES ");
+  for (size_t r = 0; r < rows->size(); ++r) {
+    if (r > 0) insert_sql.append(", ");
+    insert_sql.push_back('(');
+    for (size_t c = 0; c < union_schema_.columns.size(); ++c) {
+      if (c > 0) insert_sql.append(", ");
+      insert_sql.append(
+          RenderCellLiteral((*rows)[r].cells[c], union_schema_.columns[c]));
     }
+    insert_sql.push_back(')');
   }
-  if (insert_sql.empty()) return absl::OkStatus();
   return RunSqlNoResult(conn, insert_sql);
 }
 

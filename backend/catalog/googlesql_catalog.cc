@@ -1,5 +1,6 @@
 #include "backend/catalog/googlesql_catalog.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -22,6 +23,7 @@
 #include "backend/catalog/udf_registry.h"
 #include "backend/catalog/view_registry.h"
 #include "backend/catalog/wildcard_table.h"
+#include "backend/catalog/wildcard_table_util.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/builtin_function_options.h"
@@ -48,10 +50,6 @@ using ::googlesql::TypeFactory;
 
 constexpr absl::string_view kInformationSchema = "INFORMATION_SCHEMA";
 
-bool IsWildcardTableId(absl::string_view table_id) {
-  return !table_id.empty() && table_id.back() == '*';
-}
-
 std::optional<InfoSchemaViewKind> ParseInfoSchemaView(
     absl::string_view view_name) {
   if (view_name == "TABLES") return InfoSchemaViewKind::kTables;
@@ -71,14 +69,6 @@ std::optional<InfoSchemaViewKind> ParseInfoSchemaView(
     return InfoSchemaViewKind::kKeyColumnUsage;
   }
   return std::nullopt;
-}
-
-bool TableMatchesWildcard(absl::string_view table_id,
-                          absl::string_view wildcard_table_id) {
-  if (!IsWildcardTableId(wildcard_table_id)) return false;
-  const absl::string_view prefix =
-      wildcard_table_id.substr(0, wildcard_table_id.size() - 1);
-  return absl::StartsWith(table_id, prefix);
 }
 
 // Translate a *scalar-or-struct* `schema::ColumnSchema` into a
@@ -453,9 +443,19 @@ GoogleSqlCatalog::MaterializeWildcardTable(
                                             dataset_id));
   }
 
+  std::sort(matched.begin(),
+            matched.end(),
+            [](const storage::TableId& a, const storage::TableId& b) {
+              return a.table_id < b.table_id;
+            });
+
   absl::StatusOr<schema::TableSchema> union_schema =
-      storage_->GetSchema(matched.front());
+      UnifyWildcardTableSchemas(storage_, matched);
   if (!union_schema.ok()) return union_schema.status();
+
+  absl::StatusOr<std::vector<WildcardColumnMap>> column_maps =
+      BuildWildcardColumnMaps(storage_, matched, *union_schema);
+  if (!column_maps.ok()) return column_maps.status();
 
   std::vector<SimpleTable::NameAndType> columns;
   columns.reserve(union_schema->columns.size());
@@ -466,6 +466,7 @@ GoogleSqlCatalog::MaterializeWildcardTable(
     columns.emplace_back(column.name, *column_type);
   }
 
+  const std::string table_prefix = WildcardTablePrefix(wildcard_table_id);
   storage::TableId wildcard_id{std::string(project_id),
                                std::string(dataset_id),
                                std::string(wildcard_table_id)};
@@ -474,7 +475,8 @@ GoogleSqlCatalog::MaterializeWildcardTable(
   auto wildcard = std::make_unique<WildcardTable>(wildcard_table_id,
                                                   full_name,
                                                   wildcard_id,
-                                                  std::move(matched),
+                                                  table_prefix,
+                                                  std::move(*column_maps),
                                                   std::move(*union_schema),
                                                   columns,
                                                   storage_,

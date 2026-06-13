@@ -1,0 +1,37 @@
+# wildcard_table_suffix: _TABLE_SUFFIX pseudo-column on wildcard scans.
+name: wildcard_table_suffix
+description: |
+  Wildcard scan exposes `_TABLE_SUFFIX` and supports filtering on it.
+project_id: proj-wildcard-suffix
+dataset_id: ds_wildcard_suffix
+setup:
+  - dataset: ds_wildcard_suffix
+  - table:
+      dataset: ds_wildcard_suffix
+      id: events_a
+      schema:
+        - {name: payload, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_wildcard_suffix
+      id: events_b
+      schema:
+        - {name: payload, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_wildcard_suffix
+      table: events_a
+      rows:
+        - {payload: alpha}
+  - rows:
+      dataset: ds_wildcard_suffix
+      table: events_b
+      rows:
+        - {payload: bravo}
+query: |
+  SELECT payload, _TABLE_SUFFIX AS suffix
+    FROM ds_wildcard_suffix.events_*
+   WHERE _TABLE_SUFFIX = 'a'
+   ORDER BY payload
+expected:
+  route: duckdb_native
+  rows:
+    - {payload: alpha, suffix: a}
