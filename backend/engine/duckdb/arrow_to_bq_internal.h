@@ -26,6 +26,7 @@ std::string FormatDate(int32_t days_since_epoch);
 std::string FormatTimeMicros(int64_t micros);
 std::string FormatTimestampMicros(int64_t micros);
 std::string FormatDecimalInt64(int64_t v, uint8_t scale);
+std::string FormatDecimalHugeint(::duckdb_hugeint h, uint8_t scale);
 
 absl::StatusOr<int64_t> HugeintCellToInt64(const ::duckdb_hugeint& h,
                                            const schema::ColumnSchema& column);

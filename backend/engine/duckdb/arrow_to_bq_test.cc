@@ -259,6 +259,86 @@ TEST_F(ArrowToBqTest, RendersDecimalSumAsFloat64) {
   EXPECT_DOUBLE_EQ(rows[0].cells[0].float64_value(), 12.75);
 }
 
+// A NUMERIC column read straight out of a DECIMAL(38, 9) vector is
+// HUGEINT-backed (precision 38 > 18). The int128 formatter must
+// render it exactly as a decimal string rather than surfacing
+// UNIMPLEMENTED or losing precision via a double hop.
+TEST_F(ArrowToBqTest, RendersHugeintDecimalNumericExactly) {
+  schema::TableSchema s;
+  schema::ColumnSchema amount;
+  amount.name = "amount";
+  amount.type = schema::ColumnType::kNumeric;
+  s.columns.push_back(amount);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT CAST('12345678901234567890.123456789' AS DECIMAL(38, 9)) "
+      "AS amount",
+      s);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kString);
+  EXPECT_EQ(rows[0].cells[0].string_value(), "12345678901234567890.123456789");
+}
+
+// SUM over a NUMERIC column widens DuckDB's DECIMAL to a HUGEINT-backed
+// internal type while the analyzer still types the output NUMERIC.
+// This is the exact shape `SkipEmulatorNumericAggregateQuery` guarded.
+TEST_F(ArrowToBqTest, RendersNumericSumAsDecimalString) {
+  schema::TableSchema s;
+  schema::ColumnSchema total;
+  total.name = "total";
+  total.type = schema::ColumnType::kNumeric;
+  s.columns.push_back(total);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT SUM(amount) AS total FROM (VALUES "
+      "(CAST('1.50' AS DECIMAL(38, 9))), "
+      "(CAST('2.25' AS DECIMAL(38, 9))), "
+      "(CAST('3.75' AS DECIMAL(38, 9)))) AS t(amount)",
+      s);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kString);
+  EXPECT_EQ(rows[0].cells[0].string_value(), "7.500000000");
+}
+
+// Negative HUGEINT-backed decimals must keep the sign and pad the
+// fractional part. Pins the (v + 1) negate path in the int128 renderer.
+TEST_F(ArrowToBqTest, RendersNegativeHugeintDecimal) {
+  schema::TableSchema s;
+  schema::ColumnSchema amount;
+  amount.name = "amount";
+  amount.type = schema::ColumnType::kNumeric;
+  s.columns.push_back(amount);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT CAST('-99999999999999999999999999999.999999999' AS "
+      "DECIMAL(38, 9)) AS amount",
+      s);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].string_value(),
+            "-99999999999999999999999999999.999999999");
+}
+
+// BIGNUMERIC columns are materialized as VARCHAR (DuckDB cannot hold
+// the range in a DECIMAL), so a NUMERIC/BIGNUMERIC column backed by a
+// VARCHAR vector reads the decimal text straight through.
+TEST_F(ArrowToBqTest, RendersVarcharBackedBignumericAsString) {
+  schema::TableSchema s;
+  schema::ColumnSchema amount;
+  amount.name = "amount";
+  amount.type = schema::ColumnType::kBignumeric;
+  s.columns.push_back(amount);
+
+  std::vector<storage::Row> rows = RunAndFetch(
+      "SELECT CAST('578960446186580977117854925043439539266."
+      "34992332820282019728792003956564819967' AS VARCHAR) AS amount",
+      s);
+  ASSERT_EQ(rows.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kString);
+  EXPECT_EQ(rows[0].cells[0].string_value(),
+            "578960446186580977117854925043439539266."
+            "34992332820282019728792003956564819967");
+}
+
 // Column-count mismatch surfaces as INVALID_ARGUMENT instead of
 // silently truncating the rendered row. This is the contract the
 // engine relies on when the analyzer and DuckDB disagree on shape.

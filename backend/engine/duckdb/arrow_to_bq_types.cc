@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -89,15 +90,13 @@ std::string FormatTimestampMicros(int64_t micros) {
   return absl::StrCat(date, " ", time);
 }
 
-// Renders DECIMAL stored as int16 / int32 / int64 / hugeint using
-// the column's `width` / `scale`. We compute the textual form
-// manually so the rendering pipeline does not need to round-trip
-// through DuckDB's internal cast machinery.
-std::string FormatDecimalInt64(int64_t v, uint8_t scale) {
-  bool negative = v < 0;
-  uint64_t magnitude =
-      negative ? static_cast<uint64_t>(-(v + 1)) + 1 : static_cast<uint64_t>(v);
-  std::string digits = absl::StrCat(magnitude);
+// Inserts the implied decimal point into a run of unsigned magnitude
+// digits, applying `scale` fractional places and the sign. Shared by
+// the int64 and hugeint decimal renderers so the scale arithmetic
+// lives in one place.
+std::string FormatDecimalFromDigits(std::string digits,
+                                    bool negative,
+                                    uint8_t scale) {
   if (scale == 0) {
     return negative ? absl::StrCat("-", digits) : digits;
   }
@@ -108,6 +107,47 @@ std::string FormatDecimalInt64(int64_t v, uint8_t scale) {
   std::string fractional = digits.substr(digits.size() - scale);
   std::string out = absl::StrCat(integer, ".", fractional);
   return negative ? absl::StrCat("-", out) : out;
+}
+
+// Renders DECIMAL stored as int16 / int32 / int64 using the column's
+// `scale`. We compute the textual form manually so the rendering
+// pipeline does not need to round-trip through DuckDB's internal cast
+// machinery.
+std::string FormatDecimalInt64(int64_t v, uint8_t scale) {
+  bool negative = v < 0;
+  uint64_t magnitude =
+      negative ? static_cast<uint64_t>(-(v + 1)) + 1 : static_cast<uint64_t>(v);
+  return FormatDecimalFromDigits(absl::StrCat(magnitude), negative, scale);
+}
+
+// Renders a 128-bit DuckDB DECIMAL (HUGEINT internal storage) exactly.
+// SUM/AVG over a NUMERIC column and any DECIMAL whose precision
+// exceeds 18 land on HUGEINT-backed vectors; `duckdb_decimal_to_double`
+// would lose precision, so we materialize the magnitude digit-by-digit
+// from the raw int128 and apply the column scale. The full
+// DECIMAL(38, s) range fits int128, so this is lossless for every
+// NUMERIC/BIGNUMERIC shape DuckDB can store.
+std::string FormatDecimalHugeint(::duckdb_hugeint h, uint8_t scale) {
+  const __int128 value =
+      (static_cast<__int128>(h.upper) << 64) | static_cast<__int128>(h.lower);
+  const bool negative = value < 0;
+  // Negate via the (v + 1) trick so INT128_MIN does not overflow when
+  // we flip the sign (mirrors FormatDecimalInt64).
+  unsigned __int128 magnitude =
+      negative ? static_cast<unsigned __int128>(-(value + 1)) + 1
+               : static_cast<unsigned __int128>(value);
+  std::string digits;
+  if (magnitude == 0) {
+    digits = "0";
+  } else {
+    while (magnitude > 0) {
+      digits.push_back(
+          static_cast<char>('0' + static_cast<int>(magnitude % 10)));
+      magnitude /= 10;
+    }
+    std::reverse(digits.begin(), digits.end());
+  }
+  return FormatDecimalFromDigits(std::move(digits), negative, scale);
 }
 
 // Pack a signed integer that fits in int64 into DuckDB's HUGEINT wire

@@ -164,6 +164,14 @@ absl::StatusOr<storage::Value> ReadDecimalCell(
     ::duckdb_logical_type logical,
     ::duckdb_type type_id,
     const schema::ColumnSchema& column) {
+  // BIGNUMERIC columns are materialized as VARCHAR (DuckDB's max
+  // DECIMAL precision is 38, which cannot hold the BIGNUMERIC range),
+  // and the storage layer round-trips them losslessly as text. When a
+  // NUMERIC/BIGNUMERIC column is backed by a VARCHAR vector we read the
+  // decimal string directly.
+  if (type_id == ::DUCKDB_TYPE_VARCHAR) {
+    return storage::Value::String(std::string(ReadVarchar(vector, row)));
+  }
   if (type_id != ::DUCKDB_TYPE_DECIMAL) {
     return absl::UnimplementedError(
         absl::StrCat("arrow_to_bq: NUMERIC column '",
@@ -173,37 +181,40 @@ absl::StatusOr<storage::Value> ReadDecimalCell(
   }
   const auto scale = ::duckdb_decimal_scale(logical);
   const ::duckdb_type internal = ::duckdb_decimal_internal_type(logical);
-  int64_t raw = 0;
   switch (internal) {
     case ::DUCKDB_TYPE_SMALLINT: {
       const auto* data =
           static_cast<const int16_t*>(::duckdb_vector_get_data(vector));
-      raw = static_cast<int64_t>(data[row]);
-      break;
+      return storage::Value::String(
+          FormatDecimalInt64(static_cast<int64_t>(data[row]), scale));
     }
     case ::DUCKDB_TYPE_INTEGER: {
       const auto* data =
           static_cast<const int32_t*>(::duckdb_vector_get_data(vector));
-      raw = static_cast<int64_t>(data[row]);
-      break;
+      return storage::Value::String(
+          FormatDecimalInt64(static_cast<int64_t>(data[row]), scale));
     }
     case ::DUCKDB_TYPE_BIGINT: {
       const auto* data =
           static_cast<const int64_t*>(::duckdb_vector_get_data(vector));
-      raw = data[row];
-      break;
+      return storage::Value::String(FormatDecimalInt64(data[row], scale));
+    }
+    case ::DUCKDB_TYPE_HUGEINT: {
+      // SUM/AVG over NUMERIC and any DECIMAL with precision > 18 land
+      // here. Format the int128 magnitude exactly (no double hop) so
+      // the result round-trips as a decimal string with the correct
+      // scale rather than surfacing UNIMPLEMENTED.
+      const auto* data = static_cast<const ::duckdb_hugeint*>(
+          ::duckdb_vector_get_data(vector));
+      return storage::Value::String(FormatDecimalHugeint(data[row], scale));
     }
     default:
-      // HUGEINT-backed decimals need 128-bit arithmetic that we
-      // don't yet pull in. Fall back to the engine-agnostic
-      // string form via the textual cast path the engine takes
-      // when a column type is not yet specialized here.
       return absl::UnimplementedError(
           absl::StrCat("arrow_to_bq: DECIMAL column '",
                        column.name,
-                       "' with HUGEINT internal storage is not yet supported"));
+                       "' with unsupported internal storage type_id=",
+                       internal));
   }
-  return storage::Value::String(FormatDecimalInt64(raw, scale));
 }
 
 // Read an ARRAY-typed cell from `vector` at `row`. Caller has
