@@ -94,8 +94,15 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          # Checkout uses head_sha (detached HEAD); stage charts, then switch to the branch tip.
+          tmp="$(mktemp -d)"
+          cp bench/charts/out/*.svg "$tmp/"
+          git fetch origin "$branch"
+          git checkout -B "$branch" "origin/${branch}"
+          cp "$tmp"/*.svg bench/charts/out/
           git add bench/charts/out/*.svg
           if ! git diff --staged --quiet; then
             git commit -m "chore(bench): refresh chart snapshots"
-            git push
+            git push origin "$branch"
           fi
