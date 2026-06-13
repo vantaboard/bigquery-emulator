@@ -34,8 +34,8 @@
 #      `peaceiris/actions-gh-pages@v4`. README shields.io badges
 #      fetch those JSONs from raw.githubusercontent.com (no Pages
 #      required for badge images).
-#   2. Repo Settings -> Pages: pick `gh-pages` / `/ (root)` for
-#      browsable HTML reports and badge click-through links only.
+#   2. Repo Settings -> Pages: source = GitHub Actions (workflow
+#      `.github/workflows/pages.yml` deploys the `gh-pages` branch).
 #   3. The gate treats a missing baseline.json as bootstrap (no
 #      regression check, exit 0) so the first few PRs after rollout
 #      do not fail just because gh-pages has not been populated yet.

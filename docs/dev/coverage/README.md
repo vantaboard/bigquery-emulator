@@ -82,10 +82,10 @@ baseline becomes accurate.
 
 Repo Settings → Pages → "Build and deployment":
 
-- **Source:** Deploy from a branch
-- **Branch:** `gh-pages` / `/ (root)`
+- **Source:** GitHub Actions
+- **Workflow:** `.github/workflows/pages.yml` (deploys on push to `gh-pages`)
 
-After saving, GitHub serves the workflow's published `html/` tree
+After the first `gh-pages` push, GitHub serves the published `html/` tree
 at `https://vantaboard.github.io/bigquery-emulator/` for browsable
 Go/C++ coverage HTML and bench chart SVGs under `/bench/`.
 
