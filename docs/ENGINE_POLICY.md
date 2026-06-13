@@ -316,6 +316,29 @@ Extended-cast / type-modifier casts (`STRING(n)`, `NUMERIC(p,s)`, …)
 still surface `UNIMPLEMENTED` on the semantic path until a follow-up
 plan lands them.
 
+## Exact-decimal (`NUMERIC` / `BIGNUMERIC`)
+
+BigQuery's `NUMERIC` (`DECIMAL(38,9)`) and `BIGNUMERIC`
+(`DECIMAL(38,38)`) are exact decimals. DuckDB can store and compare
+`NUMERIC` natively, but it widens some operations to `DOUBLE` and
+cannot store `BIGNUMERIC` as a `DECIMAL` at all (its max precision is
+38, which cannot represent `DECIMAL(38,38) >= 1.0`), so `BIGNUMERIC`
+is persisted as `VARCHAR`. Following the no-silent-approximation rule,
+shapes DuckDB would widen or reject reroute to the semantic executor's
+decimal path (`googlesql::NumericValue` / `BigNumericValue`) rather
+than approximating in `DOUBLE`.
+
+| Family | Representative SQL | Route | Conformance |
+|---|---|---|---|
+| `SUM`/`MIN`/`MAX`/`COUNT` over `NUMERIC` | `SUM(amount)` | `duckdb_native` | `aggregate/aggregate_numeric_sum.yaml` |
+| `AVG` over `NUMERIC`/`BIGNUMERIC` | `AVG(amount)` | `semantic_executor` | `aggregate/aggregate_numeric_avg.yaml` |
+| `NUMERIC`/`BIGNUMERIC` division | `a / b` | `semantic_executor` | `scalar/numeric_division.yaml` |
+| `+`/`-`/`*` over `BIGNUMERIC` | `a + b` | `semantic_executor` | `scalar/bignumeric_arithmetic.yaml` |
+
+Results encode as exact decimal strings on the wire (no float
+artifacts); `arrow_to_bq` renders `HUGEINT`-backed and `VARCHAR`-backed
+decimals exactly (`backend/engine/duckdb/arrow_to_bq_*.cc`).
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](../backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).

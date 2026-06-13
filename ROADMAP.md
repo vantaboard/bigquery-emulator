@@ -402,7 +402,16 @@ handler.
   interval datetime arithmetic, `FORMAT_*`, and `CONTAINS_SUBSTR`
   route through the semantic executor. `SQRT(NUMERIC)` routes to
   `semantic_executor` via signature-aware dispatch (pinned by
-  `conformance/fixtures/scalar/sqrt_numeric.yaml`). A Bazel `genrule` materializes the table into
+  `conformance/fixtures/scalar/sqrt_numeric.yaml`). Exact-decimal
+  shapes that DuckDB widens to `DOUBLE` (or cannot store) also reroute
+  to `semantic_executor`: `AVG` over `NUMERIC`/`BIGNUMERIC`
+  (`conformance/fixtures/aggregate/aggregate_numeric_avg.yaml`),
+  `NUMERIC`/`BIGNUMERIC` division, and `+`/`-`/`*` over `BIGNUMERIC`
+  (which DuckDB persists as `VARCHAR`) — pinned by
+  `conformance/fixtures/scalar/numeric_division.yaml` and
+  `bignumeric_arithmetic.yaml`. `SUM`/`MIN`/`MAX`/`COUNT` over
+  `NUMERIC` stay `duckdb_native` and encode as exact decimal strings
+  (`aggregate_numeric_sum.yaml`). A Bazel `genrule` materializes the table into
   `functions_table.inc`, which `functions.cc` includes inside an
   `absl::flat_hash_map`. Each entry records one of the seven
   canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
