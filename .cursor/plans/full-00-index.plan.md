@@ -126,7 +126,7 @@ template" (plan path `.cursor/plans/full-<NN>-*.plan.md`).
 | 08 | pending | — | | |
 | 09 | pending | — | | |
 | 10 | pending | — | | |
-| 11 | pending | — | | |
+| 11 | partial (authoring done) | corpus 55→85 pinned (gate 85/0/56) | aacdf38 | arithmetic/math/cast_format/regexp .test files vendored + CI documented; ROADMAP count fixed. skip-matrix-audit + fixture-route-backfill deferred until full-01..10 land; string/date families blocked on scalar-only runner parser |
 
 ## Bookkeeping per landed plan
 
