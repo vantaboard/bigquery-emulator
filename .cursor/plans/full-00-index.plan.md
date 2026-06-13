@@ -116,8 +116,8 @@ template" (plan path `.cursor/plans/full-<NN>-*.plan.md`).
 
 | Plan | State | Conformance delta | Commits | Notes |
 |------|-------|-------------------|---------|-------|
-| 01 | pending | — | | |
-| 02 | pending | — | | |
+| 01 | done (JOBS* deferred to 10) | 161→168 pass (+7 fixtures) | c2757d5 | VIEWS/ROUTINES/TABLE_OPTIONS/COLUMN_FIELD_PATHS/PARTITIONS/TABLE_STORAGE/KEY_COLUMN_USAGE; table-driven view descriptor; region-* selector. JOBS/JOBS_BY_PROJECT left NOT_FOUND (job state lives in gateway) — companion to plan 10 |
+| 02 | done | 168→170 pass (+2 fixtures) | 601de83, 7078290, a613650 | Exact-decimal HUGEINT/BIGNUMERIC rendering in arrow_to_bq; materialized query-table type aligned with BIGNUMERIC storage; semantic-executor exact AVG/MIN/MAX over NUMERIC/BIGNUMERIC. Verified 170/170 conformance + lint:run green. Landed by the concurrent runner; Go skip-row removal still pending |
 | 03 | pending | — | | |
 | 04 | pending | — | | |
 | 05 | pending | — | | |
