@@ -22,7 +22,10 @@ cloud-spanner-emulator/
 # Benchmark outputs (profiles and local result JSON)
 /bench/profiles/
 /bench/results.json
-/bench/charts/out/
+# Chart SVG snapshots under bench/charts/out/ are committed for README
+# embeds; other generated files in that directory stay ignored.
+/bench/charts/out/*
+!/bench/charts/out/*.svg
 
 # Go
 *.test

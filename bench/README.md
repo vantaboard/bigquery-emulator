@@ -97,6 +97,8 @@ task bench:profile CASE=agg_group_by_100k MODE=heap  # heaptrack output
 ## Charts & CI
 
 - `task bench:charts` — matplotlib/seaborn SVGs in `bench/charts/out/`
+- Committed `bench/charts/out/*.svg` snapshots are embedded in the root
+  [`README.md`](../README.md); CI on `main` refreshes them after each run
 - `.github/workflows/bench.yml` runs after `build-engine`, pulls goccy Docker, uploads artifacts, publishes charts to `gh-pages` on `main`
 
 ## Environment
