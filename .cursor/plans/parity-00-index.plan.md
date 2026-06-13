@@ -92,7 +92,7 @@ Plans 01–05 are independent of each other and can run in parallel
 | 09 | done | 142→145 total, 136→139 pass (+3 ddl fixtures; 6 scripting pre-existing) | 674bffb, 61ad17e | ALTER TABLE→control_op, MV full refresh, EXPORT/LOAD local file://, tracker+ROADMAP flips; gateway kDdl classify for EXPORT/LOAD; ResolvedCatalogColumnRef still (planned) |
 | 10 | done | 145 total / 139 pass (no regression) | 097d334 | multi-stream + SplitReadStream + analyzer row_restriction + PENDING/BatchCommit; Go PendingStream unskipped |
 | 11 | done | 145→148 total, 139→142 pass (+3 fixtures; 6 scripting pre-existing) | 4501478 | RANGE numeric frames, REPEATABLE sample, WITH DEPTH transpiler, LIKE ANY list; weight/stratify + DATE RANGE + LIKE ANY subquery parse blocked |
-| 12 | partial | 148→152 total, 142→146 pass (+4 fixtures; 6 scripting pre-existing) | dd0bc91 | inline lambda + NET/HLL landed; pipe subpipeline / GROUP ROWS / MATCH_RECOGNIZE / FLATTEN blocked |
+| 12 | done (MATCH_RECOGNIZE deferred) | 148→152 total, 142→146 pass (+4 fixtures; 6 scripting pre-existing) | dd0bc91, 739e846 | inline lambda + NET/HLL + approximate aggregates landed (dd0bc91); pipe subpipelines (IF/FORK/TEE/INSERT), FLATTEN, GROUP ROWS, pipe DML/DDL landed (739e846). MATCH_RECOGNIZE remains `status=planned` (carried into the `full-*` plan set). |
 | 13 | done | 55 pinned (logical_functions.test) | 72a586a, c5e02ba | Go runner + CI wired; starter corpus subset gated |
 
 ## Bookkeeping per landed plan
