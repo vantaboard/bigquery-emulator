@@ -1,0 +1,31 @@
+# INFORMATION_SCHEMA.COLUMN_FIELD_PATHS: nested-field reflection.
+#
+# COLUMN_FIELD_PATHS emits one row per top-level column and one row per
+# field nested inside a STRUCT/RECORD column, with a dotted field_path
+# and the GoogleSQL data_type. Sourced from storage::GetSchema by
+# recursing the column tree.
+name: info_schema_column_field_paths
+description: |
+  CREATE TABLE with a STRUCT column -> SELECT FROM
+  <ds>.INFORMATION_SCHEMA.COLUMN_FIELD_PATHS. Pins the dotted
+  field_path expansion of a nested RECORD column.
+project_id: proj-info-schema-cfp
+dataset_id: ds_cfp
+setup:
+  - dataset: ds_cfp
+  - sql: |-
+      CREATE TABLE ds_cfp.events (
+        id INT64,
+        payload STRUCT<kind STRING, score FLOAT64>
+      )
+query: |
+  SELECT column_name, field_path, data_type
+  FROM ds_cfp.INFORMATION_SCHEMA.COLUMN_FIELD_PATHS
+  ORDER BY field_path
+expected:
+  route: duckdb_native
+  rows:
+    - {column_name: "id", field_path: "id", data_type: "INT64"}
+    - {column_name: "payload", field_path: "payload", data_type: "STRUCT<kind STRING, score FLOAT64>"}
+    - {column_name: "payload", field_path: "payload.kind", data_type: "STRING"}
+    - {column_name: "payload", field_path: "payload.score", data_type: "FLOAT64"}

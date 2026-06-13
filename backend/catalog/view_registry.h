@@ -2,6 +2,8 @@
 #define BIGQUERY_EMULATOR_BACKEND_CATALOG_VIEW_REGISTRY_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -13,6 +15,23 @@
 namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
+
+// One registered view's INFORMATION_SCHEMA-facing metadata: the
+// dataset it lives in, its name, and the SQL text it was defined with
+// (`ResolvedCreateViewStmt::sql()`). `use_standard_sql` is always true
+// because the emulator only registers GoogleSQL views.
+struct RegisteredViewInfo {
+  std::string dataset_id;
+  std::string view_name;
+  std::string view_definition;
+  bool use_standard_sql = true;
+};
+
+// Returns the registered views in `project_id`, optionally filtered to
+// `dataset_id` (empty / region-* selectors return every dataset's
+// views). Ordered by (dataset_id, view_name) for deterministic output.
+std::vector<RegisteredViewInfo> ListProjectViews(absl::string_view project_id,
+                                                 absl::string_view dataset_id);
 
 absl::Status RegisterProjectView(
     absl::string_view project_id,

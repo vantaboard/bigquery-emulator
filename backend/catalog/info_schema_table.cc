@@ -1,5 +1,6 @@
 #include "backend/catalog/info_schema_table.h"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -10,6 +11,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/catalog/info_schema_internal.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -17,6 +19,8 @@
 #include "googlesql/public/evaluator_table_iterator.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 
 namespace bigquery_emulator {
@@ -25,11 +29,16 @@ namespace catalog {
 
 namespace {
 
-using ::googlesql::SimpleColumn;
+using ::googlesql::ArrayType;
 using ::googlesql::SimpleTable;
 using ::googlesql::Type;
 using ::googlesql::TypeFactory;
 using ::googlesql::Value;
+
+using schema::ColumnMode;
+using schema::ColumnSchema;
+using schema::ColumnType;
+using schema::TableSchema;
 
 std::string QuoteIdent(absl::string_view ident) {
   std::string escaped;
@@ -58,40 +67,60 @@ std::string EscapeStringLiteral(absl::string_view s) {
 }
 
 std::string RenderCellLiteral(const storage::Value& cell,
-                              const schema::ColumnSchema& column) {
+                              const ColumnSchema& column) {
   if (cell.is_null()) return "NULL";
   switch (column.type) {
-    case schema::ColumnType::kBool:
+    case ColumnType::kBool:
       return cell.bool_value() ? "TRUE" : "FALSE";
-    case schema::ColumnType::kInt64:
+    case ColumnType::kInt64:
       return std::to_string(cell.int64_value());
-    case schema::ColumnType::kFloat64:
+    case ColumnType::kFloat64:
       return absl::StrCat(cell.float64_value());
-    case schema::ColumnType::kString:
-    case schema::ColumnType::kBytes:
+    case ColumnType::kString:
+    case ColumnType::kBytes:
       return absl::StrCat("'", EscapeStringLiteral(cell.string_value()), "'");
     default:
+      // TIMESTAMP / DATE / ARRAY cells in INFORMATION_SCHEMA views are
+      // always materialized as NULL (the emulator does not track the
+      // underlying metadata), so the null branch above covers them.
       return "NULL";
   }
 }
 
-std::string DuckDbTypeForColumn(const schema::ColumnSchema& column) {
+// DuckDB column type for the materialized in-memory table. Mirrors the
+// GoogleSQL types produced by `ViewColumnType` so the transpiled query
+// sees consistent column types.
+std::string DuckDbTypeForColumn(const ColumnSchema& column) {
+  absl::string_view scalar;
   switch (column.type) {
-    case schema::ColumnType::kBool:
-      return "BOOLEAN";
-    case schema::ColumnType::kInt64:
-      return "BIGINT";
-    case schema::ColumnType::kFloat64:
-      return "DOUBLE";
-    case schema::ColumnType::kString:
-    case schema::ColumnType::kBytes:
-      return "VARCHAR";
+    case ColumnType::kBool:
+      scalar = "BOOLEAN";
+      break;
+    case ColumnType::kInt64:
+      scalar = "BIGINT";
+      break;
+    case ColumnType::kFloat64:
+      scalar = "DOUBLE";
+      break;
+    case ColumnType::kTimestamp:
+      scalar = "TIMESTAMP";
+      break;
+    case ColumnType::kDate:
+      scalar = "DATE";
+      break;
+    case ColumnType::kString:
+    case ColumnType::kBytes:
     default:
-      return "VARCHAR";
+      scalar = "VARCHAR";
+      break;
   }
+  if (column.mode == ColumnMode::kRepeated) {
+    return absl::StrCat(scalar, "[]");
+  }
+  return std::string(scalar);
 }
 
-std::string RenderColumnList(const schema::TableSchema& schema) {
+std::string RenderColumnList(const TableSchema& schema) {
   std::string out = "(";
   for (size_t i = 0; i < schema.columns.size(); ++i) {
     if (i > 0) out.append(", ");
@@ -119,7 +148,7 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
 
 absl::Status InsertRows(::duckdb_connection conn,
                         absl::string_view quoted_table_name,
-                        const schema::TableSchema& schema,
+                        const TableSchema& schema,
                         absl::Span<const storage::Row> rows) {
   if (rows.empty()) return absl::OkStatus();
   std::string insert_sql;
@@ -139,115 +168,48 @@ absl::Status InsertRows(::duckdb_connection conn,
   return RunSqlNoResult(conn, insert_sql);
 }
 
-std::string InfoSchemaDataType(const schema::ColumnSchema& column) {
-  if (column.mode == schema::ColumnMode::kRepeated ||
-      column.type == schema::ColumnType::kArray) {
-    if (column.fields.empty()) return "ARRAY<INT64>";
-    return absl::StrCat("ARRAY<", InfoSchemaDataType(column.fields[0]), ">");
-  }
-  if (column.type == schema::ColumnType::kStruct) {
-    std::string out = "STRUCT<";
-    for (size_t i = 0; i < column.fields.size(); ++i) {
-      if (i > 0) out.append(", ");
-      absl::StrAppend(&out,
-                      column.fields[i].name,
-                      " ",
-                      InfoSchemaDataType(column.fields[i]));
-    }
-    out.push_back('>');
-    return out;
-  }
+absl::StatusOr<const Type*> ViewColumnType(const ColumnSchema& column,
+                                           TypeFactory* factory) {
+  const Type* scalar = nullptr;
   switch (column.type) {
-    case schema::ColumnType::kInt64:
-      return "INT64";
-    case schema::ColumnType::kFloat64:
-      return "DOUBLE";
-    case schema::ColumnType::kBool:
-      return "BOOL";
-    case schema::ColumnType::kString:
-      return "STRING";
-    case schema::ColumnType::kBytes:
-      return "BYTES";
-    case schema::ColumnType::kDate:
-      return "DATE";
-    case schema::ColumnType::kTime:
-      return "TIME";
-    case schema::ColumnType::kDatetime:
-      return "DATETIME";
-    case schema::ColumnType::kTimestamp:
-      return "TIMESTAMP";
-    case schema::ColumnType::kNumeric:
-      return "NUMERIC";
-    case schema::ColumnType::kBignumeric:
-      return "BIGNUMERIC";
-    case schema::ColumnType::kJson:
-      return "JSON";
+    case ColumnType::kBool:
+      scalar = factory->get_bool();
+      break;
+    case ColumnType::kInt64:
+      scalar = factory->get_int64();
+      break;
+    case ColumnType::kFloat64:
+      scalar = factory->get_double();
+      break;
+    case ColumnType::kTimestamp:
+      scalar = factory->get_timestamp();
+      break;
+    case ColumnType::kDate:
+      scalar = factory->get_date();
+      break;
+    case ColumnType::kString:
+    case ColumnType::kBytes:
     default:
-      return column.raw_type.empty() ? "STRING" : column.raw_type;
+      scalar = factory->get_string();
+      break;
   }
-}
-
-schema::TableSchema TablesViewSchema() {
-  return schema::TableSchema{
-      .columns =
-          {
-              {"table_catalog", schema::ColumnType::kString},
-              {"table_schema", schema::ColumnType::kString},
-              {"table_name", schema::ColumnType::kString},
-              {"table_type", schema::ColumnType::kString},
-          },
-  };
-}
-
-schema::TableSchema ColumnsViewSchema() {
-  return schema::TableSchema{
-      .columns =
-          {
-              {"table_catalog", schema::ColumnType::kString},
-              {"table_schema", schema::ColumnType::kString},
-              {"table_name", schema::ColumnType::kString},
-              {"column_name", schema::ColumnType::kString},
-              {"ordinal_position", schema::ColumnType::kInt64},
-              {"is_nullable", schema::ColumnType::kString},
-              {"data_type", schema::ColumnType::kString},
-          },
-  };
-}
-
-schema::TableSchema SchemataViewSchema() {
-  return schema::TableSchema{
-      .columns =
-          {
-              {"catalog_name", schema::ColumnType::kString},
-              {"schema_name", schema::ColumnType::kString},
-          },
-  };
+  if (column.mode == ColumnMode::kRepeated) {
+    const ArrayType* array_type = nullptr;
+    absl::Status s = factory->MakeArrayType(scalar, &array_type);
+    if (!s.ok()) return s;
+    return array_type;
+  }
+  return scalar;
 }
 
 std::vector<SimpleTable::NameAndType> ColumnsForView(InfoSchemaViewKind kind,
                                                      TypeFactory* factory) {
+  const TableSchema schema = info_schema_internal::RowSchemaForView(kind);
   std::vector<SimpleTable::NameAndType> out;
-  auto str = [&]() { return factory->get_string(); };
-  auto i64 = [&]() { return factory->get_int64(); };
-  switch (kind) {
-    case InfoSchemaViewKind::kTables:
-      out = {{"table_catalog", str()},
-             {"table_schema", str()},
-             {"table_name", str()},
-             {"table_type", str()}};
-      break;
-    case InfoSchemaViewKind::kColumns:
-      out = {{"table_catalog", str()},
-             {"table_schema", str()},
-             {"table_name", str()},
-             {"column_name", str()},
-             {"ordinal_position", i64()},
-             {"is_nullable", str()},
-             {"data_type", str()}};
-      break;
-    case InfoSchemaViewKind::kSchemata:
-      out = {{"catalog_name", str()}, {"schema_name", str()}};
-      break;
+  out.reserve(schema.columns.size());
+  for (const ColumnSchema& column : schema.columns) {
+    absl::StatusOr<const Type*> type = ViewColumnType(column, factory);
+    out.push_back({column.name, type.ok() ? *type : factory->get_string()});
   }
   return out;
 }
@@ -255,7 +217,7 @@ std::vector<SimpleTable::NameAndType> ColumnsForView(InfoSchemaViewKind kind,
 class InfoSchemaEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
  public:
   InfoSchemaEvaluatorIterator(std::vector<storage::Row> rows,
-                              schema::TableSchema schema,
+                              TableSchema schema,
                               std::vector<int> column_idxs,
                               std::vector<std::string> column_names,
                               std::vector<const Type*> column_types)
@@ -314,7 +276,7 @@ class InfoSchemaEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
 
  private:
   std::vector<storage::Row> rows_;
-  schema::TableSchema schema_;
+  TableSchema schema_;
   std::vector<int> column_idxs_;
   std::vector<std::string> column_names_;
   std::vector<const Type*> column_types_;
@@ -339,98 +301,8 @@ InfoSchemaTable::InfoSchemaTable(absl::string_view view_name,
       dataset_id_(dataset_id),
       storage_(storage),
       type_factory_(type_factory),
-      row_schema_(kind == InfoSchemaViewKind::kTables ? TablesViewSchema()
-                  : kind == InfoSchemaViewKind::kColumns
-                      ? ColumnsViewSchema()
-                      : SchemataViewSchema()) {
+      row_schema_(info_schema_internal::RowSchemaForView(kind)) {
   (void)set_full_name(std::string(full_name));
-}
-
-absl::StatusOr<std::vector<storage::Row>> InfoSchemaTable::GenerateRows()
-    const {
-  std::vector<storage::Row> rows;
-  if (storage_ == nullptr) {
-    return absl::FailedPreconditionError(
-        "InfoSchemaTable: storage backend is not configured");
-  }
-
-  auto append_dataset_tables =
-      [&](absl::string_view dataset_id) -> absl::Status {
-    storage::DatasetId ds_id{project_id_, std::string(dataset_id)};
-    absl::StatusOr<std::vector<storage::TableId>> tables =
-        storage_->ListTables(ds_id);
-    if (!tables.ok()) return tables.status();
-    for (const storage::TableId& table : *tables) {
-      if (kind_ == InfoSchemaViewKind::kTables) {
-        rows.push_back(storage::Row{
-            .cells =
-                {
-                    storage::Value::String(project_id_),
-                    storage::Value::String(table.dataset_id),
-                    storage::Value::String(table.table_id),
-                    storage::Value::String("BASE TABLE"),
-                },
-        });
-        continue;
-      }
-      if (kind_ != InfoSchemaViewKind::kColumns) continue;
-      absl::StatusOr<schema::TableSchema> schema = storage_->GetSchema(table);
-      if (!schema.ok()) return schema.status();
-      for (size_t i = 0; i < schema->columns.size(); ++i) {
-        const schema::ColumnSchema& column = schema->columns[i];
-        const std::string nullable =
-            column.mode == schema::ColumnMode::kRequired ? "NO" : "YES";
-        rows.push_back(storage::Row{
-            .cells =
-                {
-                    storage::Value::String(project_id_),
-                    storage::Value::String(table.dataset_id),
-                    storage::Value::String(table.table_id),
-                    storage::Value::String(column.name),
-                    storage::Value::Int64(static_cast<int64_t>(i + 1)),
-                    storage::Value::String(nullable),
-                    storage::Value::String(InfoSchemaDataType(column)),
-                },
-        });
-      }
-    }
-    return absl::OkStatus();
-  };
-
-  switch (kind_) {
-    case InfoSchemaViewKind::kSchemata: {
-      absl::StatusOr<std::vector<storage::DatasetId>> datasets =
-          storage_->ListDatasets(project_id_);
-      if (!datasets.ok()) return datasets.status();
-      for (const storage::DatasetId& ds : *datasets) {
-        rows.push_back(storage::Row{
-            .cells =
-                {
-                    storage::Value::String(project_id_),
-                    storage::Value::String(ds.dataset_id),
-                },
-        });
-      }
-      return rows;
-    }
-    case InfoSchemaViewKind::kTables:
-    case InfoSchemaViewKind::kColumns: {
-      if (!dataset_id_.empty()) {
-        absl::Status s = append_dataset_tables(dataset_id_);
-        if (!s.ok()) return s;
-        return rows;
-      }
-      absl::StatusOr<std::vector<storage::DatasetId>> datasets =
-          storage_->ListDatasets(project_id_);
-      if (!datasets.ok()) return datasets.status();
-      for (const storage::DatasetId& ds : *datasets) {
-        absl::Status s = append_dataset_tables(ds.dataset_id);
-        if (!s.ok()) return s;
-      }
-      return rows;
-    }
-  }
-  return rows;
 }
 
 absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>

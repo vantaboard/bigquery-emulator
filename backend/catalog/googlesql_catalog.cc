@@ -57,6 +57,19 @@ std::optional<InfoSchemaViewKind> ParseInfoSchemaView(
   if (view_name == "TABLES") return InfoSchemaViewKind::kTables;
   if (view_name == "COLUMNS") return InfoSchemaViewKind::kColumns;
   if (view_name == "SCHEMATA") return InfoSchemaViewKind::kSchemata;
+  if (view_name == "VIEWS") return InfoSchemaViewKind::kViews;
+  if (view_name == "ROUTINES") return InfoSchemaViewKind::kRoutines;
+  if (view_name == "TABLE_OPTIONS") return InfoSchemaViewKind::kTableOptions;
+  if (view_name == "COLUMN_FIELD_PATHS") {
+    return InfoSchemaViewKind::kColumnFieldPaths;
+  }
+  if (view_name == "PARTITIONS") return InfoSchemaViewKind::kPartitions;
+  if (view_name == "TABLE_STORAGE" || view_name == "TABLE_STORAGE_BY_PROJECT") {
+    return InfoSchemaViewKind::kTableStorage;
+  }
+  if (view_name == "KEY_COLUMN_USAGE") {
+    return InfoSchemaViewKind::kKeyColumnUsage;
+  }
   return std::nullopt;
 }
 

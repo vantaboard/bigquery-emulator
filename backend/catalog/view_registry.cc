@@ -1,5 +1,6 @@
 #include "backend/catalog/view_registry.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -24,6 +25,9 @@ namespace {
 
 struct RegisteredViewEntry {
   std::string dataset_id;
+  // SQL text the view was defined with (ResolvedCreateViewStmt::sql()),
+  // surfaced verbatim through INFORMATION_SCHEMA.VIEWS.view_definition.
+  std::string view_definition;
   std::unique_ptr<const ::googlesql::Table> view;
 };
 
@@ -81,7 +85,8 @@ absl::Status RegisterProjectView(
   if (analyzer_output != nullptr) {
     bucket.analyzer_outputs.push_back(std::move(analyzer_output));
   }
-  bucket.views.push_back(RegisteredViewEntry{dataset_id, std::move(*view_or)});
+  bucket.views.push_back(RegisteredViewEntry{
+      dataset_id, std::string(create_view_stmt.sql()), std::move(*view_or)});
   return absl::OkStatus();
 }
 
@@ -113,6 +118,38 @@ const ::googlesql::Table* FindProjectView(absl::string_view project_id,
     return entry.view.get();
   }
   return nullptr;
+}
+
+std::vector<RegisteredViewInfo> ListProjectViews(absl::string_view project_id,
+                                                 absl::string_view dataset_id) {
+  std::vector<RegisteredViewInfo> out;
+  if (project_id.empty()) return out;
+  // A region-* selector (e.g. `region-us`) is project-scoped: it
+  // returns every dataset's views, same as an unqualified call.
+  const bool all_datasets =
+      dataset_id.empty() || absl::StartsWith(dataset_id, "region-");
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) return out;
+  for (const RegisteredViewEntry& entry : it->second.views) {
+    if (entry.view == nullptr) continue;
+    if (!all_datasets &&
+        !absl::EqualsIgnoreCase(entry.dataset_id, dataset_id)) {
+      continue;
+    }
+    out.push_back(RegisteredViewInfo{entry.dataset_id,
+                                     std::string(entry.view->Name()),
+                                     entry.view_definition,
+                                     /*use_standard_sql=*/true});
+  }
+  std::sort(out.begin(),
+            out.end(),
+            [](const RegisteredViewInfo& a, const RegisteredViewInfo& b) {
+              if (a.dataset_id != b.dataset_id)
+                return a.dataset_id < b.dataset_id;
+              return a.view_name < b.view_name;
+            });
+  return out;
 }
 
 absl::Status DropProjectView(absl::string_view project_id,

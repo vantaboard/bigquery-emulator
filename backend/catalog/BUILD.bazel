@@ -53,10 +53,18 @@ cc_library(
 
 cc_library(
     name = "info_schema_table",
-    srcs = ["info_schema_table.cc"],
-    hdrs = ["info_schema_table.h"],
+    srcs = [
+        "info_schema_rows.cc",
+        "info_schema_schema.cc",
+        "info_schema_table.cc",
+    ],
+    hdrs = [
+        "info_schema_internal.h",
+        "info_schema_table.h",
+    ],
     deps = [
         ":storage_table",
+        ":view_registry",
         ":virtual_table",
         "//backend/schema",
         "//backend/storage",

@@ -1,0 +1,23 @@
+# INFORMATION_SCHEMA.KEY_COLUMN_USAGE: empty without key constraints.
+#
+# The emulator does not model primary/foreign key constraints, so
+# KEY_COLUMN_USAGE emits no rows. This matches BigQuery for a table
+# with no PK/FK constraints. The view resolves with the correct column
+# schema; the result set is empty.
+name: info_schema_key_column_usage_empty
+description: |
+  CREATE TABLE -> SELECT FROM
+  <ds>.INFORMATION_SCHEMA.KEY_COLUMN_USAGE. Pins that the view resolves
+  and returns no rows for a table without key constraints.
+project_id: proj-info-schema-key-column-usage
+dataset_id: ds_kcu
+setup:
+  - dataset: ds_kcu
+  - sql: |-
+      CREATE TABLE ds_kcu.t (id INT64, name STRING)
+query: |
+  SELECT constraint_name, table_name, column_name, ordinal_position
+  FROM ds_kcu.INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+expected:
+  route: duckdb_native
+  rows: []

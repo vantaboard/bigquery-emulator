@@ -1,0 +1,24 @@
+# INFORMATION_SCHEMA.TABLE_OPTIONS: empty when no options are set.
+#
+# The emulator does not track table options (description / labels /
+# partitioning / clustering metadata live above the engine boundary),
+# so TABLE_OPTIONS emits no rows for a plain table. This matches
+# BigQuery, which only emits one row per *set* option. The view
+# resolves with the correct column schema; the result set is empty.
+name: info_schema_table_options_empty
+description: |
+  CREATE TABLE -> SELECT FROM <ds>.INFORMATION_SCHEMA.TABLE_OPTIONS.
+  Pins that the view resolves and returns no rows for a table with no
+  options set.
+project_id: proj-info-schema-table-options
+dataset_id: ds_options
+setup:
+  - dataset: ds_options
+  - sql: |-
+      CREATE TABLE ds_options.t (id INT64)
+query: |
+  SELECT option_name, option_type, option_value
+  FROM ds_options.INFORMATION_SCHEMA.TABLE_OPTIONS
+expected:
+  route: duckdb_native
+  rows: []

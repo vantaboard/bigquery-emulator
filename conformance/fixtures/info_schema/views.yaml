@@ -1,0 +1,28 @@
+# INFORMATION_SCHEMA.VIEWS: registered-view reflection.
+#
+# CREATE VIEW registers the view in the per-project view registry;
+# VIEWS materializes one row per registered view (catalog::ListProjectViews).
+# view_definition echoes the resolved SQL text verbatim, which is
+# environment-sensitive, so this fixture pins the stable identity +
+# use_standard_sql columns.
+name: info_schema_views
+description: |
+  CREATE TABLE + CREATE VIEW -> SELECT FROM
+  <ds>.INFORMATION_SCHEMA.VIEWS. Pins table_name/use_standard_sql for a
+  registered GoogleSQL view.
+project_id: proj-info-schema-views
+dataset_id: ds_views
+setup:
+  - dataset: ds_views
+  - sql: |-
+      CREATE TABLE ds_views.base (id INT64, name STRING)
+  - sql: |-
+      CREATE VIEW ds_views.v_people AS SELECT id, name FROM ds_views.base
+query: |
+  SELECT table_schema, table_name, use_standard_sql
+  FROM ds_views.INFORMATION_SCHEMA.VIEWS
+  ORDER BY table_name
+expected:
+  route: duckdb_native
+  rows:
+    - {table_schema: "ds_views", table_name: "v_people", use_standard_sql: "YES"}

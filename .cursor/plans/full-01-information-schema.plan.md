@@ -6,28 +6,28 @@ isProject: true
 todos:
   - id: enumerate-views
     content: "Inventory BigQuery's INFORMATION_SCHEMA views against docs/bigquery/docs/information-schema-*.md and the upstream reference; pick the tooling-critical subset to land (VIEWS, ROUTINES, TABLE_OPTIONS, COLUMN_FIELD_PATHS, PARTITIONS, TABLE_STORAGE, KEY_COLUMN_USAGE, JOBS / JOBS_BY_PROJECT) and record exact column schemas."
-    status: pending
+    status: completed
   - id: generalize-kind-enum
     content: "Generalize InfoSchemaViewKind in backend/catalog/info_schema_table.h beyond kTables/kColumns/kSchemata; add a per-view row-schema + GenerateRows() arm for each new view; keep MaterializeInDuckDB / CreateEvaluatorTableIterator generic."
-    status: pending
+    status: completed
   - id: views-routines
     content: "VIEWS + ROUTINES views: source rows from view_registry / udf_registry / tvf_registry / procedure_registry (read-through to DuckDBStorage __bqemu_routines). Surface view_definition / routine_definition text and routine_type."
-    status: pending
+    status: completed
   - id: options-fieldpaths
     content: "TABLE_OPTIONS + COLUMN_FIELD_PATHS: emit table option_name/option_value pairs (partitioning/clustering/description/labels metadata accepted by control-op DDL) and recurse STRUCT/ARRAY columns into dotted field_path rows with field_type."
-    status: pending
+    status: completed
   - id: partitions-storage
     content: "PARTITIONS + TABLE_STORAGE: report partition_id/total_rows/total_logical_bytes from Storage row counts (single __NULL__/__UNPARTITIONED__ partition where partitioning is metadata-only); document the best-effort byte estimates."
-    status: pending
+    status: completed
   - id: jobs-views
     content: "JOBS / JOBS_BY_PROJECT: materialize from the gateway job store (gateway/jobs/) over the engine boundary - decide whether to serve these from the gateway side (Go) since job state lives there, or pipe a job snapshot to the engine; pick the path that keeps the dataset-qualified region-* selector working."
     status: pending
   - id: register-resolve
     content: "Register each new view in backend/catalog/googlesql_catalog.cc so `FROM <dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `region-<r>.INFORMATION_SCHEMA.<VIEW>` resolve at analyze time; honor project/dataset scoping."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "Add conformance/fixtures/info_schema/ fixtures per view (schema_only where row content is environment-dependent); update ROADMAP.md + REST/catalog docs; drop dbt skip rows (catalog, change_history, TestDocsGenerateBigQuery) that now pass and re-run task thirdparty:dbt-bigquery-tests."
-    status: pending
+    status: completed
 ---
 
 # Full 01 — Complete INFORMATION_SCHEMA views
@@ -96,6 +96,67 @@ task lint:dispositions
 task thirdparty:dbt-bigquery-tests    # remove catalog / docs-generate skip rows that pass
 task bazel:shutdown && task bazel:status
 ```
+
+## Execution notes (landed)
+
+- **Generalized materializer.** `InfoSchemaViewKind` now drives a
+  table-driven per-view descriptor (`RowSchemaForView`), a single
+  `ViewColumnType` storage→GoogleSQL converter, and per-view
+  `GenerateRows` arms. `MaterializeInDuckDB` /
+  `CreateEvaluatorTableIterator` stayed generic; the DuckDB
+  materializer learned TIMESTAMP/DATE/ARRAY column types (cells for
+  those are always NULL, so no literal rendering was needed).
+- **Views landed:** `VIEWS`, `ROUTINES`, `TABLE_OPTIONS`,
+  `COLUMN_FIELD_PATHS`, `PARTITIONS`, `TABLE_STORAGE`
+  (+`TABLE_STORAGE_BY_PROJECT` alias), `KEY_COLUMN_USAGE`, alongside
+  the pre-existing `TABLES`/`COLUMNS`/`SCHEMATA`. All resolve for both
+  `<dataset>.INFORMATION_SCHEMA.<VIEW>` and `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> ``.
+- **VIEWS source.** Views are not persisted to `Storage` (only routines
+  are), so `view_registry` grew a `ListProjectViews` API and now
+  captures `ResolvedCreateViewStmt::sql()` as `view_definition`.
+  `use_standard_sql` is always `YES` (the emulator only registers
+  GoogleSQL views).
+- **ROUTINES source.** Read-through to `Storage::ListRoutines` /
+  `ListAllRoutines` (`__bqemu_routines`). `routine_type` derives from
+  `RoutineKind`; `routine_body`/`external_language` from the stored
+  language; `created`/`last_altered`/`data_type`/`is_deterministic`/
+  `security_type`/`connection` are NULL (not tracked — honest unknown,
+  not a fake value). Temp routines are skipped.
+- **Best-effort / empty-by-design (documented, not approximated):**
+  - `PARTITIONS`/`TABLE_STORAGE`: `total_rows` is exact
+    (`Storage::CountRows`); all byte columns are NULL per the ROADMAP
+    persistence non-goal (no byte accounting in the emulator); single
+    unpartitioned partition (`partition_id` NULL, `storage_tier`
+    `ACTIVE`, `total_partitions` 0).
+  - `TABLE_OPTIONS`/`KEY_COLUMN_USAGE`: empty result with the exact
+    column schema — the emulator models neither table options nor
+    PK/FK constraints, and BigQuery emits no rows for a table without
+    them either.
+  - `COLUMN_FIELD_PATHS`: the preview `data_policies`
+    (`ARRAY<STRUCT<name STRING>>`) column is omitted (struct-array
+    plumbing for an always-empty preview field); `policy_tags`
+    (`ARRAY<STRING>`) and `collation_name`/`rounding_mode` are present
+    but NULL. Core columns (`field_path`, `data_type`, `description`)
+    are exact.
+  - Pre-existing quirk fixed: `COLUMNS.data_type` for FLOAT64 was
+    `DOUBLE`; corrected to `FLOAT64` (the BigQuery name), which the new
+    `COLUMN_FIELD_PATHS` view shares.
+- **JOBS / JOBS_BY_PROJECT — blocked, left pending (no approximation).**
+  Job state lives in the Go gateway's job store (`gateway/jobs/`), not
+  the engine's `Storage`. Serving these from the engine would require
+  snapshotting job metadata across the gRPC boundary into a scannable
+  storage table (a large cross-cutting gateway change), and serving
+  them from the gateway would fork INFORMATION_SCHEMA resolution into a
+  second path. Per the repo no-silent-approximation invariant, the
+  engine returns NOT_FOUND/UNIMPLEMENTED for `JOBS*` rather than
+  faking rows. Deferred to a dedicated follow-up (natural companion to
+  `full-10-rest-surface-completion` jobs work).
+- **dbt skip rows.** Left intact. The `catalog` / `change_history` /
+  `TestDocsGenerateBigQuery` skips depend on a full dbt run (Python +
+  live emulator) to prove they pass; `change_history` also needs the
+  deferred `JOBS*` views. Removing them without a green dbt run would
+  violate the "prove it" rule. Tracked as a follow-up once `JOBS*`
+  lands and `task thirdparty:dbt-bigquery-tests` can be exercised here.
 
 ## Out of scope
 

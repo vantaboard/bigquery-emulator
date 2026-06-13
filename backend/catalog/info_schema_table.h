@@ -18,10 +18,27 @@ namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
 
+// The set of INFORMATION_SCHEMA views the emulator materializes. Each
+// value pairs with a row-schema descriptor + a `GenerateRows()` arm in
+// info_schema_table.cc; the materializer (`MaterializeInDuckDB` /
+// `CreateEvaluatorTableIterator`) is generic over the kind. Add a new
+// view by extending this enum, `RowSchemaForView`, and `GenerateRows`.
+//
+// JOBS / JOBS_BY_PROJECT are intentionally absent: BigQuery job state
+// lives in the Go gateway's job store, not the C++ engine's `Storage`,
+// so those views are unresolved here (NOT_FOUND) rather than faked.
+// See full-01 plan notes for the deferral rationale.
 enum class InfoSchemaViewKind {
   kTables,
   kColumns,
   kSchemata,
+  kViews,
+  kRoutines,
+  kTableOptions,
+  kColumnFieldPaths,
+  kPartitions,
+  kTableStorage,
+  kKeyColumnUsage,
 };
 
 // BigQuery INFORMATION_SCHEMA.* view materialized from `Storage` metadata.
@@ -46,6 +63,24 @@ class InfoSchemaTable : public VirtualCatalogTable {
 
  private:
   absl::StatusOr<std::vector<storage::Row>> GenerateRows() const;
+
+  // Appends the per-table rows for the table-scoped views (TABLES,
+  // COLUMNS, COLUMN_FIELD_PATHS, PARTITIONS, TABLE_STORAGE) for every
+  // table in `dataset_id`. KEY_COLUMN_USAGE / TABLE_OPTIONS append
+  // nothing (no engine-side metadata source).
+  absl::Status AppendTableRows(absl::string_view dataset_id,
+                               std::vector<storage::Row>* rows) const;
+
+  // Recursively emits COLUMN_FIELD_PATHS rows for `column`, descending
+  // into STRUCT (and ARRAY<STRUCT>) fields with a dotted `field_path`.
+  void AppendFieldPathRows(const storage::TableId& table,
+                           const schema::ColumnSchema& column,
+                           absl::string_view top_level_name,
+                           absl::string_view field_path,
+                           std::vector<storage::Row>* rows) const;
+
+  // Materializes ROUTINES rows from the durable routine store.
+  absl::StatusOr<std::vector<storage::Row>> GenerateRoutineRows() const;
 
   InfoSchemaViewKind kind_;
   std::string project_id_;

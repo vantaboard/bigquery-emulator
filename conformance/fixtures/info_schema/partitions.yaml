@@ -1,0 +1,27 @@
+# INFORMATION_SCHEMA.PARTITIONS: row-count reflection.
+#
+# The emulator treats every table as a single unpartitioned partition
+# (partition_id = NULL); total_rows comes from storage::CountRows.
+# Byte columns are NULL (not tracked) per the ROADMAP persistence
+# non-goal. storage_tier is always ACTIVE (no long-term transition).
+name: info_schema_partitions
+description: |
+  CREATE TABLE + INSERT -> SELECT FROM
+  <ds>.INFORMATION_SCHEMA.PARTITIONS. Pins partition_id/total_rows/
+  storage_tier for an unpartitioned table.
+project_id: proj-info-schema-partitions
+dataset_id: ds_partitions
+setup:
+  - dataset: ds_partitions
+  - sql: |-
+      CREATE TABLE ds_partitions.t (id INT64)
+  - sql: |-
+      INSERT INTO ds_partitions.t (id) VALUES (1), (2), (3)
+query: |
+  SELECT partition_id, total_rows, storage_tier
+  FROM ds_partitions.INFORMATION_SCHEMA.PARTITIONS
+  WHERE table_name = 't'
+expected:
+  route: duckdb_native
+  rows:
+    - {partition_id: null, total_rows: "3", storage_tier: "ACTIVE"}

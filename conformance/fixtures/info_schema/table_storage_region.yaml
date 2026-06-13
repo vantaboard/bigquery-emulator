@@ -1,0 +1,29 @@
+# INFORMATION_SCHEMA.TABLE_STORAGE via the region-* selector.
+#
+# TABLE_STORAGE is project-scoped and must be queried with a region
+# qualifier (`region-<r>`). This exercises the region selector path:
+# the catalog resolves `region-us.INFORMATION_SCHEMA.TABLE_STORAGE` and
+# the materializer enumerates every dataset in the project. total_rows
+# comes from storage::CountRows; byte columns are NULL (not tracked).
+name: info_schema_table_storage_region
+description: |
+  CREATE TABLE + INSERT -> SELECT FROM
+  `region-us`.INFORMATION_SCHEMA.TABLE_STORAGE. Pins
+  total_rows/total_partitions/table_type and the region-qualified
+  resolution path.
+project_id: proj-info-schema-table-storage
+dataset_id: ds_storage
+setup:
+  - dataset: ds_storage
+  - sql: |-
+      CREATE TABLE ds_storage.t (id INT64)
+  - sql: |-
+      INSERT INTO ds_storage.t (id) VALUES (10), (20)
+query: |
+  SELECT table_name, total_rows, total_partitions, table_type
+  FROM `region-us`.INFORMATION_SCHEMA.TABLE_STORAGE
+  WHERE table_name = 't'
+expected:
+  route: duckdb_native
+  rows:
+    - {table_name: "t", total_rows: "2", total_partitions: "0", table_type: "BASE TABLE"}

@@ -1,0 +1,25 @@
+# INFORMATION_SCHEMA.ROUTINES: persistent SQL UDF reflection.
+#
+# CREATE FUNCTION persists to the durable routine store
+# (__bqemu_routines); ROUTINES materializes one row per non-temp
+# routine in the dataset via storage::ListRoutines. routine_definition
+# / created / last_altered are environment-dependent or untracked, so
+# this fixture pins the stable identity + type columns only.
+name: info_schema_routines
+description: |
+  CREATE FUNCTION -> SELECT FROM <ds>.INFORMATION_SCHEMA.ROUTINES.
+  Pins routine_name/routine_type/routine_body for a persisted SQL UDF.
+project_id: proj-info-schema-routines
+dataset_id: ds_routines
+setup:
+  - dataset: ds_routines
+  - sql: |-
+      CREATE FUNCTION ds_routines.add_one(x INT64) AS (x + 1)
+query: |
+  SELECT routine_name, routine_type, routine_body, external_language
+  FROM ds_routines.INFORMATION_SCHEMA.ROUTINES
+  ORDER BY routine_name
+expected:
+  route: duckdb_native
+  rows:
+    - {routine_name: "add_one", routine_type: "FUNCTION", routine_body: "SQL", external_language: null}

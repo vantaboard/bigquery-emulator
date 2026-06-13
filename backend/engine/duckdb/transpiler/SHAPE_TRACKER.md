@@ -294,7 +294,11 @@ semantic-executor / control-op code) so the doc stays honest.
   surface are tracked under `.cursor/plans/full-*` (see
   `.cursor/plans/full-00-index.plan.md`): `MATCH_RECOGNIZE`
   (`status=planned`), the broader GEOGRAPHY/GIS surface, the
-  complete `INFORMATION_SCHEMA` view set, JavaScript UDF call-time
+  remaining `INFORMATION_SCHEMA` views (`VIEWS`, `ROUTINES`,
+  `TABLE_OPTIONS`, `COLUMN_FIELD_PATHS`, `PARTITIONS`, `TABLE_STORAGE`,
+  `KEY_COLUMN_USAGE` landed under `full-01`; `JOBS*` deferred — job
+  state lives in the gateway, see `docs/ENGINE_POLICY.md`), JavaScript
+  UDF call-time
   execution, NUMERIC aggregate precision, time-travel
   (`FOR SYSTEM_TIME AS OF`), wildcard-table querying, row-access /
   column-level policy enforcement, and the remaining `(planned)`
