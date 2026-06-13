@@ -13,6 +13,8 @@ namespace sql_preprocess_internal {
 
 std::string PreprocessFunctionBodyBase(absl::string_view sql);
 std::string NormalizeCreateFunctionAsParens(absl::string_view sql);
+bool HasDecoratorAndSystemTimeConflict(absl::string_view sql);
+std::string LowerTableDecorators(absl::string_view sql);
 
 }  // namespace sql_preprocess_internal
 }  // namespace coordinator

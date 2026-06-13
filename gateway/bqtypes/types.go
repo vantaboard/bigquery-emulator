@@ -430,11 +430,16 @@ type TableSchema struct {
 
 // TableFieldSchema is one column in a TableSchema.
 type TableFieldSchema struct {
-	Name        string             `json:"name"`
-	Type        string             `json:"type"`           // STRING, INT64, FLOAT64, BOOL, TIMESTAMP, ...
-	Mode        string             `json:"mode,omitempty"` // NULLABLE, REQUIRED, REPEATED
-	Description string             `json:"description,omitempty"`
-	Collation   string             `json:"collation,omitempty"`
-	PolicyTags  *PolicyTagList     `json:"policyTags,omitempty"`
-	Fields      []TableFieldSchema `json:"fields,omitempty"` // for STRUCT/RECORD
+	Name        string         `json:"name"`
+	Type        string         `json:"type"`           // STRING, INT64, FLOAT64, BOOL, TIMESTAMP, ...
+	Mode        string         `json:"mode,omitempty"` // NULLABLE, REQUIRED, REPEATED
+	Description string         `json:"description,omitempty"`
+	Collation   string         `json:"collation,omitempty"`
+	PolicyTags  *PolicyTagList `json:"policyTags,omitempty"`
+	// MaskKind is an emulator extension for column-level data masking
+	// (NULLIFY | SHA256 | DEFAULT_VALUE | DENIED). BigQuery clients
+	// ignore unknown JSON fields; the gateway persists this via
+	// SetColumnGovernance on tables.insert/patch/update.
+	MaskKind string             `json:"maskKind,omitempty"`
+	Fields   []TableFieldSchema `json:"fields,omitempty"` // for STRUCT/RECORD
 }

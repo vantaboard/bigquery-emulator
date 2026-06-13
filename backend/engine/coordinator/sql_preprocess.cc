@@ -29,6 +29,9 @@ std::string PreprocessFunctionBodyForAnalyzer(absl::string_view sql) {
 }
 
 std::string PreprocessSqlForAnalyzer(absl::string_view sql) {
+  if (sql_preprocess_internal::HasDecoratorAndSystemTimeConflict(sql)) {
+    return std::string(sql);
+  }
   const std::string base =
       sql_preprocess_internal::PreprocessFunctionBodyBase(sql);
   if (absl::StrContains(absl::AsciiStrToLower(base), "create function")) {

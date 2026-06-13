@@ -196,6 +196,7 @@ backend::engine::QueryRequest ProtoToEngineRequest(
   engine_request.default_dataset_id = request.default_dataset_id();
   engine_request.sql = request.sql();
   engine_request.use_legacy_sql = request.use_legacy_sql();
+  engine_request.principal_email = request.principal_email();
   engine_request.parameters.reserve(request.parameters_size());
   for (const auto& kv : request.parameters()) {
     backend::engine::QueryParameter parameter;

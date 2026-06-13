@@ -105,6 +105,13 @@ type SetupStep struct {
 	// now landed on the local DML executor (see `Rows` for the
 	// streaming-insert alternative).
 	SQL string `yaml:"sql,omitempty"`
+
+	// RowAccessPolicy creates a row-access policy via the REST API.
+	RowAccessPolicy *RowAccessPolicySetup `yaml:"row_access_policy,omitempty"`
+
+	// ColumnGovernance sets column-level masking metadata via the
+	// engine catalog RPC (through the gateway's tables.patch hook).
+	ColumnGovernance *ColumnGovernanceSetup `yaml:"column_governance,omitempty"`
 }
 
 // RowsSetup describes a `tabledata.insertAll` setup step. Each entry
@@ -133,6 +140,25 @@ type SchemaColumn struct {
 	Mode        string         `yaml:"mode,omitempty"`
 	Description string         `yaml:"description,omitempty"`
 	Fields      []SchemaColumn `yaml:"fields,omitempty"`
+	PolicyTags  []string       `yaml:"policy_tags,omitempty"`
+}
+
+// RowAccessPolicySetup describes a rowAccessPolicies.insert setup step.
+type RowAccessPolicySetup struct {
+	Dataset         string   `yaml:"dataset"`
+	Table           string   `yaml:"table"`
+	PolicyID        string   `yaml:"policy_id"`
+	FilterPredicate string   `yaml:"filter_predicate"`
+	Grantees        []string `yaml:"grantees,omitempty"`
+}
+
+// ColumnGovernanceSetup sets column mask metadata on an existing table.
+type ColumnGovernanceSetup struct {
+	Dataset   string `yaml:"dataset"`
+	Table     string `yaml:"table"`
+	Column    string `yaml:"column"`
+	MaskKind  string `yaml:"mask_kind"`
+	PolicyTag string `yaml:"policy_tag,omitempty"`
 }
 
 // Expectation captures one of two assertion modes. Exactly one of
@@ -514,13 +540,31 @@ func (s SetupStep) validate() error {
 	if strings.TrimSpace(s.SQL) != "" {
 		count++
 	}
+	if s.RowAccessPolicy != nil {
+		count++
+		if s.RowAccessPolicy.Dataset == "" || s.RowAccessPolicy.Table == "" ||
+			s.RowAccessPolicy.PolicyID == "" || s.RowAccessPolicy.FilterPredicate == "" {
+			return errors.New("row_access_policy requires dataset, table, policy_id, filter_predicate")
+		}
+	}
+	if s.ColumnGovernance != nil {
+		count++
+		if s.ColumnGovernance.Dataset == "" || s.ColumnGovernance.Table == "" ||
+			s.ColumnGovernance.Column == "" || s.ColumnGovernance.MaskKind == "" {
+			return errors.New("column_governance requires dataset, table, column, mask_kind")
+		}
+	}
 	switch count {
 	case 0:
-		return errors.New("setup step must set exactly one of dataset, table, rows, sql")
+		return errors.New(
+			"setup step must set exactly one of dataset, table, rows, sql, row_access_policy, column_governance",
+		)
 	case 1:
 		return nil
 	default:
-		return errors.New("setup step must set exactly one of dataset, table, rows, sql")
+		return errors.New(
+			"setup step must set exactly one of dataset, table, rows, sql, row_access_policy, column_governance",
+		)
 	}
 }
 

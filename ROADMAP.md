@@ -148,10 +148,13 @@ Goal: every BigQuery REST endpoint a client library expects has a
 route registered. The core CRUD + query surface
 (`projects` / `datasets` / `tables` / `tabledata` / `jobs` /
 `queries`) is implemented end-to-end against the C++ engine; the
-peripheral surfaces (`models`, `routines`, `rowAccessPolicies`,
-`migration`, `dataTransfer`) are wired as structurally-valid stubs
-so client-library startup probes succeed and per-method behavior
-is per-row in [`docs/REST_API.md`](./docs/REST_API.md).
+peripheral surfaces (`models`, `routines`, `migration`,
+`dataTransfer`) are wired as structurally-valid stubs so
+client-library startup probes succeed and per-method behavior is
+per-row in [`docs/REST_API.md`](./docs/REST_API.md). **Row-access
+policies and column-level data masking** are persisted and enforced
+at query time for the synthetic principal (see
+[`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md#row-access-and-column-level-security-mvp)).
 
 The canonical, always-up-to-date mapping from BigQuery v2 REST endpoints
 to the handlers in this repo lives in [`docs/REST_API.md`](./docs/REST_API.md);
@@ -179,11 +182,14 @@ that document is cross-referenced against the upstream documentation under
   - `GET .../tables/{tableId}/data` (`tabledata.list`)
   - `POST .../tables/{tableId}/insertAll` (`tabledata.insertAll`)
 - ✅ Job routes (`bigquery.jobs.*`)
-  - `GET /bigquery/v2/projects/{projectId}/jobs` (`jobs.list`)
+  - `GET /bigquery/v2/projects/{projectId}/jobs` (`jobs.list`) — honors
+    `stateFilter`, `minCreationTime`, `maxCreationTime`, `parentJobId`,
+    `maxResults`, and `pageToken` against the in-process job registry
   - `POST /bigquery/v2/projects/{projectId}/jobs` (`jobs.insert`, metadata)
   - `POST /upload/bigquery/v2/projects/{projectId}/jobs` (`jobs.insert`,
     media upload — multipart/resumable per the upstream
-    [`api-uploads.md`](./docs/bigquery/docs/reference/api-uploads.md))
+    [`api-uploads.md`](./docs/bigquery/docs/reference/api-uploads.md);
+    LOAD schema add/relax via `schemaUpdateOptions`)
   - `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` (`jobs.get`)
   - `POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel`
     (`jobs.cancel`)
@@ -197,9 +203,12 @@ that document is cross-referenced against the upstream documentation under
 - ✅ Discovery doc
   - `GET /discovery/v1/apis/bigquery/v2/rest`
 - ✅ Models / Routines / RowAccessPolicies / Migration / Data
-  Transfer routes registered as wired stubs so client-library
-  startup probes (list / get / delete sample loops) succeed; the
-  per-method status lives in [`docs/REST_API.md`](./docs/REST_API.md)
+  Transfer routes — see per-method status in
+  [`docs/REST_API.md`](./docs/REST_API.md). Highlights: `routines.*` and
+  `rowAccessPolicies.*` CRUD round-trip through the engine catalog;
+  `models.*` list/get/delete serve CREATE MODEL metadata stubs;
+  `INFORMATION_SCHEMA.JOBS*` queries rewrite to gateway job snapshots
+  (`gateway/query/info_schema_jobs.go`).
 - ✅ JSON error envelope matches the documented BigQuery shape
   (`{"error": {"code", "message", "status", "errors": [...]}}`); see
   [`docs/bigquery/docs/error-messages.md`](./docs/bigquery/docs/error-messages.md)
@@ -423,7 +432,7 @@ handler.
   `hll_funcs.cc`, `aggregate_specialized.cc`). Unsupported families
   (`ML.*`, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, the broader `ST_*`
   GIS surface beyond the `ST_GEOGPOINT` constructor, differential-
-  privacy aggregates, `GENERATE_UUID`, ...) are documented in
+  privacy aggregates, `SESSION_USER`, ...) are documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
   `SAFE.<fn>(...)` is handled uniformly regardless of disposition
@@ -495,14 +504,15 @@ public-facing policy.
   Window-frame RANGE on numeric ORDER BY keys and TABLESAMPLE
   `REPEATABLE` lower on the DuckDB fast path (`conformance/fixtures/window/`,
   `conformance/fixtures/sample/sample_repeatable_seed.yaml`). Weighted /
-  stratified sampling and DATE/TIMESTAMP RANGE with non-INTERVAL offsets
-  still surface `UNIMPLEMENTED`; see `docs/ENGINE_POLICY.md`
+  stratified `TABLESAMPLE` and DATE/TIMESTAMP `RANGE` frames with numeric
+  offsets evaluate on the semantic executor (`sample_weighted_percent.yaml`,
+  `sample_stratified_percent.yaml`, `window_frame_range_date.yaml`)
 - 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
   `CAST ... AT TIME ZONE` promote to the semantic executor
   (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);
+  in-scope `extended_cast()` shapes evaluate on `eval_expr_cast_extended.cc`;
   `STRING(n)` / `NUMERIC(p,s)` type modifiers evaluate on the same path
-  (pinned by `cast_type_modifiers.yaml`); extended-cast shapes still
-  surface `UNIMPLEMENTED`.
+  (pinned by `cast_type_modifiers.yaml` and `cast_extended_geography_string.yaml`).
   `ORDER BY ... COLLATE 'und:ci'` sorts case-insensitively on the
   semantic path (`scan_eval_scan_impl.cc`). `SELECT AS VALUE`
   (`is_value_table()`) evaluates on the semantic executor. Set-op

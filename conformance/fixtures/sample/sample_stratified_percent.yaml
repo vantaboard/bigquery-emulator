@@ -1,0 +1,33 @@
+# sample_stratified_percent: TABLESAMPLE STRATIFY BY on semantic path.
+name: sample_stratified_percent
+description: |
+  BERNOULLI (100 PERCENT) STRATIFY BY category samples within each
+  stratum; 100% retains all rows per category.
+project_id: proj-sample-stratified
+dataset_id: ds_sample_stratified
+setup:
+  - dataset: ds_sample_stratified
+  - table:
+      dataset: ds_sample_stratified
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: category, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_sample_stratified
+      table: items
+      rows:
+        - {id: 1, category: "a"}
+        - {id: 2, category: "a"}
+        - {id: 3, category: "b"}
+query: |
+  SELECT id, category
+    FROM ds_sample_stratified.items
+   TABLESAMPLE BERNOULLI (100 PERCENT) STRATIFY BY (category)
+   ORDER BY id
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", category: "a"}
+    - {id: "2", category: "a"}
+    - {id: "3", category: "b"}

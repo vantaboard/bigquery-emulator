@@ -33,6 +33,34 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "duckdb_executor_time_travel",
+    srcs = ["duckdb_executor_time_travel.cc"],
+    hdrs = ["duckdb_executor_time_travel.h"],
+    deps = [
+        "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/time",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "duckdb_executor_security",
+    srcs = ["duckdb_executor_security.cc"],
+    hdrs = ["duckdb_executor_security.h"],
+    deps = [
+        "//backend/catalog:table_governance",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 # DuckDbExecutor is the `coordinator::Executor` adapter that owns
 # the transpiler / per-query DuckDB connection / Arrow result-row
 # path. The coordinator hands it an already-analyzed
@@ -40,6 +68,7 @@ cc_library(
 cc_library(
     name = "duckdb_executor",
     srcs = [
+        "duckdb_executor_attach.cc",
         "duckdb_executor_ddl.cc",
         "duckdb_executor_dml.cc",
         "duckdb_executor_insert_select.cc",
@@ -52,12 +81,18 @@ cc_library(
     ],
     deps = [
         ":arrow_to_bq",
+        ":duckdb_executor_security",
+        ":duckdb_executor_time_travel",
         "//backend/catalog:storage_table",
+        "//backend/catalog:table_governance",
         "//backend/catalog:virtual_table",
+        "//backend/catalog:wildcard_table",
+        "//backend/catalog:wildcard_table_suffix_filter",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb/transpiler",
         "//backend/engine/duckdb/udf:registrar",
+        "//backend/engine/semantic:eval_expr",
         "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",

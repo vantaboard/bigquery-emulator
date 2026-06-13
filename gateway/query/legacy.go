@@ -12,17 +12,30 @@ import (
 var legacyBracketTableRE = regexp.MustCompile(
 	`\[([a-zA-Z0-9_-]+):([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\]`)
 
+// legacyBracketDecoratorRE matches legacy snapshot decorators
+// [project:dataset.table@epoch] or [project:dataset.table@-offset].
+var legacyBracketDecoratorRE = regexp.MustCompile(
+	`\[([a-zA-Z0-9_-]+):([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)@(-?[0-9]+)\]`)
+
 // legacyBareTableRE matches [dataset.table] when no project is given.
 var legacyBareTableRE = regexp.MustCompile(`\[([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\]`)
+
+// legacyBareDecoratorRE matches [dataset.table@epoch] without a project.
+var legacyBareDecoratorRE = regexp.MustCompile(
+	`\[([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)@(-?[0-9]+)\]`)
 
 // PrepareEngineSQL translates limited legacy SQL to GoogleSQL when
 // useLegacy is true. The engine only accepts GoogleSQL; callers must
 // clear UseLegacySql on the forwarded enginepb.QueryRequest.
 func PrepareEngineSQL(useLegacy bool, sql, projectID, defaultDataset string) (string, error) {
-	if !useLegacy {
-		return sql, nil
+	if useLegacy {
+		normalized, err := NormalizeLegacySQL(sql, projectID, defaultDataset)
+		if err != nil {
+			return "", err
+		}
+		return LowerTableDecorators(normalized)
 	}
-	return NormalizeLegacySQL(sql, projectID, defaultDataset)
+	return LowerTableDecorators(sql)
 }
 
 // NormalizeLegacySQL rewrites bracket-style legacy table references to
@@ -31,7 +44,23 @@ func NormalizeLegacySQL(sql, projectID, defaultDataset string) (string, error) {
 	if strings.TrimSpace(sql) == "" {
 		return "", errors.New("legacy SQL query is empty")
 	}
-	out := legacyBracketTableRE.ReplaceAllStringFunc(sql, func(match string) string {
+	if hasDecoratorConflict(sql) {
+		return "", errors.New(
+			"Cannot use table decorator with FOR SYSTEM_TIME AS OF")
+	}
+	out := legacyBracketDecoratorRE.ReplaceAllStringFunc(sql, func(match string) string {
+		parts := legacyBracketDecoratorRE.FindStringSubmatch(match)
+		if len(parts) != 5 {
+			return match
+		}
+		epoch, err := resolveDecoratorEpoch(parts[4])
+		if err != nil {
+			return match
+		}
+		return fmt.Sprintf("`%s.%s.%s` FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)",
+			parts[1], parts[2], parts[3], epoch)
+	})
+	out = legacyBracketTableRE.ReplaceAllStringFunc(out, func(match string) string {
 		parts := legacyBracketTableRE.FindStringSubmatch(match)
 		if len(parts) != 4 {
 			return match
@@ -40,6 +69,24 @@ func NormalizeLegacySQL(sql, projectID, defaultDataset string) (string, error) {
 	})
 	if legacyBracketTableRE.MatchString(out) {
 		return "", errors.New("legacy SQL contains unsupported table reference syntax")
+	}
+	if legacyBareDecoratorRE.MatchString(out) {
+		project := strings.TrimSpace(projectID)
+		if project == "" {
+			return "", errors.New("legacy SQL [dataset.table@epoch] requires a project context")
+		}
+		out = legacyBareDecoratorRE.ReplaceAllStringFunc(out, func(match string) string {
+			parts := legacyBareDecoratorRE.FindStringSubmatch(match)
+			if len(parts) != 4 {
+				return match
+			}
+			epoch, err := resolveDecoratorEpoch(parts[3])
+			if err != nil {
+				return match
+			}
+			return fmt.Sprintf("`%s.%s.%s` FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)",
+				project, parts[1], parts[2], epoch)
+		})
 	}
 	if legacyBareTableRE.MatchString(out) {
 		project := strings.TrimSpace(projectID)

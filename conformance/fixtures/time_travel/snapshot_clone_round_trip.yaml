@@ -1,0 +1,31 @@
+# snapshot_clone_round_trip: CREATE SNAPSHOT TABLE + CREATE TABLE CLONE
+# materialize through control_op_time_travel handlers.
+name: snapshot_clone_round_trip
+description: |
+  Base table -> snapshot -> clone restore -> SELECT verifies row copy.
+project_id: proj-time-travel-snapshot
+dataset_id: ds_time_travel_snapshot
+setup:
+  - dataset: ds_time_travel_snapshot
+  - sql: |
+      CREATE TABLE ds_time_travel_snapshot.base (
+        id INT64,
+        label STRING
+      )
+  - sql: |
+      INSERT INTO ds_time_travel_snapshot.base (id, label) VALUES
+        (10, 'snap')
+  - sql: |
+      CREATE SNAPSHOT TABLE ds_time_travel_snapshot.snap
+      CLONE ds_time_travel_snapshot.base
+  - sql: |
+      CREATE TABLE ds_time_travel_snapshot.restored
+      CLONE ds_time_travel_snapshot.snap
+query: |
+  SELECT id, label
+  FROM ds_time_travel_snapshot.restored
+  ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "10", label: "snap"}

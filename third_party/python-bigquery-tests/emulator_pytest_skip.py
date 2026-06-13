@@ -1,7 +1,7 @@
 """Pytest plugin: skip out-of-scope sample tests when BIGQUERY_EMULATOR_HOST is set.
 
 Families skipped here mirror the golang third-party matrix and
-docs/ENGINE_POLICY.md (BQML, geography, legacy SQL, public-data fixtures,
+docs/ENGINE_POLICY.md (BQML, legacy SQL, public-data fixtures,
 Gemini/multimodal imports). Loaded via ``-p emulator_pytest_skip`` from
 ``task thirdparty:python-bigquery-tests`` when the emulator is targeted.
 """
@@ -31,7 +31,6 @@ _MODULE_SKIP_SUBSTRINGS: tuple[str, ...] = (
     "model",
     "legacy",
     "download_public",
-    "geograph",
     "gemini",
     "bqml",
     "multimodal",
@@ -60,16 +59,13 @@ _DOCS_SNIPPETS_EMULATOR_ALLOW: frozenset[str] = frozenset(
         "test_create_client_default_credentials",
         "test_update_table_description",
         "test_update_table_cmek",
-    }
-)
-
-# docs/snippets.py tests that require resumable upload or other REST gaps.
-_DOCS_SNIPPETS_EMULATOR_SKIP: frozenset[str] = frozenset(
-    {
         "test_load_table_add_column",
         "test_load_table_relax_column",
     }
 )
+
+# docs/snippets.py tests that require resumable upload or other REST gaps.
+_DOCS_SNIPPETS_EMULATOR_SKIP: frozenset[str] = frozenset()
 
 _docs_snippets_source: str | None = None
 

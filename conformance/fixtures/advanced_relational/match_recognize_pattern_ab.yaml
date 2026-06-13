@@ -1,0 +1,46 @@
+# match_recognize_pattern_ab: MATCH_RECOGNIZE with PATTERN (A B).
+#
+# Pins `docs/ENGINE_POLICY.md` Family 2. The analyzer resolves
+# MATCH_RECOGNIZE to `ResolvedMatchRecognizeScan`; the semantic
+# executor partitions/sorts input rows, runs GoogleSQL's compiled
+# pattern matcher, and aggregates MEASURES per match (ONE ROW PER
+# MATCH / AFTER MATCH SKIP PAST LAST ROW).
+#
+# Route-label assertion intentionally omitted; routing drift is
+# tracked by `task conformance:routing-matrix`.
+name: match_recognize_pattern_ab
+description: |
+  MATCH_RECOGNIZE finds an A row immediately followed by a B row,
+  then emits SUM(key) for that match.
+project_id: proj-match-recognize
+dataset_id: ds_mr
+setup:
+  - dataset: ds_mr
+  - table:
+      dataset: ds_mr
+      id: events
+      schema:
+        - {name: key, type: INT64, mode: REQUIRED}
+        - {name: val, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_mr
+      table: events
+      rows:
+        - {key: 1, val: a}
+        - {key: 2, val: b}
+        - {key: 3, val: verylongvalue}
+query: |
+  SELECT total
+  FROM ds_mr.events
+  MATCH_RECOGNIZE(
+    ORDER BY key
+    MEASURES SUM(key) AS total
+    PATTERN (A B)
+    DEFINE
+      A AS LENGTH(val) < 10,
+      B AS LENGTH(val) >= 10
+  )
+expected:
+  route: semantic_executor
+  rows:
+    - {total: "5"}

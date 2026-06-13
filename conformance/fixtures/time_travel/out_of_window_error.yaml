@@ -1,0 +1,26 @@
+# out_of_window_error: timestamps before the 7-day time-travel window
+# (or before table creation) return BigQuery's Invalid snapshot time error.
+name: out_of_window_error
+description: |
+  SELECT FOR SYSTEM_TIME AS OF a timestamp far in the past returns HTTP
+  400 with a message mentioning Invalid snapshot time.
+project_id: proj-time-travel-window
+dataset_id: ds_time_travel_window
+setup:
+  - dataset: ds_time_travel_window
+  - sql: |
+      CREATE TABLE ds_time_travel_window.events (
+        id INT64
+      )
+  - sql: |
+      INSERT INTO ds_time_travel_window.events (id) VALUES (1)
+query: |
+  SELECT id
+  FROM ds_time_travel_window.events
+  FOR SYSTEM_TIME AS OF TIMESTAMP '1970-01-01 00:00:00 UTC'
+expected:
+  route: duckdb_native
+  route_strict: false
+  error:
+    code: 400
+    message_contains: "Invalid snapshot time"

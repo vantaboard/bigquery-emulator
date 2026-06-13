@@ -6,21 +6,16 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/models"
 )
 
-// modelTestProjectID and modelTestDatasetID are the only project /
-// dataset values these tests target; promoted to consts so newModelReq
-// can drop the otherwise-constant `projectID` parameter (unparam).
 const (
 	modelTestProjectID = "p"
 	modelTestDatasetID = "d"
 )
 
-// newModelReq builds an *http.Request with the path-value wildcards
-// populated the way Go's mux populates them at runtime. Mirrors
-// newDatasetReq in datasets_test.go. Both the project and dataset IDs
-// are constant across every caller, so they live in package consts
-// rather than per-call parameters.
 func newModelReq(method, modelID string) *http.Request {
 	url := "/bigquery/v2/projects/" + modelTestProjectID + "/datasets/" + modelTestDatasetID + "/models"
 	if modelID != "" {
@@ -35,64 +30,89 @@ func newModelReq(method, modelID string) *http.Request {
 	return req
 }
 
-// TestModelListReturnsEmptyPage verifies the list endpoint returns the
-// BigQuery-shaped envelope so client libraries that probe at startup
-// don't fall through to the catch-all NotFound handler.
-func TestModelListReturnsEmptyPage(t *testing.T) {
+func TestModelListReturnsRegisteredModels(t *testing.T) {
+	t.Parallel()
+	store := models.NewStore()
+	store.Upsert(bqtypes.Model{
+		ModelReference: bqtypes.ModelReference{
+			ProjectID: modelTestProjectID,
+			DatasetID: modelTestDatasetID,
+			ModelID:   "m1",
+		},
+		ModelType: "LINEAR_REG",
+	})
 	rec := httptest.NewRecorder()
-	ModelList(Dependencies{})(rec, newModelReq(http.MethodGet, ""))
-
+	ModelList(Dependencies{Models: store})(rec, newModelReq(http.MethodGet, ""))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("status = %d", rec.Code)
 	}
 	var got struct {
-		Kind   string `json:"kind"`
-		Models []any  `json:"models"`
+		Models []bqtypes.Model `json:"models"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode body: %v", err)
+		t.Fatal(err)
 	}
-	if got.Kind != modelListKind {
-		t.Errorf("kind = %q, want %q", got.Kind, modelListKind)
-	}
-	if len(got.Models) != 0 {
-		t.Errorf("models = %v, want empty page", got.Models)
+	if len(got.Models) != 1 || got.Models[0].ModelReference.ModelID != "m1" {
+		t.Fatalf("models = %#v", got.Models)
 	}
 }
 
-// TestModelGetReturnsNotFound verifies that any specific modelId
-// yields the BigQuery 404 envelope (not 501) so list-get-delete sample
-// loops can rely on the "absent" semantics.
-func TestModelGetReturnsNotFound(t *testing.T) {
+func TestModelGetReturnsRegisteredModel(t *testing.T) {
+	t.Parallel()
+	store := models.NewStore()
+	store.Upsert(bqtypes.Model{
+		ModelReference: bqtypes.ModelReference{
+			ProjectID: modelTestProjectID,
+			DatasetID: modelTestDatasetID,
+			ModelID:   "m1",
+		},
+		ModelType: "LINEAR_REG",
+	})
+	rec := httptest.NewRecorder()
+	ModelGet(Dependencies{Models: store})(rec, newModelReq(http.MethodGet, "m1"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestModelDeleteRemovesRegisteredModel(t *testing.T) {
+	t.Parallel()
+	store := models.NewStore()
+	store.Upsert(bqtypes.Model{
+		ModelReference: bqtypes.ModelReference{
+			ProjectID: modelTestProjectID,
+			DatasetID: modelTestDatasetID,
+			ModelID:   "m1",
+		},
+	})
+	rec := httptest.NewRecorder()
+	ModelDelete(Dependencies{Models: store})(rec, newModelReq(http.MethodDelete, "m1"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if _, ok := store.Get(modelTestProjectID, modelTestDatasetID, "m1"); ok {
+		t.Fatal("model still present")
+	}
+}
+
+func TestPersistModelFromDDL(t *testing.T) {
+	t.Parallel()
+	deps := Dependencies{Models: models.NewStore()}
+	ref := persistModelFromDDL(nil, &deps, "p", "d",
+		"CREATE MODEL `p.d.linear` OPTIONS(model_type='linear_reg') AS SELECT 1")
+	if ref == nil || ref.ModelID != "linear" {
+		t.Fatalf("ref = %#v", ref)
+	}
+}
+
+func TestModelGetReturnsNotFoundWhenAbsent(t *testing.T) {
+	t.Parallel()
 	rec := httptest.NewRecorder()
 	ModelGet(Dependencies{})(rec, newModelReq(http.MethodGet, "m1"))
-
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("status = %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Not found: Model p:d.m1") {
-		t.Errorf("body missing fqn; got %s", rec.Body.String())
-	}
-}
-
-// TestModelDeleteReturnsNotFound mirrors the Get behavior so a
-// list-get-delete loop sees consistent "absent" semantics.
-func TestModelDeleteReturnsNotFound(t *testing.T) {
-	rec := httptest.NewRecorder()
-	ModelDelete(Dependencies{})(rec, newModelReq(http.MethodDelete, "m1"))
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
-	}
-}
-
-// TestModelPatchReturnsNotImplemented documents that a mutating
-// operation against the stub returns 501 (no BQML store yet).
-func TestModelPatchReturnsNotImplemented(t *testing.T) {
-	rec := httptest.NewRecorder()
-	ModelPatch(Dependencies{})(rec, newModelReq(http.MethodPatch, "m1"))
-
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501; body=%s", rec.Code, rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "Not found: Model") {
+		t.Fatalf("body = %s", rec.Body.String())
 	}
 }

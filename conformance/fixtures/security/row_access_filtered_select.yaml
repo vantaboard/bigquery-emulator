@@ -1,0 +1,34 @@
+# row_access_filtered_select: row-access policies filter rows at
+# query time for the synthetic emulator principal.
+name: row_access_filtered_select
+description: |
+  INSERT seed rows, create a row-access policy restricting region=EU,
+  SELECT returns only matching rows for emulator@bigquery.local.
+project_id: proj-security-rap-filter
+dataset_id: ds_security_rap
+setup:
+  - dataset: ds_security_rap
+  - sql: |
+      CREATE TABLE ds_security_rap.events (
+        id INT64,
+        region STRING
+      )
+  - sql: |
+      INSERT INTO ds_security_rap.events (id, region) VALUES
+        (1, 'EU'),
+        (2, 'US'),
+        (3, 'EU')
+  - row_access_policy:
+      dataset: ds_security_rap
+      table: events
+      policy_id: eu_only
+      filter_predicate: "region = 'EU'"
+query: |
+  SELECT id, region
+  FROM ds_security_rap.events
+  ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", region: "EU"}
+    - {id: "3", region: "EU"}

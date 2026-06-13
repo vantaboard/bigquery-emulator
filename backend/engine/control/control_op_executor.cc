@@ -212,6 +212,29 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           request,
           stmt.GetAs<::googlesql::ResolvedExportDataStmt>(),
           stmt);
+    case ::googlesql::RESOLVED_CREATE_SNAPSHOT_TABLE_STMT:
+      return internal::RunCreateSnapshotTable(
+          *storage_,
+          project_id,
+          request.default_dataset_id,
+          stmt.GetAs<::googlesql::ResolvedCreateSnapshotTableStmt>());
+    case ::googlesql::RESOLVED_CLONE_DATA_STMT:
+      return internal::RunCloneData(
+          *storage_,
+          project_id,
+          request.default_dataset_id,
+          stmt.GetAs<::googlesql::ResolvedCloneDataStmt>());
+    case ::googlesql::RESOLVED_UNDROP_STMT:
+      return internal::RunUndrop(*storage_,
+                                 project_id,
+                                 request.default_dataset_id,
+                                 stmt.GetAs<::googlesql::ResolvedUndropStmt>());
+    case ::googlesql::RESOLVED_DROP_SNAPSHOT_TABLE_STMT:
+      return internal::RunDropSnapshotTable(
+          *storage_,
+          project_id,
+          request.default_dataset_id,
+          stmt.GetAs<::googlesql::ResolvedDropSnapshotTableStmt>());
     default:
       return absl::UnimplementedError(
           absl::StrCat("control op executor: ExecuteDdl does not implement ",

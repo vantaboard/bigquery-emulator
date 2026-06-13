@@ -24,7 +24,8 @@ bool TableMatchesWildcard(absl::string_view table_id,
                           absl::string_view wildcard_table_id);
 
 // Suffix portion of `table_id` relative to `prefix` (the wildcard match).
-std::string TableSuffixFor(absl::string_view table_id, absl::string_view prefix);
+std::string TableSuffixFor(absl::string_view table_id,
+                           absl::string_view prefix);
 
 // Merge schemas across `matched` tables. Column order follows the
 // lexicographically last table (proxy for BigQuery's "most recently
@@ -46,6 +47,12 @@ absl::StatusOr<std::vector<WildcardColumnMap>> BuildWildcardColumnMaps(
     const storage::Storage* storage,
     const std::vector<storage::TableId>& matched,
     const schema::TableSchema& union_schema);
+
+// Returns true when `suffix` satisfies a constant `_TABLE_SUFFIX` predicate.
+// For `=`, `IN`, or a single-element list. For `BETWEEN`, `allowlist` must
+// contain exactly two bounds (inclusive, lexicographic).
+bool SuffixMatchesAllowList(absl::string_view suffix,
+                            const std::vector<std::string>& allowlist);
 
 }  // namespace catalog
 }  // namespace backend

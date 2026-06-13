@@ -20,6 +20,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/models"
 	"github.com/vantaboard/bigquery-emulator/gateway/routines"
 	"github.com/vantaboard/bigquery-emulator/gateway/session"
 	"github.com/vantaboard/bigquery-emulator/gateway/snapshots"
@@ -69,6 +70,11 @@ type Dependencies struct {
 	// Nil is treated as a per-handler fallback store.
 	Routines *routines.Store
 
+	// Models is the in-memory BQML metadata registry REST handlers use
+	// for models.* and CREATE MODEL DDL query jobs register into.
+	// Nil is treated as a per-handler fallback store.
+	Models *models.Store
+
 	// Sessions is the in-memory BigQuery session registry used when
 	// queries request createSession or pass connectionProperties
 	// session_id. Nil is treated as a per-handler fallback store.
@@ -78,6 +84,11 @@ type Dependencies struct {
 // NewRoutineStore returns an empty routine registry for gateway deps.
 func NewRoutineStore() *routines.Store {
 	return routines.NewStore()
+}
+
+// NewModelStore returns an empty model metadata registry for gateway deps.
+func NewModelStore() *models.Store {
+	return models.NewStore()
 }
 
 // NewSessionStore returns an empty session registry for gateway deps.

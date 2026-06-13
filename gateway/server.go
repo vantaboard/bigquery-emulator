@@ -118,13 +118,36 @@ func mountTables(mount mountFunc, deps handlers.Dependencies) {
 		handlers.TableDataInsertAll(deps),
 	)
 
-	// Row-access policies (table-scoped row-level security). No
-	// policy store yet; list returns the empty page, IAM custom
-	// methods return 501. See gateway/handlers/row_access_policies.go.
+	// Row-access policies (table-scoped row-level security).
 	mount(
 		"GET",
 		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
-		handlers.RowAccessPolicyList(deps),
+		handlers.RowAccessPolicyDispatch(deps),
+	)
+	mount(
+		"POST",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies",
+		handlers.RowAccessPolicyDispatch(deps),
+	)
+	mount(
+		"GET",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}",
+		handlers.RowAccessPolicyDispatch(deps),
+	)
+	mount(
+		"PUT",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}",
+		handlers.RowAccessPolicyDispatch(deps),
+	)
+	mount(
+		"DELETE",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}",
+		handlers.RowAccessPolicyDispatch(deps),
+	)
+	mount(
+		"POST",
+		"/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}",
+		handlers.RowAccessPolicyDispatch(deps),
 	)
 }
 

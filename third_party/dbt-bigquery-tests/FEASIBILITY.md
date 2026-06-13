@@ -45,10 +45,10 @@ package and hit BigQuery-specific paths beyond bare REST jobs:
 
 - **Dataproc / python models** — `compute_region`, `gcs_bucket`, batch submission
 - **GCS upload_file** materializations — needs `STORAGE_EMULATOR_HOST` + fake-gcs
-- **INFORMATION_SCHEMA / catalogs** — `docs generate`, column metadata, grants
+- **INFORMATION_SCHEMA / catalogs** — `docs generate`, column metadata (row-access + column masking landed; grant/policy functional tests run)
 - **Materialized views** — `simple_bigquery_view`, changing relation types
-- **Policy tags / row access** — column policy tests
-- **Wildcards / external tables** — public GCS URIs
+- **Policy tags** — column policy tag REST surfaces (masking enforcement landed; tag metadata tests may still skip)
+- **Wildcards** — runnable against the emulator (`wildcard` module skip removed)
 
 These are sketched in `emulator_pytest_skip.py`; refine during triage.
 

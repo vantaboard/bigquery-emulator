@@ -1562,6 +1562,519 @@ func (*DeleteRoutineResponse) Descriptor() ([]byte, []int) {
 	return file_emulator_proto_rawDescGZIP(), []int{31}
 }
 
+type RowAccessPolicy struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Table              *TableRef              `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
+	PolicyId           string                 `protobuf:"bytes,2,opt,name=policy_id,json=policyId,proto3" json:"policy_id,omitempty"`
+	FilterPredicate    string                 `protobuf:"bytes,3,opt,name=filter_predicate,json=filterPredicate,proto3" json:"filter_predicate,omitempty"`
+	Grantees           []string               `protobuf:"bytes,4,rep,name=grantees,proto3" json:"grantees,omitempty"`
+	CreationTimeMs     int64                  `protobuf:"varint,5,opt,name=creation_time_ms,json=creationTimeMs,proto3" json:"creation_time_ms,omitempty"`
+	LastModifiedTimeMs int64                  `protobuf:"varint,6,opt,name=last_modified_time_ms,json=lastModifiedTimeMs,proto3" json:"last_modified_time_ms,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *RowAccessPolicy) Reset() {
+	*x = RowAccessPolicy{}
+	mi := &file_emulator_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RowAccessPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RowAccessPolicy) ProtoMessage() {}
+
+func (x *RowAccessPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RowAccessPolicy.ProtoReflect.Descriptor instead.
+func (*RowAccessPolicy) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *RowAccessPolicy) GetTable() *TableRef {
+	if x != nil {
+		return x.Table
+	}
+	return nil
+}
+
+func (x *RowAccessPolicy) GetPolicyId() string {
+	if x != nil {
+		return x.PolicyId
+	}
+	return ""
+}
+
+func (x *RowAccessPolicy) GetFilterPredicate() string {
+	if x != nil {
+		return x.FilterPredicate
+	}
+	return ""
+}
+
+func (x *RowAccessPolicy) GetGrantees() []string {
+	if x != nil {
+		return x.Grantees
+	}
+	return nil
+}
+
+func (x *RowAccessPolicy) GetCreationTimeMs() int64 {
+	if x != nil {
+		return x.CreationTimeMs
+	}
+	return 0
+}
+
+func (x *RowAccessPolicy) GetLastModifiedTimeMs() int64 {
+	if x != nil {
+		return x.LastModifiedTimeMs
+	}
+	return 0
+}
+
+type UpsertRowAccessPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *RowAccessPolicy       `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertRowAccessPolicyRequest) Reset() {
+	*x = UpsertRowAccessPolicyRequest{}
+	mi := &file_emulator_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertRowAccessPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertRowAccessPolicyRequest) ProtoMessage() {}
+
+func (x *UpsertRowAccessPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertRowAccessPolicyRequest.ProtoReflect.Descriptor instead.
+func (*UpsertRowAccessPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *UpsertRowAccessPolicyRequest) GetPolicy() *RowAccessPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type UpsertRowAccessPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *RowAccessPolicy       `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertRowAccessPolicyResponse) Reset() {
+	*x = UpsertRowAccessPolicyResponse{}
+	mi := &file_emulator_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertRowAccessPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertRowAccessPolicyResponse) ProtoMessage() {}
+
+func (x *UpsertRowAccessPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertRowAccessPolicyResponse.ProtoReflect.Descriptor instead.
+func (*UpsertRowAccessPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *UpsertRowAccessPolicyResponse) GetPolicy() *RowAccessPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type DeleteRowAccessPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Table         *TableRef              `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
+	PolicyId      string                 `protobuf:"bytes,2,opt,name=policy_id,json=policyId,proto3" json:"policy_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRowAccessPolicyRequest) Reset() {
+	*x = DeleteRowAccessPolicyRequest{}
+	mi := &file_emulator_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRowAccessPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRowAccessPolicyRequest) ProtoMessage() {}
+
+func (x *DeleteRowAccessPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRowAccessPolicyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRowAccessPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *DeleteRowAccessPolicyRequest) GetTable() *TableRef {
+	if x != nil {
+		return x.Table
+	}
+	return nil
+}
+
+func (x *DeleteRowAccessPolicyRequest) GetPolicyId() string {
+	if x != nil {
+		return x.PolicyId
+	}
+	return ""
+}
+
+type DeleteRowAccessPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRowAccessPolicyResponse) Reset() {
+	*x = DeleteRowAccessPolicyResponse{}
+	mi := &file_emulator_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRowAccessPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRowAccessPolicyResponse) ProtoMessage() {}
+
+func (x *DeleteRowAccessPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRowAccessPolicyResponse.ProtoReflect.Descriptor instead.
+func (*DeleteRowAccessPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{36}
+}
+
+type ListRowAccessPoliciesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Table         *TableRef              `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRowAccessPoliciesRequest) Reset() {
+	*x = ListRowAccessPoliciesRequest{}
+	mi := &file_emulator_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRowAccessPoliciesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRowAccessPoliciesRequest) ProtoMessage() {}
+
+func (x *ListRowAccessPoliciesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRowAccessPoliciesRequest.ProtoReflect.Descriptor instead.
+func (*ListRowAccessPoliciesRequest) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ListRowAccessPoliciesRequest) GetTable() *TableRef {
+	if x != nil {
+		return x.Table
+	}
+	return nil
+}
+
+type ListRowAccessPoliciesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policies      []*RowAccessPolicy     `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRowAccessPoliciesResponse) Reset() {
+	*x = ListRowAccessPoliciesResponse{}
+	mi := &file_emulator_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRowAccessPoliciesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRowAccessPoliciesResponse) ProtoMessage() {}
+
+func (x *ListRowAccessPoliciesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRowAccessPoliciesResponse.ProtoReflect.Descriptor instead.
+func (*ListRowAccessPoliciesResponse) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ListRowAccessPoliciesResponse) GetPolicies() []*RowAccessPolicy {
+	if x != nil {
+		return x.Policies
+	}
+	return nil
+}
+
+type ColumnGovernance struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ColumnName string                 `protobuf:"bytes,1,opt,name=column_name,json=columnName,proto3" json:"column_name,omitempty"`
+	PolicyTags []string               `protobuf:"bytes,2,rep,name=policy_tags,json=policyTags,proto3" json:"policy_tags,omitempty"`
+	// NULLIFY | SHA256 | DEFAULT_VALUE | DENIED | NONE
+	MaskKind         string   `protobuf:"bytes,3,opt,name=mask_kind,json=maskKind,proto3" json:"mask_kind,omitempty"`
+	MaskGrantees     []string `protobuf:"bytes,4,rep,name=mask_grantees,json=maskGrantees,proto3" json:"mask_grantees,omitempty"`
+	DefaultMaskValue string   `protobuf:"bytes,5,opt,name=default_mask_value,json=defaultMaskValue,proto3" json:"default_mask_value,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ColumnGovernance) Reset() {
+	*x = ColumnGovernance{}
+	mi := &file_emulator_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ColumnGovernance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ColumnGovernance) ProtoMessage() {}
+
+func (x *ColumnGovernance) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ColumnGovernance.ProtoReflect.Descriptor instead.
+func (*ColumnGovernance) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ColumnGovernance) GetColumnName() string {
+	if x != nil {
+		return x.ColumnName
+	}
+	return ""
+}
+
+func (x *ColumnGovernance) GetPolicyTags() []string {
+	if x != nil {
+		return x.PolicyTags
+	}
+	return nil
+}
+
+func (x *ColumnGovernance) GetMaskKind() string {
+	if x != nil {
+		return x.MaskKind
+	}
+	return ""
+}
+
+func (x *ColumnGovernance) GetMaskGrantees() []string {
+	if x != nil {
+		return x.MaskGrantees
+	}
+	return nil
+}
+
+func (x *ColumnGovernance) GetDefaultMaskValue() string {
+	if x != nil {
+		return x.DefaultMaskValue
+	}
+	return ""
+}
+
+type SetColumnGovernanceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Table         *TableRef              `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
+	Column        *ColumnGovernance      `protobuf:"bytes,2,opt,name=column,proto3" json:"column,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetColumnGovernanceRequest) Reset() {
+	*x = SetColumnGovernanceRequest{}
+	mi := &file_emulator_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetColumnGovernanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetColumnGovernanceRequest) ProtoMessage() {}
+
+func (x *SetColumnGovernanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetColumnGovernanceRequest.ProtoReflect.Descriptor instead.
+func (*SetColumnGovernanceRequest) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *SetColumnGovernanceRequest) GetTable() *TableRef {
+	if x != nil {
+		return x.Table
+	}
+	return nil
+}
+
+func (x *SetColumnGovernanceRequest) GetColumn() *ColumnGovernance {
+	if x != nil {
+		return x.Column
+	}
+	return nil
+}
+
+type SetColumnGovernanceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetColumnGovernanceResponse) Reset() {
+	*x = SetColumnGovernanceResponse{}
+	mi := &file_emulator_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetColumnGovernanceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetColumnGovernanceResponse) ProtoMessage() {}
+
+func (x *SetColumnGovernanceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetColumnGovernanceResponse.ProtoReflect.Descriptor instead.
+func (*SetColumnGovernanceResponse) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{41}
+}
+
 type ListRowsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Rows  []*DataRow             `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
@@ -1579,7 +2092,7 @@ type ListRowsResponse struct {
 
 func (x *ListRowsResponse) Reset() {
 	*x = ListRowsResponse{}
-	mi := &file_emulator_proto_msgTypes[32]
+	mi := &file_emulator_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1591,7 +2104,7 @@ func (x *ListRowsResponse) String() string {
 func (*ListRowsResponse) ProtoMessage() {}
 
 func (x *ListRowsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[32]
+	mi := &file_emulator_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1604,7 +2117,7 @@ func (x *ListRowsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRowsResponse.ProtoReflect.Descriptor instead.
 func (*ListRowsResponse) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{32}
+	return file_emulator_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListRowsResponse) GetRows() []*DataRow {
@@ -1636,15 +2149,18 @@ type QueryRequest struct {
 	Sql              string `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
 	// Optional: query parameters keyed by name. Positional parameters use
 	// an empty key (BigQuery's @0, @1, ... convention is unrolled here).
-	Parameters    map[string]*QueryParameter `protobuf:"bytes,4,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UseLegacySql  bool                       `protobuf:"varint,5,opt,name=use_legacy_sql,json=useLegacySql,proto3" json:"use_legacy_sql,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Parameters   map[string]*QueryParameter `protobuf:"bytes,4,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	UseLegacySql bool                       `protobuf:"varint,5,opt,name=use_legacy_sql,json=useLegacySql,proto3" json:"use_legacy_sql,omitempty"`
+	// Synthetic caller email from the gateway auth middleware. Empty
+	// defaults to emulator@bigquery.local at the engine boundary.
+	PrincipalEmail string `protobuf:"bytes,6,opt,name=principal_email,json=principalEmail,proto3" json:"principal_email,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *QueryRequest) Reset() {
 	*x = QueryRequest{}
-	mi := &file_emulator_proto_msgTypes[33]
+	mi := &file_emulator_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1656,7 +2172,7 @@ func (x *QueryRequest) String() string {
 func (*QueryRequest) ProtoMessage() {}
 
 func (x *QueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[33]
+	mi := &file_emulator_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1669,7 +2185,7 @@ func (x *QueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryRequest.ProtoReflect.Descriptor instead.
 func (*QueryRequest) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{33}
+	return file_emulator_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *QueryRequest) GetProjectId() string {
@@ -1707,6 +2223,13 @@ func (x *QueryRequest) GetUseLegacySql() bool {
 	return false
 }
 
+func (x *QueryRequest) GetPrincipalEmail() string {
+	if x != nil {
+		return x.PrincipalEmail
+	}
+	return ""
+}
+
 type QueryParameter struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	TypeKind  string                 `protobuf:"bytes,1,opt,name=type_kind,json=typeKind,proto3" json:"type_kind,omitempty"`    // googlesql TypeKind name (e.g. INT64, STRING).
@@ -1720,7 +2243,7 @@ type QueryParameter struct {
 
 func (x *QueryParameter) Reset() {
 	*x = QueryParameter{}
-	mi := &file_emulator_proto_msgTypes[34]
+	mi := &file_emulator_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1732,7 +2255,7 @@ func (x *QueryParameter) String() string {
 func (*QueryParameter) ProtoMessage() {}
 
 func (x *QueryParameter) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[34]
+	mi := &file_emulator_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1745,7 +2268,7 @@ func (x *QueryParameter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryParameter.ProtoReflect.Descriptor instead.
 func (*QueryParameter) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{34}
+	return file_emulator_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *QueryParameter) GetTypeKind() string {
@@ -1779,7 +2302,7 @@ type DryRunResponse struct {
 
 func (x *DryRunResponse) Reset() {
 	*x = DryRunResponse{}
-	mi := &file_emulator_proto_msgTypes[35]
+	mi := &file_emulator_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1791,7 +2314,7 @@ func (x *DryRunResponse) String() string {
 func (*DryRunResponse) ProtoMessage() {}
 
 func (x *DryRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[35]
+	mi := &file_emulator_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1804,7 +2327,7 @@ func (x *DryRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DryRunResponse.ProtoReflect.Descriptor instead.
 func (*DryRunResponse) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{35}
+	return file_emulator_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *DryRunResponse) GetSchema() *TableSchema {
@@ -1874,7 +2397,7 @@ type QueryResultRow struct {
 
 func (x *QueryResultRow) Reset() {
 	*x = QueryResultRow{}
-	mi := &file_emulator_proto_msgTypes[36]
+	mi := &file_emulator_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +2409,7 @@ func (x *QueryResultRow) String() string {
 func (*QueryResultRow) ProtoMessage() {}
 
 func (x *QueryResultRow) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[36]
+	mi := &file_emulator_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +2422,7 @@ func (x *QueryResultRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryResultRow.ProtoReflect.Descriptor instead.
 func (*QueryResultRow) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{36}
+	return file_emulator_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *QueryResultRow) GetSchema() *TableSchema {
@@ -1954,7 +2477,7 @@ type PhaseTiming struct {
 
 func (x *PhaseTiming) Reset() {
 	*x = PhaseTiming{}
-	mi := &file_emulator_proto_msgTypes[37]
+	mi := &file_emulator_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1966,7 +2489,7 @@ func (x *PhaseTiming) String() string {
 func (*PhaseTiming) ProtoMessage() {}
 
 func (x *PhaseTiming) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[37]
+	mi := &file_emulator_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1979,7 +2502,7 @@ func (x *PhaseTiming) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PhaseTiming.ProtoReflect.Descriptor instead.
 func (*PhaseTiming) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{37}
+	return file_emulator_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PhaseTiming) GetName() string {
@@ -2005,7 +2528,7 @@ type PhaseTimings struct {
 
 func (x *PhaseTimings) Reset() {
 	*x = PhaseTimings{}
-	mi := &file_emulator_proto_msgTypes[38]
+	mi := &file_emulator_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2017,7 +2540,7 @@ func (x *PhaseTimings) String() string {
 func (*PhaseTimings) ProtoMessage() {}
 
 func (x *PhaseTimings) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[38]
+	mi := &file_emulator_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2030,7 +2553,7 @@ func (x *PhaseTimings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PhaseTimings.ProtoReflect.Descriptor instead.
 func (*PhaseTimings) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{38}
+	return file_emulator_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *PhaseTimings) GetPhases() []*PhaseTiming {
@@ -2061,7 +2584,7 @@ type DmlStats struct {
 
 func (x *DmlStats) Reset() {
 	*x = DmlStats{}
-	mi := &file_emulator_proto_msgTypes[39]
+	mi := &file_emulator_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2073,7 +2596,7 @@ func (x *DmlStats) String() string {
 func (*DmlStats) ProtoMessage() {}
 
 func (x *DmlStats) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[39]
+	mi := &file_emulator_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2086,7 +2609,7 @@ func (x *DmlStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DmlStats.ProtoReflect.Descriptor instead.
 func (*DmlStats) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{39}
+	return file_emulator_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *DmlStats) GetInsertedRowCount() int64 {
@@ -2128,7 +2651,7 @@ type Cell struct {
 
 func (x *Cell) Reset() {
 	*x = Cell{}
-	mi := &file_emulator_proto_msgTypes[40]
+	mi := &file_emulator_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2140,7 +2663,7 @@ func (x *Cell) String() string {
 func (*Cell) ProtoMessage() {}
 
 func (x *Cell) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[40]
+	mi := &file_emulator_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2153,7 +2676,7 @@ func (x *Cell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cell.ProtoReflect.Descriptor instead.
 func (*Cell) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{40}
+	return file_emulator_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *Cell) GetValue() isCell_Value {
@@ -2236,7 +2759,7 @@ type Array struct {
 
 func (x *Array) Reset() {
 	*x = Array{}
-	mi := &file_emulator_proto_msgTypes[41]
+	mi := &file_emulator_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2248,7 +2771,7 @@ func (x *Array) String() string {
 func (*Array) ProtoMessage() {}
 
 func (x *Array) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[41]
+	mi := &file_emulator_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2261,7 +2784,7 @@ func (x *Array) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Array.ProtoReflect.Descriptor instead.
 func (*Array) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{41}
+	return file_emulator_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *Array) GetElements() []*Cell {
@@ -2280,7 +2803,7 @@ type Struct struct {
 
 func (x *Struct) Reset() {
 	*x = Struct{}
-	mi := &file_emulator_proto_msgTypes[42]
+	mi := &file_emulator_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2815,7 @@ func (x *Struct) String() string {
 func (*Struct) ProtoMessage() {}
 
 func (x *Struct) ProtoReflect() protoreflect.Message {
-	mi := &file_emulator_proto_msgTypes[42]
+	mi := &file_emulator_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2828,7 @@ func (x *Struct) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Struct.ProtoReflect.Descriptor instead.
 func (*Struct) Descriptor() ([]byte, []int) {
-	return file_emulator_proto_rawDescGZIP(), []int{42}
+	return file_emulator_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Struct) GetFields() []*Cell {
@@ -2408,12 +2931,43 @@ const file_emulator_proto_rawDesc = "" +
 	"\x15UpsertRoutineResponse\"R\n" +
 	"\x14DeleteRoutineRequest\x12:\n" +
 	"\aroutine\x18\x01 \x01(\v2 .bigquery_emulator.v1.RoutineRefR\aroutine\"\x17\n" +
-	"\x15DeleteRoutineResponse\"\x8e\x01\n" +
+	"\x15DeleteRoutineResponse\"\x88\x02\n" +
+	"\x0fRowAccessPolicy\x124\n" +
+	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\x12\x1b\n" +
+	"\tpolicy_id\x18\x02 \x01(\tR\bpolicyId\x12)\n" +
+	"\x10filter_predicate\x18\x03 \x01(\tR\x0ffilterPredicate\x12\x1a\n" +
+	"\bgrantees\x18\x04 \x03(\tR\bgrantees\x12(\n" +
+	"\x10creation_time_ms\x18\x05 \x01(\x03R\x0ecreationTimeMs\x121\n" +
+	"\x15last_modified_time_ms\x18\x06 \x01(\x03R\x12lastModifiedTimeMs\"]\n" +
+	"\x1cUpsertRowAccessPolicyRequest\x12=\n" +
+	"\x06policy\x18\x01 \x01(\v2%.bigquery_emulator.v1.RowAccessPolicyR\x06policy\"^\n" +
+	"\x1dUpsertRowAccessPolicyResponse\x12=\n" +
+	"\x06policy\x18\x01 \x01(\v2%.bigquery_emulator.v1.RowAccessPolicyR\x06policy\"q\n" +
+	"\x1cDeleteRowAccessPolicyRequest\x124\n" +
+	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\x12\x1b\n" +
+	"\tpolicy_id\x18\x02 \x01(\tR\bpolicyId\"\x1f\n" +
+	"\x1dDeleteRowAccessPolicyResponse\"T\n" +
+	"\x1cListRowAccessPoliciesRequest\x124\n" +
+	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\"b\n" +
+	"\x1dListRowAccessPoliciesResponse\x12A\n" +
+	"\bpolicies\x18\x01 \x03(\v2%.bigquery_emulator.v1.RowAccessPolicyR\bpolicies\"\xc4\x01\n" +
+	"\x10ColumnGovernance\x12\x1f\n" +
+	"\vcolumn_name\x18\x01 \x01(\tR\n" +
+	"columnName\x12\x1f\n" +
+	"\vpolicy_tags\x18\x02 \x03(\tR\n" +
+	"policyTags\x12\x1b\n" +
+	"\tmask_kind\x18\x03 \x01(\tR\bmaskKind\x12#\n" +
+	"\rmask_grantees\x18\x04 \x03(\tR\fmaskGrantees\x12,\n" +
+	"\x12default_mask_value\x18\x05 \x01(\tR\x10defaultMaskValue\"\x92\x01\n" +
+	"\x1aSetColumnGovernanceRequest\x124\n" +
+	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\x12>\n" +
+	"\x06column\x18\x02 \x01(\v2&.bigquery_emulator.v1.ColumnGovernanceR\x06column\"\x1d\n" +
+	"\x1bSetColumnGovernanceResponse\"\x8e\x01\n" +
 	"\x10ListRowsResponse\x121\n" +
 	"\x04rows\x18\x01 \x03(\v2\x1d.bigquery_emulator.v1.DataRowR\x04rows\x12\x1d\n" +
 	"\n" +
 	"total_rows\x18\x02 \x01(\x03R\ttotalRows\x12(\n" +
-	"\x10next_start_index\x18\x03 \x01(\x03R\x0enextStartIndex\"\xcc\x02\n" +
+	"\x10next_start_index\x18\x03 \x01(\x03R\x0enextStartIndex\"\xf5\x02\n" +
 	"\fQueryRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12,\n" +
@@ -2422,7 +2976,8 @@ const file_emulator_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\x04 \x03(\v22.bigquery_emulator.v1.QueryRequest.ParametersEntryR\n" +
 	"parameters\x12$\n" +
-	"\x0euse_legacy_sql\x18\x05 \x01(\bR\fuseLegacySql\x1ac\n" +
+	"\x0euse_legacy_sql\x18\x05 \x01(\bR\fuseLegacySql\x12'\n" +
+	"\x0fprincipal_email\x18\x06 \x01(\tR\x0eprincipalEmail\x1ac\n" +
 	"\x0fParametersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.bigquery_emulator.v1.QueryParameterR\x05value:\x028\x01\"i\n" +
@@ -2461,8 +3016,7 @@ const file_emulator_proto_rawDesc = "" +
 	"\x05Array\x126\n" +
 	"\belements\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\belements\"<\n" +
 	"\x06Struct\x122\n" +
-	"\x06fields\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x06fields2\xaf\n" +
-	"\n" +
+	"\x06fields\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x06fields2\xb4\x0e\n" +
 	"\aCatalog\x12n\n" +
 	"\x0fRegisterDataset\x12,.bigquery_emulator.v1.RegisterDatasetRequest\x1a-.bigquery_emulator.v1.RegisterDatasetResponse\x12b\n" +
 	"\vDropDataset\x12(.bigquery_emulator.v1.DropDatasetRequest\x1a).bigquery_emulator.v1.DropDatasetResponse\x12e\n" +
@@ -2479,7 +3033,11 @@ const file_emulator_proto_rawDesc = "" +
 	"\n" +
 	"GetRoutine\x12'.bigquery_emulator.v1.GetRoutineRequest\x1a(.bigquery_emulator.v1.GetRoutineResponse\x12h\n" +
 	"\rUpsertRoutine\x12*.bigquery_emulator.v1.UpsertRoutineRequest\x1a+.bigquery_emulator.v1.UpsertRoutineResponse\x12h\n" +
-	"\rDeleteRoutine\x12*.bigquery_emulator.v1.DeleteRoutineRequest\x1a+.bigquery_emulator.v1.DeleteRoutineResponse2\xb7\x01\n" +
+	"\rDeleteRoutine\x12*.bigquery_emulator.v1.DeleteRoutineRequest\x1a+.bigquery_emulator.v1.DeleteRoutineResponse\x12\x80\x01\n" +
+	"\x15UpsertRowAccessPolicy\x122.bigquery_emulator.v1.UpsertRowAccessPolicyRequest\x1a3.bigquery_emulator.v1.UpsertRowAccessPolicyResponse\x12\x80\x01\n" +
+	"\x15DeleteRowAccessPolicy\x122.bigquery_emulator.v1.DeleteRowAccessPolicyRequest\x1a3.bigquery_emulator.v1.DeleteRowAccessPolicyResponse\x12\x80\x01\n" +
+	"\x15ListRowAccessPolicies\x122.bigquery_emulator.v1.ListRowAccessPoliciesRequest\x1a3.bigquery_emulator.v1.ListRowAccessPoliciesResponse\x12z\n" +
+	"\x13SetColumnGovernance\x120.bigquery_emulator.v1.SetColumnGovernanceRequest\x1a1.bigquery_emulator.v1.SetColumnGovernanceResponse2\xb7\x01\n" +
 	"\x05Query\x12R\n" +
 	"\x06DryRun\x12\".bigquery_emulator.v1.QueryRequest\x1a$.bigquery_emulator.v1.DryRunResponse\x12Z\n" +
 	"\fExecuteQuery\x12\".bigquery_emulator.v1.QueryRequest\x1a$.bigquery_emulator.v1.QueryResultRow0\x01BFZAgithub.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb\xf8\x01\x01b\x06proto3"
@@ -2496,52 +3054,62 @@ func file_emulator_proto_rawDescGZIP() []byte {
 	return file_emulator_proto_rawDescData
 }
 
-var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_emulator_proto_goTypes = []any{
-	(*DatasetRef)(nil),              // 0: bigquery_emulator.v1.DatasetRef
-	(*TableRef)(nil),                // 1: bigquery_emulator.v1.TableRef
-	(*FieldSchema)(nil),             // 2: bigquery_emulator.v1.FieldSchema
-	(*TableSchema)(nil),             // 3: bigquery_emulator.v1.TableSchema
-	(*RegisterDatasetRequest)(nil),  // 4: bigquery_emulator.v1.RegisterDatasetRequest
-	(*RegisterDatasetResponse)(nil), // 5: bigquery_emulator.v1.RegisterDatasetResponse
-	(*DropDatasetRequest)(nil),      // 6: bigquery_emulator.v1.DropDatasetRequest
-	(*DropDatasetResponse)(nil),     // 7: bigquery_emulator.v1.DropDatasetResponse
-	(*ListDatasetsRequest)(nil),     // 8: bigquery_emulator.v1.ListDatasetsRequest
-	(*ListDatasetsResponse)(nil),    // 9: bigquery_emulator.v1.ListDatasetsResponse
-	(*RegisterTableRequest)(nil),    // 10: bigquery_emulator.v1.RegisterTableRequest
-	(*RegisterTableResponse)(nil),   // 11: bigquery_emulator.v1.RegisterTableResponse
-	(*DropTableRequest)(nil),        // 12: bigquery_emulator.v1.DropTableRequest
-	(*DropTableResponse)(nil),       // 13: bigquery_emulator.v1.DropTableResponse
-	(*ListTablesRequest)(nil),       // 14: bigquery_emulator.v1.ListTablesRequest
-	(*ListTablesResponse)(nil),      // 15: bigquery_emulator.v1.ListTablesResponse
-	(*DescribeTableRequest)(nil),    // 16: bigquery_emulator.v1.DescribeTableRequest
-	(*DescribeTableResponse)(nil),   // 17: bigquery_emulator.v1.DescribeTableResponse
-	(*DataRow)(nil),                 // 18: bigquery_emulator.v1.DataRow
-	(*InsertRowsRequest)(nil),       // 19: bigquery_emulator.v1.InsertRowsRequest
-	(*InsertRowsResponse)(nil),      // 20: bigquery_emulator.v1.InsertRowsResponse
-	(*ListRowsRequest)(nil),         // 21: bigquery_emulator.v1.ListRowsRequest
-	(*RoutineRef)(nil),              // 22: bigquery_emulator.v1.RoutineRef
-	(*RoutineDescriptor)(nil),       // 23: bigquery_emulator.v1.RoutineDescriptor
-	(*ListRoutinesRequest)(nil),     // 24: bigquery_emulator.v1.ListRoutinesRequest
-	(*ListRoutinesResponse)(nil),    // 25: bigquery_emulator.v1.ListRoutinesResponse
-	(*GetRoutineRequest)(nil),       // 26: bigquery_emulator.v1.GetRoutineRequest
-	(*GetRoutineResponse)(nil),      // 27: bigquery_emulator.v1.GetRoutineResponse
-	(*UpsertRoutineRequest)(nil),    // 28: bigquery_emulator.v1.UpsertRoutineRequest
-	(*UpsertRoutineResponse)(nil),   // 29: bigquery_emulator.v1.UpsertRoutineResponse
-	(*DeleteRoutineRequest)(nil),    // 30: bigquery_emulator.v1.DeleteRoutineRequest
-	(*DeleteRoutineResponse)(nil),   // 31: bigquery_emulator.v1.DeleteRoutineResponse
-	(*ListRowsResponse)(nil),        // 32: bigquery_emulator.v1.ListRowsResponse
-	(*QueryRequest)(nil),            // 33: bigquery_emulator.v1.QueryRequest
-	(*QueryParameter)(nil),          // 34: bigquery_emulator.v1.QueryParameter
-	(*DryRunResponse)(nil),          // 35: bigquery_emulator.v1.DryRunResponse
-	(*QueryResultRow)(nil),          // 36: bigquery_emulator.v1.QueryResultRow
-	(*PhaseTiming)(nil),             // 37: bigquery_emulator.v1.PhaseTiming
-	(*PhaseTimings)(nil),            // 38: bigquery_emulator.v1.PhaseTimings
-	(*DmlStats)(nil),                // 39: bigquery_emulator.v1.DmlStats
-	(*Cell)(nil),                    // 40: bigquery_emulator.v1.Cell
-	(*Array)(nil),                   // 41: bigquery_emulator.v1.Array
-	(*Struct)(nil),                  // 42: bigquery_emulator.v1.Struct
-	nil,                             // 43: bigquery_emulator.v1.QueryRequest.ParametersEntry
+	(*DatasetRef)(nil),                    // 0: bigquery_emulator.v1.DatasetRef
+	(*TableRef)(nil),                      // 1: bigquery_emulator.v1.TableRef
+	(*FieldSchema)(nil),                   // 2: bigquery_emulator.v1.FieldSchema
+	(*TableSchema)(nil),                   // 3: bigquery_emulator.v1.TableSchema
+	(*RegisterDatasetRequest)(nil),        // 4: bigquery_emulator.v1.RegisterDatasetRequest
+	(*RegisterDatasetResponse)(nil),       // 5: bigquery_emulator.v1.RegisterDatasetResponse
+	(*DropDatasetRequest)(nil),            // 6: bigquery_emulator.v1.DropDatasetRequest
+	(*DropDatasetResponse)(nil),           // 7: bigquery_emulator.v1.DropDatasetResponse
+	(*ListDatasetsRequest)(nil),           // 8: bigquery_emulator.v1.ListDatasetsRequest
+	(*ListDatasetsResponse)(nil),          // 9: bigquery_emulator.v1.ListDatasetsResponse
+	(*RegisterTableRequest)(nil),          // 10: bigquery_emulator.v1.RegisterTableRequest
+	(*RegisterTableResponse)(nil),         // 11: bigquery_emulator.v1.RegisterTableResponse
+	(*DropTableRequest)(nil),              // 12: bigquery_emulator.v1.DropTableRequest
+	(*DropTableResponse)(nil),             // 13: bigquery_emulator.v1.DropTableResponse
+	(*ListTablesRequest)(nil),             // 14: bigquery_emulator.v1.ListTablesRequest
+	(*ListTablesResponse)(nil),            // 15: bigquery_emulator.v1.ListTablesResponse
+	(*DescribeTableRequest)(nil),          // 16: bigquery_emulator.v1.DescribeTableRequest
+	(*DescribeTableResponse)(nil),         // 17: bigquery_emulator.v1.DescribeTableResponse
+	(*DataRow)(nil),                       // 18: bigquery_emulator.v1.DataRow
+	(*InsertRowsRequest)(nil),             // 19: bigquery_emulator.v1.InsertRowsRequest
+	(*InsertRowsResponse)(nil),            // 20: bigquery_emulator.v1.InsertRowsResponse
+	(*ListRowsRequest)(nil),               // 21: bigquery_emulator.v1.ListRowsRequest
+	(*RoutineRef)(nil),                    // 22: bigquery_emulator.v1.RoutineRef
+	(*RoutineDescriptor)(nil),             // 23: bigquery_emulator.v1.RoutineDescriptor
+	(*ListRoutinesRequest)(nil),           // 24: bigquery_emulator.v1.ListRoutinesRequest
+	(*ListRoutinesResponse)(nil),          // 25: bigquery_emulator.v1.ListRoutinesResponse
+	(*GetRoutineRequest)(nil),             // 26: bigquery_emulator.v1.GetRoutineRequest
+	(*GetRoutineResponse)(nil),            // 27: bigquery_emulator.v1.GetRoutineResponse
+	(*UpsertRoutineRequest)(nil),          // 28: bigquery_emulator.v1.UpsertRoutineRequest
+	(*UpsertRoutineResponse)(nil),         // 29: bigquery_emulator.v1.UpsertRoutineResponse
+	(*DeleteRoutineRequest)(nil),          // 30: bigquery_emulator.v1.DeleteRoutineRequest
+	(*DeleteRoutineResponse)(nil),         // 31: bigquery_emulator.v1.DeleteRoutineResponse
+	(*RowAccessPolicy)(nil),               // 32: bigquery_emulator.v1.RowAccessPolicy
+	(*UpsertRowAccessPolicyRequest)(nil),  // 33: bigquery_emulator.v1.UpsertRowAccessPolicyRequest
+	(*UpsertRowAccessPolicyResponse)(nil), // 34: bigquery_emulator.v1.UpsertRowAccessPolicyResponse
+	(*DeleteRowAccessPolicyRequest)(nil),  // 35: bigquery_emulator.v1.DeleteRowAccessPolicyRequest
+	(*DeleteRowAccessPolicyResponse)(nil), // 36: bigquery_emulator.v1.DeleteRowAccessPolicyResponse
+	(*ListRowAccessPoliciesRequest)(nil),  // 37: bigquery_emulator.v1.ListRowAccessPoliciesRequest
+	(*ListRowAccessPoliciesResponse)(nil), // 38: bigquery_emulator.v1.ListRowAccessPoliciesResponse
+	(*ColumnGovernance)(nil),              // 39: bigquery_emulator.v1.ColumnGovernance
+	(*SetColumnGovernanceRequest)(nil),    // 40: bigquery_emulator.v1.SetColumnGovernanceRequest
+	(*SetColumnGovernanceResponse)(nil),   // 41: bigquery_emulator.v1.SetColumnGovernanceResponse
+	(*ListRowsResponse)(nil),              // 42: bigquery_emulator.v1.ListRowsResponse
+	(*QueryRequest)(nil),                  // 43: bigquery_emulator.v1.QueryRequest
+	(*QueryParameter)(nil),                // 44: bigquery_emulator.v1.QueryParameter
+	(*DryRunResponse)(nil),                // 45: bigquery_emulator.v1.DryRunResponse
+	(*QueryResultRow)(nil),                // 46: bigquery_emulator.v1.QueryResultRow
+	(*PhaseTiming)(nil),                   // 47: bigquery_emulator.v1.PhaseTiming
+	(*PhaseTimings)(nil),                  // 48: bigquery_emulator.v1.PhaseTimings
+	(*DmlStats)(nil),                      // 49: bigquery_emulator.v1.DmlStats
+	(*Cell)(nil),                          // 50: bigquery_emulator.v1.Cell
+	(*Array)(nil),                         // 51: bigquery_emulator.v1.Array
+	(*Struct)(nil),                        // 52: bigquery_emulator.v1.Struct
+	nil,                                   // 53: bigquery_emulator.v1.QueryRequest.ParametersEntry
 }
 var file_emulator_proto_depIdxs = []int32{
 	2,  // 0: bigquery_emulator.v1.FieldSchema.fields:type_name -> bigquery_emulator.v1.FieldSchema
@@ -2556,7 +3124,7 @@ var file_emulator_proto_depIdxs = []int32{
 	1,  // 9: bigquery_emulator.v1.ListTablesResponse.tables:type_name -> bigquery_emulator.v1.TableRef
 	1,  // 10: bigquery_emulator.v1.DescribeTableRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	3,  // 11: bigquery_emulator.v1.DescribeTableResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
-	40, // 12: bigquery_emulator.v1.DataRow.cells:type_name -> bigquery_emulator.v1.Cell
+	50, // 12: bigquery_emulator.v1.DataRow.cells:type_name -> bigquery_emulator.v1.Cell
 	1,  // 13: bigquery_emulator.v1.InsertRowsRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	18, // 14: bigquery_emulator.v1.InsertRowsRequest.rows:type_name -> bigquery_emulator.v1.DataRow
 	1,  // 15: bigquery_emulator.v1.ListRowsRequest.table:type_name -> bigquery_emulator.v1.TableRef
@@ -2567,54 +3135,70 @@ var file_emulator_proto_depIdxs = []int32{
 	23, // 20: bigquery_emulator.v1.GetRoutineResponse.routine:type_name -> bigquery_emulator.v1.RoutineDescriptor
 	23, // 21: bigquery_emulator.v1.UpsertRoutineRequest.routine:type_name -> bigquery_emulator.v1.RoutineDescriptor
 	22, // 22: bigquery_emulator.v1.DeleteRoutineRequest.routine:type_name -> bigquery_emulator.v1.RoutineRef
-	18, // 23: bigquery_emulator.v1.ListRowsResponse.rows:type_name -> bigquery_emulator.v1.DataRow
-	43, // 24: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
-	3,  // 25: bigquery_emulator.v1.DryRunResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
-	3,  // 26: bigquery_emulator.v1.QueryResultRow.schema:type_name -> bigquery_emulator.v1.TableSchema
-	40, // 27: bigquery_emulator.v1.QueryResultRow.cells:type_name -> bigquery_emulator.v1.Cell
-	39, // 28: bigquery_emulator.v1.QueryResultRow.dml_stats:type_name -> bigquery_emulator.v1.DmlStats
-	38, // 29: bigquery_emulator.v1.QueryResultRow.phase_timings:type_name -> bigquery_emulator.v1.PhaseTimings
-	37, // 30: bigquery_emulator.v1.PhaseTimings.phases:type_name -> bigquery_emulator.v1.PhaseTiming
-	41, // 31: bigquery_emulator.v1.Cell.array:type_name -> bigquery_emulator.v1.Array
-	42, // 32: bigquery_emulator.v1.Cell.struct_value:type_name -> bigquery_emulator.v1.Struct
-	40, // 33: bigquery_emulator.v1.Array.elements:type_name -> bigquery_emulator.v1.Cell
-	40, // 34: bigquery_emulator.v1.Struct.fields:type_name -> bigquery_emulator.v1.Cell
-	34, // 35: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
-	4,  // 36: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
-	6,  // 37: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
-	8,  // 38: bigquery_emulator.v1.Catalog.ListDatasets:input_type -> bigquery_emulator.v1.ListDatasetsRequest
-	10, // 39: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
-	12, // 40: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
-	14, // 41: bigquery_emulator.v1.Catalog.ListTables:input_type -> bigquery_emulator.v1.ListTablesRequest
-	16, // 42: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
-	19, // 43: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
-	21, // 44: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
-	24, // 45: bigquery_emulator.v1.Catalog.ListRoutines:input_type -> bigquery_emulator.v1.ListRoutinesRequest
-	26, // 46: bigquery_emulator.v1.Catalog.GetRoutine:input_type -> bigquery_emulator.v1.GetRoutineRequest
-	28, // 47: bigquery_emulator.v1.Catalog.UpsertRoutine:input_type -> bigquery_emulator.v1.UpsertRoutineRequest
-	30, // 48: bigquery_emulator.v1.Catalog.DeleteRoutine:input_type -> bigquery_emulator.v1.DeleteRoutineRequest
-	33, // 49: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
-	33, // 50: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
-	5,  // 51: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
-	7,  // 52: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
-	9,  // 53: bigquery_emulator.v1.Catalog.ListDatasets:output_type -> bigquery_emulator.v1.ListDatasetsResponse
-	11, // 54: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
-	13, // 55: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
-	15, // 56: bigquery_emulator.v1.Catalog.ListTables:output_type -> bigquery_emulator.v1.ListTablesResponse
-	17, // 57: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
-	20, // 58: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
-	32, // 59: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
-	25, // 60: bigquery_emulator.v1.Catalog.ListRoutines:output_type -> bigquery_emulator.v1.ListRoutinesResponse
-	27, // 61: bigquery_emulator.v1.Catalog.GetRoutine:output_type -> bigquery_emulator.v1.GetRoutineResponse
-	29, // 62: bigquery_emulator.v1.Catalog.UpsertRoutine:output_type -> bigquery_emulator.v1.UpsertRoutineResponse
-	31, // 63: bigquery_emulator.v1.Catalog.DeleteRoutine:output_type -> bigquery_emulator.v1.DeleteRoutineResponse
-	35, // 64: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
-	36, // 65: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
-	51, // [51:66] is the sub-list for method output_type
-	36, // [36:51] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	1,  // 23: bigquery_emulator.v1.RowAccessPolicy.table:type_name -> bigquery_emulator.v1.TableRef
+	32, // 24: bigquery_emulator.v1.UpsertRowAccessPolicyRequest.policy:type_name -> bigquery_emulator.v1.RowAccessPolicy
+	32, // 25: bigquery_emulator.v1.UpsertRowAccessPolicyResponse.policy:type_name -> bigquery_emulator.v1.RowAccessPolicy
+	1,  // 26: bigquery_emulator.v1.DeleteRowAccessPolicyRequest.table:type_name -> bigquery_emulator.v1.TableRef
+	1,  // 27: bigquery_emulator.v1.ListRowAccessPoliciesRequest.table:type_name -> bigquery_emulator.v1.TableRef
+	32, // 28: bigquery_emulator.v1.ListRowAccessPoliciesResponse.policies:type_name -> bigquery_emulator.v1.RowAccessPolicy
+	1,  // 29: bigquery_emulator.v1.SetColumnGovernanceRequest.table:type_name -> bigquery_emulator.v1.TableRef
+	39, // 30: bigquery_emulator.v1.SetColumnGovernanceRequest.column:type_name -> bigquery_emulator.v1.ColumnGovernance
+	18, // 31: bigquery_emulator.v1.ListRowsResponse.rows:type_name -> bigquery_emulator.v1.DataRow
+	53, // 32: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
+	3,  // 33: bigquery_emulator.v1.DryRunResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
+	3,  // 34: bigquery_emulator.v1.QueryResultRow.schema:type_name -> bigquery_emulator.v1.TableSchema
+	50, // 35: bigquery_emulator.v1.QueryResultRow.cells:type_name -> bigquery_emulator.v1.Cell
+	49, // 36: bigquery_emulator.v1.QueryResultRow.dml_stats:type_name -> bigquery_emulator.v1.DmlStats
+	48, // 37: bigquery_emulator.v1.QueryResultRow.phase_timings:type_name -> bigquery_emulator.v1.PhaseTimings
+	47, // 38: bigquery_emulator.v1.PhaseTimings.phases:type_name -> bigquery_emulator.v1.PhaseTiming
+	51, // 39: bigquery_emulator.v1.Cell.array:type_name -> bigquery_emulator.v1.Array
+	52, // 40: bigquery_emulator.v1.Cell.struct_value:type_name -> bigquery_emulator.v1.Struct
+	50, // 41: bigquery_emulator.v1.Array.elements:type_name -> bigquery_emulator.v1.Cell
+	50, // 42: bigquery_emulator.v1.Struct.fields:type_name -> bigquery_emulator.v1.Cell
+	44, // 43: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
+	4,  // 44: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
+	6,  // 45: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
+	8,  // 46: bigquery_emulator.v1.Catalog.ListDatasets:input_type -> bigquery_emulator.v1.ListDatasetsRequest
+	10, // 47: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
+	12, // 48: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
+	14, // 49: bigquery_emulator.v1.Catalog.ListTables:input_type -> bigquery_emulator.v1.ListTablesRequest
+	16, // 50: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
+	19, // 51: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
+	21, // 52: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
+	24, // 53: bigquery_emulator.v1.Catalog.ListRoutines:input_type -> bigquery_emulator.v1.ListRoutinesRequest
+	26, // 54: bigquery_emulator.v1.Catalog.GetRoutine:input_type -> bigquery_emulator.v1.GetRoutineRequest
+	28, // 55: bigquery_emulator.v1.Catalog.UpsertRoutine:input_type -> bigquery_emulator.v1.UpsertRoutineRequest
+	30, // 56: bigquery_emulator.v1.Catalog.DeleteRoutine:input_type -> bigquery_emulator.v1.DeleteRoutineRequest
+	33, // 57: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:input_type -> bigquery_emulator.v1.UpsertRowAccessPolicyRequest
+	35, // 58: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:input_type -> bigquery_emulator.v1.DeleteRowAccessPolicyRequest
+	37, // 59: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:input_type -> bigquery_emulator.v1.ListRowAccessPoliciesRequest
+	40, // 60: bigquery_emulator.v1.Catalog.SetColumnGovernance:input_type -> bigquery_emulator.v1.SetColumnGovernanceRequest
+	43, // 61: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
+	43, // 62: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
+	5,  // 63: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
+	7,  // 64: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
+	9,  // 65: bigquery_emulator.v1.Catalog.ListDatasets:output_type -> bigquery_emulator.v1.ListDatasetsResponse
+	11, // 66: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
+	13, // 67: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
+	15, // 68: bigquery_emulator.v1.Catalog.ListTables:output_type -> bigquery_emulator.v1.ListTablesResponse
+	17, // 69: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
+	20, // 70: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
+	42, // 71: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
+	25, // 72: bigquery_emulator.v1.Catalog.ListRoutines:output_type -> bigquery_emulator.v1.ListRoutinesResponse
+	27, // 73: bigquery_emulator.v1.Catalog.GetRoutine:output_type -> bigquery_emulator.v1.GetRoutineResponse
+	29, // 74: bigquery_emulator.v1.Catalog.UpsertRoutine:output_type -> bigquery_emulator.v1.UpsertRoutineResponse
+	31, // 75: bigquery_emulator.v1.Catalog.DeleteRoutine:output_type -> bigquery_emulator.v1.DeleteRoutineResponse
+	34, // 76: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:output_type -> bigquery_emulator.v1.UpsertRowAccessPolicyResponse
+	36, // 77: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:output_type -> bigquery_emulator.v1.DeleteRowAccessPolicyResponse
+	38, // 78: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:output_type -> bigquery_emulator.v1.ListRowAccessPoliciesResponse
+	41, // 79: bigquery_emulator.v1.Catalog.SetColumnGovernance:output_type -> bigquery_emulator.v1.SetColumnGovernanceResponse
+	45, // 80: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
+	46, // 81: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
+	63, // [63:82] is the sub-list for method output_type
+	44, // [44:63] is the sub-list for method input_type
+	44, // [44:44] is the sub-list for extension type_name
+	44, // [44:44] is the sub-list for extension extendee
+	0,  // [0:44] is the sub-list for field type_name
 }
 
 func init() { file_emulator_proto_init() }
@@ -2622,7 +3206,7 @@ func file_emulator_proto_init() {
 	if File_emulator_proto != nil {
 		return
 	}
-	file_emulator_proto_msgTypes[40].OneofWrappers = []any{
+	file_emulator_proto_msgTypes[50].OneofWrappers = []any{
 		(*Cell_StringValue)(nil),
 		(*Cell_NullValue)(nil),
 		(*Cell_Array)(nil),
@@ -2634,7 +3218,7 @@ func file_emulator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_emulator_proto_rawDesc), len(file_emulator_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   44,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
@@ -2647,6 +3231,9 @@ func file_emulator_proto_init() {
 	file_emulator_proto_depIdxs = nil
 }
 
-// file_proto_emulator_proto_init is the legacy init hook referenced by
-// storage_read.pb.go and storage_write.pb.go from an older codegen pass.
-func file_proto_emulator_proto_init() { file_emulator_proto_init() }
+// file_proto_emulator_proto_init is the legacy init name expected by
+// storage_read.pb.go and storage_write.pb.go when emulator.proto was
+// generated under proto/emulator.proto.
+func file_proto_emulator_proto_init() {
+	file_emulator_proto_init()
+}

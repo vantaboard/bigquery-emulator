@@ -28,12 +28,3 @@ func SkipEmulatorBQML(t *testing.T) {
 		t.Skip("BigQuery ML is not implemented by the bigquery-emulator")
 	}
 }
-
-// SkipEmulatorManagedWriterDefaultStream skips DefaultStream append tests when
-// the emulator cannot yet decode all proto row shapes (e.g. extreme BIGNUMERIC).
-func SkipEmulatorManagedWriterDefaultStream(t *testing.T) {
-	t.Helper()
-	if strings.TrimSpace(os.Getenv("BIGQUERY_EMULATOR_HOST")) != "" {
-		t.Skip("ManagedWriter DefaultStream proto append with full type matrix is not yet supported by the emulator")
-	}
-}

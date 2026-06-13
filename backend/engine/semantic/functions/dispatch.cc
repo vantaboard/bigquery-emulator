@@ -122,6 +122,12 @@ std::optional<absl::StatusOr<Value>> Dispatch(
     return Format(args);
   }
   if (name == "st_geogpoint") return StGeogPoint(args);
+  if (name == "st_geogfromtext") return StGeogFromText(args);
+  if (name == "st_astext") return StAsText(args);
+  if (name == "st_distance") return StDistance(args);
+  if (name == "st_within") return StWithin(args);
+  if (name == "st_contains") return StContains(args);
+  if (name == "st_intersects") return StIntersects(args);
   if (name == "to_json") return ToJson(args);
   if (name == "to_json_string") return ToJsonString(args);
   if (name == "parse_json") return ParseJson(args);

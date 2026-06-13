@@ -14,9 +14,12 @@ namespace semantic {
 namespace functions {
 
 absl::StatusOr<Value> StGeogPoint(const std::vector<Value>& args);
-
-// Used by FORMAT('%T', ...) for geography values.
-absl::StatusOr<std::string> GeographyTypeLiteralForFormat();
+absl::StatusOr<Value> StGeogFromText(const std::vector<Value>& args);
+absl::StatusOr<Value> StAsText(const std::vector<Value>& args);
+absl::StatusOr<Value> StDistance(const std::vector<Value>& args);
+absl::StatusOr<Value> StWithin(const std::vector<Value>& args);
+absl::StatusOr<Value> StContains(const std::vector<Value>& args);
+absl::StatusOr<Value> StIntersects(const std::vector<Value>& args);
 
 absl::StatusOr<Value> EmuFormatTypeLiteral(const std::vector<Value>& args);
 

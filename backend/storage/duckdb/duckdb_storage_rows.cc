@@ -11,10 +11,12 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/duckdb/duckdb_storage_version_log.h"
 #include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
@@ -197,6 +199,10 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   }
 
   // 4 + 5. Snapshot to a sibling tmp parquet then atomic rename.
+  const std::int64_t mutation_ts_ms = absl::ToUnixMillis(absl::Now());
+  absl::Status archive = internal::ArchiveParquetBeforeReplace(
+      *this, id, parquet_path, mutation_ts_ms);
+  if (!archive.ok()) return archive;
   return internal::SnapshotTempTableToParquet(
       "AppendRows", impl_.get(), tmp_table, tmp_path, parquet_path);
 }
@@ -245,6 +251,10 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
     }
   }
 
+  const std::int64_t mutation_ts_ms = absl::ToUnixMillis(absl::Now());
+  absl::Status archive = internal::ArchiveParquetBeforeReplace(
+      *this, id, parquet_path, mutation_ts_ms);
+  if (!archive.ok()) return archive;
   return internal::SnapshotTempTableToParquet(
       "OverwriteRows", impl_.get(), tmp_table, tmp_path, parquet_path);
 }
@@ -404,6 +414,24 @@ std::optional<std::string> DuckDBStorage::ParquetSnapshotPath(
     return std::nullopt;
   }
   return parquet_path;
+}
+
+absl::StatusOr<std::optional<std::string>> DuckDBStorage::ParquetSnapshotPathAt(
+    const TableId& id, std::int64_t as_of_ms) const {
+  absl::MutexLock lock(&mu_);
+  const fs::path ds_dir = DatasetDir(id.project_id, id.dataset_id);
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return std::nullopt;
+  }
+  const fs::path meta_path = TableMetaPath(id);
+  if (!fs::exists(meta_path, ec)) {
+    return std::nullopt;
+  }
+  const std::string live_parquet_path = TableParquetPath(id);
+  const std::int64_t now_ms = absl::ToUnixMillis(absl::Now());
+  return internal::ResolveParquetSnapshotAt(
+      *this, id, live_parquet_path, as_of_ms, now_ms);
 }
 
 }  // namespace duckdb

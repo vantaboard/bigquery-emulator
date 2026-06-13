@@ -628,16 +628,17 @@ keys.keyset_length: local_stub
 keys.encrypt: unsupported
 keys.decrypt_bytes: unsupported
 
-# Geography / GIS: `unsupported` for now. DuckDB's `spatial`
-# extension could close the gap but the integration is a separate
-# initiative; until that lands the deliberate posture is
-# `unsupported` (per the specialized-feature plan).
-st_geogfromtext: unsupported
+# Geography / GIS MVP: WKT-backed GEOGRAPHY values on the semantic
+# executor (WGS84 spherical haversine + planar point-in-polygon for
+# predicates). DuckDB `spatial` can close remaining gaps later.
+st_geogpoint: semantic_executor
+st_geogfromtext: semantic_executor
+st_astext: semantic_executor
+st_distance: semantic_executor
+st_within: semantic_executor
+st_contains: semantic_executor
+st_intersects: semantic_executor
 st_geogfromwkb: unsupported
-st_distance: unsupported
-st_within: unsupported
-st_contains: unsupported
-st_intersects: unsupported
 
 # --- JSON  -------------------------------------------
 # BigQuery JSON extract/query/value functions diverge from DuckDB's
@@ -664,14 +665,11 @@ to_json: semantic_executor
 to_json_string: semantic_executor
 
 # Misc BigQuery-specific scalars. `GENERATE_UUID` is non-deterministic
-# (stub would lie about uniqueness across calls); `SESSION_USER` has
-# no analog in the emulator's no-auth posture; both stay
-# `unsupported` until the matching plan lands a real implementation
-# (`GENERATE_UUID` is a candidate for a real local UUIDv4 generator;
-# see `.cursor/plans/full-*`). `ERROR(msg)` is a control-flow
-# function whose semantics belong to the procedural scripting
-# executor (`docs/ENGINE_POLICY.md`); it evaluates on the semantic
-# executor.
-generate_uuid: unsupported
+# and evaluates on the semantic executor (RFC-4122 v4 per call).
+# `SESSION_USER` has no analog in the emulator's no-auth posture and
+# stays `unsupported`. `ERROR(msg)` is a control-flow function whose
+# semantics belong to the procedural scripting executor
+# (`docs/ENGINE_POLICY.md`); it evaluates on the semantic executor.
+generate_uuid: semantic_executor
 session_user: unsupported
 error: semantic_executor

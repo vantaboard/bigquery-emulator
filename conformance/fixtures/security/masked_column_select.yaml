@@ -1,0 +1,32 @@
+# masked_column_select: policy-tagged STRING columns are SHA256-masked
+# for the synthetic emulator principal at query time.
+name: masked_column_select
+description: |
+  CREATE TABLE with a policy-tagged secret column; SELECT masks the value.
+project_id: proj-security-masked-col
+dataset_id: ds_security_mask
+setup:
+  - dataset: ds_security_mask
+  - table:
+      dataset: ds_security_mask
+      id: secrets
+      schema:
+        - name: id
+          type: INT64
+        - name: secret
+          type: STRING
+          policy_tags:
+            - projects/p/locations/us/taxonomies/t/policyTags/pt
+  - sql: |
+      INSERT INTO ds_security_mask.secrets (id, secret) VALUES
+        (1, 'hello')
+query: |
+  SELECT id, secret FROM ds_security_mask.secrets ORDER BY id
+expected:
+  route: duckdb_native
+  match: schema_only
+  schema:
+    - name: id
+      type: INT64
+    - name: secret
+      type: STRING

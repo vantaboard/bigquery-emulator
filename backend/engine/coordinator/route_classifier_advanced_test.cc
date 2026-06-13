@@ -240,6 +240,17 @@ TEST_F(RouteClassifierTest, LocalStubOutranksSemanticExecutorInSameQuery) {
   EXPECT_EQ(d.offending_node, "function:keys.new_keyset");
 }
 
+TEST_F(RouteClassifierTest, MatchRecognizeScanPromotesToSemanticExecutor) {
+  const auto* stmt = Analyze(
+      "SELECT m FROM people MATCH_RECOGNIZE("
+      "ORDER BY id MEASURES COUNT(*) AS m PATTERN (A) DEFINE A AS id > 0)");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedMatchRecognizeScan");
+}
+
 TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
   // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
   // that the classifier returns the unsupported route and records

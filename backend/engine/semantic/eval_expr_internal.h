@@ -94,6 +94,10 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);
 
+absl::StatusOr<Value> EvalExtendedCast(const ::googlesql::ResolvedCast& cast,
+                                       Value inner,
+                                       const ::googlesql::Type* source);
+
 absl::StatusOr<Value> DispatchFunctionByName(
     absl::string_view name,
     const std::vector<Value>& args,

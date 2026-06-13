@@ -86,9 +86,15 @@ ResolvedAnalyzeStmt: control_op
 ResolvedAuxLoadDataStmt: control_op
 ResolvedAssertStmt: semantic_executor
 ResolvedExportDataStmt: control_op
+ResolvedCreateSnapshotTableStmt: control_op
+ResolvedCloneDataStmt: control_op
+ResolvedUndropStmt: control_op
+ResolvedDropSnapshotTableStmt: control_op
 
 # --- Relational scans --------------------------------------------------
 ResolvedTableScan: duckdb_native
+# Wildcard tables (`dataset.prefix_*`) resolve to `WildcardTable` in
+# the virtual catalog and materialize as a union before lowering.
 ResolvedSingleRowScan: duckdb_native
 ResolvedProjectScan: duckdb_native
 ResolvedFilterScan: duckdb_native
@@ -109,7 +115,7 @@ ResolvedRecursiveScan: duckdb_rewrite
 ResolvedRecursiveRefScan: duckdb_rewrite
 ResolvedPivotScan: duckdb_rewrite
 ResolvedUnpivotScan: duckdb_rewrite
-ResolvedMatchRecognizeScan: semantic_executor status=planned
+ResolvedMatchRecognizeScan: semantic_executor
 ResolvedGroupRowsScan: semantic_executor
 ResolvedTVFScan: semantic_executor
 ResolvedRelationArgumentScan: semantic_executor status=planned

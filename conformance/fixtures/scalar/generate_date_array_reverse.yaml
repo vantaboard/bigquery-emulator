@@ -1,0 +1,14 @@
+# generate_date_array_reverse: descending DATE array via negative step.
+name: generate_date_array_reverse
+description: |
+  GENERATE_DATE_ARRAY with a negative day step walks backward across
+  an inclusive range on the semantic executor.
+project_id: proj-scalar-generate-date-array-reverse
+query: |
+  SELECT TO_JSON_STRING(
+    GENERATE_DATE_ARRAY(DATE '2020-01-05', DATE '2020-01-01', -1)
+  ) AS arr
+expected:
+  route: semantic_executor
+  rows:
+    - {arr: '["2020-01-05","2020-01-04","2020-01-03","2020-01-02","2020-01-01"]'}

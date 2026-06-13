@@ -168,9 +168,13 @@ func executeSQLCopy(ctx context.Context, catalog enginepb.CatalogClient, query e
 func buildCopySQL(sources []bqtypes.TableReference, destDataset, destTable, wd string) (string, error) {
 	selects := make([]string, 0, len(sources))
 	for _, src := range sources {
-		base, _, _ := snapshots.ParseDecorator(src.TableID)
-		selects = append(selects, fmt.Sprintf("SELECT * FROM %s.%s",
-			quoteIdent(src.DatasetID), quoteIdent(base)))
+		base, epoch, decorated := snapshots.ParseDecorator(src.TableID)
+		from := fmt.Sprintf("%s.%s", quoteIdent(src.DatasetID), quoteIdent(base))
+		if decorated {
+			from = fmt.Sprintf("%s FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)",
+				from, epoch)
+		}
+		selects = append(selects, "SELECT * FROM "+from)
 	}
 	fromClause := strings.Join(selects, " UNION ALL ")
 	dest := fmt.Sprintf("%s.%s", quoteIdent(destDataset), quoteIdent(destTable))

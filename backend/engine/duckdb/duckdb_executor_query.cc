@@ -11,10 +11,13 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/catalog/table_governance.h"
 #include "backend/catalog/virtual_table.h"
+#include "backend/catalog/wildcard_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
+#include "backend/engine/duckdb/duckdb_executor_security.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
@@ -86,8 +89,13 @@ class DuckDBRowSource : public RowSource {
   DuckDBRowSource(::duckdb_database db,
                   ::duckdb_connection conn,
                   ::duckdb_result result,
-                  schema::TableSchema schema)
-      : db_(db), conn_(conn), result_(result), schema_(std::move(schema)) {}
+                  schema::TableSchema schema,
+                  std::vector<internal::OutputColumnMask> column_masks)
+      : db_(db),
+        conn_(conn),
+        result_(result),
+        schema_(std::move(schema)),
+        column_masks_(std::move(column_masks)) {}
 
   ~DuckDBRowSource() override {
     if (chunk_ != nullptr) ::duckdb_destroy_data_chunk(&chunk_);
@@ -123,6 +131,11 @@ class DuckDBRowSource : public RowSource {
     absl::StatusOr<storage::Row> rendered =
         arrow_to_bq::ChunkRowToCells(chunk_, next_in_chunk_, schema_);
     if (!rendered.ok()) return rendered.status();
+    if (!column_masks_.empty()) {
+      absl::Status masked =
+          internal::ApplyOutputColumnMasks(column_masks_, &rendered.value());
+      if (!masked.ok()) return masked;
+    }
     *row = std::move(rendered).value();
     ++next_in_chunk_;
     return true;
@@ -133,6 +146,7 @@ class DuckDBRowSource : public RowSource {
   ::duckdb_connection conn_ = nullptr;
   ::duckdb_result result_{};
   schema::TableSchema schema_{};
+  std::vector<internal::OutputColumnMask> column_masks_{};
   ::duckdb_data_chunk chunk_ = nullptr;
   ::idx_t chunk_size_ = 0;
   ::idx_t next_in_chunk_ = 0;
@@ -210,6 +224,37 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   absl::Status visit_status = stmt.Accept(&collector);
   if (!visit_status.ok()) return visit_status;
 
+  const std::string principal =
+      request.principal_email.empty()
+          ? std::string(catalog::kEmulatorPrincipalEmail)
+          : request.principal_email;
+  catalog::TableGovernance merged_governance;
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (storage_table == nullptr) continue;
+    absl::StatusOr<storage::TableGovernance> gov_or =
+        storage_->GetTableGovernance(storage_table->storage_table_id());
+    if (!gov_or.ok()) return gov_or.status();
+    catalog::TableGovernance catalog_gov =
+        internal::StorageGovernanceToCatalog(*gov_or);
+    merged_governance.row_access_policies.insert(
+        merged_governance.row_access_policies.end(),
+        catalog_gov.row_access_policies.begin(),
+        catalog_gov.row_access_policies.end());
+    merged_governance.columns.insert(merged_governance.columns.end(),
+                                     catalog_gov.columns.begin(),
+                                     catalog_gov.columns.end());
+    absl::StatusOr<std::string> filter_or = catalog::ComposeRowAccessFilterSql(
+        catalog_gov.row_access_policies, principal);
+    if (!filter_or.ok()) return filter_or.status();
+    if (!filter_or->empty()) {
+      collector.SetRowAccessFilter(tbl, *filter_or);
+    }
+  }
+  std::vector<internal::OutputColumnMask> column_masks =
+      internal::BuildOutputColumnMasks(
+          *output_schema, merged_governance, principal);
+
   const absl::Time setup_start = absl::Now();
   // 4. Open a fresh in-memory DuckDB. The connection / database are
   // per-query: tables we materialize live only for this RPC and
@@ -259,6 +304,23 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // already present in the connection's default schema.
   const absl::Time attach_start = absl::Now();
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (const auto* wildcard_table =
+            dynamic_cast<const catalog::WildcardTable*>(tbl)) {
+      std::optional<std::vector<std::string>> suffix_allowlist =
+          collector.WildcardSuffixAllowList(tbl);
+      absl::Status status =
+          wildcard_table->MaterializeInDuckDBWithSuffixAllowList(
+              conn,
+              storage_,
+              internal::QuoteIdent(tbl->Name()),
+              suffix_allowlist);
+      if (!status.ok()) {
+        ::duckdb_disconnect(&conn);
+        ::duckdb_close(&db);
+        return status;
+      }
+      continue;
+    }
     if (const auto* virtual_table =
             dynamic_cast<const catalog::VirtualCatalogTable*>(tbl)) {
       absl::Status status = virtual_table->MaterializeInDuckDB(
@@ -280,7 +342,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
           "'; rebuild against a GoogleSqlCatalog-backed analyzer"));
     }
     absl::Status status = internal::AttachStorageTable(
-        conn, storage_, *storage_table, request.phase_recorder.get());
+        conn,
+        storage_,
+        *storage_table,
+        collector.SystemTimeAsOfMs(tbl),
+        collector.RowAccessFilterSql(tbl).value_or(""),
+        request.phase_recorder.get());
     if (!status.ok()) {
       ::duckdb_disconnect(&conn);
       ::duckdb_close(&db);
@@ -319,8 +386,8 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
         "duckdb_execute",
         absl::ToInt64Microseconds(absl::Now() - execute_start));
   }
-  return std::unique_ptr<RowSource>(
-      new DuckDBRowSource(db, conn, result, std::move(*output_schema)));
+  return std::unique_ptr<RowSource>(new DuckDBRowSource(
+      db, conn, result, std::move(*output_schema), std::move(column_masks)));
 }
 
 }  // namespace duckdb

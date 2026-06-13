@@ -96,6 +96,19 @@ cc_library(
 )
 
 cc_library(
+    name = "wildcard_table_suffix_filter",
+    srcs = ["wildcard_table_suffix_filter.cc"],
+    hdrs = ["wildcard_table_suffix_filter.h"],
+    deps = [
+        ":wildcard_table_util",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "wildcard_table",
     srcs = ["wildcard_table.cc"],
     hdrs = ["wildcard_table.h"],
@@ -241,10 +254,27 @@ cc_library(
 )
 
 cc_library(
+    name = "js_udf_registry",
+    srcs = ["js_udf_registry.cc"],
+    hdrs = ["js_udf_registry.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "udf_registry",
     srcs = ["udf_registry.cc"],
     hdrs = ["udf_registry.h"],
     deps = [
+        ":js_udf_registry",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
@@ -296,6 +326,21 @@ cc_library(
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
     ],
+)
+
+cc_library(
+    name = "table_governance",
+    srcs = ["table_governance.cc"],
+    hdrs = ["table_governance.h"],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+    linkopts = ["-lcrypto"],
 )
 
 cc_library(

@@ -1,0 +1,33 @@
+# sample_weighted_percent: TABLESAMPLE with WITH WEIGHT on semantic path.
+name: sample_weighted_percent
+description: |
+  BERNOULLI (100 PERCENT) WITH WEIGHT returns every input row when
+  weights are positive (semantic weighted sampling).
+project_id: proj-sample-weighted
+dataset_id: ds_sample_weighted
+setup:
+  - dataset: ds_sample_weighted
+  - table:
+      dataset: ds_sample_weighted
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: weight, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_sample_weighted
+      table: items
+      rows:
+        - {id: 1, weight: 1}
+        - {id: 2, weight: 5}
+        - {id: 3, weight: 2}
+query: |
+  SELECT id
+    FROM ds_sample_weighted.items
+   TABLESAMPLE BERNOULLI (100 PERCENT) WITH WEIGHT (weight)
+   ORDER BY id
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1"}
+    - {id: "2"}
+    - {id: "3"}

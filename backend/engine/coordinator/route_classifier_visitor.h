@@ -39,6 +39,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedAnalyticFunctionCall* node) override;
   absl::Status VisitResolvedAnalyticScan(
       const ::googlesql::ResolvedAnalyticScan* node) override;
+  absl::Status VisitResolvedSampleScan(
+      const ::googlesql::ResolvedSampleScan* node) override;
   absl::Status VisitResolvedQueryStmt(
       const ::googlesql::ResolvedQueryStmt* node) override;
   absl::Status VisitResolvedJoinScan(
@@ -67,6 +69,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
  private:
   void CheckNodeClass(const ::googlesql::ResolvedNode* node);
   void CheckFunction(const ::googlesql::ResolvedNode* node);
+  void CheckAnalyticScanDateTimestampRange(
+      const ::googlesql::ResolvedAnalyticScan* node);
   void MaybePromote(Disposition d, std::string name);
 
   Disposition disposition_ = Disposition::kDuckdbNative;

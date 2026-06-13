@@ -1,0 +1,28 @@
+# window_frame_range_date: RANGE BETWEEN numeric offsets on DATE ORDER BY.
+name: window_frame_range_date
+description: |
+  COUNT(*) OVER (ORDER BY event_date RANGE BETWEEN 1 PRECEDING AND 1
+  FOLLOWING) on an inline relation. Pins semantic-executor RANGE frames
+  when the ORDER BY key is DATE with integer offsets.
+project_id: proj-window-range-date
+query: |
+  WITH events AS (
+    SELECT DATE '2020-01-01' AS event_date
+    UNION ALL SELECT DATE '2020-01-02'
+    UNION ALL SELECT DATE '2020-01-03'
+    UNION ALL SELECT DATE '2020-01-04'
+  )
+  SELECT event_date,
+         COUNT(*) OVER (
+           ORDER BY event_date
+           RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
+         ) AS cnt
+    FROM events
+   ORDER BY event_date
+expected:
+  route: semantic_executor
+  rows:
+    - {event_date: "2020-01-01", cnt: "2"}
+    - {event_date: "2020-01-02", cnt: "3"}
+    - {event_date: "2020-01-03", cnt: "3"}
+    - {event_date: "2020-01-04", cnt: "2"}

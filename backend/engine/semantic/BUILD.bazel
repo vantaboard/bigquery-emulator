@@ -19,7 +19,12 @@
 # scope and design constraints.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//:googlesql_deps.bzl", "GOOGLESQL_SQL_FUNCTION_DEPS", "GOOGLESQL_SQL_TVF_DEPS")
+load(
+    "//:googlesql_deps.bzl",
+    "GOOGLESQL_MATCH_RECOGNIZE_DEPS",
+    "GOOGLESQL_SQL_FUNCTION_DEPS",
+    "GOOGLESQL_SQL_TVF_DEPS",
+)
 
 package(default_visibility = ["//visibility:public"])
 
@@ -45,6 +50,21 @@ cc_test(
 )
 
 cc_library(
+    name = "geography_value",
+    srcs = ["geography_value.cc"],
+    hdrs = ["geography_value.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "value",
     srcs = [
         "value.cc",
@@ -56,6 +76,7 @@ cc_library(
     ],
     deps = [
         ":error",
+        ":geography_value",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/status",
@@ -108,11 +129,29 @@ cc_library(
 )
 
 cc_library(
+    name = "js_udf_runtime",
+    srcs = ["js_udf_runtime.cc"],
+    hdrs = ["js_udf_runtime.h"],
+    deps = [
+        ":error",
+        ":value",
+        "//backend/catalog:js_udf_registry",
+        "//third_party/duktape",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "eval_expr",
     srcs = [
         "eval_expr.cc",
         "eval_expr_calls.cc",
         "eval_expr_cast.cc",
+        "eval_expr_cast_extended.cc",
         "eval_expr_cast_format.cc",
         "eval_expr_cast_helpers.cc",
         "eval_expr_cast_modifiers.cc",
@@ -131,8 +170,10 @@ cc_library(
     deps = [
         ":error",
         ":frame_stack",
+        ":js_udf_runtime",
         ":system_variables",
         ":value",
+        "//backend/catalog:js_udf_registry",
         "//backend/catalog:udf_registry",
         "//backend/engine/semantic/functions:datetime_funcs",
         "//backend/engine/semantic/functions:dispatch",
@@ -144,12 +185,14 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         # `googlesql/public/constant.h` is bundled into the prebuilt
         # artifact's catch-all header set; the public wrapper API
         # exposes it transitively through `:simple_catalog` (which
         # `#include`s `constant.h` for `SimpleConstant`). There is no
         # standalone `:constant` wrapper today.
         "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:type",
@@ -185,8 +228,10 @@ cc_library(
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
         "scan_eval_analytic.cc",
+        "scan_eval_sample.cc",
         "scan_eval_pipe.cc",
         "scan_eval_group_rows.cc",
+        "scan_eval_match_recognize.cc",
         "scan_eval_scan_impl.cc",
     ],
     hdrs = [
@@ -200,14 +245,18 @@ cc_library(
         ":frame_stack",
         ":outer_row_eval",
         ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
         "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:evaluator",
         "//backend/catalog:storage_table",
         "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/functions:operator_funcs",
         "//backend/engine/semantic/functions:specialized_funcs",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
-    ] + GOOGLESQL_SQL_FUNCTION_DEPS + GOOGLESQL_SQL_TVF_DEPS,
+    ] + GOOGLESQL_SQL_FUNCTION_DEPS + GOOGLESQL_SQL_TVF_DEPS +
+    GOOGLESQL_MATCH_RECOGNIZE_DEPS,
 )
 
 cc_test(

@@ -1,0 +1,12 @@
+# cast_extended_geography_string: CAST GEOGRAPHY to STRING via extended_cast.
+name: cast_extended_geography_string
+description: |
+  CAST(ST_GEOGPOINT(...) AS STRING) uses extended_cast conversion to
+  WKT text on the semantic executor.
+project_id: proj-scalar-cast-extended-geography
+query: |
+  SELECT CAST(ST_GEOGPOINT(1, 2) AS STRING) AS g
+expected:
+  route: semantic_executor
+  rows:
+    - {g: "POINT(1 2)"}

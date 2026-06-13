@@ -146,7 +146,7 @@ state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 | **BigQuery Connection** | Set `BIGQUERY_STORAGE_GRPC_ENDPOINT`. Metadata-only (no live federated data sources; IAM methods are unimplemented). |
 | **BigQuery Migration** (v2alpha REST) | Partial: workflow create/get/list/delete/start on the emulator HTTP port. Use `bqopts.MigrationRESTClientOptions()`. gRPC `NewClient` is not emulated. |
 | **Reservation** | When `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set, Reservation gRPC is multiplexed on that listener. If only HTTP is set, the test skips. |
-| **ManagedWriter / Storage Read** | Skipped unless `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set; uses `bqopts.StorageGRPCClientOptions()`. `DefaultStream` subtests still skip on the emulator (reserved `_default` proto-type matrix differs from explicit `CreateWriteStream`). `PendingStream` and multi-stream Storage Read run when the gRPC endpoint is set. |
+| **ManagedWriter / Storage Read** | Skipped unless `BIGQUERY_STORAGE_GRPC_ENDPOINT` is set; uses `bqopts.StorageGRPCClientOptions()`. `DefaultStream` and `PendingStream` append subtests run when the gRPC endpoint is set (full proto type matrix including NUMERIC/BIGNUMERIC/GEOGRAPHY). Multi-stream Storage Read runs when the gRPC endpoint is set. |
 | **GCS sample loads** (`gs://cloud-samples-data/...`) | Skipped when `BIGQUERY_EMULATOR_HOST` is set and `STORAGE_EMULATOR_HOST` is unset. When both are set, tests expect the compose-mounted fake-gcs objects (including `bigquery/hive-partitioning-samples/customlayout/*`). |
 | **Legacy SQL** | This emulator rejects `useLegacySql=true` with HTTP 400 (see `docs/REST_API.md`); samples that rely on legacy syntax fail rather than skip. Adjust the sample set accordingly. |
 | **CREATE MODEL / ML** + **routine DDL** | Skipped via `bqtestutil.SkipEmulatorBQML()` in Go model/export samples (mirrors Python `emulator_pytest_skip.py` / Node `models.test.js` skip). |
@@ -232,7 +232,7 @@ set.
 When `BIGQUERY_EMULATOR_HOST` is set, the task also loads the
 repo-owned pytest plugin
 [`emulator_pytest_skip.py`](python-bigquery-tests/emulator_pytest_skip.py)
-(`-p emulator_pytest_skip`) which skips BQML, geography, legacy SQL,
+(`-p emulator_pytest_skip`) which skips BQML, legacy SQL,
 and public-data samples whose tables are not in the bundled seed file.
 Override or narrow via `PYTHON_SAMPLES_PYTEST_ARGS` (appended last).
 
@@ -653,8 +653,10 @@ DBT_BIGQUERY_RUN_TRIAGE=1 \
 | **GCS `upload_file`** | Skipped unless `STORAGE_EMULATOR_HOST` + fake-gcs wiring lands in this lane |
 | **INFORMATION_SCHEMA / docs generate** | Skipped (`catalog`, `TestDocsGenerateBigQuery`) |
 | **Materialized views** | Skipped (`simple_bigquery_view`, `materialized` paths) |
-| **JS / SQL UDAF functions** | Skipped (engine gaps; JS UDFs and external-language UDFs are unsupported per `docs/ENGINE_POLICY.md`) |
-| **Policy tags / grants / change history** | Skipped (deferred REST surfaces) |
+| **SQL UDAF functions** | Skipped (`functions/test_udaf`; external-language UDAFs unsupported per `docs/ENGINE_POLICY.md`) |
+| **Policy tags / change history** | Skipped (deferred REST surfaces; row-access + column masking run via `grant_access` / `column_policy` functional tests) |
+| **JS scalar UDFs** | Runnable (`functions/test_js` unskipped; pinned by `conformance/fixtures/udf/js_scalar_add.yaml`) |
+| **Wildcard tables** | Runnable (dbt wildcard functional tests unskipped) |
 | **BaseSimpleMaterializations** | Skipped by default; set `DBT_BIGQUERY_RUN_TRIAGE=1` for feasibility |
 
 See [`FEASIBILITY.md`](dbt-bigquery-tests/FEASIBILITY.md) for the client-level

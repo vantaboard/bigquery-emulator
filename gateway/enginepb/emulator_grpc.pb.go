@@ -30,19 +30,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Catalog_RegisterDataset_FullMethodName = "/bigquery_emulator.v1.Catalog/RegisterDataset"
-	Catalog_DropDataset_FullMethodName     = "/bigquery_emulator.v1.Catalog/DropDataset"
-	Catalog_ListDatasets_FullMethodName    = "/bigquery_emulator.v1.Catalog/ListDatasets"
-	Catalog_RegisterTable_FullMethodName   = "/bigquery_emulator.v1.Catalog/RegisterTable"
-	Catalog_DropTable_FullMethodName       = "/bigquery_emulator.v1.Catalog/DropTable"
-	Catalog_ListTables_FullMethodName      = "/bigquery_emulator.v1.Catalog/ListTables"
-	Catalog_DescribeTable_FullMethodName   = "/bigquery_emulator.v1.Catalog/DescribeTable"
-	Catalog_InsertRows_FullMethodName      = "/bigquery_emulator.v1.Catalog/InsertRows"
-	Catalog_ListRows_FullMethodName        = "/bigquery_emulator.v1.Catalog/ListRows"
-	Catalog_ListRoutines_FullMethodName    = "/bigquery_emulator.v1.Catalog/ListRoutines"
-	Catalog_GetRoutine_FullMethodName      = "/bigquery_emulator.v1.Catalog/GetRoutine"
-	Catalog_UpsertRoutine_FullMethodName   = "/bigquery_emulator.v1.Catalog/UpsertRoutine"
-	Catalog_DeleteRoutine_FullMethodName   = "/bigquery_emulator.v1.Catalog/DeleteRoutine"
+	Catalog_RegisterDataset_FullMethodName       = "/bigquery_emulator.v1.Catalog/RegisterDataset"
+	Catalog_DropDataset_FullMethodName           = "/bigquery_emulator.v1.Catalog/DropDataset"
+	Catalog_ListDatasets_FullMethodName          = "/bigquery_emulator.v1.Catalog/ListDatasets"
+	Catalog_RegisterTable_FullMethodName         = "/bigquery_emulator.v1.Catalog/RegisterTable"
+	Catalog_DropTable_FullMethodName             = "/bigquery_emulator.v1.Catalog/DropTable"
+	Catalog_ListTables_FullMethodName            = "/bigquery_emulator.v1.Catalog/ListTables"
+	Catalog_DescribeTable_FullMethodName         = "/bigquery_emulator.v1.Catalog/DescribeTable"
+	Catalog_InsertRows_FullMethodName            = "/bigquery_emulator.v1.Catalog/InsertRows"
+	Catalog_ListRows_FullMethodName              = "/bigquery_emulator.v1.Catalog/ListRows"
+	Catalog_ListRoutines_FullMethodName          = "/bigquery_emulator.v1.Catalog/ListRoutines"
+	Catalog_GetRoutine_FullMethodName            = "/bigquery_emulator.v1.Catalog/GetRoutine"
+	Catalog_UpsertRoutine_FullMethodName         = "/bigquery_emulator.v1.Catalog/UpsertRoutine"
+	Catalog_DeleteRoutine_FullMethodName         = "/bigquery_emulator.v1.Catalog/DeleteRoutine"
+	Catalog_UpsertRowAccessPolicy_FullMethodName = "/bigquery_emulator.v1.Catalog/UpsertRowAccessPolicy"
+	Catalog_DeleteRowAccessPolicy_FullMethodName = "/bigquery_emulator.v1.Catalog/DeleteRowAccessPolicy"
+	Catalog_ListRowAccessPolicies_FullMethodName = "/bigquery_emulator.v1.Catalog/ListRowAccessPolicies"
+	Catalog_SetColumnGovernance_FullMethodName   = "/bigquery_emulator.v1.Catalog/SetColumnGovernance"
 )
 
 // CatalogClient is the client API for Catalog service.
@@ -76,6 +80,11 @@ type CatalogClient interface {
 	GetRoutine(ctx context.Context, in *GetRoutineRequest, opts ...grpc.CallOption) (*GetRoutineResponse, error)
 	UpsertRoutine(ctx context.Context, in *UpsertRoutineRequest, opts ...grpc.CallOption) (*UpsertRoutineResponse, error)
 	DeleteRoutine(ctx context.Context, in *DeleteRoutineRequest, opts ...grpc.CallOption) (*DeleteRoutineResponse, error)
+	// Row-access policies and column-level security metadata.
+	UpsertRowAccessPolicy(ctx context.Context, in *UpsertRowAccessPolicyRequest, opts ...grpc.CallOption) (*UpsertRowAccessPolicyResponse, error)
+	DeleteRowAccessPolicy(ctx context.Context, in *DeleteRowAccessPolicyRequest, opts ...grpc.CallOption) (*DeleteRowAccessPolicyResponse, error)
+	ListRowAccessPolicies(ctx context.Context, in *ListRowAccessPoliciesRequest, opts ...grpc.CallOption) (*ListRowAccessPoliciesResponse, error)
+	SetColumnGovernance(ctx context.Context, in *SetColumnGovernanceRequest, opts ...grpc.CallOption) (*SetColumnGovernanceResponse, error)
 }
 
 type catalogClient struct {
@@ -216,6 +225,46 @@ func (c *catalogClient) DeleteRoutine(ctx context.Context, in *DeleteRoutineRequ
 	return out, nil
 }
 
+func (c *catalogClient) UpsertRowAccessPolicy(ctx context.Context, in *UpsertRowAccessPolicyRequest, opts ...grpc.CallOption) (*UpsertRowAccessPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertRowAccessPolicyResponse)
+	err := c.cc.Invoke(ctx, Catalog_UpsertRowAccessPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *catalogClient) DeleteRowAccessPolicy(ctx context.Context, in *DeleteRowAccessPolicyRequest, opts ...grpc.CallOption) (*DeleteRowAccessPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteRowAccessPolicyResponse)
+	err := c.cc.Invoke(ctx, Catalog_DeleteRowAccessPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *catalogClient) ListRowAccessPolicies(ctx context.Context, in *ListRowAccessPoliciesRequest, opts ...grpc.CallOption) (*ListRowAccessPoliciesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRowAccessPoliciesResponse)
+	err := c.cc.Invoke(ctx, Catalog_ListRowAccessPolicies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *catalogClient) SetColumnGovernance(ctx context.Context, in *SetColumnGovernanceRequest, opts ...grpc.CallOption) (*SetColumnGovernanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetColumnGovernanceResponse)
+	err := c.cc.Invoke(ctx, Catalog_SetColumnGovernance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CatalogServer is the server API for Catalog service.
 // All implementations should embed UnimplementedCatalogServer
 // for forward compatibility.
@@ -247,6 +296,11 @@ type CatalogServer interface {
 	GetRoutine(context.Context, *GetRoutineRequest) (*GetRoutineResponse, error)
 	UpsertRoutine(context.Context, *UpsertRoutineRequest) (*UpsertRoutineResponse, error)
 	DeleteRoutine(context.Context, *DeleteRoutineRequest) (*DeleteRoutineResponse, error)
+	// Row-access policies and column-level security metadata.
+	UpsertRowAccessPolicy(context.Context, *UpsertRowAccessPolicyRequest) (*UpsertRowAccessPolicyResponse, error)
+	DeleteRowAccessPolicy(context.Context, *DeleteRowAccessPolicyRequest) (*DeleteRowAccessPolicyResponse, error)
+	ListRowAccessPolicies(context.Context, *ListRowAccessPoliciesRequest) (*ListRowAccessPoliciesResponse, error)
+	SetColumnGovernance(context.Context, *SetColumnGovernanceRequest) (*SetColumnGovernanceResponse, error)
 }
 
 // UnimplementedCatalogServer should be embedded to have
@@ -294,6 +348,18 @@ func (UnimplementedCatalogServer) UpsertRoutine(context.Context, *UpsertRoutineR
 }
 func (UnimplementedCatalogServer) DeleteRoutine(context.Context, *DeleteRoutineRequest) (*DeleteRoutineResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteRoutine not implemented")
+}
+func (UnimplementedCatalogServer) UpsertRowAccessPolicy(context.Context, *UpsertRowAccessPolicyRequest) (*UpsertRowAccessPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertRowAccessPolicy not implemented")
+}
+func (UnimplementedCatalogServer) DeleteRowAccessPolicy(context.Context, *DeleteRowAccessPolicyRequest) (*DeleteRowAccessPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteRowAccessPolicy not implemented")
+}
+func (UnimplementedCatalogServer) ListRowAccessPolicies(context.Context, *ListRowAccessPoliciesRequest) (*ListRowAccessPoliciesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRowAccessPolicies not implemented")
+}
+func (UnimplementedCatalogServer) SetColumnGovernance(context.Context, *SetColumnGovernanceRequest) (*SetColumnGovernanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetColumnGovernance not implemented")
 }
 func (UnimplementedCatalogServer) testEmbeddedByValue() {}
 
@@ -549,6 +615,78 @@ func _Catalog_DeleteRoutine_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Catalog_UpsertRowAccessPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertRowAccessPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).UpsertRowAccessPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_UpsertRowAccessPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).UpsertRowAccessPolicy(ctx, req.(*UpsertRowAccessPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Catalog_DeleteRowAccessPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRowAccessPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).DeleteRowAccessPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_DeleteRowAccessPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).DeleteRowAccessPolicy(ctx, req.(*DeleteRowAccessPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Catalog_ListRowAccessPolicies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRowAccessPoliciesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).ListRowAccessPolicies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_ListRowAccessPolicies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).ListRowAccessPolicies(ctx, req.(*ListRowAccessPoliciesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Catalog_SetColumnGovernance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetColumnGovernanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).SetColumnGovernance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_SetColumnGovernance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).SetColumnGovernance(ctx, req.(*SetColumnGovernanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Catalog_ServiceDesc is the grpc.ServiceDesc for Catalog service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -607,6 +745,22 @@ var Catalog_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteRoutine",
 			Handler:    _Catalog_DeleteRoutine_Handler,
+		},
+		{
+			MethodName: "UpsertRowAccessPolicy",
+			Handler:    _Catalog_UpsertRowAccessPolicy_Handler,
+		},
+		{
+			MethodName: "DeleteRowAccessPolicy",
+			Handler:    _Catalog_DeleteRowAccessPolicy_Handler,
+		},
+		{
+			MethodName: "ListRowAccessPolicies",
+			Handler:    _Catalog_ListRowAccessPolicies_Handler,
+		},
+		{
+			MethodName: "SetColumnGovernance",
+			Handler:    _Catalog_SetColumnGovernance_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -23,6 +23,7 @@ cc_library(
         "control_op_literals.cc",
         "control_op_materialized_view.cc",
         "control_op_options.cc",
+        "control_op_time_travel.cc",
     ],
     hdrs = [
         "control_op_executor.h",
@@ -41,6 +42,7 @@ cc_library(
         "//backend/engine",
         "//backend/engine/coordinator:executor",
         "//backend/engine/duckdb:arrow_to_bq",
+        "//backend/engine/duckdb:duckdb_executor_time_travel",
         "//backend/engine/duckdb/transpiler:transpiler",
         "//backend/engine/duckdb/udf:registrar",
         "//backend/engine/semantic:value",

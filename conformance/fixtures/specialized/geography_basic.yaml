@@ -1,0 +1,36 @@
+# geography_basic: ST_GEOGPOINT / ST_GEOGFROMTEXT / ST_ASTEXT and
+# spherical ST_DISTANCE / ST_WITHIN / ST_CONTAINS / ST_INTERSECTS.
+#
+# Pins the semantic executor's `geog_funcs.cc` WKT-backed GEOGRAPHY
+# MVP (no DuckDB spatial required).
+name: specialized_geography_basic
+description: |
+  Core geography constructors, WKT round-trip, haversine distance,
+  and point-in-polygon predicates on the semantic executor.
+project_id: proj-specialized-geography
+query: |
+  SELECT
+    ST_ASTEXT(ST_GEOGPOINT(1, 2)) AS pt_text,
+    ST_ASTEXT(ST_GEOGFROMTEXT('POINT(3 4)')) AS from_text,
+    CAST(ST_DISTANCE(ST_GEOGPOINT(0, 0), ST_GEOGPOINT(1, 0)) AS INT64)
+      AS dist_m,
+    ST_CONTAINS(
+      ST_GEOGFROMTEXT('POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))'),
+      ST_GEOGPOINT(1, 1)
+    ) AS contains_pt,
+    ST_WITHIN(
+      ST_GEOGPOINT(1, 1),
+      ST_GEOGFROMTEXT('POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))')
+    ) AS within_poly,
+    ST_INTERSECTS(ST_GEOGPOINT(0, 0), ST_GEOGPOINT(5, 5)) AS far_apart
+expected:
+  route: semantic_executor
+  rows:
+    - {
+        pt_text: "POINT(1 2)",
+        from_text: "POINT(3 4)",
+        dist_m: "111194",
+        contains_pt: true,
+        within_poly: true,
+        far_apart: false,
+      }

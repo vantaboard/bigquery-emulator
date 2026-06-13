@@ -28,6 +28,7 @@
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/row_restriction.h"
+#include "backend/storage/table_governance.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -305,6 +306,16 @@ class Storage {
       const TableId& id, const schema::TableSchema& schema) = 0;
   [[nodiscard]] virtual absl::Status DropTable(const TableId& id) = 0;
 
+  // Restores a table previously soft-deleted by `DropTable`. When
+  // `deleted_ms` is zero, restores the newest tombstone for the table.
+  [[nodiscard]] virtual absl::Status RestoreTable(const TableId& id,
+                                                  std::int64_t deleted_ms = 0) {
+    (void)id;
+    (void)deleted_ms;
+    return absl::UnimplementedError(
+        "Storage::RestoreTable is not implemented for this backend");
+  }
+
   // Lists the tables registered under `dataset_id`. Returns an empty
   // vector when the dataset is empty. NOT_FOUND when the dataset does
   // not exist; INVALID_ARGUMENT when `project_id` / `dataset_id` is
@@ -379,6 +390,15 @@ class Storage {
     return std::nullopt;
   }
 
+  // When the backend supports historical Parquet snapshots, returns the
+  // absolute path to the snapshot that was current at `as_of_ms` (Unix epoch
+  // milliseconds). Default: same as `ParquetSnapshotPath` (ignores as-of).
+  [[nodiscard]] virtual absl::StatusOr<std::optional<std::string>>
+  ParquetSnapshotPathAt(const TableId& id, std::int64_t as_of_ms) const {
+    (void)as_of_ms;
+    return ParquetSnapshotPath(id);
+  }
+
   // ------------------------------------------------------------------
   // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the
   // per-project registries can rehydrate across engine restarts.
@@ -395,6 +415,37 @@ class Storage {
       const DatasetId& dataset_id) const = 0;
   [[nodiscard]] virtual absl::StatusOr<std::vector<RoutineRecord>>
   ListAllRoutines() const = 0;
+
+  // Row-access policies and column-level security metadata.
+  [[nodiscard]] virtual absl::StatusOr<TableGovernance> GetTableGovernance(
+      const TableId& id) const {
+    (void)id;
+    return TableGovernance{};
+  }
+  [[nodiscard]] virtual absl::Status UpsertRowAccessPolicy(
+      const TableId& id, const RowAccessPolicyRecord& policy) {
+    (void)id;
+    (void)policy;
+    return absl::UnimplementedError(
+        "Storage backend does not persist row access policies");
+  }
+  [[nodiscard]] virtual absl::Status DeleteRowAccessPolicy(
+      const TableId& id, absl::string_view policy_id) {
+    (void)id;
+    (void)policy_id;
+    return absl::UnimplementedError(
+        "Storage backend does not persist row access policies");
+  }
+  [[nodiscard]] virtual absl::Status SetColumnGovernance(
+      const TableId& id,
+      absl::string_view column_name,
+      const ColumnGovernanceRecord& column) {
+    (void)id;
+    (void)column_name;
+    (void)column;
+    return absl::UnimplementedError(
+        "Storage backend does not persist column governance");
+  }
 };
 
 }  // namespace storage

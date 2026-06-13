@@ -261,6 +261,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
       return MaterializeAnalyticScan(
           *scan->GetAs<::googlesql::ResolvedAnalyticScan>(), ctx);
+    case ::googlesql::RESOLVED_SAMPLE_SCAN:
+      return MaterializeSampleScan(
+          *scan->GetAs<::googlesql::ResolvedSampleScan>(), ctx);
     case ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN:
       return MaterializeLimitOffsetScan(
           *scan->GetAs<::googlesql::ResolvedLimitOffsetScan>(), ctx);
@@ -282,6 +285,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_GROUP_ROWS_SCAN:
       return MaterializeGroupRowsScan(
           *scan->GetAs<::googlesql::ResolvedGroupRowsScan>(), ctx);
+    case ::googlesql::RESOLVED_MATCH_RECOGNIZE_SCAN:
+      return MaterializeMatchRecognizeScan(
+          *scan->GetAs<::googlesql::ResolvedMatchRecognizeScan>(), ctx);
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: scan kind ",

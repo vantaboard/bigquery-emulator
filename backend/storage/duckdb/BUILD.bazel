@@ -16,10 +16,14 @@ cc_library(
         "duckdb_storage_read_stream.cc",
         "duckdb_storage_rows.cc",
         "duckdb_storage_routines.cc",
+        "duckdb_storage_governance.cc",
+        "duckdb_storage_version_log.cc",
     ],
     hdrs = [
         "duckdb_storage.h",
+        "duckdb_storage_governance.h",
         "duckdb_storage_internal.h",
+        "duckdb_storage_version_log.h",
     ],
     deps = [
         "//backend/schema",

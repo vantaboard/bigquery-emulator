@@ -88,6 +88,8 @@ class DuckDBStorage : public Storage {
   absl::Status CreateTable(const TableId& id,
                            const schema::TableSchema& schema) override;
   absl::Status DropTable(const TableId& id) override;
+  absl::Status RestoreTable(const TableId& id,
+                            std::int64_t deleted_ms = 0) override;
   absl::StatusOr<std::vector<TableId>> ListTables(
       const DatasetId& dataset_id) const override;
 
@@ -109,6 +111,8 @@ class DuckDBStorage : public Storage {
 
   std::optional<std::string> ParquetSnapshotPath(
       const TableId& id) const override;
+  absl::StatusOr<std::optional<std::string>> ParquetSnapshotPathAt(
+      const TableId& id, std::int64_t as_of_ms) const override;
 
   absl::Status UpsertRoutine(const RoutineRecord& record) override;
   absl::Status DeleteRoutine(const RoutineId& id) override;
@@ -116,6 +120,17 @@ class DuckDBStorage : public Storage {
   absl::StatusOr<std::vector<RoutineRecord>> ListRoutines(
       const DatasetId& dataset_id) const override;
   absl::StatusOr<std::vector<RoutineRecord>> ListAllRoutines() const override;
+
+  absl::StatusOr<TableGovernance> GetTableGovernance(
+      const TableId& id) const override;
+  absl::Status UpsertRowAccessPolicy(
+      const TableId& id, const RowAccessPolicyRecord& policy) override;
+  absl::Status DeleteRowAccessPolicy(const TableId& id,
+                                     absl::string_view policy_id) override;
+  absl::Status SetColumnGovernance(
+      const TableId& id,
+      absl::string_view column_name,
+      const ColumnGovernanceRecord& column) override;
 
   // Ensures catalog metadata tables (e.g. `__bqemu_routines`) exist.
   // Called from `Open` and idempotently before routine CRUD.
@@ -140,6 +155,11 @@ class DuckDBStorage : public Storage {
   std::string DatasetMetaPath(const DatasetId& id) const;
   std::string TableMetaPath(const TableId& id) const;
   std::string TableParquetPath(const TableId& id) const;
+
+  std::string TableGovernancePath(const TableId& id) const;
+
+  absl::Status PutTableGovernance(const TableId& id,
+                                  const TableGovernance& gov);
 
   // Stable DuckDB schema name for a (project, dataset) pair. We can't
   // just use the dataset_id because two projects may share a dataset

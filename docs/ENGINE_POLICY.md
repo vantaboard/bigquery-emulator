@@ -111,7 +111,7 @@ summary the unsupported error envelope points at. Per-family posture
 | `LOAD DATA <gs://...>` (cloud storage)                                                                       | `unsupported` | The emulator does not model BigQuery's cloud-storage ingest surface.                                                                                                                                        |
 | `EXPORT DATA` (local `file://` URI)                                                                          | `control_op`  | DuckDB `COPY (SELECT ...) TO` for CSV/JSON/Parquet; `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
 | `CREATE MATERIALIZED VIEW`                                                                                   | `control_op`  | Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by `conformance/fixtures/ddl/materialized_view_query.yaml`. |
-| `INFORMATION_SCHEMA.*` reflection views                                                                      | `duckdb_native` | `<dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> `` resolve at analyze time through `backend/catalog/info_schema_table.{h,cc}` (a `VirtualCatalogTable`) and materialize from `Storage` + the routine/view registries: `TABLES`, `COLUMNS`, `SCHEMATA`, `VIEWS` (view registry), `ROUTINES` (`__bqemu_routines`), `COLUMN_FIELD_PATHS` (recursed STRUCT/ARRAY paths), `PARTITIONS` / `TABLE_STORAGE` (`Storage::CountRows`, single unpartitioned partition; byte columns NULL per the persistence non-goal), and `TABLE_OPTIONS` / `KEY_COLUMN_USAGE` (empty — options/constraints are not modeled). `JOBS` / `JOBS_BY_PROJECT` stay unresolved (NOT_FOUND): job state lives in the Go gateway, not the engine `Storage`, so faking it would violate the no-approximation rule (see `.cursor/plans/full-01-information-schema.plan.md`). Conformance fixtures under `conformance/fixtures/info_schema/`. |
+| `INFORMATION_SCHEMA.*` reflection views                                                                      | `duckdb_native` | `<dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> `` resolve at analyze time through `backend/catalog/info_schema_table.{h,cc}` (a `VirtualCatalogTable`) and materialize from `Storage` + the routine/view registries: `TABLES`, `COLUMNS`, `SCHEMATA`, `VIEWS` (view registry), `ROUTINES` (`__bqemu_routines`), `COLUMN_FIELD_PATHS` (recursed STRUCT/ARRAY paths), `PARTITIONS` / `TABLE_STORAGE` (`Storage::CountRows`, single unpartitioned partition; byte columns NULL per the persistence non-goal), and `TABLE_OPTIONS` / `KEY_COLUMN_USAGE` (empty — options/constraints are not modeled). `JOBS` / `JOBS_BY_PROJECT` are **not** engine-resolved: the gateway rewrites those queries to a snapshot table in `` `_bqemu_jobs.JOBS` `` materialized from the in-process job registry (`gateway/query/info_schema_jobs.go`, `gateway/jobs/info_schema.go`) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under `conformance/fixtures/info_schema/`. |
 
 The two halves of the `local_stub` posture are load-bearing:
 
@@ -308,13 +308,15 @@ where noted.
 |---|---|---|---|
 | CAST FORMAT | `CAST(DATE '2018-01-30' AS STRING FORMAT 'YYYY')` | `semantic_executor` | `scalar/cast_format_date_to_string.yaml`, `cast_format_parse_date.yaml` |
 | CAST AT TIME ZONE | `CAST(TIMESTAMP ... AS STRING AT TIME ZONE 'UTC')` | `semantic_executor` | `scalar/cast_timestamp_at_timezone.yaml` |
+| CAST extended | `CAST(ST_GEOGPOINT(...) AS STRING)` | `semantic_executor` | `scalar/cast_extended_geography_string.yaml` |
 | COLLATE in ORDER BY | `ORDER BY name COLLATE 'und:ci'` | `semantic_executor` | `scalar/order_by_collate_und_ci.yaml` |
 | SELECT AS VALUE | `SELECT AS VALUE 42 AS n` | `semantic_executor` | `scalar/select_as_value_scalar.yaml` |
 | Set-op CORRESPONDING | `UNION ALL CORRESPONDING` | `duckdb_native` (subset) | `setops/set_op_corresponding_union_all.yaml` |
 
-Extended-cast / type-modifier casts (`STRING(n)`, `NUMERIC(p,s)`, …)
-still surface `UNIMPLEMENTED` on the semantic path until a follow-up
-plan lands them.
+Extended-cast shapes that remain out of scope (proto / enum / range-of-proto /
+graph / measure / tokenlist targets) still surface `UNIMPLEMENTED` on the
+semantic path. Type-modifier casts (`STRING(n)`, `NUMERIC(p,s)`, …) evaluate
+on `eval_expr_cast.cc` (`cast_type_modifiers.yaml`).
 
 ## Exact-decimal (`NUMERIC` / `BIGNUMERIC`)
 
@@ -338,6 +340,27 @@ than approximating in `DOUBLE`.
 Results encode as exact decimal strings on the wire (no float
 artifacts); `arrow_to_bq` renders `HUGEINT`-backed and `VARCHAR`-backed
 decimals exactly (`backend/engine/duckdb/arrow_to_bq_*.cc`).
+
+## Row-access and column-level security (MVP)
+
+Governance is enforced at **query time** for the synthetic principal
+`emulator@bigquery.local` (see `gateway/middleware/auth.go`). The
+emulator does not implement multi-principal IAM; policies are stored
+via REST (`rowAccessPolicies.*`, `tables.*` with policy tags / `maskKind`)
+and applied inside `DuckDbExecutor::ExecuteQuery`.
+
+**Row-access policies:** predicates for policies whose grantee list is
+empty or includes the synthetic principal are OR-composed and injected
+into table materialization (`WHERE` on load). Policies targeting only
+other principals do not grant the emulator access.
+
+**Column masking:** policy tags on STRING/BYTES columns default to
+SHA256 masking; explicit `maskKind` supports NULLIFY, DEFAULT_VALUE,
+and DENIED. DENIED columns surface `accessDenied` (HTTP 403) when
+selected. Masking runs in the DuckDB row source after the query
+executes (`duckdb_executor_security.*`).
+
+Conformance fixtures live under `conformance/fixtures/security/`.
 
 ## Cross-references
 

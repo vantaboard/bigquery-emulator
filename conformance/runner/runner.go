@@ -430,6 +430,10 @@ func runSetupStep(ctx context.Context, base string, step SetupStep) error {
 		return setupRows(ctx, base, step.Rows)
 	case strings.TrimSpace(step.SQL) != "":
 		return setupSQL(ctx, base, step.SQL)
+	case step.RowAccessPolicy != nil:
+		return setupRowAccessPolicy(ctx, base, step.RowAccessPolicy)
+	case step.ColumnGovernance != nil:
+		return setupColumnGovernance(ctx, base, step.ColumnGovernance)
 	default:
 		return errors.New("empty setup step (validated at load time)")
 	}
@@ -549,10 +553,68 @@ func columnToTableField(c SchemaColumn) bqtypes.TableFieldSchema {
 		Mode:        c.Mode,
 		Description: c.Description,
 	}
+	if len(c.PolicyTags) > 0 {
+		out.PolicyTags = &bqtypes.PolicyTagList{Names: append([]string(nil), c.PolicyTags...)}
+	}
 	for _, f := range c.Fields {
 		out.Fields = append(out.Fields, columnToTableField(f))
 	}
 	return out
+}
+
+func setupRowAccessPolicy(ctx context.Context, base string, rap *RowAccessPolicySetup) error {
+	body := map[string]any{
+		"rowAccessPolicyReference": map[string]string{
+			"projectId": projectIDFromBase(base),
+			"datasetId": rap.Dataset,
+			"tableId":   rap.Table,
+			"policyId":  rap.PolicyID,
+		},
+		"filterPredicate": rap.FilterPredicate,
+	}
+	if len(rap.Grantees) > 0 {
+		body["grantees"] = rap.Grantees
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("marshal row access policy: %w", err)
+	}
+	url := fmt.Sprintf("%s/datasets/%s/tables/%s/rowAccessPolicies", base, rap.Dataset, rap.Table)
+	status, respBody, err := doRequest(ctx, url, jsonBody)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("rowAccessPolicies.insert -> %d: %s", status, snippet(respBody))
+	}
+	return nil
+}
+
+func setupColumnGovernance(ctx context.Context, base string, cg *ColumnGovernanceSetup) error {
+	field := map[string]any{
+		"name":     cg.Column,
+		"type":     "STRING",
+		"maskKind": cg.MaskKind,
+	}
+	if cg.PolicyTag != "" {
+		field["policyTags"] = map[string]any{"names": []string{cg.PolicyTag}}
+	}
+	patchBody := map[string]any{
+		"schema": map[string]any{"fields": []map[string]any{field}},
+	}
+	jsonBody, err := json.Marshal(patchBody)
+	if err != nil {
+		return fmt.Errorf("marshal column governance patch: %w", err)
+	}
+	url := fmt.Sprintf("%s/datasets/%s/tables/%s", base, cg.Dataset, cg.Table)
+	status, respBody, err := doPatchRequest(ctx, url, jsonBody)
+	if err != nil {
+		return err
+	}
+	if status < 200 || status >= 300 {
+		return fmt.Errorf("tables.patch column governance -> %d: %s", status, snippet(respBody))
+	}
+	return nil
 }
 
 // projectIDFromBase pulls the projectId from a URL of the form

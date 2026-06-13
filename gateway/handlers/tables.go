@@ -201,6 +201,7 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
 		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
+		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
 		created := nowMillis()
 		if deps.Snapshots != nil {
 			if ms, parseErr := strconv.ParseInt(created, 10, 64); parseErr == nil {
@@ -380,6 +381,7 @@ func TableUpdate(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
+		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -400,6 +402,7 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 		}
 		deps.Metadata.MergeTable(projectID, datasetID, tableID, t)
 		syncPatchedTableSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
+		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
 		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 			t = applyTableMetadataOverlay(t, overlay)
 		}

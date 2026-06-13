@@ -18,3 +18,13 @@ GOOGLESQL_SQL_TVF_DEPS = select({
     ],
     "//conditions:default": [],
 })
+
+# MATCH_RECOGNIZE pattern compiler (`CompiledPattern` / `MatchPartition`).
+# Prebuilt mode resolves headers via `//googlesql/resolved_ast` -> `:_all_hdrs`
+# and links symbols from `:_archive`.
+GOOGLESQL_MATCH_RECOGNIZE_DEPS = select({
+    "//:googlesql_source": [
+        "@googlesql//googlesql/public/functions/match_recognize:compiled_pattern",
+    ],
+    "//conditions:default": [],
+})

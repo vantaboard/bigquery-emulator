@@ -6,6 +6,7 @@
 // live in `control_op_ddl.cc`; the public dispatch surface is
 // `control_op_executor.cc`.
 
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -29,10 +30,14 @@ class ResolvedAnalyzeStmt;
 class ResolvedAlterTableStmt;
 class ResolvedAuxLoadDataStmt;
 class ResolvedCreateMaterializedViewStmt;
+class ResolvedCloneDataStmt;
+class ResolvedCreateSnapshotTableStmt;
 class ResolvedCreateTableAsSelectStmt;
 class ResolvedCreateTableStmt;
 class ResolvedDropStmt;
+class ResolvedDropSnapshotTableStmt;
 class ResolvedExportDataStmt;
+class ResolvedUndropStmt;
 class Table;
 }  // namespace googlesql
 
@@ -70,10 +75,12 @@ class TableScanCollector : public ::googlesql::ResolvedASTVisitor {
 
 absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql);
 
-absl::Status AttachStorageTableAt(::duckdb_connection conn,
-                                  storage::Storage* storage,
-                                  const catalog::StorageTable& table,
-                                  absl::string_view quoted_table_name);
+absl::Status AttachStorageTableAt(
+    ::duckdb_connection conn,
+    storage::Storage* storage,
+    const catalog::StorageTable& table,
+    absl::string_view quoted_table_name,
+    std::optional<std::int64_t> as_of_ms = std::nullopt);
 
 absl::StatusOr<std::vector<storage::Row>> DrainTableRows(
     ::duckdb_connection conn,
@@ -147,6 +154,34 @@ absl::Status RunLoadData(storage::Storage& storage,
                          absl::string_view project_id,
                          absl::string_view default_dataset_id,
                          const ::googlesql::ResolvedAuxLoadDataStmt* stmt);
+
+absl::Status RunCreateTableClone(
+    storage::Storage& storage,
+    absl::string_view project_id,
+    absl::string_view default_dataset_id,
+    const ::googlesql::ResolvedCreateTableStmt* stmt);
+
+absl::Status RunCreateSnapshotTable(
+    storage::Storage& storage,
+    absl::string_view project_id,
+    absl::string_view default_dataset_id,
+    const ::googlesql::ResolvedCreateSnapshotTableStmt* stmt);
+
+absl::Status RunCloneData(storage::Storage& storage,
+                          absl::string_view project_id,
+                          absl::string_view default_dataset_id,
+                          const ::googlesql::ResolvedCloneDataStmt* stmt);
+
+absl::Status RunUndrop(storage::Storage& storage,
+                       absl::string_view project_id,
+                       absl::string_view default_dataset_id,
+                       const ::googlesql::ResolvedUndropStmt* stmt);
+
+absl::Status RunDropSnapshotTable(
+    storage::Storage& storage,
+    absl::string_view project_id,
+    absl::string_view default_dataset_id,
+    const ::googlesql::ResolvedDropSnapshotTableStmt* stmt);
 
 }  // namespace internal
 }  // namespace control

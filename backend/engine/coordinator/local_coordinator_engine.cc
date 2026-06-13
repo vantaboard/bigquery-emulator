@@ -12,6 +12,7 @@
 #include "absl/time/time.h"
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/routine_persistence.h"
 #include "backend/catalog/tvf_registry.h"
@@ -258,6 +259,9 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
     absl::Status registered = catalog::RegisterProjectFunction(
         request.project_id, is_temp, std::move(*reg_output), std::move(*fn_or));
     if (!registered.ok()) return registered;
+    absl::Status js_registered = catalog::RegisterJsUdfFromCreateFunction(
+        request.project_id, *create_fn);
+    if (!js_registered.ok()) return js_registered;
     return catalog::PersistRoutineDdl(
         bq_catalog->storage(), request, *reg_stmt);
   }

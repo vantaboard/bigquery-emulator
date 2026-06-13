@@ -1,8 +1,11 @@
 #include <cctype>
 #include <string>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/coordinator/sql_preprocess_internal.h"
 
@@ -480,11 +483,9 @@ std::string PreprocessFunctionBodyBase(absl::string_view sql) {
       normalized.push_back(c);
     }
   }
-  // Rewrite STRUCT literal casts before INTEGER→INT64 alias so patterns still
-  // match `CAST(lit AS INTEGER) AS field` from bigquery-utils fixtures.
-  return RewriteIntegerTypeAlias(
+  return LowerTableDecorators(RewriteIntegerTypeAlias(
       RewriteStructInt64LiteralCasts(RewriteFormatTypeLiteral(
-          RewriteAnonymousStructFieldAccess(StripBlockComments(normalized)))));
+          RewriteAnonymousStructFieldAccess(StripBlockComments(normalized))))));
 }
 
 std::string NormalizeCreateFunctionAsParens(absl::string_view sql) {

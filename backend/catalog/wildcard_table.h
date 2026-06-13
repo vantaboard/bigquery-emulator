@@ -2,6 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_CATALOG_WILDCARD_TABLE_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,8 +42,17 @@ class WildcardTable : public VirtualCatalogTable {
       const storage::Storage* storage,
       absl::string_view quoted_table_name) const override;
 
+  // Same as MaterializeInDuckDB but prunes the matched-table set when
+  // `suffix_allowlist` is present (constant `_TABLE_SUFFIX` predicate).
+  absl::Status MaterializeInDuckDBWithSuffixAllowList(
+      ::duckdb_connection conn,
+      const storage::Storage* storage,
+      absl::string_view quoted_table_name,
+      const std::optional<std::vector<std::string>>& suffix_allowlist) const;
+
  private:
-  absl::StatusOr<std::vector<storage::Row>> CollectUnionRows() const;
+  absl::StatusOr<std::vector<storage::Row>> CollectUnionRows(
+      const std::optional<std::vector<std::string>>& suffix_allowlist) const;
 
   storage::TableId wildcard_id_;
   std::string table_prefix_;

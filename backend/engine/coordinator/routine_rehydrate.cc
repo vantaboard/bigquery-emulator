@@ -7,6 +7,7 @@
 #include "absl/status/status.h"
 #include "backend/catalog/create_function_util.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
@@ -44,10 +45,14 @@ absl::Status RegisterResolvedRoutine(
       const bool is_temp =
           create_fn->create_scope() ==
           ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
-      return catalog::RegisterProjectFunction(request.project_id,
-                                              is_temp,
-                                              std::move(analyzer_output),
-                                              std::move(*fn_or));
+      absl::Status registered =
+          catalog::RegisterProjectFunction(request.project_id,
+                                           is_temp,
+                                           std::move(analyzer_output),
+                                           std::move(*fn_or));
+      if (!registered.ok()) return registered;
+      return catalog::RegisterJsUdfFromCreateFunction(request.project_id,
+                                                      *create_fn);
     }
     case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT: {
       const auto* create_tvf =

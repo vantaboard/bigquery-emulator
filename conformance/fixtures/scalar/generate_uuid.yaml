@@ -1,0 +1,16 @@
+# generate_uuid: RFC-4122 v4 UUID per evaluation.
+name: generate_uuid
+description: |
+  GENERATE_UUID returns distinct lowercase hex UUID v4 strings per
+  call; five UNNEST rows yield five distinct values.
+project_id: proj-scalar-generate-uuid
+query: |
+  SELECT COUNT(DISTINCT u) AS distinct_u
+  FROM (
+    SELECT GENERATE_UUID() AS u
+    FROM UNNEST(GENERATE_ARRAY(1, 5)) AS n
+  )
+expected:
+  route: semantic_executor
+  rows:
+    - {distinct_u: "5"}

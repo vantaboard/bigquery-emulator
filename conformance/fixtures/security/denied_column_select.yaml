@@ -1,0 +1,28 @@
+# denied_column_select: columns with DENIED masking return accessDenied.
+name: denied_column_select
+description: |
+  Column governance with DENIED mask rejects SELECT of the protected column.
+project_id: proj-security-denied-col
+dataset_id: ds_security_deny
+setup:
+  - dataset: ds_security_deny
+  - sql: |
+      CREATE TABLE ds_security_deny.t (
+        id INT64,
+        secret STRING
+      )
+  - sql: |
+      INSERT INTO ds_security_deny.t (id, secret) VALUES (1, 'x')
+  - column_governance:
+      dataset: ds_security_deny
+      table: t
+      column: secret
+      mask_kind: DENIED
+query: |
+  SELECT secret FROM ds_security_deny.t
+expected:
+  route: duckdb_native
+  route_strict: false
+  error:
+    code: 403
+    message_contains: Access denied

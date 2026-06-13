@@ -15,6 +15,7 @@ func BuildDependencies(eng *engine.Client) Dependencies {
 		Metadata:  NewMetadataStore(),
 		Snapshots: NewSnapshotStore(),
 		Routines:  NewRoutineStore(),
+		Models:    NewModelStore(),
 		Sessions:  NewSessionStore(),
 	}
 	if eng != nil {

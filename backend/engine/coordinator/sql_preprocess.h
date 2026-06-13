@@ -13,7 +13,9 @@ namespace coordinator {
 // Applies BigQuery-parity SQL rewrites before the analyzer sees the
 // text. Today: anonymous-struct positional access spelled as
 // `expr._0` is rewritten to `expr[OFFSET(0)]`, matching the
-// transpiler's synthesized `_N` field naming on the DuckDB emit side.
+// transpiler's synthesized `_N` field naming on the DuckDB emit side;
+// table time decorators in backtick paths (`table@epoch`) lower to
+// `FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(...)`.
 std::string PreprocessSqlForAnalyzer(absl::string_view sql);
 
 // Rewrite pass for templated SQL function bodies extracted from

@@ -1,74 +1,109 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/models"
 )
 
 // modelListKind is the `kind` field for a models.list response. See
 // docs/bigquery/docs/reference/rest/v2/models/list.md.
 const modelListKind = "bigquery#listModelsResponse"
 
-// ModelList implements `bigquery.models.list`:
-//
-//	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models
-//
-// The internal Catalog gRPC service has no model registry (BQML models
-// require a trained-model store that the emulator does not implement),
-// so the handler returns the BigQuery-shaped empty page. Client
-// libraries that probe this endpoint at startup (e.g. nodejs-bigquery's
-// `Models` test scaffold) get a structurally-valid response instead of
-// a 404 from the catch-all `NotFound` handler. When BQML lands the
-// stub can be promoted in place without changing the wire shape.
-func ModelList(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			resourceKeyKind: modelListKind,
-			"models":        []any{},
-		})
+func modelStore(deps *Dependencies) *models.Store {
+	if deps.Models == nil {
+		deps.Models = models.NewStore()
+	}
+	return deps.Models
+}
+
+func modelIDFromPath(r *http.Request) (projectID, datasetID, modelID string) {
+	return r.PathValue("projectId"), r.PathValue("datasetId"), r.PathValue("modelId")
+}
+
+func modelListEntry(m bqtypes.Model) bqtypes.Model {
+	return bqtypes.Model{
+		ModelReference:   m.ModelReference,
+		ModelType:        m.ModelType,
+		CreationTime:     m.CreationTime,
+		LastModifiedTime: m.LastModifiedTime,
+		Labels:           m.Labels,
 	}
 }
 
-// ModelGet implements `bigquery.models.get`:
-//
-//	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}
-//
-// Returns 404 with the BigQuery-shaped error envelope: the emulator
-// has no BQML store so by definition any specific modelId is unknown.
-// Distinct from `NotImplemented` because a 501 here would confuse
-// client libraries that treat 404 as "absent" and 501 as "fatal".
-func ModelGet(_ Dependencies) http.HandlerFunc {
+// ModelList implements `bigquery.models.list`.
+func ModelList(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID := r.PathValue("projectId")
 		datasetID := r.PathValue("datasetId")
-		modelID := r.PathValue("modelId")
-		writeError(w, http.StatusNotFound, reasonNotFound,
-			"Not found: Model "+projectID+":"+datasetID+"."+modelID)
+		all := modelStore(&deps).List(projectID, datasetID, r.URL.Query().Get("filter"))
+		items := make([]bqtypes.Model, 0, len(all))
+		for _, m := range all {
+			items = append(items, modelListEntry(m))
+		}
+		resp := map[string]any{
+			resourceKeyKind: modelListKind,
+			"models":        items,
+		}
+		if maxResults := r.URL.Query().Get("maxResults"); maxResults != "" {
+			if n, err := strconv.Atoi(maxResults); err == nil && n >= 0 && n < len(items) {
+				resp["models"] = items[:n]
+				resp["nextPageToken"] = strconv.Itoa(n)
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
 }
 
-// ModelPatch implements `bigquery.models.patch`:
-//
-//	PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}
-//
-// The emulator has no BQML store; patch is wired so clients see a
-// structured 501 instead of a 404 catch-all when they try to update
-// a model that was supposed to exist.
-func ModelPatch(_ Dependencies) http.HandlerFunc {
+// ModelGet implements `bigquery.models.get`.
+func ModelGet(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID, datasetID, modelID := modelIDFromPath(r)
+		m, ok := modelStore(&deps).Get(projectID, datasetID, modelID)
+		if !ok {
+			writeError(w, http.StatusNotFound, reasonNotFound,
+				"Not found: Model "+projectID+":"+datasetID+"."+modelID)
+			return
+		}
+		writeJSON(w, http.StatusOK, m)
+	}
+}
+
+// ModelPatch implements `bigquery.models.patch`.
+func ModelPatch(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
 }
 
-// ModelDelete implements `bigquery.models.delete`:
-//
-//	DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}
-//
-// Returns 404 (no BQML store), matching ModelGet so a
-// list-get-delete sample loop behaves predictably.
-func ModelDelete(_ Dependencies) http.HandlerFunc {
+// ModelDelete implements `bigquery.models.delete`.
+func ModelDelete(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		projectID := r.PathValue("projectId")
-		datasetID := r.PathValue("datasetId")
-		modelID := r.PathValue("modelId")
-		writeError(w, http.StatusNotFound, reasonNotFound,
-			"Not found: Model "+projectID+":"+datasetID+"."+modelID)
+		projectID, datasetID, modelID := modelIDFromPath(r)
+		if !modelStore(&deps).Delete(projectID, datasetID, modelID) {
+			writeError(w, http.StatusNotFound, reasonNotFound,
+				"Not found: Model "+projectID+":"+datasetID+"."+modelID)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	}
+}
+
+// persistModelFromDDL registers CREATE MODEL metadata in the in-memory store.
+func persistModelFromDDL(
+	_ context.Context,
+	deps *Dependencies,
+	projectID, defaultDatasetID, sql string,
+) *bqtypes.ModelReference {
+	ref := models.RegisterFromDDL(modelStore(deps), projectID, defaultDatasetID, sql)
+	return ref
+}
+
+func isCreateModelSQL(sql string) bool {
+	trim := strings.ToUpper(strings.TrimSpace(sql))
+	return strings.HasPrefix(trim, "CREATE MODEL") ||
+		strings.HasPrefix(trim, "CREATE OR REPLACE MODEL") ||
+		strings.HasPrefix(trim, "CREATE MODEL IF NOT EXISTS")
 }

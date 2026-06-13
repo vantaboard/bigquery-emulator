@@ -1,0 +1,29 @@
+# as_of_current: FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP() reads the
+# live table snapshot through the DuckDB engine's as-of attach path.
+name: as_of_current
+description: |
+  CREATE TABLE -> INSERT VALUES -> SELECT FOR SYSTEM_TIME AS OF
+  CURRENT_TIMESTAMP() returns the current row set.
+project_id: proj-time-travel-as-of
+dataset_id: ds_time_travel_as_of
+setup:
+  - dataset: ds_time_travel_as_of
+  - sql: |
+      CREATE TABLE ds_time_travel_as_of.events (
+        id INT64,
+        name STRING
+      )
+  - sql: |
+      INSERT INTO ds_time_travel_as_of.events (id, name) VALUES
+        (1, 'alpha'),
+        (2, 'beta')
+query: |
+  SELECT id, name
+  FROM ds_time_travel_as_of.events
+  FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP()
+  ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", name: "alpha"}
+    - {id: "2", name: "beta"}

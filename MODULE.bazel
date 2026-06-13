@@ -172,3 +172,16 @@ http_archive(
         "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-amd64.zip",
     ],
 )
+
+# Duktape — embeddable ECMAScript engine for BigQuery LANGUAGE js UDFs.
+# Pin/checksum in third_party/duktape/VERSION.
+http_archive(
+    name = "duktape_src",
+    build_file = "//third_party/duktape:duktape.BUILD.bazel",
+    sha256 = "90f8d2fa8b5567c6899830ddef2c03f3c27960b11aca222fa17aa7ac613c2890",
+    strip_prefix = "duktape-2.7.0",
+    urls = [
+        "https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz",
+        "https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz",
+    ],
+)

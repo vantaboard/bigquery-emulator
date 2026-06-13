@@ -238,19 +238,23 @@ WildcardTable::WildcardTable(absl::string_view wildcard_table_id,
   (void)type_factory_;
 }
 
-absl::StatusOr<std::vector<storage::Row>> WildcardTable::CollectUnionRows()
-    const {
+absl::StatusOr<std::vector<storage::Row>> WildcardTable::CollectUnionRows(
+    const std::optional<std::vector<std::string>>& suffix_allowlist) const {
   if (storage_ == nullptr) {
     return absl::FailedPreconditionError(
         "WildcardTable: storage backend is not configured");
   }
   std::vector<storage::Row> rows;
   for (const WildcardColumnMap& map : matched_tables_) {
+    const std::string suffix =
+        TableSuffixFor(map.table_id.table_id, table_prefix_);
+    if (suffix_allowlist.has_value() &&
+        !SuffixMatchesAllowList(suffix, *suffix_allowlist)) {
+      continue;
+    }
     absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
         storage_->ScanRows(map.table_id);
     if (!iter.ok()) return iter.status();
-    const std::string suffix =
-        TableSuffixFor(map.table_id.table_id, table_prefix_);
     storage::Row physical;
     while (true) {
       absl::StatusOr<bool> has = (*iter)->Next(&physical);
@@ -265,7 +269,8 @@ absl::StatusOr<std::vector<storage::Row>> WildcardTable::CollectUnionRows()
 absl::StatusOr<std::unique_ptr<::googlesql::EvaluatorTableIterator>>
 WildcardTable::CreateEvaluatorTableIterator(
     absl::Span<const int> column_idxs) const {
-  absl::StatusOr<std::vector<storage::Row>> rows = CollectUnionRows();
+  absl::StatusOr<std::vector<storage::Row>> rows =
+      CollectUnionRows(std::nullopt);
   if (!rows.ok()) return rows.status();
 
   std::vector<int> idxs;
@@ -298,6 +303,15 @@ absl::Status WildcardTable::MaterializeInDuckDB(
     ::duckdb_connection conn,
     const storage::Storage* storage,
     absl::string_view quoted_table_name) const {
+  return MaterializeInDuckDBWithSuffixAllowList(
+      conn, storage, quoted_table_name, std::nullopt);
+}
+
+absl::Status WildcardTable::MaterializeInDuckDBWithSuffixAllowList(
+    ::duckdb_connection conn,
+    const storage::Storage* storage,
+    absl::string_view quoted_table_name,
+    const std::optional<std::vector<std::string>>& suffix_allowlist) const {
   if (storage == nullptr) {
     return absl::FailedPreconditionError(
         "WildcardTable: storage backend is not configured");
@@ -311,7 +325,8 @@ absl::Status WildcardTable::MaterializeInDuckDB(
                                   RenderColumnList(union_schema_)));
   if (!create.ok()) return create;
 
-  absl::StatusOr<std::vector<storage::Row>> rows = CollectUnionRows();
+  absl::StatusOr<std::vector<storage::Row>> rows =
+      CollectUnionRows(suffix_allowlist);
   if (!rows.ok()) return rows.status();
   if (rows->empty()) return absl::OkStatus();
 

@@ -96,7 +96,6 @@ func TestAppends(t *testing.T) {
 	})
 
 	t.Run("DefaultStream", func(t *testing.T) {
-		bqtestutil.SkipEmulatorManagedWriterDefaultStream(t)
 		if err := appendToDefaultStream(ioutil.Discard, tc.ProjectID, testDatasetID, testTableID); err != nil {
 			t.Errorf("appendToDefaultStream(%q %q): %v", testDatasetID, testTableID, err)
 		}

@@ -63,6 +63,16 @@ service Catalog {
   rpc GetRoutine(GetRoutineRequest) returns (GetRoutineResponse);
   rpc UpsertRoutine(UpsertRoutineRequest) returns (UpsertRoutineResponse);
   rpc DeleteRoutine(DeleteRoutineRequest) returns (DeleteRoutineResponse);
+
+  // Row-access policies and column-level security metadata.
+  rpc UpsertRowAccessPolicy(UpsertRowAccessPolicyRequest)
+      returns (UpsertRowAccessPolicyResponse);
+  rpc DeleteRowAccessPolicy(DeleteRowAccessPolicyRequest)
+      returns (DeleteRowAccessPolicyResponse);
+  rpc ListRowAccessPolicies(ListRowAccessPoliciesRequest)
+      returns (ListRowAccessPoliciesResponse);
+  rpc SetColumnGovernance(SetColumnGovernanceRequest)
+      returns (SetColumnGovernanceResponse);
 }
 
 message DatasetRef {
@@ -204,6 +214,50 @@ message DeleteRoutineRequest {
 }
 message DeleteRoutineResponse {}
 
+message RowAccessPolicy {
+  TableRef table = 1;
+  string policy_id = 2;
+  string filter_predicate = 3;
+  repeated string grantees = 4;
+  int64 creation_time_ms = 5;
+  int64 last_modified_time_ms = 6;
+}
+
+message UpsertRowAccessPolicyRequest {
+  RowAccessPolicy policy = 1;
+}
+message UpsertRowAccessPolicyResponse {
+  RowAccessPolicy policy = 1;
+}
+
+message DeleteRowAccessPolicyRequest {
+  TableRef table = 1;
+  string policy_id = 2;
+}
+message DeleteRowAccessPolicyResponse {}
+
+message ListRowAccessPoliciesRequest {
+  TableRef table = 1;
+}
+message ListRowAccessPoliciesResponse {
+  repeated RowAccessPolicy policies = 1;
+}
+
+message ColumnGovernance {
+  string column_name = 1;
+  repeated string policy_tags = 2;
+  // NULLIFY | SHA256 | DEFAULT_VALUE | DENIED | NONE
+  string mask_kind = 3;
+  repeated string mask_grantees = 4;
+  string default_mask_value = 5;
+}
+
+message SetColumnGovernanceRequest {
+  TableRef table = 1;
+  ColumnGovernance column = 2;
+}
+message SetColumnGovernanceResponse {}
+
 message ListRowsResponse {
   repeated DataRow rows = 1;
   // Total number of rows in the table at the moment the request was
@@ -239,6 +293,9 @@ message QueryRequest {
   // an empty key (BigQuery's @0, @1, ... convention is unrolled here).
   map<string, QueryParameter> parameters = 4;
   bool use_legacy_sql = 5;
+  // Synthetic caller email from the gateway auth middleware. Empty
+  // defaults to emulator@bigquery.local at the engine boundary.
+  string principal_email = 6;
 }
 
 message QueryParameter {

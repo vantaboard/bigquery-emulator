@@ -20,6 +20,7 @@
 #include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/geography_value.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/civil_time.h"
@@ -214,10 +215,14 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
     }
     case ::googlesql::TYPE_JSON:
       return storage::Value::String(value.json_string());
-    case ::googlesql::TYPE_GEOGRAPHY:
-      // Reuse the SQL literal -- GoogleSQL emits WKT for GEOGRAPHY.
+    case ::googlesql::TYPE_GEOGRAPHY: {
+      const std::string wkt = GeographyWkt(value);
+      if (!wkt.empty()) {
+        return storage::Value::String(wkt);
+      }
       return storage::Value::String(
           value.GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL));
+    }
     case ::googlesql::TYPE_INTERVAL:
       return storage::Value::String(value.interval_value().ToString());
     case ::googlesql::TYPE_RANGE: {

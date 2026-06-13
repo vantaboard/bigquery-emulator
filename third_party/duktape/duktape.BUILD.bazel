@@ -1,0 +1,16 @@
+# BUILD file injected into the Duktape source tarball that
+# `MODULE.bazel`'s `http_archive(name = "duktape_src", ...)` downloads.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "duktape",
+    srcs = ["src/duktape.c"],
+    hdrs = [
+        "src/duk_config.h",
+        "src/duktape.h",
+    ],
+    includes = ["src"],
+)

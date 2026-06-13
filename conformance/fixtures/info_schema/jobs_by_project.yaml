@@ -1,0 +1,23 @@
+# INFORMATION_SCHEMA.JOBS_BY_PROJECT: gateway job registry snapshot.
+#
+# Job state lives in the Go gateway registry, not engine Storage. The
+# gateway rewrites JOBS* queries to `_bqemu_jobs.JOBS` before ExecuteQuery.
+name: info_schema_jobs_by_project
+description: |
+  Run a SELECT job, then introspect it via region-qualified JOBS_BY_PROJECT.
+project_id: proj-info-schema-jobs
+dataset_id: ds_jobs
+setup:
+  - dataset: ds_jobs
+  - sql: SELECT 1 AS x
+query: |
+  SELECT job_type, state, statement_type, project_id
+  FROM `region-us`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+  WHERE project_id = 'proj-info-schema-jobs'
+    AND statement_type = 'SELECT'
+  ORDER BY creation_time DESC
+  LIMIT 1
+expected:
+  route: duckdb_native
+  rows:
+    - {job_type: "QUERY", state: "DONE", statement_type: "SELECT", project_id: "proj-info-schema-jobs"}

@@ -38,6 +38,7 @@ cc_library(
     name = "route_classifier",
     srcs = [
         "route_classifier.cc",
+        "route_classifier_analytic.cc",
         "route_classifier_functions.cc",
         "route_classifier_visitor.cc",
     ],
@@ -115,13 +116,17 @@ cc_library(
     srcs = [
         "sql_preprocess.cc",
         "sql_preprocess_rewrites.cc",
+        "sql_preprocess_table_decorators.cc",
     ],
     hdrs = [
         "sql_preprocess.h",
         "sql_preprocess_internal.h",
     ],
     deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -180,6 +185,7 @@ cc_library(
         ":local_coordinator_analyze",
         "//backend/catalog:create_function_util",
         "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:js_udf_registry",
         "//backend/catalog:procedure_registry",
         "//backend/catalog:tvf_registry",
         "//backend/catalog:udf_registry",
@@ -219,6 +225,7 @@ cc_library(
         ":stub_executors",
         "//backend/catalog:create_function_util",
         "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:js_udf_registry",
         "//backend/catalog:procedure_registry",
         "//backend/catalog:routine_persistence",
         "//backend/catalog:tvf_registry",

@@ -1,5 +1,6 @@
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -325,9 +326,37 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
 absl::Status AttachStorageTableAt(::duckdb_connection conn,
                                   storage::Storage* storage,
                                   const catalog::StorageTable& table,
-                                  absl::string_view quoted_table_name) {
+                                  absl::string_view quoted_table_name,
+                                  std::optional<std::int64_t> as_of_ms) {
   const schema::TableSchema& schema = table.bq_schema();
   const std::string table_name(quoted_table_name);
+  const storage::TableId& id = table.storage_table_id();
+
+  std::optional<std::string> parquet_path;
+  if (as_of_ms.has_value()) {
+    absl::StatusOr<std::optional<std::string>> path_or =
+        storage->ParquetSnapshotPathAt(id, *as_of_ms);
+    if (!path_or.ok()) return path_or.status();
+    parquet_path = std::move(*path_or);
+  } else {
+    parquet_path = storage->ParquetSnapshotPath(id);
+  }
+
+  if (parquet_path) {
+    const std::string columns = RenderColumnList(schema);
+    absl::Status status = RunSqlNoResult(
+        conn,
+        absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ", columns));
+    if (!status.ok()) return status;
+    const std::string escaped = EscapeStringLiteralInner(*parquet_path);
+    return RunSqlNoResult(conn,
+                          absl::StrCat("INSERT INTO ",
+                                       table_name,
+                                       " SELECT * FROM read_parquet('",
+                                       escaped,
+                                       "')"));
+  }
+
   const std::string columns = RenderColumnList(schema);
 
   absl::Status status = RunSqlNoResult(

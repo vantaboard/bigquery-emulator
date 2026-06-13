@@ -68,6 +68,9 @@ struct QueryRequest {
   // belt-and-braces field so the engine can also error out if the
   // gateway ever stops enforcing.
   bool use_legacy_sql = false;
+  // Synthetic principal from the gateway; defaults to
+  // catalog::kEmulatorPrincipalEmail when empty.
+  std::string principal_email;
   // Optional per-query phase recorder populated by the frontend and
   // filled by coordinator / executor paths for loopback diagnostics.
   PhaseRecorderPtr phase_recorder;

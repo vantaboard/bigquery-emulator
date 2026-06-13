@@ -5,8 +5,6 @@
 # THEN branch; the semantic executor materializes the input rows, runs the
 # selected subpipeline (here a WHERE filter), and returns the branch output.
 #
-# Route-label assertion intentionally omitted; routing drift is
-# tracked by `task conformance:routing-matrix`.
 # Note: trailing ORDER BY after a top-level pipe chain is a parse
 # error; wrap in a subquery if ordering is required.
 name: pipe_if_filter

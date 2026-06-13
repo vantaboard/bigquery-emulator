@@ -371,6 +371,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	}
 	projectID := r.PathValue("projectId")
 	job := newPendingJob(deps, projectID, posted, cfg)
+	job.UserEmail = principalEmailFromContext(r)
 
 	useLegacy := false
 	if cfg.Query.UseLegacySQL != nil {
@@ -403,12 +404,20 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	sql, sqlErr = query.PrepareEngineSQLForJobs(r.Context(), deps.Catalog, deps.Jobs, projectID, sql)
+	if sqlErr != nil {
+		start := time.Now().UTC()
+		finalizeFailedJob(deps, job, start, sqlErr)
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
 		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(bindParams),
+		PrincipalEmail:   principalEmailFromContext(r),
 	}
 
 	start := time.Now().UTC()
@@ -436,6 +445,9 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 		statementType == "CREATE_TABLE_FUNCTION" {
 		ddlTarget = persistRoutineFromDDL(
 			r.Context(), &deps, projectID, defaultDataset, cfg.Query.Query)
+	}
+	if isCreateModelSQL(cfg.Query.Query) {
+		persistModelFromDDL(r.Context(), &deps, projectID, defaultDataset, cfg.Query.Query)
 	}
 	if cfg.Query.DestinationTable == nil && deps.Catalog != nil && len(rows) > 0 &&
 		(statementType == "" || statementType == statementTypeSelect) {
@@ -503,6 +515,7 @@ func runSyncQueryDryRunInsert(deps Dependencies, w http.ResponseWriter, r *http.
 		Sql:              sql,
 		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(cfg.Query.QueryParameters),
+		PrincipalEmail:   principalEmailFromContext(r),
 	}
 
 	start := time.Now().UTC()

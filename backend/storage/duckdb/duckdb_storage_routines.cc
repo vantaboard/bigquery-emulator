@@ -9,6 +9,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
+#include "backend/storage/duckdb/duckdb_storage_governance.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "duckdb.h"
 
@@ -129,7 +130,9 @@ absl::StatusOr<std::vector<RoutineRecord>> QueryRoutines(
 
 absl::Status DuckDBStorage::InitCatalogTables() {
   absl::MutexLock lock(&mu_);
-  return EnsureRoutinesTable(impl_.get());
+  absl::Status routines = EnsureRoutinesTable(impl_.get());
+  if (!routines.ok()) return routines;
+  return EnsureGovernanceTables(impl_.get());
 }
 
 absl::Status DuckDBStorage::UpsertRoutine(const RoutineRecord& record) {

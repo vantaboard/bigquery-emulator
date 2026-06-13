@@ -4,43 +4,43 @@ overview: Replacement execution playbook for the remainder of the full-01..11 wa
 todos:
   - id: session-hygiene
     content: Run the pre-flight block (git status, bazel audit, free -h, rebuild emulator if engine touched since last build) before every unit; run post-flight (conformance delta, lint:dispositions, bazel shutdown, update NEXT pointer) after every unit.
-    status: in_progress
+    status: completed
   - id: carryover-02-storage-write
     content: "Close full-02 remainder: ManagedWriter DefaultStream full NUMERIC/BIGNUMERIC type matrix; remove SkipEmulatorManagedWriterDefaultStream; gateway/e2e or bqstorage fixture; re-run task thirdparty:golang. Numeric aggregate skip already removed (dfc54d9)."
-    status: in_progress
+    status: completed
   - id: carryover-04-suffix-prune
     content: "Optional optimization from full-04: prune matched wildcard tables on constant _TABLE_SUFFIX = / BETWEEN / IN before MaterializeInDuckDB (correctness already holds via post-materialize WHERE)."
-    status: pending
+    status: completed
   - id: carryover-01-jobs-views
     content: "Defer to full-10 companion: INFORMATION_SCHEMA.JOBS / JOBS_BY_PROJECT from gateway job store (full-01 jobs-views todo still pending)."
-    status: pending
+    status: completed
   - id: carryover-11-skip-audit
     content: "After each wave lands shapes: audit third_party/*/emulator_*skip* and remove rows unblocked by that wave; do NOT run the full sweep until wave 4 closes (plan 11 rule)."
-    status: pending
+    status: completed
   - id: wave2-03-time-travel
     content: Execute full-03-time-travel-decorators.plan.md end-to-end (version log, FOR SYSTEM_TIME AS OF, decorators, snapshots, UNDROP, fixtures).
-    status: pending
+    status: completed
   - id: wave2-05-js-udf
     content: Execute full-05-javascript-udf-runtime.plan.md (embedded JS call-time execution; dbt functions/test_js unskip).
-    status: pending
+    status: completed
   - id: wave2-06-gis
     content: Execute full-06-geography-gis.plan.md (GEOGRAPHY + ST_* via DuckDB spatial; geography skip rows). If spatial link blocks, pull forward 08 or 09 per stall rule.
-    status: pending
+    status: completed
   - id: wave3-07-security
     content: Execute full-07-row-column-security.plan.md (row-access + column-level security / masking; coordinate persistence with 10).
-    status: pending
+    status: completed
   - id: wave3-08-match-recognize
     content: Execute full-08-match-recognize-ast-shapes.plan.md (last status=planned AST rows).
-    status: pending
+    status: completed
   - id: wave3-09-long-tail
     content: Execute full-09-scalar-relational-long-tail.plan.md.
-    status: pending
+    status: completed
   - id: wave4-10-rest
     content: Execute full-10-rest-surface-completion.plan.md (needs 01 + 07; includes JOBS_* views companion, resumable upload, jobs.list filters).
-    status: pending
+    status: completed
   - id: wave4-11-breadth
     content: "Execute full-11-conformance-breadth execution phase: corpus expansion execution, skip-matrix final sweep, routing-matrix backfill, coverage publish (authoring already done)."
-    status: pending
+    status: completed
 isProject: true
 ---
 

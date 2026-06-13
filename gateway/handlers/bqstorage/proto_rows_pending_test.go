@@ -100,3 +100,41 @@ func TestFallbackDescriptorDecodesTimestampMicros(t *testing.T) {
 		t.Fatalf("timestamp cell looks like float seconds, not micros: %q", tsCell)
 	}
 }
+
+func TestManagedWriterExtremeBignumericDecoding(t *testing.T) {
+	t.Parallel()
+	const extremeBignumeric = "578960446186580977117854925043439539266.34992332820282019728792003956564819967"
+	desc := descriptorFromEngineTableSchema(pendingManagedWriterSchema())
+	md, err := messageDescriptor(desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := dynamicpb.NewMessage(md)
+	bnFD := md.Fields().ByName("bignumeric_col")
+	if bnFD == nil {
+		t.Fatal("bignumeric_col field missing")
+	}
+	msg.Set(bnFD, protoreflect.ValueOfString(extremeBignumeric))
+	rowNumFD := md.Fields().ByName("row_num")
+	msg.Set(rowNumFD, protoreflect.ValueOfInt64(23))
+
+	raw, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dyn := dynamicpb.NewMessage(md)
+	if unmarshalErr := proto.Unmarshal(raw, dyn); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
+	}
+	row, err := dynamicMessageToDataRow(dyn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(row.Cells) < 10 {
+		t.Fatalf("cells = %d, want >= 10", len(row.Cells))
+	}
+	got := row.Cells[9].GetStringValue()
+	if got != extremeBignumeric {
+		t.Fatalf("bignumeric cell = %q, want %q", got, extremeBignumeric)
+	}
+}

@@ -26,6 +26,7 @@ cc_library(
     name = "catalog_handler",
     srcs = [
         "catalog.cc",
+        "catalog_governance.cc",
         "catalog_routines.cc",
     ],
     hdrs = ["catalog.h"],

@@ -134,6 +134,38 @@ func (f *materializeFakeCatalog) DeleteRoutine(
 	return &enginepb.DeleteRoutineResponse{}, nil
 }
 
+func (f *materializeFakeCatalog) UpsertRowAccessPolicy(
+	_ context.Context,
+	_ *enginepb.UpsertRowAccessPolicyRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UpsertRowAccessPolicyResponse, error) {
+	return &enginepb.UpsertRowAccessPolicyResponse{}, nil
+}
+
+func (f *materializeFakeCatalog) DeleteRowAccessPolicy(
+	_ context.Context,
+	_ *enginepb.DeleteRowAccessPolicyRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DeleteRowAccessPolicyResponse, error) {
+	return &enginepb.DeleteRowAccessPolicyResponse{}, nil
+}
+
+func (f *materializeFakeCatalog) ListRowAccessPolicies(
+	_ context.Context,
+	_ *enginepb.ListRowAccessPoliciesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRowAccessPoliciesResponse, error) {
+	return &enginepb.ListRowAccessPoliciesResponse{}, nil
+}
+
+func (f *materializeFakeCatalog) SetColumnGovernance(
+	_ context.Context,
+	_ *enginepb.SetColumnGovernanceRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.SetColumnGovernanceResponse, error) {
+	return &enginepb.SetColumnGovernanceResponse{}, nil
+}
+
 func TestExternalMaterializeCSVFromFakeGCS(t *testing.T) {
 	const csvBody = "name,post_abbr\nWashington,WA\nWyoming,WY\nWisconsin,WI\nWest Virginia,WV\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

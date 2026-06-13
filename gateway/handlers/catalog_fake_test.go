@@ -212,3 +212,35 @@ func (f *fakeCatalogClient) DeleteRoutine(
 ) (*enginepb.DeleteRoutineResponse, error) {
 	return &enginepb.DeleteRoutineResponse{}, nil
 }
+
+func (f *fakeCatalogClient) UpsertRowAccessPolicy(
+	_ context.Context,
+	_ *enginepb.UpsertRowAccessPolicyRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UpsertRowAccessPolicyResponse, error) {
+	return &enginepb.UpsertRowAccessPolicyResponse{}, nil
+}
+
+func (f *fakeCatalogClient) DeleteRowAccessPolicy(
+	_ context.Context,
+	_ *enginepb.DeleteRowAccessPolicyRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.DeleteRowAccessPolicyResponse, error) {
+	return &enginepb.DeleteRowAccessPolicyResponse{}, nil
+}
+
+func (f *fakeCatalogClient) ListRowAccessPolicies(
+	_ context.Context,
+	_ *enginepb.ListRowAccessPoliciesRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.ListRowAccessPoliciesResponse, error) {
+	return &enginepb.ListRowAccessPoliciesResponse{}, nil
+}
+
+func (f *fakeCatalogClient) SetColumnGovernance(
+	_ context.Context,
+	_ *enginepb.SetColumnGovernanceRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.SetColumnGovernanceResponse, error) {
+	return &enginepb.SetColumnGovernanceResponse{}, nil
+}

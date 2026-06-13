@@ -1,0 +1,15 @@
+# Scalar JavaScript UDF: CREATE FUNCTION ... LANGUAGE js evaluates at call time.
+name: udf_js_scalar_add
+description: |
+  Pins call-time evaluation for LANGUAGE js scalar UDFs on the semantic
+  executor (INT64 in/out marshaling through Duktape).
+project_id: proj-udf-js-scalar-add
+setup:
+  - sql: |-
+      CREATE FUNCTION js_add(x INT64) RETURNS INT64
+      LANGUAGE js AS "return x + 1;"
+query: SELECT js_add(1) AS out
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "2"}

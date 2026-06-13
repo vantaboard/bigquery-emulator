@@ -1,4 +1,6 @@
+#include <array>
 #include <cstdint>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -8,6 +10,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
@@ -65,11 +68,41 @@ absl::StatusOr<Value> SessionUser(const std::vector<Value>& args) {
   return Value::String("dummy");
 }
 
+std::string FormatUuidV4(const std::array<uint8_t, 16>& bytes) {
+  return absl::StrFormat(
+      "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+      bytes[0],
+      bytes[1],
+      bytes[2],
+      bytes[3],
+      bytes[4],
+      bytes[5],
+      bytes[6],
+      bytes[7],
+      bytes[8],
+      bytes[9],
+      bytes[10],
+      bytes[11],
+      bytes[12],
+      bytes[13],
+      bytes[14],
+      bytes[15]);
+}
+
 absl::StatusOr<Value> GenerateUuid(const std::vector<Value>& args) {
   if (!args.empty()) {
     return absl::InvalidArgumentError("GENERATE_UUID expects no arguments");
   }
-  return Value::String("00000000-0000-4000-8000-000000000001");
+  std::array<uint8_t, 16> bytes{};
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<int> dist(0, 255);
+  for (uint8_t& b : bytes) {
+    b = static_cast<uint8_t>(dist(gen));
+  }
+  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0F) | 0x40);
+  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3F) | 0x80);
+  return Value::String(FormatUuidV4(bytes));
 }
 
 absl::StatusOr<std::string> ParseIpv4ToBytes(absl::string_view ip) {

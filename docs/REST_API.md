@@ -89,17 +89,28 @@ omits `defaultDataset`, definitions are registered under internal dataset
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `jobs.list` | `GET /bigquery/v2/projects/{projectId}/jobs` | wired | [`gateway/handlers/jobs.go::JobList`][jobs] |
-| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | wired (query, LOAD, COPY, EXTRACT) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
-| `jobs.insert` (media upload) | `POST /upload/bigquery/v2/projects/{projectId}/jobs` | wired (multipart + resumable LOAD) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
-| `jobs.insert` (resumable chunk) | `PUT /upload/bigquery/v2/projects/{projectId}/jobs` | wired (resumable LOAD upload) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
-| `jobs.get` | `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` | wired | [`gateway/handlers/jobs.go::JobGet`][jobs] |
-| `jobs.cancel` | `POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel` | wired | [`gateway/handlers/jobs.go::JobCancel`][jobs] |
-| `jobs.delete` | `DELETE /bigquery/v2/projects/{projectId}/jobs/{jobId}/delete` | wired | [`gateway/handlers/jobs.go::JobDelete`][jobs] |
+| `jobs.list` | `GET /bigquery/v2/projects/{projectId}/jobs` | done | [`gateway/handlers/jobs.go::JobList`][jobs] |
+| `jobs.insert` (metadata) | `POST /bigquery/v2/projects/{projectId}/jobs` | done (query, LOAD, COPY, EXTRACT) | [`gateway/handlers/jobs.go::JobInsert`][jobs] |
+| `jobs.insert` (media upload) | `POST /upload/bigquery/v2/projects/{projectId}/jobs` | done (multipart + resumable LOAD) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
+| `jobs.insert` (resumable chunk) | `PUT /upload/bigquery/v2/projects/{projectId}/jobs` | done (resumable LOAD upload) | [`gateway/handlers/jobs.go::JobInsertUpload`][jobs] |
+| `jobs.get` | `GET /bigquery/v2/projects/{projectId}/jobs/{jobId}` | done | [`gateway/handlers/jobs.go::JobGet`][jobs] |
+| `jobs.cancel` | `POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel` | done | [`gateway/handlers/jobs.go::JobCancel`][jobs] |
+| `jobs.delete` | `DELETE /bigquery/v2/projects/{projectId}/jobs/{jobId}/delete` | done | [`gateway/handlers/jobs.go::JobDelete`][jobs] |
 
 The literal `/delete` segment after `{jobId}` is not a typo — that is
 the upstream URL template, see
 [`jobs.delete` reference](https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/delete).
+
+**`jobs.list` filters:** `stateFilter` (repeatable `pending`/`running`/`done`),
+`minCreationTime` / `maxCreationTime` (epoch ms), `parentJobId`,
+`maxResults` (default 50), and opaque `pageToken` pagination are honored
+against the gateway job registry. `allUsers=true` returns 501 (no auth
+context).
+
+**`INFORMATION_SCHEMA.JOBS*`:** queries against `` `region-*`.INFORMATION_SCHEMA.JOBS(_BY_PROJECT) ``
+are rewritten to `` `{project}`.`_bqemu_jobs`.`JOBS` `` with rows
+materialized from the job registry before the engine executes the SQL
+([`gateway/query/info_schema_jobs.go`](../gateway/query/info_schema_jobs.go)).
 
 **COPY / EXTRACT / undelete:** `configuration.copy` copies rows
 from `sourceTable` / `sourceTables` into `destinationTable`, honoring
@@ -123,17 +134,16 @@ separate `tables.undelete` RPC.
 
 ### Models (`bigquery.models.*`)
 
-BQML has no engine backing yet (the emulator has no trained-model
-store). List returns an empty BigQuery-shaped page so client probes
-succeed; specific-resource methods return 404 (absent) or 501
-(mutating) so list-get-delete sample loops behave predictably.
+BQML has no trained-model store (inference stays `UNIMPLEMENTED`), but
+`CREATE MODEL` DDL registers metadata-only model resources the REST
+surface can list/get/delete for client-library round-trips.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `models.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models` | wired | [`gateway/handlers/models.go::ModelList`][models] |
-| `models.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelGet`][models] |
+| `models.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models` | done | [`gateway/handlers/models.go::ModelList`][models] |
+| `models.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | done | [`gateway/handlers/models.go::ModelGet`][models] |
 | `models.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelPatch`][models] |
-| `models.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | wired | [`gateway/handlers/models.go::ModelDelete`][models] |
+| `models.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}` | done | [`gateway/handlers/models.go::ModelDelete`][models] |
 
 ### Routines (`bigquery.routines.*`)
 
@@ -160,14 +170,16 @@ statistics envelope.
 
 ### Row-access policies (`bigquery.rowAccessPolicies.*`)
 
-Row-level access policies have no engine backing yet (they would need a
-policy store + per-query analysis rewrite). Only `list` is wired so
-client libraries that probe at startup get an empty page; the AIP-136
-IAM custom methods return 501.
+Row-level access policies persist in the engine catalog
+(`__bqemu_row_access_policies`) and round-trip through REST insert/get/list/update/delete.
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `rowAccessPolicies.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies` | wired | [`gateway/handlers/row_access_policies.go::RowAccessPolicyList`][rowaccess] |
+| `rowAccessPolicies.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies` | done | [`gateway/handlers/row_access_policies.go::RowAccessPolicyList`][rowaccess] |
+| `rowAccessPolicies.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies` | done | [`gateway/handlers/row_access_policies.go::RowAccessPolicyInsert`][rowaccess] |
+| `rowAccessPolicies.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}` | done | [`gateway/handlers/row_access_policies.go::RowAccessPolicyGet`][rowaccess] |
+| `rowAccessPolicies.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}` | done | [`gateway/handlers/row_access_policies.go::RowAccessPolicyUpdate`][rowaccess] |
+| `rowAccessPolicies.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}` | done | [`gateway/handlers/row_access_policies.go::RowAccessPolicyDelete`][rowaccess] |
 
 ### Migration (`bigquerymigration.v2alpha`)
 
@@ -177,17 +189,16 @@ official client libraries
 `google-cloud-bigquery-migration` for Python/Node/Java) read
 `BIGQUERY_MIGRATION_EMULATOR_HOST` and fall back to
 `BIGQUERY_EMULATOR_HOST`. Routes are registered under both `v2alpha`
-and `v2` (alias parity for client compatibility). Engine has no workflow
-state, AST translator, or LRO store yet — list returns the documented
-empty page, get/delete return 404, create / `:start` return 501.
+and `v2` (alias parity for client compatibility). Workflow metadata is
+held in an in-process store (no AST translator or LRO execution).
 
 | Method | Path | Status | Handler |
 |---|---|---|---|
-| `migration.workflows.list` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowList`][migration] |
-| `migration.workflows.create` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowCreate`][migration] |
-| `migration.workflows.get` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowGet`][migration] |
-| `migration.workflows.delete` | `DELETE /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowDelete`][migration] |
-| `migration.workflows.start` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}:start` (also `v2`) | wired | [`gateway/handlers/migration.go::MigrationWorkflowCustomMethodPOST`][migration] |
+| `migration.workflows.list` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | done | [`gateway/handlers/migration.go::MigrationWorkflowList`][migration] |
+| `migration.workflows.create` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows` (also `v2`) | done | [`gateway/handlers/migration.go::MigrationWorkflowCreate`][migration] |
+| `migration.workflows.get` | `GET /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | done | [`gateway/handlers/migration.go::MigrationWorkflowGet`][migration] |
+| `migration.workflows.delete` | `DELETE /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}` (also `v2`) | done | [`gateway/handlers/migration.go::MigrationWorkflowDelete`][migration] |
+| `migration.workflows.start` | `POST /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}:start` (also `v2`) | done | [`gateway/handlers/migration.go::MigrationWorkflowCustomMethodPOST`][migration] |
 
 ### Data Transfer Service (`bigquerydatatransfer.v1`)
 

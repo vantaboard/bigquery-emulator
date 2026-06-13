@@ -156,6 +156,9 @@ absl::Status RunCreateTable(storage::Storage& storage,
         "ControlOpExecutor::ExecuteDdl: CREATE TABLE has null resolved "
         "statement");
   }
+  if (stmt->clone_from() != nullptr) {
+    return RunCreateTableClone(storage, project_id, default_dataset_id, stmt);
+  }
   absl::StatusOr<storage::TableId> target =
       NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
   if (!target.ok()) return target.status();

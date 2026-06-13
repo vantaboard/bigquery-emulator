@@ -80,6 +80,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan& analytic, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeSampleScan(
+    const ::googlesql::ResolvedSampleScan& scan, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSubpipelineInputScan(
     const ::googlesql::ResolvedSubpipelineInputScan& scan,
     const EvalContext& ctx);
@@ -95,6 +97,15 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeForkScan(
     const ::googlesql::ResolvedPipeForkScan& fork, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeGroupRowsScan(
     const ::googlesql::ResolvedGroupRowsScan& scan, const EvalContext& ctx);
+std::string GroupKeyFingerprint(const std::vector<Value>& keys);
+absl::StatusOr<Value> EvalAggregateForRows(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeMatchRecognizeScan(
+    const ::googlesql::ResolvedMatchRecognizeScan& scan, EvalContext& ctx);
 
 }  // namespace scan_eval_internal
 }  // namespace semantic

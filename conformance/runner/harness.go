@@ -353,3 +353,25 @@ func doRequest(ctx context.Context, url string, body []byte) (int, []byte, error
 	}
 	return resp.StatusCode, respBody, nil
 }
+
+// doPatchRequest POSTs a JSON body with HTTP PATCH. Used by setup steps
+// that mutate table metadata (e.g. column governance via tables.patch).
+func doPatchRequest(ctx context.Context, url string, body []byte) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url,
+		bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, fmt.Errorf("build request PATCH %s: %w", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("http PATCH %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("read body from PATCH %s: %w",
+			url, err)
+	}
+	return resp.StatusCode, respBody, nil
+}

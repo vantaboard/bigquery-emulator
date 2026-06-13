@@ -20,6 +20,13 @@ import (
 // docs/bigquery/docs/reference/rest/v2/jobs/query.md.
 const queryResponseKind = "bigquery#queryResponse"
 
+func principalEmailFromContext(r *http.Request) string {
+	if p, ok := middleware.PrincipalFromContext(r.Context()); ok && p.Email != "" {
+		return p.Email
+	}
+	return "emulator@bigquery.local"
+}
+
 // statementTypeSelect is the engine-reported statement type for read
 // queries. Promoted to a package constant so goconst does not flag the
 // repeated literal across handlers.
@@ -133,6 +140,7 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		Sql:              sql,
 		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(req.Parameters),
+		PrincipalEmail:   principalEmailFromContext(r),
 	}
 
 	resp, err := deps.Query.DryRun(r.Context(), engineReq)
@@ -206,12 +214,18 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if writeLegacySQLError(w, sqlErr) {
 		return
 	}
+	sql, sqlErr = query.PrepareEngineSQLForJobs(r.Context(), deps.Catalog, deps.Jobs, projectID, sql)
+	if sqlErr != nil {
+		writeError(w, http.StatusBadRequest, reasonInvalidQuery, sqlErr.Error())
+		return
+	}
 	engineReq := &enginepb.QueryRequest{
 		ProjectId:        projectID,
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
 		UseLegacySql:     false,
 		Parameters:       parametersToEngineMap(bindParams),
+		PrincipalEmail:   principalEmailFromContext(r),
 	}
 
 	start := time.Now().UTC()
@@ -244,6 +258,9 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		ddlTarget = persistRoutineFromDDL(
 			r.Context(), &deps, projectID, defaultDataset, req.Query)
 	}
+	if isCreateModelSQL(req.Query) {
+		persistModelFromDDL(r.Context(), &deps, projectID, defaultDataset, req.Query)
+	}
 	result := &jobs.QueryResult{
 		Schema:           restSchema,
 		Rows:             rows,
@@ -257,6 +274,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		projectID, req.Location, req.CreateSession, req.ConnProperties)
 	job := deps.Jobs.CompleteQueryWithResult(
 		projectID, req.Location, 0, start, end, result)
+	job.UserEmail = principalEmailFromContext(r)
 	if deps.Catalog != nil && len(rows) > 0 &&
 		(statementType == "" || statementType == statementTypeSelect) {
 		if dest, err := query.MaterializeImplicitDestination(

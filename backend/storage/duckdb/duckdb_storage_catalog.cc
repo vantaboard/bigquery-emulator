@@ -11,9 +11,11 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/duckdb/duckdb_storage_version_log.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {
@@ -247,7 +249,8 @@ absl::Status DuckDBStorage::CreateTable(const TableId& id,
     return copy_status;
   }
   if (!drop_status.ok()) return drop_status;
-  return absl::OkStatus();
+  const std::int64_t created_ts_ms = absl::ToUnixMillis(absl::Now());
+  return internal::InitVersionIndex(*this, id, created_ts_ms);
 }
 
 absl::StatusOr<std::vector<TableId>> DuckDBStorage::ListTables(
@@ -309,23 +312,14 @@ absl::Status DuckDBStorage::DropTable(const TableId& id) {
                                             ".",
                                             id.table_id));
   }
-  fs::remove(meta_path, ec);
-  if (ec) {
-    return internal::FilesystemStatus(
-        absl::StrCat("failed to remove table sidecar: ", meta_path.string()),
-        ec);
-  }
-  const fs::path parquet_path = TableParquetPath(id);
-  if (fs::exists(parquet_path, ec)) {
-    fs::remove(parquet_path, ec);
-    if (ec) {
-      return internal::FilesystemStatus(
-          absl::StrCat("failed to remove table parquet: ",
-                       parquet_path.string()),
-          ec);
-    }
-  }
-  return absl::OkStatus();
+  const std::int64_t deleted_ms = absl::ToUnixMillis(absl::Now());
+  return internal::MoveTableToTombstone(*this, id, deleted_ms);
+}
+
+absl::Status DuckDBStorage::RestoreTable(const TableId& id,
+                                         std::int64_t deleted_ms) {
+  absl::MutexLock lock(&mu_);
+  return internal::RestoreTableFromTombstone(*this, id, deleted_ms);
 }
 
 absl::StatusOr<schema::TableSchema> DuckDBStorage::GetSchema(

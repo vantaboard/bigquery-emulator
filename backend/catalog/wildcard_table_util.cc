@@ -144,8 +144,7 @@ absl::StatusOr<std::vector<WildcardColumnMap>> BuildWildcardColumnMaps(
 
     absl::flat_hash_map<std::string, int> physical_by_name;
     for (size_t i = 0; i < schema_or->columns.size(); ++i) {
-      physical_by_name.emplace(schema_or->columns[i].name,
-                               static_cast<int>(i));
+      physical_by_name.emplace(schema_or->columns[i].name, static_cast<int>(i));
     }
 
     WildcardColumnMap map;
@@ -158,13 +157,22 @@ absl::StatusOr<std::vector<WildcardColumnMap>> BuildWildcardColumnMaps(
         continue;
       }
       auto it = physical_by_name.find(union_col.name);
-      map.union_to_physical.push_back(it == physical_by_name.end()
-                                          ? -1
-                                          : it->second);
+      map.union_to_physical.push_back(
+          it == physical_by_name.end() ? -1 : it->second);
     }
     out.push_back(std::move(map));
   }
   return out;
+}
+
+bool SuffixMatchesAllowList(absl::string_view suffix,
+                            const std::vector<std::string>& allowlist) {
+  if (allowlist.empty()) return false;
+  if (allowlist.size() == 2 && allowlist[0] <= allowlist[1]) {
+    return suffix >= allowlist[0] && suffix <= allowlist[1];
+  }
+  return std::find(allowlist.begin(), allowlist.end(), suffix) !=
+         allowlist.end();
 }
 
 }  // namespace catalog

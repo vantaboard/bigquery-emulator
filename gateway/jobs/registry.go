@@ -371,6 +371,7 @@ type Job struct {
 	Status        Status               `json:"status"`
 	Statistics    Statistics           `json:"statistics"`
 	Configuration *JobConfiguration    `json:"configuration,omitempty"`
+	UserEmail     string               `json:"user_email,omitempty"`
 	// ParentJobID is the registry's link to a scripting parent. It
 	// is round-tripped under `Statistics.parentJobId` once the per-
 	// type statistics envelope ships; today it stays an internal

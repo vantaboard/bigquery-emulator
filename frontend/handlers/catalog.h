@@ -87,6 +87,26 @@ class CatalogService final : public v1::Catalog::Service {
                                const v1::DeleteRoutineRequest* request,
                                v1::DeleteRoutineResponse* response) override;
 
+  ::grpc::Status UpsertRowAccessPolicy(
+      ::grpc::ServerContext* context,
+      const v1::UpsertRowAccessPolicyRequest* request,
+      v1::UpsertRowAccessPolicyResponse* response) override;
+
+  ::grpc::Status DeleteRowAccessPolicy(
+      ::grpc::ServerContext* context,
+      const v1::DeleteRowAccessPolicyRequest* request,
+      v1::DeleteRowAccessPolicyResponse* response) override;
+
+  ::grpc::Status ListRowAccessPolicies(
+      ::grpc::ServerContext* context,
+      const v1::ListRowAccessPoliciesRequest* request,
+      v1::ListRowAccessPoliciesResponse* response) override;
+
+  ::grpc::Status SetColumnGovernance(
+      ::grpc::ServerContext* context,
+      const v1::SetColumnGovernanceRequest* request,
+      v1::SetColumnGovernanceResponse* response) override;
+
  private:
   backend::storage::Storage* storage_;
 };

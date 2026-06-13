@@ -111,12 +111,26 @@ absl::Status RouteClassifierVisitor::VisitResolvedAnalyticFunctionCall(
 
 absl::Status RouteClassifierVisitor::VisitResolvedAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan* node) {
-  if (node != nullptr && node->input_scan() != nullptr &&
-      node->input_scan()->node_kind() == ::googlesql::RESOLVED_AGGREGATE_SCAN) {
-    MaybePromote(Disposition::kSemanticExecutor,
-                 "ResolvedAnalyticScan(aggregate_input)");
+  if (node != nullptr) {
+    if (node->input_scan() != nullptr &&
+        node->input_scan()->node_kind() ==
+            ::googlesql::RESOLVED_AGGREGATE_SCAN) {
+      MaybePromote(Disposition::kSemanticExecutor,
+                   "ResolvedAnalyticScan(aggregate_input)");
+    }
+    CheckAnalyticScanDateTimestampRange(node);
   }
   return ::googlesql::ResolvedASTVisitor::VisitResolvedAnalyticScan(node);
+}
+
+absl::Status RouteClassifierVisitor::VisitResolvedSampleScan(
+    const ::googlesql::ResolvedSampleScan* node) {
+  if (node != nullptr && (node->weight_column() != nullptr ||
+                          node->partition_by_list_size() > 0)) {
+    MaybePromote(Disposition::kSemanticExecutor,
+                 "ResolvedSampleScan(extended)");
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedSampleScan(node);
 }
 
 absl::Status RouteClassifierVisitor::VisitResolvedQueryStmt(

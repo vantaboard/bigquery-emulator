@@ -76,19 +76,16 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQuerySelectStarRoundTripsViaDuckDb) {
 
 TEST_F(LocalCoordinatorEngineTest,
        ExecuteQueryUnsupportedFunctionRoutesToUnsupportedStub) {
-  // `GENERATE_UUID` is `unsupported` in `functions.yaml` (not
-  // planned). The classifier promotes the route to
-  // `kUnsupported`, the coordinator dispatches to the
-  // `UnsupportedExecutor` stub, and the stub returns UNIMPLEMENTED
-  // with a disposition-aware message that names the route and
-  // points at the policy. This pins the dispatcher's
-  // unsupported-route behavior against the gateway's stable
-  // `notImplemented` contract.
+  // `SESSION_USER` is `unsupported` in `functions.yaml`. The
+  // classifier promotes the route to `kUnsupported`, the coordinator
+  // dispatches to the `UnsupportedExecutor` stub, and the stub returns
+  // UNIMPLEMENTED with a disposition-aware message that names the
+  // route and points at the policy.
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
-  auto source = engine_->ExecuteQuery(
-      MakeRequest("SELECT GENERATE_UUID() FROM ds.people"),
-      bundle.catalog.get());
+  auto source =
+      engine_->ExecuteQuery(MakeRequest("SELECT SESSION_USER() FROM ds.people"),
+                            bundle.catalog.get());
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
   EXPECT_TRUE(absl::StrContains(source.status().message(), "unsupported"))

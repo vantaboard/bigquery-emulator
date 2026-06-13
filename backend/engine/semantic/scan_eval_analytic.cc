@@ -12,8 +12,8 @@
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/type.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -135,6 +135,102 @@ std::vector<Value> PartitionKeysForRow(
   return keys;
 }
 
+absl::StatusOr<int64_t> EvalFrameOffsetInt64(
+    const ::googlesql::ResolvedExpr* expr, EvalContext& ctx) {
+  if (expr == nullptr) {
+    return absl::InvalidArgumentError("semantic: frame offset missing");
+  }
+  auto value_or = EvalExpr(*expr, ctx);
+  if (!value_or.ok()) return value_or.status();
+  if (value_or->is_null()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: frame offset must not be NULL");
+  }
+  if (value_or->type_kind() == ::googlesql::TYPE_INT64) {
+    return value_or->int64_value();
+  }
+  if (value_or->type_kind() == ::googlesql::TYPE_DOUBLE) {
+    return static_cast<int64_t>(value_or->double_value());
+  }
+  return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                           "semantic: frame offset must be INT64");
+}
+
+absl::StatusOr<Value> AddDateOffset(Value date, int64_t offset_days) {
+  if (date.is_null()) return date;
+  int32_t out = 0;
+  if (auto s = ::googlesql::functions::AddDate(
+          date.date_value(),
+          ::googlesql::functions::DateTimestampPart::DAY,
+          offset_days,
+          &out);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Date(out);
+}
+
+absl::StatusOr<Value> AddTimestampOffset(Value ts, int64_t offset_micros) {
+  if (ts.is_null()) return ts;
+  return Value::TimestampFromUnixMicros(ts.ToUnixMicros() + offset_micros);
+}
+
+absl::StatusOr<Value> FrameBoundValue(
+    const ::googlesql::ResolvedWindowFrameExpr* bound,
+    const Value& current_order,
+    EvalContext& ctx) {
+  if (bound == nullptr) {
+    return absl::InvalidArgumentError("semantic: frame bound missing");
+  }
+  switch (bound->boundary_type()) {
+    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_PRECEDING:
+    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_FOLLOWING:
+      return Value::NullInt64();
+    case ::googlesql::ResolvedWindowFrameExpr::CURRENT_ROW:
+      return current_order;
+    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING: {
+      auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
+      if (!offset_or.ok()) return offset_or.status();
+      if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
+        return AddDateOffset(current_order, -*offset_or);
+      }
+      if (current_order.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+        return AddTimestampOffset(current_order, -*offset_or);
+      }
+      break;
+    }
+    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING: {
+      auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
+      if (!offset_or.ok()) return offset_or.status();
+      if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
+        return AddDateOffset(current_order, *offset_or);
+      }
+      if (current_order.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+        return AddTimestampOffset(current_order, *offset_or);
+      }
+      break;
+    }
+  }
+  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                           "semantic: unsupported frame bound for order key");
+}
+
+bool ValueInClosedRange(const Value& value,
+                        const Value& low,
+                        bool has_low,
+                        const Value& high,
+                        bool has_high) {
+  if (value.is_null()) return false;
+  if (has_low && !value.is_null() && !low.is_null() && ValueLess(value, low)) {
+    return false;
+  }
+  if (has_high && !value.is_null() && !high.is_null() &&
+      ValueLess(high, value)) {
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
@@ -215,6 +311,71 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
           out_rows[r][out_col_id] = Value::Int64(row_numbers[r]);
         }
         continue;
+      }
+      if (fname == "count") {
+        const ::googlesql::ResolvedWindowFrame* wf = afn->window_frame();
+        if (wf != nullptr &&
+            wf->frame_unit() == ::googlesql::ResolvedWindowFrame::RANGE &&
+            order_spec != nullptr &&
+            order_spec->order_by_item_list_size() > 0) {
+          const ::googlesql::ResolvedOrderByItem* order_item =
+              order_spec->order_by_item_list(0);
+          if (order_item == nullptr || order_item->column_ref() == nullptr) {
+            return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                                     "semantic: analytic COUNT RANGE missing "
+                                     "order key");
+          }
+          const int order_col_id =
+              order_item->column_ref()->column().column_id();
+          const ::googlesql::Type* order_type =
+              order_item->column_ref()->type();
+          if (order_type == nullptr ||
+              (order_type->kind() != ::googlesql::TYPE_DATE &&
+               order_type->kind() != ::googlesql::TYPE_TIMESTAMP)) {
+            return MakeSemanticError(
+                SemanticErrorReason::kNotImplemented,
+                "semantic: analytic COUNT RANGE requires DATE/TIMESTAMP order");
+          }
+          for (size_t r = 0; r < out_rows.size(); ++r) {
+            const Value current_order =
+                LookupColumnValue(input_rows[r], order_col_id);
+            EvalContext row_ctx = ctx;
+            row_ctx.columns = &input_rows[r];
+            auto low_or =
+                FrameBoundValue(wf->start_expr(), current_order, row_ctx);
+            if (!low_or.ok()) return low_or.status();
+            auto high_or =
+                FrameBoundValue(wf->end_expr(), current_order, row_ctx);
+            if (!high_or.ok()) return high_or.status();
+            const bool has_low = !(*low_or).is_null();
+            const bool has_high = !(*high_or).is_null();
+            int64_t count = 0;
+            for (size_t other = 0; other < input_rows.size(); ++other) {
+              if (partition_fps[other] != partition_fps[r]) continue;
+              const Value other_order =
+                  LookupColumnValue(input_rows[other], order_col_id);
+              if (!ValueInClosedRange(
+                      other_order, *low_or, has_low, *high_or, has_high)) {
+                continue;
+              }
+              if (afn->argument_list_size() == 0) {
+                count++;
+                continue;
+              }
+              if (afn->argument_list(0) == nullptr) {
+                count++;
+                continue;
+              }
+              EvalContext other_ctx = ctx;
+              other_ctx.columns = &input_rows[other];
+              auto arg = EvalExpr(*afn->argument_list(0), other_ctx);
+              if (!arg.ok()) return arg.status();
+              if (!arg->is_null()) count++;
+            }
+            out_rows[r][out_col_id] = Value::Int64(count);
+          }
+          continue;
+        }
       }
       if (fname == "sum") {
         if (afn->argument_list_size() != 1 ||

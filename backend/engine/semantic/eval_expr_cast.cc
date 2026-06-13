@@ -6,7 +6,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -42,17 +41,17 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
   if (target == nullptr) {
     return absl::InvalidArgumentError("semantic: ResolvedCast has null type");
   }
-  if (cast.extended_cast() != nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: CAST extended_cast shapes are deferred");
-  }
   const bool has_type_modifiers = !cast.type_modifiers().IsEmpty();
   auto finalize = [&](Value v) -> absl::StatusOr<Value> {
     if (!has_type_modifiers) return std::move(v);
     return ApplyCastTypeModifiers(
         std::move(v), cast.type_modifiers(), cast.return_null_on_error());
   };
+  if (cast.extended_cast() != nullptr) {
+    auto extended = EvalExtendedCast(cast, inner, source);
+    if (!extended.ok()) return extended.status();
+    return finalize(*std::move(extended));
+  }
   if (auto formatted = TryEvalCastFormatAndTimezone(cast, inner, target);
       formatted.has_value()) {
     if (!formatted->ok()) return formatted->status();
