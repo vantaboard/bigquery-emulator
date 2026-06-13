@@ -182,13 +182,14 @@ func (t *GoccyTarget) startLogFollower() {
 	logCtx, cancel := context.WithCancel(context.Background())
 	t.logsCancel = cancel
 	go func() {
+		// #nosec G204 -- container name is bench-owned.
 		cmd := exec.CommandContext(
 			logCtx,
 			"docker",
 			"logs",
 			"-f",
 			t.container,
-		) //nolint:gosec // container name is bench-owned
+		)
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			return
