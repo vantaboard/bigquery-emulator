@@ -117,12 +117,8 @@ tasks:
           echo "coverage:html: skipping Go report ({{.GO_PROFILE}} missing)" >&2
         fi
         if [ -f "{{.LCOV_PROFILE}}" ]; then
-          if ! command -v genhtml >/dev/null 2>&1; then
-            echo "coverage:html: genhtml not on PATH; install 'lcov' to render the C++ report." >&2
-          else
-            genhtml --ignore-errors empty,source --quiet --output-directory {{.HTML_DIR}}/cpp {{.LCOV_PROFILE}}
-            echo "wrote {{.HTML_DIR}}/cpp/index.html"
-          fi
+          tools/coverage/render_cpp_html.sh {{.LCOV_PROFILE}} {{.HTML_DIR}}/cpp
+          echo "wrote {{.HTML_DIR}}/cpp/index.html"
         else
           echo "coverage:html: skipping C++ report ({{.LCOV_PROFILE}} missing)" >&2
         fi

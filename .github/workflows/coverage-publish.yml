@@ -244,10 +244,10 @@ jobs:
             go tool cover -html=artifacts/go/coverage.out -o html/go.html
           fi
           if [ "${{ steps.inputs.outputs.has_cpp }}" = true ]; then
-            # Bazel's combined lcov report often omits per-line DA records;
-            # tolerate empty/summary-only tracefiles so publish still lands.
-            genhtml --ignore-errors empty,source --quiet --output-directory html/cpp \
-              "${{ steps.inputs.outputs.lcov_path }}"
+            # Bazel's combined LCOV report is often summary-only; lcov 2.x
+            # genhtml aborts on those tracefiles even with --ignore-errors.
+            tools/coverage/render_cpp_html.sh \
+              "${{ steps.inputs.outputs.lcov_path }}" html/cpp
           fi
           cat > html/index.html <<'INDEX'
           <!doctype html>

@@ -88,8 +88,8 @@ func TestParseLCOVReader_BadDA(t *testing.T) {
 
 // TestParseLCOVReader_LHLFOnly documents the Bazel combined-report
 // shape that lists SF records with LH/LF summaries but no DA lines.
-// genhtml rejects that tracefile unless --ignore-errors empty is set;
-// the summarizer still counts the summary totals.
+// lcov 2.x genhtml still aborts on those tracefiles; render_cpp_html.sh
+// falls back to a placeholder page. The summarizer counts the totals.
 func TestParseLCOVReader_LHLFOnly(t *testing.T) {
 	const input = `SF:backend/foo.cc
 FNF:0
