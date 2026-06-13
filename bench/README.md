@@ -17,7 +17,8 @@ task emulator:build-engine:bazel
 # Run vantaboard + goccy benchmarks and charts
 task bench:run
 
-# Compare vantaboard against committed BigQuery baseline
+# Compare vantaboard against committed BigQuery baseline (emulator only;
+# does not rewrite bench/results.json — use bench:run for goccy charts)
 task bench:compare
 ```
 

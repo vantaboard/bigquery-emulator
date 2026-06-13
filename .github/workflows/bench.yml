@@ -65,7 +65,12 @@ jobs:
 
       - name: Compare against baseline (advisory)
         continue-on-error: true
-        run: task bench:compare
+        run: |
+          go run ./bench/cmd/bench \
+            --target=emulator \
+            --compare \
+            --baseline bench/baselines/bigquery.json
+          # Leave bench/results.json + charts from bench:run intact (goccy rows).
 
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v6

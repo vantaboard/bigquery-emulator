@@ -56,9 +56,10 @@ tasks:
         go run ./bench/cmd/bench \
           --target=emulator \
           --compare \
-          --baseline "{{.BENCH_BASELINE}}" \
-          --json-out "{{.BENCH_JSON}}"
-        task bench:charts
+          --baseline "{{.BENCH_BASELINE}}"
+        # Do not write bench/results.json or regenerate charts here;
+        # that would drop goccy rows produced by bench:run. Use
+        # bench:run for full three-way results + chart snapshots.
       - task: cleanup
 
   charts:

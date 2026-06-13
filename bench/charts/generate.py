@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -19,6 +20,8 @@ OUTCOMES = {
     "skipped": "#7f7f7f",
 }
 
+EXPECTED_TARGETS = ("emulator", "goccy")
+
 
 def load_results(path: Path) -> dict:
     with path.open(encoding="utf-8") as f:
@@ -32,6 +35,18 @@ def load_baseline(path: Path) -> dict:
         return json.load(f)
 
 
+def _missing_targets(results: dict) -> list[str]:
+    present = {r["target"] for r in results["results"]}
+    return [t for t in EXPECTED_TARGETS if t not in present]
+
+
+def _latency_or_nan(row: dict | None) -> float:
+    if not row or row.get("outcome") != "ok":
+        return math.nan
+    ms = _p50_ms(row)
+    return ms if ms > 0 else math.nan
+
+
 def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     cases = sorted({r["case_name"] for r in results["results"]})
     emu = {r["case_name"]: r for r in results["results"] if r["target"] == "emulator"}
@@ -41,21 +56,25 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     labels, emu_ms, goccy_ms, bq_ms = [], [], [], []
     for case in cases:
         labels.append(case)
-        emu_ms.append(_p50_ms(emu.get(case)))
-        goccy_ms.append(_p50_ms(goccy.get(case)))
+        emu_ms.append(_latency_or_nan(emu.get(case)))
+        goccy_ms.append(_latency_or_nan(goccy.get(case)))
         bq_ms.append(bq.get(case, {}).get("total_p50_ms"))
 
     x = range(len(labels))
     width = 0.25
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 6))
-    ax.bar([i - width for i in x], [v or 0 for v in emu_ms], width, label="vantaboard")
-    ax.bar(x, [v or 0 for v in goccy_ms], width, label="goccy")
-    ax.bar([i + width for i in x], [v or 0 for v in bq_ms], width, label="bigquery baseline")
+    ax.bar([i - width for i in x], emu_ms, width, label="vantaboard")
+    ax.bar(x, goccy_ms, width, label="goccy")
+    ax.bar([i + width for i in x], bq_ms, width, label="bigquery baseline")
     ax.set_yscale("log")
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylabel("p50 latency (ms)")
-    ax.set_title("Benchmark comparison")
+    title = "Benchmark comparison"
+    missing = _missing_targets(results)
+    if missing:
+        title += f" (missing: {', '.join(missing)} — run task bench:run)"
+    ax.set_title(title)
     ax.legend()
     fig.tight_layout()
     fig.savefig(out, format="svg")
@@ -74,8 +93,8 @@ def ratio_chart(results: dict, baseline: dict, out: Path) -> None:
         if bq_ms <= 0:
             continue
         labels.append(case)
-        emu_ratio.append(_p50_ms(emu.get(case)) / bq_ms if emu.get(case) else None)
-        goccy_ratio.append(_p50_ms(goccy.get(case)) / bq_ms if goccy.get(case) else None)
+        emu_ratio.append(_p50_ms(emu.get(case)) / bq_ms if emu.get(case) and emu.get(case).get("outcome") == "ok" else math.nan)
+        goccy_ratio.append(_p50_ms(goccy.get(case)) / bq_ms if goccy.get(case) and goccy.get(case).get("outcome") == "ok" else math.nan)
 
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 5))
     x = range(len(labels))
@@ -195,6 +214,9 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     results = load_results(Path(args.results))
     baseline = load_baseline(Path(args.baseline))
+    missing = _missing_targets(results)
+    if missing:
+        print(f"warning: results missing targets {missing}; run task bench:run for full charts")
 
     comparison_chart(results, baseline, out_dir / "comparison.svg")
     ratio_chart(results, baseline, out_dir / "ratio.svg")
