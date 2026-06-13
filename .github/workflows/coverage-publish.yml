@@ -28,14 +28,22 @@
 #     run for the same SHA (rather than firing twice and racing each
 #     other).
 #
-# Bootstrap (one-time, see plan):
-#   1. After the first push to main, this workflow creates the
-#      gh-pages branch via `peaceiris/actions-gh-pages@v4`.
-#   2. Repo Settings -> Pages: pick `gh-pages` / `/ (root)` as the
-#      source. The README badges then resolve via shields.io.
+# Bootstrap (one-time, see docs/dev/coverage/README.md):
+#   1. After the first push to main, this workflow publishes badge
+#      JSON, HTML reports, and baseline.json to `gh-pages` via
+#      `peaceiris/actions-gh-pages@v4`. README shields.io badges
+#      fetch those JSONs from raw.githubusercontent.com (no Pages
+#      required for badge images).
+#   2. Repo Settings -> Pages: pick `gh-pages` / `/ (root)` for
+#      browsable HTML reports and badge click-through links only.
 #   3. The gate treats a missing baseline.json as bootstrap (no
 #      regression check, exit 0) so the first few PRs after rollout
 #      do not fail just because gh-pages has not been populated yet.
+#
+# Publish vs gate routing uses `workflow_run.head_branch`, not
+# `workflow_run.event`: ci and coverage-bazel are triggered by
+# build-engine's workflow_run, so their own event is always
+# `workflow_run` even when the original trigger was a push to main.
 
 name: coverage-publish
 
@@ -212,7 +220,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # Generate the three shields.io endpoint JSONs that the README
-      # badges resolve via `https://img.shields.io/endpoint?url=...`.
+      # badges resolve via raw.githubusercontent.com/.../gh-pages/badge*.json.
       # Combined badge first (`badge.json`), then per-suite badges
       # so a contributor can see the Go vs C++ split at a glance.
       - name: Generate badge JSONs
@@ -293,17 +301,16 @@ jobs:
       # root, so the gate can `git show origin/gh-pages:baseline.json`
       # in subsequent runs. We always write it next to summary.json
       # so the publish step picks it up by path.
+      # head_branch (not event): producers run with event=workflow_run.
       - name: Stage baseline for gh-pages
         if: |
           steps.inputs.outputs.skip != 'true' &&
-          github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_branch == 'main'
         run: cp summary.json html/baseline.json
 
       - name: Publish to gh-pages
         if: |
           steps.inputs.outputs.skip != 'true' &&
-          github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_branch == 'main'
         uses: peaceiris/actions-gh-pages@v4
         with:
@@ -327,7 +334,7 @@ jobs:
       - name: Fetch baseline from gh-pages
         if: |
           steps.inputs.outputs.skip != 'true' &&
-          github.event.workflow_run.event == 'pull_request'
+          github.event.workflow_run.head_branch != 'main'
         run: |
           set -eo pipefail
           if git fetch --no-tags --depth=1 origin gh-pages 2>/dev/null; then
@@ -344,7 +351,7 @@ jobs:
       - name: Run coverage gate
         if: |
           steps.inputs.outputs.skip != 'true' &&
-          github.event.workflow_run.event == 'pull_request'
+          github.event.workflow_run.head_branch != 'main'
         run: |
           set -eo pipefail
           /tmp/coverage gate \

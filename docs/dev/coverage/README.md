@@ -29,9 +29,9 @@ flowchart LR
   buildEngine -->|"main push only"| cpp[coverage-bazel.yml: bazel coverage]
   ci -->|go-coverage artifact| pub[coverage-publish.yml]
   cpp -->|cpp-bazel-coverage artifact| pub
-  pub -->|"push to main"| gh[gh-pages branch]
-  pub -->|"pull_request Go-only gate"| gate[regression gate against gh-pages baseline.json]
-  gh -->|shields.io endpoint| readme["README badges"]
+  pub -->|"head_branch == main"| gh[gh-pages branch]
+  pub -->|"head_branch != main"| gate[regression gate against gh-pages baseline.json]
+  gh -->|raw.githubusercontent.com badge JSON| readme["README badges"]
   gh -->|GitHub Pages| browse["browsable reports"]
 ```
 
@@ -78,7 +78,7 @@ fields equal `0` and the current run's are real percentages
 greater than zero. After the first push-to-main publish, the
 baseline becomes accurate.
 
-### 2. Enable GitHub Pages
+### 2. Enable GitHub Pages (for HTML reports and badge click-through)
 
 Repo Settings → Pages → "Build and deployment":
 
@@ -86,9 +86,15 @@ Repo Settings → Pages → "Build and deployment":
 - **Branch:** `gh-pages` / `/ (root)`
 
 After saving, GitHub serves the workflow's published `html/` tree
-at `https://vantaboard.github.io/bigquery-emulator/`. shields.io's
-endpoint badges then resolve from
-`https://vantaboard.github.io/bigquery-emulator/badge*.json`.
+at `https://vantaboard.github.io/bigquery-emulator/` for browsable
+Go/C++ coverage HTML and bench chart SVGs under `/bench/`.
+
+README **badge images** do not depend on Pages: shields.io fetches
+endpoint JSON from
+`https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge*.json`
+as soon as this workflow publishes to `gh-pages`. **Badge click-through**
+links and the coverage index still use the `github.io` URLs above,
+so enable Pages for those to work.
 
 If the `gh-pages` branch does not exist yet (step 1 skipped),
 Pages cannot be enabled until the first successful main-branch
@@ -115,9 +121,15 @@ publish creates it. Merge a no-op PR to `main`, wait for
    - `summary.json`, `baseline.json` (identical for this commit),
      `badge.json`, `badge-go.json`, `badge-cpp.json`
    - `go.html`, `cpp/index.html`, `index.html`
-7. Refresh the README on the main branch: the three new
-   `coverage*` badges should resolve to real percentages (allow
-   ~5 minutes for shields.io's cache).
+7. Confirm badge JSON is on `gh-pages`, then refresh the README on
+   the main branch (allow ~5 minutes for shields.io's cache):
+
+   ```bash
+   curl -sf https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge.json | jq .
+   ```
+
+   The three `coverage*` badges should show real percentages, not
+   `resource not found`.
 
 ### 4. Remove the `CODECOV_TOKEN` secret
 
@@ -169,6 +181,7 @@ workflow will compute.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| Badge shows `resource not found` | `badge.json` absent on `gh-pages`, or publish step skipped | Confirm `coverage-publish` ran **Publish to gh-pages** on main; re-run the workflow if needed. Wait ~5 min for shields.io cache. |
 | Badge shows `n/a` | Producer artifact missing for the published SHA | Re-run the failing producer; the next workflow_run will refresh the badge. |
 | Gate reports "Baseline missing" | `gh-pages` branch or its `baseline.json` not yet published | Wait for the first push-to-main publish, or pre-seed via step 1 above. |
 | Gate fails on a PR you expected to pass | Current run dropped > `COVERAGE_TOLERANCE` percentage points | Inspect the step-summary table; either fix the regression or, if the threshold is wrong, tighten/relax `COVERAGE_TOLERANCE` in the workflow. |
