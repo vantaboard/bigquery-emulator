@@ -37,12 +37,3 @@ func SkipEmulatorManagedWriterDefaultStream(t *testing.T) {
 		t.Skip("ManagedWriter DefaultStream proto append with full type matrix is not yet supported by the emulator")
 	}
 }
-
-// SkipEmulatorNumericAggregateQuery skips queries whose result includes
-// SUM/aggregates over NUMERIC columns when the emulator host is set.
-func SkipEmulatorNumericAggregateQuery(t *testing.T) {
-	t.Helper()
-	if strings.TrimSpace(os.Getenv("BIGQUERY_EMULATOR_HOST")) != "" {
-		t.Skip("NUMERIC aggregate query results are not yet fully supported by the emulator")
-	}
-}

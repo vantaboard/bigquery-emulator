@@ -25,8 +25,8 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/bqopts"
-	"github.com/GoogleCloudPlatform/golang-samples/bigquery/snippets/bqtestutil"
 	"github.com/GoogleCloudPlatform/golang-samples/bigquery/internal/testutil"
+	"github.com/GoogleCloudPlatform/golang-samples/bigquery/snippets/bqtestutil"
 )
 
 func TestQueries(t *testing.T) {
@@ -165,7 +165,6 @@ func TestQueries(t *testing.T) {
 		})
 		t.Run("queryClusteredTable", func(t *testing.T) {
 			t.Parallel()
-			bqtestutil.SkipEmulatorNumericAggregateQuery(t)
 			if os.Getenv("BIGQUERY_EMULATOR_HOST") != "" {
 				if os.Getenv("STORAGE_EMULATOR_HOST") == "" {
 					t.Skip("clustered table setup loads from gs://cloud-samples-data; set STORAGE_EMULATOR_HOST with mirrored buckets or unset BIGQUERY_EMULATOR_HOST")
