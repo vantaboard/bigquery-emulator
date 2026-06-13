@@ -59,11 +59,16 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      # Go is installed only so `go-task/setup-task` can run Task wrappers
+      # (`task bazel:coverage`, optional `task googlesql:fetch-prebuilt`).
+      # This job never runs `go mod download` / `go test` / `go build`, so
+      # enabling setup-go's module cache restores a hit then post-job cleanup
+      # warns that GOMODCACHE was never created on disk.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: '1.26'
-          cache: true
+          cache: false
 
       - name: Install Task
         uses: go-task/setup-task@v2
