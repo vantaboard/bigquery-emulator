@@ -23,6 +23,24 @@ OUTCOMES = {
 EXPECTED_TARGETS = ("emulator", "goccy")
 
 
+def _save_chart(fig: plt.Figure, out: Path) -> None:
+    fig.savefig(out, format="svg", bbox_inches="tight", pad_inches=0.1)
+    plt.close(fig)
+
+
+def _legend_outside(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    *,
+    loc: str = "outside upper right",
+    **kwargs,
+) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    if not handles:
+        return
+    fig.legend(handles, labels, loc=loc, **kwargs)
+
+
 def load_results(path: Path) -> dict:
     with path.open(encoding="utf-8") as f:
         return json.load(f)
@@ -75,10 +93,8 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     if missing:
         title += f" (missing: {', '.join(missing)} — run task bench:run)"
     ax.set_title(title)
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out, format="svg")
-    plt.close(fig)
+    _legend_outside(fig, ax)
+    _save_chart(fig, out)
 
 
 def ratio_chart(results: dict, baseline: dict, out: Path) -> None:
@@ -105,10 +121,8 @@ def ratio_chart(results: dict, baseline: dict, out: Path) -> None:
     ax.set_xticklabels(labels, rotation=45, ha="right")
     ax.set_ylabel("ratio vs BigQuery p50")
     ax.set_title("Latency ratio vs BigQuery baseline")
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out, format="svg")
-    plt.close(fig)
+    _legend_outside(fig, ax)
+    _save_chart(fig, out)
 
 
 def support_matrix(results: dict, out: Path) -> None:
@@ -134,9 +148,7 @@ def support_matrix(results: dict, out: Path) -> None:
     ax.set_yticks(range(len(cases)))
     ax.set_yticklabels(cases)
     ax.set_title("Support / correctness matrix")
-    fig.tight_layout()
-    fig.savefig(out, format="svg")
-    plt.close(fig)
+    _save_chart(fig, out)
 
 
 def phases_chart(results: dict, out: Path) -> None:
@@ -156,10 +168,8 @@ def phases_chart(results: dict, out: Path) -> None:
         bottom = [b + h for b, h in zip(bottom, heights)]
     ax.set_xlabel("seconds (p50)")
     ax.set_title("Engine phase breakdown (vantaboard)")
-    ax.legend(loc="lower right", fontsize=8)
-    fig.tight_layout()
-    fig.savefig(out, format="svg")
-    plt.close(fig)
+    _legend_outside(fig, ax, loc="outside lower center", ncol=4, fontsize=8)
+    _save_chart(fig, out)
 
 
 def trend_chart(history: list[dict], out: Path) -> None:
@@ -180,10 +190,8 @@ def trend_chart(history: list[dict], out: Path) -> None:
     ax.set_xlabel("run index")
     ax.set_ylabel("p50 ms")
     ax.set_title("Latency trend")
-    ax.legend(fontsize=7, ncol=2)
-    fig.tight_layout()
-    fig.savefig(out, format="svg")
-    plt.close(fig)
+    _legend_outside(fig, ax, loc="outside lower center", fontsize=7, ncol=4)
+    _save_chart(fig, out)
 
 
 def _p50_ms(row: dict | None) -> float:
