@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Pre-commit lint gate (before auto-commits)
 
+> **This gate never overrides the auto-commit mandate.** The user has explicitly opted into always auto-committing without being asked (see `.cursor/rules/auto-commit.mdc`). This gate only shapes *how* you prepare a commit (run the linter first when safe); it is **never** a reason to ask the user whether to commit, to defer the commit, or to leave the work uncommitted. When the skip conditions below apply, commit anyway.
+
 When following **Auto-Commit Workflow** (`.cursor/rules/auto-commit.mdc`), **before** `git commit` on a change set that touches **lint-relevant paths** (see below), run from the repo root:
 
 ```bash
