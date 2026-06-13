@@ -111,8 +111,8 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedLiteral`                             | `duckdb_native`       | `transpiler-emit-scans` for scalars (via `Value::GetSQLLiteral(PRODUCT_EXTERNAL)`). `transpiler-struct-unnest` extends the path through a private `EmitValueLiteral` helper that recurses into `ARRAY` and `STRUCT` values so the nested STRING / STRUCT shapes use DuckDB-flavored quoting (`'...'`, `{'k': v}`) instead of BQ's `"..."` / `(...)`. `transpiler-json-struct-completion` finishes the anonymous-field subset by synthesizing positional names (`_0`, `_1`, ...). |
 | `ResolvedParameter`                           | `duckdb_native`       | `transpiler-expression-core`: named (`@p`) and positional (`?`) parameters lower to DuckDB `$N` placeholders. The transpiler accumulates one `ParameterRef` per unique slot in `parameter_order()`. |
 | `ResolvedColumnRef`                           | `duckdb_native`       | Emits the quoted `ResolvedColumn::name()` — `transpiler-emit-scans` plan.                  |
-| `ResolvedFunctionCall`                        | `duckdb_native` (subset) | `transpiler-emit-scans` covers `COALESCE` + `IFNULL`; `transpiler-struct-unnest` adds `$make_array(<args>)`; `transpiler-functions-window` routes everything else through the YAML-backed disposition table (`functions.yaml` -> `functions_table.inc`). Math / string / array entries map directly. Datetime / regex / format functions on the `kFallback` disposition are slated to move to `duckdb_udf` (`docs/ENGINE_POLICY.md`) or `semantic_executor` (`docs/ENGINE_POLICY.md`) per family. BQ-specific (`APPROX_QUANTILES`, `ML.*`, `NET.*`, `HLL_COUNT.*`, `KEYS.*`, `ST_*`) live on `unsupported` via `docs/ENGINE_POLICY.md`. `SAFE.<fn>(...)` short-circuits regardless of disposition. |
-| `ResolvedAggregateFunctionCall`               | `duckdb_native` (subset) | `transpiler-emit-join-agg` baseline + `transpiler-functions-window` disposition-table dispatch for `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) plus YAML-table entries `ARRAY_AGG`, `STRING_AGG`, `ANY_VALUE`, `LOGICAL_AND`, `LOGICAL_OR`, `BIT_AND/OR/XOR`. Optional `DISTINCT` lowers as a prefix. `ARRAY_AGG` / `STRING_AGG` / `ARRAY_CONCAT_AGG` ORDER BY + LIMIT lower via `list(... ORDER BY ...)` + optional `list_slice(..., 1, n)` / `array_to_string`; `ARRAY_AGG` IGNORE NULLS lowers via `FILTER (WHERE ... IS NOT NULL)` and RESPECT NULLS via the `WrapArrayAggRespectNulls` error guard. Aggregate filtering (`WHERE` inside the call) lowers as DuckDB `FILTER (WHERE ...)`. `SAFE.<agg>(...)` (including `SAFE.SUM`) reroutes to `semantic_executor` (DuckDB rejects aggregates inside `TRY`). HAVING MAX/MIN and multi-level GROUP BY reroute to `semantic_executor`. Skiplisted aggregates (`APPROX_QUANTILES`, `COUNTIF`, ...) live on `unsupported`. Registered SQL UDAFs (`SQLFunction` with `mode=AGGREGATE`) promote the query to `semantic_executor` and evaluate via `EvalSqlUdafBody`. |
+| `ResolvedFunctionCall`                        | `duckdb_native` (subset) | `transpiler-emit-scans` covers `COALESCE` + `IFNULL`; `transpiler-struct-unnest` adds `$make_array(<args>)`; `transpiler-functions-window` routes everything else through the YAML-backed disposition table (`functions.yaml` -> `functions_table.inc`). Math / string / array entries map directly. Datetime / regex / format functions route through `duckdb_udf` (`docs/ENGINE_POLICY.md`) or `semantic_executor` (`docs/ENGINE_POLICY.md`) per family. BQ-specific `NET.*`, `HLL_COUNT.*`, and the approximate-aggregate family (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`, `APPROX_TOP_SUM`) evaluate on `semantic_executor`; `ML.*`, `KEYS.ENCRYPT`/`KEYS.DECRYPT_BYTES`, and the broader `ST_*` GIS surface live on `unsupported` via `docs/ENGINE_POLICY.md`. `SAFE.<fn>(...)` short-circuits regardless of disposition. |
+| `ResolvedAggregateFunctionCall`               | `duckdb_native` (subset) | `transpiler-emit-join-agg` baseline + `transpiler-functions-window` disposition-table dispatch for `SUM`/`COUNT`/`AVG`/`MIN`/`MAX` + `COUNT(*)` (`$count_star`) plus YAML-table entries `ARRAY_AGG`, `STRING_AGG`, `ANY_VALUE`, `LOGICAL_AND`, `LOGICAL_OR`, `BIT_AND/OR/XOR`. Optional `DISTINCT` lowers as a prefix. `ARRAY_AGG` / `STRING_AGG` / `ARRAY_CONCAT_AGG` ORDER BY + LIMIT lower via `list(... ORDER BY ...)` + optional `list_slice(..., 1, n)` / `array_to_string`; `ARRAY_AGG` IGNORE NULLS lowers via `FILTER (WHERE ... IS NOT NULL)` and RESPECT NULLS via the `WrapArrayAggRespectNulls` error guard. Aggregate filtering (`WHERE` inside the call) lowers as DuckDB `FILTER (WHERE ...)`. `SAFE.<agg>(...)` (including `SAFE.SUM`) reroutes to `semantic_executor` (DuckDB rejects aggregates inside `TRY`). HAVING MAX/MIN and multi-level GROUP BY reroute to `semantic_executor`. `COUNTIF` lowers `duckdb_native` (`count_if`); the approximate-aggregate family (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`, `APPROX_TOP_SUM`) evaluates on `semantic_executor` via `aggregate_specialized.cc`. Differential-privacy aggregate scans stay `unsupported`. Registered SQL UDAFs (`SQLFunction` with `mode=AGGREGATE`) promote the query to `semantic_executor` and evaluate via `EvalSqlUdafBody`. |
 | `ResolvedAnalyticFunctionCall`                | `duckdb_native` (subset) | `transpiler-functions-window`: ROW_NUMBER, RANK, DENSE_RANK, PERCENT_RANK, CUME_DIST, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE, NTH_VALUE, and aggregate-over-window dispatch through the YAML disposition table. The OVER clause is stitched on by `EmitAnalyticScan`. IGNORE/RESPECT NULLS on FIRST_VALUE/LAST_VALUE/NTH_VALUE lower natively; `PERCENTILE_DISC` RESPECT NULLS uses the dedicated coalesce rewrite. LAG/LEAD null-handling, other IGNORE/RESPECT NULLS shapes, and `SAFE.<fn>(...)` reroute to `semantic_executor`. |
 | `ResolvedCast`                                | `duckdb_native` (subset) | `transpiler-expression-core`: `CAST(<expr> AS T)` -> `CAST(<expr> AS <duckdb-type>)` (and SAFE_CAST -> `TRY_CAST(...)`) for every `TypeKind` `IsCastTargetSupported` whitelists. `FORMAT` / `AT TIME ZONE` promote to `semantic_executor` (`VisitResolvedCast` + `eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`); `extended_cast()` shapes still surface `UNIMPLEMENTED`; `type_modifiers()` (`STRING(n)`, `NUMERIC(p,s)`) evaluate on `eval_expr_cast.cc`. Casts whose target is `TYPE_GEOGRAPHY` / proto / enum / range / graph / measure / tokenlist live on `unsupported`. Pinned by `conformance/fixtures/scalar/cast_format_*.yaml`, `cast_timestamp_at_timezone.yaml`, and `cast_type_modifiers.yaml`. |
 | `ResolvedMakeStruct`                          | `duckdb_rewrite`      | `transpiler-struct-unnest`: named-field `STRUCT(<expr> AS <name>, ...)` lowers to DuckDB's `{'<name>': <value>, ...}` struct literal. `transpiler-json-struct-completion`: anonymous-field structs (`STRUCT(1, 2)`) synthesize positional names (`_0`, `_1`, ...) -- a deliberate structural rewrite of BigQuery's positional STRUCT semantics into DuckDB's name-keyed STRUCT model. |
@@ -242,10 +242,13 @@ semantic-executor / control-op code) so the doc stays honest.
     a row off `local_stub` requires the matching real
     implementation, not a thicker stub.
   * `unsupported` — deliberately out of scope locally
-    (`approx_quantiles`, `ml.*`, `keys.encrypt`,
-    `keys.decrypt_bytes`, `st_*`, `generate_uuid`,
-    `session_user`, `error`). Every row points at
-    `docs/ENGINE_POLICY.md`. `BIT_COUNT` was on this
+    (`ml.*`, `keys.encrypt`, `keys.decrypt_bytes`, the broader
+    `st_*` GIS surface, `generate_uuid`, `session_user`). Every
+    row points at `docs/ENGINE_POLICY.md`. The approximate-
+    aggregate family (`approx_quantiles`, `approx_count_distinct`,
+    `approx_top_count`, `approx_top_sum`) and `error` were
+    promoted off this list onto the semantic executor. `BIT_COUNT`
+    was on this
     list before `docs/ENGINE_POLICY.md` shipped a
     two's-complement-correct implementation in the semantic
     executor;     `IEEE_DIVIDE` is also owned by the semantic
@@ -276,15 +279,28 @@ semantic-executor / control-op code) so the doc stays honest.
     The semantic executor owns these shapes because their BigQuery
     evaluation order does not map cleanly onto DuckDB's
     `LATERAL` / `unnest(...)` model.
-* **Next plan(s):**
-  * `docs/ENGINE_POLICY.md` — install the explicit route
-    classifier behind `Engine::Analyze` so the "always DuckDB fast
-    path" default becomes an explicit, observable routing decision.
-  * `docs/ENGINE_POLICY.md` — retire the
-    `kMap` / `kFallback` / `kSkiplist` function-disposition enum in
-    favor of the same six-route vocabulary used in this tracker.
-  * `docs/ENGINE_POLICY.md` — tighten conformance
-    on the shapes that already route to the DuckDB fast path.
+* **Landed since the original transpiler plan set:** the explicit
+  route classifier behind `Engine::Analyze`
+  (`backend/engine/coordinator/route_classifier_visitor.cc`), the
+  retirement of the legacy `kMap` / `kFallback` / `kSkiplist`
+  function-disposition enum in favor of the seven-route vocabulary,
+  the local DML / scripting / UDF-TVF / control-op executors, the
+  semantic executor families (UNNEST/lateral/correlated, aggregate
+  modifiers, CAST/COLLATE edges, pipe subpipelines, FLATTEN, GROUP
+  ROWS, inline lambdas, NET/HLL/approximate aggregates), and the
+  Storage Read/Write API completion. The parity 01–13 plan set under
+  `.cursor/plans/parity-*` tracked that work.
+* **Next plan(s):** the remaining gaps toward a fuller BigQuery
+  surface are tracked under `.cursor/plans/full-*` (see
+  `.cursor/plans/full-00-index.plan.md`): `MATCH_RECOGNIZE`
+  (`status=planned`), the broader GEOGRAPHY/GIS surface, the
+  complete `INFORMATION_SCHEMA` view set, JavaScript UDF call-time
+  execution, NUMERIC aggregate precision, time-travel
+  (`FOR SYSTEM_TIME AS OF`), wildcard-table querying, row-access /
+  column-level policy enforcement, and the remaining `(planned)`
+  AST shapes (`ResolvedUpdateConstructor`,
+  `ResolvedRelationArgumentScan`, `ResolvedCatalogColumnRef`, MERGE
+  `THEN RETURN`).
 * **Promotion policy.** Promoting a row to a non-`unsupported` route
   requires (a) an `Emit*` (or semantic-executor / control-op handler)
   that lowers / executes the shape cleanly, and (b) the conformance

@@ -408,10 +408,13 @@ handler.
   canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
   `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`,
   `unsupported`); deferred rows carry `status=planned` in the YAML
-  tables. `NET.*` and `HLL_COUNT.*` evaluate on the semantic executor
-  (`net_funcs.cc`, `hll_funcs.cc`). Unsupported families
-  (`APPROX_QUANTILES`, `ML.*`, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`,
-  `ST_*`, ...) are documented in
+  tables. `NET.*`, `HLL_COUNT.*`, and the approximate-aggregate family
+  (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`,
+  `APPROX_TOP_SUM`) evaluate on the semantic executor (`net_funcs.cc`,
+  `hll_funcs.cc`, `aggregate_specialized.cc`). Unsupported families
+  (`ML.*`, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, the broader `ST_*`
+  GIS surface beyond the `ST_GEOGPOINT` constructor, differential-
+  privacy aggregates, `GENERATE_UUID`, ...) are documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
   `SAFE.<fn>(...)` is handled uniformly regardless of disposition
@@ -654,7 +657,7 @@ and
   diffs `expected.rows` against the gateway's wire response with
   typed cell comparison (INT64 as `*big.Rat`, FLOAT64 with epsilon,
   RFC3339 / SQL-form timestamps, ...), supports `ordered` /
-  `unordered` / `schema_only` matching modes. 140 fixtures today
+  `unordered` / `schema_only` matching modes. 160+ fixtures today
   spanning SELECT shapes, GROUP BY / aggregates, JOINs, CTEs /
   subqueries, DML / DDL round-trips, functions, scripting / UDFs,
   structural errors, and schema-only smokes (plus the

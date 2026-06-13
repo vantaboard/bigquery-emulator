@@ -558,10 +558,13 @@ $subscript: duckdb_rewrite duckdb_name=$subscript
 #   stays on `local_stub` until then so the runtime behavior is
 #   "succeeds with placeholder", not "silent approximation".
 
-# Anonymized / differential-privacy / threshold aggregates. No
-# stub: DP semantics are too easy to get wrong by accident, and a
-# placeholder result would mask the missing implementation. The
-# `unsupported` row is the no-silent-approximation choice.
+# Approximate aggregation. NOT differential privacy: these compute
+# exact results on the semantic executor
+# (`backend/engine/semantic/functions/aggregate_specialized.cc`).
+# The differential-privacy / anonymized aggregate *scans*
+# (`ResolvedAnonymizedAggregateScan`, ...) stay `unsupported` in
+# `node_dispositions.yaml` because their noise-calibration guarantee
+# cannot be honored locally.
 approx_quantiles: semantic_executor
 approx_count_distinct: semantic_executor
 approx_top_count: semantic_executor
@@ -662,11 +665,13 @@ to_json_string: semantic_executor
 
 # Misc BigQuery-specific scalars. `GENERATE_UUID` is non-deterministic
 # (stub would lie about uniqueness across calls); `SESSION_USER` has
-# no analog in the emulator's no-auth posture; `ERROR(msg)` is a
-# control-flow function whose semantics belong to the procedural
-# scripting executor (`docs/ENGINE_POLICY.md`).
-# All three stay `unsupported` until the matching plan lands a
-# real implementation.
+# no analog in the emulator's no-auth posture; both stay
+# `unsupported` until the matching plan lands a real implementation
+# (`GENERATE_UUID` is a candidate for a real local UUIDv4 generator;
+# see `.cursor/plans/full-*`). `ERROR(msg)` is a control-flow
+# function whose semantics belong to the procedural scripting
+# executor (`docs/ENGINE_POLICY.md`); it evaluates on the semantic
+# executor.
 generate_uuid: unsupported
 session_user: unsupported
 error: semantic_executor
