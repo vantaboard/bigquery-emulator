@@ -1,11 +1,10 @@
 ---
 name: Full — Subagent dispatch / orchestration
 overview: How to spin off subagents to execute the full 01-11 plans to completion. Defines dispatch waves that respect the plan dependency graph, the bazel single-invocation invariant (the dominant constraint), and the shared-hot-file conflict surface (route classifier, catalog, functions.yaml / node_dispositions.yaml, SHAPE_TRACKER), plus parent-side process hygiene and progress tracking against the full-00 index.
-isProject: true
 todos:
   - id: wave1
     content: "Wave 1 foundational catalog + correctness (SERIALIZED on bazel): dispatch 01 info_schema -> 02 numeric precision -> 04 wildcard tables, one at a time; parent cleanup + status update between each. 04 reuses the VirtualCatalogTable machinery 01 generalizes."
-    status: pending
+    status: in_progress
   - id: wave2
     content: "Wave 2 feature surfaces (SERIALIZED): dispatch 03 time travel -> 05 js udf runtime -> 06 geography/gis. Each is independent; order is by value/effort."
     status: pending
@@ -17,10 +16,11 @@ todos:
     status: pending
   - id: bglane
     content: "Background lane: dispatch 11 conformance-breadth AUTHORING (corpus vendoring + CI YAML + skip-matrix edits; no engine changes) alongside any single engine-lane subagent; gate its conformance-EXECUTION steps to bazel-quiet windows. Sweep skip matrices again at the very end."
-    status: pending
+    status: completed
   - id: track
     content: After each subagent returns, run the parent cleanup block, update the full-00 status table, flip the matching wave todo here, and verify SHAPE_TRACKER/disposition parity stayed green on main.
-    status: pending
+    status: in_progress
+isProject: true
 ---
 
 # Full — Subagent dispatch / orchestration
