@@ -436,11 +436,12 @@ handler.
   `APPROX_TOP_SUM`) evaluate on the semantic executor (`net_funcs.cc`,
   `hll_funcs.cc`, `aggregate_specialized.cc`). Deferred families that
   today surface `UNIMPLEMENTED` but are tracked as ⏳ planned work
-  (see [Planned work](#planned-work) below) include `ML.*` inference,
-  `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `ST_GEOGFROMWKB`, differential-
-  privacy / anonymized aggregates, graph / proto AST nodes,
-  `SESSION_USER`, cloud-backed external data sources, and related node
-  kinds in
+  (see [Planned work](#planned-work) and the ENGINE_POLICY index table
+  there) include the full BigQuery ML surface, differential-privacy /
+  anonymized aggregates, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`,
+  protobuf / graph / sequence AST nodes, MEASURE functions, Python UDFs,
+  `ST_GEOGFROMWKB`, `SESSION_USER`, cloud-backed external data sources,
+  and related rows in
   [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
   The current posture for each is documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
@@ -485,9 +486,9 @@ public-facing policy.
   `Engine::ExecuteQuery`
 - ✅ Per-shape dispositions recorded in the shape tracker
   (seven-route vocabulary + node/function YAML registries are closed
-  for in-scope shapes; deferred families that remain `unsupported`
-  today are listed in [Planned work](#planned-work) and summarized in
-  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
+  for in-scope shapes; every `unsupported` / deferred `local_stub`
+  family in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) is indexed
+  as ⏳ planned in [Planned work](#planned-work))
 - 🟢 Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
   The conformance routing matrix added the
@@ -611,7 +612,8 @@ public-facing policy.
   (pinned by `conformance/fixtures/udf/tvf_relation_argument.yaml`).
   Conformance fixtures under `conformance/fixtures/udf/` (+
   `gateway/e2e/routine_persistence_test.go` for restart proof).
-  Python UDFs and non-scalar JS UDFs remain unsupported.
+  Python UDFs remain unsupported today; see
+  [Python UDFs](#python-udfs). Non-scalar JS UDFs remain unsupported.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
   local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
   matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
@@ -789,12 +791,32 @@ optionally reach live upstream APIs when configured. Each promotion off
 disposition-registry update in the same commit (per
 [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
 
-### BigQuery ML inference
+The table below mirrors the `unsupported` / `local_stub` families in
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) §Unsupported families.
+Every row is ⏳ planned; subsection bullets spell out the AST nodes,
+functions, and gateway surfaces each family will touch.
 
-`CREATE MODEL` already routes `local_stub` so client-library registration
-probes succeed; the inference call sites below still surface
-`UNIMPLEMENTED` until a local model-evaluation path ships.
+| ENGINE_POLICY family | Today | Planned work |
+|---|---|---|
+| BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | [BigQuery ML](#bigquery-ml) |
+| BigQuery ML `CREATE MODEL` | `local_stub` | [BigQuery ML](#bigquery-ml) |
+| Differential privacy / anonymized aggregation | `unsupported` | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
+| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | [Deferred built-in functions](#deferred-built-in-functions) |
+| Protobuf shapes (`ResolvedMakeProto`, ...) | `unsupported` | [Protobuf field access](#protobuf-field-access) |
+| MEASURE / measure functions | `unsupported` | [Measure functions](#measure-functions) |
+| Graph (`GRAPH_TABLE`, GQL, `ResolvedGraph*Scan`, `ResolvedCatalogColumnRef`) | `unsupported` | [Graph / GQL scans](#graph--gql-scans) · [Catalog helpers](#catalog--sequence-helpers) |
+| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | [Catalog / sequence helpers](#catalog--sequence-helpers) |
+| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `unsupported` | [Python UDFs](#python-udfs) |
+| `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | [External data sources](#external-data-sources) |
 
+### BigQuery ML
+
+`CREATE MODEL` routes `local_stub` today so client-library registration
+probes succeed without materializing a model. Full model registration,
+persistence, and inference are ⏳ planned on a local evaluation path.
+
+- ⏳ `CREATE MODEL` — materialize and register models locally (promote
+  off `local_stub`; complements today's metadata-only OK envelope)
 - ⏳ `ML.PREDICT` (`ml.predict`)
 - ⏳ `ML.FORECAST` (`ml.forecast`)
 - ⏳ `ML.EVALUATE` (`ml.evaluate`)
@@ -818,17 +840,25 @@ Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
 Rows in
 [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml):
 
-**Statements**
+#### Statements
 
 - ⏳ `ResolvedExplainStmt` — `EXPLAIN` plan introspection
 
-**Privacy-preserving aggregates**
+#### Privacy-preserving aggregates
+
+Differential-privacy / anonymized-aggregation scans from
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) (`AnonymizedAggregate*`,
+`DifferentialPrivacyAggregate*`, ...). Planned as a **local**
+deterministic implementation for tests — not a cloud DP guarantee.
 
 - ⏳ `ResolvedAnonymizedAggregateScan`
 - ⏳ `ResolvedDifferentialPrivacyAggregateScan`
 - ⏳ `ResolvedAggregationThresholdAggregateScan`
 
-**Graph / GQL scans**
+#### Graph / GQL scans
+
+`GRAPH_TABLE`, GQL subqueries, and the `ResolvedGraph*Scan` family from
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
 
 - ⏳ `ResolvedGraphTableScan`
 - ⏳ `ResolvedGraphScan`
@@ -840,7 +870,7 @@ Rows in
 - ⏳ `ResolvedGraphEdgeScan`
 - ⏳ `ResolvedGraphPathScan`
 
-**Protobuf field access**
+#### Protobuf field access
 
 - ⏳ `ResolvedMakeProto`
 - ⏳ `ResolvedGetProtoField`
@@ -850,11 +880,35 @@ Rows in
 - ⏳ `ResolvedFilterField`
 - ⏳ `ResolvedFilterFieldArg`
 
-**Catalog / sequence helpers**
+#### Catalog / sequence helpers
 
-- ⏳ `ResolvedSequence`
-- ⏳ `ResolvedCatalogColumnRef`
+`ResolvedSequence` / `NEXT VALUE FOR` and catalog-internal column refs
+from [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
+
+- ⏳ `ResolvedSequence` — `NEXT VALUE FOR` sequence advancement
+- ⏳ `ResolvedCatalogColumnRef` — graph / catalog-internal column refs
 - ⏳ `ResolvedExpressionColumn`
+
+### Measure functions
+
+MEASURE types and `AGGREGATE(<measure>)` from
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). Today the analytical
+measure layer surfaces `UNIMPLEMENTED`; planned as a local semantic-executor
+path over the existing aggregate infrastructure.
+
+- ⏳ MEASURE type surface and `AGGREGATE(<measure>)` evaluation
+
+### Python UDFs
+
+`CREATE FUNCTION ... LANGUAGE python` from
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). Complements the landed
+`LANGUAGE js` scalar path (`js_udf_runtime.cc`); `cw_xml_extract` in
+bqutils `known_failing/` is the representative parity target.
+
+- ⏳ `CREATE FUNCTION ... LANGUAGE python` — register, persist, and
+  evaluate Python UDF bodies locally (embedded runtime TBD)
+- ⏳ Scalar and table-valued Python UDF shapes exercised by third-party
+  client suites
 
 ### External data sources
 
