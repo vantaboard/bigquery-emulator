@@ -32,10 +32,13 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install MkDocs dependencies
-        run: uv pip install --system -r docs/requirements.txt
+        run: |
+          uv venv .venv-docs --clear
+          uv pip install --python .venv-docs/bin/python \
+            -r docs/requirements.txt
 
       - name: Build site
-        run: mkdocs build --strict
+        run: .venv-docs/bin/mkdocs build --strict
 
   deploy:
     name: deploy
@@ -50,10 +53,13 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install MkDocs dependencies
-        run: uv pip install --system -r docs/requirements.txt
+        run: |
+          uv venv .venv-docs --clear
+          uv pip install --python .venv-docs/bin/python \
+            -r docs/requirements.txt
 
       - name: Build site
-        run: mkdocs build --strict
+        run: .venv-docs/bin/mkdocs build --strict
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4

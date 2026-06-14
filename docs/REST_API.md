@@ -110,7 +110,7 @@ context).
 **`INFORMATION_SCHEMA.JOBS*`:** queries against `` `region-*`.INFORMATION_SCHEMA.JOBS(_BY_PROJECT) ``
 are rewritten to `` `{project}`.`_bqemu_jobs`.`JOBS` `` with rows
 materialized from the job registry before the engine executes the SQL
-([`gateway/query/info_schema_jobs.go`](../gateway/query/info_schema_jobs.go)).
+([`gateway/query/info_schema_jobs.go`](https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/query/info_schema_jobs.go)).
 
 **COPY / EXTRACT / undelete:** `configuration.copy` copies rows
 from `sourceTable` / `sourceTables` into `destinationTable`, honoring

@@ -139,7 +139,7 @@ running the route classifier in their head.
 
 2. **DML / DDL routing is closed for in-scope GoogleSQL shapes.**
    Remaining deliberate gaps are `unsupported` families documented in
-   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) (graph/GQL, broad
+   [`ENGINE_POLICY.md`](ENGINE_POLICY.md) (graph/GQL, broad
    proto surface, `ML.*`, cloud `gs://`, ...). Landed on the local DML
    executor (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
    SELECT`, scalar and deep-STRUCT `UPDATE`, proto `UpdateConstructor`
