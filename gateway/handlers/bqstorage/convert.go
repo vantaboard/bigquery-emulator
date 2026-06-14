@@ -139,7 +139,7 @@ func engineModeToPublic(m string) storagepb.TableFieldSchema_Mode {
 	switch strings.ToUpper(strings.TrimSpace(m)) {
 	case bqModeRequired:
 		return storagepb.TableFieldSchema_REQUIRED
-	case "REPEATED":
+	case bqModeRepeated:
 		return storagepb.TableFieldSchema_REPEATED
 	default:
 		return storagepb.TableFieldSchema_NULLABLE

@@ -5,6 +5,7 @@ package bqstorage
 const (
 	bqModeRequired = "REQUIRED"
 	bqModeNullable = "NULLABLE"
+	bqModeRepeated = "REPEATED"
 
 	bqTypeINT64      = "INT64"
 	bqTypeINTEGER    = "INTEGER"

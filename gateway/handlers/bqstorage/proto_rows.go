@@ -115,7 +115,7 @@ func engineModeToProtoLabel(mode string) *descriptorpb.FieldDescriptorProto_Labe
 	switch strings.ToUpper(strings.TrimSpace(mode)) {
 	case bqModeRequired:
 		return descriptorpb.FieldDescriptorProto_LABEL_REQUIRED.Enum()
-	case "REPEATED":
+	case bqModeRepeated:
 		return descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
 	default:
 		return descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()

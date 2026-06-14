@@ -46,7 +46,7 @@ func NormalizeLegacySQL(sql, projectID, defaultDataset string) (string, error) {
 	}
 	if hasDecoratorConflict(sql) {
 		return "", errors.New(
-			"Cannot use table decorator with FOR SYSTEM_TIME AS OF")
+			"cannot use table decorator with FOR SYSTEM_TIME AS OF")
 	}
 	out := legacyBracketDecoratorRE.ReplaceAllStringFunc(sql, func(match string) string {
 		parts := legacyBracketDecoratorRE.FindStringSubmatch(match)
@@ -71,36 +71,52 @@ func NormalizeLegacySQL(sql, projectID, defaultDataset string) (string, error) {
 		return "", errors.New("legacy SQL contains unsupported table reference syntax")
 	}
 	if legacyBareDecoratorRE.MatchString(out) {
-		project := strings.TrimSpace(projectID)
-		if project == "" {
-			return "", errors.New("legacy SQL [dataset.table@epoch] requires a project context")
+		var err error
+		out, err = normalizeLegacyBareDecorators(out, projectID)
+		if err != nil {
+			return "", err
 		}
-		out = legacyBareDecoratorRE.ReplaceAllStringFunc(out, func(match string) string {
-			parts := legacyBareDecoratorRE.FindStringSubmatch(match)
-			if len(parts) != 4 {
-				return match
-			}
-			epoch, err := resolveDecoratorEpoch(parts[3])
-			if err != nil {
-				return match
-			}
-			return fmt.Sprintf("`%s.%s.%s` FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)",
-				project, parts[1], parts[2], epoch)
-		})
 	}
 	if legacyBareTableRE.MatchString(out) {
-		project := strings.TrimSpace(projectID)
-		if project == "" {
-			return "", errors.New("legacy SQL [dataset.table] requires a project context")
+		var err error
+		out, err = normalizeLegacyBareTables(out, projectID)
+		if err != nil {
+			return "", err
 		}
-		out = legacyBareTableRE.ReplaceAllStringFunc(out, func(match string) string {
-			parts := legacyBareTableRE.FindStringSubmatch(match)
-			if len(parts) != 3 {
-				return match
-			}
-			return fmt.Sprintf("`%s.%s.%s`", project, parts[1], parts[2])
-		})
 	}
 	_ = defaultDataset // reserved for future bare-table defaulting
 	return out, nil
+}
+
+func normalizeLegacyBareDecorators(out, projectID string) (string, error) {
+	project := strings.TrimSpace(projectID)
+	if project == "" {
+		return "", errors.New("legacy SQL [dataset.table@epoch] requires a project context")
+	}
+	return legacyBareDecoratorRE.ReplaceAllStringFunc(out, func(match string) string {
+		parts := legacyBareDecoratorRE.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		epoch, err := resolveDecoratorEpoch(parts[3])
+		if err != nil {
+			return match
+		}
+		return fmt.Sprintf("`%s.%s.%s` FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)",
+			project, parts[1], parts[2], epoch)
+	}), nil
+}
+
+func normalizeLegacyBareTables(out, projectID string) (string, error) {
+	project := strings.TrimSpace(projectID)
+	if project == "" {
+		return "", errors.New("legacy SQL [dataset.table] requires a project context")
+	}
+	return legacyBareTableRE.ReplaceAllStringFunc(out, func(match string) string {
+		parts := legacyBareTableRE.FindStringSubmatch(match)
+		if len(parts) != 3 {
+			return match
+		}
+		return fmt.Sprintf("`%s.%s.%s`", project, parts[1], parts[2])
+	}), nil
 }

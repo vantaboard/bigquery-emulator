@@ -16,40 +16,48 @@ const InfoSchemaJobsDataset = "_bqemu_jobs"
 // InfoSchemaJobsTable is the table id holding materialized job rows.
 const InfoSchemaJobsTable = "JOBS"
 
+const (
+	infoSchemaColProjectID  = "project_id"
+	infoSchemaTypeString    = "STRING"
+	infoSchemaTypeTimestamp = "TIMESTAMP"
+	infoSchemaTypeInt64     = "INT64"
+	infoSchemaTypeStruct    = "STRUCT"
+)
+
 // InfoSchemaJobsSchema is the column layout for the materialized JOBS view.
 func InfoSchemaJobsSchema() *enginepb.TableSchema {
 	return &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "job_id", Type: "STRING"},
-		{Name: "creation_time", Type: "TIMESTAMP"},
-		{Name: "start_time", Type: "TIMESTAMP"},
-		{Name: "end_time", Type: "TIMESTAMP"},
-		{Name: "state", Type: "STRING"},
-		{Name: "job_type", Type: "STRING"},
-		{Name: "project_id", Type: "STRING"},
-		{Name: "query", Type: "STRING"},
-		{Name: "statement_type", Type: "STRING"},
-		{Name: "user_email", Type: "STRING"},
-		{Name: "parent_job_id", Type: "STRING"},
-		{Name: "total_bytes_processed", Type: "INT64"},
+		{Name: "job_id", Type: infoSchemaTypeString},
+		{Name: "creation_time", Type: infoSchemaTypeTimestamp},
+		{Name: "start_time", Type: infoSchemaTypeTimestamp},
+		{Name: "end_time", Type: infoSchemaTypeTimestamp},
+		{Name: "state", Type: infoSchemaTypeString},
+		{Name: "job_type", Type: infoSchemaTypeString},
+		{Name: infoSchemaColProjectID, Type: infoSchemaTypeString},
+		{Name: "query", Type: infoSchemaTypeString},
+		{Name: "statement_type", Type: infoSchemaTypeString},
+		{Name: "user_email", Type: infoSchemaTypeString},
+		{Name: "parent_job_id", Type: infoSchemaTypeString},
+		{Name: "total_bytes_processed", Type: infoSchemaTypeInt64},
 		{Name: "cache_hit", Type: "BOOL"},
 		{
-			Name: "destination_table", Type: "STRUCT", Fields: []*enginepb.FieldSchema{
-				{Name: "project_id", Type: "STRING"},
-				{Name: "dataset_id", Type: "STRING"},
-				{Name: "table_id", Type: "STRING"},
+			Name: "destination_table", Type: infoSchemaTypeStruct, Fields: []*enginepb.FieldSchema{
+				{Name: infoSchemaColProjectID, Type: infoSchemaTypeString},
+				{Name: "dataset_id", Type: infoSchemaTypeString},
+				{Name: "table_id", Type: infoSchemaTypeString},
 			},
 		},
 		{
-			Name: "error_result", Type: "STRUCT", Fields: []*enginepb.FieldSchema{
-				{Name: "reason", Type: "STRING"},
-				{Name: "message", Type: "STRING"},
+			Name: "error_result", Type: infoSchemaTypeStruct, Fields: []*enginepb.FieldSchema{
+				{Name: "reason", Type: infoSchemaTypeString},
+				{Name: "message", Type: infoSchemaTypeString},
 			},
 		},
 		{
-			Name: "dml_statistics", Type: "STRUCT", Fields: []*enginepb.FieldSchema{
-				{Name: "inserted_row_count", Type: "INT64"},
-				{Name: "deleted_row_count", Type: "INT64"},
-				{Name: "updated_row_count", Type: "INT64"},
+			Name: "dml_statistics", Type: infoSchemaTypeStruct, Fields: []*enginepb.FieldSchema{
+				{Name: "inserted_row_count", Type: infoSchemaTypeInt64},
+				{Name: "deleted_row_count", Type: infoSchemaTypeInt64},
+				{Name: "updated_row_count", Type: infoSchemaTypeInt64},
 			},
 		},
 	}}
@@ -80,12 +88,12 @@ func infoSchemaRowFromJob(j *Job) map[string]any {
 		"end_time":              millisToTimestamp(j.Statistics.EndTime),
 		"state":                 j.Status.State,
 		"job_type":              jobTypeFromConfiguration(j.Configuration),
-		"project_id":            j.JobReference.ProjectID,
+		infoSchemaColProjectID:  j.JobReference.ProjectID,
 		"query":                 queryTextFromConfiguration(j.Configuration),
 		"statement_type":        statementTypeFromJob(j),
 		"user_email":            j.UserEmail,
 		"parent_job_id":         parentJobID(j),
-		"total_bytes_processed": parseInt64Default(j.Statistics.TotalBytesProcessed, 0),
+		"total_bytes_processed": parseInt64OrZero(j.Statistics.TotalBytesProcessed),
 		"cache_hit":             false,
 	}
 	if dest := destinationTableFromConfiguration(j.Configuration); dest != nil {
@@ -165,9 +173,9 @@ func destinationTableFromConfiguration(cfg *JobConfiguration) map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"project_id": ref.ProjectID,
-		"dataset_id": ref.DatasetID,
-		"table_id":   ref.TableID,
+		infoSchemaColProjectID: ref.ProjectID,
+		"dataset_id":           ref.DatasetID,
+		"table_id":             ref.TableID,
 	}
 }
 
@@ -180,9 +188,9 @@ func dmlStatsFromJob(j *Job) map[string]any {
 		return nil
 	}
 	return map[string]any{
-		"inserted_row_count": parseInt64Default(stats.InsertedRowCount, 0),
-		"deleted_row_count":  parseInt64Default(stats.DeletedRowCount, 0),
-		"updated_row_count":  parseInt64Default(stats.UpdatedRowCount, 0),
+		"inserted_row_count": parseInt64OrZero(stats.InsertedRowCount),
+		"deleted_row_count":  parseInt64OrZero(stats.DeletedRowCount),
+		"updated_row_count":  parseInt64OrZero(stats.UpdatedRowCount),
 	}
 }
 
@@ -197,13 +205,13 @@ func millisToTimestamp(ms string) any {
 	return time.UnixMilli(n).UTC().Format("2006-01-02 15:04:05.999999 UTC")
 }
 
-func parseInt64Default(s string, def int64) int64 {
+func parseInt64OrZero(s string) int64 {
 	if strings.TrimSpace(s) == "" {
-		return def
+		return 0
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return def
+		return 0
 	}
 	return n
 }

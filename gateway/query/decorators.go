@@ -23,7 +23,7 @@ func LowerTableDecorators(sql string) (string, error) {
 	}
 	if hasDecoratorConflict(trim) {
 		return "", errors.New(
-			"Cannot use table decorator with FOR SYSTEM_TIME AS OF")
+			"cannot use table decorator with FOR SYSTEM_TIME AS OF")
 	}
 	return backtickDecoratedRE.ReplaceAllStringFunc(sql, func(match string) string {
 		parts := backtickDecoratedRE.FindStringSubmatch(match)

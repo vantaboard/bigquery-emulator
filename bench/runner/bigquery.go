@@ -95,8 +95,8 @@ func (t *BigQueryTarget) RunQuery(ctx context.Context, c Case, sql string, timeo
 			return QueryResult{Error: err.Error()}, err
 		}
 		if metrics.cacheHit {
-			err := errors.New("bigquery query cache hit (DisableQueryCache ineffective)")
-			return QueryResult{Error: err.Error()}, err
+			cacheErr := errors.New("bigquery query cache hit (DisableQueryCache ineffective)")
+			return QueryResult{Error: cacheErr.Error()}, cacheErr
 		}
 		it, err := job.Read(ctx)
 		if err != nil {

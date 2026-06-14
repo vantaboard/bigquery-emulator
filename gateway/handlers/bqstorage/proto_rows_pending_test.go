@@ -28,11 +28,11 @@ func pendingManagedWriterSchema() *enginepb.TableSchema {
 		{Name: "bignumeric_col", Type: bqTypeBIGNUMERIC},
 		{Name: "time_col", Type: bqTypeTIME},
 		{Name: "timestamp_col", Type: bqTypeTIMESTAMP},
-		{Name: "int64_list", Type: bqTypeINTEGER, Mode: "REPEATED"},
+		{Name: "int64_list", Type: bqTypeINTEGER, Mode: bqModeRepeated},
 		{Name: "struct_col", Type: bqTypeRECORD, Mode: "NULLABLE", Fields: []*enginepb.FieldSchema{
 			{Name: "sub_int_col", Type: bqTypeINTEGER},
 		}},
-		{Name: "struct_list", Type: bqTypeRECORD, Mode: "REPEATED", Fields: []*enginepb.FieldSchema{
+		{Name: "struct_list", Type: bqTypeRECORD, Mode: bqModeRepeated, Fields: []*enginepb.FieldSchema{
 			{Name: "sub_int_col", Type: bqTypeINTEGER},
 		}},
 		{Name: "row_num", Type: bqTypeINTEGER, Mode: "REQUIRED"},

@@ -285,21 +285,7 @@ func runQueryIterations(
 			}
 			break
 		}
-		label := ""
-		if i < c.Warmup {
-			label = " (warmup)"
-		}
-		opts.logf("    %s on %s: iteration %d/%d%s took %s",
-			c.Name, target.Name(), i+1, c.Iterations, label,
-			res.Elapsed.Round(time.Millisecond))
-		if target.Name() == TargetBigQuery && res.ExecutionValid {
-			clientOverhead := res.Elapsed - res.ExecutionOnly
-			opts.logf("      bq stats: execution=%s queue=%s slot_ms=%d client_overhead=%s",
-				res.ExecutionOnly.Round(time.Millisecond),
-				res.QueueOnly.Round(time.Millisecond),
-				res.SlotMs,
-				clientOverhead.Round(time.Millisecond))
-		}
+		logQueryIteration(opts, c, target, i, res)
 		samples = append(samples, res.Elapsed)
 		if res.ExecutionValid {
 			execSamples = append(execSamples, res.ExecutionOnly)
@@ -315,6 +301,24 @@ func runQueryIterations(
 		}
 	}
 	return samples, execSamples, queueSamples, slotSamples, phaseIters, last, outcome, lastErr
+}
+
+func logQueryIteration(opts RunOptions, c Case, target Target, i int, res QueryResult) {
+	label := ""
+	if i < c.Warmup {
+		label = " (warmup)"
+	}
+	opts.logf("    %s on %s: iteration %d/%d%s took %s",
+		c.Name, target.Name(), i+1, c.Iterations, label,
+		res.Elapsed.Round(time.Millisecond))
+	if target.Name() == TargetBigQuery && res.ExecutionValid {
+		clientOverhead := res.Elapsed - res.ExecutionOnly
+		opts.logf("      bq stats: execution=%s queue=%s slot_ms=%d client_overhead=%s",
+			res.ExecutionOnly.Round(time.Millisecond),
+			res.QueueOnly.Round(time.Millisecond),
+			res.SlotMs,
+			clientOverhead.Round(time.Millisecond))
+	}
 }
 
 func datasetForCase(name string) string {

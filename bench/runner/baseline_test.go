@@ -7,6 +7,11 @@ import (
 	"cloud.google.com/go/bigquery"
 )
 
+const (
+	testContentHash = "abc"
+	testResultHash  = "hash"
+)
+
 func TestBaselineCase_LatencyP50MS(t *testing.T) {
 	t.Parallel()
 	base := BaselineCase{TotalP50MS: 1500, ExecutionP50MS: 200}
@@ -31,19 +36,19 @@ func TestBaselineCase_LatencyP50ForRatio(t *testing.T) {
 
 func TestCompareToBaseline_UsesExecutionAndEngineP50(t *testing.T) {
 	t.Parallel()
-	c := Case{Name: "x", ContentHash: "abc", MaxRatio: 1.5, MaxMS: 100}
+	c := Case{Name: "x", ContentHash: testContentHash, MaxRatio: 1.5, MaxMS: 100}
 	base := BaselineCase{
-		ContentHash:    "abc",
+		ContentHash:    testContentHash,
 		ExecutionP50MS: 200,
 		TotalP50MS:     1500,
-		ResultHash:     "hash",
+		ResultHash:     testResultHash,
 	}
 	ok := CaseResult{
-		ContentHash: "abc",
+		ContentHash: testContentHash,
 		Outcome:     OutcomeOK,
 		EngineP50:   250 * time.Millisecond,
 		Latency:     LatencyStats{P50: 5 * time.Millisecond},
-		ResultHash:  "hash",
+		ResultHash:  testResultHash,
 	}
 	pass, reason := CompareToBaseline(c, base, ok)
 	if !pass {
@@ -62,13 +67,13 @@ func TestCompareToBaseline_UsesExecutionAndEngineP50(t *testing.T) {
 
 func TestCompareToBaseline_ZeroExecutionDoesNotPanic(t *testing.T) {
 	t.Parallel()
-	c := Case{Name: "x", ContentHash: "abc", MaxRatio: 1.5, MaxMS: 500}
-	base := BaselineCase{ExecutionP50MS: 0, TotalP50MS: 0, ResultHash: "hash"}
+	c := Case{Name: "x", ContentHash: testContentHash, MaxRatio: 1.5, MaxMS: 500}
+	base := BaselineCase{ExecutionP50MS: 0, TotalP50MS: 0, ResultHash: testResultHash}
 	cr := CaseResult{
-		ContentHash: "abc",
+		ContentHash: testContentHash,
 		Outcome:     OutcomeOK,
 		EngineP50:   2 * time.Millisecond,
-		ResultHash:  "hash",
+		ResultHash:  testResultHash,
 	}
 	pass, _ := CompareToBaseline(c, base, cr)
 	if !pass {

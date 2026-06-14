@@ -21,7 +21,7 @@ func TestRegisterFromDDLCreateModel(t *testing.T) {
 	if !ok {
 		t.Fatal("model not found")
 	}
-	if m.ModelType != "LINEAR_REG" {
+	if m.ModelType != defaultModelType {
 		t.Fatalf("modelType = %q", m.ModelType)
 	}
 }
@@ -31,7 +31,7 @@ func TestStoreListDeleteRoundTrip(t *testing.T) {
 	store := NewStore()
 	store.Upsert(bqtypes.Model{
 		ModelReference: bqtypes.ModelReference{ProjectID: "p", DatasetID: "d", ModelID: "m1"},
-		ModelType:      "LINEAR_REG",
+		ModelType:      defaultModelType,
 	})
 	if len(store.List("p", "d", "")) != 1 {
 		t.Fatal("expected one model")

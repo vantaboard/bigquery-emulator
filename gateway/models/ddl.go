@@ -11,6 +11,8 @@ import (
 
 var modelTypeRE = regexp.MustCompile(`(?i)model_type\s*=\s*'([^']+)'`)
 
+const defaultModelType = "LINEAR_REG"
+
 // RegisterFromDDL parses CREATE MODEL DDL and upserts metadata into store.
 func RegisterFromDDL(store *Store, projectID, defaultDatasetID, sql string) *bqtypes.ModelReference {
 	m, ok := parseCreateModelDDL(projectID, defaultDatasetID, sql)
@@ -40,7 +42,7 @@ func parseCreateModelDDL(projectID, defaultDatasetID, sql string) (bqtypes.Model
 		return bqtypes.Model{}, false
 	}
 	pID, dID, mID := splitModelName(projectID, defaultDatasetID, name)
-	modelType := "LINEAR_REG"
+	modelType := defaultModelType
 	if m := modelTypeRE.FindStringSubmatch(sql); len(m) == 2 {
 		modelType = strings.ToUpper(strings.TrimSpace(m[1]))
 	}
