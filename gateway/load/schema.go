@@ -191,10 +191,20 @@ func mergeSchemas(
 	}
 	if allowRelax {
 		for i := range merged.Fields {
-			if merged.Fields[i].Mode == fieldModeRequired {
-				merged.Fields[i].Mode = ""
-				changed = true
+			if merged.Fields[i].Mode != fieldModeRequired {
+				continue
 			}
+			if load != nil {
+				if idx := fieldIndex(load.Fields, merged.Fields[i].Name); idx >= 0 {
+					// Query/load results default to NULLABLE; only keep
+					// REQUIRED when the incoming schema still requires it.
+					if load.Fields[idx].Mode == fieldModeRequired {
+						continue
+					}
+				}
+			}
+			merged.Fields[i].Mode = ""
+			changed = true
 		}
 	}
 	return merged, changed
