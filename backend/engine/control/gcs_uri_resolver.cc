@@ -70,13 +70,21 @@ std::string UrlEscapePath(absl::string_view s) {
 }
 
 std::string GcsMediaURL(absl::string_view origin, const GCSObjectParts& parts) {
-  return absl::StrCat(origin, "/storage/v1/b/", UrlEscapePath(parts.bucket),
-                      "/o/", UrlEscapePath(parts.object), "?alt=media");
+  return absl::StrCat(origin,
+                      "/storage/v1/b/",
+                      UrlEscapePath(parts.bucket),
+                      "/o/",
+                      UrlEscapePath(parts.object),
+                      "?alt=media");
 }
 
-std::string GcsUploadURL(absl::string_view origin, const GCSObjectParts& parts) {
-  return absl::StrCat(origin, "/upload/storage/v1/b/", UrlEscapePath(parts.bucket),
-                      "/o?uploadType=media&name=", UrlEscapePath(parts.object));
+std::string GcsUploadURL(absl::string_view origin,
+                         const GCSObjectParts& parts) {
+  return absl::StrCat(origin,
+                      "/upload/storage/v1/b/",
+                      UrlEscapePath(parts.bucket),
+                      "/o?uploadType=media&name=",
+                      UrlEscapePath(parts.object));
 }
 
 std::string ShellEscape(absl::string_view s) {
@@ -120,8 +128,7 @@ std::string GcsCachePath(absl::string_view data_dir,
 }
 
 absl::StatusOr<std::string> MaterializeGCSObjectToCache(
-    absl::string_view gs_uri,
-    absl::string_view data_dir) {
+    absl::string_view gs_uri, absl::string_view data_dir) {
   if (data_dir.empty()) {
     return absl::InvalidArgumentError(
         "control op executor: data_dir is required to resolve gs:// URIs");
@@ -140,9 +147,11 @@ absl::StatusOr<std::string> MaterializeGCSObjectToCache(
       "curl -sf '", ShellEscape(url), "' -o '", ShellEscape(cache), "'");
   if (absl::Status fetched = RunShellCommand(cmd); !fetched.ok()) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "control op executor: could not fetch ", gs_uri,
+        "control op executor: could not fetch ",
+        gs_uri,
         " from storage emulator (set STORAGE_EMULATOR_HOST or pre-stage ",
-        cache, "): ",
+        cache,
+        "): ",
         fetched.message()));
   }
   if (!fs::exists(cache)) {
@@ -167,9 +176,14 @@ absl::Status UploadGCSObjectFromFile(absl::string_view gs_uri,
   if (ct.empty()) {
     ct = "application/octet-stream";
   }
-  const std::string cmd = absl::StrCat(
-      "curl -sf -X POST -H 'Content-Type: ", ShellEscape(ct), "' --data-binary ",
-      "@'", ShellEscape(local_path), "' '", ShellEscape(url), "'");
+  const std::string cmd = absl::StrCat("curl -sf -X POST -H 'Content-Type: ",
+                                       ShellEscape(ct),
+                                       "' --data-binary ",
+                                       "@'",
+                                       ShellEscape(local_path),
+                                       "' '",
+                                       ShellEscape(url),
+                                       "'");
   return RunShellCommand(cmd);
 }
 

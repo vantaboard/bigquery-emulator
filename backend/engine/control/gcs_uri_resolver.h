@@ -28,8 +28,7 @@ std::string GcsCachePath(absl::string_view data_dir,
 // MaterializeGCSObjectToCache ensures the object bytes exist at the cache
 // path (reading an existing snapshot or fetching from STORAGE_EMULATOR_HOST).
 absl::StatusOr<std::string> MaterializeGCSObjectToCache(
-    absl::string_view gs_uri,
-    absl::string_view data_dir);
+    absl::string_view gs_uri, absl::string_view data_dir);
 
 // UploadGCSObjectFromFile uploads a local file to gs:// via the storage
 // emulator JSON API when STORAGE_EMULATOR_HOST is set.
