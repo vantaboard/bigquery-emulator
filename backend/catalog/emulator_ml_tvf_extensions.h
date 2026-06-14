@@ -18,14 +18,14 @@ void RegisterEmulatorMlTvfStubs(::googlesql::SimpleCatalog& catalog);
 // MODEL metadata exists. Used by `GoogleSqlCatalog::FindModel` and unit
 // tests that analyze ML TVFs without a full model registry.
 absl::StatusOr<const ::googlesql::Model*> MaterializeMlStubModel(
-    ::googlesql::TypeFactory* type_factory,
+    const ::googlesql::TypeFactory* type_factory,
     const absl::Span<const std::string>& path);
 
 // `FindModel` fallback for catalogs that serve ML.* analysis without a
 // real model registry (production `GoogleSqlCatalog` and test helpers).
 absl::Status ResolveMlStubModelForAnalysis(
     ::googlesql::SimpleCatalog& catalog,
-    ::googlesql::TypeFactory* type_factory,
+    const ::googlesql::TypeFactory* type_factory,
     const absl::Span<const std::string>& path,
     const ::googlesql::Model** model,
     const ::googlesql::Catalog::FindOptions& options = {});

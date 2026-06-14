@@ -1,5 +1,3 @@
-#include "backend/catalog/emulator_ml_tvf_extensions.h"
-#include "backend/engine/semantic/eval_tvf.h"
 #include "backend/engine/semantic/stubs/ml.h"
 
 #include <memory>
@@ -8,6 +6,9 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/catalog/emulator_ml_test_catalog.h"
+#include "backend/catalog/emulator_ml_tvf_extensions.h"
+#include "backend/engine/semantic/eval_tvf.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
@@ -16,7 +17,6 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
-#include "backend/catalog/emulator_ml_test_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
@@ -97,7 +97,8 @@ class MlStubTest : public ::testing::Test {
     }
     const ::googlesql::ResolvedStatement* stmt =
         last_output_->resolved_statement();
-    if (stmt == nullptr || stmt->node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
+    if (stmt == nullptr ||
+        stmt->node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
       return nullptr;
     }
     const auto* query = stmt->GetAs<::googlesql::ResolvedQueryStmt>();

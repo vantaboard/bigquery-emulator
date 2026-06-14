@@ -6,13 +6,13 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_join.h"
+#include "backend/catalog/emulator_ml_test_catalog.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
-#include "googlesql/public/catalog.h"
-#include "backend/catalog/emulator_ml_test_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "gtest/gtest.h"
 
@@ -73,7 +73,10 @@ TEST_F(EmulatorMlTvfCatalogTest, AnalyzeMlPredictSucceeds) {
   absl::Status st = ::googlesql::AnalyzeStatement(
       "SELECT * FROM ML.PREDICT(MODEL `ds.unregistered_model`, "
       "(SELECT 1.0 AS f1))",
-      options, catalog_.get(), type_factory_.get(), &output);
+      options,
+      catalog_.get(),
+      type_factory_.get(),
+      &output);
   EXPECT_TRUE(st.ok()) << st;
 }
 

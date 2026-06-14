@@ -21,8 +21,8 @@ class EmulatorMlTestCatalog : public ::googlesql::SimpleCatalog {
   absl::Status FindModel(const absl::Span<const std::string>& path,
                          const ::googlesql::Model** model,
                          const FindOptions& options = FindOptions()) override {
-    return ResolveMlStubModelForAnalysis(*this, type_factory(), path, model,
-                                         options);
+    return ResolveMlStubModelForAnalysis(
+        *this, type_factory(), path, model, options);
   }
 };
 

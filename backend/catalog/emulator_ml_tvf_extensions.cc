@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "absl/base/call_once.h"
+#include "absl/strings/str_join.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/catalog.h"
-#include "absl/strings/str_join.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/table_valued_function.h"
@@ -52,8 +52,7 @@ const TVFInputArgumentType* FindRelationArg(
 }
 
 absl::StatusOr<std::shared_ptr<TVFSignature>> MlPredictSchema(
-    TypeFactory* factory,
-    const std::vector<TVFInputArgumentType>& args) {
+    TypeFactory* factory, const std::vector<TVFInputArgumentType>& args) {
   const TVFInputArgumentType* relation = FindRelationArg(args);
   if (relation == nullptr) {
     return absl::InvalidArgumentError(
@@ -70,8 +69,7 @@ absl::StatusOr<std::shared_ptr<TVFSignature>> MlPredictSchema(
 }
 
 absl::StatusOr<std::shared_ptr<TVFSignature>> MlEvaluateSchema(
-    TypeFactory* factory,
-    const std::vector<TVFInputArgumentType>& args) {
+    TypeFactory* factory, const std::vector<TVFInputArgumentType>& args) {
   (void)args;
   TVFRelation::ColumnList out_cols = {
       TVFRelation::Column("mean_squared_error", factory->get_double()),
@@ -81,8 +79,7 @@ absl::StatusOr<std::shared_ptr<TVFSignature>> MlEvaluateSchema(
 }
 
 absl::StatusOr<std::shared_ptr<TVFSignature>> MlForecastSchema(
-    TypeFactory* factory,
-    const std::vector<TVFInputArgumentType>& args) {
+    TypeFactory* factory, const std::vector<TVFInputArgumentType>& args) {
   (void)args;
   TVFRelation::ColumnList out_cols = {
       TVFRelation::Column("forecast_timestamp", factory->get_timestamp()),
@@ -94,7 +91,8 @@ absl::StatusOr<std::shared_ptr<TVFSignature>> MlForecastSchema(
 TVFComputeResultTypeCallback MakeComputeCallback(
     absl::StatusOr<std::shared_ptr<TVFSignature>> (*schema_fn)(
         TypeFactory*, const std::vector<TVFInputArgumentType>&)) {
-  return [schema_fn](Catalog* catalog, TypeFactory* type_factory,
+  return [schema_fn](Catalog* catalog,
+                     TypeFactory* type_factory,
                      const FunctionSignature& signature,
                      const std::vector<TVFInputArgumentType>& args,
                      const AnalyzerOptions& options)
@@ -113,8 +111,10 @@ void AddMlTvf(std::vector<std::string> name_path,
   options.set_uses_upper_case_sql_name(true);
   options.set_compute_result_type_callback(std::move(compute));
   EmulatorMlTvfs()->push_back(std::make_unique<TableValuedFunction>(
-      std::move(name_path), ::googlesql::Function::kGoogleSQLFunctionGroupName,
-      std::move(signatures), std::move(options)));
+      std::move(name_path),
+      ::googlesql::Function::kGoogleSQLFunctionGroupName,
+      std::move(signatures),
+      std::move(options)));
 }
 
 void EnsureEmulatorMlTvfsCreated() {
@@ -123,32 +123,29 @@ void EnsureEmulatorMlTvfsCreated() {
     const FunctionArgumentType relation_result =
         FunctionArgumentType::AnyRelation();
 
-    AddMlTvf(
-        {"ML", "PREDICT"},
-        {FunctionSignature(
-            relation_result,
-            {FunctionArgumentType::AnyModel(),
-             FunctionArgumentType::AnyRelation()},
-            context_id)},
-        MakeComputeCallback(MlPredictSchema));
+    AddMlTvf({"ML", "PREDICT"},
+             {FunctionSignature(relation_result,
+                                {FunctionArgumentType::AnyModel(),
+                                 FunctionArgumentType::AnyRelation()},
+                                context_id)},
+             MakeComputeCallback(MlPredictSchema));
 
     AddMlTvf(
         {"ML", "EVALUATE"},
-        {FunctionSignature(relation_result, {FunctionArgumentType::AnyModel()},
-                          context_id),
-         FunctionSignature(
-             relation_result,
-             {FunctionArgumentType::AnyModel(),
-              FunctionArgumentType::AnyRelation()},
-             context_id)},
+        {FunctionSignature(
+             relation_result, {FunctionArgumentType::AnyModel()}, context_id),
+         FunctionSignature(relation_result,
+                           {FunctionArgumentType::AnyModel(),
+                            FunctionArgumentType::AnyRelation()},
+                           context_id)},
         MakeComputeCallback(MlEvaluateSchema));
 
     FunctionArgumentTypeOptions struct_opts;
     struct_opts.set_argument_name("data", ::googlesql::kPositionalOrNamed);
     AddMlTvf(
         {"ML", "FORECAST"},
-        {FunctionSignature(relation_result, {FunctionArgumentType::AnyModel()},
-                          context_id),
+        {FunctionSignature(
+             relation_result, {FunctionArgumentType::AnyModel()}, context_id),
          FunctionSignature(
              relation_result,
              {FunctionArgumentType::AnyModel(),
@@ -161,7 +158,7 @@ void EnsureEmulatorMlTvfsCreated() {
 }  // namespace
 
 absl::StatusOr<const ::googlesql::Model*> MaterializeMlStubModel(
-    ::googlesql::TypeFactory* type_factory,
+    const ::googlesql::TypeFactory* type_factory,
     const absl::Span<const std::string>& path) {
   if (type_factory == nullptr) {
     return absl::InvalidArgumentError(
@@ -175,14 +172,15 @@ absl::StatusOr<const ::googlesql::Model*> MaterializeMlStubModel(
       new std::vector<std::unique_ptr<const ::googlesql::SimpleModel>>();
   const std::string name = absl::StrJoin(path, ".");
   owned_models->push_back(std::make_unique<::googlesql::SimpleModel>(
-      name, std::vector<::googlesql::SimpleModel::NameAndType>{},
+      name,
+      std::vector<::googlesql::SimpleModel::NameAndType>{},
       std::vector<::googlesql::SimpleModel::NameAndType>{}));
   return owned_models->back().get();
 }
 
 absl::Status ResolveMlStubModelForAnalysis(
     ::googlesql::SimpleCatalog& catalog,
-    ::googlesql::TypeFactory* type_factory,
+    const ::googlesql::TypeFactory* type_factory,
     const absl::Span<const std::string>& path,
     const ::googlesql::Model** model,
     const ::googlesql::Catalog::FindOptions& options) {
@@ -190,8 +188,7 @@ absl::Status ResolveMlStubModelForAnalysis(
     return absl::InvalidArgumentError("FindModel: output pointer is null");
   }
   *model = nullptr;
-  absl::Status found =
-      catalog.::googlesql::SimpleCatalog::FindModel(path, model, options);
+  absl::Status found = catalog.FindModel(path, model, options);
   if (found.ok() && *model != nullptr) {
     return found;
   }
@@ -214,16 +211,13 @@ absl::Status FindTableValuedFunctionWithUnqualifiedFallback(
         "FindTableValuedFunction: output pointer is null");
   }
   *function = nullptr;
-  absl::Status found =
-      catalog.::googlesql::SimpleCatalog::FindTableValuedFunction(
-          path, function, options);
+  absl::Status found = catalog.FindTableValuedFunction(path, function, options);
   if (found.ok() && *function != nullptr) {
     return found;
   }
   if (path.size() >= 2) {
     const std::vector<std::string> unqualified = {path.back()};
-    return catalog.::googlesql::SimpleCatalog::FindTableValuedFunction(
-        unqualified, function, options);
+    return catalog.FindTableValuedFunction(unqualified, function, options);
   }
   return found;
 }
