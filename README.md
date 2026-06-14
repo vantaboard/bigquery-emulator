@@ -6,8 +6,6 @@
 [![coverage (go)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge-go.json)](https://vantaboard.github.io/bigquery-emulator/coverage/go.html)
 [![coverage (cpp)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge-cpp.json)](https://vantaboard.github.io/bigquery-emulator/coverage/cpp/index.html)
 [![Go version](https://img.shields.io/github/go-mod/go-version/vantaboard/bigquery-emulator)](go.mod)
-[![Top language](https://img.shields.io/github/languages/top/vantaboard/bigquery-emulator)](https://github.com/vantaboard/bigquery-emulator/search?l=go)
-[![Languages](https://img.shields.io/github/languages/count/vantaboard/bigquery-emulator)](https://github.com/vantaboard/bigquery-emulator)
 [![License](https://img.shields.io/github/license/vantaboard/bigquery-emulator)](LICENSE)
 
 A locally-runnable emulator of Google Cloud BigQuery, intended for local
