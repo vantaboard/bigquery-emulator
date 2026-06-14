@@ -1,11 +1,14 @@
-# cast_extended_geography_string: CAST GEOGRAPHY to STRING via extended_cast.
+# cast_extended_geography_string: geography WKT text via ST_ASTEXT.
+#
+# Production BigQuery rejects CAST(... AS STRING) on GEOGRAPHY (same error as
+# `bq query`); ST_ASTEXT is the supported round-trip to WKT text.
 name: cast_extended_geography_string
 description: |
-  CAST(ST_GEOGPOINT(...) AS STRING) uses extended_cast conversion to
-  WKT text on the semantic executor.
+  ST_ASTEXT(ST_GEOGPOINT(...)) returns WKT text on the semantic executor.
+  CAST GEOGRAPHY to STRING is invalid on production BigQuery.
 project_id: proj-scalar-cast-extended-geography
 query: |
-  SELECT CAST(ST_GEOGPOINT(1, 2) AS STRING) AS g
+  SELECT ST_ASTEXT(ST_GEOGPOINT(1, 2)) AS g
 expected:
   route: semantic_executor
   rows:

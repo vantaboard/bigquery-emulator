@@ -24,32 +24,42 @@ using GeographyRef = ::googlesql::internal::GeographyRef;
 absl::Mutex g_geography_wkt_mu;
 absl::flat_hash_map<const GeographyRef*, std::string> g_geography_wkt;
 
-int64_t NonNullGeographyMetadata() {
-  const Value null_geo = Value::NullGeography();
-  const Value json_shell = Value::UnvalidatedJsonString("emu");
-  int64_t geo_meta = 0;
-  int64_t json_meta = 0;
-  std::memcpy(&geo_meta, &null_geo, sizeof(int64_t));
-  std::memcpy(&json_meta, &json_shell, sizeof(int64_t));
-  const int64_t diff = geo_meta ^ json_meta;
-  return (json_meta & ~diff) | (geo_meta & diff);
+constexpr size_t kMetadataSize = sizeof(int64_t);
+constexpr size_t kGeographyPtrOffset = kMetadataSize;
+
+int64_t MetadataWord(const Value& value) {
+  int64_t meta = 0;
+  std::memcpy(&meta, &value, kMetadataSize);
+  return meta;
 }
 
-Value ValueFromGeographyRef(GeographyRef* ref) {
-  const int64_t meta = NonNullGeographyMetadata();
-  alignas(Value) unsigned char bytes[sizeof(Value)];
-  std::memcpy(bytes, &meta, sizeof(int64_t));
-  std::memcpy(bytes + sizeof(int64_t), &ref, sizeof(ref));
-  Value out;
-  std::memcpy(&out, bytes, sizeof(Value));
-  return out;
+// The prebuilt stub's EmptyGeography() aborts; flip the is_null bit on
+// NullGeography metadata using INT64 null/non-null as the mask reference.
+int64_t NonNullGeographyMetadata() {
+  const int64_t null_int64 = MetadataWord(Value::NullInt64());
+  const int64_t non_null_int64 = MetadataWord(Value::Int64(0));
+  const int64_t null_bit_mask = null_int64 ^ non_null_int64;
+  const int64_t null_geo = MetadataWord(Value::NullGeography());
+  return null_geo ^ null_bit_mask;
 }
 
 const GeographyRef* GeographyRefFromValue(const Value& value) {
   const GeographyRef* ref = nullptr;
-  std::memcpy(&ref, reinterpret_cast<const unsigned char*>(&value) + sizeof(int64_t),
-              sizeof(ref));
+  std::memcpy(
+      &ref,
+      reinterpret_cast<const unsigned char*>(&value) + kGeographyPtrOffset,
+      sizeof(ref));
   return ref;
+}
+
+Value MakeNonNullGeographyValue(GeographyRef* ref) {
+  const int64_t meta = NonNullGeographyMetadata();
+  Value out;
+  std::memcpy(&out, &meta, kMetadataSize);
+  std::memcpy(reinterpret_cast<unsigned char*>(&out) + kGeographyPtrOffset,
+              &ref,
+              sizeof(ref));
+  return out;
 }
 
 }  // namespace
@@ -60,7 +70,7 @@ const GeographyRef* GeographyRefFromValue(const Value& value) {
     absl::MutexLock lock(&g_geography_wkt_mu);
     g_geography_wkt[ref] = std::move(wkt);
   }
-  return ValueFromGeographyRef(ref);
+  return MakeNonNullGeographyValue(ref);
 }
 
 std::string GeographyWkt(const Value& value) {
@@ -98,8 +108,11 @@ absl::StatusOr<std::string> GeographySqlLiteral(const Value& value) {
     if (space == std::string::npos) {
       return absl::InvalidArgumentError("semantic: invalid POINT WKT");
     }
-    return absl::StrCat("ST_GEOGPOINT(", inner.substr(0, space), ", ",
-                        inner.substr(space + 1), ")");
+    return absl::StrCat("ST_GEOGPOINT(",
+                        inner.substr(0, space),
+                        ", ",
+                        inner.substr(space + 1),
+                        ")");
   }
   return absl::StrCat("ST_GEOGFROMTEXT('", wkt, "')");
 }

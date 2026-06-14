@@ -474,6 +474,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScan(
   const int n_arrays = scan.array_expr_list_size();
   for (ColumnBindings& row : *rows_or) {
     array_struct::AliasUnnestPublicColumnIds(scan, n_arrays, row);
+    array_struct::InjectArrayScanInternalColumns(scan, row);
   }
   return rows_or;
 }

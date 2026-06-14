@@ -44,9 +44,8 @@ std::string TableTombstoneDir(const DuckDBStorage& storage,
                               const TableId& id,
                               std::int64_t deleted_ms);
 
-absl::StatusOr<VersionIndex> ReadVersionIndex(
-    absl::string_view index_path,
-    bool allow_missing);
+absl::StatusOr<VersionIndex> ReadVersionIndex(absl::string_view index_path,
+                                              bool allow_missing);
 absl::Status WriteVersionIndex(absl::string_view index_path,
                                const VersionIndex& index);
 

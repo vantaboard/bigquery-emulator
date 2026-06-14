@@ -36,12 +36,30 @@ std::string StratifyFingerprint(const std::vector<Value>& keys) {
   return fp;
 }
 
-absl::StatusOr<double> EvalSampleWeight(const ::googlesql::ResolvedSampleScan& scan,
-                                        const ColumnBindings& row,
-                                        EvalContext& ctx) {
+absl::StatusOr<double> EvalSampleWeight(
+    const ::googlesql::ResolvedSampleScan& scan,
+    const ColumnBindings& row,
+    EvalContext& ctx) {
   if (scan.weight_column() == nullptr) return 1.0;
   const int col_id = scan.weight_column()->column().column_id();
   auto it = row.find(col_id);
+  if (it == row.end()) {
+    const absl::string_view weight_name = scan.weight_column()->column().name();
+    const ::googlesql::ResolvedScan* input =
+        StripBarrierScans(scan.input_scan());
+    const auto* table = input != nullptr
+                            ? input->GetAs<::googlesql::ResolvedTableScan>()
+                            : nullptr;
+    if (table != nullptr) {
+      for (int i = 0; i < table->column_list_size(); ++i) {
+        const ::googlesql::ResolvedColumn& col = table->column_list(i);
+        if (col.name() == weight_name) {
+          it = row.find(col.column_id());
+          if (it != row.end()) break;
+        }
+      }
+    }
+  }
   if (it == row.end()) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "semantic: sample weight column missing");
@@ -67,7 +85,7 @@ absl::StatusOr<double> EvalSampleWeight(const ::googlesql::ResolvedSampleScan& s
 absl::StatusOr<std::vector<Value>> StratifyKeys(
     const ::googlesql::ResolvedSampleScan& scan,
     const ColumnBindings& row,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<Value> keys;
   keys.reserve(static_cast<size_t>(scan.partition_by_list_size()));
   for (int i = 0; i < scan.partition_by_list_size(); ++i) {
@@ -136,8 +154,7 @@ absl::StatusOr<std::vector<ColumnBindings>> BernoulliPercentSample(
     auto weight_or = EvalSampleWeight(scan, rows[r], ctx);
     if (!weight_or.ok()) return weight_or.status();
     const std::string fp = StratifyFingerprint(*keys_or);
-    stratum_max_weight[fp] =
-        std::max(stratum_max_weight[fp], *weight_or);
+    stratum_max_weight[fp] = std::max(stratum_max_weight[fp], *weight_or);
   }
 
   std::vector<ColumnBindings> out;
@@ -150,7 +167,7 @@ absl::StatusOr<std::vector<ColumnBindings>> BernoulliPercentSample(
     const std::string fp = StratifyFingerprint(*keys_or);
     const double max_w = stratum_max_weight[fp];
     double probability = fraction;
-    if (max_w > 0.0 && scan.weight_column() != nullptr) {
+    if (fraction < 1.0 && max_w > 0.0 && scan.weight_column() != nullptr) {
       probability = fraction * (*weight_or / max_w);
     }
     if (probability >= 1.0) {

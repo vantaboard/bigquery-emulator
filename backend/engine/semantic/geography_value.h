@@ -20,7 +20,8 @@ namespace semantic {
 std::string GeographyWkt(const ::googlesql::Value& value);
 
 // SQL literal for FORMAT('%T', ...) / TO_JSON_STRING on geography.
-absl::StatusOr<std::string> GeographySqlLiteral(const ::googlesql::Value& value);
+absl::StatusOr<std::string> GeographySqlLiteral(
+    const ::googlesql::Value& value);
 
 }  // namespace semantic
 }  // namespace engine

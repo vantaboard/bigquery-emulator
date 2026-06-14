@@ -1,9 +1,15 @@
-# window_frame_range_date: RANGE BETWEEN numeric offsets on DATE ORDER BY.
+# window_frame_range_date: day-granularity RANGE via UNIX_DATE order key.
+#
+# BigQuery rejects RANGE BETWEEN ... PRECEDING/FOLLOWING when ORDER BY is
+# DATE (same error as production `bq query`). Encode dates as UNIX_DATE so
+# the frame is ±1 day in logical range space; consecutive daily rows match
+# the ±1-day window counts.
 name: window_frame_range_date
 description: |
-  COUNT(*) OVER (ORDER BY event_date RANGE BETWEEN 1 PRECEDING AND 1
-  FOLLOWING) on an inline relation. Pins semantic-executor RANGE frames
-  when the ORDER BY key is DATE with integer offsets.
+  COUNT(*) OVER (ORDER BY UNIX_DATE(event_date) RANGE BETWEEN 1 PRECEDING AND
+  1 FOLLOWING) on an inline relation. Pins DuckDB RANGE frames over a
+  UNIX_DATE order key (production BigQuery requires numeric ORDER BY for
+  RANGE offsets).
 project_id: proj-window-range-date
 query: |
   WITH events AS (
@@ -14,13 +20,13 @@ query: |
   )
   SELECT event_date,
          COUNT(*) OVER (
-           ORDER BY event_date
+           ORDER BY UNIX_DATE(event_date)
            RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
          ) AS cnt
     FROM events
    ORDER BY event_date
 expected:
-  route: semantic_executor
+  route: duckdb_udf
   rows:
     - {event_date: "2020-01-01", cnt: "2"}
     - {event_date: "2020-01-02", cnt: "3"}

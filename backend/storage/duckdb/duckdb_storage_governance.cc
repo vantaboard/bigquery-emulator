@@ -109,32 +109,32 @@ absl::Status EnsureGovernanceTables(DuckDBStorage::Impl* impl) {
   if (!rap.ok()) return rap;
   return internal::RunSql(
       impl,
-      absl::StrCat("CREATE TABLE IF NOT EXISTS ",
-                   kColumnGovernanceTable,
-                   " (",
-                   "project_id VARCHAR NOT NULL, ",
-                   "dataset_id VARCHAR NOT NULL, ",
-                   "table_id VARCHAR NOT NULL, ",
-                   "column_name VARCHAR NOT NULL, ",
-                   "policy_tags_csv VARCHAR, ",
-                   "mask_kind VARCHAR NOT NULL, ",
-                   "mask_grantees_csv VARCHAR, ",
-                   "default_mask_value VARCHAR, ",
-                   "PRIMARY KEY (project_id, dataset_id, table_id, column_name)",
-                   ")"));
+      absl::StrCat(
+          "CREATE TABLE IF NOT EXISTS ",
+          kColumnGovernanceTable,
+          " (",
+          "project_id VARCHAR NOT NULL, ",
+          "dataset_id VARCHAR NOT NULL, ",
+          "table_id VARCHAR NOT NULL, ",
+          "column_name VARCHAR NOT NULL, ",
+          "policy_tags_csv VARCHAR, ",
+          "mask_kind VARCHAR NOT NULL, ",
+          "mask_grantees_csv VARCHAR, ",
+          "default_mask_value VARCHAR, ",
+          "PRIMARY KEY (project_id, dataset_id, table_id, column_name)",
+          ")"));
 }
 
 absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
                                                     const TableId& id) {
   TableGovernance gov;
-  const std::string where = absl::StrCat(
-      "project_id='",
-      SqlQuote(id.project_id),
-      "' AND dataset_id='",
-      SqlQuote(id.dataset_id),
-      "' AND table_id='",
-      SqlQuote(id.table_id),
-      "'");
+  const std::string where = absl::StrCat("project_id='",
+                                         SqlQuote(id.project_id),
+                                         "' AND dataset_id='",
+                                         SqlQuote(id.dataset_id),
+                                         "' AND table_id='",
+                                         SqlQuote(id.table_id),
+                                         "'");
 
   {
     const std::string sql = absl::StrCat(
@@ -145,7 +145,8 @@ absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
         where,
         " ORDER BY policy_id");
     ::duckdb_result result;
-    if (::duckdb_query(impl->connection, sql.c_str(), &result) != ::DuckDBSuccess) {
+    if (::duckdb_query(impl->connection, sql.c_str(), &result) !=
+        ::DuckDBSuccess) {
       const char* err = ::duckdb_result_error(&result);
       std::string detail = err == nullptr ? std::string("") : std::string(err);
       ::duckdb_destroy_result(&result);
@@ -161,8 +162,7 @@ absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
       rec.filter_predicate =
           std::string(::duckdb_value_varchar(&result, 1, row));
       if (!::duckdb_value_is_null(&result, 2, row)) {
-        rec.grantees =
-            SplitCsv(::duckdb_value_varchar(&result, 2, row));
+        rec.grantees = SplitCsv(::duckdb_value_varchar(&result, 2, row));
       }
       rec.creation_time_ms = ::duckdb_value_int64(&result, 3, row);
       rec.last_modified_time_ms = ::duckdb_value_int64(&result, 4, row);
@@ -180,12 +180,14 @@ absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
         where,
         " ORDER BY column_name");
     ::duckdb_result result;
-    if (::duckdb_query(impl->connection, sql.c_str(), &result) != ::DuckDBSuccess) {
+    if (::duckdb_query(impl->connection, sql.c_str(), &result) !=
+        ::DuckDBSuccess) {
       const char* err = ::duckdb_result_error(&result);
       std::string detail = err == nullptr ? std::string("") : std::string(err);
       ::duckdb_destroy_result(&result);
       return internal::DuckDBError(absl::StatusCode::kInternal,
-                                   "LoadTableGovernance columns failed", detail);
+                                   "LoadTableGovernance columns failed",
+                                   detail);
     }
     const idx_t n = ::duckdb_row_count(&result);
     gov.columns.reserve(static_cast<size_t>(n));
@@ -194,14 +196,12 @@ absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
       const std::string column_name =
           std::string(::duckdb_value_varchar(&result, 0, row));
       if (!::duckdb_value_is_null(&result, 1, row)) {
-        col.policy_tags =
-            SplitCsv(::duckdb_value_varchar(&result, 1, row));
+        col.policy_tags = SplitCsv(::duckdb_value_varchar(&result, 1, row));
       }
       col.mask_kind =
           MaskKindFromString(::duckdb_value_varchar(&result, 2, row));
       if (!::duckdb_value_is_null(&result, 3, row)) {
-        col.mask_grantees =
-            SplitCsv(::duckdb_value_varchar(&result, 3, row));
+        col.mask_grantees = SplitCsv(::duckdb_value_varchar(&result, 3, row));
       }
       if (!::duckdb_value_is_null(&result, 4, row)) {
         col.default_mask_value =
@@ -218,39 +218,37 @@ absl::StatusOr<TableGovernance> LoadTableGovernance(DuckDBStorage::Impl* impl,
 absl::Status SaveRowAccessPolicies(DuckDBStorage::Impl* impl,
                                    const TableId& id,
                                    const TableGovernance& gov) {
-  const std::string where = absl::StrCat(
-      "project_id='",
-      SqlQuote(id.project_id),
-      "' AND dataset_id='",
-      SqlQuote(id.dataset_id),
-      "' AND table_id='",
-      SqlQuote(id.table_id),
-      "'");
+  const std::string where = absl::StrCat("project_id='",
+                                         SqlQuote(id.project_id),
+                                         "' AND dataset_id='",
+                                         SqlQuote(id.dataset_id),
+                                         "' AND table_id='",
+                                         SqlQuote(id.table_id),
+                                         "'");
   absl::Status del = internal::RunSql(
       impl,
       absl::StrCat("DELETE FROM ", kRowAccessPoliciesTable, " WHERE ", where));
   if (!del.ok()) return del;
   for (const RowAccessPolicyRecord& policy : gov.row_access_policies) {
-    const std::string sql = absl::StrCat(
-        "INSERT INTO ",
-        kRowAccessPoliciesTable,
-        " VALUES ('",
-        SqlQuote(id.project_id),
-        "', '",
-        SqlQuote(id.dataset_id),
-        "', '",
-        SqlQuote(id.table_id),
-        "', '",
-        SqlQuote(policy.policy_id),
-        "', '",
-        SqlQuote(policy.filter_predicate),
-        "', '",
-        SqlQuote(JoinCsv(policy.grantees)),
-        "', ",
-        policy.creation_time_ms,
-        ", ",
-        policy.last_modified_time_ms,
-        ")");
+    const std::string sql = absl::StrCat("INSERT INTO ",
+                                         kRowAccessPoliciesTable,
+                                         " VALUES ('",
+                                         SqlQuote(id.project_id),
+                                         "', '",
+                                         SqlQuote(id.dataset_id),
+                                         "', '",
+                                         SqlQuote(id.table_id),
+                                         "', '",
+                                         SqlQuote(policy.policy_id),
+                                         "', '",
+                                         SqlQuote(policy.filter_predicate),
+                                         "', '",
+                                         SqlQuote(JoinCsv(policy.grantees)),
+                                         "', ",
+                                         policy.creation_time_ms,
+                                         ", ",
+                                         policy.last_modified_time_ms,
+                                         ")");
     absl::Status ins = internal::RunSql(impl, sql);
     if (!ins.ok()) return ins;
   }
@@ -261,26 +259,25 @@ absl::Status SaveColumnGovernance(DuckDBStorage::Impl* impl,
                                   const TableId& id,
                                   absl::string_view column_name,
                                   const ColumnGovernanceRecord& column) {
-  const std::string sql = absl::StrCat(
-      "INSERT OR REPLACE INTO ",
-      kColumnGovernanceTable,
-      " VALUES ('",
-      SqlQuote(id.project_id),
-      "', '",
-      SqlQuote(id.dataset_id),
-      "', '",
-      SqlQuote(id.table_id),
-      "', '",
-      SqlQuote(column_name),
-      "', '",
-      SqlQuote(JoinCsv(column.policy_tags)),
-      "', '",
-      MaskKindToString(column.mask_kind),
-      "', '",
-      SqlQuote(JoinCsv(column.mask_grantees)),
-      "', '",
-      SqlQuote(column.default_mask_value),
-      "')");
+  const std::string sql = absl::StrCat("INSERT OR REPLACE INTO ",
+                                       kColumnGovernanceTable,
+                                       " VALUES ('",
+                                       SqlQuote(id.project_id),
+                                       "', '",
+                                       SqlQuote(id.dataset_id),
+                                       "', '",
+                                       SqlQuote(id.table_id),
+                                       "', '",
+                                       SqlQuote(column_name),
+                                       "', '",
+                                       SqlQuote(JoinCsv(column.policy_tags)),
+                                       "', '",
+                                       MaskKindToString(column.mask_kind),
+                                       "', '",
+                                       SqlQuote(JoinCsv(column.mask_grantees)),
+                                       "', '",
+                                       SqlQuote(column.default_mask_value),
+                                       "')");
   return internal::RunSql(impl, sql);
 }
 

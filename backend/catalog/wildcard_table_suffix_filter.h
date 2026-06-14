@@ -29,8 +29,7 @@ std::optional<std::vector<std::string>> ExtractTableSuffixAllowList(
 // Walks `scan` for a FilterScan wrapping a TableScan on `wildcard_table_id`
 // and returns the suffix allow-list when present.
 std::optional<std::vector<std::string>> FindTableSuffixAllowListForWildcardScan(
-    const ::googlesql::ResolvedScan* scan,
-    absl::string_view wildcard_table_id);
+    const ::googlesql::ResolvedScan* scan, absl::string_view wildcard_table_id);
 
 }  // namespace catalog
 }  // namespace backend

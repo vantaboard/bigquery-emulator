@@ -22,9 +22,9 @@ namespace semantic {
 namespace {
 
 absl::Status JsUdfError(absl::string_view message) {
-  return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                           absl::StrCat("User-defined function error: ",
-                                          message));
+  return MakeSemanticError(
+      SemanticErrorReason::kInvalidArgument,
+      absl::StrCat("User-defined function error: ", message));
 }
 
 void PushGooglesqlValueToJs(duk_context* ctx,
@@ -53,9 +53,8 @@ void PushGooglesqlValueToJs(duk_context* ctx,
   }
 }
 
-absl::StatusOr<Value> PopJsValueToGooglesql(duk_context* ctx,
-                                            int stack_index,
-                                            const ::googlesql::Type* return_type) {
+absl::StatusOr<Value> PopJsValueToGooglesql(
+    duk_context* ctx, int stack_index, const ::googlesql::Type* return_type) {
   if (return_type == nullptr) {
     return absl::InternalError("js_udf_runtime: missing return type");
   }
@@ -112,14 +111,6 @@ absl::StatusOr<Value> PopJsValueToGooglesql(duk_context* ctx,
   }
 }
 
-std::string BuildJsWrapper(const catalog::JsUdfDefinition& definition) {
-  return absl::StrCat("(function(",
-                      absl::StrJoin(definition.arg_names, ","),
-                      ") { ",
-                      definition.js_body,
-                      " })");
-}
-
 }  // namespace
 
 absl::StatusOr<Value> EvalJsUdfCall(
@@ -133,12 +124,12 @@ absl::StatusOr<Value> EvalJsUdfCall(
         "JavaScript aggregate UDF call-time evaluation is not implemented");
   }
   if (definition.arg_names.size() != arg_values.size()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("semantic: JavaScript UDF argument count mismatch (expected ",
-                     definition.arg_names.size(),
-                     ", got ",
-                     arg_values.size(),
-                     ")"));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "semantic: JavaScript UDF argument count mismatch (expected ",
+        definition.arg_names.size(),
+        ", got ",
+        arg_values.size(),
+        ")"));
   }
 
   duk_context* duk_ctx = duk_create_heap_default();
@@ -147,20 +138,23 @@ absl::StatusOr<Value> EvalJsUdfCall(
         "js_udf_runtime: failed to allocate Duktape heap");
   }
 
-  const std::string wrapper = BuildJsWrapper(definition);
-  duk_push_string(duk_ctx, wrapper.c_str());
-  if (duk_pcompile(duk_ctx, DUK_COMPILE_EVAL) != 0) {
+  const std::string arg_list = absl::StrJoin(definition.arg_names, ",");
+  duk_push_global_object(duk_ctx);
+  duk_get_prop_string(duk_ctx, -1, "Function");
+  duk_remove(duk_ctx, -2);
+  duk_push_string(duk_ctx, arg_list.c_str());
+  duk_push_string(duk_ctx, definition.js_body.c_str());
+  if (duk_pcall(duk_ctx, 2) != 0) {
     const char* err = duk_safe_to_string(duk_ctx, -1);
     duk_destroy_heap(duk_ctx);
-    return JsUdfError(err != nullptr ? err : "failed to compile JavaScript UDF");
+    return JsUdfError(err != nullptr ? err
+                                     : "failed to construct JavaScript UDF");
   }
-  duk_call(duk_ctx, 0);
 
   for (size_t i = 0; i < arg_values.size(); ++i) {
-    const ::googlesql::TypeKind type_kind =
-        i < definition.arg_type_kinds.size()
-            ? definition.arg_type_kinds[i]
-            : ::googlesql::TYPE_UNKNOWN;
+    const ::googlesql::TypeKind type_kind = i < definition.arg_type_kinds.size()
+                                                ? definition.arg_type_kinds[i]
+                                                : ::googlesql::TYPE_UNKNOWN;
     const ::googlesql::Type* arg_type =
         i < arg_types.size() ? arg_types[i] : nullptr;
     const ::googlesql::TypeKind effective_kind =

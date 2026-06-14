@@ -6,7 +6,7 @@ description: |
 project_id: proj-scalar-generate-date-array-reverse
 query: |
   SELECT TO_JSON_STRING(
-    GENERATE_DATE_ARRAY(DATE '2020-01-05', DATE '2020-01-01', -1)
+    GENERATE_DATE_ARRAY(DATE '2020-01-05', DATE '2020-01-01', INTERVAL -1 DAY)
   ) AS arr
 expected:
   route: semantic_executor

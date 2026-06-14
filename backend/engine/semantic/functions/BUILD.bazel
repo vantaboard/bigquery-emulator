@@ -108,6 +108,7 @@ cc_library(
         "datetime_add_sub.cc",
         "datetime_current_unix.cc",
         "datetime_funcs.cc",
+        "datetime_funcs_constructors.cc",
         "datetime_helpers.cc",
         "datetime_parse_format.cc",
     ],

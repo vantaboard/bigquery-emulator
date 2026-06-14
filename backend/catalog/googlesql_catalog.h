@@ -75,6 +75,28 @@ namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
 
+// Language options for catalog builtin registration. Must stay aligned
+// with `frontend/handlers/query_internal.cc::MakeAnalyzerOptions` and
+// `local_coordinator_analyze.cc::MakeAnalyzerOptionsBase` so internal
+// templated builtins (e.g. `$with_side_effects` for LIKE ANY lists)
+// resolve during analysis.
+inline ::googlesql::LanguageOptions MakeCatalogLanguageOptions() {
+  ::googlesql::LanguageOptions language;
+  language.EnableMaximumLanguageFeaturesForDevelopment();
+  language.EnableLanguageFeature(::googlesql::FEATURE_WITH_EXPRESSION);
+  language.EnableLanguageFeature(::googlesql::FEATURE_MATCH_RECOGNIZE);
+  language.EnableLanguageFeature(
+      ::googlesql::FEATURE_STRATIFIED_RESERVOIR_TABLESAMPLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_KLL_WEIGHTS);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_TABLE_CLONE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
+  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
+  language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+  language.SetSupportsAllStatementKinds();
+  return language;
+}
+
 class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
  public:
   // `storage` and `type_factory` must outlive the catalog. The

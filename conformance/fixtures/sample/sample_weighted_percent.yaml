@@ -1,4 +1,7 @@
 # sample_weighted_percent: TABLESAMPLE with WITH WEIGHT on semantic path.
+#
+# GoogleSQL parser feature (not accepted by production `bq query` as of
+# 2026-06); pins semantic executor weighted sampling at 100 PERCENT.
 name: sample_weighted_percent
 description: |
   BERNOULLI (100 PERCENT) WITH WEIGHT returns every input row when
@@ -23,7 +26,7 @@ setup:
 query: |
   SELECT id
     FROM ds_sample_weighted.items
-   TABLESAMPLE BERNOULLI (100 PERCENT) WITH WEIGHT (weight)
+   TABLESAMPLE BERNOULLI (100 PERCENT) WITH WEIGHT weight
    ORDER BY id
 expected:
   route: semantic_executor

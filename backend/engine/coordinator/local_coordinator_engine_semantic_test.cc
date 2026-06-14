@@ -306,6 +306,52 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(ids[2], 3);
 }
 
+TEST_F(LocalCoordinatorEngineTest, LikeAnyListOverUnnestRoutesToSemantic) {
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT word, word LIKE ANY ('Int%', '%ion') AS matches "
+                  "FROM UNNEST(['Intention', 'Fusion', 'Intent']) AS word "
+                  "ORDER BY word"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  std::vector<std::pair<std::string, bool>> got;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    got.emplace_back(row.cells[0].string_value(), row.cells[1].bool_value());
+  }
+  ASSERT_EQ(got.size(), 3u);
+  EXPECT_EQ(got[0].first, "Fusion");
+  EXPECT_TRUE(got[0].second);
+  EXPECT_EQ(got[1].first, "Intent");
+  EXPECT_TRUE(got[1].second);
+  EXPECT_EQ(got[2].first, "Intention");
+  EXPECT_TRUE(got[2].second);
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreateJsScalarUdfThenCall) {
+  CatalogBundle bundle = MakeCatalog();
+  const absl::Status created = engine_->ExecuteDdl(
+      MakeRequest(R"(CREATE FUNCTION js_add(x INT64) RETURNS INT64
+LANGUAGE js AS "return x + 1;")"),
+      bundle.catalog.get());
+  ASSERT_TRUE(created.ok()) << created;
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(MakeRequest("SELECT js_add(1) AS out"),
+                                      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+  EXPECT_EQ(row.cells[0].int64_value(), 2);
+}
+
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureViaExecuteDdl) {
   CatalogBundle bundle = MakeCatalog();
   const std::string sql = R"(/*

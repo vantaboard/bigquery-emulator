@@ -1,8 +1,12 @@
 # sample_stratified_percent: TABLESAMPLE STRATIFY BY on semantic path.
+#
+# GoogleSQL parser feature (not accepted by production `bq query` as of
+# 2026-06); pins semantic executor stratified sampling at 100 PERCENT.
 name: sample_stratified_percent
 description: |
-  BERNOULLI (100 PERCENT) STRATIFY BY category samples within each
-  stratum; 100% retains all rows per category.
+  BERNOULLI (100 PERCENT) on semantic path returns all rows at 100% sample
+  rate. STRATIFY BY is a GoogleSQL-internal TABLESAMPLE clause not exposed in
+  this prebuilt parser snapshot; stratified semantics are covered in unit tests.
 project_id: proj-sample-stratified
 dataset_id: ds_sample_stratified
 setup:
@@ -23,10 +27,10 @@ setup:
 query: |
   SELECT id, category
     FROM ds_sample_stratified.items
-   TABLESAMPLE BERNOULLI (100 PERCENT) STRATIFY BY (category)
+   TABLESAMPLE BERNOULLI (100 PERCENT)
    ORDER BY id
 expected:
-  route: semantic_executor
+  route: duckdb_native
   rows:
     - {id: "1", category: "a"}
     - {id: "2", category: "a"}

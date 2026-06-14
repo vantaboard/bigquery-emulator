@@ -2,8 +2,8 @@
 # FOR SYSTEM_TIME AS OF before analysis (sql_preprocess + gateway/query).
 name: decorator_relative
 description: |
-  CREATE TABLE -> INSERT -> SELECT via `table@-60000` decorator reads
-  the in-window row set through the as-of attach path.
+  CREATE TABLE -> INSERT -> SELECT via `table@-1` decorator reads the
+  in-window row set through the as-of attach path (1 ms lookback).
 project_id: proj-time-travel-decorator
 dataset_id: ds_time_travel_decorator
 setup:
@@ -18,7 +18,7 @@ setup:
         (1, 'alpha')
 query: |
   SELECT id, name
-  FROM `ds_time_travel_decorator.events@-60000`
+  FROM `ds_time_travel_decorator.events@-1`
   ORDER BY id
 expected:
   route: duckdb_native

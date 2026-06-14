@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -129,6 +130,40 @@ void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
         bindings.emplace(public_id, it->second);
       }
       break;
+    }
+  }
+}
+
+void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
+                                    ColumnBindings& bindings) {
+  absl::flat_hash_set<int> known_ids;
+  known_ids.reserve(scan.element_column_list_size() + 2);
+  for (int i = 0; i < scan.element_column_list_size(); ++i) {
+    known_ids.insert(scan.element_column_list(i).column_id());
+  }
+  if (scan.array_offset_column() != nullptr) {
+    known_ids.insert(scan.array_offset_column()->column().column_id());
+  }
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = scan.column_list(i);
+    if (known_ids.contains(col.column_id())) continue;
+    if (bindings.count(col.column_id()) != 0) continue;
+    const absl::string_view name = col.name();
+    if (name.empty() || name[0] != '$') continue;
+    if (name == "$side_effects") {
+      const ::googlesql::Type* type = col.type();
+      if (type != nullptr && type->kind() == ::googlesql::TYPE_BYTES) {
+        bindings.emplace(col.column_id(), Value::NullBytes());
+      } else {
+        bindings.emplace(col.column_id(), Value::Null(type));
+      }
+      continue;
+    }
+    const ::googlesql::Type* type = col.type();
+    if (type != nullptr && type->kind() == ::googlesql::TYPE_BOOL) {
+      bindings.emplace(col.column_id(), Value::Bool(false));
+    } else {
+      bindings.emplace(col.column_id(), Value::Null(type));
     }
   }
 }
@@ -289,6 +324,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
                        Value::NullInt64());
     }
     AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
+    InjectArrayScanInternalColumns(scan, bindings);
     rows.push_back(std::move(bindings));
     return rows;
   }
@@ -317,6 +353,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
                        Value::Int64(static_cast<int64_t>(idx)));
     }
     AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
+    InjectArrayScanInternalColumns(scan, bindings);
     rows.push_back(std::move(bindings));
   }
   return rows;

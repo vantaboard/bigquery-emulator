@@ -44,9 +44,16 @@ namespace {
 // plan) and the new coordinator.
 ::googlesql::AnalyzerOptions MakeAnalyzerOptionsBase() {
   ::googlesql::LanguageOptions language;
-  language.EnableMaximumLanguageFeatures();
+  language.EnableMaximumLanguageFeaturesForDevelopment();
   // WITH(<name> AS <expr>, ...) <body> scalar bindings (GA feature).
   language.EnableLanguageFeature(::googlesql::FEATURE_WITH_EXPRESSION);
+  language.EnableLanguageFeature(::googlesql::FEATURE_MATCH_RECOGNIZE);
+  language.EnableLanguageFeature(
+      ::googlesql::FEATURE_STRATIFIED_RESERVOIR_TABLESAMPLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_KLL_WEIGHTS);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_TABLE_CLONE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   ::googlesql::AnalyzerOptions options(language);

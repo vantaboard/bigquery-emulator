@@ -28,7 +28,8 @@ namespace fs = std::filesystem;
 
 std::string DatasetDirFromStorage(const DuckDBStorage& storage,
                                   const TableId& id) {
-  return (fs::path(storage.data_dir()) / id.project_id / id.dataset_id).string();
+  return (fs::path(storage.data_dir()) / id.project_id / id.dataset_id)
+      .string();
 }
 
 std::string TableMetaPathFromStorage(const DuckDBStorage& storage,
@@ -152,10 +153,10 @@ std::vector<VersionEntry> ParseVersionEntries(absl::string_view json) {
     }
     pos += key.size();
   }
-  std::sort(out.begin(), out.end(),
-            [](const VersionEntry& a, const VersionEntry& b) {
-              return a.valid_from_ms < b.valid_from_ms;
-            });
+  std::sort(
+      out.begin(), out.end(), [](const VersionEntry& a, const VersionEntry& b) {
+        return a.valid_from_ms < b.valid_from_ms;
+      });
   return out;
 }
 
@@ -163,10 +164,10 @@ std::string RenderVersionIndexJson(const VersionIndex& index) {
   std::vector<std::string> version_objs;
   version_objs.reserve(index.versions.size());
   for (const VersionEntry& v : index.versions) {
-    version_objs.push_back(absl::StrFormat(
-        R"({"valid_from_ms":%lld,"file":"%s"})",
-        static_cast<long long>(v.valid_from_ms),
-        EscapeJsonString(v.file)));
+    version_objs.push_back(
+        absl::StrFormat(R"({"valid_from_ms":%lld,"file":"%s"})",
+                        static_cast<long long>(v.valid_from_ms),
+                        EscapeJsonString(v.file)));
   }
   return absl::StrFormat(
       R"({"created_ts_ms":%lld,"current_ts_ms":%lld,"versions":[%s]})",
@@ -329,17 +330,20 @@ absl::Status ArchiveParquetBeforeReplace(const DuckDBStorage& storage,
   const std::string archive_name =
       absl::StrCat(index.current_ts_ms, ".parquet");
   const fs::path archive_path = fs::path(versions_dir) / archive_name;
-  fs::copy_file(live_parquet_path, archive_path,
-                fs::copy_options::overwrite_existing, ec);
+  fs::copy_file(live_parquet_path,
+                archive_path,
+                fs::copy_options::overwrite_existing,
+                ec);
   if (ec) {
-    return FilesystemStatus(absl::StrCat("failed to archive parquet to ",
-                                         archive_path.string()),
-                            ec);
+    return FilesystemStatus(
+        absl::StrCat("failed to archive parquet to ", archive_path.string()),
+        ec);
   }
 
   index.versions.push_back(
       VersionEntry{.valid_from_ms = index.current_ts_ms, .file = archive_name});
-  std::sort(index.versions.begin(), index.versions.end(),
+  std::sort(index.versions.begin(),
+            index.versions.end(),
             [](const VersionEntry& a, const VersionEntry& b) {
               return a.valid_from_ms < b.valid_from_ms;
             });
@@ -362,8 +366,8 @@ absl::StatusOr<std::string> ResolveParquetSnapshotAt(
   if (as_of_ms < now_ms - kTimeTravelWindowMs) {
     auto index_or = LoadVersionIndexOrInit(storage, id);
     if (!index_or.ok()) return index_or.status();
-    const std::int64_t earliest = std::max(
-        EarliestReadableMs(*index_or), now_ms - kTimeTravelWindowMs);
+    const std::int64_t earliest =
+        std::max(EarliestReadableMs(*index_or), now_ms - kTimeTravelWindowMs);
     return InvalidSnapshotTimeError(id, as_of_ms, earliest);
   }
 
@@ -404,172 +408,6 @@ absl::StatusOr<std::string> ResolveParquetSnapshotAt(
     return InvalidSnapshotTimeError(id, as_of_ms, index.created_ts_ms);
   }
   return path;
-}
-
-absl::Status MoveTableToTombstone(const DuckDBStorage& storage,
-                                  const TableId& id,
-                                  std::int64_t deleted_ms) {
-  const std::string tombstone_dir = TableTombstoneDir(storage, id, deleted_ms);
-  std::error_code ec;
-  fs::create_directories(tombstone_dir, ec);
-  if (ec) {
-    return FilesystemStatus(
-        absl::StrCat("failed to create tombstone dir: ", tombstone_dir), ec);
-  }
-
-  auto move_if_exists = [&](const std::string& src_path) -> absl::Status {
-    std::error_code move_ec;
-    if (!fs::exists(src_path, move_ec)) return absl::OkStatus();
-    const fs::path dest =
-        fs::path(tombstone_dir) / fs::path(src_path).filename();
-    fs::rename(src_path, dest, move_ec);
-    if (move_ec) {
-      return FilesystemStatus(
-          absl::StrCat("failed to move ", src_path, " -> ", dest.string()),
-          move_ec);
-    }
-    return absl::OkStatus();
-  };
-
-  absl::Status status =
-      move_if_exists(TableMetaPathFromStorage(storage, id));
-  if (!status.ok()) return status;
-  status = move_if_exists(TableParquetPathFromStorage(storage, id));
-  if (!status.ok()) return status;
-  status = move_if_exists(TableVersionsIndexPath(storage, id));
-  if (!status.ok()) return status;
-
-  const std::string versions_dir = TableVersionsDir(storage, id);
-  if (fs::exists(versions_dir, ec)) {
-    const fs::path dest = fs::path(tombstone_dir) /
-                          (absl::StrCat(id.table_id, ".versions"));
-    fs::rename(versions_dir, dest, ec);
-    if (ec) {
-      return FilesystemStatus(
-          absl::StrCat("failed to move versions dir to ", dest.string()), ec);
-    }
-  }
-  return absl::OkStatus();
-}
-
-absl::StatusOr<std::int64_t> LatestTombstoneMs(
-    const DuckDBStorage& storage,
-    const TableId& id) {
-  const fs::path root =
-      fs::path(storage.data_dir()) / ".tombstones" / id.table_id;
-  std::error_code ec;
-  if (!fs::exists(root, ec)) {
-    return absl::NotFoundError(absl::StrCat("no tombstones for table ",
-                                            id.project_id,
-                                            ".",
-                                            id.dataset_id,
-                                            ".",
-                                            id.table_id));
-  }
-  std::int64_t best = 0;
-  bool found = false;
-  for (const auto& entry : fs::directory_iterator(root, ec)) {
-    if (ec) break;
-    if (!entry.is_directory()) continue;
-    std::int64_t deleted_ms = 0;
-    if (!absl::SimpleAtoi(entry.path().filename().string(), &deleted_ms)) {
-      continue;
-    }
-    if (!found || deleted_ms > best) {
-      best = deleted_ms;
-      found = true;
-    }
-  }
-  if (!found) {
-    return absl::NotFoundError(absl::StrCat("no tombstones for table ",
-                                            id.project_id,
-                                            ".",
-                                            id.dataset_id,
-                                            ".",
-                                            id.table_id));
-  }
-  return best;
-}
-
-absl::Status RestoreTableFromTombstone(const DuckDBStorage& storage,
-                                       const TableId& id,
-                                       std::int64_t deleted_ms) {
-  std::int64_t chosen = deleted_ms;
-  if (chosen == 0) {
-    auto latest_or = LatestTombstoneMs(storage, id);
-    if (!latest_or.ok()) return latest_or.status();
-    chosen = *latest_or;
-  }
-
-  const fs::path ds_dir = fs::path(DatasetDirFromStorage(storage, id));
-  std::error_code ec;
-  const fs::path meta_path = TableMetaPathFromStorage(storage, id);
-  if (fs::exists(meta_path, ec)) {
-    return absl::AlreadyExistsError(absl::StrCat("table already exists: ",
-                                                 id.project_id,
-                                                 ".",
-                                                 id.dataset_id,
-                                                 ".",
-                                                 id.table_id));
-  }
-
-  const std::string tombstone_dir = TableTombstoneDir(storage, id, chosen);
-  if (!fs::exists(tombstone_dir, ec)) {
-    return absl::NotFoundError(absl::StrCat("tombstone not found for table ",
-                                            id.project_id,
-                                            ".",
-                                            id.dataset_id,
-                                            ".",
-                                            id.table_id,
-                                            " at ",
-                                            chosen));
-  }
-
-  fs::create_directories(ds_dir, ec);
-  if (ec) {
-    return FilesystemStatus(
-        absl::StrCat("failed to create dataset dir: ", ds_dir.string()), ec);
-  }
-
-  auto move_entry = [&](const fs::path& name) -> absl::Status {
-    const fs::path src = fs::path(tombstone_dir) / name;
-    if (!fs::exists(src, ec)) return absl::OkStatus();
-    const fs::path dest = ds_dir / name;
-    fs::rename(src, dest, ec);
-    if (ec) {
-      return FilesystemStatus(
-          absl::StrCat("failed to restore ", src.string(), " -> ",
-                       dest.string()),
-          ec);
-    }
-    return absl::OkStatus();
-  };
-
-  absl::Status status = move_entry(
-      fs::path(absl::StrCat(id.table_id, kTableMetaSuffix)).filename());
-  if (!status.ok()) return status;
-  status = move_entry(fs::path(absl::StrCat(id.table_id, ".parquet")).filename());
-  if (!status.ok()) return status;
-  status = move_entry(
-      fs::path(absl::StrCat(id.table_id, ".versions.json")).filename());
-  if (!status.ok()) return status;
-
-  const fs::path versions_src =
-      fs::path(tombstone_dir) / absl::StrCat(id.table_id, ".versions");
-  if (fs::exists(versions_src, ec)) {
-    const fs::path versions_dest =
-        fs::path(DatasetDirFromStorage(storage, id)) /
-        absl::StrCat(id.table_id, ".versions");
-    fs::rename(versions_src, versions_dest, ec);
-    if (ec) {
-      return FilesystemStatus(absl::StrCat("failed to restore versions dir to ",
-                                           versions_dest.string()),
-                              ec);
-    }
-  }
-
-  fs::remove(tombstone_dir, ec);
-  return absl::OkStatus();
 }
 
 }  // namespace internal

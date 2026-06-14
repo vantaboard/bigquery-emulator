@@ -36,9 +36,8 @@ std::vector<OutputColumnMask> BuildOutputColumnMasks(
     absl::string_view principal_email);
 
 // Applies row/column governance to one rendered row.
-absl::Status ApplyOutputColumnMasks(
-    absl::Span<const OutputColumnMask> masks,
-    storage::Row* row);
+absl::Status ApplyOutputColumnMasks(absl::Span<const OutputColumnMask> masks,
+                                    storage::Row* row);
 
 }  // namespace internal
 }  // namespace duckdb

@@ -33,11 +33,7 @@ namespace coordinator {
 namespace fs = std::filesystem;
 
 inline ::googlesql::LanguageOptions MakeLanguageOptions() {
-  ::googlesql::LanguageOptions language;
-  language.EnableMaximumLanguageFeatures();
-  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
-  language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
-  return language;
+  return catalog::MakeCatalogLanguageOptions();
 }
 
 class LocalCoordinatorEngineTest : public ::testing::Test {

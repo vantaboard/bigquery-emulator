@@ -59,10 +59,15 @@ bool ContainsSetKeyword(absl::string_view sql) {
 }
 
 bool NeedsAllStatements(const QueryRequest& request) {
+  const absl::string_view sql = absl::StripAsciiWhitespace(request.sql);
   return absl::StrContains(request.sql, "DECLARE") ||
          absl::StrContains(request.sql, "CALL ") ||
          absl::StrContains(request.sql, "BEGIN") ||
          absl::StrContains(request.sql, "CREATE CONSTANT") ||
+         absl::StartsWithIgnoreCase(sql, "CREATE FUNCTION") ||
+         absl::StartsWithIgnoreCase(sql, "CREATE OR REPLACE FUNCTION") ||
+         absl::StartsWithIgnoreCase(sql, "CREATE SNAPSHOT") ||
+         absl::StartsWithIgnoreCase(sql, "CREATE TABLE") ||
          ContainsSetKeyword(request.sql);
 }
 

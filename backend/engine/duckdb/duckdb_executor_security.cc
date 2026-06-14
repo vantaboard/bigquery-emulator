@@ -67,8 +67,8 @@ std::vector<OutputColumnMask> BuildOutputColumnMasks(
     if (const catalog::ColumnGovernanceRecord* gov =
             catalog::FindColumnGovernance(table_governance, column.name)) {
       mask.governance = *gov;
-      mask.mask = catalog::EffectiveColumnMask(
-          *gov, column.type, principal_email);
+      mask.mask =
+          catalog::EffectiveColumnMask(*gov, column.type, principal_email);
     }
     masks.push_back(std::move(mask));
   }
@@ -86,9 +86,10 @@ absl::Status ApplyOutputColumnMasks(absl::Span<const OutputColumnMask> masks,
   }
   for (size_t i = 0; i < masks.size(); ++i) {
     if (masks[i].mask == catalog::DataMaskKind::kNone) continue;
-    absl::Status masked = catalog::ApplyDataMask(
-        masks[i].mask, masks[i].governance, masks[i].column_type,
-        &row->cells[i]);
+    absl::Status masked = catalog::ApplyDataMask(masks[i].mask,
+                                                 masks[i].governance,
+                                                 masks[i].column_type,
+                                                 &row->cells[i]);
     if (!masked.ok()) return masked;
   }
   return absl::OkStatus();

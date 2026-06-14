@@ -18,8 +18,7 @@ bool AnalyticScanHasDateTimestampNumericRangeFrame(
     if (group == nullptr || group->order_by() == nullptr) continue;
     const ::googlesql::ResolvedWindowOrdering* order = group->order_by();
     if (order->order_by_item_list_size() == 0) continue;
-    const ::googlesql::ResolvedOrderByItem* item =
-        order->order_by_item_list(0);
+    const ::googlesql::ResolvedOrderByItem* item = order->order_by_item_list(0);
     if (item == nullptr || item->column_ref() == nullptr ||
         item->column_ref()->type() == nullptr) {
       continue;

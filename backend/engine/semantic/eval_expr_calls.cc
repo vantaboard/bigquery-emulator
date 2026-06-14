@@ -4,6 +4,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/udf_registry.h"
@@ -273,6 +274,26 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   return *result;
 }
 
+absl::StatusOr<Value> EvalWithSideEffects(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  if (call.argument_list_size() != 2) {
+    return absl::InvalidArgumentError(
+        "semantic: $with_side_effects expects exactly two arguments");
+  }
+  auto payload_or = EvalExpr(*call.argument_list(1), ctx);
+  if (!payload_or.ok()) return payload_or.status();
+  if (!payload_or->is_null()) {
+    if (payload_or->type() != nullptr && payload_or->type()->IsBytes()) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               absl::StrCat("semantic: deferred side effect: ",
+                                            payload_or->bytes_value()));
+    }
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: deferred side effect");
+  }
+  return EvalExpr(*call.argument_list(0), ctx);
+}
+
 absl::StatusOr<Value> EvalFunctionCall(
     const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
   if (call.function() == nullptr) {
@@ -285,13 +306,11 @@ absl::StatusOr<Value> EvalFunctionCall(
   }
   if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
           call.function_call_info();
-      info != nullptr && fn != nullptr &&
-      fn->GetGroup() ==
-          ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup) {
-    const auto* templated =
-        static_cast<const ::googlesql::TemplatedSQLFunctionCall*>(info.get());
-    if (templated->expr() != nullptr &&
-        catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
+      info != nullptr) {
+    if (const auto* templated =
+            dynamic_cast<const ::googlesql::TemplatedSQLFunctionCall*>(
+                info.get());
+        templated != nullptr && templated->expr() != nullptr) {
       return EvalSqlUdfBody(call, *templated->expr(), ctx);
     }
   }
@@ -329,6 +348,9 @@ absl::StatusOr<Value> EvalFunctionCall(
     return EvalJsUdfCall(*js_def, arg_values, call.type(), arg_types);
   }
   const std::string name = LowerFunctionDispatchName(call.function());
+  if (name == "$with_side_effects") {
+    return EvalWithSideEffects(call, ctx);
+  }
   if (name == "emu_format_t") {
     std::vector<Value> args;
     args.reserve(call.argument_list_size());

@@ -42,10 +42,8 @@ BuildExtendedCastEvaluator(const ::googlesql::ResolvedExtendedCast& ext) {
       return absl::InvalidArgumentError(
           "semantic: extended_cast element is null");
     }
-    auto evaluator_or =
-        ::googlesql::ConversionEvaluator::Create(elem->from_type(),
-                                                 elem->to_type(),
-                                                 elem->function());
+    auto evaluator_or = ::googlesql::ConversionEvaluator::Create(
+        elem->from_type(), elem->to_type(), elem->function());
     if (!evaluator_or.ok()) return evaluator_or.status();
     evaluators.push_back(*std::move(evaluator_or));
   }
@@ -88,11 +86,10 @@ absl::StatusOr<Value> EvalExtendedCast(const ::googlesql::ResolvedCast& cast,
   }
   if (IsUnsupportedExtendedCastTarget(target) ||
       (source != nullptr && IsUnsupportedExtendedCastTarget(source))) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        absl::StrCat("semantic: CAST extended_cast to ",
-                     target->DebugString(),
-                     " is unsupported locally"));
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             absl::StrCat("semantic: CAST extended_cast to ",
+                                          target->DebugString(),
+                                          " is unsupported locally"));
   }
 
   auto evaluator_or = BuildExtendedCastEvaluator(*ext);

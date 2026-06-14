@@ -97,8 +97,7 @@ absl::StatusOr<std::string> ParseQuotedJsBody(absl::string_view ddl) {
   ddl.remove_prefix(1);
   std::string body;
   body.reserve(ddl.size());
-  const bool triple =
-      ddl.size() >= 2 && ddl[0] == quote && ddl[1] == quote;
+  const bool triple = ddl.size() >= 2 && ddl[0] == quote && ddl[1] == quote;
   if (triple) {
     ddl.remove_prefix(2);
     const std::string end = std::string(3, quote);
@@ -185,9 +184,9 @@ absl::StatusOr<JsUdfDefinition> ParseJsUdfFromDdlImpl(absl::string_view ddl) {
   def.return_type_kind = ::googlesql::TYPE_UNKNOWN;
 
   const size_t open_paren = upper.find('(');
-  const size_t close_paren =
-      open_paren == std::string::npos ? std::string::npos
-                                      : upper.find(')', open_paren);
+  const size_t close_paren = open_paren == std::string::npos
+                                 ? std::string::npos
+                                 : upper.find(')', open_paren);
   if (open_paren != std::string::npos && close_paren != std::string::npos &&
       close_paren > open_paren) {
     const absl::string_view args =
@@ -198,10 +197,9 @@ absl::StatusOr<JsUdfDefinition> ParseJsUdfFromDdlImpl(absl::string_view ddl) {
       const size_t space = part.find_first_of(" \t\r\n");
       const absl::string_view name =
           space == absl::string_view::npos ? part : part.substr(0, space);
-      const absl::string_view rest =
-          space == absl::string_view::npos
-              ? absl::string_view()
-              : SkipWhitespace(part.substr(space));
+      const absl::string_view rest = space == absl::string_view::npos
+                                         ? absl::string_view()
+                                         : SkipWhitespace(part.substr(space));
       def.arg_names.emplace_back(name);
       def.arg_type_kinds.push_back(ParseTypeKindToken(rest));
     }
@@ -212,9 +210,9 @@ absl::StatusOr<JsUdfDefinition> ParseJsUdfFromDdlImpl(absl::string_view ddl) {
     const absl::string_view after_returns =
         SkipWhitespace(ddl.substr(returns_pos + 7));
     const size_t space = after_returns.find_first_of(" \t\r\n");
-    const absl::string_view type_token =
-        space == absl::string_view::npos ? after_returns
-                                         : after_returns.substr(0, space);
+    const absl::string_view type_token = space == absl::string_view::npos
+                                             ? after_returns
+                                             : after_returns.substr(0, space);
     def.return_type_kind = ParseTypeKindToken(type_token);
   }
   return def;
@@ -271,8 +269,7 @@ absl::StatusOr<JsUdfDefinition> ParseJsUdfFromDdl(absl::string_view ddl_sql) {
   return ParseJsUdfFromDdlImpl(ddl_sql);
 }
 
-void DropProjectJsUdf(absl::string_view project_id,
-                      absl::string_view fn_name) {
+void DropProjectJsUdf(absl::string_view project_id, absl::string_view fn_name) {
   if (project_id.empty() || fn_name.empty()) return;
   absl::MutexLock lock(&mu);
   auto pit = by_project.find(std::string(project_id));

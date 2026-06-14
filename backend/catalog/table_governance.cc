@@ -1,5 +1,7 @@
 #include "backend/catalog/table_governance.h"
 
+#include <openssl/sha.h>
+
 #include <cstdint>
 #include <string>
 
@@ -10,7 +12,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
-#include <openssl/sha.h>
 
 namespace bigquery_emulator {
 namespace backend {
@@ -32,7 +33,8 @@ bool GranteeMatchesPrincipal(absl::string_view grantee,
 
 std::string Sha256Hex(absl::string_view input) {
   unsigned char digest[SHA256_DIGEST_LENGTH];
-  SHA256(reinterpret_cast<const unsigned char*>(input.data()), input.size(),
+  SHA256(reinterpret_cast<const unsigned char*>(input.data()),
+         input.size(),
          digest);
   static const char kHex[] = "0123456789abcdef";
   std::string out;
@@ -109,7 +111,11 @@ DataMaskKind EffectiveColumnMask(const ColumnGovernanceRecord& column,
   if (column.policy_tags.empty() && column.mask_kind == DataMaskKind::kNone) {
     return DataMaskKind::kNone;
   }
-  if (GranteesIncludePrincipal(column.mask_grantees, principal_email)) {
+  // Empty mask_grantees means no principal is exempt from the column mask.
+  const bool exempt =
+      !column.mask_grantees.empty() &&
+      GranteesIncludePrincipal(column.mask_grantees, principal_email);
+  if (exempt) {
     return DataMaskKind::kNone;
   }
   if (column.mask_kind != DataMaskKind::kNone) {

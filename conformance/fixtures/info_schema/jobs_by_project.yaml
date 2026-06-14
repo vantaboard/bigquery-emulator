@@ -12,7 +12,7 @@ setup:
   - sql: SELECT 1 AS x
 query: |
   SELECT job_type, state, statement_type, project_id
-  FROM `region-us`.INFORMATION_SCHEMA.JOBS_BY_PROJECT
+  FROM `region-us`.`INFORMATION_SCHEMA.JOBS_BY_PROJECT`
   WHERE project_id = 'proj-info-schema-jobs'
     AND statement_type = 'SELECT'
   ORDER BY creation_time DESC

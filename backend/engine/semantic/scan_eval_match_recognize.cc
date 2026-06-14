@@ -159,7 +159,7 @@ void SortRowsByOrderBy(const ::googlesql::ResolvedWindowOrdering* order_by,
 absl::StatusOr<std::vector<bool>> EvalPatternVariableRow(
     const ::googlesql::ResolvedMatchRecognizeScan& scan,
     const ColumnBindings& row,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<bool> predicate_vals;
   predicate_vals.reserve(scan.pattern_variable_definition_list_size());
   absl::flat_hash_map<std::string, ::googlesql::Value> by_name;
@@ -312,6 +312,18 @@ absl::StatusOr<ColumnBindings> EvalMatchMeasures(
       return absl::InternalError(
           "semantic: MATCH_RECOGNIZE match has no rows for output");
     }
+    if (col_id == match_number_id) {
+      out_row.emplace(col_id, Value::Int64(contexts.front().match_id));
+      continue;
+    }
+    if (col_id == match_row_number_id) {
+      out_row.emplace(col_id, Value::Int64(contexts.front().match_row_number));
+      continue;
+    }
+    if (col_id == classifier_id) {
+      out_row.emplace(col_id, Value::String(contexts.front().classifier));
+      continue;
+    }
     auto it = contexts.front().row.find(col_id);
     if (it == contexts.front().row.end()) {
       return MakeSemanticError(
@@ -328,7 +340,7 @@ absl::StatusOr<ColumnBindings> EvalMatchMeasures(
 absl::StatusOr<std::vector<Match>> RunPartitionMatching(
     const ::googlesql::ResolvedMatchRecognizeScan& scan,
     const std::vector<ColumnBindings>& partition_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   auto pattern_or = CompiledPattern::Create(scan, PatternOptions{});
   if (!pattern_or.ok()) {
     return pattern_or.status();

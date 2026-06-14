@@ -65,6 +65,13 @@ void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
                                 int n_arrays,
                                 ColumnBindings& bindings);
 
+// The analyzer attaches internal `$...` columns to `column_list` for
+// shapes like `LIKE ANY (<literal list>)` over an UNNEST input. They are
+// not element/offset bindings; default them so correlated subquery eval
+// can resolve `ResolvedColumnRef`s without failing row lookup.
+void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
+                                    ColumnBindings& bindings);
+
 }  // namespace array_struct
 }  // namespace semantic
 }  // namespace engine

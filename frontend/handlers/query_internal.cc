@@ -53,6 +53,9 @@ namespace internal {
     case absl::StatusCode::kFailedPrecondition:
       code = ::grpc::StatusCode::FAILED_PRECONDITION;
       break;
+    case absl::StatusCode::kPermissionDenied:
+      code = ::grpc::StatusCode::PERMISSION_DENIED;
+      break;
     case absl::StatusCode::kUnimplemented:
       code = ::grpc::StatusCode::UNIMPLEMENTED;
       break;
@@ -76,7 +79,15 @@ namespace internal {
 // BigQuery itself enables everything), strict resolution mode.
 ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   ::googlesql::LanguageOptions language;
-  language.EnableMaximumLanguageFeatures();
+  language.EnableMaximumLanguageFeaturesForDevelopment();
+  language.EnableLanguageFeature(::googlesql::FEATURE_WITH_EXPRESSION);
+  language.EnableLanguageFeature(::googlesql::FEATURE_MATCH_RECOGNIZE);
+  language.EnableLanguageFeature(
+      ::googlesql::FEATURE_STRATIFIED_RESERVOIR_TABLESAMPLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_KLL_WEIGHTS);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_TABLE_CLONE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
+  language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   // Without this opt-in the analyzer rejects every non-SELECT

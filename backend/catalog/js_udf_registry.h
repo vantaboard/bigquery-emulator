@@ -48,8 +48,7 @@ const JsUdfDefinition* LookupProjectJsUdf(absl::string_view project_id,
 absl::StatusOr<JsUdfDefinition> ParseJsUdfFromDdl(absl::string_view ddl_sql);
 
 // Removes JS UDF metadata; no-op when absent.
-void DropProjectJsUdf(absl::string_view project_id,
-                       absl::string_view fn_name);
+void DropProjectJsUdf(absl::string_view project_id, absl::string_view fn_name);
 
 }  // namespace catalog
 }  // namespace backend

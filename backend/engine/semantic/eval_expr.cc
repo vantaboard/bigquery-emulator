@@ -44,6 +44,30 @@ using eval_expr_internal::ToDouble;
 absl::StatusOr<Value> EvalSubqueryExpr(
     const ::googlesql::ResolvedSubqueryExpr& node, const EvalContext& ctx);
 
+namespace {
+
+absl::StatusOr<Value> DefaultInternalAnalyzerColumn(
+    const ::googlesql::ResolvedColumn& col) {
+  const absl::string_view name = col.name();
+  if (name.empty() || name[0] != '$') {
+    return absl::NotFoundError("not an internal analyzer column");
+  }
+  if (name == "$side_effects") {
+    const ::googlesql::Type* type = col.type();
+    if (type != nullptr && type->kind() == ::googlesql::TYPE_BYTES) {
+      return Value::NullBytes();
+    }
+    return Value::Null(type);
+  }
+  const ::googlesql::Type* type = col.type();
+  if (type != nullptr && type->kind() == ::googlesql::TYPE_BOOL) {
+    return Value::Bool(false);
+  }
+  return Value::Null(type);
+}
+
+}  // namespace
+
 absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                                const EvalContext& ctx) {
   switch (expr.node_kind()) {
@@ -215,6 +239,10 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
             return name_it->second;
           }
         }
+        if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
+            internal.ok()) {
+          return *std::move(internal);
+        }
         return MakeSemanticError(
             SemanticErrorReason::kNotImplemented,
             absl::StrCat("semantic: ResolvedColumnRef '",
@@ -231,6 +259,10 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
           if (name_it != ctx.columns_by_name->end()) {
             return name_it->second;
           }
+        }
+        if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
+            internal.ok()) {
+          return *std::move(internal);
         }
         return MakeSemanticError(
             SemanticErrorReason::kInvalidArgument,

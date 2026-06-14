@@ -1,5 +1,3 @@
-#include "backend/engine/control/control_op_internal.h"
-
 #include <memory>
 #include <optional>
 #include <string>
@@ -11,6 +9,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/duckdb/duckdb_executor_time_travel.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -63,10 +62,10 @@ absl::StatusOr<const catalog::StorageTable*> StorageTableFromScan(
   const auto* storage_table =
       dynamic_cast<const catalog::StorageTable*>(table_scan->table());
   if (storage_table == nullptr) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "control op executor: clone source '",
-        table_scan->table()->Name(),
-        "' is not a storage-backed table"));
+    return absl::FailedPreconditionError(
+        absl::StrCat("control op executor: clone source '",
+                     table_scan->table()->Name(),
+                     "' is not a storage-backed table"));
   }
   return storage_table;
 }
@@ -81,16 +80,15 @@ absl::Status MaterializeCloneIntoTarget(
       storage.GetSchema(source.storage_table_id());
   if (!bq_schema.ok()) return bq_schema.status();
 
-  if (create_mode ==
-      ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
+  if (create_mode == ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
     absl::Status dropped = storage.DropTable(target);
     if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
       return dropped;
     }
   }
 
-  absl::Status created = ApplyCreateMode(
-      storage.CreateTable(target, *bq_schema), create_mode);
+  absl::Status created =
+      ApplyCreateMode(storage.CreateTable(target, *bq_schema), create_mode);
   if (!created.ok()) return created;
 
   ::duckdb_database db = nullptr;
@@ -101,8 +99,7 @@ absl::Status MaterializeCloneIntoTarget(
   ::duckdb_connection conn = nullptr;
   if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "control op executor: duckdb_connect failed");
+    return absl::InternalError("control op executor: duckdb_connect failed");
   }
 
   absl::Status attach = AttachStorageTableAt(
@@ -141,8 +138,7 @@ absl::Status MaterializeCloneIntoExistingTarget(
   ::duckdb_connection conn = nullptr;
   if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "control op executor: duckdb_connect failed");
+    return absl::InternalError("control op executor: duckdb_connect failed");
   }
 
   absl::Status attach = AttachStorageTableAt(
@@ -193,8 +189,8 @@ absl::Status RunCreateTableClone(
   absl::StatusOr<std::optional<std::int64_t>> as_of_ms =
       AsOfMsFromScan(stmt->clone_from());
   if (!as_of_ms.ok()) return as_of_ms.status();
-  return MaterializeCloneIntoTarget(storage, *target, **source, *as_of_ms,
-                                    stmt->create_mode());
+  return MaterializeCloneIntoTarget(
+      storage, *target, **source, *as_of_ms, stmt->create_mode());
 }
 
 absl::Status RunCreateSnapshotTable(
@@ -224,15 +220,14 @@ absl::Status RunCreateSnapshotTable(
   absl::StatusOr<std::optional<std::int64_t>> as_of_ms =
       AsOfMsFromScan(stmt->clone_from());
   if (!as_of_ms.ok()) return as_of_ms.status();
-  return MaterializeCloneIntoTarget(storage, *target, **source, *as_of_ms,
-                                    stmt->create_mode());
+  return MaterializeCloneIntoTarget(
+      storage, *target, **source, *as_of_ms, stmt->create_mode());
 }
 
-absl::Status RunCloneData(
-    storage::Storage& storage,
-    absl::string_view project_id,
-    absl::string_view default_dataset_id,
-    const ::googlesql::ResolvedCloneDataStmt* stmt) {
+absl::Status RunCloneData(storage::Storage& storage,
+                          absl::string_view project_id,
+                          absl::string_view default_dataset_id,
+                          const ::googlesql::ResolvedCloneDataStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: CLONE DATA has null stmt");
@@ -261,27 +256,23 @@ absl::Status RunCloneData(
   (void)project_id;
   (void)default_dataset_id;
   return MaterializeCloneIntoExistingTarget(
-      storage,
-      target_storage->storage_table_id(),
-      **source,
-      *as_of_ms);
+      storage, target_storage->storage_table_id(), **source, *as_of_ms);
 }
 
-absl::Status RunUndrop(
-    storage::Storage& storage,
-    absl::string_view project_id,
-    absl::string_view default_dataset_id,
-    const ::googlesql::ResolvedUndropStmt* stmt) {
+absl::Status RunUndrop(storage::Storage& storage,
+                       absl::string_view project_id,
+                       absl::string_view default_dataset_id,
+                       const ::googlesql::ResolvedUndropStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: UNDROP has null stmt");
   }
   const absl::string_view kind = stmt->schema_object_kind();
   if (kind != "TABLE" && kind != "SCHEMA") {
-    return absl::UnimplementedError(absl::StrCat(
-        "control op executor: UNDROP ",
-        kind,
-        " is not implemented (TABLE and SCHEMA only)"));
+    return absl::UnimplementedError(
+        absl::StrCat("control op executor: UNDROP ",
+                     kind,
+                     " is not implemented (TABLE and SCHEMA only)"));
   }
   if (kind == "SCHEMA") {
     return absl::UnimplementedError(
