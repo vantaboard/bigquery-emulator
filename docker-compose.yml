@@ -57,6 +57,11 @@ services:
         # missing pair drops back to the source fallback.
         GOOGLESQL_PREBUILT_URL: ${GOOGLESQL_PREBUILT_URL:-}
         GOOGLESQL_PREBUILT_SHA256: ${GOOGLESQL_PREBUILT_SHA256:-}
+        # Lift host-built bin/emulator_main + bin/libduckdb.so instead of
+        # compiling inside the container (CI thirdparty + release path).
+        # Local thirdparty sets prebuilt via ensure_emulator_image_fresh.sh;
+        # default bazel keeps docker:smoke / quickstart self-contained.
+        ENGINE_SOURCE: ${ENGINE_SOURCE:-bazel}
     ports:
       - "9050:9050"
       - "9060:9060"

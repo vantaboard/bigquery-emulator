@@ -87,10 +87,13 @@ build_image() {
 	if [ "${THIRDPARTY_FORCE_PULL:-0}" = "1" ]; then
 		args+=(--pull)
 	fi
-	# Default Docker/thirdparty builds to the release.yml prebuilt pin
-	# when GOOGLESQL_PREBUILT_* are unset — source-mode fallback needs
-	# extra googlesql patches and is much slower.
+	engine_source="${ENGINE_SOURCE:-prebuilt}"
+	if [ "$engine_source" = "prebuilt" ]; then
+		bash "${root}/scripts/ensure_emulator_engine_staged.sh"
+	fi
 	eval "$(bash "${root}/scripts/load_googlesql_prebuilt_pin.sh")"
+	export ENGINE_SOURCE="$engine_source"
+	log "ENGINE_SOURCE=${ENGINE_SOURCE}"
 	# `docker compose build` honors the build args declared in
 	# docker-compose.yml; the caller's BAZEL_JOBS / BAZEL_MEM_MB /
 	# GOOGLESQL_PREBUILT_URL / GOOGLESQL_PREBUILT_SHA256 are picked
