@@ -56,11 +56,11 @@ Parent index + landed status: [full-00-index.plan.md](full-00-index.plan.md).
 ## NEXT (update after every unit)
 
 ```
-NEXT UNIT:     carryover-02-storage-write  (or wave2-03 if skipping carryover)
-CONFORMANCE:   175/175 (baseline before this session's first unit)
-LAST COMMIT:   b1e9e88 (wildcard tables; verify with git log -1)
-BLOCKERS:      none
-WAVE:          carryover → wave 2
+NEXT UNIT:     (wave complete — triage remaining conformance follow-ups)
+CONFORMANCE:   ~178/190 YAML pass; 85/85 googlesql-corpus pinned (de46027)
+LAST COMMIT:   de46027 (waves 2–4 carryover; verify with git log -1)
+BLOCKERS:      12 new conformance fixtures need follow-up / bq validation
+WAVE:          complete (see full-00-index status table)
 ```
 
 When starting a session, read **only** this block + the linked sub-plan for

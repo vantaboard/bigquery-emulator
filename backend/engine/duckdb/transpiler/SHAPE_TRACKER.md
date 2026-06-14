@@ -295,21 +295,28 @@ semantic-executor / control-op code) so the doc stays honest.
   ROWS, inline lambdas, NET/HLL/approximate aggregates), and the
   Storage Read/Write API completion. The parity 01–13 plan set under
   `.cursor/plans/parity-*` tracked that work.
-* **Next plan(s):** the remaining gaps toward a fuller BigQuery
-  surface are tracked under `.cursor/plans/full-*` (see
-  `.cursor/plans/full-00-index.plan.md`): `MATCH_RECOGNIZE`
-  (`status=planned`), the broader GEOGRAPHY/GIS surface beyond the
-  landed MVP (`ST_GEOGFROMWKB` and friends still `unsupported`), the
-  deferred `INFORMATION_SCHEMA.JOBS*` views (job state lives in the
-  gateway — see `docs/ENGINE_POLICY.md`), and the remaining
-  `(planned)` AST shapes (`ResolvedUpdateConstructor`,
-  `ResolvedRelationArgumentScan`, `ResolvedCatalogColumnRef`, MERGE
-  `THEN RETURN`). **Landed in full-01..10:** core `INFORMATION_SCHEMA`
-  catalog views, NUMERIC/BIGNUMERIC exact-decimal routing, wildcard
-  tables + `_TABLE_SUFFIX`, `FOR SYSTEM_TIME AS OF` / snapshot clone /
-  `UNDROP`, `LANGUAGE js` scalar UDF call-time execution, row-access
-  policies + column-level masking, and the conformance fixtures that
-  pin each family.
+* **Next gaps (post full-* second wave):** the `(planned)` AST rows
+  that still surface `UNIMPLEMENTED` until handlers land:
+  `ResolvedUpdateConstructor`, `ResolvedRelationArgumentScan`,
+  `ResolvedCatalogColumnRef`, `ResolvedDeferredComputedColumn`, and
+  MERGE `THEN RETURN` (blocked on googlesql pinning
+  `ResolvedMergeStmt::returning()`). The broader `ST_*` GIS surface
+  beyond the MVP (`ST_GEOGFROMWKB`, aggregates, buffer/simplify family,
+  ...) stays `unsupported`. Incremental conformance follow-ups (new
+  fixtures landing with waves 2–4) may still be triaged against
+  production BigQuery via the `bq` CLI rule
+  (`.cursor/rules/conformance-bq-validation.mdc`).
+* **Landed in the full-01..11 second-wave set:** core
+  `INFORMATION_SCHEMA` catalog views (engine-resolved; `JOBS` /
+  `JOBS_BY_PROJECT` gateway-rewritten), NUMERIC/BIGNUMERIC
+  exact-decimal routing, wildcard tables + `_TABLE_SUFFIX` pruning,
+  `FOR SYSTEM_TIME AS OF` / snapshot clone / `UNDROP`, scalar JS UDF
+  call-time execution (Duktape), GIS MVP, row-access policies +
+  column-level masking, `MATCH_RECOGNIZE`, scalar/relational long tail
+  (weighted/stratified `TABLESAMPLE`, DATE/TIMESTAMP window `RANGE`,
+  extended casts), REST/JOBS surface companion work, ManagedWriter
+  DefaultStream decimal matrix, and the widened GoogleSQL `.test` corpus
+  lane (85 pinned cases).
 * **Promotion policy.** Promoting a row to a non-`unsupported` route
   requires (a) an `Emit*` (or semantic-executor / control-op handler)
   that lowers / executes the shape cleanly, and (b) the conformance

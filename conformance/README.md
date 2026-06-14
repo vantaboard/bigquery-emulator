@@ -4,10 +4,12 @@ The conformance harness drives the BigQuery emulator through its REST
 gateway with declarative YAML fixtures and diffs the resulting rows (or
 errors) against the values pinned in each file. The harness is the
 conformance-harness capability area of `ROADMAP.md`; it consists of
-the runner CLI (`conformance/cmd/runner`) plus the seed fixture set
+the runner CLI (`conformance/cmd/runner`) plus the fixture set
 under `conformance/fixtures/`. At time of writing the directory contains
-**24 fixtures** spanning SELECT shapes, GROUP BY / aggregates, JOINs,
-DML, structural errors, DDL, and a schema-only smoke check; see the
+**190+ YAML fixtures** spanning SELECT shapes, GROUP BY / aggregates,
+JOINs, CTEs / subqueries, DML / DDL round-trips, functions, scripting /
+UDFs, time travel, wildcard tables, GIS, security, `MATCH_RECOGNIZE`,
+`INFORMATION_SCHEMA`, structural errors, and schema-only smokes; see the
 "Contributing a new fixture" section below to add more.
 
 > **Sibling lanes:** [`third_party/`](../third_party/README.md) hosts
@@ -368,11 +370,18 @@ diff of expected vs actual.
 ## Contributing a new fixture
 
 This section walks through the end-to-end workflow for adding one
-new fixture. The seed set already covers the broad categories
-(SELECT shapes, GROUP BY / aggregates, JOINs, DML, structural
-errors, DDL, schema-only); a new fixture is justified when it pins
-a *new* construct or a *new* failure mode the existing set does not
-already exercise.
+new fixture. The fixture set already covers the broad categories
+(SELECT shapes, GROUP BY / aggregates, JOINs, CTEs / subqueries, DML,
+scripting / UDFs, time travel, wildcard tables, GIS, security,
+`MATCH_RECOGNIZE`, `INFORMATION_SCHEMA`, structural errors, DDL,
+schema-only); a new fixture is justified when it pins a *new* construct
+or a *new* failure mode the existing set does not already exercise.
+
+When a fixture's query misbehaves in the emulator, validate the SQL
+against production BigQuery with `bq query` before assuming an emulator
+bug: a `bq` error means fix the fixture SQL; `bq` success means use
+the `bq` output as expected (see
+[`.cursor/rules/conformance-bq-validation.mdc`](../.cursor/rules/conformance-bq-validation.mdc)).
 
 ### 1. Pick a category and name
 
@@ -387,6 +396,10 @@ use (skim the existing files before naming):
 | `groupby_` | `groupby_count`, `groupby_having` |
 | `join_` | `join_inner`, `join_left_outer` |
 | `ddl_` | `ddl_drop_table_then_select` |
+| `time_travel/` | `snapshot_clone_round_trip`, `decorator_relative` |
+| `wildcard/` | `wildcard_union`, `wildcard_suffix_filter` |
+| `security/` | `row_access_filtered_select`, `masked_column_select` |
+| `udf/` | `js_scalar_add`, `drop_function` |
 | `error_` | `error_invalid_sql`, `error_unknown_table`, `error_type_mismatch` |
 
 The `name:` field inside the YAML **must** match the filename
@@ -399,7 +412,7 @@ Start from a similar existing fixture and adapt it. The shape is
 documented under "Fixture schema" above; key choices to make:
 
 - **`profiles:`** -- omit unless you need to single-target a future
-  profile. Today the default profile set is `[duckdb]`.
+  profile. Today the default profile set is `[local]`.
 - **`setup:`** -- only the catalog state the fixture *needs*. A
   SELECT fixture that doesn't read any tables can omit `setup:`
   entirely (see `select_literal_value.yaml`).

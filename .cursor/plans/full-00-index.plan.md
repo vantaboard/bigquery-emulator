@@ -75,7 +75,7 @@ are independent. Everything else is logically independent.
 ## Dispatch (serialized engine lane)
 
 - **Wave 1 (complete):** [full-dispatch.plan.md](full-dispatch.plan.md)
-- **Waves 2–4 + carryover backlog:** [full-continue.plan.md](full-continue.plan.md) — **live runbook; start here**
+- **Waves 2–4 + carryover backlog (complete):** [full-continue.plan.md](full-continue.plan.md) — landed in de46027; remaining work is `(planned)` AST rows, broader GIS, and conformance follow-ups
 
 Constraints (bazel single-invocation, hot files, process hygiene) are documented in
 full-dispatch (the `full-*` analog of [parity-dispatch.plan.md](parity-dispatch.plan.md)).
@@ -111,17 +111,17 @@ template in full-dispatch for remaining work).
 
 | Plan | State | Conformance delta | Commits | Notes |
 |------|-------|-------------------|---------|-------|
-| 01 | done (JOBS* deferred to 10) | 161→168 pass (+7 fixtures) | c2757d5 | VIEWS/ROUTINES/TABLE_OPTIONS/COLUMN_FIELD_PATHS/PARTITIONS/TABLE_STORAGE/KEY_COLUMN_USAGE; table-driven view descriptor; region-* selector. JOBS/JOBS_BY_PROJECT left NOT_FOUND (job state lives in gateway) — companion to plan 10 |
-| 02 | done (carryover: storage write) | 168→170 pass (+2 fixtures) | 601de83, 7078290, a613650, d0ee6e8, dfc54d9 | Exact-decimal path + routing; NUMERIC aggregate skip removed. **Pending:** ManagedWriter DefaultStream / full proto type matrix (see full-continue carryover-02) |
-| 03 | pending | — | | Next engine plan after carryover (full-continue) |
-| 04 | done (carryover: suffix prune opt) | 172→175 pass (+3 fixtures) | b1e9e88 | WildcardTable union + _TABLE_SUFFIX + NULL-pad; dbt wildcard skip removed |
-| 05 | pending | — | | |
-| 06 | pending | — | | |
-| 07 | pending | — | | |
-| 08 | pending | — | | |
-| 09 | pending | — | | |
-| 10 | pending | — | | |
-| 11 | partial (authoring done) | corpus 55→85 pinned (gate 85/0/56) | aacdf38 | arithmetic/math/cast_format/regexp .test files vendored + CI documented; ROADMAP count fixed. skip-matrix-audit + fixture-route-backfill deferred until full-01..10 land; string/date families blocked on scalar-only runner parser |
+| 01 | done | 161→168 pass (+7 fixtures) | c2757d5 | VIEWS/ROUTINES/TABLE_OPTIONS/COLUMN_FIELD_PATHS/PARTITIONS/TABLE_STORAGE/KEY_COLUMN_USAGE; table-driven view descriptor; region-* selector. `JOBS`/`JOBS_BY_PROJECT` gateway-rewritten in plan 10 |
+| 02 | done | 168→170 pass (+2 fixtures) | 601de83, 7078290, a613650, d0ee6e8, dfc54d9 | Exact-decimal path + routing; NUMERIC aggregate skip removed; ManagedWriter DefaultStream decimal matrix closed in full-continue carryover |
+| 03 | done | — | de46027 | `FOR SYSTEM_TIME AS OF`, decorators, snapshot clone, `UNDROP`; fixtures under `conformance/fixtures/time_travel/` |
+| 04 | done | 172→175 pass (+3 fixtures) | b1e9e88 | WildcardTable union + `_TABLE_SUFFIX` + NULL-pad; suffix prune optimization in carryover |
+| 05 | done | — | de46027 | Scalar JS UDF call-time via Duktape; dbt `functions/test_js` unskipped |
+| 06 | done | — | de46027 | GIS MVP on semantic executor; geography skip rows trimmed |
+| 07 | done | — | de46027 | Row-access policies + column masking; fixtures under `conformance/fixtures/security/` |
+| 08 | done | — | de46027 | `MATCH_RECOGNIZE` + remaining planned AST promotions where landed |
+| 09 | done | — | de46027 | Scalar/relational long tail (TABLESAMPLE, window RANGE on dates, extended casts, …) |
+| 10 | done | — | de46027 | REST/JOBS surface companion (`INFORMATION_SCHEMA.JOBS*`, jobs.list filters, resumable upload pieces) |
+| 11 | done (execution partial) | corpus 55→85 pinned; ~178/190 YAML pass | aacdf38, de46027 | Corpus vendored + CI documented; skip-matrix incremental audit done; 12 new fixtures still need follow-up per de46027 |
 
 ## Bookkeeping per landed plan
 

@@ -2,6 +2,9 @@
 
 Guides for running, developing, and extending the BigQuery emulator.
 
+**Published site:** [vantaboard.github.io/bigquery-emulator](https://vantaboard.github.io/bigquery-emulator/)
+(built from this directory with MkDocs Material; see [`mkdocs.yml`](../mkdocs.yml)).
+
 ## Getting started
 
 | Guide | Contents |

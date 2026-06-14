@@ -27,10 +27,10 @@ BigQuery REST API.
 > evaluation, and storage/catalog handlers for DDL and metadata
 > operations. Results land back as REST `f`/`v` JSON or, on the
 > internal gRPC Storage Read API, as native Arrow batches.
-> DDL (`CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`) and
-> DML (`INSERT` — including `INSERT ... SELECT` — `UPDATE`, `DELETE`,
-> `MERGE`) execute locally; a few harder DML branches (e.g. deep
-> STRUCT updates) still surface `UNIMPLEMENTED`.
+> DDL (`CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, …) and
+> DML (`INSERT`, `UPDATE`, `DELETE`, `MERGE`, pipe INSERT, deep-STRUCT
+> `UPDATE`, `THEN RETURN`) execute locally; a few harder branches (e.g.
+> MERGE `THEN RETURN`) still surface `UNIMPLEMENTED`.
 > See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
 > narrative and the [documentation site](https://vantaboard.github.io/bigquery-emulator/)
 > (or [`docs/README.md`](./docs/README.md)) for the full guide index.

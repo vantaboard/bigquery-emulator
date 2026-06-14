@@ -30,6 +30,7 @@ Active work to green the ported **query port suite** is tracked via:
 - [`scripts/query_port_failures.sh`](scripts/query_port_failures.sh) — classify failures from gateway e2e test results
 - [`taskfiles/thirdparty.yml`](taskfiles/thirdparty.yml) — third-party Java sample parity tasks
 - Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document, and disposition YAML headers
+- The **full-01..11 second-wave parity set** (`.cursor/plans/full-00-index.plan.md`) — landed on the branch ahead of `main` as of 2026-06; remaining follow-ups are `(planned)` AST rows, broader GIS, and incremental conformance triage
 
 Route vocabulary, foundation prerequisites, and engine-wide done criteria live in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
 
@@ -333,10 +334,10 @@ behind each, and the multi-strategy coordinator is the only
   using the route-aware status vocabulary
   (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`,
   `semantic_executor`, `control_op`, `local_stub`, `unsupported`)
-- 🟡 Local execution router behind `backend/engine/engine.h`: dispatches
+- ✅ Local execution router behind `backend/engine/engine.h`: dispatches
   each query to the strategy that fits its resolved-AST shape. Policy
   is documented in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md);
-  shapes not yet implemented surface `UNIMPLEMENTED`.
+  shapes with no planned route surface `UNIMPLEMENTED`.
 - ✅ Local semantic executor (`backend/engine/semantic/`) — DML,
   scripting, SQL UDF/UDAF/TVF evaluation, array/struct scans,
   function stubs
@@ -385,7 +386,10 @@ handler.
 - ✅ Type lowering: BigQuery / GoogleSQL types -> DuckDB types
   (`INT64`, `FLOAT64`, `STRING`, `BYTES`, `BOOL`, `DATE`, `TIMESTAMP`,
   `NUMERIC`, `BIGNUMERIC`, `JSON`, `INTERVAL`, `UUID`, `ARRAY<T>`,
-  `STRUCT<...>`). `GEOGRAPHY` is `kSkiplist` until a GIS pass lands
+  `STRUCT<...>`). `GEOGRAPHY` persists as `VARCHAR` in DuckDB storage;
+  the GIS MVP (`ST_GEOGPOINT`, `ST_GEOGFROMTEXT`, `ST_ASTEXT`,
+  `ST_DISTANCE`, `ST_WITHIN`, `ST_CONTAINS`, `ST_INTERSECTS`) evaluates
+  on the semantic executor; remaining `ST_*` stay `unsupported`
 - ✅ STRUCT handling: BQ struct literals + field access lower to
   DuckDB STRUCTs (`{'a': 1}`, `s."a"`); anonymous STRUCT fields
   synthesize positional names (`_0`, `_1`, ...) on both the
@@ -471,9 +475,11 @@ public-facing policy.
 | `local_stub`         | Specialized feature accepted at parse / analyzer but evaluated against a deterministic BigQuery-shaped placeholder (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `CREATE MODEL`) so client-library startup probes succeed. | [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) |
 | `unsupported`        | Deliberately out of scope locally. Surfaces a BigQuery-shaped `UNIMPLEMENTED` error naming the family + linking to `docs/ENGINE_POLICY.md`. | [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) |
 
-- 🟡 Route classifier behind `Engine::Analyze` /
+- ✅ Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`
 - 🟡 Per-shape dispositions recorded in the shape tracker
+  (the seven-route vocabulary is landed; individual AST /
+  function rows still promote as shapes close)
 - 🟢 Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
   The conformance routing matrix added the
@@ -482,9 +488,9 @@ public-facing policy.
   so only local-loopback callers see it), extended the
   conformance fixture schema with `expected.route` /
   `route_strict` / `route_allowlist`, backfilled every
-  fixture under `conformance/fixtures/` (91/91), and added
-  `task conformance:routing-matrix` for a reviewable
-  Markdown snapshot of every shape's route. The
+  fixture under `conformance/fixtures/` (191 YAML files),
+  and added `task conformance:routing-matrix` for a
+  reviewable Markdown snapshot of every shape's route. The
   `conformance.yml` CI workflow uploads the matrix as a
   non-blocking artifact.
 - 🟡 CTE / subquery routing. Non-recursive CTEs
@@ -506,7 +512,9 @@ public-facing policy.
   `conformance/fixtures/sample/sample_repeatable_seed.yaml`). Weighted /
   stratified `TABLESAMPLE` and DATE/TIMESTAMP `RANGE` frames with numeric
   offsets evaluate on the semantic executor (`sample_weighted_percent.yaml`,
-  `sample_stratified_percent.yaml`, `window_frame_range_date.yaml`)
+  `sample_stratified_percent.yaml`, `window_frame_range_date.yaml`).
+  `MATCH_RECOGNIZE` evaluates on the semantic executor
+  (`conformance/fixtures/advanced_relational/match_recognize_pattern_ab.yaml`)
 - 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
   `CAST ... AT TIME ZONE` promote to the semantic executor
   (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);
@@ -555,9 +563,14 @@ public-facing policy.
   `CREATE VIEW` registers in the per-project view registry and replays
   into each query catalog (`sys_calendar` bqutils fixture promoted).
   `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
-  the UDF registry (next bullet). Cloud-storage `gs://` URIs for
-  `EXPORT DATA` / `LOAD DATA` remain unsupported per
-  `docs/ENGINE_POLICY.md`.
+  the UDF registry (next bullet). `FOR SYSTEM_TIME AS OF` table
+  decorators, snapshot clone, and `UNDROP TABLE` route through
+  control ops (`control_op_time_travel.cc`,
+  `duckdb_storage_version_log.*`). Wildcard tables
+  (`dataset.prefix_*`) resolve in the virtual catalog with
+  `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
+  Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA`
+  remain unsupported per `docs/ENGINE_POLICY.md`.
 - 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
@@ -581,12 +594,14 @@ public-facing policy.
   `CREATE PROCEDURE` write through to `DuckDBStorage` (`__bqemu_routines`)
   and rehydrate across engine restarts; `DROP FUNCTION` removes registry +
   storage rows. REST `routines.*` delegates to `Catalog` RPCs backed by
-  the same store. `LANGUAGE js` follows the metadata-only `local_stub`
-  posture (registration + `routines.get` round-trip; call-time stays
-  `UNIMPLEMENTED`). Scalar / `ANY TYPE` UDFs, SQL UDAFs, and SQL TVFs
-  evaluate on the semantic executor; conformance fixtures under
-  `conformance/fixtures/udf/` (+ `gateway/e2e/routine_persistence_test.go`
-  for restart proof). JS call-time execution and Python UDFs remain open.
+  the same store. `LANGUAGE js` scalar UDFs register through
+  `js_udf_registry.cc` and evaluate at call time on the semantic
+  executor via embedded Duktape (`js_udf_runtime.cc`; pinned by
+  `conformance/fixtures/udf/js_scalar_add.yaml`). Scalar / `ANY TYPE`
+  SQL UDFs, SQL UDAFs, and SQL TVFs evaluate on the semantic executor;
+  conformance fixtures under `conformance/fixtures/udf/` (+
+  `gateway/e2e/routine_persistence_test.go` for restart proof).
+  Python UDFs and non-scalar JS UDFs remain unsupported.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
   local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
   matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
@@ -634,14 +649,15 @@ Write API (`google.cloud.bigquery.storage.v1.BigQueryWrite`) for
 append-only writes that ride the same gRPC surface the read path
 already uses.
 
-- 🟡 `BigQueryWrite` gRPC service implemented
+- ✅ `BigQueryWrite` gRPC service implemented
   ([`frontend/handlers/storage_write.{h,cc}`](./frontend/handlers/));
   `CreateWriteStream`, bidi-streaming `AppendRows`, and
   `GetWriteStream` are wired for the `COMMITTED` and reserved
-  `_default` stream types. Append batches commit immediately
-  through `DuckDBStorage::AppendRows`, the same primitive
-  the local DML executor uses
-- 🟡 Schema-shape mismatches and recoverable storage errors land
+  `_default` stream types (including ManagedWriter DefaultStream
+  with the full NUMERIC/BIGNUMERIC proto type matrix). Append
+  batches commit immediately through `DuckDBStorage::AppendRows`,
+  the same primitive the local DML executor uses
+- ✅ Schema-shape mismatches and recoverable storage errors land
   on the `AppendRowsResponse.error_message` envelope so a producer
   can fix the batch and retry without tearing the bidi stream down,
   matching the public Storage Write API's recoverable-error
@@ -676,11 +692,16 @@ and
   diffs `expected.rows` against the gateway's wire response with
   typed cell comparison (INT64 as `*big.Rat`, FLOAT64 with epsilon,
   RFC3339 / SQL-form timestamps, ...), supports `ordered` /
-  `unordered` / `schema_only` matching modes. 160+ fixtures today
-  spanning SELECT shapes, GROUP BY / aggregates, JOINs, CTEs /
+  `unordered` / `schema_only` matching modes. **190+ YAML fixtures**
+  today spanning SELECT shapes, GROUP BY / aggregates, JOINs, CTEs /
   subqueries, DML / DDL round-trips, functions, scripting / UDFs,
-  structural errors, and schema-only smokes (plus the
-  bigquery-utils suite under `conformance/thirdparty-fixtures/`).
+  time travel, wildcard tables, GIS, row/column security,
+  `MATCH_RECOGNIZE`, `INFORMATION_SCHEMA`, structural errors, and
+  schema-only smokes (plus the bigquery-utils suite under
+  `conformance/thirdparty-fixtures/`). When a fixture disagrees with
+  production BigQuery, validate the SQL with the `bq` CLI before
+  assuming an emulator bug (see
+  [`.cursor/rules/conformance-bq-validation.mdc`](./.cursor/rules/conformance-bq-validation.mdc)).
   JSON output is consumed by the coverage publisher
 - ✅ **Third-party client lane** — the five official BigQuery
   client-library sample suites are vendored under
@@ -720,6 +741,9 @@ and
   git commit + build date; gateway via `-X main.<sym>=…` ldflags
   (see `.goreleaser.yml`), engine via the `:version_cc` genrule under
   `binaries/emulator_main/BUILD.bazel`
+- ✅ MkDocs Material documentation site published via GitHub Pages
+  ([`https://vantaboard.github.io/bigquery-emulator/`](https://vantaboard.github.io/bigquery-emulator/);
+  source under [`docs/`](./docs/), build config in [`mkdocs.yml`](./mkdocs.yml))
 - ✅ Runtime configuration documented in README §Runtime configuration;
   the conformance harness (`conformance/README.md`) and the engine
   policy (`docs/ENGINE_POLICY.md`) cover the local-only execution
@@ -824,9 +848,9 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
   (`bigquery_emulator.v1.StorageWrite`) and routes appends through
   the same `DuckDBStorage::AppendRows` primitive the local DML
   executor owns. `BUFFERED` (with `FlushRows` /
-  `FinalizeWriteStream`) is implemented; `PENDING` and
-  `BatchCommitWriteStreams` reserve their proto slots and return
-  `UNIMPLEMENTED` today (see
+  `FinalizeWriteStream`) is implemented; `PENDING` +
+  `BatchCommitWriteStreams` commit atomically through the same
+  `DuckDBStorage::AppendRows` primitive (see
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md)).
 - **Dialect translation friction (GoogleSQL <-> DuckDB).** The DuckDB
   fast path is no longer the project's whole story, but the friction

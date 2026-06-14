@@ -6,7 +6,7 @@ kept here as a sibling to the in-repo SQL-fixture conformance harness:
 
 | Lane | Lives under | Drives | What it asserts |
 |------|-------------|--------|-----------------|
-| **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). Both `memory` and `duckdb` profiles run by default; results pinned in YAML. |
+| **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). The default `[local]` profile runs every fixture against the local execution coordinator + DuckDB storage; results pinned in YAML. |
 | **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) and **dbt-bigquery** functional tests talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos (and dbt-labs/dbt-adapters for the dbt lane). The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see `ROADMAP.md` and `taskfiles/thirdparty.yml`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
