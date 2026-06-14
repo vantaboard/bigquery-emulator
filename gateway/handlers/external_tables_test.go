@@ -112,14 +112,15 @@ func TestExternalTableGetRoundTripsConfiguration(t *testing.T) {
 	}
 }
 
-func TestExternalTableInsertGoogleSheets501(t *testing.T) {
+func TestExternalTableInsertGoogleSheets(t *testing.T) {
 	fake := &fakeCatalogClient{}
 	deps := Dependencies{Catalog: fake, Metadata: NewMetadataStore()}
 	body := `{
-	  "tableReference": {"tableId": "sheet"},
+	  "tableReference": {"tableId": "class_data"},
 	  "externalDataConfiguration": {
 	    "sourceFormat": "GOOGLE_SHEETS",
-	    "sourceUris": ["https://docs.google.com/spreadsheets/d/x/edit"]
+	    "sourceUris": ["https://docs.google.com/spreadsheets/d/` + external.ClassDataSheetDocID + `/edit"],
+	    "autodetect": true
 	  }
 	}`
 	req := httptest.NewRequest(http.MethodPost,
@@ -128,8 +129,11 @@ func TestExternalTableInsertGoogleSheets501(t *testing.T) {
 	req.SetPathValue("datasetId", "ds")
 	w := httptest.NewRecorder()
 	TableInsert(deps)(w, req)
-	if w.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", w.Code, w.Body.String())
+	}
+	if fake.lastInsertRows == nil {
+		t.Fatal("expected rows inserted for sheets external table")
 	}
 }
 

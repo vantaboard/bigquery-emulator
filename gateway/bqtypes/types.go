@@ -391,8 +391,7 @@ func (o *CsvOptions) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GoogleSheetsOptions is the googleSheetsOptions sub-object. The emulator
-// does not implement the Sheets API; presence of this block triggers 501.
+// GoogleSheetsOptions is the googleSheetsOptions sub-object.
 type GoogleSheetsOptions struct {
 	SkipLeadingRows int    `json:"skipLeadingRows,omitempty"`
 	Range           string `json:"range,omitempty"`

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/external/sourceconfig"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/models"
 	"github.com/vantaboard/bigquery-emulator/gateway/routines"
@@ -79,6 +80,14 @@ type Dependencies struct {
 	// queries request createSession or pass connectionProperties
 	// session_id. Nil is treated as a per-handler fallback store.
 	Sessions *session.Store
+
+	// DataDir is the engine persistent storage root (--data_dir). Used
+	// to resolve external source fixture/local/live modes.
+	DataDir string
+
+	// ExternalSources configures per-source fixture|local|live resolution.
+	// Nil uses package defaults (GCS local, Sheets fixture).
+	ExternalSources *sourceconfig.Config
 }
 
 // NewRoutineStore returns an empty routine registry for gateway deps.

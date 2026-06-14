@@ -206,7 +206,9 @@ func (g *Gateway) Run() error {
 		}
 	}
 
-	deps := handlers.BuildDependencies(g.engineClient)
+	deps := handlers.BuildDependenciesWith(g.engineClient, handlers.DepsOptions{
+		DataDir: g.opts.DataDir,
+	})
 
 	if err := g.startStorageGRPC(ctx, deps); err != nil {
 		g.stopEngine()

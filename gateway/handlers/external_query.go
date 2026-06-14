@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -45,7 +44,8 @@ func prepareQueryExternalTables(
 	if len(tableDefs) == 0 || deps.Catalog == nil {
 		return defaultDataset, nil
 	}
-	return external.PrepareTableDefinitions(ctx, deps.Catalog, projectID, tableDefs, defaultDataset)
+	return external.PrepareTableDefinitionsWith(ctx, deps.Catalog, projectID, tableDefs, defaultDataset,
+		externalResolver(deps))
 }
 
 // writeExternalTableError maps gateway-side external table failures to
@@ -53,10 +53,6 @@ func prepareQueryExternalTables(
 func writeExternalTableError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
-	}
-	if errors.Is(err, external.ErrGoogleSheetsUnsupported) {
-		writeError(w, http.StatusNotImplemented, reasonNotImplemented, err.Error())
-		return true
 	}
 	writeError(w, http.StatusBadRequest, reasonInvalidQuery,
 		"Could not prepare external table: "+err.Error())
@@ -75,12 +71,12 @@ func insertExternalTable(
 	if t.Type == "" {
 		t.Type = externalTableType
 	}
-	err := external.Materialize(r.Context(), deps.Catalog, external.Target{
+	err := external.MaterializeWith(r.Context(), deps.Catalog, external.Target{
 		ProjectID: projectID,
 		DatasetID: datasetID,
 		TableID:   tableID,
 		Schema:    t.Schema,
-	}, t.ExternalDataConfiguration)
+	}, t.ExternalDataConfiguration, externalResolver(deps))
 	return !writeExternalTableInsertError(w, err)
 }
 
@@ -88,10 +84,6 @@ func insertExternalTable(
 func writeExternalTableInsertError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
-	}
-	if errors.Is(err, external.ErrGoogleSheetsUnsupported) {
-		writeError(w, http.StatusNotImplemented, reasonNotImplemented, err.Error())
-		return true
 	}
 	writeError(w, http.StatusBadRequest, reasonInvalid,
 		"Could not create external table: "+err.Error())

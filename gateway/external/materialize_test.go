@@ -3,7 +3,6 @@ package external
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -209,19 +208,25 @@ func TestExternalMaterializeCSVFromFakeGCS(t *testing.T) {
 	}
 }
 
-func TestExternalGoogleSheetsUnsupported(t *testing.T) {
+func TestExternalGoogleSheetsFixtureMaterialize(t *testing.T) {
 	fake := &materializeFakeCatalog{}
 	cfg := &bqtypes.ExternalDataConfiguration{
 		SourceFormat: "GOOGLE_SHEETS",
-		SourceURIs:   []string{"https://docs.google.com/spreadsheets/d/abc/edit"},
+		SourceURIs: []string{
+			"https://docs.google.com/spreadsheets/d/" + ClassDataSheetDocID + "/edit",
+		},
+		Autodetect: true,
 	}
 	err := Materialize(context.Background(), fake, Target{
 		ProjectID: testExtProjectID,
 		DatasetID: "ds",
-		TableID:   "sheet",
+		TableID:   "class_data",
 	}, cfg)
-	if !errors.Is(err, ErrGoogleSheetsUnsupported) {
-		t.Fatalf("err = %v, want ErrGoogleSheetsUnsupported", err)
+	if err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	if fake.lastInsertRows == nil || len(fake.lastInsertRows.GetRows()) != 30 {
+		t.Fatalf("insert rows = %d, want 30", len(fake.lastInsertRows.GetRows()))
 	}
 }
 

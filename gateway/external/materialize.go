@@ -1,7 +1,6 @@
 // Package external materializes BigQuery external tables into the
-// engine catalog by fetching GCS (fake-gcs) sources and bulk-inserting
-// parsed rows. Google Sheets sources are metadata-only: query-time
-// materialization returns a structured unsupported error.
+// engine catalog by fetching GCS (fake-gcs), Google Sheets (fixture/live),
+// or local snapshot sources and bulk-inserting parsed rows.
 package external
 
 import (
@@ -12,6 +11,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/external/sourceconfig"
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/seed"
 )
@@ -22,22 +22,6 @@ import (
 // unqualified table ids in SQL resolve.
 const TempDatasetID = "_bq_external_temp"
 
-// ErrGoogleSheetsUnsupported is returned when external config references
-// Google Sheets (sourceFormat or googleSheetsOptions).
-var ErrGoogleSheetsUnsupported = errors.New(
-	"google Sheets external tables are not supported by the BigQuery emulator; " +
-		"use GCS-backed external tables (CSV / NEWLINE_DELIMITED_JSON / PARQUET) instead")
-
-// Target names a catalog table to materialize.
-type Target struct {
-	ProjectID string
-	DatasetID string
-	TableID   string
-	// Schema from the enclosing Table resource; wins over config.Schema
-	// when both are set (permanent external table inserts).
-	Schema *bqtypes.TableSchema
-}
-
 // Materialize fetches external source bytes, parses them, and registers
 // the destination table with rows in the engine catalog (WRITE_TRUNCATE).
 func Materialize(
@@ -46,13 +30,24 @@ func Materialize(
 	target Target,
 	cfg *bqtypes.ExternalDataConfiguration,
 ) error {
+	return MaterializeWith(ctx, catalog, target, cfg, nil)
+}
+
+// MaterializeWith materializes using an optional per-source resolver.
+func MaterializeWith(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	target Target,
+	cfg *bqtypes.ExternalDataConfiguration,
+	resolver *Resolver,
+) error {
 	if catalog == nil {
 		return errors.New("external: nil CatalogClient")
 	}
 	if cfg == nil {
 		return errors.New("external: externalDataConfiguration is required")
 	}
-	if err := checkSupported(cfg); err != nil {
+	if err := validateExternalConfig(cfg); err != nil {
 		return err
 	}
 	if target.ProjectID == "" || target.DatasetID == "" || target.TableID == "" {
@@ -68,11 +63,21 @@ func Materialize(
 		skip = cfg.CsvOptions.SkipLeadingRows()
 	}
 
-	parsed, err := fetchAndParse(ctx, cfg, schema, skip)
+	parsed, err := fetchAndParse(ctx, resolver, cfg, schema, skip)
 	if err != nil {
 		return err
 	}
 	return registerParsedRows(ctx, catalog, target, schema, parsed)
+}
+
+// Target names a catalog table to materialize.
+type Target struct {
+	ProjectID string
+	DatasetID string
+	TableID   string
+	// Schema from the enclosing Table resource; wins over config.Schema
+	// when both are set (permanent external table inserts).
+	Schema *bqtypes.TableSchema
 }
 
 func registerParsedRows(
@@ -130,6 +135,18 @@ func PrepareTableDefinitions(
 	defs map[string]bqtypes.ExternalDataConfiguration,
 	defaultDataset string,
 ) (string, error) {
+	return PrepareTableDefinitionsWith(ctx, catalog, projectID, defs, defaultDataset, nil)
+}
+
+// PrepareTableDefinitionsWith materializes defs with an optional resolver.
+func PrepareTableDefinitionsWith(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	projectID string,
+	defs map[string]bqtypes.ExternalDataConfiguration,
+	defaultDataset string,
+	resolver *Resolver,
+) (string, error) {
 	if len(defs) == 0 {
 		return defaultDataset, nil
 	}
@@ -139,12 +156,12 @@ func PrepareTableDefinitions(
 	}
 	for tableID, cfg := range defs {
 		cfgCopy := cfg
-		if err := Materialize(ctx, catalog, Target{
+		if err := MaterializeWith(ctx, catalog, Target{
 			ProjectID: projectID,
 			DatasetID: ds,
 			TableID:   tableID,
 			Schema:    cfg.Schema,
-		}, &cfgCopy); err != nil {
+		}, &cfgCopy, resolver); err != nil {
 			return "", err
 		}
 	}
@@ -154,17 +171,27 @@ func PrepareTableDefinitions(
 	return defaultDataset, nil
 }
 
-func checkSupported(cfg *bqtypes.ExternalDataConfiguration) error {
+func isGoogleSheets(cfg *bqtypes.ExternalDataConfiguration) bool {
 	if strings.EqualFold(strings.TrimSpace(cfg.SourceFormat), "GOOGLE_SHEETS") {
-		return ErrGoogleSheetsUnsupported
+		return true
 	}
 	if cfg.GoogleSheetsOptions != nil {
-		return ErrGoogleSheetsUnsupported
+		return true
 	}
 	for _, uri := range cfg.SourceURIs {
 		if strings.Contains(uri, "docs.google.com/spreadsheets") {
-			return ErrGoogleSheetsUnsupported
+			return true
 		}
+	}
+	return false
+}
+
+func validateExternalConfig(cfg *bqtypes.ExternalDataConfiguration) error {
+	if isGoogleSheets(cfg) {
+		if len(cfg.SourceURIs) == 0 {
+			return errors.New("google sheets external table requires sourceUri")
+		}
+		return nil
 	}
 	if len(cfg.SourceURIs) == 0 {
 		return errors.New("external table requires at least one sourceUri")
@@ -174,10 +201,14 @@ func checkSupported(cfg *bqtypes.ExternalDataConfiguration) error {
 
 func fetchAndParse(
 	ctx context.Context,
+	resolver *Resolver,
 	cfg *bqtypes.ExternalDataConfiguration,
 	schema *bqtypes.TableSchema,
 	skipLeading int,
 ) (load.ParsedRows, error) {
+	if isGoogleSheets(cfg) {
+		return parseSheetsExternal(ctx, resolver, cfg, schema, skipLeading)
+	}
 	parsed, _, _, err := load.ParseExternalGCS(ctx, cfg, schema, skipLeading)
 	return parsed, err
 }
@@ -215,4 +246,9 @@ func fieldToProto(f bqtypes.TableFieldSchema) *enginepb.FieldSchema {
 		out.Fields = append(out.Fields, fieldToProto(f.Fields[i]))
 	}
 	return out
+}
+
+// LoadSourceConfig loads external source resolution rules for dataDir.
+func LoadSourceConfig(dataDir string) (*sourceconfig.Config, error) {
+	return sourceconfig.Load(dataDir)
 }
