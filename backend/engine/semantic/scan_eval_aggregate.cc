@@ -7,6 +7,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/eval_udaf.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
@@ -25,6 +26,53 @@ namespace scan_eval_internal {
 
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
+using ::bigquery_emulator::backend::engine::semantic::eval_expr_internal::
+    LowerFunctionDispatchName;
+
+absl::StatusOr<Value> EvalAggregateForRows(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
+
+namespace {
+
+// BigFrames routes lazy aggregates through `ResolvedDeferredComputedColumn`.
+// The value expression may be a bare aggregate or `$with_side_effects(value,
+// side_effect)` where a null side effect means "evaluate value". Scalar
+// `EvalExpr` cannot evaluate aggregates; reuse the aggregate-scan path.
+absl::StatusOr<Value> EvalDeferredComputedExpr(
+    const ::googlesql::ResolvedExpr& expr,
+    const ::googlesql::ResolvedAggregateScan& aggregate,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& agg_ctx) {
+  const ::googlesql::ResolvedExpr* current = &expr;
+  if (const auto* fn = current->GetAs<::googlesql::ResolvedFunctionCall>();
+      fn != nullptr && fn->function() != nullptr &&
+      LowerFunctionDispatchName(fn->function()) == "$with_side_effects") {
+    if (fn->argument_list_size() != 2) {
+      return absl::InvalidArgumentError(
+          "semantic: $with_side_effects expects exactly two arguments");
+    }
+    auto side_or = EvalExpr(*fn->argument_list(1), agg_ctx);
+    if (!side_or.ok()) return side_or.status();
+    if (!side_or->is_null()) {
+      return EvalExpr(expr, agg_ctx);
+    }
+    current = fn->argument_list(0);
+  }
+  if (const auto* agg =
+          current->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
+      agg != nullptr) {
+    return EvalAggregateForRows(
+        *agg, aggregate.input_scan(), input_rows, row_indices, agg_ctx);
+  }
+  return EvalExpr(expr, agg_ctx);
+}
+
+}  // namespace
 
 const ::googlesql::ResolvedScan* StripBarrierScans(
     const ::googlesql::ResolvedScan* scan) {
@@ -144,7 +192,8 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
     if (cc->node_kind() == ::googlesql::RESOLVED_DEFERRED_COMPUTED_COLUMN) {
       const auto* deferred =
           cc->GetAs<::googlesql::ResolvedDeferredComputedColumn>();
-      auto result = EvalExpr(*cc->expr(), agg_ctx);
+      auto result = EvalDeferredComputedExpr(
+          *cc->expr(), aggregate, input_rows, row_indices, agg_ctx);
       if (!result.ok()) {
         out_row.emplace(deferred->column().column_id(),
                         Value::Null(deferred->column().type()));
