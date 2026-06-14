@@ -162,6 +162,24 @@ cc_library(
 )
 
 cc_library(
+    name = "proto_helpers",
+    srcs = ["proto_helpers.cc"],
+    hdrs = ["proto_helpers.h"],
+    deps = [
+        ":error",
+        ":value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:type_cc_proto",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "eval_expr",
     srcs = [
         "eval_expr.cc",
@@ -176,6 +194,7 @@ cc_library(
         "eval_expr_fn_dispatch.cc",
         "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
+        "eval_expr_proto.cc",
         "eval_expr_update_constructor.cc",
         "eval_udaf.cc",
     ],
@@ -188,6 +207,7 @@ cc_library(
         ":error",
         ":frame_stack",
         ":js_udf_runtime",
+        ":proto_helpers",
         ":python_udf_runtime",
         ":system_variables",
         ":value",
@@ -304,6 +324,22 @@ cc_test(
         "@googlesql//googlesql/public:catalog",
         "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "eval_expr_proto_test",
+    srcs = ["eval_expr_proto_test.cc"],
+    deps = [
+        ":eval_expr",
+        ":scan_eval",
+        ":value",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",

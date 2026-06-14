@@ -390,6 +390,24 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
     case ::googlesql::RESOLVED_UPDATE_CONSTRUCTOR:
       return eval_expr_internal::EvalUpdateConstructor(
           *expr.GetAs<::googlesql::ResolvedUpdateConstructor>(), ctx);
+    case ::googlesql::RESOLVED_MAKE_PROTO:
+      return eval_expr_internal::EvalMakeProto(
+          *expr.GetAs<::googlesql::ResolvedMakeProto>(), ctx);
+    case ::googlesql::RESOLVED_GET_PROTO_FIELD:
+      return eval_expr_internal::EvalGetProtoField(
+          *expr.GetAs<::googlesql::ResolvedGetProtoField>(), ctx);
+    case ::googlesql::RESOLVED_GET_PROTO_ONEOF:
+      return eval_expr_internal::EvalGetProtoOneof(
+          *expr.GetAs<::googlesql::ResolvedGetProtoOneof>(), ctx);
+    case ::googlesql::RESOLVED_REPLACE_FIELD:
+      return eval_expr_internal::EvalReplaceField(
+          *expr.GetAs<::googlesql::ResolvedReplaceField>(), ctx);
+    case ::googlesql::RESOLVED_FILTER_FIELD:
+      return eval_expr_internal::EvalFilterField(
+          *expr.GetAs<::googlesql::ResolvedFilterField>(), ctx);
+    case ::googlesql::RESOLVED_GET_ROW_FIELD:
+      return eval_expr_internal::EvalGetRowField(
+          *expr.GetAs<::googlesql::ResolvedGetRowField>(), ctx);
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",

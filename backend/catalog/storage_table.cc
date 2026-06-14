@@ -8,6 +8,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -18,6 +19,7 @@
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
+#include "googlesql/public/types/proto_type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
 
@@ -118,6 +120,15 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
     case Kind::kString:
       return ::googlesql::Value::StringValue(value.string_value());
     case Kind::kBytes:
+      if (type != nullptr && type->kind() == ::googlesql::TYPE_PROTO) {
+        const auto* proto_type = type->AsProto();
+        if (proto_type == nullptr) {
+          return absl::InvalidArgumentError(
+              "StorageTable iterator: PROTO column missing ProtoType payload");
+        }
+        return ::googlesql::Value::Proto(proto_type,
+                                         absl::Cord(value.string_value()));
+      }
       return ::googlesql::Value::Bytes(value.string_value());
     case Kind::kStruct: {
       if (type == nullptr || !type->IsStruct()) {

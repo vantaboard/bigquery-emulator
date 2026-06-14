@@ -99,6 +99,18 @@ absl::StatusOr<Value> EvalExtendedCast(const ::googlesql::ResolvedCast& cast,
                                        const ::googlesql::Type* source);
 absl::StatusOr<Value> EvalUpdateConstructor(
     const ::googlesql::ResolvedUpdateConstructor& node, const EvalContext& ctx);
+absl::StatusOr<Value> EvalMakeProto(const ::googlesql::ResolvedMakeProto& node,
+                                    const EvalContext& ctx);
+absl::StatusOr<Value> EvalGetProtoField(
+    const ::googlesql::ResolvedGetProtoField& node, const EvalContext& ctx);
+absl::StatusOr<Value> EvalGetProtoOneof(
+    const ::googlesql::ResolvedGetProtoOneof& node, const EvalContext& ctx);
+absl::StatusOr<Value> EvalReplaceField(
+    const ::googlesql::ResolvedReplaceField& node, const EvalContext& ctx);
+absl::StatusOr<Value> EvalFilterField(
+    const ::googlesql::ResolvedFilterField& node, const EvalContext& ctx);
+absl::StatusOr<Value> EvalGetRowField(
+    const ::googlesql::ResolvedGetRowField& node, const EvalContext& ctx);
 
 absl::StatusOr<Value> DispatchFunctionByName(
     absl::string_view name,

@@ -257,6 +257,8 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
       }
       return storage::Value::Struct(std::move(fields));
     }
+    case ::googlesql::TYPE_PROTO:
+      return storage::Value::Bytes(std::string(value.ToCord()));
     default:
       return absl::InvalidArgumentError(absl::StrCat(
           "semantic: unsupported type for storage::Value lowering: ",
@@ -338,6 +340,15 @@ absl::StatusOr<schema::ColumnSchema> ColumnSchemaForType(
       }
       break;
     }
+    case ::googlesql::TYPE_PROTO:
+      column.type = schema::ColumnType::kBytes;
+      if (core->IsProto() && core->AsProto() != nullptr) {
+        column.raw_type = absl::StrCat(
+            "PROTO<", core->AsProto()->descriptor()->full_name(), ">");
+      } else {
+        column.raw_type = "PROTO";
+      }
+      break;
     case ::googlesql::TYPE_INTERVAL:
     case ::googlesql::TYPE_UUID:
     case ::googlesql::TYPE_RANGE:
