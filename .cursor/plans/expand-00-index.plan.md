@@ -119,8 +119,8 @@ graph LR
 |------|------|-------|-------------------|---------|-------|
 | 01 | real | landed (partial) | +1 external (google_sheets_class_data); gs:// engine path | e48222e, 6c112c1, 42a2f61 | Sheets + gs:// LOAD/EXPORT + config model; EXTERNAL_QUERY federated reads deferred |
 | 02 | stub | landed | +3 specialized (ml_predict/evaluate/forecast_stub) | 67e9d30, 8ad84ed | ML.* local_stub TVFs; CREATE MODEL stays control stub |
-| 03 | real | pending | — | | Python UDF runtime |
-| 04 | real | pending | — | | Protobuf field access |
+| 03 | real | landed | +1 udf (python_scalar_add); cw_xml_extract → bqutils passing | 80fb50a, 9e0e1cc, feb104b | Subprocess python3 scalar UDFs; lxml for cw_xml_extract |
+| 04 | real | landed | +1 specialized (replace_fields_struct); +7 unit tests | cc1a169, c6c7378 | Proto AST on semantic executor; catalog descriptor pool deferred |
 | 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
 | 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; NOT differential privacy |
 | 07 | real | pending | — | | Sequences + catalog refs |
