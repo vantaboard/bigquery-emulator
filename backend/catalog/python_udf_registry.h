@@ -42,14 +42,13 @@ absl::Status RegisterPythonUdfFromCreateFunction(
 
 // Returns nullptr when the project has no Python UDF named `fn_name`.
 const PythonUdfDefinition* LookupProjectPythonUdf(absl::string_view project_id,
-                                                absl::string_view fn_name);
+                                                  absl::string_view fn_name);
 
 // Minimal DDL fallback: parse `LANGUAGE python` scalar bodies from
 // persisted `ddl_sql` when in-memory metadata is absent (e.g. tests that
 // only replay storage rows).
 absl::StatusOr<PythonUdfDefinition> ParsePythonUdfFromDdl(
-    absl::string_view ddl_sql,
-    absl::string_view fn_name = absl::string_view());
+    absl::string_view ddl_sql, absl::string_view fn_name = absl::string_view());
 
 // Removes Python UDF metadata; no-op when absent.
 void DropProjectPythonUdf(absl::string_view project_id,

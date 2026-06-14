@@ -1,5 +1,8 @@
 #include "backend/engine/semantic/python_udf_runtime.h"
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -9,9 +12,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -174,21 +174,24 @@ absl::StatusOr<std::string> BuildRequestJson(
   std::string json = "{";
   absl::StrAppend(&json, "\"body\":", JsonEscape(definition.python_body), ",");
   absl::StrAppend(&json, "\"fn_name\":", JsonEscape(fn_name), ",");
-  absl::StrAppend(&json, "\"entry_point\":",
-                  JsonEscape(definition.entry_point), ",");
-  absl::StrAppend(&json, "\"arg_names\":[",
-                  absl::StrJoin(definition.arg_names, ",",
+  absl::StrAppend(
+      &json, "\"entry_point\":", JsonEscape(definition.entry_point), ",");
+  absl::StrAppend(&json,
+                  "\"arg_names\":[",
+                  absl::StrJoin(definition.arg_names,
+                                ",",
                                 [](std::string* out, const std::string& name) {
                                   absl::StrAppend(out, JsonEscape(name));
                                 }),
                   "],\"args\":{");
   for (size_t i = 0; i < arg_values.size(); ++i) {
     if (i > 0) json.push_back(',');
-    const ::googlesql::TypeKind type_kind =
-        i < definition.arg_type_kinds.size()
-            ? definition.arg_type_kinds[i]
-            : ::googlesql::TYPE_UNKNOWN;
-    absl::StrAppend(&json, JsonEscape(definition.arg_names[i]), ":",
+    const ::googlesql::TypeKind type_kind = i < definition.arg_type_kinds.size()
+                                                ? definition.arg_type_kinds[i]
+                                                : ::googlesql::TYPE_UNKNOWN;
+    absl::StrAppend(&json,
+                    JsonEscape(definition.arg_names[i]),
+                    ":",
                     JsonValue(arg_values[i], type_kind));
   }
   json.append("}}");
@@ -267,8 +270,7 @@ absl::StatusOr<bool> ExtractJsonBoolField(absl::string_view json,
 }
 
 absl::StatusOr<Value> PopPythonValueToGooglesql(
-    absl::string_view raw_result,
-    const ::googlesql::Type* return_type) {
+    absl::string_view raw_result, const ::googlesql::Type* return_type) {
   if (return_type == nullptr) {
     return absl::InternalError("python_udf_runtime: missing return type");
   }
@@ -345,7 +347,10 @@ absl::StatusOr<std::string> InvokePythonRunner(absl::string_view request_json) {
     close(stdin_pipe[1]);
     close(stdout_pipe[0]);
     close(stdout_pipe[1]);
-    execlp(python_or->c_str(), python_or->c_str(), "-c", runner.c_str(),
+    execlp(python_or->c_str(),
+           python_or->c_str(),
+           "-c",
+           runner.c_str(),
            static_cast<char*>(nullptr));
     _exit(127);
   }
@@ -394,12 +399,12 @@ absl::StatusOr<Value> EvalPythonUdfCall(
         "Python aggregate UDF call-time evaluation is not implemented");
   }
   if (definition.arg_names.size() != arg_values.size()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: Python UDF argument count mismatch (expected ",
-        definition.arg_names.size(),
-        ", got ",
-        arg_values.size(),
-        ")"));
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: Python UDF argument count mismatch (expected ",
+                     definition.arg_names.size(),
+                     ", got ",
+                     arg_values.size(),
+                     ")"));
   }
 
   for (const std::string& pkg : definition.packages) {
@@ -407,7 +412,8 @@ absl::StatusOr<Value> EvalPythonUdfCall(
     if (module == "lxml") continue;
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        absl::StrCat("Python UDF package ", pkg,
+        absl::StrCat("Python UDF package ",
+                     pkg,
                      " is not available in the emulator runtime"));
   }
 

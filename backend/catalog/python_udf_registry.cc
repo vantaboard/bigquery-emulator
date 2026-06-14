@@ -33,7 +33,8 @@ struct ProjectPythonUdfs {
 };
 
 absl::Mutex mu;
-absl::flat_hash_map<std::string, ProjectPythonUdfs> by_project ABSL_GUARDED_BY(mu);
+absl::flat_hash_map<std::string, ProjectPythonUdfs> by_project
+    ABSL_GUARDED_BY(mu);
 
 std::string NormalizeFnKey(absl::string_view fn_name) {
   return absl::AsciiStrToLower(fn_name);
@@ -332,8 +333,10 @@ std::vector<std::string> ParsePackagesFromDdl(absl::string_view ddl) {
   const size_t pos = upper.find("PACKAGES");
   if (pos == std::string::npos) return {};
   const size_t open = ddl.find('[', pos);
-  const size_t close = open == std::string::npos ? std::string::npos : ddl.find(']', open);
-  if (open == std::string::npos || close == std::string::npos || close <= open) {
+  const size_t close =
+      open == std::string::npos ? std::string::npos : ddl.find(']', open);
+  if (open == std::string::npos || close == std::string::npos ||
+      close <= open) {
     return {};
   }
   std::vector<std::string> packages;
@@ -352,8 +355,7 @@ std::vector<std::string> ParsePackagesFromDdl(absl::string_view ddl) {
 }
 
 absl::StatusOr<PythonUdfDefinition> ParsePythonUdfFromDdlImpl(
-    absl::string_view ddl,
-    absl::string_view fn_name) {
+    absl::string_view ddl, absl::string_view fn_name) {
   const std::string upper = absl::AsciiStrToUpper(ddl);
   const size_t lang_pos = upper.find("LANGUAGE PYTHON");
   if (lang_pos == std::string::npos) {
@@ -362,7 +364,8 @@ absl::StatusOr<PythonUdfDefinition> ParsePythonUdfFromDdlImpl(
   }
   const size_t as_pos = upper.find(" AS ", lang_pos);
   if (as_pos == std::string::npos) {
-    return absl::InvalidArgumentError("ParsePythonUdfFromDdl: missing AS clause");
+    return absl::InvalidArgumentError(
+        "ParsePythonUdfFromDdl: missing AS clause");
   }
   absl::StatusOr<std::string> body_or =
       ParseQuotedPythonBody(ddl.substr(as_pos + 4));
@@ -450,8 +453,8 @@ absl::Status RegisterPythonUdfFromCreateFunction(
     def_or->entry_point =
         InferEntryPointFromBody(def_or->python_body, name_path.back());
   }
-  return RegisterProjectPythonUdf(project_id, name_path.back(),
-                                  *std::move(def_or));
+  return RegisterProjectPythonUdf(
+      project_id, name_path.back(), *std::move(def_or));
 }
 
 const PythonUdfDefinition* LookupProjectPythonUdf(absl::string_view project_id,
@@ -466,8 +469,7 @@ const PythonUdfDefinition* LookupProjectPythonUdf(absl::string_view project_id,
 }
 
 absl::StatusOr<PythonUdfDefinition> ParsePythonUdfFromDdl(
-    absl::string_view ddl_sql,
-    absl::string_view fn_name) {
+    absl::string_view ddl_sql, absl::string_view fn_name) {
   return ParsePythonUdfFromDdlImpl(ddl_sql, fn_name);
 }
 

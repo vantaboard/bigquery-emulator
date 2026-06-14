@@ -109,9 +109,9 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
-// Pipe-operator DDL control-op routing: pipe EXPORT DATA is rejected
-// by the export handler (cloud-storage URIs are unsupported); pipe
-// CREATE TABLE materializes the pipe input into a new table.
+// Pipe-operator DDL control-op routing: pipe EXPORT DATA resolves gs://
+// through the control op (fails when the storage emulator is unreachable);
+// pipe CREATE TABLE materializes the pipe input into a new table.
 TEST_F(LocalCoordinatorEngineTest,
        ExecuteQueryPipeExportDataRoutesToControlOpHandler) {
   CreatePeopleTable();
@@ -124,7 +124,7 @@ TEST_F(LocalCoordinatorEngineTest,
   ASSERT_FALSE(source.ok());
   EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_TRUE(absl::StrContains(source.status().message(),
-                                "cloud-storage URI 'gs://b/o.csv'"))
+                                "could not fetch gs://b/o.csv"))
       << source.status();
 }
 
