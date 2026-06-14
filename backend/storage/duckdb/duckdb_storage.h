@@ -72,7 +72,7 @@ class DuckDBStorage : public Storage {
 
   // Path the storage was opened with. Stable for the lifetime of the
   // instance; exposed mainly for tests / logs.
-  const std::string& data_dir() const {
+  absl::string_view data_dir() const override {
     return data_dir_;
   }
 

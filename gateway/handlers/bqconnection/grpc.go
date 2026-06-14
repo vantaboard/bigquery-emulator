@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"cloud.google.com/go/bigquery/connection/apiv1/connectionpb"
+	"github.com/vantaboard/bigquery-emulator/gateway/external/sourceconfig"
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -15,14 +16,15 @@ import (
 type Server struct {
 	connectionpb.UnimplementedConnectionServiceServer
 	store sync.Map // name string -> *connectionpb.Connection
+	cfg   *sourceconfig.Config
 }
 
 // RegisterGRPC wires ConnectionService onto srv.
-func RegisterGRPC(srv grpc.ServiceRegistrar, _ handlers.Dependencies) {
+func RegisterGRPC(srv grpc.ServiceRegistrar, deps handlers.Dependencies) {
 	if srv == nil {
 		return
 	}
-	connectionpb.RegisterConnectionServiceServer(srv, &Server{})
+	connectionpb.RegisterConnectionServiceServer(srv, &Server{cfg: deps.ExternalSources})
 }
 
 // ListConnections returns an empty page so client startup probes succeed.
@@ -51,7 +53,7 @@ func (s *Server) CreateConnection(
 	out := &connectionpb.Connection{
 		Name:         name,
 		FriendlyName: conn.GetFriendlyName(),
-		Description:  conn.GetDescription(),
+		Description:  AnnotateFixtureDescription(s.cfg, name, conn.GetDescription()),
 	}
 	if _, loaded := s.store.LoadOrStore(name, out); loaded {
 		return nil, status.Errorf(codes.AlreadyExists, "Connection %s already exists", name)

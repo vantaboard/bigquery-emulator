@@ -11,6 +11,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/control/gcs_uri_resolver.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
@@ -119,17 +120,17 @@ absl::StatusOr<std::vector<std::string>> ExtractStringArrayLiteral(
 }
 
 absl::StatusOr<std::string> LocalPathFromUri(absl::string_view uri) {
+  return LocalPathFromUri(uri, absl::string_view{});
+}
+
+absl::StatusOr<std::string> LocalPathFromUri(absl::string_view uri,
+                                             absl::string_view data_dir) {
   if (uri.empty()) {
     return absl::InvalidArgumentError(
         "control op executor: URI must be non-empty");
   }
   if (absl::StartsWith(uri, "gs://")) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("control op executor: cloud-storage URI '",
-                     uri,
-                     "' is unsupported (family: ResolvedAuxLoadDataStmt / "
-                     "ResolvedExportDataStmt); use a local file:// URI. "
-                     "See docs/ENGINE_POLICY.md."));
+    return MaterializeGCSObjectToCache(uri, data_dir);
   }
   if (absl::StartsWith(uri, "file://")) {
     return std::string(uri.substr(strlen("file://")));

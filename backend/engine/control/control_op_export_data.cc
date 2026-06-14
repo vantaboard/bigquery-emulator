@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <memory>
 #include <set>
 #include <string>
@@ -13,6 +14,7 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/control/control_op_options.h"
+#include "backend/engine/control/gcs_uri_resolver.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
@@ -91,7 +93,8 @@ absl::Status RunExportData(storage::Storage& storage,
   absl::StatusOr<std::string> uri_or =
       FindOptionString(stmt->option_list(), "uri");
   if (!uri_or.ok()) return uri_or.status();
-  absl::StatusOr<std::string> path_or = LocalPathFromUri(*uri_or);
+  absl::StatusOr<std::string> path_or =
+      LocalPathFromUri(*uri_or, storage.data_dir());
   if (!path_or.ok()) return path_or.status();
 
   std::string format = "CSV";
@@ -137,8 +140,14 @@ absl::Status RunExportData(storage::Storage& storage,
     return attach;
   }
 
+  const bool export_to_gcs = absl::StartsWith(*uri_or, "gs://");
+  std::string write_path = *path_or;
+  if (export_to_gcs) {
+    write_path = absl::StrCat(*path_or, ".export.tmp");
+  }
+
   absl::StatusOr<std::string> copy_sql =
-      BuildCopyToSql(select_sql, *path_or, format);
+      BuildCopyToSql(select_sql, write_path, format);
   if (!copy_sql.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
@@ -148,7 +157,22 @@ absl::Status RunExportData(storage::Storage& storage,
   absl::Status copied = RunSqlNoResult(conn, *copy_sql);
   ::duckdb_disconnect(&conn);
   ::duckdb_close(&db);
-  return copied;
+  if (!copied.ok()) return copied;
+  if (!export_to_gcs) {
+    return absl::OkStatus();
+  }
+  std::string content_type = "text/csv";
+  if (format == "JSON" || format == "NEWLINE_DELIMITED_JSON") {
+    content_type = "application/json";
+  } else if (format == "PARQUET") {
+    content_type = "application/octet-stream";
+  }
+  absl::Status uploaded =
+      UploadGCSObjectFromFile(*uri_or, write_path, content_type);
+  if (!uploaded.ok()) return uploaded;
+  std::error_code ec;
+  std::filesystem::remove(write_path, ec);
+  return absl::OkStatus();
 }
 
 }  // namespace internal

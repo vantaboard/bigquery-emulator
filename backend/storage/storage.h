@@ -446,6 +446,11 @@ class Storage {
     return absl::UnimplementedError(
         "Storage backend does not persist column governance");
   }
+
+  // Persistent-store root (DuckDB catalog + external-source snapshots).
+  [[nodiscard]] virtual absl::string_view data_dir() const {
+    return "";
+  }
 };
 
 }  // namespace storage

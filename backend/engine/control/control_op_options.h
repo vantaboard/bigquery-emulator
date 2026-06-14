@@ -32,9 +32,11 @@ absl::StatusOr<std::vector<std::string>> ExtractStringArrayLiteral(
 
 // Normalizes export/load URI schemes to a local filesystem path.
 // `file://` prefixes are stripped; bare absolute paths pass through.
-// `gs://` URIs return INVALID_ARGUMENT so callers can surface the
-// documented unsupported posture for cloud-storage ingest/export.
+// `gs://` URIs are materialized under `data_dir/external/gcs-cache/`
+// from a local snapshot or STORAGE_EMULATOR_HOST (fake-gcs).
 absl::StatusOr<std::string> LocalPathFromUri(absl::string_view uri);
+absl::StatusOr<std::string> LocalPathFromUri(absl::string_view uri,
+                                             absl::string_view data_dir);
 
 }  // namespace internal
 }  // namespace control

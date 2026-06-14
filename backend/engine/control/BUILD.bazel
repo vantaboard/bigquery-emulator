@@ -23,12 +23,14 @@ cc_library(
         "control_op_literals.cc",
         "control_op_materialized_view.cc",
         "control_op_options.cc",
+        "gcs_uri_resolver.cc",
         "control_op_time_travel.cc",
     ],
     hdrs = [
         "control_op_executor.h",
         "control_op_internal.h",
         "control_op_options.h",
+        "gcs_uri_resolver.h",
     ],
     deps = [
         "//backend/catalog:create_function_util",

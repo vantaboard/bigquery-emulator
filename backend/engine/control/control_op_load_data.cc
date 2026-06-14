@@ -110,7 +110,8 @@ absl::Status RunLoadData(storage::Storage& storage,
         "yet");
   }
 
-  absl::StatusOr<std::string> path_or = LocalPathFromUri(uris[0]);
+  absl::StatusOr<std::string> path_or =
+      LocalPathFromUri(uris[0], storage.data_dir());
   if (!path_or.ok()) return path_or.status();
 
   absl::StatusOr<schema::TableSchema> bq_schema =
