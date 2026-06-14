@@ -91,7 +91,7 @@ jobs:
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
           fi
-          docker buildx build \
+          bash scripts/docker_build_retry.sh docker buildx build \
             --tag bigquery-emulator:local \
             --load \
             --build-arg ENGINE_SOURCE=prebuilt \
