@@ -29,8 +29,8 @@ BigQuery REST API.
 > internal gRPC Storage Read API, as native Arrow batches.
 > DDL (`CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, …) and
 > DML (`INSERT`, `UPDATE`, `DELETE`, `MERGE`, pipe INSERT, deep-STRUCT
-> `UPDATE`, `THEN RETURN`) execute locally; a few harder branches (e.g.
-> MERGE `THEN RETURN`) still surface `UNIMPLEMENTED`.
+> `UPDATE`, `THEN RETURN` on INSERT/UPDATE/DELETE) execute locally.
+> GoogleSQL does not define `THEN RETURN` on MERGE.
 > See [`ROADMAP.md`](./ROADMAP.md) for the capability-area
 > narrative and the [documentation site](https://vantaboard.github.io/bigquery-emulator/)
 > (or [`docs/README.md`](./docs/README.md)) for the full guide index.

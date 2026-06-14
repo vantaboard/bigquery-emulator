@@ -372,13 +372,14 @@ strategy that fits: DuckDB fast path (today's primary), DuckDB
 rewrite / UDF, local semantic executor, or a catalog/control-op
 handler.
 
-- 🟡 [`backend/engine/duckdb/transpiler/`](./backend/engine/duckdb/transpiler/):
+- ✅ [`backend/engine/duckdb/transpiler/`](./backend/engine/duckdb/transpiler/):
   the **DuckDB fast path**. A `googlesql::ResolvedASTVisitor` that
   emits DuckDB SQL strings, implemented one node kind at a time;
   per-shape route disposition (`duckdb_native` /
   `duckdb_rewrite` / `duckdb_udf` / `semantic_executor` /
   `control_op` / `local_stub` / `unsupported`) lives in
   [`SHAPE_TRACKER.md`](./backend/engine/duckdb/transpiler/SHAPE_TRACKER.md).
+  `(subset)` rows are property-gated fast-path wins, not missing emits.
   Shapes routed to the other strategies are tracked in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) and the Work
   tracking section at the top of this document
@@ -405,7 +406,7 @@ handler.
   `duckdb_native` (`conformance/fixtures/fastpath/join_using_inner.yaml`).
   Lateral `ResolvedJoinScan` (`is_lateral`) evaluates per outer row on
   the semantic executor.
-- 🟡 Built-in function mapping table — sourced from
+- ✅ Built-in function mapping table — sourced from
   [`backend/engine/duckdb/transpiler/functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)
   (~140 BigQuery functions across math, string, datetime,
   conditional, array, aggregation, window, and BQ-specific
@@ -428,8 +429,9 @@ handler.
   `absl::flat_hash_map`. Each entry records one of the seven
   canonical route dispositions (`duckdb_native`, `duckdb_rewrite`,
   `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`,
-  `unsupported`); deferred rows carry `status=planned` in the YAML
-  tables. `NET.*`, `HLL_COUNT.*`, and the approximate-aggregate family
+  `unsupported`); every in-scope row is landed (zero `status=planned`
+  in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml)).
+  `NET.*`, `HLL_COUNT.*`, and the approximate-aggregate family
   (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`,
   `APPROX_TOP_SUM`) evaluate on the semantic executor (`net_funcs.cc`,
   `hll_funcs.cc`, `aggregate_specialized.cc`). Unsupported families
@@ -476,9 +478,10 @@ public-facing policy.
 
 - ✅ Route classifier behind `Engine::Analyze` /
   `Engine::ExecuteQuery`
-- 🟡 Per-shape dispositions recorded in the shape tracker
-  (the seven-route vocabulary is landed; individual AST /
-  function rows still promote as shapes close)
+- ✅ Per-shape dispositions recorded in the shape tracker
+  (seven-route vocabulary + node/function YAML registries are closed
+  for in-scope shapes; deliberate `unsupported` families documented
+  in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
 - 🟢 Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
   The conformance routing matrix added the
@@ -487,12 +490,12 @@ public-facing policy.
   so only local-loopback callers see it), extended the
   conformance fixture schema with `expected.route` /
   `route_strict` / `route_allowlist`, backfilled every
-  fixture under `conformance/fixtures/` (191 YAML files),
+  fixture under `conformance/fixtures/` (192 YAML files),
   and added `task conformance:routing-matrix` for a
   reviewable Markdown snapshot of every shape's route. The
   `conformance.yml` CI workflow uploads the matrix as a
   non-blocking artifact.
-- 🟡 CTE / subquery routing. Non-recursive CTEs
+- ✅ CTE / subquery routing. Non-recursive CTEs
   (`ResolvedWithScan` / `ResolvedWithRefScan`) lower to DuckDB
   `WITH "a" AS (...)` natively. Non-correlated scalar / IN /
   EXISTS / ARRAY `ResolvedSubqueryExpr` forms lower directly to
@@ -500,10 +503,11 @@ public-facing policy.
   evaluate per outer row on the semantic executor via
   `EvalSubqueryExpr` + `outer_row_eval` (pinned by
   `conformance/fixtures/cte_subquery/subquery_expr_correlated_exists.yaml`).
-  Recursive CTEs lower through `duckdb_rewrite`, including transpiler
-  support for `WITH DEPTH` depth pseudo-columns when the analyzer
-  supplies `recursion_depth_modifier` (unit-tested; no parse surface
-  in `PRODUCT_EXTERNAL` yet).
+  Recursive CTEs lower through `duckdb_rewrite` (`WITH RECURSIVE`),
+  pinned by `conformance/fixtures/advanced_relational/recursive_cte.yaml`;
+  `WITH DEPTH` depth pseudo-columns are unit-tested when the analyzer
+  supplies `recursion_depth_modifier` (no parse surface in
+  `PRODUCT_EXTERNAL` yet).
   LIKE ANY / ALL list forms evaluate on the semantic executor
   (`conformance/fixtures/cte_subquery/subquery_expr_like_any_list.yaml`).
   Window-frame RANGE on numeric ORDER BY keys and TABLESAMPLE
@@ -514,7 +518,7 @@ public-facing policy.
   `sample_stratified_percent.yaml`, `window_frame_range_date.yaml`).
   `MATCH_RECOGNIZE` evaluates on the semantic executor
   (`conformance/fixtures/advanced_relational/match_recognize_pattern_ab.yaml`)
-- 🟡 Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
+- ✅ Cast / collation / value-table / set-op edges. `CAST ... FORMAT` /
   `CAST ... AT TIME ZONE` promote to the semantic executor
   (`eval_expr_cast.cc` via googlesql `CastFormat*` / `CastStringTo*`);
   in-scope `extended_cast()` shapes evaluate on `eval_expr_cast_extended.cc`;
@@ -531,23 +535,22 @@ public-facing policy.
 
 ## DML / DDL
 
-- 🟡 DML routed by shape. Simple `MERGE` (`WHEN MATCHED` + single
+- ✅ DML routed by shape. Simple `MERGE` (`WHEN MATCHED` + single
   `WHEN NOT MATCHED BY TARGET`) lowers through the DuckDB fast path;
   the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`,
   multi-action sequences) routes through the storage-aware local DML
   executor (`backend/engine/semantic/dml/dml_merge.cc`). `INSERT
   VALUES`, `INSERT ... SELECT`, scalar- and deep-STRUCT `SET`
-  `UPDATE`, `UPDATE ... FROM`, `DELETE`, `THEN RETURN` on
-  INSERT/UPDATE/DELETE, and `ASSERT_ROWS_MODIFIED` also route through
-  the semantic DML executor and populate `numDmlAffectedRows`
-  correctly. Nested `(DELETE ... WITH OFFSET ...)` inside `UPDATE SET`
-  lands on `ApplyNestedArrayDeleteItem` (pinned by
+  `UPDATE`, proto `UpdateConstructor` SET, `UPDATE ... FROM`, `DELETE`,
+  `THEN RETURN` on INSERT/UPDATE/DELETE (GoogleSQL does not define
+  MERGE `THEN RETURN`), and `ASSERT_ROWS_MODIFIED` route through the
+  semantic DML executor and populate `numDmlAffectedRows` correctly.
+  Nested `(DELETE ... WITH OFFSET ...)` inside `UPDATE SET` lands on
+  `ApplyNestedArrayDeleteItem` (pinned by
   `update_delete_array_offset.yaml`). Pipe INSERT (`ResolvedPipeInsertScan`
   via `ExecuteDml` on generalized query statements) is landed on the
-  semantic DML executor. MERGE `THEN RETURN` continues to surface
-  `UNIMPLEMENTED` where not yet landed; see `docs/ENGINE_POLICY.md`. Conformance fixtures
-  may seed rows via either `tabledata.insertAll` or `INSERT VALUES`
-  `sql:` steps. See
+  semantic DML executor. Conformance fixtures may seed rows via either
+  `tabledata.insertAll` or `INSERT VALUES` `sql:` steps. See
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
@@ -570,7 +573,7 @@ public-facing policy.
   `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
   Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA`
   remain unsupported per `docs/ENGINE_POLICY.md`.
-- 🟡 Scripting / UDFs / TVFs routed to a local scripting executor
+- ✅ Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
   surfaces BigQuery's documented `Assertion failed` envelope; the
@@ -598,7 +601,9 @@ public-facing policy.
   executor via embedded Duktape (`js_udf_runtime.cc`; pinned by
   `conformance/fixtures/udf/js_scalar_add.yaml`). Scalar / `ANY TYPE`
   SQL UDFs, SQL UDAFs, and SQL TVFs evaluate on the semantic executor;
-  conformance fixtures under `conformance/fixtures/udf/` (+
+  TABLE-typed TVF parameters materialize via `ResolvedRelationArgumentScan`
+  (pinned by `conformance/fixtures/udf/tvf_relation_argument.yaml`).
+  Conformance fixtures under `conformance/fixtures/udf/` (+
   `gateway/e2e/routine_persistence_test.go` for restart proof).
   Python UDFs and non-scalar JS UDFs remain unsupported.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the

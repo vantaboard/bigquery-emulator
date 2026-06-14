@@ -101,7 +101,7 @@ summary the unsupported error envelope points at. Per-family posture
 | HLL (`HLL_COUNT.*`)                                                                                          | `local_impl`  | Routes to the semantic executor; `hll_funcs.cc` implements INIT/MERGE/MERGE_PARTIAL/EXTRACT with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by `conformance/fixtures/specialized/hll_count_round_trip.yaml`. |
 | Protobuf shapes (`ResolvedMakeProto`, `ResolvedGetProtoField`, ...)                                          | `unsupported` | The emulator does not model the GoogleSQL proto type surface end-to-end.                                                                                                                                    |
 | MEASURE / measure functions (`AGGREGATE(<measure>)`)                                                         | `unsupported` | Measure types require BigQuery's analytical layer the emulator does not model.                                                                                                                              |
-| Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`)                                                  | `unsupported` | The Spanner-Graph SQL surface is not part of this emulator's scope.                                                                                                                                         |
+| Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`, `ResolvedCatalogColumnRef`) | `unsupported` | The Spanner-Graph SQL surface and catalog-internal column refs are not part of this emulator's scope. |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`)                                                             | `unsupported` | BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on `unsupported` to make the gap explicit.                                                                          |
 | JavaScript UDFs (`CREATE FUNCTION ... LANGUAGE js`)                                                          | `local_impl`  | `CREATE FUNCTION ... LANGUAGE js` registers through `js_udf_registry.cc`, persists the DDL in `DuckDBStorage`, and evaluates scalar bodies at call time on the semantic executor via embedded Duktape (`js_udf_runtime.cc`) so `routines.get` round-trips and call-time execution match. Pinned by `conformance/fixtures/udf/js_scalar_add.yaml`. Table-valued / aggregate JS UDFs remain unsupported. |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` | No Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/` as a documented external-language gap (same disposition as JS UDFs). |
@@ -137,21 +137,19 @@ running the route classifier in their head.
    UDF, semantic executor, control op), land the implementation, and
    update the shape tracker row in the same commit.
 
-2. **Some DML / DDL shapes are still deferred today.** Remaining DML
-   gaps (MERGE `THEN RETURN`, `(planned)` DML expression shapes like
-   `ResolvedUpdateConstructor`, ...) land on the `semantic_executor`
-   route as handlers are added. Landed today on the local DML executor
-   (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
-   SELECT`, scalar and deep-STRUCT `UPDATE`, nested `(DELETE arr WITH OFFSET ...)`
-   in `UPDATE SET`, `UPDATE ... FROM`,
-   `DELETE`, `THEN RETURN` on INSERT/UPDATE/DELETE/MERGE (except MERGE
-   `THEN RETURN`, still deferred where googlesql has not pinned
-   `returning()`), pipe INSERT (`ResolvedPipeInsertScan`),
-   `ASSERT_ROWS_MODIFIED`, and the harder MERGE matrix (`WHEN NOT
-   MATCHED BY SOURCE`, multi-action sequences via `dml_merge.cc`).
-   Simple `MERGE` (`WHEN MATCHED` + single `WHEN NOT MATCHED BY
-   TARGET`) stays on the DuckDB fast path. Use `tabledata.insertAll`
-   to seed rows for tests and fixtures while gaps are closed.
+2. **DML / DDL routing is closed for in-scope GoogleSQL shapes.**
+   Remaining deliberate gaps are `unsupported` families documented in
+   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) (graph/GQL, broad
+   proto surface, `ML.*`, cloud `gs://`, ...). Landed on the local DML
+   executor (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
+   SELECT`, scalar and deep-STRUCT `UPDATE`, proto `UpdateConstructor`
+   SET expressions (`eval_expr_update_constructor.cc`), nested `(DELETE arr
+   WITH OFFSET ...)` in `UPDATE SET`, `UPDATE ... FROM`, `DELETE`, `THEN
+   RETURN` on INSERT/UPDATE/DELETE (GoogleSQL does not define MERGE `THEN
+   RETURN`), pipe INSERT (`ResolvedPipeInsertScan`), `ASSERT_ROWS_MODIFIED`,
+   and the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`, multi-action
+   sequences via `dml_merge.cc`). Simple `MERGE` (`WHEN MATCHED` + single
+   `WHEN NOT MATCHED BY TARGET`) stays on the DuckDB fast path.
    `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
    `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
    `LOAD DATA` (local files) are implemented today on the control-op
