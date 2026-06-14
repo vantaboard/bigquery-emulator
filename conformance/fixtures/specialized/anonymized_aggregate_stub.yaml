@@ -1,0 +1,44 @@
+# anonymized_aggregate_stub: WITH ANONYMIZATION local-stub.
+#
+# The deprecated `WITH ANONYMIZATION` clause resolves to
+# `ResolvedAnonymizedAggregateScan`. The emulator strips privacy
+# modifiers and evaluates the plain aggregate (NOT anonymization).
+name: specialized_anonymized_aggregate_stub
+description: |
+  SELECT WITH ANONYMIZATION returns the plain GROUP BY aggregate
+  without erroring. Pins the local-stub scan contract for the
+  legacy anonymization scan node.
+project_id: proj-specialized-anon-aggregate
+dataset_id: ds_specialized_anon
+setup:
+  - dataset: ds_specialized_anon
+  - table:
+      dataset: ds_specialized_anon
+      id: events
+      schema:
+        - {name: user_id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_specialized_anon
+      table: events
+      rows:
+        - {user_id: 1, kind: login}
+        - {user_id: 2, kind: click}
+        - {user_id: 3, kind: login}
+        - {user_id: 4, kind: view}
+        - {user_id: 5, kind: click}
+        - {user_id: 6, kind: login}
+query: |
+  SELECT WITH ANONYMIZATION
+    OPTIONS(k_threshold=1, epsilon=10)
+    kind,
+    COUNT(*) AS c
+  FROM ds_specialized_anon.events
+  GROUP BY kind
+  ORDER BY kind
+expected:
+  route: local_stub
+  rows:
+    - {kind: "click", c: "2"}
+    - {kind: "login", c: "3"}
+    - {kind: "view",  c: "1"}

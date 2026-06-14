@@ -79,7 +79,7 @@ absl::StatusOr<std::vector<size_t>> FilterRowsByHavingModifier(
     const std::vector<size_t>& row_indices,
     const EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
-    const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx);
+    const ::googlesql::ResolvedAggregateScanBase& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan& analytic, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSampleScan(

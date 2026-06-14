@@ -1,0 +1,43 @@
+# aggregation_threshold_aggregate_stub: WITH AGGREGATION_THRESHOLD local-stub.
+#
+# Privacy-preserving aggregate scans are `local_stub` per
+# `docs/ENGINE_POLICY.md`: threshold / privacy-unit options are
+# ignored and the underlying aggregate is evaluated exactly.
+name: specialized_aggregation_threshold_aggregate_stub
+description: |
+  SELECT WITH AGGREGATION_THRESHOLD returns the plain GROUP BY
+  aggregate without erroring. Pins the local-stub scan contract.
+project_id: proj-specialized-threshold-aggregate
+dataset_id: ds_specialized_threshold
+setup:
+  - dataset: ds_specialized_threshold
+  - table:
+      dataset: ds_specialized_threshold
+      id: events
+      schema:
+        - {name: user_id, type: INT64, mode: REQUIRED}
+        - {name: kind, type: STRING, mode: REQUIRED}
+  - rows:
+      dataset: ds_specialized_threshold
+      table: events
+      rows:
+        - {user_id: 1, kind: login}
+        - {user_id: 2, kind: click}
+        - {user_id: 3, kind: login}
+        - {user_id: 4, kind: view}
+        - {user_id: 5, kind: click}
+        - {user_id: 6, kind: login}
+query: |
+  SELECT WITH AGGREGATION_THRESHOLD
+    OPTIONS(threshold=1, privacy_unit_column=user_id)
+    kind,
+    COUNT(*) AS c
+  FROM ds_specialized_threshold.events
+  GROUP BY kind
+  ORDER BY kind
+expected:
+  route: local_stub
+  rows:
+    - {kind: "click", c: "2"}
+    - {kind: "login", c: "3"}
+    - {kind: "view",  c: "1"}

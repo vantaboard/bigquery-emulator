@@ -101,9 +101,9 @@ ResolvedFilterScan: duckdb_native
 ResolvedJoinScan: duckdb_native
 ResolvedArrayScan: duckdb_native
 ResolvedAggregateScan: duckdb_native
-ResolvedAnonymizedAggregateScan: unsupported
-ResolvedDifferentialPrivacyAggregateScan: unsupported
-ResolvedAggregationThresholdAggregateScan: unsupported
+ResolvedAnonymizedAggregateScan: local_stub
+ResolvedDifferentialPrivacyAggregateScan: local_stub
+ResolvedAggregationThresholdAggregateScan: local_stub
 ResolvedSetOperationScan: duckdb_native
 ResolvedOrderByScan: duckdb_native
 ResolvedLimitOffsetScan: duckdb_native

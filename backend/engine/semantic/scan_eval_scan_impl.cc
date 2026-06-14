@@ -259,8 +259,13 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
       return MaterializeSetOperationScan(
           *scan->GetAs<::googlesql::ResolvedSetOperationScan>(), ctx);
     case ::googlesql::RESOLVED_AGGREGATE_SCAN:
-      return MaterializeAggregateScan(
-          *scan->GetAs<::googlesql::ResolvedAggregateScan>(), ctx);
+    case ::googlesql::RESOLVED_ANONYMIZED_AGGREGATE_SCAN:
+    case ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN:
+    case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN: {
+      const auto* aggregate =
+          static_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+      return MaterializeAggregateScan(*aggregate, ctx);
+    }
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:
       return MaterializeAnalyticScan(
           *scan->GetAs<::googlesql::ResolvedAnalyticScan>(), ctx);

@@ -5,6 +5,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
@@ -38,13 +39,56 @@ absl::StatusOr<Value> EvalAggregateForRows(
 
 namespace {
 
+// Privacy-preserving aggregate scans are `local_stub`: strip internal
+// `$differential_privacy_*` / `$anon_*` dispatch names to the plain
+// aggregate the semantic executor already implements.
+std::string PlainAggregateNameForPrivacyStub(absl::string_view agg_name) {
+  std::string stripped(agg_name);
+  if (absl::StartsWith(stripped, "$differential_privacy_")) {
+    stripped.erase(0, strlen("$differential_privacy_"));
+  } else if (absl::StartsWith(stripped, "$anon_")) {
+    stripped.erase(0, strlen("$anon_"));
+  } else {
+    return std::string(agg_name);
+  }
+  static constexpr absl::string_view kReportSuffixes[] = {
+      "_with_report_json",
+      "_with_report_proto",
+      "_report_json",
+      "_report_proto",
+  };
+  for (absl::string_view suffix : kReportSuffixes) {
+    if (absl::EndsWith(stripped, suffix)) {
+      stripped.erase(stripped.size() - suffix.size());
+      break;
+    }
+  }
+  if (stripped == "count_star" || absl::StartsWith(stripped, "count_star")) {
+    return "$count_star";
+  }
+  static constexpr absl::string_view kTypeSuffixes[] = {
+      "_double_array",
+      "_int64",
+      "_uint64",
+      "_double",
+      "_numeric",
+  };
+  for (absl::string_view suffix : kTypeSuffixes) {
+    if (absl::EndsWith(stripped, suffix)) {
+      stripped.erase(stripped.size() - suffix.size());
+      break;
+    }
+  }
+  return stripped;
+}
+
 // BigFrames routes lazy aggregates through `ResolvedDeferredComputedColumn`.
 // The value expression may be a bare aggregate or `$with_side_effects(value,
 // side_effect)` where a null side effect means "evaluate value". Scalar
 // `EvalExpr` cannot evaluate aggregates; reuse the aggregate-scan path.
 absl::StatusOr<Value> EvalDeferredComputedExpr(
     const ::googlesql::ResolvedExpr& expr,
-    const ::googlesql::ResolvedAggregateScan& aggregate,
+    const ::googlesql::ResolvedAggregateScanBase& aggregate,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
     EvalContext& agg_ctx) {
@@ -135,6 +179,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
       agg_name = absl::AsciiStrToLower(agg.function()->Name());
     }
   }
+  agg_name = PlainAggregateNameForPrivacyStub(agg_name);
   if (agg_name == "$count_star") {
     return Value::Int64(static_cast<int64_t>(effective_rows.size()));
   }
@@ -158,7 +203,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
 }
 
 absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
-    const ::googlesql::ResolvedAggregateScan& aggregate,
+    const ::googlesql::ResolvedAggregateScanBase& aggregate,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
     const std::vector<Value>* group_keys,
@@ -224,7 +269,7 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
-    const ::googlesql::ResolvedAggregateScan& aggregate, EvalContext& ctx) {
+    const ::googlesql::ResolvedAggregateScanBase& aggregate, EvalContext& ctx) {
   auto input_or = MaterializeScanImpl(aggregate.input_scan(), ctx);
   if (!input_or.ok()) return input_or.status();
   const std::vector<ColumnBindings>& input_rows = *input_or;

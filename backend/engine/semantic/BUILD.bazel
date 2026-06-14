@@ -309,6 +309,19 @@ cc_test(
 )
 
 cc_test(
+    name = "scan_eval_privacy_aggregate_stub_test",
+    srcs = ["scan_eval_privacy_aggregate_stub_test.cc"],
+    deps = [
+        ":scan_eval",
+        ":value",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
     name = "scan_eval_aggregate_deferred_test",
     srcs = ["scan_eval_aggregate_deferred_test.cc"],
     deps = [

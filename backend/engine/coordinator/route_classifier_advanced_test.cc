@@ -206,6 +206,45 @@ TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
 }
 
+TEST_F(RouteClassifierTest, DifferentialPrivacyAggregateScanRoutesToLocalStub) {
+  const auto* stmt = Analyze(
+      "SELECT WITH DIFFERENTIAL_PRIVACY "
+      "OPTIONS(epsilon=10, delta=0.01, privacy_unit_column=id) "
+      "name, COUNT(*) AS c FROM people GROUP BY name");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
+  EXPECT_EQ(d.offending_node, "ResolvedDifferentialPrivacyAggregateScan");
+  EXPECT_NE(d.reason.find("local-stub"), std::string::npos)
+      << "reason should mention the local-stub route; got: " << d.reason;
+}
+
+TEST_F(RouteClassifierTest,
+       AggregationThresholdAggregateScanRoutesToLocalStub) {
+  const auto* stmt = Analyze(
+      "SELECT WITH AGGREGATION_THRESHOLD "
+      "OPTIONS(threshold=1, privacy_unit_column=id) "
+      "name, COUNT(*) AS c FROM people GROUP BY name");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
+  EXPECT_EQ(d.offending_node, "ResolvedAggregationThresholdAggregateScan");
+}
+
+TEST_F(RouteClassifierTest, AnonymizedAggregateScanRoutesToLocalStub) {
+  const auto* stmt = Analyze(
+      "SELECT WITH ANONYMIZATION "
+      "OPTIONS(k_threshold=1, epsilon=10) "
+      "name, COUNT(*) AS c FROM people GROUP BY name");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
+  EXPECT_EQ(d.offending_node, "ResolvedAnonymizedAggregateScan");
+}
+
 TEST_F(RouteClassifierTest, MlPredictRoutesToLocalStub) {
   const auto* stmt = Analyze(
       "SELECT * FROM ML.PREDICT(MODEL `ds.unregistered_model`, "

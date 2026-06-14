@@ -562,9 +562,10 @@ $subscript: duckdb_rewrite duckdb_name=$subscript
 # exact results on the semantic executor
 # (`backend/engine/semantic/functions/aggregate_specialized.cc`).
 # The differential-privacy / anonymized aggregate *scans*
-# (`ResolvedAnonymizedAggregateScan`, ...) stay `unsupported` in
-# `node_dispositions.yaml` because their noise-calibration guarantee
-# cannot be honored locally.
+# (`ResolvedAnonymizedAggregateScan`, ...) are `local_stub` rows in
+# `node_dispositions.yaml`: privacy modifiers are stripped and the
+# plain aggregate is evaluated on the semantic executor (NOT
+# differential privacy — see `docs/ENGINE_POLICY.md`).
 approx_quantiles: semantic_executor
 approx_count_distinct: semantic_executor
 approx_top_count: semantic_executor

@@ -807,7 +807,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 |---|---|---|---|
 | BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | **stub** | [BigQuery ML](#bigquery-ml) |
 | BigQuery ML `CREATE MODEL` | `local_stub` | stub (stays) | [BigQuery ML](#bigquery-ml) |
-| Differential privacy / anonymized aggregation | `unsupported` | **stub** | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
+| Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
 | Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
 | `SESSION_USER` (`session_user`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `unsupported` | **real** | [Deferred built-in functions](#deferred-built-in-functions) |
@@ -873,9 +873,10 @@ in production and the emulator cannot honor the guarantee, so these are
 aggregate so the query does not fail. This is **not** differential
 privacy.
 
-- ⏳ `ResolvedAnonymizedAggregateScan` — **stub**
-- ⏳ `ResolvedDifferentialPrivacyAggregateScan` — **stub**
-- ⏳ `ResolvedAggregationThresholdAggregateScan` — **stub**
+- ✅ `ResolvedAnonymizedAggregateScan` — **stub**: privacy modifiers
+  stripped; plain aggregate via `scan_eval_aggregate.cc`
+- ✅ `ResolvedDifferentialPrivacyAggregateScan` — **stub**: same
+- ✅ `ResolvedAggregationThresholdAggregateScan` — **stub**: same
 
 #### Protobuf field access
 
