@@ -29,7 +29,7 @@ Active work to green the ported **query port suite** is tracked via:
 
 - [`scripts/query_port_failures.sh`](scripts/query_port_failures.sh) — classify failures from gateway e2e test results
 - [`taskfiles/thirdparty.yml`](taskfiles/thirdparty.yml) — third-party Java sample parity tasks
-- Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document, [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](backend/engine/duckdb/transpiler/SHAPE_TRACKER.md), and disposition YAML headers
+- Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document ([Planned work](#planned-work)), [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](backend/engine/duckdb/transpiler/SHAPE_TRACKER.md), and disposition YAML headers
 
 Route vocabulary, foundation prerequisites, and engine-wide done criteria live in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
 
@@ -434,10 +434,14 @@ handler.
   `NET.*`, `HLL_COUNT.*`, and the approximate-aggregate family
   (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`,
   `APPROX_TOP_SUM`) evaluate on the semantic executor (`net_funcs.cc`,
-  `hll_funcs.cc`, `aggregate_specialized.cc`). Unsupported families
-  (`ML.*`, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, the broader `ST_*`
-  GIS surface beyond the `ST_GEOGPOINT` constructor, differential-
-  privacy aggregates, `SESSION_USER`, ...) are documented in
+  `hll_funcs.cc`, `aggregate_specialized.cc`). Deferred families that
+  today surface `UNIMPLEMENTED` but are tracked as ⏳ planned work
+  (see [Planned work](#planned-work) below) include `ML.*` inference,
+  `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `ST_GEOGFROMWKB`, differential-
+  privacy / anonymized aggregates, graph / proto AST nodes,
+  `SESSION_USER`, and related node kinds in
+  [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
+  The current posture for each is documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
   `SAFE.<fn>(...)` is handled uniformly regardless of disposition
@@ -480,8 +484,9 @@ public-facing policy.
   `Engine::ExecuteQuery`
 - ✅ Per-shape dispositions recorded in the shape tracker
   (seven-route vocabulary + node/function YAML registries are closed
-  for in-scope shapes; deliberate `unsupported` families documented
-  in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
+  for in-scope shapes; deferred families that remain `unsupported`
+  today are listed in [Planned work](#planned-work) and summarized in
+  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
 - 🟢 Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
   The conformance routing matrix added the
@@ -770,6 +775,84 @@ and
 
 ---
 
+## Planned work
+
+The items below are deliberately deferred today (`unsupported` in
+[`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml) and
+[`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml);
+summarized in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)) but are on
+the roadmap to land with **local** implementations — never with a cloud
+passthrough. Each promotion off `unsupported` requires the handler,
+conformance fixture(s), and disposition-registry update in the same commit
+(per [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
+
+### BigQuery ML inference
+
+`CREATE MODEL` already routes `local_stub` so client-library registration
+probes succeed; the inference call sites below still surface
+`UNIMPLEMENTED` until a local model-evaluation path ships.
+
+- ⏳ `ML.PREDICT` (`ml.predict`)
+- ⏳ `ML.FORECAST` (`ml.forecast`)
+- ⏳ `ML.EVALUATE` (`ml.evaluate`)
+
+### Deferred built-in functions
+
+Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
+
+- ⏳ `KEYS.ENCRYPT` (`keys.encrypt`) — AEAD encrypt over a local keyset
+  representation (complements the existing `KEYS.NEW_KEYSET` /
+  `KEYS.KEYSET_LENGTH` `local_stub` probes)
+- ⏳ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`)
+- ⏳ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — WKB → `GEOGRAPHY` on the semantic
+  GIS path (extends the landed `ST_GEOGPOINT` / `ST_GEOGFROMTEXT` MVP in
+  `backend/engine/semantic/functions/geog_funcs.cc`)
+- ⏳ `SESSION_USER` (`session_user`) — session principal identifier for
+  row/column-policy and audit queries
+
+### Deferred AST node dispositions
+
+Rows in
+[`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml):
+
+**Statements**
+
+- ⏳ `ResolvedExplainStmt` — `EXPLAIN` plan introspection
+
+**Privacy-preserving aggregates**
+
+- ⏳ `ResolvedAnonymizedAggregateScan`
+- ⏳ `ResolvedDifferentialPrivacyAggregateScan`
+- ⏳ `ResolvedAggregationThresholdAggregateScan`
+
+**Graph / GQL scans**
+
+- ⏳ `ResolvedGraphTableScan`
+- ⏳ `ResolvedGraphScan`
+- ⏳ `ResolvedGraphLinearScan`
+- ⏳ `ResolvedGraphRefScan`
+- ⏳ `ResolvedGraphCallScan`
+- ⏳ `ResolvedGraphElementScan`
+- ⏳ `ResolvedGraphNodeScan`
+- ⏳ `ResolvedGraphEdgeScan`
+- ⏳ `ResolvedGraphPathScan`
+
+**Protobuf field access**
+
+- ⏳ `ResolvedMakeProto`
+- ⏳ `ResolvedGetProtoField`
+- ⏳ `ResolvedGetProtoOneof`
+- ⏳ `ResolvedReplaceField`
+- ⏳ `ResolvedGetRowField`
+- ⏳ `ResolvedFilterField`
+- ⏳ `ResolvedFilterFieldArg`
+
+**Catalog / sequence helpers**
+
+- ⏳ `ResolvedSequence`
+- ⏳ `ResolvedCatalogColumnRef`
+- ⏳ `ResolvedExpressionColumn`
+
 ## Non-goals
 
 - No Go port of GoogleSQL. Engine is C++. If GoogleSQL changes, we rebuild;
@@ -786,11 +869,13 @@ and
   shapes that route through the DuckDB fast path; expect "fast
   enough for tests, not fast enough for benchmarks" for shapes that
   route through the semantic executor; expect `UNIMPLEMENTED` for
-  the unsupported-by-design families documented in
-  `docs/ENGINE_POLICY.md`.
-- No BigQuery ML / BigQuery Omni / external data sources at first; opt-in
-  later if there's demand, and only with a local implementation or a
-  deterministic stub — never with a cloud passthrough.
+  families not yet landed (see [Planned work](#planned-work) and
+  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
+- No BigQuery Omni or cloud-backed external data sources (`gs://`
+  ingest/export, federated queries, ...). Deferred families in
+  [Planned work](#planned-work) — including BigQuery ML inference —
+  will land only as local implementations or deterministic stubs,
+  never with a cloud passthrough.
 
 ## Build systems
 
