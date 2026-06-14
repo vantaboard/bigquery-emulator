@@ -29,8 +29,7 @@ Active work to green the ported **query port suite** is tracked via:
 
 - [`scripts/query_port_failures.sh`](scripts/query_port_failures.sh) — classify failures from gateway e2e test results
 - [`taskfiles/thirdparty.yml`](taskfiles/thirdparty.yml) — third-party Java sample parity tasks
-- Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document, and disposition YAML headers
-- The **full-01..11 second-wave parity set** (`.cursor/plans/full-00-index.plan.md`) — landed on the branch ahead of `main` as of 2026-06; remaining follow-ups are `(planned)` AST rows, broader GIS, and incremental conformance triage
+- Inline deferrals in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md), this document, [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](backend/engine/duckdb/transpiler/SHAPE_TRACKER.md), and disposition YAML headers
 
 Route vocabulary, foundation prerequisites, and engine-wide done criteria live in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
 

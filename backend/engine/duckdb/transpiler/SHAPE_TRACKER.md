@@ -138,7 +138,7 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedSystemVariable`                      | `semantic_executor`   | `@@time_zone` defaults to UTC via `system_variables.cc`; scripting `@@error.*` reads resolve through `EvalContext::script_system_variables` (populated by `googlesql::ScriptExecutor` during `EXCEPTION` handlers). Pinned by `conformance/fixtures/scripting/exception_error_message.yaml` and `exception_statement_text.yaml`. |
 | `ResolvedSequence`                            | `unsupported`         | SEQUENCE objects; `docs/ENGINE_POLICY.md`.                                                  |
 | `ResolvedArgumentRef` / `ResolvedArgumentDef` | `semantic_executor` (subset) | `udf-tvf-module-routing`: `ResolvedArgumentRef` resolves against `EvalContext::arguments` (a `semantic::FrameStack` the UDF / TVF caller pushes per invocation). Missing frame surfaces a structured `kInvalidArgument` naming the argument rather than substituting NULL. `ResolvedArgumentDef` signature metadata is serialized at routine persist time (`SerializeFunctionSignatureJson` in `routine_persistence.cc`) and recovered when stored DDL is re-analyzed at rehydrate. |
-| `ResolvedCatalogColumnRef`                    | `control_op`          | (planned) Catalog-time column ref inside DDL option lists; no landed `ALTER TABLE` / `LOAD DATA` shape in plan 09 required an `EmitCatalogColumnRef` lowering — keep `UNIMPLEMENTED` until a conformance fixture pins a consumer. |
+| `ResolvedCatalogColumnRef`                    | `control_op`          | (planned) Catalog-time column ref inside DDL option lists; no landed `ALTER TABLE` / `LOAD DATA` shape required an `EmitCatalogColumnRef` lowering — keep `UNIMPLEMENTED` until a conformance fixture pins a consumer. |
 | `ResolvedExpressionColumn`                    | `unsupported`         | Expression-mode analyzer; emulator does not use it.                                       |
 | `ResolvedUpdateConstructor`                   | `semantic_executor`   | (planned) DML expr; `docs/ENGINE_POLICY.md`.                                                       |
 
@@ -148,7 +148,7 @@ semantic-executor / control-op code) so the doc stays honest.
 |-----------------------------------------------|-----------------------|-------------------------------------------------------------------------------------------|
 | `ResolvedOutputColumn`                        | `duckdb_native`       | `transpiler-select-core`: `<column-name> AS <output-name>` (alias collapsed when the names match). Used by `EmitQueryStmt` for the outermost projection. |
 | `ResolvedComputedColumn`                      | `duckdb_native`       | `transpiler-select-core`: `<expr> AS "<resolved-column-name>"`; child expression failures propagate the empty-string fallback contract. |
-| `ResolvedDeferredComputedColumn`              | `semantic_executor`   | `advanced-relational-routing`: side-effect-aware computed column (deferred error capture via `side_effect_column`). The route classifier promotes any query containing one to the semantic executor; the executor itself surfaces `UNIMPLEMENTED` until the deferred-evaluation semantics are wired up (downstream plan).                                                       |
+| `ResolvedDeferredComputedColumn`              | `semantic_executor`   | Side-effect-aware computed column (deferred error capture via `side_effect_column`). The route classifier promotes any query containing one to the semantic executor; the executor itself surfaces `UNIMPLEMENTED` until the deferred-evaluation semantics are wired up.                                                       |
 | `ResolvedOrderByItem`                         | `duckdb_native` (subset) | `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` promotes to `semantic_executor` with the parent `ResolvedOrderByScan`. |
 | `ResolvedColumnHolder`                        | `semantic_executor`   | UNNEST WITH OFFSET shape; `backend/engine/semantic/array_struct/array_scan.cc` binds the holder's `ResolvedColumn` to the per-row INT64 offset; `docs/ENGINE_POLICY.md` Family 1. |
 | `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` | `duckdb_rewrite` | `advanced-relational-routing`: GROUPING SETS / ROLLUP / CUBE lower onto DuckDB's `GROUP BY GROUPING SETS (...)` form via `EmitGroupingSetEntry` (see the `ResolvedAggregateScan` row).         |
@@ -293,20 +293,18 @@ semantic-executor / control-op code) so the doc stays honest.
   semantic executor families (UNNEST/lateral/correlated, aggregate
   modifiers, CAST/COLLATE edges, pipe subpipelines, FLATTEN, GROUP
   ROWS, inline lambdas, NET/HLL/approximate aggregates), and the
-  Storage Read/Write API completion. The parity 01–13 plan set under
-  `.cursor/plans/parity-*` tracked that work.
-* **Next gaps (post full-* second wave):** the `(planned)` AST rows
-  that still surface `UNIMPLEMENTED` until handlers land:
-  `ResolvedUpdateConstructor`, `ResolvedRelationArgumentScan`,
-  `ResolvedCatalogColumnRef`, `ResolvedDeferredComputedColumn`, and
-  MERGE `THEN RETURN` (blocked on googlesql pinning
-  `ResolvedMergeStmt::returning()`). The broader `ST_*` GIS surface
-  beyond the MVP (`ST_GEOGFROMWKB`, aggregates, buffer/simplify family,
-  ...) stays `unsupported`. Incremental conformance follow-ups (new
-  fixtures landing with waves 2–4) may still be triaged against
-  production BigQuery via the `bq` CLI rule
+  Storage Read/Write API completion.
+* **Remaining gaps:** the `(planned)` AST rows that still surface
+  `UNIMPLEMENTED` until handlers land: `ResolvedUpdateConstructor`,
+  `ResolvedRelationArgumentScan`, `ResolvedCatalogColumnRef`,
+  `ResolvedDeferredComputedColumn`, and MERGE `THEN RETURN` (blocked
+  on googlesql pinning `ResolvedMergeStmt::returning()`). The broader
+  `ST_*` GIS surface beyond the MVP (`ST_GEOGFROMWKB`, aggregates,
+  buffer/simplify family, ...) stays `unsupported`. Incremental
+  conformance follow-ups may still be triaged against production
+  BigQuery via the `bq` CLI rule
   (`.cursor/rules/conformance-bq-validation.mdc`).
-* **Landed in the full-01..11 second-wave set:** core
+* **Recently landed (beyond the original transpiler baseline):** core
   `INFORMATION_SCHEMA` catalog views (engine-resolved; `JOBS` /
   `JOBS_BY_PROJECT` gateway-rewritten), NUMERIC/BIGNUMERIC
   exact-decimal routing, wildcard tables + `_TABLE_SUFFIX` pruning,

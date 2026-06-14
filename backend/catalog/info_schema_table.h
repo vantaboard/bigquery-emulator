@@ -27,7 +27,7 @@ namespace catalog {
 // JOBS / JOBS_BY_PROJECT are intentionally absent: BigQuery job state
 // lives in the Go gateway's job store, not the C++ engine's `Storage`,
 // so those views are unresolved here (NOT_FOUND) rather than faked.
-// See full-01 plan notes for the deferral rationale.
+// The gateway rewrites those queries instead (`gateway/query/info_schema_jobs.go`).
 enum class InfoSchemaViewKind {
   kTables,
   kColumns,
