@@ -1,5 +1,3 @@
-#include "backend/engine/semantic/eval_expr_internal.h"
-
 #include <memory>
 #include <string>
 #include <vector>
@@ -8,6 +6,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/dynamic_message.h"
@@ -81,7 +80,8 @@ absl::StatusOr<google::protobuf::Message*> MutableMessageAtPath(
   google::protobuf::Message* current = root;
   for (size_t i = 0; i + 1 < path.size(); ++i) {
     const google::protobuf::FieldDescriptor* field = path[i];
-    if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+    if (field->cpp_type() !=
+        google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
       return absl::InvalidArgumentError(
           "semantic: intermediate UpdateConstructor path is not a message");
     }
@@ -111,7 +111,8 @@ absl::Status ApplyUpdateFieldItem(
   const bool create_missing =
       item.operation() !=
       ::googlesql::ResolvedUpdateFieldItem::UPDATE_SINGLE_NO_CREATION;
-  auto msg_or = MutableMessageAtPath(root, item.proto_field_path(), create_missing);
+  auto msg_or =
+      MutableMessageAtPath(root, item.proto_field_path(), create_missing);
   if (!msg_or.ok()) return msg_or.status();
   google::protobuf::Message* target = *msg_or;
   const google::protobuf::FieldDescriptor* leaf =
@@ -144,7 +145,8 @@ absl::Status ApplyUpdateFieldItem(
 }  // namespace
 
 absl::StatusOr<Value> EvalUpdateConstructor(
-    const ::googlesql::ResolvedUpdateConstructor& node, const EvalContext& ctx) {
+    const ::googlesql::ResolvedUpdateConstructor& node,
+    const EvalContext& ctx) {
   if (node.type() == nullptr || !node.type()->IsProto()) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
@@ -176,8 +178,9 @@ absl::StatusOr<Value> EvalUpdateConstructor(
     }
     msg = base_or->ToMessage(&factory, /*return_null_on_error=*/true);
     if (msg == nullptr) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: UpdateConstructor base proto is invalid");
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic: UpdateConstructor base proto is invalid");
     }
     owned.reset(msg);
   }

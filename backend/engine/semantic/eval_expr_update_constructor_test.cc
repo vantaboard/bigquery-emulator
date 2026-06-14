@@ -33,9 +33,9 @@ const google::protobuf::Descriptor* BuildTestRowDescriptor(
   field->set_number(1);
   field->set_type(google::protobuf::FieldDescriptorProto::TYPE_INT64);
   field->set_label(google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
-  const google::protobuf::FileDescriptor* file_desc =
-      pool->BuildFile(file);
-  return file_desc == nullptr ? nullptr : file_desc->FindMessageTypeByName("Row");
+  const google::protobuf::FileDescriptor* file_desc = pool->BuildFile(file);
+  return file_desc == nullptr ? nullptr
+                              : file_desc->FindMessageTypeByName("Row");
 }
 
 TEST(EvalUpdateConstructorTest, SetsProtoFieldOnNullBase) {
@@ -50,7 +50,8 @@ TEST(EvalUpdateConstructorTest, SetsProtoFieldOnNullBase) {
 
   std::vector<const google::protobuf::FieldDescriptor*> path = {
       row_desc->FindFieldByName("val")};
-  std::vector<std::unique_ptr<const ::googlesql::ResolvedUpdateFieldItem>> items;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedUpdateFieldItem>>
+      items;
   items.push_back(::googlesql::MakeResolvedUpdateFieldItem(
       ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(42)),
       path,
