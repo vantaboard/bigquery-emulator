@@ -19,6 +19,9 @@ todos:
   - id: fixtures-trackers
     content: "Conformance fixtures: ST_GEOGFROMWKB constructor (WKB -> WKT, real), an EXPLAIN smoke (real), KEYS.ENCRYPT/DECRYPT_BYTES round-trip returns a placeholder without erroring (stub), and SESSION_USER returns the placeholder principal (stub). Flip the rows in functions.yaml / node_dispositions.yaml + SHAPE_TRACKER with the correct posture (local_impl for ST_GEOGFROMWKB/EXPLAIN, local_stub for KEYS/SESSION_USER); update ENGINE_POLICY (Key management, Geography, + EXPLAIN/SESSION_USER notes) and ROADMAP §Deferred built-in functions + §Statements."
     status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and bqutils known_failing/ for ST_GEOGFROMWKB / EXPLAIN / KEYS.* / SESSION_USER fixtures now passing and promote them; re-run any third-party subtest touching these. For KEYS.* / SESSION_USER only unskip where the test checks the query *runs* (stub returns a placeholder, not real crypto / identity); note why otherwise. Update third_party/README.md."
+    status: pending
 ---
 
 # Expand 08 — Scalar + statement long tail
@@ -62,6 +65,19 @@ no-fail), so the policy text must be updated alongside.
 3. `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` placeholder (stub).
 4. `SESSION_USER` placeholder principal (stub).
 5. Fixtures + per-item posture flips (local_impl vs local_stub) + docs.
+
+## Third-party / conformance to revisit
+
+**Audit for newly-passing tests**, not just fresh fixtures. Re-run to
+prove it; for the stubs (`KEYS.*`, `SESSION_USER`) only unskip where the
+test checks the query *runs*, and note why otherwise.
+
+- **GoogleSQL `.test` + bqutils corpus** — sweep
+  `conformance/googlesql-corpus/` and
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` for
+  `ST_GEOGFROMWKB` / `EXPLAIN` / `KEYS.*` / `SESSION_USER` fixtures.
+- **client lanes** — re-run any subtest touching these; update
+  `third_party/README.md` for rows truly unblocked.
 
 ## Out of scope
 

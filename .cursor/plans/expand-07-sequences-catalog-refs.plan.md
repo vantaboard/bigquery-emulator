@@ -16,6 +16,9 @@ todos:
   - id: fixtures-trackers
     content: "Conformance fixtures for whichever shapes land with real SQL coverage (sequence advance if implemented; expression-column eval). Flip the corresponding rows in node_dispositions.yaml + SHAPE_TRACKER; update ROADMAP §Catalog / sequence helpers + the ENGINE_POLICY Sequences row. For any shape that stays unsupported, sharpen the envelope/doc instead of flipping."
     status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done, for whatever shapes actually land). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and the bqutils known_failing/ corpus for sequence / expression-column / catalog-ref fixtures that now pass and promote them. Re-run any third-party subtest that touches these shapes; update third_party/README.md only for rows truly unblocked. For shapes that stay unsupported, leave a note rather than unskipping."
+    status: pending
 ---
 
 # Expand 07 — Sequences & catalog column refs
@@ -63,6 +66,19 @@ task conformance:run
 task lint:dispositions
 task bazel:shutdown && task bazel:status
 ```
+
+## Third-party / conformance to revisit
+
+For whatever shapes actually land, **audit for newly-passing tests** (not
+just fresh fixtures). Re-run to prove it; note shapes that stay
+unsupported instead of unskipping.
+
+- **GoogleSQL `.test` + bqutils corpus** — sweep
+  `conformance/googlesql-corpus/` and
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` for
+  sequence / expression-column / catalog-ref fixtures to promote.
+- **client lanes** — re-run any subtest touching these shapes; update
+  `third_party/README.md` for rows truly unblocked.
 
 ## Out of scope
 

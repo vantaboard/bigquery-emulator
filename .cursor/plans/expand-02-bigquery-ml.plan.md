@@ -14,7 +14,10 @@ todos:
     content: "Route classifier: ensure ML.* model-bearing calls dispatch to the stub lane rather than surfacing UNIMPLEMENTED, while keeping the priority order intact (a query mixing a stubbed ML.* with a genuinely unsupported shape still surfaces the unsupported error)."
     status: pending
   - id: fixtures-trackers
-    content: "Conformance fixtures: CREATE MODEL + ML.PREDICT / ML.EVALUATE return a schema-correct placeholder result (schema_only matching mode) without erroring. Flip ml.predict / ml.forecast / ml.evaluate from unsupported -> local_stub in functions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY ML rows + ROADMAP §BigQuery ML to describe the stub posture. Drop any client-lane ML skip rows that now pass because the query no longer fails."
+    content: "Conformance fixtures: CREATE MODEL + ML.PREDICT / ML.EVALUATE return a schema-correct placeholder result (schema_only matching mode) without erroring. Flip ml.predict / ml.forecast / ml.evaluate from unsupported -> local_stub in functions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY ML rows + ROADMAP §BigQuery ML to describe the stub posture."
+    status: pending
+  - id: skip-audit
+    content: "Third-party skip audit (run before declaring done). The ML stub means ML.* queries no longer error, so several currently-skipped ML tests may run as schema_only checks. Re-run each suite and unskip what passes: golang `bqtestutil.SkipEmulatorBQML` call sites (third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go); python `model` / `bqml` skip substrings (third_party/python-bigquery-tests/emulator_pytest_skip.py + _SKIP_FIXTURES model_id); node `models.test.js` (third_party/node-bigquery-tests/test/setup.js + EMULATOR.md); java BQML ITs. Keep skips where the test asserts real prediction values (the stub returns placeholders, not predictions) and note why. Update third_party/README.md."
     status: pending
 ---
 
@@ -53,6 +56,20 @@ the policy text must be updated alongside.
 2. Implement the stubs in the function-stub lane; keep CREATE MODEL stub.
 3. Route ML.* to the stub lane (no `UNIMPLEMENTED`).
 4. Fixtures (schema_only, no-error) + flip `ml.*` to `local_stub` + doc updates.
+
+## Third-party / conformance to revisit
+
+The stub makes ML.* queries succeed (schema-correct placeholder), so
+**audit the ML skip rows** — tests that only need the query to *run*
+(not to return real predictions) can be unskipped. Re-run the suite to
+prove it; keep skips that assert prediction *values* and note why.
+
+- **golang** — `bqtestutil.SkipEmulatorBQML` call sites
+  (`third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go`).
+- **python** — `model` / `bqml` skip substrings + `model_id` fixture
+  (`third_party/python-bigquery-tests/emulator_pytest_skip.py`).
+- **node** — `models.test.js` (`third_party/node-bigquery-tests/test/setup.js`).
+- **java** — BQML ITs; update `third_party/README.md` matrices.
 
 ## Out of scope
 

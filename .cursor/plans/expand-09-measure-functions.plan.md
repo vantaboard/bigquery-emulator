@@ -16,6 +16,9 @@ todos:
   - id: fixtures-trackers
     content: "Conformance fixtures: a measure-typed view column + AGGREGATE(<measure>) over a GROUP BY. Flip the measure rows off unsupported in the registries + SHAPE_TRACKER; update the ENGINE_POLICY MEASURE row + ROADMAP §Measure functions."
     status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and bqutils known_failing/ for MEASURE / AGGREGATE(<measure>) fixtures that now pass and promote them; re-run any third-party subtest touching measure columns. Update third_party/README.md only for rows truly unblocked + note anything still failing."
+    status: pending
 ---
 
 # Expand 09 — Measure functions
@@ -63,6 +66,18 @@ task conformance:run
 task lint:dispositions
 task bazel:shutdown && task bazel:status
 ```
+
+## Third-party / conformance to revisit
+
+When measures land, **audit for newly-passing tests**, not just fresh
+fixtures. Re-run to prove it; note anything still failing.
+
+- **GoogleSQL `.test` + bqutils corpus** — sweep
+  `conformance/googlesql-corpus/` and
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` for
+  `MEASURE` / `AGGREGATE(<measure>)` fixtures to promote.
+- **client lanes** — re-run any subtest touching measure columns; update
+  `third_party/README.md` for rows truly unblocked.
 
 ## Out of scope
 

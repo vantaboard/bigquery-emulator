@@ -134,6 +134,12 @@ graph LR
 - Update the matching ROADMAP.md §Planned work bullet (⏳ -> ✅, or move
   the row to a landed section) and the ENGINE_POLICY.md family table
   posture (`unsupported` -> `local_impl` / `local_stub`, etc.).
-- Remove third-party skip-matrix rows (`third_party/*/emulator_*skip*`,
-  `third_party/README.md`) the landed shape unblocks; re-run that suite
-  to prove it.
+- Audit third-party + conformance skips for the landed shape — don't just
+  remove the obvious rows. Each plan carries a `skip-audit` todo naming its
+  targets: client-lane matrices (`third_party/*/emulator_*skip*`,
+  `third_party/README.md`, `node-bigquery-tests/EMULATOR.md`), the bqutils
+  corpus (`conformance/thirdparty-fixtures/bigquery_utils/known_failing/` ->
+  `passing/`), and the GoogleSQL `.test` corpus
+  (`conformance/googlesql-corpus/`). Re-run the suite to prove a row now
+  passes before unskipping; for stub-only families unskip only where the
+  test checks the query *runs*, and leave a note for anything still blocked.

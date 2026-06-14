@@ -13,6 +13,9 @@ todos:
   - id: fixtures-trackers
     content: "Conformance fixtures: a WITH ANONYMIZATION / DIFFERENTIAL_PRIVACY / AGGREGATION_THRESHOLD query returns the plain aggregate without erroring. Flip the three scan rows from unsupported -> local_stub (or semantic_executor-as-stub) in node_dispositions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY DP row to describe the no-fail stub (and that it is NOT differential privacy) + ROADMAP §Privacy-preserving aggregates."
     status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done). The stub makes DP/anonymized/threshold queries succeed (plain aggregate), so check for currently-skipped or known_failing cases that now run: sweep the bqutils corpus known_failing/ (conformance/thirdparty-fixtures/bigquery_utils/known_failing/) and the GoogleSQL `.test` corpus for DP-clause fixtures; re-run any third-party subtest that issues these clauses. Only unskip where the test asserts the query *runs* (not a privacy guarantee); note why for the rest. Update third_party/README.md."
+    status: pending
 ---
 
 # Expand 06 — Privacy-preserving aggregates (stubs)
@@ -47,6 +50,19 @@ emulator's output for a privacy-preserving result.
 1. Decide the no-fail behavior (plain aggregate, modifiers ignored).
 2. Route the three scans to aggregate eval with modifiers stripped.
 3. Fixtures (no-error) + flip the rows + doc updates ("not DP").
+
+## Third-party / conformance to revisit
+
+The stub makes these clauses succeed, so **audit for newly-runnable
+tests** — but only unskip where the test checks the query *runs*, not a
+privacy guarantee. Re-run to prove it; note why for the rest.
+
+- **bqutils + GoogleSQL `.test` corpus** — sweep
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` and
+  `conformance/googlesql-corpus/` for DP-clause fixtures.
+- **client lanes** — re-run any subtest issuing `WITH ANONYMIZATION` /
+  `DIFFERENTIAL_PRIVACY` / `AGGREGATION_THRESHOLD`; update
+  `third_party/README.md`.
 
 ## Out of scope
 

@@ -22,6 +22,9 @@ todos:
   - id: fixtures-trackers
     content: "Conformance fixtures: proto construct + field read, oneof, REPLACE_FIELDS, FILTER_FIELDS, GetRowField. Flip the proto rows in node_dispositions.yaml (unsupported -> semantic_executor) + SHAPE_TRACKER + the ENGINE_POLICY Protobuf row; update ROADMAP §Protobuf field access."
     status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done). Check whether any currently-skipped or known_failing proto cases now pass and promote them: widen the GoogleSQL `.test` corpus lane (conformance/googlesql-corpus/) with proto cases the implementation covers; sweep the bqutils corpus known_failing/ for proto-shaped fixtures (conformance/thirdparty-fixtures/bigquery_utils/known_failing/); re-run any third-party subtests that touch proto columns. Update third_party/README.md only for rows actually unblocked + note anything still failing."
+    status: pending
 ---
 
 # Expand 04 — Protobuf field access
@@ -73,6 +76,19 @@ task conformance:run
 task lint:dispositions
 task bazel:shutdown && task bazel:status
 ```
+
+## Third-party / conformance to revisit
+
+When the proto surface lands, **audit for newly-passing tests** — don't
+just add fresh fixtures. Re-run to prove it; note anything still failing.
+
+- **GoogleSQL `.test` corpus** — widen `conformance/googlesql-corpus/`
+  with proto cases the implementation now covers.
+- **bqutils corpus** — sweep
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` for
+  proto-shaped fixtures that can move to `passing/`.
+- **client lanes** — re-run any subtest touching proto columns; update
+  `third_party/README.md` for rows actually unblocked.
 
 ## Out of scope
 

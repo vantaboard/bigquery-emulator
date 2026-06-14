@@ -20,7 +20,10 @@ todos:
     content: "Extend ephemeral tableDefinitions on jobs.query / jobs.insert to non-GCS sources beyond today's GCS-via-fake-gcs materialization, routing each definition through the config model (gateway/external/materialize.go)."
     status: pending
   - id: fixtures-trackers
-    content: "Conformance fixtures: gs:// LOAD/EXPORT round-trip against fake-gcs, a Google Sheets external-table read from a local snapshot, and a connection/federated read in fixture mode. Update ENGINE_POLICY (gs:// LOAD/EXPORT, Google Sheets, connections rows), the §Google Sheets section, ROADMAP §External data sources (⏳ -> ✅ per surface), and remove the python `test_query_external_sheets_*` skip rows that now pass. Document the live-mode opt-in + credentials in docs/REST_API.md + README."
+    content: "Conformance fixtures: gs:// LOAD/EXPORT round-trip against fake-gcs, a Google Sheets external-table read from a local snapshot, and a connection/federated read in fixture mode. Update ENGINE_POLICY (gs:// LOAD/EXPORT, Google Sheets, connections rows), the §Google Sheets section, ROADMAP §External data sources (⏳ -> ✅ per surface). Document the live-mode opt-in + credentials in docs/REST_API.md + README."
+    status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done; never just remove the obvious rows). Re-run each suite the landed surface should unblock and unskip what now passes: python `test_query_external_sheets_permanent_table` / `test_query_external_sheets_temporary_table` + GCS-backed sample loads (third_party/python-bigquery-tests/emulator_pytest_skip.py); golang bqconnection / external-table ITs (third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go + the README coverage matrix); java bigqueryconnection ITs (third_party/java-bigquery-tests, currently UNIMPLEMENTED per README); GCS subtests gated on STORAGE_EMULATOR_HOST. Update third_party/README.md skip matrices + node-bigquery-tests/EMULATOR.md. Leave a written note for any row that still can't run + why."
     status: pending
 ---
 
@@ -77,6 +80,21 @@ task lint:dispositions
 task thirdparty:python      # external sheets samples
 task bazel:shutdown && task bazel:status
 ```
+
+## Third-party / conformance to revisit
+
+When a surface lands, **audit the skip matrices** — some currently-skipped
+tests should run afterward. Re-run the suite to prove it before removing a
+skip; leave a note for anything still blocked.
+
+- **python** — `test_query_external_sheets_*` and GCS-backed sample loads
+  (`third_party/python-bigquery-tests/emulator_pytest_skip.py`).
+- **golang** — connection / external-table ITs gated in
+  `third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go` + the
+  README "coverage matrix".
+- **java** — `bigqueryconnection` ITs (today `UNIMPLEMENTED`).
+- **all lanes** — GCS subtests gated on `STORAGE_EMULATOR_HOST`; update
+  `third_party/README.md` + `node-bigquery-tests/EMULATOR.md`.
 
 ## Out of scope
 

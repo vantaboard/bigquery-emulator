@@ -17,7 +17,10 @@ todos:
     content: "Decide scope for table-valued / aggregate Python UDFs. Scalar is the must-have; TVF/aggregate may stay unsupported initially (document), matching the JS UDF posture where non-scalar shapes are deferred."
     status: pending
   - id: fixtures-trackers
-    content: "Conformance fixtures under conformance/fixtures/udf/ (python_scalar_*); promote cw_xml_extract out of bqutils known_failing/ if it now passes. Flip the Python UDF row in ENGINE_POLICY (unsupported -> local_impl), update ROADMAP §Python UDFs, and drop the python-language skip rows from the client-lane skip matrices that pass."
+    content: "Conformance fixtures under conformance/fixtures/udf/ (python_scalar_*). Flip the Python UDF row in ENGINE_POLICY (unsupported -> local_impl), update ROADMAP §Python UDFs."
+    status: pending
+  - id: skip-audit
+    content: "Third-party + conformance skip audit (run before declaring done). Re-run each suite and unskip / promote what now passes: promote cw_xml_extract out of bqutils known_failing/ (conformance/thirdparty-fixtures/bigquery_utils/known_failing/community/cw_xml_extract.yaml) into passing/ if the Python runtime evaluates it; drop python LANGUAGE-python UDF skip rows from the client-lane skip matrices (third_party/python-bigquery-tests/emulator_pytest_skip.py and others) that now pass. Keep skips for non-scalar (TVF/aggregate) Python UDFs if those stay deferred + note why. Update third_party/README.md."
     status: pending
 ---
 
@@ -70,6 +73,20 @@ task lint:dispositions
 task thirdparty:python
 task bazel:shutdown && task bazel:status
 ```
+
+## Third-party / conformance to revisit
+
+When the Python runtime lands, **audit the skip surfaces** — the
+representative parity target and the client-lane Python-UDF skips should
+flip. Re-run to prove it; keep skips for deferred shapes + note why.
+
+- **bqutils corpus** — promote
+  `conformance/thirdparty-fixtures/bigquery_utils/known_failing/community/cw_xml_extract.yaml`
+  into `passing/` if it now evaluates.
+- **python lane** — drop `LANGUAGE python` UDF skip rows from
+  `third_party/python-bigquery-tests/emulator_pytest_skip.py`.
+- Keep skips for non-scalar (TVF / aggregate) Python UDFs if deferred;
+  update `third_party/README.md`.
 
 ## Out of scope
 

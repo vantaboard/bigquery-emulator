@@ -24,7 +24,7 @@ todos:
     content: "After each subagent returns: run the parent cleanup block (process-hygiene.mdc), flip the matching wave todo here to completed, update the expand-00-index status table (state / conformance delta / commits / notes), verify `task lint:dispositions` green on main, and confirm `task bazel:status` -> `(clean)` before the next dispatch."
     status: pending
   - id: closeout
-    content: "Closeout when all waves land: sweep third-party skip matrices (`third_party/*/emulator_*skip*`, `third_party/README.md`) for shapes now unblocked; run `task conformance:routing-matrix`; final `task bazel:shutdown` + `task bazel:status`; mark any remaining ROADMAP §Planned work bullets ✅ or document blockers."
+    content: "Closeout when all waves land: final cross-cutting skip audit (each plan's `skip-audit` todo runs per-plan; this is the catch-all). Sweep third-party skip matrices (`third_party/*/emulator_*skip*`, `third_party/README.md`, `node-bigquery-tests/EMULATOR.md`), the bqutils corpus (`conformance/thirdparty-fixtures/bigquery_utils/known_failing/` -> `passing/`), and the GoogleSQL `.test` corpus (`conformance/googlesql-corpus/`) for shapes now unblocked; run `task conformance:routing-matrix`; final `task bazel:shutdown` + `task bazel:status`; mark any remaining ROADMAP §Planned work bullets ✅ or document blockers."
     status: pending
 isProject: true
 ---
