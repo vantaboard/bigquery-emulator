@@ -118,11 +118,11 @@ graph LR
 | Plan | Kind | State | Conformance delta | Commits | Notes |
 |------|------|-------|-------------------|---------|-------|
 | 01 | real | pending | — | | External data sources (fixture + opt-in live) |
-| 02 | stub | pending | — | | BigQuery ML inference placeholders; CREATE MODEL stays stub |
+| 02 | stub | landed | +3 specialized (ml_predict/evaluate/forecast_stub) | 67e9d30, 8ad84ed | ML.* local_stub TVFs; CREATE MODEL stays control stub |
 | 03 | real | pending | — | | Python UDF runtime |
 | 04 | real | pending | — | | Protobuf field access |
 | 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
-| 06 | stub | pending | — | | Privacy-preserving aggregates (strip modifiers, plain aggregate) |
+| 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; NOT differential privacy |
 | 07 | real | pending | — | | Sequences + catalog refs |
 | 08 | mixed | pending | — | | real: ST_GEOGFROMWKB, EXPLAIN; stub: KEYS encrypt/decrypt, SESSION_USER |
 | 09 | real | pending | — | | Measure functions |
