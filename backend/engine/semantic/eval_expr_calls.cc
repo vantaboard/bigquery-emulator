@@ -7,6 +7,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/catalog/js_udf_registry.h"
+#include "backend/catalog/python_udf_registry.h"
 #include "backend/catalog/udf_registry.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
@@ -16,6 +17,7 @@
 #include "backend/engine/semantic/functions/dispatch.h"
 #include "backend/engine/semantic/functions/geog_funcs.h"
 #include "backend/engine/semantic/js_udf_runtime.h"
+#include "backend/engine/semantic/python_udf_runtime.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
@@ -326,26 +328,47 @@ absl::StatusOr<Value> EvalFunctionCall(
       catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
     const catalog::JsUdfDefinition* js_def =
         catalog::LookupProjectJsUdf(ctx.project_id, fn->Name());
-    if (js_def == nullptr) {
-      return absl::InternalError(
-          "JavaScript UDF metadata is missing for registered function");
-    }
-    std::vector<Value> arg_values;
-    std::vector<const ::googlesql::Type*> arg_types;
-    arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
-    arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
-    for (int i = 0; i < call.argument_list_size(); ++i) {
-      auto v = EvalExpr(*call.argument_list(i), ctx);
-      if (!v.ok()) return v.status();
-      const ::googlesql::Type* arg_type = call.argument_list(i)->type();
-      arg_types.push_back(arg_type);
-      if (v->is_null()) {
-        arg_values.push_back(NullOfType(arg_type));
-      } else {
-        arg_values.push_back(*std::move(v));
+    if (js_def != nullptr) {
+      std::vector<Value> arg_values;
+      std::vector<const ::googlesql::Type*> arg_types;
+      arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
+      arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
+      for (int i = 0; i < call.argument_list_size(); ++i) {
+        auto v = EvalExpr(*call.argument_list(i), ctx);
+        if (!v.ok()) return v.status();
+        const ::googlesql::Type* arg_type = call.argument_list(i)->type();
+        arg_types.push_back(arg_type);
+        if (v->is_null()) {
+          arg_values.push_back(NullOfType(arg_type));
+        } else {
+          arg_values.push_back(*std::move(v));
+        }
       }
+      return EvalJsUdfCall(*js_def, arg_values, call.type(), arg_types);
     }
-    return EvalJsUdfCall(*js_def, arg_values, call.type(), arg_types);
+    const catalog::PythonUdfDefinition* py_def =
+        catalog::LookupProjectPythonUdf(ctx.project_id, fn->Name());
+    if (py_def != nullptr) {
+      std::vector<Value> arg_values;
+      std::vector<const ::googlesql::Type*> arg_types;
+      arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
+      arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
+      for (int i = 0; i < call.argument_list_size(); ++i) {
+        auto v = EvalExpr(*call.argument_list(i), ctx);
+        if (!v.ok()) return v.status();
+        const ::googlesql::Type* arg_type = call.argument_list(i)->type();
+        arg_types.push_back(arg_type);
+        if (v->is_null()) {
+          arg_values.push_back(NullOfType(arg_type));
+        } else {
+          arg_values.push_back(*std::move(v));
+        }
+      }
+      return EvalPythonUdfCall(
+          fn->Name(), *py_def, arg_values, call.type(), arg_types);
+    }
+    return absl::InternalError(
+        "External-language UDF metadata is missing for registered function");
   }
   const std::string name = LowerFunctionDispatchName(call.function());
   if (name == "$with_side_effects") {

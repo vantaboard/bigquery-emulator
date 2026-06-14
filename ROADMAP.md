@@ -614,8 +614,11 @@ public-facing policy.
   (pinned by `conformance/fixtures/udf/tvf_relation_argument.yaml`).
   Conformance fixtures under `conformance/fixtures/udf/` (+
   `gateway/e2e/routine_persistence_test.go` for restart proof).
-  Python UDFs remain unsupported today; see
-  [Python UDFs](#python-udfs). Non-scalar JS UDFs remain unsupported.
+  `LANGUAGE python` scalar UDFs register through `python_udf_registry.cc`
+  and evaluate at call time on the semantic executor via a sandboxed
+  `python3` subprocess (`python_udf_runtime.cc`; pinned by
+  `conformance/fixtures/udf/python_scalar_add.yaml`). See
+  [Python UDFs](#python-udfs). Non-scalar JS / Python UDFs remain unsupported.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
   local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
   matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
@@ -814,7 +817,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Protobuf shapes (`ResolvedMakeProto`, ...) | `unsupported` | **real** | [Protobuf field access](#protobuf-field-access) |
 | MEASURE / measure functions | `unsupported` | **real** | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | **real** | [Catalog / sequence helpers](#catalog--sequence-helpers) |
-| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `unsupported` | **real** | [Python UDFs](#python-udfs) |
+| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
 | `ResolvedExplainStmt` (`EXPLAIN`) | `unsupported` | **real** | [Statements](#statements) |
 
@@ -913,13 +916,17 @@ path over the existing aggregate infrastructure.
 
 `CREATE FUNCTION ... LANGUAGE python` from
 [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). Complements the landed
-`LANGUAGE js` scalar path (`js_udf_runtime.cc`); `cw_xml_extract` in
-bqutils `known_failing/` is the representative parity target.
+`LANGUAGE js` scalar path (`js_udf_runtime.cc`); `cw_xml_extract` promoted
+from bqutils `known_failing/` to `passing/`.
 
-- ⏳ `CREATE FUNCTION ... LANGUAGE python` — register, persist, and
-  evaluate Python UDF bodies locally (embedded runtime TBD)
-- ⏳ Scalar and table-valued Python UDF shapes exercised by third-party
-  client suites
+- ✅ `CREATE FUNCTION ... LANGUAGE python` — register, persist, and
+  evaluate scalar Python UDF bodies locally via `python_udf_runtime.cc`
+  (sandboxed `python3` subprocess; `BIGQUERY_EMULATOR_PYTHON` override)
+- ✅ Scalar Python UDF conformance pinned by
+  `conformance/fixtures/udf/python_scalar_add.yaml`
+- ⏳ Table-valued / aggregate Python UDF shapes remain unsupported
+- ⏳ Arbitrary `packages` pip installs remain unsupported (pre-installed
+  stdlib + `lxml` when present on the host interpreter)
 
 ### External data sources
 

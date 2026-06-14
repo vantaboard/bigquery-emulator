@@ -13,6 +13,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/catalog/js_udf_registry.h"
+#include "backend/catalog/python_udf_registry.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
@@ -134,6 +135,7 @@ absl::Status DropProjectFunction(absl::string_view project_id,
       it->second.retired_functions.push_back(std::move(*nit));
       fns.erase(nit);
       DropProjectJsUdf(project_id, fn_name);
+      DropProjectPythonUdf(project_id, fn_name);
       return absl::OkStatus();
     }
   }

@@ -9,6 +9,7 @@
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/python_udf_registry.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
 #include "backend/catalog/udf_registry.h"
@@ -51,8 +52,11 @@ absl::Status RegisterResolvedRoutine(
                                            std::move(analyzer_output),
                                            std::move(*fn_or));
       if (!registered.ok()) return registered;
-      return catalog::RegisterJsUdfFromCreateFunction(request.project_id,
-                                                      *create_fn);
+      absl::Status js_registered = catalog::RegisterJsUdfFromCreateFunction(
+          request.project_id, *create_fn);
+      if (!js_registered.ok()) return js_registered;
+      return catalog::RegisterPythonUdfFromCreateFunction(request.project_id,
+                                                          *create_fn);
     }
     case ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT: {
       const auto* create_tvf =

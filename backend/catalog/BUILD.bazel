@@ -273,11 +273,28 @@ cc_library(
 )
 
 cc_library(
+    name = "python_udf_registry",
+    srcs = ["python_udf_registry.cc"],
+    hdrs = ["python_udf_registry.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "udf_registry",
     srcs = ["udf_registry.cc"],
     hdrs = ["udf_registry.h"],
     deps = [
         ":js_udf_registry",
+        ":python_udf_registry",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",

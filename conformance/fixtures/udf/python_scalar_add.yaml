@@ -1,0 +1,15 @@
+# Scalar Python UDF: CREATE FUNCTION ... LANGUAGE python evaluates at call time.
+name: udf_python_scalar_add
+description: |
+  Pins call-time evaluation for LANGUAGE python scalar UDFs on the semantic
+  executor (INT64 in/out marshaling through a sandboxed python3 subprocess).
+project_id: proj-udf-python-scalar-add
+setup:
+  - sql: |-
+      CREATE FUNCTION py_add(x INT64) RETURNS INT64
+      LANGUAGE python AS "return x + 1"
+query: SELECT py_add(1) AS out
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "2"}

@@ -99,12 +99,16 @@ func TestRegisterFromDDLAnyTypeArg(t *testing.T) {
 	}
 }
 
-func TestParseCreateRoutineDDLProcedure(t *testing.T) {
-	rt, ok := parseCreateRoutineDDL("p", "d", "CREATE PROCEDURE `proc`(IN x INT64) AS (SELECT 1)")
+func TestParseCreateRoutineDDLPythonUdf(t *testing.T) {
+	rt, ok := parseCreateRoutineDDL("p", "d",
+		`CREATE FUNCTION py_add(x INT64) RETURNS INT64 LANGUAGE python AS "return x + 1"`)
 	if !ok {
 		t.Fatal("parse failed")
 	}
-	if rt.RoutineType != routineTypeProcedure {
-		t.Errorf("type = %q", rt.RoutineType)
+	if rt.Language != "PYTHON" {
+		t.Errorf("language = %q", rt.Language)
+	}
+	if rt.DefinitionBody != "return x + 1" {
+		t.Errorf("body = %q", rt.DefinitionBody)
 	}
 }

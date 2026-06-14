@@ -352,6 +352,38 @@ LANGUAGE js AS "return x + 1;")"),
   EXPECT_EQ(row.cells[0].int64_value(), 2);
 }
 
+TEST_F(LocalCoordinatorEngineTest, CreatePythonScalarUdfThenCall) {
+  CatalogBundle bundle = MakeCatalog();
+  const absl::Status created = engine_->ExecuteDdl(
+      MakeRequest(R"(CREATE FUNCTION py_add(x INT64) RETURNS INT64
+LANGUAGE python AS
+"""
+return x + 1
+""")"),
+      bundle.catalog.get());
+  ASSERT_TRUE(created.ok()) << created;
+  CatalogBundle bundle2 = MakeCatalog();
+  auto source = engine_->ExecuteQuery(MakeRequest("SELECT py_add(1) AS out"),
+                                      bundle2.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 1u);
+  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
+  EXPECT_EQ(row.cells[0].int64_value(), 2);
+}
+
+TEST_F(LocalCoordinatorEngineTest, CreatePythonScalarUdfConformanceFixtureSql) {
+  CatalogBundle bundle = MakeCatalog();
+  const absl::Status created = engine_->ExecuteDdl(
+      MakeRequest(R"(CREATE FUNCTION py_add(x INT64) RETURNS INT64
+LANGUAGE python AS "return x + 1")"),
+      bundle.catalog.get());
+  ASSERT_TRUE(created.ok()) << created;
+}
+
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureViaExecuteDdl) {
   CatalogBundle bundle = MakeCatalog();
   const std::string sql = R"(/*

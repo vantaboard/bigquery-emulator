@@ -146,6 +146,22 @@ cc_library(
 )
 
 cc_library(
+    name = "python_udf_runtime",
+    srcs = ["python_udf_runtime.cc"],
+    hdrs = ["python_udf_runtime.h"],
+    deps = [
+        ":error",
+        ":value",
+        "//backend/catalog:python_udf_registry",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
     name = "eval_expr",
     srcs = [
         "eval_expr.cc",
@@ -172,9 +188,11 @@ cc_library(
         ":error",
         ":frame_stack",
         ":js_udf_runtime",
+        ":python_udf_runtime",
         ":system_variables",
         ":value",
         "//backend/catalog:js_udf_registry",
+        "//backend/catalog:python_udf_registry",
         "//backend/catalog:udf_registry",
         "//backend/engine/semantic/functions:datetime_funcs",
         "//backend/engine/semantic/functions:dispatch",

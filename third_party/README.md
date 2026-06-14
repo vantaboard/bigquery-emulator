@@ -704,9 +704,8 @@ fixtures live in `passing/`** — spanning scalar UDFs, ANY TYPE
 templated UDFs, SQL UDAFs, RANGE<>, BIGNUMERIC/interval,
 regexp/string, bytes/bitwise families, plus hand-authored
 `passing/views/` and `passing/stored_procedures/` README goldens —
-and **1 in `known_failing/`**: `community/cw_xml_extract.yaml`
-(**LANGUAGE python**, the documented external-language gap; same
-disposition as JS UDFs in `docs/ENGINE_POLICY.md`). Run
+including **`community/cw_xml_extract.yaml`** (scalar `LANGUAGE python`,
+now evaluated via `python_udf_runtime.cc`). Run
 `task conformance:bqutils` for the live pass/fail bar. First-party
 `tvf_simple.yaml` and `call_with_declare_out.yaml` cover TVF and
 gateway→engine scripting separately.

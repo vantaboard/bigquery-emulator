@@ -14,6 +14,7 @@
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/python_udf_registry.h"
 #include "backend/catalog/routine_persistence.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
@@ -265,6 +266,9 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
     absl::Status js_registered = catalog::RegisterJsUdfFromCreateFunction(
         request.project_id, *create_fn);
     if (!js_registered.ok()) return js_registered;
+    absl::Status py_registered = catalog::RegisterPythonUdfFromCreateFunction(
+        request.project_id, *create_fn);
+    if (!py_registered.ok()) return py_registered;
     return catalog::PersistRoutineDdl(
         bq_catalog->storage(), request, *reg_stmt);
   }

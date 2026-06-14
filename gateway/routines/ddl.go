@@ -36,6 +36,18 @@ func ParseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Rou
 	return parseCreateRoutineDDL(projectID, defaultDatasetID, sql)
 }
 
+func routineLanguageFromDDL(sql string) bqtypes.RoutineLanguage {
+	upper := strings.ToUpper(sql)
+	switch {
+	case strings.Contains(upper, "LANGUAGE PYTHON"):
+		return bqtypes.RoutineLanguage("PYTHON")
+	case strings.Contains(upper, "LANGUAGE JS"):
+		return bqtypes.RoutineLanguage("JS")
+	default:
+		return routineLanguageSQL
+	}
+}
+
 func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Routine, bool) {
 	rest, routineType, ok := stripCreateRoutineHeader(sql)
 	if !ok {
@@ -59,7 +71,7 @@ func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Rou
 			RoutineID: rID,
 		},
 		RoutineType:      bqtypes.RoutineType(routineType),
-		Language:         routineLanguageSQL,
+		Language:         routineLanguageFromDDL(sql),
 		Arguments:        args,
 		ReturnType:       returnType,
 		DefinitionBody:   body,
@@ -100,6 +112,31 @@ func stripCreateRoutineHeader(sql string) (rest, routineType string, ok bool) {
 	return "", "", false
 }
 
+func skipLanguageAndOptions(rest string) string {
+	rest = strings.TrimSpace(rest)
+	for {
+		upper := strings.ToUpper(rest)
+		if strings.HasPrefix(upper, "LANGUAGE") {
+			rest = strings.TrimSpace(rest[len("LANGUAGE"):])
+			for len(rest) > 0 && !unicode.IsSpace(rune(rest[0])) {
+				rest = rest[1:]
+			}
+			rest = strings.TrimSpace(rest)
+			continue
+		}
+		if strings.HasPrefix(upper, "OPTIONS") {
+			if !strings.HasPrefix(rest, "(") {
+				break
+			}
+			_, rest, _ = scanBalanced(rest, '(', ')')
+			rest = strings.TrimSpace(rest)
+			continue
+		}
+		break
+	}
+	return rest
+}
+
 func parseRoutineSignature(rest string) (args []bqtypes.RoutineArgument,
 	returnType *bqtypes.StandardSqlDataType, body string, ok bool,
 ) {
@@ -121,6 +158,7 @@ func parseRoutineSignature(rest string) (args []bqtypes.RoutineArgument,
 		returnType = typeRaw
 		rest = strings.TrimSpace(rest[consumed:])
 	}
+	rest = skipLanguageAndOptions(rest)
 	rest = strings.TrimSpace(rest)
 	if !strings.HasPrefix(strings.ToUpper(rest), "AS") {
 		return nil, nil, "", false
@@ -357,8 +395,11 @@ func parseDefinitionBody(s string) (string, bool) {
 		inner, _, ok := scanBalanced(s, '(', ')')
 		return strings.TrimSpace(inner), ok
 	}
-	// Language-specific quoted bodies (JavaScript UDFs) — take the
-	// first quoted span verbatim.
+	// Language-specific quoted bodies (JavaScript / Python UDFs) — take
+	// the first quoted span verbatim.
+	if s[0] == 'r' && len(s) > 1 && (s[1] == '\'' || s[1] == '"') {
+		s = s[1:]
+	}
 	if s[0] == '\'' || s[0] == '"' {
 		quote := s[0]
 		var b strings.Builder
