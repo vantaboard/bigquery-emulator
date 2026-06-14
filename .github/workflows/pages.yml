@@ -1,14 +1,22 @@
 # Deploy static content from the gh-pages branch to GitHub Pages.
 #
-# coverage-publish and bench push HTML/charts to gh-pages via
-# peaceiris/actions-gh-pages; this workflow publishes that branch
-# using GitHub Actions (replacing the legacy branch-based Pages
-# build that emitted Node.js 20 deprecation warnings).
+# coverage-publish, docs, and bench push HTML/charts to gh-pages via
+# peaceiris/actions-gh-pages; this workflow publishes that branch using
+# GitHub Actions (replacing the legacy branch-based Pages build that
+# emitted Node.js 20 deprecation warnings).
+#
+# peaceiris pushes with GITHUB_TOKEN do not trigger workflow_run-on-push
+# for other workflows, so we also listen for workflow_run on the
+# publishers and always check out the gh-pages ref explicitly.
 name: pages
 
 on:
   push:
     branches: [gh-pages]
+  workflow_run:
+    workflows: [docs, coverage-publish, bench]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +30,12 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -29,6 +43,8 @@ jobs:
     steps:
       - name: Checkout gh-pages
         uses: actions/checkout@v6
+        with:
+          ref: gh-pages
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

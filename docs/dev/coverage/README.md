@@ -83,7 +83,9 @@ baseline becomes accurate.
 Repo Settings → Pages → "Build and deployment":
 
 - **Source:** GitHub Actions
-- **Workflow:** `.github/workflows/pages.yml` (deploys on push to `gh-pages`)
+- **Workflow:** `.github/workflows/pages.yml` (deploys after docs,
+  coverage-publish, or bench publish to `gh-pages`; GITHUB_TOKEN pushes
+  do not trigger other workflows on push)
 
 After the first `gh-pages` push, GitHub serves the published `html/` tree
 at `https://vantaboard.github.io/bigquery-emulator/` for browsable
