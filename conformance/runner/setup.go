@@ -55,18 +55,31 @@ func setupDataset(ctx context.Context, base, dataset string) error {
 func setupTable(ctx context.Context, base string, t *TableSetup) error {
 	tableBody := struct {
 		TableReference bqtypes.TableReference `json:"tableReference"`
-		Schema         struct {
+		Schema         *struct {
 			Fields []bqtypes.TableFieldSchema `json:"fields"`
-		} `json:"schema"`
+		} `json:"schema,omitempty"`
+		ExternalDataConfiguration *bqtypes.ExternalDataConfiguration `json:"externalDataConfiguration,omitempty"`
 	}{}
 	tableBody.TableReference = bqtypes.TableReference{
 		ProjectID: projectIDFromBase(base),
 		DatasetID: t.Dataset,
 		TableID:   t.ID,
 	}
-	for _, c := range t.Schema {
-		tableBody.Schema.Fields = append(tableBody.Schema.Fields,
-			columnToTableField(c))
+	if t.External != nil {
+		tableBody.ExternalDataConfiguration = &bqtypes.ExternalDataConfiguration{
+			SourceFormat: t.External.SourceFormat,
+			SourceURIs:   append([]string(nil), t.External.SourceURIs...),
+			Autodetect:   t.External.Autodetect,
+		}
+	}
+	if len(t.Schema) > 0 {
+		tableBody.Schema = &struct {
+			Fields []bqtypes.TableFieldSchema `json:"fields"`
+		}{}
+		for _, c := range t.Schema {
+			tableBody.Schema.Fields = append(tableBody.Schema.Fields,
+				columnToTableField(c))
+		}
 	}
 	jsonBody, err := json.Marshal(tableBody)
 	if err != nil {

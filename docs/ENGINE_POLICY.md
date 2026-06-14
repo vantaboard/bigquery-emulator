@@ -109,9 +109,10 @@ summary the unsupported error envelope points at. Per-family posture
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` (planned: `local_impl`) | Today no Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/`. Planned as a **real** local Python UDF runtime mirroring the landed JS path — see ROADMAP §Python UDFs. |
 | SQL scalar UDFs (`CREATE FUNCTION ... AS (...)`), including `ANY TYPE` templated parameters                  | `semantic_executor`     | `CREATE FUNCTION` registers through the per-project UDF registry (`backend/catalog/udf_registry.cc`), writes through to `DuckDBStorage` (`__bqemu_routines`), and replays into each query's `GoogleSqlCatalog` (including after engine restart via `RehydrateRoutinesFromStorage`), shadowing a built-in when the names collide. Templated bodies evaluate on the semantic executor via `EvalSqlUdfBody`; SQL UDAFs evaluate via `EvalSqlUdafBody`. SQL TVFs and procedures follow the same persistence path through `tvf_registry` / `procedure_registry`. `DROP FUNCTION` deletes registry + storage rows. Conformance fixtures under `conformance/fixtures/udf/`. |
 | Scripting (`DECLARE`, `SET`, `CALL`, `BEGIN…END` multi-stmt blocks)                                          | `semantic_executor`     | Gateway sends DECLARE/SET/CALL scripts in one engine `ExecuteQuery` round-trip (`script_runner_engine.go`); control-flow scripts register a single child job for the final SELECT result. Simple statements (`CREATE CONSTANT`/`SET`/`CALL`/`ASSERT`/`EXECUTE IMMEDIATE` literals) run via `ExecuteScriptViaAnalyzeNext`; scripts with structured control flow (`IF`/`WHILE`/`LOOP`/`FOR`/`EXECUTE IMMEDIATE`/`EXCEPTION`/`RAISE` in blocks) delegate to `googlesql::ScriptExecutor` through `EmulatorStatementEvaluator` when `BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1` (always set once the prebuilt artifact ships `//googlesql/scripting:script_executor`). `@@error.*` reads resolve through `EvalContext::script_system_variables` (populated by the ScriptExecutor during `EXCEPTION` handlers). Conformance fixtures under `conformance/fixtures/scripting/`. |
-| `LOAD DATA LOCAL <local-uri>` / `LOAD DATA ... FROM FILES (uris = ['file://...'])`                           | `control_op`  | Local CSV/JSON/Parquet readers via DuckDB (`RunLoadData`); `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
-| `LOAD DATA <gs://...>` (cloud storage)                                                                       | `unsupported` | The emulator does not model BigQuery's cloud-storage ingest surface.                                                                                                                                        |
-| `EXPORT DATA` (local `file://` URI)                                                                          | `control_op`  | DuckDB `COPY (SELECT ...) TO` for CSV/JSON/Parquet; `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
+| `LOAD DATA LOCAL <local-uri>` / `LOAD DATA ... FROM FILES (uris = ['file://...'])`                           | `control_op`  | Local CSV/JSON/Parquet readers via DuckDB (`RunLoadData`). Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
+| `LOAD DATA <gs://...>` (cloud storage)                                                                       | `control_op`  | Resolves `gs://` via `$data_dir/external/gcs-cache/` snapshots or `STORAGE_EMULATOR_HOST` (fake-gcs). |
+| `EXPORT DATA` (local `file://` URI)                                                                          | `control_op`  | DuckDB `COPY (SELECT ...) TO` for CSV/JSON/Parquet. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
+| `EXPORT DATA` (`gs://` URI)                                                                                  | `control_op`  | Writes locally then uploads via fake-gcs when `STORAGE_EMULATOR_HOST` is set. |
 | `CREATE MATERIALIZED VIEW`                                                                                   | `control_op`  | Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by `conformance/fixtures/ddl/materialized_view_query.yaml`. |
 | `INFORMATION_SCHEMA.*` reflection views                                                                      | `duckdb_native` | `<dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> `` resolve at analyze time through `backend/catalog/info_schema_table.{h,cc}` (a `VirtualCatalogTable`) and materialize from `Storage` + the routine/view registries: `TABLES`, `COLUMNS`, `SCHEMATA`, `VIEWS` (view registry), `ROUTINES` (`__bqemu_routines`), `COLUMN_FIELD_PATHS` (recursed STRUCT/ARRAY paths), `PARTITIONS` / `TABLE_STORAGE` (`Storage::CountRows`, single unpartitioned partition; byte columns NULL per the persistence non-goal), and `TABLE_OPTIONS` / `KEY_COLUMN_USAGE` (empty — options/constraints are not modeled). `JOBS` / `JOBS_BY_PROJECT` are **not** engine-resolved: the gateway rewrites those queries to a snapshot table in `` `_bqemu_jobs.JOBS` `` materialized from the in-process job registry (`gateway/query/info_schema_jobs.go`, `gateway/jobs/info_schema.go`) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under `conformance/fixtures/info_schema/`. |
 
@@ -285,11 +286,18 @@ samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
 
 ## Google Sheets external tables
 
-The emulator does not call the Google Sheets API. Python thirdparty
-samples `test_query_external_sheets_*` are skipped via
-`third_party/python-bigquery-tests/emulator_pytest_skip.py` when
-`BIGQUERY_EMULATOR_HOST` is set. GCS-backed external tables remain in
-scope.
+Google Sheets external tables (`GOOGLE_SHEETS` / `googleSheetsOptions`) are
+materialized at insert / `tableDefinitions` time through
+`gateway/external/sheets.go`. Default mode reads a committed CSV snapshot
+under `--data_dir` / `gateway/external/fixtures/` (the public sample sheet
+docId `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms`, Class Data tab).
+Opt-in live mode (`BIGQUERY_EMULATOR_LIVE_SHEETS=1` or per-source entry in
+`$data_dir/external_sources.yaml`) fetches the link-public CSV export URL
+without credentials. Private sheets still require Sheets API credentials.
+Pinned by `conformance/fixtures/external/google_sheets_class_data.yaml`.
+Python thirdparty samples `test_query_external_sheets_*` target a different
+public sheet (`1i_QCL-…`) and remain skipped until that snapshot is added.
+GCS-backed external tables remain in scope via fake-gcs.
 
 ## Relational UNNEST / lateral / correlated subqueries
 

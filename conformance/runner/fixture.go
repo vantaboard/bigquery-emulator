@@ -124,11 +124,36 @@ type RowsSetup struct {
 }
 
 // TableSetup describes a table to create via REST. The schema is the
-// usual BigQuery TableFieldSchema shape.
+// usual BigQuery TableFieldSchema shape. When External is set the
+// runner POSTs an external table (Google Sheets, GCS, ...).
 type TableSetup struct {
-	Dataset string         `yaml:"dataset"`
-	ID      string         `yaml:"id"`
-	Schema  []SchemaColumn `yaml:"schema"`
+	Dataset  string              `yaml:"dataset"`
+	ID       string              `yaml:"id"`
+	Schema   []SchemaColumn      `yaml:"schema,omitempty"`
+	External *ExternalTableSetup `yaml:"external,omitempty"`
+}
+
+// ExternalTableSetup is the externalDataConfiguration block for setup.
+type ExternalTableSetup struct {
+	SourceFormat string   `yaml:"source_format"`
+	SourceURIs   []string `yaml:"source_uris"`
+	Autodetect   bool     `yaml:"autodetect,omitempty"`
+}
+
+func (t *TableSetup) validate() error {
+	if t.Dataset == "" {
+		return errors.New("table.dataset is required")
+	}
+	if t.ID == "" {
+		return errors.New("table.id is required")
+	}
+	if len(t.Schema) == 0 && t.External == nil {
+		return errors.New("table.schema must list at least one column (or set table.external)")
+	}
+	if t.External != nil && t.External.SourceFormat == "" {
+		return errors.New("table.external.source_format is required")
+	}
+	return nil
 }
 
 // SchemaColumn maps directly to `bqtypes.TableFieldSchema`. We keep
@@ -515,14 +540,8 @@ func (s SetupStep) validate() error {
 	}
 	if s.Table != nil {
 		count++
-		if s.Table.Dataset == "" {
-			return errors.New("table.dataset is required")
-		}
-		if s.Table.ID == "" {
-			return errors.New("table.id is required")
-		}
-		if len(s.Table.Schema) == 0 {
-			return errors.New("table.schema must list at least one column")
+		if err := s.Table.validate(); err != nil {
+			return err
 		}
 	}
 	if s.Rows != nil {

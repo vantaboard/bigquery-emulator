@@ -1,0 +1,23 @@
+# google_sheets_class_data: external table backed by the public sample sheet
+# fixture (docId 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms, Class Data).
+name: external_google_sheets_class_data
+description: |
+  Materialize a GOOGLE_SHEETS external table from the committed Class Data
+  snapshot and assert all 30 student rows are readable.
+project_id: proj-external-sheets
+dataset_id: ds_external_sheets
+setup:
+  - dataset: ds_external_sheets
+  - table:
+      dataset: ds_external_sheets
+      id: class_data
+      external:
+        source_format: GOOGLE_SHEETS
+        source_uris:
+          - https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
+        autodetect: true
+query: SELECT COUNT(*) AS n FROM ds_external_sheets.class_data
+expected:
+  route: duckdb_native
+  rows:
+    - {n: 30}

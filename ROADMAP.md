@@ -923,40 +923,35 @@ bqutils `known_failing/` is the representative parity target.
 
 ### External data sources
 
-Today the emulator supports local `file://` for `LOAD DATA` / `EXPORT DATA`
-and GCS-backed **external tables** when `STORAGE_EMULATOR_HOST` points at
-fake-gcs (see [`docs/REST_API.md`](docs/REST_API.md) and
-[`third_party/README.md`](third_party/README.md)); `gs://` ingest/export
-DDL, Google Sheets external tables, and federated connection-backed scans
-still surface `UNIMPLEMENTED` or **501** at the gateway.
+Today the emulator supports local `file://` and `gs://` (via
+`$data_dir/external/gcs-cache/` or `STORAGE_EMULATOR_HOST` / fake-gcs) for
+`LOAD DATA` / `EXPORT DATA`, GCS-backed **external tables**, **Google
+Sheets** external tables (fixture snapshot + opt-in live fetch), and
+ephemeral `tableDefinitions` for Sheets/GCS. See
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) and
+[`gateway/external/sourceconfig/`](gateway/external/sourceconfig/).
 
-Planned posture: **per-source configuration** so tests and local workflows
-can choose deterministic fixtures or opt into live upstreams — without
-routing query execution through the real BigQuery service.
+**Configuration model** (✅)
 
-**Configuration model** (⏳)
+- **Fixture / local** — per-source `fixture | local | live` resolution via
+  `$data_dir/external_sources.yaml` and env vars (`BIGQUERY_EMULATOR_LIVE_SHEETS`,
+  `BIGQUERY_EMULATOR_EXTERNAL_GCS_MODE`, …). Defaults: GCS `local`, Sheets
+  `fixture`, connections `fixture`.
+- **Live** — opt-in (`BIGQUERY_EMULATOR_LIVE_SHEETS=1`) unauthenticated CSV
+  export for the public sample sheet; private sheets still need Sheets API
+  credentials.
 
-- **Fixture / local** — map an external table URI, connection, or federated
-  endpoint to locally stored data under `--data_dir`, checked-in conformance
-  fixtures, `file://` paths, or GCS snapshots served by fake-gcs
-  (`STORAGE_EMULATOR_HOST`; extends today's `gs://cloud-samples-data/...`
-  preload path in third-party client suites)
-- **Live** — optional credentials-backed fetch from the real upstream when
-  the user opts in (e.g. a live Google Sheets document, a real GCS bucket,
-  or a federated Cloud SQL / Spanner endpoint for integration tests that
-  need end-to-end I/O)
+**Surface areas**
 
-**Surface areas** (⏳)
-
-- `gs://` URIs for `LOAD DATA` / `EXPORT DATA` (today `unsupported` per
-  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
-- Google Sheets external tables (`GOOGLE_SHEETS` / `googleSheetsOptions`;
-  today **501** at the gateway — see ENGINE_POLICY §Google Sheets)
-- Cloud-resource **connections** and federated / external-dataset query
-  paths (`EXTERNAL_QUERY`, BigLake tables, object tables, Spanner external
-  datasets, connection-backed scans)
-- Ephemeral `tableDefinitions` on `jobs.query` / `jobs.insert` over
-  non-GCS sources beyond today's GCS-via-fake-gcs materialization
+- ✅ `gs://` URIs for `LOAD DATA` / `EXPORT DATA` (`control_op` via
+  `gcs_uri_resolver.cc`)
+- ✅ Google Sheets external tables (`gateway/external/sheets.go`; conformance
+  `external/google_sheets_class_data.yaml`)
+- ⏳ Cloud-resource **connections** and federated / external-dataset query
+  paths (`EXTERNAL_QUERY`, BigLake, object tables, Spanner external datasets)
+  — bqconnection CRUD wired to config model; `EXTERNAL_QUERY` engine stub
+  still pending
+- ✅ Ephemeral `tableDefinitions` for Sheets and GCS sources
 
 ## Non-goals
 
