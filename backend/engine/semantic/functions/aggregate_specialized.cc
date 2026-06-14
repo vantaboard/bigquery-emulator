@@ -413,6 +413,39 @@ absl::StatusOr<Value> StddevAggregate(
       std::sqrt(sum_sq / static_cast<double>(values.size() - 1)));
 }
 
+absl::StatusOr<Value> VarSampAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values) {
+  std::vector<RowValue> rows =
+      CollectAggregateInputs(call, input_column_values);
+  std::vector<double> values;
+  values.reserve(rows.size());
+  for (const RowValue& row : rows) {
+    if (row.is_null) continue;
+    if (row.v.type_kind() == ::googlesql::TYPE_INT64) {
+      values.push_back(static_cast<double>(row.v.int64_value()));
+    } else if (row.v.type_kind() == ::googlesql::TYPE_DOUBLE) {
+      values.push_back(row.v.double_value());
+    } else if (row.v.type_kind() == ::googlesql::TYPE_FLOAT) {
+      values.push_back(static_cast<double>(row.v.float_value()));
+    } else {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: VAR_SAMP expects numeric arguments");
+    }
+  }
+  if (values.size() < 2) return Value::NullDouble();
+  double mean = 0.0;
+  for (double v : values)
+    mean += v;
+  mean /= static_cast<double>(values.size());
+  double sum_sq = 0.0;
+  for (double v : values) {
+    const double d = v - mean;
+    sum_sq += d * d;
+  }
+  return Value::Double(sum_sq / static_cast<double>(values.size() - 1));
+}
+
 absl::StatusOr<Value> CountIfAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values) {

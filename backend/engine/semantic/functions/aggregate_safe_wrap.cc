@@ -37,6 +37,9 @@ absl::StatusOr<Value> AnyValueAggregate(
 absl::StatusOr<Value> StddevAggregate(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values);
+absl::StatusOr<Value> VarSampAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values);
 absl::StatusOr<Value> ApproxCountDistinct(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values);
@@ -110,6 +113,9 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "stddev" || name == "stddev_samp" || name == "stdev") {
     return finish(StddevAggregate(call, input_column_values));
+  }
+  if (name == "var_samp" || name == "variance") {
+    return finish(VarSampAggregate(call, input_column_values));
   }
   if (name == "approx_count_distinct") {
     return finish(ApproxCountDistinct(call, input_column_values));
