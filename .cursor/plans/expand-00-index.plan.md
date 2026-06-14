@@ -98,16 +98,8 @@ graph LR
 
 ## Dispatch (serialized engine lane)
 
-See [expand-dispatch.plan.md](expand-dispatch.plan.md) for the session
-protocol, subagent prompt, and process/bazel hygiene constraints.
-
-**Every plan modifies the C++ engine** (and 01 also the Go gateway) and
-must rebuild + re-run conformance, so plans stay serialized end-to-end:
-
-- `subagent_type: generalPurpose`, `run_in_background: false`.
-- Run the parent cleanup block from `process-hygiene.mdc` between every
-  subagent; confirm the prior plan's work is committed and
-  `task lint:dispositions` is green on main before dispatching the next.
+- **Live runbook:** [expand-dispatch.plan.md](expand-dispatch.plan.md) — **start here**; wave `todos` in the frontmatter drive execution order.
+- Constraints (bazel single-invocation, hot files, process hygiene) are documented in expand-dispatch (the `expand-*` analog of [parity-dispatch.plan.md](parity-dispatch.plan.md)).
 
 ## Verification matrix (run after each plan)
 
