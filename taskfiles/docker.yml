@@ -48,6 +48,7 @@ tasks:
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
+        eval "$(bash "${root}/scripts/load_googlesql_prebuilt_pin.sh")"
         gsq_args=()
         if [ -n "${GOOGLESQL_PREBUILT_URL:-}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256:-}" ]; then
           gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
@@ -103,6 +104,7 @@ tasks:
           # `${VAR:-default}` and the helper honors caller env. See
           # `scripts/compute_docker_throttle.sh` for the derivation.
           eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
+          eval "$(bash "${root}/scripts/load_googlesql_prebuilt_pin.sh")"
 
           if [ "${DOCKER_SMOKE_SKIP_BUILD:-0}" = "1" ]; then
             echo "[docker:smoke] docker compose up -d (DOCKER_SMOKE_SKIP_BUILD=1; image pre-loaded)"

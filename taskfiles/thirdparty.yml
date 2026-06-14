@@ -277,6 +277,7 @@ tasks:
         # BAZEL_CPU_RESERVE) are honored verbatim. See
         # `scripts/compute_docker_throttle.sh` for the full picks.
         eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
+        eval "$(bash "${root}/scripts/load_googlesql_prebuilt_pin.sh")"
         # Rebuild the bigquery-emulator:local image if any tracked
         # source path is newer than the image (the staleness check
         # short-circuits in <100 ms on the happy path). See the helper

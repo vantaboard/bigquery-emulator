@@ -190,6 +190,7 @@ cc_library(
     srcs = ["stored_procedure.cc"],
     hdrs = ["stored_procedure.h"],
     deps = [
+        "@com_google_absl//absl/container:node_hash_map",
         "@googlesql//googlesql/public:function",
     ],
 )

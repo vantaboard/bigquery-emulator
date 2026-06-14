@@ -134,6 +134,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         gnupg \
         libstdc++-12-dev \
+        libssl-dev \
         openjdk-17-jdk-headless \
         pkg-config \
         python3 \
@@ -172,6 +173,7 @@ COPY third_party ./third_party
 # busts only the validate step's layer — the (expensive) bazel build
 # layer below stays cached.
 COPY tools/googlesql-prebuilt ./tools/googlesql-prebuilt
+COPY scripts/patch_googlesql_source_checkout.sh ./scripts/patch_googlesql_source_checkout.sh
 
 # Resolve a GoogleSQL build mode (the CI/Docker/release track of the
 # `googlesql-prebuilt` rollout — see
@@ -259,8 +261,7 @@ RUN set -eux; \
         echo "GOOGLESQL_PREBUILT_URL/_SHA256 not set; falling back to source GoogleSQL build" >&2; \
         git clone --depth=1 --branch="${GOOGLESQL_VERSION}" \
             https://github.com/google/googlesql.git /googlesql; \
-        sed -i "s/version = \"${GOOGLESQL_VERSION}\"/version = \"${GOOGLESQL_VERSION_PATCHED}\"/" \
-            /googlesql/MODULE.bazel; \
+        bash scripts/patch_googlesql_source_checkout.sh /googlesql; \
         echo source > /tmp/googlesql-mode; \
     fi
 
@@ -419,6 +420,7 @@ LABEL org.opencontainers.image.source="${SOURCE_REPO}" \
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
+        libssl3t64 \
         libstdc++6 \
         tzdata \
         wget \
