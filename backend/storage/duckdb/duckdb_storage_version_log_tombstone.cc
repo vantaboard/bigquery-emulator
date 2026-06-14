@@ -1,5 +1,3 @@
-#include "backend/storage/duckdb/duckdb_storage_version_log.h"
-
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -7,6 +5,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/duckdb/duckdb_storage_version_log.h"
 
 namespace bigquery_emulator {
 namespace backend {
