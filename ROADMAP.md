@@ -439,7 +439,8 @@ handler.
   (see [Planned work](#planned-work) below) include `ML.*` inference,
   `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `ST_GEOGFROMWKB`, differential-
   privacy / anonymized aggregates, graph / proto AST nodes,
-  `SESSION_USER`, and related node kinds in
+  `SESSION_USER`, cloud-backed external data sources, and related node
+  kinds in
   [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
   The current posture for each is documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
@@ -576,8 +577,8 @@ public-facing policy.
   `duckdb_storage_version_log.*`). Wildcard tables
   (`dataset.prefix_*`) resolve in the virtual catalog with
   `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
-  Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA`
-  remain unsupported per `docs/ENGINE_POLICY.md`.
+  Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA` remain
+  unsupported today; see [External data sources](#external-data-sources).
 - ✅ Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
@@ -781,10 +782,12 @@ The items below are deliberately deferred today (`unsupported` in
 [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml) and
 [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml);
 summarized in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)) but are on
-the roadmap to land with **local** implementations — never with a cloud
-passthrough. Each promotion off `unsupported` requires the handler,
-conformance fixture(s), and disposition-registry update in the same commit
-(per [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
+the roadmap to land with **local** implementations. Query execution never
+proxies through the real BigQuery service; external data sources (below) may
+optionally reach live upstream APIs when configured. Each promotion off
+`unsupported` requires the handler, conformance fixture(s), and
+disposition-registry update in the same commit (per
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
 
 ### BigQuery ML inference
 
@@ -853,6 +856,43 @@ Rows in
 - ⏳ `ResolvedCatalogColumnRef`
 - ⏳ `ResolvedExpressionColumn`
 
+### External data sources
+
+Today the emulator supports local `file://` for `LOAD DATA` / `EXPORT DATA`
+and GCS-backed **external tables** when `STORAGE_EMULATOR_HOST` points at
+fake-gcs (see [`docs/REST_API.md`](docs/REST_API.md) and
+[`third_party/README.md`](third_party/README.md)); `gs://` ingest/export
+DDL, Google Sheets external tables, and federated connection-backed scans
+still surface `UNIMPLEMENTED` or **501** at the gateway.
+
+Planned posture: **per-source configuration** so tests and local workflows
+can choose deterministic fixtures or opt into live upstreams — without
+routing query execution through the real BigQuery service.
+
+**Configuration model** (⏳)
+
+- **Fixture / local** — map an external table URI, connection, or federated
+  endpoint to locally stored data under `--data_dir`, checked-in conformance
+  fixtures, `file://` paths, or GCS snapshots served by fake-gcs
+  (`STORAGE_EMULATOR_HOST`; extends today's `gs://cloud-samples-data/...`
+  preload path in third-party client suites)
+- **Live** — optional credentials-backed fetch from the real upstream when
+  the user opts in (e.g. a live Google Sheets document, a real GCS bucket,
+  or a federated Cloud SQL / Spanner endpoint for integration tests that
+  need end-to-end I/O)
+
+**Surface areas** (⏳)
+
+- `gs://` URIs for `LOAD DATA` / `EXPORT DATA` (today `unsupported` per
+  [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md))
+- Google Sheets external tables (`GOOGLE_SHEETS` / `googleSheetsOptions`;
+  today **501** at the gateway — see ENGINE_POLICY §Google Sheets)
+- Cloud-resource **connections** and federated / external-dataset query
+  paths (`EXTERNAL_QUERY`, BigLake tables, object tables, Spanner external
+  datasets, connection-backed scans)
+- Ephemeral `tableDefinitions` on `jobs.query` / `jobs.insert` over
+  non-GCS sources beyond today's GCS-via-fake-gcs materialization
+
 ## Non-goals
 
 - No Go port of GoogleSQL. Engine is C++. If GoogleSQL changes, we rebuild;
@@ -871,11 +911,11 @@ Rows in
   route through the semantic executor; expect `UNIMPLEMENTED` for
   families not yet landed (see [Planned work](#planned-work) and
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)).
-- No BigQuery Omni or cloud-backed external data sources (`gs://`
-  ingest/export, federated queries, ...). Deferred families in
-  [Planned work](#planned-work) — including BigQuery ML inference —
-  will land only as local implementations or deterministic stubs,
-  never with a cloud passthrough.
+- No BigQuery Omni (cross-cloud query in AWS / Azure Omni regions).
+  Cloud-backed **external data sources** are planned — see
+  [External data sources](#external-data-sources) — and will land with
+  per-source fixture or live configuration, not by proxying through the
+  real BigQuery service.
 
 ## Build systems
 
