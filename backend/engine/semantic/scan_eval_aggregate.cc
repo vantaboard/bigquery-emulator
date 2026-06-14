@@ -49,23 +49,25 @@ absl::StatusOr<Value> EvalDeferredComputedExpr(
     const std::vector<size_t>& row_indices,
     EvalContext& agg_ctx) {
   const ::googlesql::ResolvedExpr* current = &expr;
-  if (const auto* fn = current->GetAs<::googlesql::ResolvedFunctionCall>();
-      fn != nullptr && fn->function() != nullptr &&
-      LowerFunctionDispatchName(fn->function()) == "$with_side_effects") {
-    if (fn->argument_list_size() != 2) {
-      return absl::InvalidArgumentError(
-          "semantic: $with_side_effects expects exactly two arguments");
+  if (current->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
+    const auto* fn = current->GetAs<::googlesql::ResolvedFunctionCall>();
+    if (fn->function() != nullptr &&
+        LowerFunctionDispatchName(fn->function()) == "$with_side_effects") {
+      if (fn->argument_list_size() != 2) {
+        return absl::InvalidArgumentError(
+            "semantic: $with_side_effects expects exactly two arguments");
+      }
+      auto side_or = EvalExpr(*fn->argument_list(1), agg_ctx);
+      if (!side_or.ok()) return side_or.status();
+      if (!side_or->is_null()) {
+        return EvalExpr(expr, agg_ctx);
+      }
+      current = fn->argument_list(0);
     }
-    auto side_or = EvalExpr(*fn->argument_list(1), agg_ctx);
-    if (!side_or.ok()) return side_or.status();
-    if (!side_or->is_null()) {
-      return EvalExpr(expr, agg_ctx);
-    }
-    current = fn->argument_list(0);
   }
-  if (const auto* agg =
-          current->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
-      agg != nullptr) {
+  if (current->node_kind() == ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL) {
+    const auto* agg =
+        current->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
     return EvalAggregateForRows(
         *agg, aggregate.input_scan(), input_rows, row_indices, agg_ctx);
   }
