@@ -23,7 +23,6 @@ ENGINE_SOURCE_PATHS=(
 	"proto"
 	"frontend"
 	"MODULE.bazel"
-	"MODULE.bazel.lock"
 	".bazelrc"
 	".bazelversion"
 	"BUILD.bazel"
