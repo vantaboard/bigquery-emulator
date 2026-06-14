@@ -437,12 +437,14 @@ handler.
   `hll_funcs.cc`, `aggregate_specialized.cc`). Deferred families that
   today surface `UNIMPLEMENTED` but are tracked as ⏳ planned work
   (see [Planned work](#planned-work) and the ENGINE_POLICY index table
-  there) include the full BigQuery ML surface, differential-privacy /
-  anonymized aggregates, `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`,
-  protobuf / graph / sequence AST nodes, MEASURE functions, Python UDFs,
-  `ST_GEOGFROMWKB`, `SESSION_USER`, cloud-backed external data sources,
-  and related rows in
+  there) include BigQuery ML inference (**stub**), differential-privacy /
+  anonymized aggregates (**stub**), `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`
+  + `SESSION_USER` (**stub**), and the real implementations of protobuf /
+  sequence AST nodes, MEASURE functions, Python UDFs, `ST_GEOGFROMWKB`,
+  `EXPLAIN`, and cloud-backed external data sources, plus related rows in
   [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
+  Graph / GQL (`ResolvedGraph*Scan`) stays `unsupported` and is **not**
+  planned.
   The current posture for each is documented in
   [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). The legacy
   `kMap`/`kFallback`/`kSkiplist` vocabulary was retired.
@@ -489,7 +491,7 @@ public-facing policy.
   for in-scope shapes; every `unsupported` / deferred `local_stub`
   family in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) is indexed
   as ⏳ planned in [Planned work](#planned-work))
-- 🟢 Route labels surfaced on conformance fixture output so
+- ✅ Route labels surfaced on conformance fixture output so
   passing rows can't hide accidental drift between strategies.
   The conformance routing matrix added the
   `emulatorRoute` debug field on `Job.statistics.query`
@@ -793,47 +795,63 @@ disposition-registry update in the same commit (per
 
 The table below mirrors the `unsupported` / `local_stub` families in
 [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) §Unsupported families.
-Every row is ⏳ planned; subsection bullets spell out the AST nodes,
-functions, and gateway surfaces each family will touch.
+Every row is ⏳ planned. **Planned work is one of two kinds:**
 
-| ENGINE_POLICY family | Today | Planned work |
-|---|---|---|
-| BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | [BigQuery ML](#bigquery-ml) |
-| BigQuery ML `CREATE MODEL` | `local_stub` | [BigQuery ML](#bigquery-ml) |
-| Differential privacy / anonymized aggregation | `unsupported` | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
-| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | [Deferred built-in functions](#deferred-built-in-functions) |
-| Protobuf shapes (`ResolvedMakeProto`, ...) | `unsupported` | [Protobuf field access](#protobuf-field-access) |
-| MEASURE / measure functions | `unsupported` | [Measure functions](#measure-functions) |
-| Graph (`GRAPH_TABLE`, GQL, `ResolvedGraph*Scan`, `ResolvedCatalogColumnRef`) | `unsupported` | [Graph / GQL scans](#graph--gql-scans) · [Catalog helpers](#catalog--sequence-helpers) |
-| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | [Catalog / sequence helpers](#catalog--sequence-helpers) |
-| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `unsupported` | [Python UDFs](#python-udfs) |
-| `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | [External data sources](#external-data-sources) |
+- **real** — the feature is useful locally, so land exact BigQuery
+  semantics + conformance fixtures.
+- **stub** — the feature is not useful in a local emulator, so the only
+  goal is that a query referencing it **does not fail**: return a
+  schema-correct BigQuery-shaped placeholder via `local_stub`.
+
+| ENGINE_POLICY family | Today | Planned | Plan work |
+|---|---|---|---|
+| BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | **stub** | [BigQuery ML](#bigquery-ml) |
+| BigQuery ML `CREATE MODEL` | `local_stub` | stub (stays) | [BigQuery ML](#bigquery-ml) |
+| Differential privacy / anonymized aggregation | `unsupported` | **stub** | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
+| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
+| `SESSION_USER` (`session_user`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
+| `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `unsupported` | **real** | [Deferred built-in functions](#deferred-built-in-functions) |
+| Protobuf shapes (`ResolvedMakeProto`, ...) | `unsupported` | **real** | [Protobuf field access](#protobuf-field-access) |
+| MEASURE / measure functions | `unsupported` | **real** | [Measure functions](#measure-functions) |
+| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | **real** | [Catalog / sequence helpers](#catalog--sequence-helpers) |
+| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `unsupported` | **real** | [Python UDFs](#python-udfs) |
+| `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
+| `ResolvedExplainStmt` (`EXPLAIN`) | `unsupported` | **real** | [Statements](#statements) |
+
+> **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
+> NOT planned.** It is effectively a whole second query language and is
+> not worth modeling in a local emulator; it stays `unsupported` (see
+> [Non-goals](#non-goals)).
 
 ### BigQuery ML
 
-`CREATE MODEL` routes `local_stub` today so client-library registration
-probes succeed without materializing a model. Full model registration,
-persistence, and inference are ⏳ planned on a local evaluation path.
+BigQuery ML depends on Vertex AI / real model training + serving that a
+local emulator cannot meaningfully provide, so the plan is **stub, not
+implement** — the only goal is that ML.* does not fail a query.
+`CREATE MODEL` already routes `local_stub` (metadata-only OK); the
+inference calls below get the same treatment.
 
-- ⏳ `CREATE MODEL` — materialize and register models locally (promote
-  off `local_stub`; complements today's metadata-only OK envelope)
-- ⏳ `ML.PREDICT` (`ml.predict`)
-- ⏳ `ML.FORECAST` (`ml.forecast`)
-- ⏳ `ML.EVALUATE` (`ml.evaluate`)
+- ⏳ `ML.PREDICT` (`ml.predict`) — **stub**: return a schema-correct
+  placeholder result, not a prediction
+- ⏳ `ML.FORECAST` (`ml.forecast`) — **stub**
+- ⏳ `ML.EVALUATE` (`ml.evaluate`) — **stub**
+- `CREATE MODEL` — stays `local_stub` (no model is trained or stored)
 
 ### Deferred built-in functions
 
 Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
 
-- ⏳ `KEYS.ENCRYPT` (`keys.encrypt`) — AEAD encrypt over a local keyset
-  representation (complements the existing `KEYS.NEW_KEYSET` /
-  `KEYS.KEYSET_LENGTH` `local_stub` probes)
-- ⏳ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`)
-- ⏳ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — WKB → `GEOGRAPHY` on the semantic
-  GIS path (extends the landed `ST_GEOGPOINT` / `ST_GEOGFROMTEXT` MVP in
+- ⏳ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — **real**: WKB → `GEOGRAPHY` on
+  the semantic GIS path (extends the landed `ST_GEOGPOINT` /
+  `ST_GEOGFROMTEXT` MVP in
   `backend/engine/semantic/functions/geog_funcs.cc`)
-- ⏳ `SESSION_USER` (`session_user`) — session principal identifier for
-  row/column-policy and audit queries
+- ⏳ `KEYS.ENCRYPT` (`keys.encrypt`) — **stub**: not useful locally;
+  return a deterministic BigQuery-shaped `BYTES` placeholder so the query
+  does not fail (NOT real AEAD)
+- ⏳ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`) — **stub**
+- ⏳ `SESSION_USER` (`session_user`) — **stub**: return a deterministic
+  placeholder principal so row/column-policy and audit queries do not
+  fail
 
 ### Deferred AST node dispositions
 
@@ -842,33 +860,21 @@ Rows in
 
 #### Statements
 
-- ⏳ `ResolvedExplainStmt` — `EXPLAIN` plan introspection
+- ⏳ `ResolvedExplainStmt` — **real**: `EXPLAIN` plan introspection
 
 #### Privacy-preserving aggregates
 
 Differential-privacy / anonymized-aggregation scans from
 [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) (`AnonymizedAggregate*`,
-`DifferentialPrivacyAggregate*`, ...). Planned as a **local**
-deterministic implementation for tests — not a cloud DP guarantee.
+`DifferentialPrivacyAggregate*`, ...). Differential privacy only matters
+in production and the emulator cannot honor the guarantee, so these are
+**stub** — strip the privacy modifiers and return the plain underlying
+aggregate so the query does not fail. This is **not** differential
+privacy.
 
-- ⏳ `ResolvedAnonymizedAggregateScan`
-- ⏳ `ResolvedDifferentialPrivacyAggregateScan`
-- ⏳ `ResolvedAggregationThresholdAggregateScan`
-
-#### Graph / GQL scans
-
-`GRAPH_TABLE`, GQL subqueries, and the `ResolvedGraph*Scan` family from
-[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
-
-- ⏳ `ResolvedGraphTableScan`
-- ⏳ `ResolvedGraphScan`
-- ⏳ `ResolvedGraphLinearScan`
-- ⏳ `ResolvedGraphRefScan`
-- ⏳ `ResolvedGraphCallScan`
-- ⏳ `ResolvedGraphElementScan`
-- ⏳ `ResolvedGraphNodeScan`
-- ⏳ `ResolvedGraphEdgeScan`
-- ⏳ `ResolvedGraphPathScan`
+- ⏳ `ResolvedAnonymizedAggregateScan` — **stub**
+- ⏳ `ResolvedDifferentialPrivacyAggregateScan` — **stub**
+- ⏳ `ResolvedAggregationThresholdAggregateScan` — **stub**
 
 #### Protobuf field access
 
@@ -883,10 +889,13 @@ deterministic implementation for tests — not a cloud DP guarantee.
 #### Catalog / sequence helpers
 
 `ResolvedSequence` / `NEXT VALUE FOR` and catalog-internal column refs
-from [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
+from [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). **Real**, but land
+only the shapes a non-graph BigQuery query can actually reach; otherwise
+keep `unsupported` with a sharper envelope.
 
 - ⏳ `ResolvedSequence` — `NEXT VALUE FOR` sequence advancement
-- ⏳ `ResolvedCatalogColumnRef` — graph / catalog-internal column refs
+- ⏳ `ResolvedCatalogColumnRef` — catalog-internal column refs (the
+  graph use of this node is out of scope; see [Non-goals](#non-goals))
 - ⏳ `ResolvedExpressionColumn`
 
 ### Measure functions
@@ -970,6 +979,12 @@ routing query execution through the real BigQuery service.
   [External data sources](#external-data-sources) — and will land with
   per-source fixture or live configuration, not by proxying through the
   real BigQuery service.
+- No Graph / GQL (`GRAPH_TABLE`, GQL subqueries, the `ResolvedGraph*Scan`
+  family). The GQL surface is effectively a whole second query language
+  (its own analyzer, data model, and pattern grammar) and is not worth
+  modeling in a local emulator; it stays `unsupported` and surfaces
+  `UNIMPLEMENTED`. The graph use of `ResolvedCatalogColumnRef` is out of
+  scope for the same reason.
 
 ## Build systems
 

@@ -1,23 +1,23 @@
 ---
 name: Expand 08 — Scalar + statement long tail
-overview: Land the small, independent deferred items from ROADMAP §Planned work that don't need a plan of their own - KEYS.ENCRYPT / KEYS.DECRYPT_BYTES (real local AEAD over the existing keyset stub), ST_GEOGFROMWKB (WKB -> GEOGRAPHY on the semantic GIS path), SESSION_USER (session principal), and ResolvedExplainStmt (EXPLAIN plan introspection). Each is a self-contained promotion off unsupported.
-est_effort: ~2 weeks
+overview: Land the small, independent deferred items from ROADMAP §Planned work. Two are real local implementations - ST_GEOGFROMWKB (WKB -> GEOGRAPHY on the semantic GIS path) and ResolvedExplainStmt (EXPLAIN plan introspection). Two are deterministic stubs that only need to stop failing - KEYS.ENCRYPT / KEYS.DECRYPT_BYTES and SESSION_USER. Each is self-contained.
+est_effort: ~1-2 weeks
 isProject: true
 todos:
-  - id: keys-aead
-    content: "KEYS.ENCRYPT / KEYS.DECRYPT_BYTES: implement real local AEAD over the keyset representation that KEYS.NEW_KEYSET / KEYS.KEYSET_LENGTH already stub (backend/engine/semantic/stubs/keys.{h,cc}). Promote NEW_KEYSET/KEYSET_LENGTH from local_stub to a real (local, non-Tink-wire-compatible) keyset if needed so encrypt/decrypt round-trip. Preserve the 'fail loudly on misuse' contract for any unsupported keyset shape. Flip keys.encrypt / keys.decrypt_bytes off unsupported."
-    status: pending
   - id: st-geogfromwkb
-    content: "ST_GEOGFROMWKB: parse WKB bytes into the GEOGRAPHY representation used by geog_funcs.cc (which already does ST_GEOGFROMTEXT / ST_GEOGPOINT / ST_ASTEXT). Reuse the existing GIS value plumbing; flip st_geogfromwkb off unsupported in functions.yaml and update the ENGINE_POLICY Geography row (remove ST_GEOGFROMWKB from the unsupported list)."
-    status: pending
-  - id: session-user
-    content: "SESSION_USER: return the session principal identifier. Decide the source (a configurable session identity, default to a deterministic emulator principal) and surface it for row/column-policy + audit queries. Flip session_user off unsupported."
+    content: "ST_GEOGFROMWKB (REAL implementation): parse WKB bytes into the GEOGRAPHY representation used by geog_funcs.cc (which already does ST_GEOGFROMTEXT / ST_GEOGPOINT / ST_ASTEXT). Reuse the existing GIS value plumbing; flip st_geogfromwkb off unsupported -> local_impl (semantic_executor) in functions.yaml and remove ST_GEOGFROMWKB from the unsupported list in the ENGINE_POLICY Geography row."
     status: pending
   - id: explain-stmt
-    content: "ResolvedExplainStmt: EXPLAIN plan introspection. Emit a BigQuery-shaped plan/explain result for the analyzed query (the route classifier + transpiler already produce a plan shape). Flip ResolvedExplainStmt off unsupported in node_dispositions.yaml."
+    content: "ResolvedExplainStmt (REAL implementation): EXPLAIN plan introspection. Emit a BigQuery-shaped plan/explain result for the analyzed query (the route classifier + transpiler already produce a plan shape). Flip ResolvedExplainStmt off unsupported in node_dispositions.yaml."
+    status: pending
+  - id: keys-stub
+    content: "KEYS.ENCRYPT / KEYS.DECRYPT_BYTES (STUB - not a real AEAD): these are not useful locally and should only stop failing. Return a deterministic BigQuery-shaped placeholder through the existing keys stub lane (backend/engine/semantic/stubs/keys.{h,cc}, the same lane as KEYS.NEW_KEYSET): KEYS.ENCRYPT -> a fixed BYTES envelope, KEYS.DECRYPT_BYTES -> a fixed/echoed BYTES value. NOT real encryption. Flip keys.encrypt / keys.decrypt_bytes from unsupported -> local_stub."
+    status: pending
+  - id: session-user-stub
+    content: "SESSION_USER (STUB): return a deterministic placeholder principal identifier (a fixed emulator principal string, optionally configurable) so row/column-policy + audit queries do not fail. Flip session_user from unsupported -> local_stub."
     status: pending
   - id: fixtures-trackers
-    content: "Conformance fixtures: KEYS encrypt/decrypt round-trip, ST_GEOGFROMWKB constructor (WKB -> WKT), SESSION_USER, and an EXPLAIN smoke. Flip the four families in functions.yaml / node_dispositions.yaml + SHAPE_TRACKER; update ENGINE_POLICY (Key management, Geography, + add EXPLAIN/SESSION_USER notes) and ROADMAP §Deferred built-in functions + §Statements."
+    content: "Conformance fixtures: ST_GEOGFROMWKB constructor (WKB -> WKT, real), an EXPLAIN smoke (real), KEYS.ENCRYPT/DECRYPT_BYTES round-trip returns a placeholder without erroring (stub), and SESSION_USER returns the placeholder principal (stub). Flip the rows in functions.yaml / node_dispositions.yaml + SHAPE_TRACKER with the correct posture (local_impl for ST_GEOGFROMWKB/EXPLAIN, local_stub for KEYS/SESSION_USER); update ENGINE_POLICY (Key management, Geography, + EXPLAIN/SESSION_USER notes) and ROADMAP §Deferred built-in functions + §Statements."
     status: pending
 ---
 
@@ -26,57 +26,46 @@ todos:
 ## Why
 
 [ROADMAP.md §Deferred built-in functions](../../ROADMAP.md) and
-§Statements list four self-contained ⏳ items that each promote off
-`unsupported` without needing a dedicated plan:
+§Statements list four self-contained ⏳ items. Two get **real** local
+implementations; two are **stubs** that only need to stop failing:
 
-- `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` — today `unsupported` so a
-  consumer can't round-trip the `KEYS.NEW_KEYSET` / `KEYS.KEYSET_LENGTH`
-  `local_stub` sentinels into a real AEAD op.
-- `ST_GEOGFROMWKB` — the one remaining constructor gap in the landed GIS
-  MVP (`geog_funcs.cc` already does WKT + point constructors).
-- `SESSION_USER` — session principal for row/column-policy + audit SQL.
-- `ResolvedExplainStmt` — `EXPLAIN` plan introspection.
+- **Real:** `ST_GEOGFROMWKB` — the one remaining constructor gap in the
+  landed GIS MVP (`geog_funcs.cc` already does WKT + point constructors).
+- **Real:** `ResolvedExplainStmt` — `EXPLAIN` plan introspection.
+- **Stub:** `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` — no real AEAD;
+  encryption is not useful locally, so return a deterministic placeholder
+  so the query does not fail.
+- **Stub:** `SESSION_USER` — return a fixed placeholder principal.
 
 ## The hard part
 
-`KEYS.*` is the one with a contract subtlety: the existing keyset stubs
-deliberately fail loudly so a fake sentinel can't be encrypted/decrypted.
-Promoting encrypt/decrypt means making `NEW_KEYSET` produce a **real
-local keyset** (not necessarily Tink-wire-compatible) so the round-trip
-is honest, while still rejecting genuinely unsupported keyset shapes.
-The other three are mechanical.
+Keeping the two postures straight. `ST_GEOGFROMWKB` and `EXPLAIN` are
+genuine implementations that must produce correct results. `KEYS.*` and
+`SESSION_USER` are placeholders — and the `KEYS.*` change deliberately
+reverses the older ENGINE_POLICY "fail loudly" stance (the new intent is
+no-fail), so the policy text must be updated alongside.
 
 ## Key files
 
-- [`backend/engine/semantic/stubs/keys.{h,cc}`](../../backend/engine/semantic/stubs/) — keyset stubs (promote)
-- [`backend/engine/semantic/functions/geog_funcs.{h,cc}`](../../backend/engine/semantic/functions/) — GIS value plumbing (add WKB)
-- [`backend/engine/semantic/functions/dispatch.cc`](../../backend/engine/semantic/functions/dispatch.cc) — function dispatch
-- [`backend/engine/coordinator/route_classifier_visitor.cc`](../../backend/engine/coordinator/route_classifier_visitor.cc) — `ResolvedExplainStmt` dispatch
+- [`backend/engine/semantic/functions/geog_funcs.{h,cc}`](../../backend/engine/semantic/functions/) — GIS value plumbing (add WKB, real)
+- [`backend/engine/coordinator/route_classifier_visitor.cc`](../../backend/engine/coordinator/route_classifier_visitor.cc) — `ResolvedExplainStmt` dispatch (real)
+- [`backend/engine/semantic/stubs/keys.{h,cc}`](../../backend/engine/semantic/stubs/) — KEYS stub lane (add encrypt/decrypt placeholders)
+- [`backend/engine/semantic/stubs/`](../../backend/engine/semantic/stubs/) — SESSION_USER placeholder
 - [`backend/engine/duckdb/transpiler/functions.yaml`](../../backend/engine/duckdb/transpiler/functions.yaml) — `keys.*`, `st_geogfromwkb`, `session_user`
 - [`backend/engine/duckdb/transpiler/node_dispositions.yaml`](../../backend/engine/duckdb/transpiler/node_dispositions.yaml) — `ResolvedExplainStmt`
 - [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md) — Key management + Geography rows
 
 ## Steps
 
-1. `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` + real local keyset.
-2. `ST_GEOGFROMWKB` on the GIS path.
-3. `SESSION_USER` session principal.
-4. `ResolvedExplainStmt` plan introspection.
-5. Fixtures + tracker/posture flips.
-
-## Verify
-
-```bash
-task emulator:build-engine:bazel
-task conformance:run
-task lint:dispositions
-task bazel:shutdown && task bazel:status
-```
+1. `ST_GEOGFROMWKB` on the GIS path (real).
+2. `ResolvedExplainStmt` plan introspection (real).
+3. `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` placeholder (stub).
+4. `SESSION_USER` placeholder principal (stub).
+5. Fixtures + per-item posture flips (local_impl vs local_stub) + docs.
 
 ## Out of scope
 
-- Tink wire-format compatibility for keysets (local representation only).
-- The broader `ST_*` GIS long tail (aggregates, buffer/simplify) — those
-  stay tracked separately; this plan only adds the WKB constructor.
-- Real authenticated session identity / IAM (SESSION_USER returns a
-  configurable/deterministic principal, not an authenticated user).
+- Real AEAD / Tink-compatible keysets — `KEYS.*` is a placeholder.
+- Authenticated session identity / IAM — `SESSION_USER` is a placeholder.
+- The broader `ST_*` GIS long tail (aggregates, buffer/simplify) — this
+  plan only adds the WKB constructor.

@@ -90,21 +90,23 @@ summary the unsupported error envelope points at. Per-family posture
 
 | Family                                                                                                       | Posture     | What happens                                                                                                                                                                                                |
 |---|---|---|
-| BigQuery ML (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`)                                                     | `unsupported` | `UNIMPLEMENTED` with `family: function:ml.<name>` and a link here.                                                                                                                                          |
-| BigQuery ML `CREATE MODEL`                                                                                   | `local_stub`  | Accepted as metadata-only; returns OK without registering a model. A subsequent `ML.PREDICT` over the named model still surfaces `UNIMPLEMENTED` (the family stays unsupported).                            |
+| BigQuery ML (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`)                                                     | `unsupported` (planned: `local_stub`) | Today `UNIMPLEMENTED` with `family: function:ml.<name>`. ML is not useful locally (no Vertex AI / training / serving), so the planned posture is a deterministic **stub** that returns a schema-correct placeholder so the query does not fail — see ROADMAP §BigQuery ML. NOT a real prediction. |
+| BigQuery ML `CREATE MODEL`                                                                                   | `local_stub`  | Accepted as metadata-only; returns OK without registering a model. Stays a stub: no model is trained or stored.                                                                                            |
 | Geography / GIS (`ST_*`)                                                                                     | `local_impl` (partial) | GIS MVP on the semantic executor (`backend/engine/semantic/functions/geog_funcs.cc`): `ST_GEOGPOINT`, `ST_GEOGFROMTEXT`, `ST_ASTEXT`, `ST_DISTANCE`, `ST_WITHIN`, `ST_CONTAINS`, `ST_INTERSECTS`. `GEOGRAPHY` persists as `VARCHAR` in DuckDB storage; extended casts evaluate on `eval_expr_cast_extended.cc`. Remaining `ST_*` (`ST_GEOGFROMWKB`, aggregates, buffer/simplify family, ...) surface `UNIMPLEMENTED` with `family: function:st_<name>`. |
-| Differential privacy / anonymized aggregation (`AnonymizedAggregate*`, `DifferentialPrivacyAggregate*`, ...) | `unsupported` | `UNIMPLEMENTED`. The DP guarantee depends on noise calibration the emulator cannot honor.                                                                                                                   |
+| Differential privacy / anonymized aggregation (`AnonymizedAggregate*`, `DifferentialPrivacyAggregate*`, ...) | `unsupported` (planned: `local_stub`) | Today `UNIMPLEMENTED`. The DP guarantee depends on noise calibration the emulator cannot honor and only matters in production, so the planned posture is a **stub** that strips the privacy modifiers and returns the plain underlying aggregate so the query does not fail (NOT differential privacy) — see ROADMAP §Privacy-preserving aggregates. |
 | Approximate aggregation (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`, `APPROX_TOP_SUM`)   | `local_impl`  | Routes to the semantic executor (`backend/engine/semantic/functions/aggregate_specialized.cc`). Results are computed exactly (not sketch-approximated); not differential-privacy aggregation (see the DP row above). |
 | Networking (`NET.*`)                                                                                         | `local_impl`  | Routes to the semantic executor; implemented in `net_funcs.cc` (IP parse/mask/trunc, HOST, PUBLIC_SUFFIX, REG_DOMAIN). Pinned by `conformance/fixtures/specialized/net_host_reg_domain.yaml`. |
 | Key management (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`)                                                     | `local_stub`  | Returns a deterministic BigQuery-shaped sentinel (`KEYS.NEW_KEYSET` -> a fixed `BYTES` envelope; `KEYS.KEYSET_LENGTH` -> `1`). NOT a real Tink keyset.                                                      |
-| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`)                                                        | `unsupported` | Encryption-bearing entries deliberately fail loudly so a downstream consumer cannot round-trip the stub sentinel into an actual AEAD operation.                                                            |
+| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`)                                                        | `unsupported` (planned: `local_stub`) | Today `UNIMPLEMENTED`. Real AEAD is not useful locally, so the planned posture is a deterministic **stub** that returns a fixed BigQuery-shaped `BYTES` placeholder so the query does not fail (NOT real encryption) — see ROADMAP §Deferred built-in functions. This deliberately relaxes the earlier "fail loudly" stance. |
+| `SESSION_USER` (`session_user`)                                                                             | `unsupported` (planned: `local_stub`) | Today `UNIMPLEMENTED`. Planned posture is a **stub** returning a deterministic placeholder principal so row/column-policy + audit queries do not fail. NOT an authenticated identity. |
+| `ST_GEOGFROMWKB` (`st_geogfromwkb`)                                                                         | `unsupported` (planned: `local_impl`) | Today `UNIMPLEMENTED` (see the Geography row). Planned as a **real** WKB → `GEOGRAPHY` constructor on the semantic GIS path. |
 | HLL (`HLL_COUNT.*`)                                                                                          | `local_impl`  | Routes to the semantic executor; `hll_funcs.cc` implements INIT/MERGE/MERGE_PARTIAL/EXTRACT with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by `conformance/fixtures/specialized/hll_count_round_trip.yaml`. |
-| Protobuf shapes (`ResolvedMakeProto`, `ResolvedGetProtoField`, ...)                                          | `unsupported` | The emulator does not model the GoogleSQL proto type surface end-to-end.                                                                                                                                    |
-| MEASURE / measure functions (`AGGREGATE(<measure>)`)                                                         | `unsupported` | Measure types require BigQuery's analytical layer the emulator does not model.                                                                                                                              |
-| Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`, `ResolvedCatalogColumnRef`) | `unsupported` | The Spanner-Graph SQL surface and catalog-internal column refs are not part of this emulator's scope. |
-| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`)                                                             | `unsupported` | BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on `unsupported` to make the gap explicit.                                                                          |
+| Protobuf shapes (`ResolvedMakeProto`, `ResolvedGetProtoField`, ...)                                          | `unsupported` (planned: `local_impl`) | Today the emulator does not model the GoogleSQL proto type surface end-to-end. Planned as a **real** semantic-executor implementation — see ROADMAP §Protobuf field access. |
+| MEASURE / measure functions (`AGGREGATE(<measure>)`)                                                         | `unsupported` (planned: `local_impl`) | Today `UNIMPLEMENTED`. Planned as a **real** local semantic-executor path over the existing aggregate infrastructure — see ROADMAP §Measure functions. |
+| Graph (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`, `ResolvedCatalogColumnRef`) | `unsupported` (not planned) | The GQL surface is effectively a whole second query language (its own analyzer, data model, and pattern grammar) and is **not** worth modeling in a local emulator. Stays `unsupported`; **not** on the roadmap. The graph use of `ResolvedCatalogColumnRef` is out of scope for the same reason. |
+| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`)                                                             | `unsupported` (planned: `local_impl`, if reachable) | BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on `unsupported`. Planned to land **real** only for shapes a non-graph query can reach — see ROADMAP §Catalog / sequence helpers. |
 | JavaScript UDFs (`CREATE FUNCTION ... LANGUAGE js`)                                                          | `local_impl`  | `CREATE FUNCTION ... LANGUAGE js` registers through `js_udf_registry.cc`, persists the DDL in `DuckDBStorage`, and evaluates scalar bodies at call time on the semantic executor via embedded Duktape (`js_udf_runtime.cc`) so `routines.get` round-trips and call-time execution match. Pinned by `conformance/fixtures/udf/js_scalar_add.yaml`. Table-valued / aggregate JS UDFs remain unsupported. |
-| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` | No Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/` as a documented external-language gap (same disposition as JS UDFs). |
+| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`)                                                        | `unsupported` (planned: `local_impl`) | Today no Python UDF runtime; `cw_xml_extract` stays in bqutils `known_failing/`. Planned as a **real** local Python UDF runtime mirroring the landed JS path — see ROADMAP §Python UDFs. |
 | SQL scalar UDFs (`CREATE FUNCTION ... AS (...)`), including `ANY TYPE` templated parameters                  | `semantic_executor`     | `CREATE FUNCTION` registers through the per-project UDF registry (`backend/catalog/udf_registry.cc`), writes through to `DuckDBStorage` (`__bqemu_routines`), and replays into each query's `GoogleSqlCatalog` (including after engine restart via `RehydrateRoutinesFromStorage`), shadowing a built-in when the names collide. Templated bodies evaluate on the semantic executor via `EvalSqlUdfBody`; SQL UDAFs evaluate via `EvalSqlUdafBody`. SQL TVFs and procedures follow the same persistence path through `tvf_registry` / `procedure_registry`. `DROP FUNCTION` deletes registry + storage rows. Conformance fixtures under `conformance/fixtures/udf/`. |
 | Scripting (`DECLARE`, `SET`, `CALL`, `BEGIN…END` multi-stmt blocks)                                          | `semantic_executor`     | Gateway sends DECLARE/SET/CALL scripts in one engine `ExecuteQuery` round-trip (`script_runner_engine.go`); control-flow scripts register a single child job for the final SELECT result. Simple statements (`CREATE CONSTANT`/`SET`/`CALL`/`ASSERT`/`EXECUTE IMMEDIATE` literals) run via `ExecuteScriptViaAnalyzeNext`; scripts with structured control flow (`IF`/`WHILE`/`LOOP`/`FOR`/`EXECUTE IMMEDIATE`/`EXCEPTION`/`RAISE` in blocks) delegate to `googlesql::ScriptExecutor` through `EmulatorStatementEvaluator` when `BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1` (always set once the prebuilt artifact ships `//googlesql/scripting:script_executor`). `@@error.*` reads resolve through `EvalContext::script_system_variables` (populated by the ScriptExecutor during `EXCEPTION` handlers). Conformance fixtures under `conformance/fixtures/scripting/`. |
 | `LOAD DATA LOCAL <local-uri>` / `LOAD DATA ... FROM FILES (uris = ['file://...'])`                           | `control_op`  | Local CSV/JSON/Parquet readers via DuckDB (`RunLoadData`); `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
@@ -113,22 +115,27 @@ summary the unsupported error envelope points at. Per-family posture
 | `CREATE MATERIALIZED VIEW`                                                                                   | `control_op`  | Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by `conformance/fixtures/ddl/materialized_view_query.yaml`. |
 | `INFORMATION_SCHEMA.*` reflection views                                                                      | `duckdb_native` | `<dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> `` resolve at analyze time through `backend/catalog/info_schema_table.{h,cc}` (a `VirtualCatalogTable`) and materialize from `Storage` + the routine/view registries: `TABLES`, `COLUMNS`, `SCHEMATA`, `VIEWS` (view registry), `ROUTINES` (`__bqemu_routines`), `COLUMN_FIELD_PATHS` (recursed STRUCT/ARRAY paths), `PARTITIONS` / `TABLE_STORAGE` (`Storage::CountRows`, single unpartitioned partition; byte columns NULL per the persistence non-goal), and `TABLE_OPTIONS` / `KEY_COLUMN_USAGE` (empty — options/constraints are not modeled). `JOBS` / `JOBS_BY_PROJECT` are **not** engine-resolved: the gateway rewrites those queries to a snapshot table in `` `_bqemu_jobs.JOBS` `` materialized from the in-process job registry (`gateway/query/info_schema_jobs.go`, `gateway/jobs/info_schema.go`) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under `conformance/fixtures/info_schema/`. |
 
-The two halves of the `local_stub` posture are load-bearing:
+The `local_stub` posture has two flavors:
 
-1. **BigQuery-shaped placeholder** -- client-library startup probes
-   (e.g. a connector that issues `SELECT KEYS.NEW_KEYSET(...)` to
-   confirm the dialect understands the namespace) succeed against the
-   emulator without forcing the user to disable their probe.
-2. **No silent approximation downstream** -- the call site that would
-   actually consume the stub value (`KEYS.ENCRYPT(...)`, `ML.PREDICT(
-   MODEL <id>, ...)`) stays on `unsupported` so a misuse fails loudly
-   rather than emitting a plausible-looking-but-fake answer.
+1. **Probe placeholder (no downstream consumption)** -- client-library
+   startup probes (e.g. a connector that issues `SELECT KEYS.NEW_KEYSET(...)`
+   to confirm the dialect understands the namespace) succeed without
+   forcing the user to disable their probe.
+2. **No-fail placeholder (deliberate, for families that are not useful
+   locally)** -- families the emulator will never model meaningfully
+   (BigQuery ML inference, differential-privacy aggregates,
+   `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `SESSION_USER`) return a
+   deterministic, schema-correct placeholder so a query that references
+   them **does not fail**. The product decision here is no-fail, not
+   loud-fail: these are explicitly placeholders (documented as such per
+   family above), never real answers. This supersedes the emulator's
+   earlier "consume the stub and fail loudly" stance for these families.
 
-When the unsupported route surfaces an envelope, the message names the
-offending family (e.g. `family: function:keys.encrypt`, `family:
-function:ml.predict`, `family: ResolvedSequenceStmt`) so a user landing
-on this document can find the matching row in the table above without
-running the route classifier in their head.
+A shape that is genuinely `unsupported` (e.g. graph / GQL) still surfaces
+an `UNIMPLEMENTED` envelope naming the offending family (e.g.
+`family: ResolvedGraphScan`) so a user landing on this document can find
+the matching row in the table above without running the route classifier
+in their head.
 
 ## What this means in practice
 
@@ -138,9 +145,12 @@ running the route classifier in their head.
    update the shape tracker row in the same commit.
 
 2. **DML / DDL routing is closed for in-scope GoogleSQL shapes.**
-   Remaining deliberate gaps are `unsupported` families documented in
-   [`ENGINE_POLICY.md`](ENGINE_POLICY.md) (graph/GQL, broad
-   proto surface, `ML.*`, cloud `gs://`, ...). Landed on the local DML
+   Remaining gaps are tracked in ROADMAP §Planned work (real
+   implementations for the proto surface, Python UDFs, `gs://` external
+   data, MEASURE, ...; deterministic no-fail stubs for `ML.*`,
+   differential-privacy aggregates, `KEYS.ENCRYPT`/`DECRYPT_BYTES`,
+   `SESSION_USER`). Graph / GQL is the one family that stays
+   `unsupported` and is **not** planned. Landed on the local DML
    executor (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
    SELECT`, scalar and deep-STRUCT `UPDATE`, proto `UpdateConstructor`
    SET expressions (`eval_expr_update_constructor.cc`), nested `(DELETE arr

@@ -1,6 +1,6 @@
 ---
 name: Expand — dispatch playbook
-overview: Serialized engine-lane runbook for the expand 01-09 feature set. Documents the per-subagent session protocol, the bazel single-invocation + process-hygiene constraints, the hot-file list to watch for cross-plan conflicts, and the parent-agent cleanup between subagents. Mirrors full-dispatch / parity-dispatch for the third wave.
+overview: Serialized engine-lane runbook for the expand feature set (plans 01-09, with 05 removed — Graph/GQL is out of scope). Documents the per-subagent session protocol, the bazel single-invocation + process-hygiene constraints, the hot-file list to watch for cross-plan conflicts, and the parent-agent cleanup between subagents. Mirrors full-dispatch / parity-dispatch for the third wave.
 isProject: true
 ---
 
@@ -9,6 +9,7 @@ isProject: true
 Runbook for draining [expand-00-index.plan.md](expand-00-index.plan.md).
 Every expand plan rebuilds the C++ engine (and plan 01 the Go gateway),
 so the engine lane is **serialized**: one plan in flight at a time.
+There is no `expand-05-*`: Graph / GQL is `unsupported` and not planned.
 
 ## Session protocol (per sub-plan)
 
@@ -74,10 +75,11 @@ so the engine lane is **serialized**: one plan in flight at a time.
 These are touched by more than one expand plan; coordinate so two
 serialized plans don't clobber each other's edits:
 
-- `backend/engine/duckdb/transpiler/node_dispositions.yaml` — 02, 04, 05, 06, 07, 08, 09
+- `backend/engine/duckdb/transpiler/node_dispositions.yaml` — 04, 06, 07, 08, 09
 - `backend/engine/duckdb/transpiler/functions.yaml` — 02, 08
 - `backend/engine/duckdb/transpiler/SHAPE_TRACKER.md` — all
-- `backend/engine/coordinator/route_classifier*.cc` — any plan adding a pre-dispatch route (02, 05)
+- `backend/engine/coordinator/route_classifier*.cc` — any plan adding a route/stub dispatch (02, 06, 08)
+- `backend/engine/semantic/stubs/` — 02, 08 (ML, KEYS, SESSION_USER stub lane)
 - `backend/engine/semantic/functions/dispatch.cc` — 08, 09
 - `docs/ENGINE_POLICY.md`, `ROADMAP.md` — all (bookkeeping)
 

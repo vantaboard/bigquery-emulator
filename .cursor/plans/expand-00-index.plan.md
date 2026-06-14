@@ -1,6 +1,6 @@
 ---
 name: Expand 00 — Index & dispatch
-overview: Master index for the third wave - moving the emulator from "the common OLAP + DML + scripting + storage surface works, with a fully-indexed unsupported backlog" (the parity 01-13 and full 01-11 sets) to closing every `unsupported` / deferred `local_stub` family in docs/ENGINE_POLICY.md and the ROADMAP §Planned work. Each plan promotes one feature family off `unsupported` with a local implementation (or, for external data sources, an opt-in live path) plus conformance fixtures and tracker updates. Ordered most-impactful-for-real-workloads first.
+overview: Master index for the third wave - draining the ⏳ planned families from ROADMAP §Planned work / docs/ENGINE_POLICY.md. Two kinds of work: (a) REAL local implementations (external data sources, Python UDFs, protobuf shapes, ST_GEOGFROMWKB, EXPLAIN, sequences/catalog refs, measure functions) and (b) deterministic STUBS that only need to stop a query from failing (BigQuery ML inference, differential-privacy aggregates, KEYS.ENCRYPT/DECRYPT_BYTES, SESSION_USER). Graph / GQL is explicitly OUT of scope (unsupported, not planned) — it is effectively a second query language and not worth modeling locally. Ordered most-impactful-for-real-workloads first.
 isProject: true
 ---
 
@@ -9,10 +9,22 @@ isProject: true
 This is the successor to [full-00-index.plan.md](full-00-index.plan.md).
 The parity 01-13 and full 01-11 sets landed the common query / DML /
 scripting / UDF / storage-API surface and indexed the remaining gaps.
-This set closes the `unsupported` / deferred `local_stub` families that
-[ROADMAP.md §Planned work](../../ROADMAP.md) now tracks as ⏳ planned —
-the rows that still surface `UNIMPLEMENTED` (or **501** at the gateway)
-today.
+This set drains the families that [ROADMAP.md §Planned work](../../ROADMAP.md)
+now tracks as ⏳ planned — the rows that still surface `UNIMPLEMENTED`
+(or **501** at the gateway) today.
+
+Two kinds of work live here, and each plan says which it is:
+
+- **Real implementation** — the feature is genuinely useful locally, so
+  land exact BigQuery semantics + conformance fixtures.
+- **Deterministic stub** — the feature is not useful in a local emulator
+  (no Vertex AI, no real keysets, no production DP), so the only goal is
+  that a query referencing it **does not fail**: return a schema-correct
+  BigQuery-shaped placeholder via the `local_stub` lane.
+
+**Graph / GQL is not in this set.** `GRAPH_TABLE` / GQL is effectively a
+whole second query language; it stays `unsupported` and is **not**
+planned (see [ROADMAP.md §Non-goals](../../ROADMAP.md)).
 
 Source documents (re-read before starting any sub-plan; they are the
 authoritative trackers and must be updated in the same commits that land
@@ -32,52 +44,57 @@ Repo-wide invariants every sub-plan obeys (identical to the parity / full sets):
 2. **Tracker parity**: edit `node_dispositions.yaml` / `functions.yaml`
    and the matching SHAPE_TRACKER.md row in the same commit;
    `task lint:dispositions` (wired into `task lint:run`) gates drift.
-3. **No silent approximation**: a shape either lands on its route with
-   exact BigQuery semantics or keeps surfacing `UNIMPLEMENTED`. A
-   deterministic `local_stub` is allowed only for client-library probes
-   (per ENGINE_POLICY), never as a fake answer downstream. The one
-   sanctioned exception to "no cloud" is **opt-in live external data
-   sources** (plan 01), which the user explicitly requested.
+3. **Real vs stub is a deliberate per-family call**: a real-impl plan
+   lands exact BigQuery semantics; a stub plan returns a schema-correct
+   placeholder via `local_stub` so the query does not fail. The stub
+   families here (ML, DP aggregates, `KEYS.ENCRYPT`/`DECRYPT_BYTES`,
+   `SESSION_USER`) deliberately relax the older ENGINE_POLICY "fail
+   loudly downstream" stance — the product decision is no-fail, not
+   loud-fail, so update the policy text alongside. The one sanctioned
+   exception to "no cloud" is **opt-in live external data sources**
+   (plan 01), which the user explicitly requested.
 4. **Bazel hygiene**: one bazel invocation at a time, throttled via
    `task emulator:build-engine:bazel` / `task bazel:test`; end every
    plan with `task bazel:shutdown` + `task bazel:status` -> `(clean)`.
 
 ## Sub-plans (most impactful for real workloads → least)
 
-| # | Plan file | Theme | ENGINE_POLICY family / ROADMAP row |
-|---|-----------|-------|------------------------------------|
-| 01 | [expand-01-external-data-sources.plan.md](expand-01-external-data-sources.plan.md) | `gs://` LOAD/EXPORT, Google Sheets, connections / `EXTERNAL_QUERY`, ephemeral `tableDefinitions`; per-source **fixture vs live** config | External data sources |
-| 02 | [expand-02-bigquery-ml.plan.md](expand-02-bigquery-ml.plan.md) | `CREATE MODEL` materialization (promote off `local_stub`) + `ML.PREDICT` / `ML.FORECAST` / `ML.EVALUATE` | BigQuery ML |
-| 03 | [expand-03-python-udf-runtime.plan.md](expand-03-python-udf-runtime.plan.md) | `CREATE FUNCTION ... LANGUAGE python` register / persist / evaluate | Python UDFs |
-| 04 | [expand-04-protobuf-shapes.plan.md](expand-04-protobuf-shapes.plan.md) | Proto type surface — `ResolvedMakeProto`, `Get/ReplaceProtoField`, `GetProtoOneof`, `GetRowField`, `FilterField(Arg)` | Protobuf field access |
-| 05 | [expand-05-graph-gql.plan.md](expand-05-graph-gql.plan.md) | `GRAPH_TABLE` / GQL — the nine `ResolvedGraph*Scan` classes + `ResolvedCatalogColumnRef` | Graph / GQL scans |
-| 06 | [expand-06-privacy-aggregates.plan.md](expand-06-privacy-aggregates.plan.md) | `ResolvedAnonymizedAggregateScan` / `ResolvedDifferentialPrivacyAggregateScan` / `ResolvedAggregationThresholdAggregateScan` | Privacy-preserving aggregates |
-| 07 | [expand-07-sequences-catalog-refs.plan.md](expand-07-sequences-catalog-refs.plan.md) | `ResolvedSequence` / `NEXT VALUE FOR`, `ResolvedExpressionColumn`, `ResolvedCatalogColumnRef` (non-graph) | Catalog / sequence helpers |
-| 08 | [expand-08-scalar-statement-long-tail.plan.md](expand-08-scalar-statement-long-tail.plan.md) | `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `ST_GEOGFROMWKB`, `SESSION_USER`, `ResolvedExplainStmt` | Deferred functions + EXPLAIN |
-| 09 | [expand-09-measure-functions.plan.md](expand-09-measure-functions.plan.md) | MEASURE types + `AGGREGATE(<measure>)` | Measure functions |
+`kind` is **real** (land BigQuery semantics) or **stub** (no-fail placeholder).
+
+| # | Plan file | Kind | Theme | ROADMAP row |
+|---|-----------|------|-------|-------------|
+| 01 | [expand-01-external-data-sources.plan.md](expand-01-external-data-sources.plan.md) | real | `gs://` LOAD/EXPORT, Google Sheets, connections / `EXTERNAL_QUERY`, ephemeral `tableDefinitions`; per-source **fixture vs live** config | External data sources |
+| 02 | [expand-02-bigquery-ml.plan.md](expand-02-bigquery-ml.plan.md) | **stub** | `ML.PREDICT` / `ML.FORECAST` / `ML.EVALUATE` return schema-correct placeholders; `CREATE MODEL` stays `local_stub` | BigQuery ML |
+| 03 | [expand-03-python-udf-runtime.plan.md](expand-03-python-udf-runtime.plan.md) | real | `CREATE FUNCTION ... LANGUAGE python` register / persist / evaluate | Python UDFs |
+| 04 | [expand-04-protobuf-shapes.plan.md](expand-04-protobuf-shapes.plan.md) | real | Proto type surface — `ResolvedMakeProto`, `Get/ReplaceProtoField`, `GetProtoOneof`, `GetRowField`, `FilterField(Arg)` | Protobuf field access |
+| 06 | [expand-06-privacy-aggregates.plan.md](expand-06-privacy-aggregates.plan.md) | **stub** | `ResolvedAnonymizedAggregateScan` / `ResolvedDifferentialPrivacyAggregateScan` / `ResolvedAggregationThresholdAggregateScan` — strip privacy modifiers, return the plain aggregate | Privacy-preserving aggregates |
+| 07 | [expand-07-sequences-catalog-refs.plan.md](expand-07-sequences-catalog-refs.plan.md) | real | `ResolvedSequence` / `NEXT VALUE FOR`, `ResolvedExpressionColumn`, `ResolvedCatalogColumnRef` (non-graph) | Catalog / sequence helpers |
+| 08 | [expand-08-scalar-statement-long-tail.plan.md](expand-08-scalar-statement-long-tail.plan.md) | mixed | **real:** `ST_GEOGFROMWKB`, `ResolvedExplainStmt`; **stub:** `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `SESSION_USER` | Deferred functions + EXPLAIN |
+| 09 | [expand-09-measure-functions.plan.md](expand-09-measure-functions.plan.md) | real | MEASURE types + `AGGREGATE(<measure>)` | Measure functions |
+
+> **05 (Graph / GQL) was removed.** `GRAPH_TABLE` / GQL is effectively a
+> second query language; it stays `unsupported` and is **not** planned.
+> The plan slot is intentionally left empty (no `expand-05-*`).
 
 ## Dependency sketch
 
 ```mermaid
 graph LR
   P01[01 external data]
-  P02[02 bigquery ml] --> P01
+  P02[02 ml stub]
   P03[03 python udf]
   P04[04 protobuf]
-  P05[05 graph/gql] --> P07
-  P06[06 privacy agg]
+  P06[06 privacy agg stub]
   P07[07 sequences/catalog refs]
   P08[08 scalar/statement long tail]
   P09[09 measure fns]
 ```
 
-- **02 (BigQuery ML)** benefits from **01**'s opt-in live-source plumbing
-  if it ever fetches remote models, but its core (local model
-  registration + inference over local data) is independent.
-- **05 (Graph)** needs `ResolvedCatalogColumnRef`, which **07** owns the
-  disposition for; land 07's catalog-ref handling first or co-develop.
-- Everything else is logically independent and can be picked up in any
-  order. 03, 04, 06, 08, 09 each touch a disjoint slice of the engine.
+- Every plan is logically independent and can be picked up in any order;
+  the lane is serialized only because they all rebuild the engine.
+- The stub plans (02, 06, and the stub half of 08) are the cheapest —
+  they reuse the existing `local_stub` lane and just need a placeholder
+  + a no-fail fixture, so they make good warm-up or fill-in work.
 
 ## Dispatch (serialized engine lane)
 
@@ -106,17 +123,17 @@ must rebuild + re-run conformance, so plans stay serialized end-to-end:
 
 ## Status (updated by the parent agent after each subagent returns)
 
-| Plan | State | Conformance delta | Commits | Notes |
-|------|-------|-------------------|---------|-------|
-| 01 | pending | — | | External data sources (fixture + opt-in live) |
-| 02 | pending | — | | BigQuery ML (CREATE MODEL + inference) |
-| 03 | pending | — | | Python UDF runtime |
-| 04 | pending | — | | Protobuf field access |
-| 05 | pending | — | | Graph / GQL scans |
-| 06 | pending | — | | Privacy-preserving aggregates |
-| 07 | pending | — | | Sequences + catalog refs |
-| 08 | pending | — | | KEYS encrypt/decrypt, ST_GEOGFROMWKB, SESSION_USER, EXPLAIN |
-| 09 | pending | — | | Measure functions |
+| Plan | Kind | State | Conformance delta | Commits | Notes |
+|------|------|-------|-------------------|---------|-------|
+| 01 | real | pending | — | | External data sources (fixture + opt-in live) |
+| 02 | stub | pending | — | | BigQuery ML inference placeholders; CREATE MODEL stays stub |
+| 03 | real | pending | — | | Python UDF runtime |
+| 04 | real | pending | — | | Protobuf field access |
+| 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
+| 06 | stub | pending | — | | Privacy-preserving aggregates (strip modifiers, plain aggregate) |
+| 07 | real | pending | — | | Sequences + catalog refs |
+| 08 | mixed | pending | — | | real: ST_GEOGFROMWKB, EXPLAIN; stub: KEYS encrypt/decrypt, SESSION_USER |
+| 09 | real | pending | — | | Measure functions |
 
 ## Bookkeeping per landed plan
 

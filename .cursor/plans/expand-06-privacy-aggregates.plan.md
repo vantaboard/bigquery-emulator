@@ -1,73 +1,54 @@
 ---
-name: Expand 06 — Privacy-preserving aggregates
-overview: Promote the differential-privacy / anonymized / aggregation-threshold scan family off unsupported. Implement ResolvedAnonymizedAggregateScan, ResolvedDifferentialPrivacyAggregateScan, and ResolvedAggregationThresholdAggregateScan on the semantic executor as a local, deterministic implementation suitable for tests - explicitly NOT a production DP guarantee.
-est_effort: ~2-3 weeks
+name: Expand 06 — Privacy-preserving aggregates (stubs)
+overview: Differential privacy only matters in production; the local emulator cannot honor the DP guarantee and there is no value in modeling it. The goal here is only to stop these scans from failing a query. Stub ResolvedAnonymizedAggregateScan, ResolvedDifferentialPrivacyAggregateScan, and ResolvedAggregationThresholdAggregateScan so a query that uses WITH ANONYMIZATION / DIFFERENTIAL_PRIVACY / AGGREGATION_THRESHOLD returns a deterministic result (the underlying aggregate, no noise/suppression) instead of UNIMPLEMENTED.
+est_effort: ~1 week
 isProject: true
 todos:
-  - id: semantics-decision
-    content: "Decide the local semantics. BigQuery's DP guarantee depends on calibrated noise the emulator cannot honor. Two options: (a) deterministic mode (seeded/zero noise) so conformance is reproducible, with the privacy parameters parsed + validated but the noise made deterministic; (b) seeded-PRNG noise for shape realism. Pick deterministic-by-default and document loudly that this is NOT a privacy guarantee."
+  - id: stub-semantics
+    content: "Decide the no-fail behavior: parse + ignore the privacy parameters (epsilon/delta/k_threshold/privacy_unit_column) and evaluate the underlying aggregation as a plain GROUP BY aggregate on the semantic executor, emitting the documented output columns. No noise, no group suppression. Explicitly a placeholder, NOT a privacy guarantee."
     status: pending
-  - id: anon-aggregate
-    content: "ResolvedAnonymizedAggregateScan: WITH ANONYMIZATION aggregation — parse the privacy params (epsilon/delta/k_threshold), evaluate the underlying aggregates on the semantic executor, apply the aggregation threshold (drop groups below the contribution threshold), and apply deterministic noise per the chosen mode."
-    status: pending
-  - id: dp-aggregate
-    content: "ResolvedDifferentialPrivacyAggregateScan: the newer DIFFERENTIAL_PRIVACY clause form (privacy_unit_column, epsilon/delta budget). Share the aggregation-threshold + noise machinery with the anonymized path."
-    status: pending
-  - id: threshold-aggregate
-    content: "ResolvedAggregationThresholdAggregateScan: WITH AGGREGATION_THRESHOLD — group suppression below a count threshold without the full DP noise apparatus. Simplest of the three; good first landing."
+  - id: stub-scans
+    content: "Route the three scan classes (ResolvedAnonymizedAggregateScan, ResolvedDifferentialPrivacyAggregateScan, ResolvedAggregationThresholdAggregateScan) to the semantic executor's existing aggregate-scan eval with the privacy modifiers stripped, so the query produces rows instead of erroring."
     status: pending
   - id: fixtures-trackers
-    content: "Conformance fixtures: aggregation-threshold suppression, anonymized aggregate group-drop + deterministic output, DP-clause variant. Flip the three scan rows off unsupported in node_dispositions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY DP row (note deterministic, not a privacy guarantee) + ROADMAP §Privacy-preserving aggregates."
+    content: "Conformance fixtures: a WITH ANONYMIZATION / DIFFERENTIAL_PRIVACY / AGGREGATION_THRESHOLD query returns the plain aggregate without erroring. Flip the three scan rows from unsupported -> local_stub (or semantic_executor-as-stub) in node_dispositions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY DP row to describe the no-fail stub (and that it is NOT differential privacy) + ROADMAP §Privacy-preserving aggregates."
     status: pending
 ---
 
-# Expand 06 — Privacy-preserving aggregates
+# Expand 06 — Privacy-preserving aggregates (stubs)
 
 ## Why
 
-[ROADMAP.md §Privacy-preserving aggregates](../../ROADMAP.md) tracks the
-three scans as ⏳ planned. ENGINE_POLICY marks them `unsupported` because
-"the DP guarantee depends on noise calibration the emulator cannot
-honor." For an emulator the **useful** behavior is deterministic + test-
-reproducible result shape (group suppression below thresholds, correct
-output columns) — not an actual privacy guarantee.
+Differential privacy is a production-only concern: the guarantee depends
+on calibrated noise the emulator cannot honor, and a local test harness
+gains nothing from modeling it. The product decision (ROADMAP
+§Privacy-preserving aggregates) is therefore **stub, do not implement**:
+the only goal is that a query using `WITH ANONYMIZATION` /
+`DIFFERENTIAL_PRIVACY` / `WITH AGGREGATION_THRESHOLD` **does not fail**.
 
 ## The hard part
 
-Honesty about the contract. We must implement the *shape* (parse privacy
-params, suppress small groups, emit the documented columns) while making
-absolutely clear — in the envelope-adjacent docs and the ENGINE_POLICY
-row — that the local implementation does **not** provide differential
-privacy. Deterministic-by-default noise keeps conformance stable; an
-opt-in seeded-PRNG mode can come later.
+Being unambiguous that this is not differential privacy. The stub
+strips the privacy modifiers and returns the plain underlying
+aggregate — no noise, no suppression. The ENGINE_POLICY DP row and any
+result-adjacent docs must say so plainly so nobody mistakes the
+emulator's output for a privacy-preserving result.
 
 ## Key files
 
-- [`backend/engine/semantic/functions/aggregate_specialized.cc`](../../backend/engine/semantic/functions/aggregate_specialized.cc) — specialized aggregate home
-- [`backend/engine/semantic/scan_eval_scan_impl.cc`](../../backend/engine/semantic/) — aggregate scan evaluation
-- [`backend/engine/coordinator/route_classifier_visitor.cc`](../../backend/engine/coordinator/route_classifier_visitor.cc) — scan dispatch
+- [`backend/engine/semantic/scan_eval_scan_impl.cc`](../../backend/engine/semantic/) — aggregate scan evaluation to reuse
+- [`backend/engine/semantic/functions/aggregate_specialized.cc`](../../backend/engine/semantic/functions/aggregate_specialized.cc) — aggregate eval
+- [`backend/engine/coordinator/route_classifier_visitor.cc`](../../backend/engine/coordinator/route_classifier_visitor.cc) — scan dispatch (strip privacy modifiers)
 - [`backend/engine/duckdb/transpiler/node_dispositions.yaml`](../../backend/engine/duckdb/transpiler/node_dispositions.yaml) — the three scan rows
 - [`docs/ENGINE_POLICY.md`](../../docs/ENGINE_POLICY.md) — DP row
 
 ## Steps
 
-1. Decide local semantics (deterministic-by-default) + document.
-2. `ResolvedAggregationThresholdAggregateScan` (simplest; land first).
-3. `ResolvedAnonymizedAggregateScan` (threshold + deterministic noise).
-4. `ResolvedDifferentialPrivacyAggregateScan` (DP-clause variant).
-5. Fixtures + tracker/posture flips + the "not a privacy guarantee" note.
-
-## Verify
-
-```bash
-task emulator:build-engine:bazel
-task conformance:run
-task lint:dispositions
-task bazel:shutdown && task bazel:status
-```
+1. Decide the no-fail behavior (plain aggregate, modifiers ignored).
+2. Route the three scans to aggregate eval with modifiers stripped.
+3. Fixtures (no-error) + flip the rows + doc updates ("not DP").
 
 ## Out of scope
 
-- Any actual differential-privacy guarantee / calibrated noise.
-- Per-user contribution bounding beyond what the threshold needs.
-- Privacy budget accounting across queries.
+- Any actual differential-privacy guarantee, calibrated noise, group
+  suppression, or privacy-budget accounting.

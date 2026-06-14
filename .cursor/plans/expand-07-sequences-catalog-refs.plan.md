@@ -11,7 +11,7 @@ todos:
     content: "ResolvedExpressionColumn: the column reference used for standalone expression evaluation contexts (e.g. expression-only analysis, check constraints, computed contexts). Evaluate on the semantic executor by binding the named expression column from the eval context."
     status: pending
   - id: catalog-column-ref
-    content: "ResolvedCatalogColumnRef (non-graph): catalog-internal column references. Coordinate with expand-05 — this plan owns the node_dispositions.yaml row edit; if 05 lands first in the graph context, reconcile so the row reflects both. Implement the non-graph binding on the semantic executor."
+    content: "ResolvedCatalogColumnRef: catalog-internal column references. Graph/GQL (the other consumer of this node) is out of scope (unsupported, not planned), so this plan owns the node only for the non-graph catalog-ref cases the analyzer can reach. If no non-graph SQL reaches the node, keep it unsupported with a sharper envelope instead of forcing an implementation."
     status: pending
   - id: fixtures-trackers
     content: "Conformance fixtures for whichever shapes land with real SQL coverage (sequence advance if implemented; expression-column eval). Flip the corresponding rows in node_dispositions.yaml + SHAPE_TRACKER; update ROADMAP §Catalog / sequence helpers + the ENGINE_POLICY Sequences row. For any shape that stays unsupported, sharpen the envelope/doc instead of flipping."
@@ -26,18 +26,19 @@ todos:
 `ResolvedSequence`, `ResolvedCatalogColumnRef`, and
 `ResolvedExpressionColumn` as ⏳ planned. These are small,
 analyzer-visible shapes anchored on `unsupported` today to make the gap
-explicit. Some may have no reachable BigQuery SQL surface (sequences in
-particular) — for those the right outcome is a sharper envelope + doc,
-not a forced implementation.
+explicit. Some may have no reachable BigQuery SQL surface — for those the
+right outcome is a sharper envelope + doc, not a forced implementation.
+Note: Graph / GQL is out of scope (unsupported, not planned), so the
+graph use of `ResolvedCatalogColumnRef` does **not** drive this plan.
 
 ## The hard part
 
 Deciding what is actually reachable. `ResolvedSequence` /
 `NEXT VALUE FOR` is the ambiguous one: BigQuery doesn't ship general SQL
 sequences, so the plan must confirm whether any analyzable query reaches
-the node before building a sequence object. `ResolvedCatalogColumnRef`
-is shared with the graph plan (05); this plan owns the YAML row so the
-two don't double-edit it.
+the node before building a sequence object. `ResolvedCatalogColumnRef`'s
+other consumer (graph/GQL) is out of scope, so only land it if a
+non-graph catalog-ref shape is actually reachable.
 
 ## Key files
 
@@ -51,7 +52,7 @@ two don't double-edit it.
 
 1. Investigate + decide `ResolvedSequence` reachability; implement or sharpen.
 2. `ResolvedExpressionColumn` eval-context binding.
-3. `ResolvedCatalogColumnRef` (non-graph); reconcile with plan 05.
+3. `ResolvedCatalogColumnRef` (non-graph) if reachable; else sharpen the envelope.
 4. Fixtures (for landed shapes) + tracker/posture flips or doc sharpening.
 
 ## Verify
@@ -65,6 +66,6 @@ task bazel:shutdown && task bazel:status
 
 ## Out of scope
 
-- The graph-context use of `ResolvedCatalogColumnRef` (lives in plan 05;
-  this plan only owns the shared disposition row).
+- The graph-context use of `ResolvedCatalogColumnRef` — Graph / GQL is
+  unsupported and not planned.
 - A general SQL sequence DDL surface if no BigQuery SQL reaches it.
