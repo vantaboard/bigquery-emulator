@@ -194,20 +194,24 @@ func mergeSchemas(
 			if merged.Fields[i].Mode != fieldModeRequired {
 				continue
 			}
-			if load != nil {
-				if idx := fieldIndex(load.Fields, merged.Fields[i].Name); idx >= 0 {
-					// Query/load results default to NULLABLE; only keep
-					// REQUIRED when the incoming schema still requires it.
-					if load.Fields[idx].Mode == fieldModeRequired {
-						continue
-					}
-				}
+			if loadKeepsFieldRequired(load, merged.Fields[i].Name) {
+				continue
 			}
 			merged.Fields[i].Mode = ""
 			changed = true
 		}
 	}
 	return merged, changed
+}
+
+func loadKeepsFieldRequired(load *bqtypes.TableSchema, name string) bool {
+	if load == nil {
+		return false
+	}
+	idx := fieldIndex(load.Fields, name)
+	// Query/load results default to NULLABLE; only keep REQUIRED when the
+	// incoming schema still requires it.
+	return idx >= 0 && load.Fields[idx].Mode == fieldModeRequired
 }
 
 func cloneBQSchema(s *bqtypes.TableSchema) *bqtypes.TableSchema {

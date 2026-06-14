@@ -13,6 +13,7 @@ const (
 	testStateName = "Alabama"
 	testStateCode = "AL"
 	testColName   = "Name"
+	testColAge    = "Age"
 )
 
 func TestParseParquetRoundTrip(t *testing.T) {
@@ -101,11 +102,11 @@ func TestMergeSchemasAllowFieldAddition(t *testing.T) {
 	t.Parallel()
 	existing := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
 		{Name: testColName, Type: fieldTypeString},
-		{Name: "Age", Type: fieldTypeInteger},
+		{Name: testColAge, Type: fieldTypeInteger},
 	}}
 	load := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
 		{Name: testColName, Type: fieldTypeString},
-		{Name: "Age", Type: fieldTypeInteger},
+		{Name: testColAge, Type: fieldTypeInteger},
 		{Name: "IsMagic", Type: fieldTypeBoolean},
 	}}
 	merged, changed := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldAddition})
@@ -120,11 +121,11 @@ func TestMergeSchemasAllowFieldAddition(t *testing.T) {
 func TestMergeSchemasAllowFieldRelaxation(t *testing.T) {
 	t.Parallel()
 	existing := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "Name", Type: fieldTypeString, Mode: fieldModeRequired},
+		{Name: testColName, Type: fieldTypeString, Mode: fieldModeRequired},
 		{Name: "Extra", Type: fieldTypeString, Mode: fieldModeRequired},
 	}}
 	load := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "Name", Type: fieldTypeString, Mode: fieldModeRequired},
+		{Name: testColName, Type: fieldTypeString, Mode: fieldModeRequired},
 	}}
 	merged, changed := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldRelaxation})
 	if !changed {
@@ -139,11 +140,11 @@ func TestMergeSchemasAllowFieldRelaxation(t *testing.T) {
 
 	// Query-style result schema: columns are NULLABLE unless explicitly REQUIRED.
 	queryResult := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "Name", Type: fieldTypeString},
-		{Name: "Age", Type: fieldTypeInteger},
+		{Name: testColName, Type: fieldTypeString},
+		{Name: testColAge, Type: fieldTypeInteger},
 	}}
 	existing2 := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
-		{Name: "Name", Type: fieldTypeString, Mode: fieldModeRequired},
+		{Name: testColName, Type: fieldTypeString, Mode: fieldModeRequired},
 		{Name: "Age", Type: fieldTypeInteger, Mode: fieldModeRequired},
 	}}
 	merged2, changed2 := mergeSchemas(existing2, queryResult, []string{schemaUpdateAllowFieldRelaxation})
