@@ -20,11 +20,15 @@ import (
 	"testing"
 )
 
-// SkipEmulatorBQML skips tests that require BigQuery ML (CREATE MODEL, model
-// export, model metadata) when BIGQUERY_EMULATOR_HOST targets the local emulator.
+// SkipEmulatorBQML skips tests that require real BigQuery ML semantics
+// (model metadata APIs, non-null prediction/metric values) when
+// BIGQUERY_EMULATOR_HOST targets the local emulator. CREATE MODEL and
+// ML.PREDICT / ML.EVALUATE / ML.FORECAST return schema-correct
+// placeholders locally, but these samples still need catalog model
+// CRUD or real inference results.
 func SkipEmulatorBQML(t *testing.T) {
 	t.Helper()
 	if strings.TrimSpace(os.Getenv("BIGQUERY_EMULATOR_HOST")) != "" {
-		t.Skip("BigQuery ML is not implemented by the bigquery-emulator")
+		t.Skip("BigQuery ML samples need model metadata or real predictions; emulator returns placeholders only")
 	}
 }

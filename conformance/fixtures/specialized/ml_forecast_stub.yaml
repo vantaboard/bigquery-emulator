@@ -1,0 +1,31 @@
+# ml_forecast_stub: ML.FORECAST local-stub forecast row.
+#
+# Returns a single forecast-schema row with NULL values. The
+# ARIMA_PLUS model is metadata-only (CREATE MODEL stub); no time
+# series is trained locally.
+name: specialized_ml_forecast_stub
+description: |
+  ML.FORECAST returns one schema-correct forecast row of NULL
+  placeholders. Pins the local-stub TVF contract end-to-end.
+project_id: proj-specialized-ml-forecast
+dataset_id: ds_specialized_ml_forecast
+setup:
+  - dataset: ds_specialized_ml_forecast
+  - sql: |
+      CREATE MODEL ds_specialized_ml_forecast.arima_model
+      OPTIONS(
+        model_type='ARIMA_PLUS',
+        time_series_timestamp_col='ts',
+        time_series_data_col='val')
+      AS
+      SELECT TIMESTAMP '2020-01-01' AS ts, 1.0 AS val
+      UNION ALL
+      SELECT TIMESTAMP '2020-01-02', 2.0
+query: |
+  SELECT forecast_timestamp, forecast_value
+  FROM ML.FORECAST(MODEL ds_specialized_ml_forecast.arima_model,
+    STRUCT(2 AS horizon))
+expected:
+  route: local_stub
+  rows:
+    - {forecast_timestamp: null, forecast_value: null}

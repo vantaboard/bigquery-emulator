@@ -1,0 +1,23 @@
+# ml_evaluate_stub: ML.EVALUATE local-stub metrics row.
+#
+# Returns a single metrics row with NULL values matching the
+# documented evaluate schema for a linear-regression model.
+name: specialized_ml_evaluate_stub
+description: |
+  ML.EVALUATE returns one schema-correct metrics row of NULL
+  placeholders. Pins the local-stub TVF contract end-to-end.
+project_id: proj-specialized-ml-evaluate
+dataset_id: ds_specialized_ml_eval
+setup:
+  - dataset: ds_specialized_ml_eval
+  - sql: |
+      CREATE MODEL ds_specialized_ml_eval.linear_model
+      OPTIONS(model_type='LINEAR_REG', input_label_cols=['label'])
+      AS SELECT 1.0 AS label, 2.0 AS f1
+query: |
+  SELECT mean_squared_error, r2_score
+  FROM ML.EVALUATE(MODEL ds_specialized_ml_eval.linear_model)
+expected:
+  route: local_stub
+  rows:
+    - {mean_squared_error: null, r2_score: null}

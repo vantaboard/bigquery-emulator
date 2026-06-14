@@ -31,6 +31,49 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# ML.* TVF placeholder family (`ML.PREDICT`, `ML.EVALUATE`,
+# `ML.FORECAST`). See `ml.h` for the local-stub contract.
+cc_library(
+    name = "ml",
+    srcs = ["ml.cc"],
+    hdrs = ["ml.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "ml_test",
+    srcs = ["ml_test.cc"],
+    deps = [
+        ":ml",
+        "//backend/catalog:emulator_ml_tvf_extensions",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:scan_eval",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
 # KEYS.* placeholder family (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`).
 # The contract is documented in the header; the runtime behavior is
 # deliberately a fixed-shape sentinel so a client-library startup

@@ -256,6 +256,7 @@ cc_library(
         "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/functions:operator_funcs",
         "//backend/engine/semantic/functions:specialized_funcs",
+        "//backend/engine/semantic/stubs:ml",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
     ] + GOOGLESQL_SQL_FUNCTION_DEPS + GOOGLESQL_SQL_TVF_DEPS +

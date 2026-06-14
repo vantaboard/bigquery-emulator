@@ -61,6 +61,8 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
       const ::googlesql::ResolvedDeleteStmt* node) override;
   absl::Status VisitResolvedMergeStmt(
       const ::googlesql::ResolvedMergeStmt* node) override;
+  absl::Status VisitResolvedTVFScan(
+      const ::googlesql::ResolvedTVFScan* node) override;
 
   static bool IsScalarOnlySelect(const ::googlesql::ResolvedQueryStmt* node);
   static bool MergeRequiresSemanticExecutor(
@@ -69,6 +71,7 @@ class RouteClassifierVisitor : public ::googlesql::ResolvedASTVisitor {
  private:
   void CheckNodeClass(const ::googlesql::ResolvedNode* node);
   void CheckFunction(const ::googlesql::ResolvedNode* node);
+  void CheckTvf(const ::googlesql::ResolvedTVFScan* node);
   void CheckAnalyticScanDateTimestampRange(
       const ::googlesql::ResolvedAnalyticScan* node);
   void MaybePromote(Disposition d, std::string name);

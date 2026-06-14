@@ -16,6 +16,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/catalog/emulator_builtin_extensions.h"
+#include "backend/catalog/emulator_ml_tvf_extensions.h"
 #include "backend/catalog/info_schema_table.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/storage_table.h"
@@ -185,6 +186,7 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
     LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: " << s;
   }
   RegisterEmulatorBuiltinFunctions(*this);
+  RegisterEmulatorMlTvfStubs(*this);
   ReplayFunctionsIntoCatalog(project_id_, *this);
   ReplayViewsIntoCatalog(project_id_, *this);
   ReplayTvfsIntoCatalog(project_id_, *this);
@@ -291,24 +293,20 @@ absl::Status GoogleSqlCatalog::FindTable(
   return absl::OkStatus();
 }
 
+absl::Status GoogleSqlCatalog::FindModel(
+    const absl::Span<const std::string>& path,
+    const ::googlesql::Model** model,
+    const FindOptions& options) {
+  return ResolveMlStubModelForAnalysis(
+      *this, type_factory_, path, model, options);
+}
+
 absl::Status GoogleSqlCatalog::FindTableValuedFunction(
     const absl::Span<const std::string>& path,
     const ::googlesql::TableValuedFunction** function,
     const FindOptions& options) {
-  if (function == nullptr) {
-    return absl::InvalidArgumentError(
-        "FindTableValuedFunction: output pointer is null");
-  }
-  *function = nullptr;
-  absl::Status found =
-      SimpleCatalog::FindTableValuedFunction(path, function, options);
-  if (found.ok() && *function != nullptr) return found;
-  if (path.size() >= 2) {
-    const std::vector<std::string> unqualified = {path.back()};
-    return SimpleCatalog::FindTableValuedFunction(
-        unqualified, function, options);
-  }
-  return found;
+  return FindTableValuedFunctionWithUnqualifiedFallback(
+      *this, path, function, options);
 }
 
 absl::Status GoogleSqlCatalog::FindProcedure(

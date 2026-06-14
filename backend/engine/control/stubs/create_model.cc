@@ -32,12 +32,11 @@ absl::Status RunCreateModel(const ::googlesql::ResolvedStatement& stmt) {
   model->MarkFieldsAccessed();
   // OK. A real BigQuery `CREATE MODEL` would register the model
   // under `projects/<proj>/datasets/<ds>/models/<id>`; the stub
-  // skips that. A downstream `ML.PREDICT(MODEL <id>, ...)` reaches
-  // the unsupported stub executor (because `ml.predict` is a
-  // `functions.yaml` `unsupported` row) and surfaces UNIMPLEMENTED
-  // with the ML.* family-named, link-bearing error message --
-  // which is the half of the local-stub posture that prevents
-  // silent approximation downstream.
+  // skips that. Downstream `ML.PREDICT` / `ML.FORECAST` /
+  // `ML.EVALUATE` are `local_stub` TVFs (`functions.yaml`) and
+  // return schema-correct NULL placeholders via
+  // `backend/engine/semantic/stubs/ml.cc` rather than failing the
+  // query.
   return absl::OkStatus();
 }
 

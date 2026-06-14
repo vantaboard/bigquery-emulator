@@ -332,6 +332,46 @@ cc_library(
 )
 
 cc_library(
+    name = "emulator_ml_tvf_extensions",
+    srcs = ["emulator_ml_tvf_extensions.cc"],
+    hdrs = [
+        "emulator_ml_tvf_extensions.h",
+        "emulator_ml_test_catalog.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ] + GOOGLESQL_SQL_TVF_DEPS,
+)
+
+cc_test(
+    name = "emulator_ml_tvf_extensions_test",
+    srcs = ["emulator_ml_tvf_extensions_test.cc"],
+    deps = [
+        ":emulator_ml_tvf_extensions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:builtin_function_options",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_library(
     name = "table_governance",
     srcs = ["table_governance.cc"],
     hdrs = ["table_governance.h"],
@@ -352,6 +392,7 @@ cc_library(
     hdrs = ["googlesql_catalog.h"],
     deps = [
         ":emulator_builtin_extensions",
+        ":emulator_ml_tvf_extensions",
         ":info_schema_table",
         ":storage_table",
         ":procedure_registry",

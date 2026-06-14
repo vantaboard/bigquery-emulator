@@ -52,9 +52,9 @@ TEST(RunCreateModelTest, AcceptsValidStatementAndReturnsOk) {
   // no model catalog entry -- the local-stub posture for ML
   // explicitly does NOT model the BigQuery `models/<id>`
   // namespace. A client that issues `CREATE MODEL` as a setup
-  // step succeeds; a subsequent `ML.PREDICT` will surface
-  // UNIMPLEMENTED through the unsupported stub executor (the
-  // `ml.predict` row in `functions.yaml` stays `unsupported`).
+  // step succeeds; downstream `ML.PREDICT` / `ML.EVALUATE` /
+  // `ML.FORECAST` are `local_stub` TVFs that return schema-correct
+  // NULL placeholders (`backend/engine/semantic/stubs/ml.cc`).
   auto stmt = MakeMinimalCreateModelStmt();
   EXPECT_TRUE(RunCreateModel(*stmt).ok());
 }

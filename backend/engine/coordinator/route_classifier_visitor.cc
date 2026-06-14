@@ -380,6 +380,14 @@ absl::Status RouteClassifierVisitor::VisitResolvedDeleteStmt(
   return ::googlesql::ResolvedASTVisitor::VisitResolvedDeleteStmt(node);
 }
 
+absl::Status RouteClassifierVisitor::VisitResolvedTVFScan(
+    const ::googlesql::ResolvedTVFScan* node) {
+  if (node != nullptr) {
+    CheckTvf(node);
+  }
+  return ::googlesql::ResolvedASTVisitor::VisitResolvedTVFScan(node);
+}
+
 absl::Status RouteClassifierVisitor::VisitResolvedMergeStmt(
     const ::googlesql::ResolvedMergeStmt* node) {
   if (node != nullptr) {

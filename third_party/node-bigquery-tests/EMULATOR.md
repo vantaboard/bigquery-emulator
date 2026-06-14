@@ -46,7 +46,10 @@ The parent repo’s task is **`task thirdparty:node-bigquery-tests`** (same as *
 
 When **`BIGQUERY_EMULATOR_HOST`** is set, **`test/setup.js`** also:
 
-- Skips entire **`models.test.js`** (BQML / `google_analytics_sample`). All
+- Skips entire **`models.test.js`** (BQML / `google_analytics_sample`). The
+  emulator stubs `CREATE MODEL` and `ML.PREDICT` / `ML.FORECAST` /
+  `ML.EVALUATE` with schema-correct NULL placeholders, but this file
+  still needs model metadata APIs and real prediction values. All
   other Mocha files run when the gateway loads
   `testdata/public-data/bigquery-public-data.yaml` at startup (including
   `jobs.test.js`, legacy SQL queries, and cross-project public-dataset listing).

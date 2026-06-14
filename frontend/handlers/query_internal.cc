@@ -88,6 +88,7 @@ namespace internal {
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_TABLE_CLONE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
+  language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   // Without this opt-in the analyzer rejects every non-SELECT

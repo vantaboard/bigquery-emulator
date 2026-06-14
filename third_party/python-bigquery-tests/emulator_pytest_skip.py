@@ -38,6 +38,10 @@ _MODULE_SKIP_SUBSTRINGS: tuple[str, ...] = (
     "tensorflow",
 )
 
+# BQML inference TVFs are local_stub (NULL placeholders), but most
+# model/bqml modules also assert model metadata APIs or real prediction
+# values — keep skipping those on the emulator.
+
 # Fixtures whose setup implies BQML or pre-seeded public catalog tables.
 _SKIP_FIXTURES: frozenset[str] = frozenset({"model_id", "table_with_data_id"})
 

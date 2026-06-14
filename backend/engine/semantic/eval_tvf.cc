@@ -14,6 +14,7 @@
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
+#include "backend/engine/semantic/stubs/ml.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/sql_tvf.h"
 #include "googlesql/public/templated_sql_tvf.h"
@@ -111,6 +112,42 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
     const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
   if (scan.tvf() == nullptr) {
     return absl::InvalidArgumentError("semantic: TVFScan has null tvf");
+  }
+  const std::string tvf_name = absl::AsciiStrToLower(scan.tvf()->SQLName());
+  if (tvf_name == "ml.predict") {
+    for (int i = 0; i < scan.argument_list_size(); ++i) {
+      const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
+      if (arg == nullptr || arg->scan() == nullptr) {
+        continue;
+      }
+      const ::googlesql::ResolvedScan* input_scan = arg->scan();
+      auto input_rows =
+          scan_eval_internal::MaterializeScanImpl(input_scan, ctx);
+      if (!input_rows.ok()) {
+        return input_rows.status();
+      }
+      return stubs::MlPredictStub(scan, *input_rows, input_scan);
+    }
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic stub: ML.PREDICT requires a TABLE input argument");
+  }
+  if (tvf_name == "ml.evaluate") {
+    for (int i = 0; i < scan.argument_list_size(); ++i) {
+      const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
+      if (arg != nullptr && arg->scan() != nullptr) {
+        auto input_rows =
+            scan_eval_internal::MaterializeScanImpl(arg->scan(), ctx);
+        if (!input_rows.ok()) {
+          return input_rows.status();
+        }
+        break;
+      }
+    }
+    return stubs::MlEvaluateStub(scan);
+  }
+  if (tvf_name == "ml.forecast") {
+    return stubs::MlForecastStub(scan);
   }
   if (scan.signature() != nullptr) {
     const auto* templated_sig =

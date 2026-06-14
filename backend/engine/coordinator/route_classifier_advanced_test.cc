@@ -206,6 +206,19 @@ TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
 }
 
+TEST_F(RouteClassifierTest, MlPredictRoutesToLocalStub) {
+  const auto* stmt = Analyze(
+      "SELECT * FROM ML.PREDICT(MODEL `ds.unregistered_model`, "
+      "(SELECT 1.0 AS f1))");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
+  EXPECT_EQ(d.offending_node, "function:ml.predict");
+  EXPECT_NE(d.reason.find("local-stub"), std::string::npos)
+      << "reason should mention the local-stub route; got: " << d.reason;
+}
+
 TEST_F(RouteClassifierTest, KeysFunctionRoutesToLocalStub) {
   // `KEYS.NEW_KEYSET('AEAD_AES_GCM_256')` is a `local_stub` row in
   // `functions.yaml` per `docs/ENGINE_POLICY.md`. A

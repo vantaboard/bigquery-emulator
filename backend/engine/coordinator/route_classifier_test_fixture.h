@@ -7,6 +7,8 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/emulator_ml_test_catalog.h"
+#include "backend/catalog/emulator_ml_tvf_extensions.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
@@ -15,7 +17,6 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
-#include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "gtest/gtest.h"
@@ -28,6 +29,7 @@ namespace coordinator {
 inline ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   ::googlesql::LanguageOptions language;
   language.EnableMaximumLanguageFeaturesForDevelopment();
+  language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   language.SetSupportsAllStatementKinds();
@@ -43,10 +45,11 @@ class RouteClassifierTest : public ::testing::Test {
  protected:
   void SetUp() override {
     type_factory_ = std::make_unique<::googlesql::TypeFactory>();
-    catalog_ = std::make_unique<::googlesql::SimpleCatalog>(
+    catalog_ = std::make_unique<catalog::EmulatorMlTestCatalog>(
         "test_catalog", type_factory_.get());
     ::googlesql::LanguageOptions language;
-    language.EnableMaximumLanguageFeatures();
+    language.EnableMaximumLanguageFeaturesForDevelopment();
+    language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
     language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
     ASSERT_TRUE(catalog_
                     ->AddBuiltinFunctionsAndTypes(
@@ -73,6 +76,7 @@ class RouteClassifierTest : public ::testing::Test {
             {"arr", int64_array_type},
         });
     catalog_->AddOwnedTable(std::move(arr_table));
+    catalog::RegisterEmulatorMlTvfStubs(*catalog_);
   }
 
   const ::googlesql::ResolvedStatement* Analyze(absl::string_view sql) {
@@ -86,7 +90,7 @@ class RouteClassifierTest : public ::testing::Test {
   }
 
   std::unique_ptr<::googlesql::TypeFactory> type_factory_{};
-  std::unique_ptr<::googlesql::SimpleCatalog> catalog_{};
+  std::unique_ptr<catalog::EmulatorMlTestCatalog> catalog_{};
   std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
   RouteClassifier classifier_{};
 };

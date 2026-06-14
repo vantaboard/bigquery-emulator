@@ -91,6 +91,7 @@ inline ::googlesql::LanguageOptions MakeCatalogLanguageOptions() {
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_TABLE_CLONE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
+  language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   language.SetSupportsAllStatementKinds();
@@ -146,6 +147,11 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   // a storage-level failure mid-lookup.
   absl::Status FindTable(const absl::Span<const std::string>& path,
                          const ::googlesql::Table** table,
+                         const FindOptions& options = FindOptions()) override
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  absl::Status FindModel(const absl::Span<const std::string>& path,
+                         const ::googlesql::Model** model,
                          const FindOptions& options = FindOptions()) override
       ABSL_LOCKS_EXCLUDED(mu_);
 

@@ -588,16 +588,15 @@ hll_count.merge: semantic_executor
 hll_count.merge_partial: semantic_executor
 hll_count.extract: semantic_executor
 
-# BigQuery ML inference: `unsupported`. There is no local model
-# training / serving surface, and a stub `ML.PREDICT` would lie
-# about producing inference results. `CREATE MODEL` itself routes
-# to `kLocalStub` at the statement level (see
-# `node_dispositions.yaml::ResolvedCreateModelStmt`) so client
-# library registration probes succeed; calling `ML.PREDICT` on the
-# stub-registered model returns the family-named UNIMPLEMENTED.
-ml.predict: unsupported
-ml.forecast: unsupported
-ml.evaluate: unsupported
+# BigQuery ML inference: `local_stub`. There is no local model
+# training / serving surface; these TVFs return schema-correct
+# placeholder rows (NULL predicted / metric / forecast values) so
+# queries referencing `ML.PREDICT` / `ML.FORECAST` / `ML.EVALUATE`
+# do not fail. `CREATE MODEL` routes to `kLocalStub` at the
+# statement level (see `node_dispositions.yaml::ResolvedCreateModelStmt`).
+ml.predict: local_stub
+ml.forecast: local_stub
+ml.evaluate: local_stub
 
 # NET.* IP / URL parsing on the semantic executor via
 # `backend/engine/semantic/functions/net_funcs.cc`.

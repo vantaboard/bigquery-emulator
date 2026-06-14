@@ -161,9 +161,10 @@ TEST(FunctionsTableTest, CoverageMeetsPlanThreshold) {
       "any_value",
       "array_agg",
       "string_agg",
-      // unsupported families (specialized-feature-policy)
+      // local_stub families (specialized-feature-policy)
       "approx_quantiles",
       "ml.predict",
+      "keys.new_keyset",
       "net.ip_from_string",
       // window
       "row_number",

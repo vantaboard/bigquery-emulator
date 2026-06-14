@@ -831,10 +831,11 @@ implement** — the only goal is that ML.* does not fail a query.
 `CREATE MODEL` already routes `local_stub` (metadata-only OK); the
 inference calls below get the same treatment.
 
-- ⏳ `ML.PREDICT` (`ml.predict`) — **stub**: return a schema-correct
-  placeholder result, not a prediction
-- ⏳ `ML.FORECAST` (`ml.forecast`) — **stub**
-- ⏳ `ML.EVALUATE` (`ml.evaluate`) — **stub**
+- ✅ `ML.PREDICT` (`ml.predict`) — **stub**: input pass-through + NULL
+  predicted columns (`backend/engine/semantic/stubs/ml.cc`)
+- ✅ `ML.FORECAST` (`ml.forecast`) — **stub**: single forecast-schema row
+  of NULLs
+- ✅ `ML.EVALUATE` (`ml.evaluate`) — **stub**: single metrics row of NULLs
 - `CREATE MODEL` — stays `local_stub` (no model is trained or stored)
 
 ### Deferred built-in functions

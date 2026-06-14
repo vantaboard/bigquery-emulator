@@ -1,0 +1,28 @@
+# ml_predict_stub: ML.PREDICT local-stub pass-through.
+#
+# `docs/ENGINE_POLICY.md` pins ML.PREDICT to the `local_stub`
+# posture: input rows and input columns pass through unchanged;
+# analyzer-resolved predicted output columns are typed NULL
+# placeholders (NOT real predictions). `CREATE MODEL` in setup
+# exercises the metadata-only control stub; the model is not
+# persisted and the predict call still succeeds over the name.
+name: specialized_ml_predict_stub
+description: |
+  ML.PREDICT passes input rows through and appends NULL
+  predicted_label. Pins the local-stub TVF contract end-to-end.
+project_id: proj-specialized-ml-predict
+dataset_id: ds_specialized_ml
+setup:
+  - dataset: ds_specialized_ml
+  - sql: |
+      CREATE MODEL ds_specialized_ml.linear_model
+      OPTIONS(model_type='LINEAR_REG', input_label_cols=['label'])
+      AS SELECT 1.0 AS label, 2.0 AS f1
+query: |
+  SELECT f1, label, predicted_label
+  FROM ML.PREDICT(MODEL ds_specialized_ml.linear_model,
+    (SELECT 3.0 AS f1, 4.0 AS label))
+expected:
+  route: local_stub
+  rows:
+    - {f1: 3.0, label: 4.0, predicted_label: null}

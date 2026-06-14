@@ -6,11 +6,10 @@
 # `SetSupportsAllStatementKinds` allowlist), the coordinator
 # pre-dispatches it to `backend/engine/control/stubs/create_model.
 # cc::RunCreateModel`, which returns OK without persisting a
-# storage-side model entry. A subsequent `ML.PREDICT(MODEL <id>,
-# ...)` would surface `UNIMPLEMENTED` because the matching
-# `ml.predict` row stays `unsupported` -- that half of the local-
-# stub posture is covered by `unsupported_session_user.yaml`'s
-# pattern; this fixture only pins the accept-and-return-OK half.
+# storage-side model entry. Downstream `ML.PREDICT` /
+# `ML.EVALUATE` / `ML.FORECAST` are `local_stub` TVFs (see
+# `conformance/fixtures/specialized/ml_*_stub.yaml`); this fixture
+# only pins the accept-and-return-OK half of CREATE MODEL.
 #
 # The follow-up `SELECT 1` (the "query" step) is the gateway-side
 # observable confirming the previous setup step succeeded; no row

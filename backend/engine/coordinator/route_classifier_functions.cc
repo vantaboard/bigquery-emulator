@@ -108,6 +108,15 @@ void RouteClassifierVisitor::CheckFunction(
                absl::StrCat("function:", absl::AsciiStrToLower(name)));
 }
 
+void RouteClassifierVisitor::CheckTvf(
+    const ::googlesql::ResolvedTVFScan* node) {
+  if (node == nullptr || node->tvf() == nullptr) return;
+  const std::string name = absl::AsciiStrToLower(node->tvf()->SQLName());
+  const auto* entry = transpiler::LookupFunction(name);
+  if (entry == nullptr || entry->planned) return;
+  MaybePromote(entry->disposition, absl::StrCat("function:", name));
+}
+
 }  // namespace coordinator
 }  // namespace engine
 }  // namespace backend
