@@ -375,6 +375,19 @@ absl::StatusOr<std::string> ResolveParquetSnapshotAt(
   if (!index_or.ok()) return index_or.status();
   const VersionIndex& index = *index_or;
 
+  const std::string index_path = TableVersionsIndexPath(storage, id);
+  std::error_code index_ec;
+  const bool index_on_disk = fs::exists(index_path, index_ec);
+
+  // No version history yet: client decorators from the same session may
+  // predate the first persisted index timestamp; serve live data.
+  if (!index_on_disk && index.versions.empty() && as_of_ms <= now_ms) {
+    std::error_code live_ec;
+    if (fs::exists(live_parquet_path, live_ec)) {
+      return std::string(live_parquet_path);
+    }
+  }
+
   if (as_of_ms < index.created_ts_ms) {
     return InvalidSnapshotTimeError(id, as_of_ms, index.created_ts_ms);
   }
