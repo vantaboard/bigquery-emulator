@@ -117,7 +117,7 @@ graph LR
 
 | Plan | Kind | State | Conformance delta | Commits | Notes |
 |------|------|-------|-------------------|---------|-------|
-| 01 | real | pending | — | | External data sources (fixture + opt-in live) |
+| 01 | real | landed (partial) | +1 external (google_sheets_class_data); gs:// engine path | e48222e, 6c112c1, 42a2f61 | Sheets + gs:// LOAD/EXPORT + config model; EXTERNAL_QUERY federated reads deferred |
 | 02 | stub | landed | +3 specialized (ml_predict/evaluate/forecast_stub) | 67e9d30, 8ad84ed | ML.* local_stub TVFs; CREATE MODEL stays control stub |
 | 03 | real | pending | — | | Python UDF runtime |
 | 04 | real | pending | — | | Protobuf field access |

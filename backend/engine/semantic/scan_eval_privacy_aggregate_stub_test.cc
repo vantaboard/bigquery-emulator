@@ -97,9 +97,10 @@ TEST_P(PrivacyAggregateStubTest, MaterializeScanEvaluatesPlainAggregate) {
 INSTANTIATE_TEST_SUITE_P(
     PrivacyAggregateScanKinds,
     PrivacyAggregateStubTest,
-    ::testing::Values(::googlesql::RESOLVED_ANONYMIZED_AGGREGATE_SCAN,
-                      ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN,
-                      ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN));
+    ::testing::Values(
+        ::googlesql::RESOLVED_ANONYMIZED_AGGREGATE_SCAN,
+        ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN,
+        ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN));
 
 }  // namespace
 }  // namespace semantic
