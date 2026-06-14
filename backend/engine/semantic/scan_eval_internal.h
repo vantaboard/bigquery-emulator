@@ -46,6 +46,8 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeSingleRowScan(
     const ::googlesql::ResolvedSingleRowScan& scan);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithRefScan(
     const ::googlesql::ResolvedWithRefScan& scan, EvalContext& ctx);
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeRelationArgumentScan(
+    const ::googlesql::ResolvedRelationArgumentScan& scan, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSetOperationScan(
     const ::googlesql::ResolvedSetOperationScan& scan, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(

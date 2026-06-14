@@ -387,6 +387,9 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
           SemanticErrorReason::kNotImplemented,
           "semantic: aggregate function call outside SQL UDAF body evaluation "
           "is not yet implemented");
+    case ::googlesql::RESOLVED_UPDATE_CONSTRUCTOR:
+      return eval_expr_internal::EvalUpdateConstructor(
+          *expr.GetAs<::googlesql::ResolvedUpdateConstructor>(), ctx);
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",

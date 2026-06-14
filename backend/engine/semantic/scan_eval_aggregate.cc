@@ -141,6 +141,22 @@ absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
     if (cc == nullptr || cc->expr() == nullptr) {
       return absl::InternalError("semantic: aggregate column has null expr");
     }
+    if (cc->node_kind() == ::googlesql::RESOLVED_DEFERRED_COMPUTED_COLUMN) {
+      const auto* deferred =
+          cc->GetAs<::googlesql::ResolvedDeferredComputedColumn>();
+      auto result = EvalExpr(*cc->expr(), agg_ctx);
+      if (!result.ok()) {
+        out_row.emplace(deferred->column().column_id(),
+                        Value::Null(deferred->column().type()));
+        out_row.emplace(deferred->side_effect_column().column_id(),
+                        Value::Bytes(std::string(result.status().message())));
+      } else {
+        out_row.emplace(deferred->column().column_id(), *std::move(result));
+        out_row.emplace(deferred->side_effect_column().column_id(),
+                        Value::Null(deferred->side_effect_column().type()));
+      }
+      continue;
+    }
     const auto* agg =
         cc->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
     if (agg == nullptr) {

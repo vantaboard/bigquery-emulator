@@ -1,0 +1,22 @@
+# tvf_relation_argument: SQL TVF with a TABLE parameter scans the bound
+# relation via ResolvedRelationArgumentScan on the semantic executor.
+name: udf_tvf_relation_argument
+description: |
+  Register a SQL TVF that accepts a TABLE argument, then invoke it with
+  an inline subquery table literal.
+project_id: proj-tvf-relation-arg
+setup:
+  - dataset: ds
+  - sql: |-
+      CREATE OR REPLACE TABLE FUNCTION ds.filter_positive(src TABLE<x INT64>) AS (
+        SELECT x FROM src WHERE x > 0
+      );
+query: |
+  SELECT x FROM ds.filter_positive(
+    (SELECT x FROM UNNEST([1, -2, 3, 0]) AS x)
+  ) ORDER BY x
+expected:
+  route: semantic_executor
+  rows:
+    - {x: 1}
+    - {x: 3}

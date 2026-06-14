@@ -249,6 +249,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_WITH_REF_SCAN:
       return MaterializeWithRefScan(
           *scan->GetAs<::googlesql::ResolvedWithRefScan>(), ctx);
+    case ::googlesql::RESOLVED_RELATION_ARGUMENT_SCAN:
+      return MaterializeRelationArgumentScan(
+          *scan->GetAs<::googlesql::ResolvedRelationArgumentScan>(), ctx);
     case ::googlesql::RESOLVED_JOIN_SCAN:
       return MaterializeJoinScan(*scan->GetAs<::googlesql::ResolvedJoinScan>(),
                                  ctx);

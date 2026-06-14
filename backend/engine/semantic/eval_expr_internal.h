@@ -97,6 +97,8 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
 absl::StatusOr<Value> EvalExtendedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);
+absl::StatusOr<Value> EvalUpdateConstructor(
+    const ::googlesql::ResolvedUpdateConstructor& node, const EvalContext& ctx);
 
 absl::StatusOr<Value> DispatchFunctionByName(
     absl::string_view name,

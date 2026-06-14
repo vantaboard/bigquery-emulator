@@ -4,12 +4,15 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/sql_tvf.h"
@@ -23,10 +26,46 @@ namespace semantic {
 
 namespace {
 
-absl::Status BindTvfArguments(const ::googlesql::ResolvedTVFScan& scan,
-                              const std::vector<std::string>& arg_names,
-                              const EvalContext& ctx,
-                              FrameStack& frames) {
+absl::StatusOr<std::vector<ColumnBindings>> RemapScanOutputColumns(
+    const std::vector<ColumnBindings>& rows,
+    const ::googlesql::ResolvedScan* src_scan,
+    const ::googlesql::ResolvedTVFScan& tvf_scan) {
+  if (src_scan == nullptr) {
+    return rows;
+  }
+  if (tvf_scan.column_list_size() != src_scan->column_list_size()) {
+    return absl::InternalError(
+        "semantic: TVFScan output column count does not match inner query");
+  }
+  if (tvf_scan.column_list_size() == 0) {
+    return rows;
+  }
+  std::vector<ColumnBindings> out;
+  out.reserve(rows.size());
+  for (const ColumnBindings& in_row : rows) {
+    ColumnBindings row;
+    row.reserve(tvf_scan.column_list_size());
+    for (int i = 0; i < tvf_scan.column_list_size(); ++i) {
+      const int src_id = src_scan->column_list(i).column_id();
+      const ::googlesql::ResolvedColumn& dst = tvf_scan.column_list(i);
+      auto it = in_row.find(src_id);
+      if (it == in_row.end()) {
+        return absl::InternalError(
+            absl::StrCat("semantic: TVF inner row missing column_id=", src_id));
+      }
+      row.emplace(dst.column_id(), it->second);
+    }
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
+absl::Status BindTvfArguments(
+    const ::googlesql::ResolvedTVFScan& scan,
+    const std::vector<std::string>& arg_names,
+    EvalContext& ctx,
+    FrameStack& frames,
+    absl::flat_hash_map<std::string, CteTable>& relations) {
   if (arg_names.size() != static_cast<size_t>(scan.argument_list_size())) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: TVF argument count mismatch (expected ",
@@ -38,7 +77,23 @@ absl::Status BindTvfArguments(const ::googlesql::ResolvedTVFScan& scan,
   frames.PushFrame();
   for (int i = 0; i < scan.argument_list_size(); ++i) {
     const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
-    if (arg == nullptr || arg->expr() == nullptr) {
+    if (arg == nullptr) {
+      return absl::InvalidArgumentError("semantic: TVF call has null argument");
+    }
+    const std::string arg_key = absl::AsciiStrToLower(arg_names[i]);
+    if (arg->scan() != nullptr) {
+      auto rows = scan_eval_internal::MaterializeScanImpl(arg->scan(), ctx);
+      if (!rows.ok()) return rows.status();
+      CteTable table;
+      table.rows = *std::move(rows);
+      table.column_ids.reserve(arg->scan()->column_list_size());
+      for (int j = 0; j < arg->scan()->column_list_size(); ++j) {
+        table.column_ids.push_back(arg->scan()->column_list(j).column_id());
+      }
+      relations.emplace(arg_key, std::move(table));
+      continue;
+    }
+    if (arg->expr() == nullptr) {
       return absl::InvalidArgumentError(
           "semantic: TVF call has null argument expression");
     }
@@ -64,8 +119,11 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
     if (templated_sig != nullptr &&
         templated_sig->resolved_templated_query() != nullptr &&
         templated_sig->resolved_templated_query()->query() != nullptr) {
-      return scan_eval_internal::MaterializeScanImpl(
-          templated_sig->resolved_templated_query()->query(), ctx);
+      const ::googlesql::ResolvedScan* inner =
+          templated_sig->resolved_templated_query()->query();
+      auto rows = scan_eval_internal::MaterializeScanImpl(inner, ctx);
+      if (!rows.ok()) return rows.status();
+      return RemapScanOutputColumns(*rows, inner, scan);
     }
   }
 
@@ -82,12 +140,17 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
         "semantic: SQLTableValuedFunction has null query scan");
   }
   FrameStack frames;
-  absl::Status bound =
-      BindTvfArguments(scan, sql_tvf->GetArgumentNames(), ctx, frames);
+  absl::flat_hash_map<std::string, CteTable> relations;
+  absl::Status bound = BindTvfArguments(
+      scan, sql_tvf->GetArgumentNames(), ctx, frames, relations);
   if (!bound.ok()) return bound;
   EvalContext inner = ctx;
   inner.arguments = &frames;
-  return scan_eval_internal::MaterializeScanImpl(sql_tvf->query(), inner);
+  inner.relation_arguments = &relations;
+  const ::googlesql::ResolvedScan* inner_query = sql_tvf->query();
+  auto rows = scan_eval_internal::MaterializeScanImpl(inner_query, inner);
+  if (!rows.ok()) return rows.status();
+  return RemapScanOutputColumns(*rows, inner_query, scan);
 }
 
 }  // namespace semantic

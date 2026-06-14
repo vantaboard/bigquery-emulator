@@ -406,7 +406,6 @@ void RouteClassifierVisitor::CheckNodeClass(
   std::string class_name = absl::StrCat("Resolved", node->node_kind_string());
   const auto* entry = transpiler::LookupNodeDisposition(class_name);
   if (entry == nullptr) return;
-  if (entry->planned) return;
   MaybePromote(entry->disposition, std::move(class_name));
 }
 

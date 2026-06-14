@@ -66,6 +66,9 @@ struct EvalContext {
   const ::googlesql::SystemVariableValuesMap* script_system_variables = nullptr;
   const UdafEvalScope* udaf = nullptr;
   const absl::flat_hash_map<std::string, CteTable>* with_tables = nullptr;
+  // Materialized TABLE-typed TVF arguments keyed by lowered arg name.
+  const absl::flat_hash_map<std::string, CteTable>* relation_arguments =
+      nullptr;
   SubpipelineEvalScope* subpipeline = nullptr;
   FlattenEvalScope* flatten = nullptr;
   GroupRowsEvalScope* group_rows = nullptr;

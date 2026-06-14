@@ -160,6 +160,7 @@ cc_library(
         "eval_expr_fn_dispatch.cc",
         "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
+        "eval_expr_update_constructor.cc",
         "eval_udaf.cc",
     ],
     hdrs = [
@@ -202,6 +203,7 @@ cc_library(
         "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",
         "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+        "@com_google_protobuf//:protobuf",
     ] + GOOGLESQL_SQL_FUNCTION_DEPS,
 )
 
@@ -227,6 +229,7 @@ cc_library(
         "scan_eval_agg_list.cc",
         "scan_eval_aggregate.cc",
         "scan_eval_materialize.cc",
+        "scan_eval_materialize_relation_argument.cc",
         "scan_eval_analytic.cc",
         "scan_eval_sample.cc",
         "scan_eval_pipe.cc",
@@ -283,6 +286,34 @@ cc_test(
         "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "eval_expr_update_constructor_test",
+    srcs = ["eval_expr_update_constructor_test.cc"],
+    deps = [
+        ":eval_expr",
+        ":scan_eval",
+        ":value",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+        "@googlesql//googlesql/resolved_ast",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_test(
+    name = "scan_eval_aggregate_deferred_test",
+    srcs = ["scan_eval_aggregate_deferred_test.cc"],
+    deps = [
+        ":scan_eval",
+        ":value",
+        "@com_google_googletest//:gtest_main",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",

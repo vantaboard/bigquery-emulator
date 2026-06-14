@@ -118,7 +118,7 @@ ResolvedUnpivotScan: duckdb_rewrite
 ResolvedMatchRecognizeScan: semantic_executor
 ResolvedGroupRowsScan: semantic_executor
 ResolvedTVFScan: semantic_executor
-ResolvedRelationArgumentScan: semantic_executor status=planned
+ResolvedRelationArgumentScan: semantic_executor
 ResolvedBarrierScan: semantic_executor
 ResolvedPipeIfScan: semantic_executor
 ResolvedPipeForkScan: semantic_executor
@@ -174,9 +174,9 @@ ResolvedSystemVariable: semantic_executor
 ResolvedSequence: unsupported
 ResolvedArgumentRef: semantic_executor
 ResolvedArgumentDef: semantic_executor
-ResolvedCatalogColumnRef: control_op
+ResolvedCatalogColumnRef: unsupported
 ResolvedExpressionColumn: unsupported
-ResolvedUpdateConstructor: semantic_executor status=planned
+ResolvedUpdateConstructor: semantic_executor
 
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native
