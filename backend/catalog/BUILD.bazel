@@ -250,6 +250,8 @@ cc_library(
         "//backend/storage",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/resolved_ast",
     ],
 )

@@ -39,6 +39,7 @@ cc_library(
     hdrs = ["duckdb_executor_time_travel.h"],
     deps = [
         "//backend/engine/semantic:eval_expr",
+        "//backend/engine/semantic:scan_eval",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

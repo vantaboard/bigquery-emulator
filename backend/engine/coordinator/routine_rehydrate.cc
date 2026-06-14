@@ -91,10 +91,8 @@ absl::Status AnalyzeAndRegisterRoutineDdl(storage::Storage* storage,
 
   ::googlesql::TypeFactory* reg_tf =
       catalog::EnsureProjectTypeFactory(rec.id.project_id);
-  ::googlesql::LanguageOptions language;
-  language.EnableMaximumLanguageFeatures();
-  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
-  language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+  const ::googlesql::LanguageOptions language =
+      catalog::MakeCatalogLanguageOptions();
   catalog::GoogleSqlCatalog* reg_catalog =
       catalog::GetOrCreateRegistrationCatalog(
           rec.id.project_id, storage, reg_tf, language, rec.id.dataset_id);

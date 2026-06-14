@@ -227,10 +227,8 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
     }
     ::googlesql::TypeFactory* reg_tf =
         catalog::EnsureProjectTypeFactory(request.project_id);
-    ::googlesql::LanguageOptions language;
-    language.EnableMaximumLanguageFeatures();
-    language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
-    language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+    const ::googlesql::LanguageOptions language =
+        catalog::MakeCatalogLanguageOptions();
     catalog::GoogleSqlCatalog* reg_catalog =
         catalog::GetOrCreateRegistrationCatalog(request.project_id,
                                                 bq_catalog->storage(),
@@ -281,10 +279,8 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
     }
     ::googlesql::TypeFactory* reg_tf =
         catalog::EnsureProjectTypeFactory(request.project_id);
-    ::googlesql::LanguageOptions language;
-    language.EnableMaximumLanguageFeatures();
-    language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
-    language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+    const ::googlesql::LanguageOptions language =
+        catalog::MakeCatalogLanguageOptions();
     catalog::GoogleSqlCatalog* reg_catalog =
         catalog::GetOrCreateRegistrationCatalog(request.project_id,
                                                 bq_catalog->storage(),
