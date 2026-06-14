@@ -814,7 +814,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
 | `SESSION_USER` (`session_user`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `unsupported` | **real** | [Deferred built-in functions](#deferred-built-in-functions) |
-| Protobuf shapes (`ResolvedMakeProto`, ...) | `unsupported` | **real** | [Protobuf field access](#protobuf-field-access) |
+| Protobuf shapes (`ResolvedMakeProto`, ...) | `semantic_executor` | **real** | [Protobuf field access](#protobuf-field-access) |
 | MEASURE / measure functions | `unsupported` | **real** | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | **real** | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
@@ -883,13 +883,13 @@ privacy.
 
 #### Protobuf field access
 
-- ⏳ `ResolvedMakeProto`
-- ⏳ `ResolvedGetProtoField`
-- ⏳ `ResolvedGetProtoOneof`
-- ⏳ `ResolvedReplaceField`
-- ⏳ `ResolvedGetRowField`
-- ⏳ `ResolvedFilterField`
-- ⏳ `ResolvedFilterFieldArg`
+- ✅ `ResolvedMakeProto` — construct PROTO from field args (`eval_expr_proto.cc`)
+- ✅ `ResolvedGetProtoField` — scalar read + `has_` presence (`eval_expr_proto.cc`)
+- ✅ `ResolvedGetProtoOneof` — set oneof field name (`eval_expr_proto.cc`)
+- ✅ `ResolvedReplaceField` — `REPLACE_FIELDS` on STRUCT + PROTO (`eval_expr_proto.cc`)
+- ✅ `ResolvedGetRowField` — row STRUCT field by column name (`eval_expr_proto.cc`)
+- ✅ `ResolvedFilterField` / `ResolvedFilterFieldArg` — `FILTER_FIELDS` on PROTO (`eval_expr_proto.cc`)
+- ⏳ Proto-typed CREATE TABLE + googlesql-corpus `load_proto_*` (catalog registration UX)
 
 #### Catalog / sequence helpers
 

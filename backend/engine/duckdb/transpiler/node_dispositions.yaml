@@ -152,19 +152,19 @@ ResolvedAnalyticFunctionCall: duckdb_native
 ResolvedCast: duckdb_native
 ResolvedMakeStruct: duckdb_rewrite
 ResolvedGetStructField: duckdb_rewrite
-ResolvedMakeProto: unsupported
-ResolvedGetProtoField: unsupported
-ResolvedGetProtoOneof: unsupported
-ResolvedReplaceField: unsupported
+ResolvedMakeProto: semantic_executor
+ResolvedGetProtoField: semantic_executor
+ResolvedGetProtoOneof: semantic_executor
+ResolvedReplaceField: semantic_executor
 ResolvedGetJsonField: duckdb_rewrite
-ResolvedGetRowField: unsupported
+ResolvedGetRowField: semantic_executor
 ResolvedFlatten: semantic_executor
 ResolvedFlattenedArg: semantic_executor
 ResolvedSubqueryExpr: duckdb_native
 ResolvedWithExpr: duckdb_native
 ResolvedInlineLambda: semantic_executor
-ResolvedFilterField: unsupported
-ResolvedFilterFieldArg: unsupported
+ResolvedFilterField: semantic_executor
+ResolvedFilterFieldArg: semantic_executor
 # Literals appear inside every lowered expression (e.g. ORDER BY
 # FARM_FINGERPRINT('x')); promoting the whole query to semantic_executor
 # whenever the walker sees a constant breaks analytic/window fast paths.
