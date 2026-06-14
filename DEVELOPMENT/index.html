@@ -1,0 +1,1258 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/DEVELOPMENT/">
+      
+      
+        <link rel="prev" href="../features/support/">
+      
+      
+        <link rel="next" href="../dev/cpp-lint/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Development setup - BigQuery Emulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#development-setup" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BigQuery Emulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Development setup
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../DOCKER/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../REST_API/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BigQuery Emulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLIENTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Client libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/multi-language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Languages & tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEEDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Seeding data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases & install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REST_API/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ENGINE_POLICY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../features/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feature support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#repo-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Repo layout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-the-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Building the engine
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Building the engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#googlesql-build-mode-prebuilt-by-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      GoogleSQL build mode (prebuilt by default)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prebuilt-googlesql-vs-prebuilt-emulator-engine-binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prebuilt GoogleSQL vs prebuilt emulator engine binary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-the-prebuilt-artifact-fetch-or-validation-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      When the prebuilt artifact fetch or validation fails
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Runtime configuration
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/cpp-lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#repo-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Repo layout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-the-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Building the engine
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Building the engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#googlesql-build-mode-prebuilt-by-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      GoogleSQL build mode (prebuilt by default)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prebuilt-googlesql-vs-prebuilt-emulator-engine-binary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prebuilt GoogleSQL vs prebuilt emulator engine binary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-the-prebuilt-artifact-fetch-or-validation-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      When the prebuilt artifact fetch or validation fails
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Runtime configuration
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="development-setup">Development setup<a class="headerlink" href="#development-setup" title="Permanent link">&para;</a></h1>
+<p>Most of the toolchain is pinned in <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/mise.toml"><code>mise.toml</code></a> and fetched by a
+single command:</p>
+<div class="language-bash highlight"><pre><span></span><code>mise<span class="w"> </span>install<span class="w">   </span><span class="c1"># or: task tools:install</span>
+</code></pre></div>
+<p>That covers Go, Bazel, <code>task</code>, <code>clang</code> (the build toolchain <code>mise</code> materializes
+for editor / dev use; Bazel itself still pins the system <code>/usr/bin/clang</code> for
+hermeticity), <code>buf</code>, <code>golangci-lint</code>, <code>shellcheck</code>, <code>goreleaser</code>, <code>gcloud</code>,
+<code>hadolint</code>, the Maven / Java JDK, and the Python interpreter used by the
+third-party harnesses.</p>
+<p>A few C++ tooling packages are <strong>not</strong> distributed via <code>mise</code> and have to be
+installed through the system package manager. On Ubuntu / Debian:</p>
+<div class="language-bash highlight"><pre><span></span><code>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>clang-format<span class="w"> </span>clang-tidy<span class="w"> </span>cppcheck
+</code></pre></div>
+<p>These are required for the C++ lint gates (<code>task lint:cpp:format</code>,
+<code>task lint:cpp:tidy</code>, <code>task lint:cpp:cppcheck</code>) and for matching what runs in
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml">CI</a>. On macOS use Homebrew
+(<code>brew install clang-format llvm cppcheck</code>); other distributions ship equivalent
+packages under similar names.</p>
+<p>For the full lint policy — commands, thresholds, baselines, and suppression
+markers — see <a href="../dev/cpp-lint/"><code>docs/dev/cpp-lint.md</code></a>.</p>
+<h2 id="repo-layout">Repo layout<a class="headerlink" href="#repo-layout" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code>bigquery-emulator/
+  binaries/
+    gateway_main/         # Go REST gateway entrypoint (cli.go, main.go)
+    emulator_main/        # C++ engine entrypoint (main.cc + version glue)
+  gateway/              # Go: HTTP server + subprocess manager
+    gateway.go            # Lifecycle: spawn engine, run HTTP, shutdown
+    server.go             # HTTP routing
+    handlers/             # BigQuery REST handlers (one file per resource)
+    middleware/           # Auth + request logging middleware
+    bqtypes/              # Wire-compatible BigQuery REST types
+    enginepb/             # Generated Go bindings for proto/*.proto
+    engine/               # gRPC client wrapper for emulator_main
+    jobs/                 # In-process job lifecycle (creation -&gt; done)
+    seed/, seedfile/      # Seed-data REST API + YAML applier
+    e2e/                  # Integration tests against a real engine
+  frontend/             # C++: gRPC server that fronts the engine
+    server/                 # gRPC plumbing
+    handlers/               # Catalog + Query + StorageRead services
+  backend/              # C++: catalog / schema / storage / engine
+    catalog/, schema/       # GoogleSQL catalog adapter + type mapping
+    storage/duckdb/         # DuckDB-backed catalog.duckdb persistence
+    engine/                 # Engine interface + local execution coordinator
+    engine/duckdb/          # DuckDB fast path: AST -&gt; DuckDB SQL transpiler
+                            # (additional strategies — semantic executor,
+                            # DuckDB UDF/polyfill library, control-op
+                            # executor — live alongside duckdb/ as they
+                            # land; see ROADMAP.md &quot;Execution strategies&quot;)
+  proto/                # Internal Go &lt;-&gt; C++ contract
+    emulator.proto        # Catalog + Query services
+    storage_read.proto    # bigquery_emulator.v1.StorageRead
+  conformance/          # YAML fixture runner + diff harness
+    cmd/runner/             # `go run ./conformance/cmd/runner`
+    fixtures/               # YAML fixtures (SELECT / GROUP BY / JOIN / DDL / ...)
+  third_party/          # Vendored upstream client-library sample suites
+    golang-bigquery-tests/, node-bigquery-tests/,
+    python-bigquery-tests/, python-bigquery-dataframes-tests/,
+    java-bigquery-tests/, duckdb/  # DuckDB pin
+  docs/                 # Documentation
+    REST_API.md           # Endpoint -&gt; handler mapping (read this when
+                          # debugging a specific BigQuery REST call)
+    ENGINE_POLICY.md      # Local-only execution policy + route catalog
+    SEEDING.md            # Declarative + template + REST seeding
+    dev/                  # C++ lint policy, prebuilt GoogleSQL playbooks
+    bigquery/             # Vendored copy of the upstream BigQuery docs
+                          # corpus, used as the source of truth when
+                          # verifying request/response shapes
+  taskfiles/            # Per-namespace Task includes (emulator:, lint:,
+                        # test:, docker:, conformance:, thirdparty:, ...)
+  Taskfile.yml          # Common dev commands (build, run, test, lint)
+  Makefile              # Same as Taskfile, for users who prefer make
+  BUILD.bazel           # Bazel root
+  MODULE.bazel          # Bzlmod root (GoogleSQL via local_path_override,
+                        # DuckDB via http_archive)
+  Dockerfile            # Multi-stage build: engine-builder-bazel + runtime
+  docker-compose.yml    # `docker compose up` runtime + smoke recipe
+  go.mod / go.sum       # Go module
+  ROADMAP.md            # Capability-area plan (read this first)
+  README.md
+  LICENSE               # MIT
+</code></pre></div>
+<p>Run <code>task --list</code> for the full set of namespaces (<code>emulator:</code>, <code>lint:</code>,
+<code>test:</code>, <code>docker:</code>, <code>conformance:</code>, <code>thirdparty:</code>, <code>googlesql:</code>, <code>release:</code>,
+<code>ci:</code>, <code>tools:</code>).</p>
+<h2 id="building-the-engine">Building the engine<a class="headerlink" href="#building-the-engine" title="Permanent link">&para;</a></h2>
+<p>The C++ engine is built with Bazel. Run <code>task emulator:build-engine:bazel</code>
+(alias: <code>task emulator:build-engine</code>). This links GoogleSQL's analyzer with the
+local execution coordinator (DuckDB fast path today, with the semantic executor
+/ control-op executor / DuckDB UDF polyfills slotting in behind the same
+<code>Engine</code> interface), the DuckDB storage backend, and gRPC. The output binary
+serves <code>Query.DryRun</code> and <code>Query.ExecuteQuery</code> end-to-end. The integration tests
+under <code>gateway/e2e/</code> drive this binary directly.</p>
+<p>GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a prebuilt
+tarball through <code>http_archive</code> (see <a href="https://github.com/vantaboard/bigquery-emulator/tree/main/third_party/duckdb"><code>third_party/duckdb/</code></a>).</p>
+<p>Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain does not
+cross-build cleanly to linux/arm64 yet, so the engine binary ships only for
+amd64. Non-amd64 hosts should use the published Docker image.</p>
+<h3 id="googlesql-build-mode-prebuilt-by-default">GoogleSQL build mode (prebuilt by default)<a class="headerlink" href="#googlesql-build-mode-prebuilt-by-default" title="Permanent link">&para;</a></h3>
+<p><code>task emulator:build-engine:bazel</code> consumes a <strong>prebuilt GoogleSQL artifact</strong> by
+default — it does not recompile GoogleSQL on every build. Cold builds drop from
+the multi-hour source link to a few minutes once the cache is warm.</p>
+<p><code>GOOGLESQL_SOURCE</code> selects the mode (defaulted to <code>prebuilt</code>):</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="c1"># Default — prebuilt GoogleSQL from .cache/googlesql-prebuilt/.</span>
+task<span class="w"> </span>emulator:build-engine:bazel
+
+<span class="c1"># Explicit source rebuild from a sibling ../googlesql/ checkout.</span>
+<span class="c1"># Use this when iterating on a GoogleSQL upgrade or producer change.</span>
+<span class="nv">GOOGLESQL_SOURCE</span><span class="o">=</span><span class="nb">local</span><span class="w"> </span>task<span class="w"> </span>emulator:build-engine:bazel
+</code></pre></div>
+<p>There is <strong>no silent fallback</strong>: if <code>GOOGLESQL_SOURCE=prebuilt</code> is selected (or
+defaulted) and the prebuilt cache is empty or stale, the build refuses to start
+with an actionable diagnostic instead of silently doing the wrong thing.</p>
+<p>Populate the cache once with either:</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="c1"># Published artifact (URL + SHA-256 from the producer release notes).</span>
+task<span class="w"> </span>googlesql:fetch-prebuilt<span class="w"> </span><span class="nv">URL</span><span class="o">=</span>&lt;asset<span class="w"> </span>url&gt;<span class="w"> </span><span class="nv">SHA256</span><span class="o">=</span>&lt;<span class="m">64</span><span class="w"> </span>hex<span class="w"> </span>chars&gt;
+
+<span class="c1"># Or a locally-built real artifact (uses your sibling ../googlesql/</span>
+<span class="c1"># checkout; ~25-55 min cold cache).</span>
+task<span class="w"> </span>googlesql:stage-bazel
+</code></pre></div>
+<p>Inspect or revalidate the cache without rebuilding:</p>
+<div class="language-bash highlight"><pre><span></span><code>task<span class="w"> </span>googlesql:status<span class="w">    </span><span class="c1"># what&#39;s currently staged</span>
+task<span class="w"> </span>googlesql:validate<span class="w">  </span><span class="c1"># re-run the safety validator over the cache</span>
+</code></pre></div>
+<p>Escape hatch for the validator only (cache contents are still expected to be
+correct; <strong>never</strong> use this to mask a SHA mismatch):</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="nv">BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>task<span class="w"> </span>emulator:build-engine:bazel
+</code></pre></div>
+<h3 id="prebuilt-googlesql-vs-prebuilt-emulator-engine-binary">Prebuilt GoogleSQL vs prebuilt emulator engine binary<a class="headerlink" href="#prebuilt-googlesql-vs-prebuilt-emulator-engine-binary" title="Permanent link">&para;</a></h3>
+<p>Two unrelated "prebuilt" surfaces both ship with releases — don't confuse them:</p>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>What it is</th>
+<th>Who consumes it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Prebuilt GoogleSQL artifact</strong> (<code>googlesql-prebuilt/v&lt;...&gt;+gs-&lt;...&gt;</code> GitHub release)</td>
+<td>The <code>@googlesql//...</code> Bazel external repo packaged as a <code>.tar.gz</code> with <code>manifest.json</code>. Lets <code>task emulator:build-engine:bazel</code> link GoogleSQL without compiling its ~8K C++ TUs.</td>
+<td>Engine <strong>builders</strong> (this repo's CI, Docker <code>engine-builder-bazel</code> stage, release.yml) — anyone who needs to link <code>emulator_main</code> from source.</td>
+</tr>
+<tr>
+<td><strong>Prebuilt emulator engine binary</strong> (<code>bin/emulator_main</code> + <code>bin/libduckdb.so</code> inside the release archives and Docker image)</td>
+<td>The already-linked C++ engine binary itself. Skips the Bazel build entirely.</td>
+<td>Engine <strong>users</strong> — anyone who just wants to run the emulator (<code>docker run ghcr.io/...:vX.Y.Z</code>, the goreleaser tarballs, the Docker <code>ENGINE_SOURCE=prebuilt</code> stage).</td>
+</tr>
+</tbody>
+</table>
+<p>If you are not running <code>bazel build</code> or <code>task emulator:build-engine:bazel</code>, you
+are using the prebuilt engine binary and the GoogleSQL artifact is irrelevant to
+you. The Docker image and the release archives both ship the prebuilt binary; the
+GoogleSQL artifact surface only matters if you are building the engine yourself.</p>
+<h3 id="when-the-prebuilt-artifact-fetch-or-validation-fails">When the prebuilt artifact fetch or validation fails<a class="headerlink" href="#when-the-prebuilt-artifact-fetch-or-validation-fails" title="Permanent link">&para;</a></h3>
+<p>If the build refuses to start, the diagnostic line names the gate that tripped.
+Common shapes:</p>
+<ul>
+<li><code>GOOGLESQL_SOURCE=prebuilt (default) but the cache is empty at: &lt;path&gt;</code> — the cache has not been populated. Run <code>task googlesql:fetch-prebuilt URL=... SHA256=...</code> or fall back to source mode explicitly.</li>
+<li><code>validate_artifact: FAIL_PAYLOAD_SHA</code> (or any other <code>FAIL_*</code> token) — the validator rejected the staged cache. Each token corresponds to a specific failure class (checksum, platform, missing wrapper, manifest schema, …). The <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/troubleshooting.md">GoogleSQL prebuilt troubleshooting guide</a> maps every <code>FAIL_*</code> token to the likely owner and the next step; the <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/rollback.md">rollback playbook</a> covers the matching repin / revert procedures.</li>
+</ul>
+<p>For the full maintainer flow (publishing new artifacts, bumping the GoogleSQL
+pin, releasing) start at the
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/docs/dev/googlesql-prebuilt/README.md">GoogleSQL prebuilt docs index</a>.</p>
+<h2 id="runtime-configuration">Runtime configuration<a class="headerlink" href="#runtime-configuration" title="Permanent link">&para;</a></h2>
+<p><code>emulator_main</code> runs a single local emulator process with a single <code>Engine</code>
+interface and a single persistent storage backend (<code>DuckDBStorage</code>, <code>catalog.duckdb</code>
+under <code>--data_dir</code>). Query execution behind that interface is multi-strategy — the
+local coordinator chooses DuckDB-native SQL, a DuckDB rewrite/UDF, the semantic
+executor, or a catalog/control handler per query — but the runtime surface stays a
+single emulator binary with no runtime backend selector. There are no <code>--engine</code> /
+<code>--storage</code> / <code>--on_unknown_fn</code> flags (those were removed when the ReferenceImpl
+engine and in-memory storage backends were deleted, and the new multi-strategy
+coordinator intentionally keeps the same single-knob posture). The only flags are
+<code>--host_port</code> and <code>--data_dir</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="c1"># Default: bind to 127.0.0.1:9060, use $HOME/.bigquery-emulator as the</span>
+<span class="c1"># DuckDB catalog root.</span>
+./bin/emulator_main
+
+<span class="c1"># Pick a port + hermetic data dir (used by tests, conformance,</span>
+<span class="c1"># `docker compose up`).</span>
+./bin/emulator_main<span class="w"> </span>--host_port<span class="o">=</span><span class="m">127</span>.0.0.1:9060<span class="w"> </span>--data_dir<span class="o">=</span>/tmp/bq-emu
+</code></pre></div>
+<p>The gateway forwards <code>--data_dir</code> (and any of its hyphen-aliased equivalents — see
+<a href="../SEEDING/"><code>docs/SEEDING.md</code></a>) to <code>emulator_main</code> on spawn, so all of the
+following set the same DuckDB catalog root:</p>
+<div class="language-bash highlight"><pre><span></span><code>./bin/bigquery-emulator-gateway<span class="w"> </span>--data-dir<span class="w"> </span>/var/lib/bq-emu
+docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:v0.0.1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data-dir<span class="w"> </span>/var/lib/bq-emu
+</code></pre></div>
+<p>See <a href="../ENGINE_POLICY/"><code>docs/ENGINE_POLICY.md</code></a> for the local-only execution
+policy, the per-shape route catalog (DuckDB fast path / DuckDB rewrite / DuckDB UDF
+/ semantic executor / control op / unsupported-by-design), and which DML / DDL
+shapes are still UNIMPLEMENTED, and the conformance harness
+(<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md"><code>conformance/README.md</code></a>) for the shape of the
+per-fixture diff.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../features/support/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Feature support">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Feature support
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../dev/cpp-lint/" class="md-footer__link md-footer__link--next" aria-label="Next: C++ lint policy">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                C++ lint policy
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>

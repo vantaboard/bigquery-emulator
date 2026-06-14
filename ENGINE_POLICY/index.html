@@ -1,0 +1,1868 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/ENGINE_POLICY/">
+      
+      
+        <link rel="prev" href="../REST_API/">
+      
+      
+        <link rel="next" href="../features/support/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Engine policy - BigQuery Emulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#execution-policy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BigQuery Emulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Engine policy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../DOCKER/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../REST_API/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../DEVELOPMENT/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BigQuery Emulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLIENTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Client libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/multi-language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Languages & tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEEDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Seeding data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases & install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REST_API/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      The runtime
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specialized-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Specialized features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-means-in-practice" class="md-nav__link">
+    <span class="md-ellipsis">
+      What this means in practice
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implication-for-conformance-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implication for conformance fixtures
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#history" class="md-nav__link">
+    <span class="md-ellipsis">
+      History
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bigquery-storage-grpc-engine-bigquery_emulatorv1" class="md-nav__link">
+    <span class="md-ellipsis">
+      BigQuery Storage gRPC (engine bigquery_emulator.v1.*)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#google-sheets-external-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Sheets external tables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relational-unnest-lateral-correlated-subqueries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Relational UNNEST / lateral / correlated subqueries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cast-extensions-collate-value-tables-set-op-corresponding" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cast extensions, COLLATE, value tables, set-op CORRESPONDING
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exact-decimal-numeric-bignumeric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exact-decimal (NUMERIC / BIGNUMERIC)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#row-access-and-column-level-security-mvp" class="md-nav__link">
+    <span class="md-ellipsis">
+      Row-access and column-level security (MVP)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-references
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../features/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feature support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/cpp-lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      The runtime
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specialized-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      Specialized features
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-means-in-practice" class="md-nav__link">
+    <span class="md-ellipsis">
+      What this means in practice
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implication-for-conformance-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implication for conformance fixtures
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#history" class="md-nav__link">
+    <span class="md-ellipsis">
+      History
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bigquery-storage-grpc-engine-bigquery_emulatorv1" class="md-nav__link">
+    <span class="md-ellipsis">
+      BigQuery Storage gRPC (engine bigquery_emulator.v1.*)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#google-sheets-external-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Sheets external tables
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relational-unnest-lateral-correlated-subqueries" class="md-nav__link">
+    <span class="md-ellipsis">
+      Relational UNNEST / lateral / correlated subqueries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cast-extensions-collate-value-tables-set-op-corresponding" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cast extensions, COLLATE, value tables, set-op CORRESPONDING
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exact-decimal-numeric-bignumeric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exact-decimal (NUMERIC / BIGNUMERIC)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#row-access-and-column-level-security-mvp" class="md-nav__link">
+    <span class="md-ellipsis">
+      Row-access and column-level security (MVP)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cross-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-references
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="execution-policy">Execution policy<a class="headerlink" href="#execution-policy" title="Permanent link">&para;</a></h1>
+<p>This emulator ships <strong>one local emulator process</strong> with <strong>one C++
+<code>Engine</code> interface</strong> (<code>backend/engine/engine.h</code>) and <strong>one persistent
+storage implementation</strong> (<code>DuckDBStorage</code>). Behind that single
+<code>Engine</code>, query execution is <strong>multi-strategy</strong>: a local execution
+router classifies each resolved GoogleSQL AST shape and dispatches it
+to the strategy that fits, all inside the same process.</p>
+<blockquote>
+<p><strong>TL;DR</strong>: there is no second engine binary, no runtime backend
+selector, and no fallback to a cloud BigQuery service. There is also
+no claim that the DuckDB transpiler is the universal lowering
+target. Inside <code>emulator_main</code>, a route classifier picks one of
+seven local dispositions (DuckDB fast path, DuckDB rewrite, DuckDB
+UDF/polyfill, local semantic executor, control-op handler,
+local-stub, or the deliberate <code>unsupported</code> envelope) per query,
+and shapes that have no planned local route surface a BigQuery-
+shaped <code>UNIMPLEMENTED</code> whose message names the offending family
+and links back here. See "History" below for the runtimes this
+layout replaces.</p>
+</blockquote>
+<h2 id="the-runtime">The runtime<a class="headerlink" href="#the-runtime" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>Engine</code> interface</strong></td>
+<td><code>backend/engine/engine.h</code></td>
+<td>Single public interface seen by the gRPC layer. Implementation behind it is the local execution coordinator.</td>
+</tr>
+<tr>
+<td><strong>Local execution coordinator</strong></td>
+<td><code>backend/engine/coordinator/</code> (<code>LocalCoordinatorEngine</code>)</td>
+<td>Owns the route classifier and dispatches each query to one of the routes documented below. The classifier consumes the <code>node_dispositions.yaml</code> / <code>functions.yaml</code> registries (built into <code>backend/engine/duckdb/transpiler/</code>) at build time and returns a <code>RouteDecision{disposition; reason; offending_node}</code> per resolved statement.</td>
+</tr>
+<tr>
+<td><strong>Route classifier</strong></td>
+<td><code>backend/engine/coordinator/route_classifier.{h,cc}</code></td>
+<td>Walks the resolved AST, consults the disposition registries, and picks one of <code>kDuckdbNative / kDuckdbRewrite / kDuckdbUdf / kSemanticExecutor / kControlOp / kLocalStub / kUnsupported</code>. Compositional fallback at planning time: any leaf with a higher-priority disposition promotes the whole query; planned rows do NOT promote (the fast path handles them via the transpiler's empty-string contract). Priority order is <code>unsupported &gt; local_stub &gt; semantic_executor &gt; control_op &gt; duckdb_udf &gt; duckdb_rewrite &gt; duckdb_native</code>, so a SELECT mixing a local-stub function (e.g. <code>KEYS.NEW_KEYSET</code>) and an unsupported function (<code>APPROX_QUANTILES</code>) surfaces <code>UNIMPLEMENTED</code> rather than a stubbed answer.</td>
+</tr>
+<tr>
+<td><strong>DuckDB fast path</strong></td>
+<td><code>backend/engine/duckdb/</code> (<code>DuckDbExecutor</code>)</td>
+<td>The transpiler + DuckDB execution surface. Produces DuckDB SQL via a <code>googlesql::ResolvedASTVisitor</code> and runs it through DuckDB's C++ client. Implements the <code>coordinator::Executor</code> interface (<code>ExecuteQuery</code> / <code>ExecuteDml</code> / <code>ExecuteDdl</code>); the coordinator hands it a pre-analyzed <code>ResolvedStatement</code>.</td>
+</tr>
+<tr>
+<td><strong>DuckDB rewrites + UDFs</strong></td>
+<td><code>backend/engine/duckdb/</code></td>
+<td>DuckDB SQL expressed via rewrites or DuckDB UDFs/macros to make a BigQuery function correct locally.</td>
+</tr>
+<tr>
+<td><strong>Local semantic executor</strong></td>
+<td><code>backend/engine/semantic/</code></td>
+<td>A local row/array/value interpreter for shapes that demand exact BigQuery semantics.</td>
+</tr>
+<tr>
+<td><strong>Control-op executor</strong></td>
+<td><code>backend/engine/control/</code></td>
+<td>DDL / metadata / catalog ops routed straight through the storage layer instead of through query execution.</td>
+</tr>
+<tr>
+<td><strong><code>Storage</code> interface</strong></td>
+<td><code>backend/storage/storage.h</code></td>
+<td>Single public interface.</td>
+</tr>
+<tr>
+<td><strong>DuckDB storage</strong></td>
+<td><code>backend/storage/duckdb/</code></td>
+<td>Sole storage implementation. Catalog + table rows persist to a <code>catalog.duckdb</code> file under <code>--data_dir</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><code>emulator_main</code> does not accept <code>--engine</code>, <code>--storage</code>, or
+<code>--on_unknown_fn</code>; those flags were removed when the ReferenceImpl
+engine and in-memory storage were deleted, and the new multi-strategy
+coordinator intentionally keeps the same single-knob posture (route
+selection happens internally at AST-classification time, not via a
+runtime flag). The only knobs are <code>--host_port</code> (default
+<code>localhost:9060</code>) and <code>--data_dir</code> (default <code>$HOME/.bigquery-emulator</code>,
+with <code>./.bigquery-emulator</code> as the fallback when <code>HOME</code> is unset).</p>
+<h2 id="routes">Routes<a class="headerlink" href="#routes" title="Permanent link">&para;</a></h2>
+<p>The route classifier maps every <code>ResolvedAST</code> shape (and every
+built-in function) to exactly one route. The same vocabulary appears
+in <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md"><code>backend/engine/duckdb/transpiler/SHAPE_TRACKER.md</code></a>
+on a per-node basis.</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Meaning</th>
+<th>What it does at runtime</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>duckdb_native</code></td>
+<td>Lowers cleanly to DuckDB SQL with semantics that already match BigQuery's exactly.</td>
+<td>Transpiles to DuckDB SQL and runs it through DuckDB. Today's primary path.</td>
+</tr>
+<tr>
+<td><code>duckdb_rewrite</code></td>
+<td>Lowers to DuckDB SQL with a deliberate structural rewrite (e.g. struct/array shape rewrites, JSON operator mapping).</td>
+<td>Same execution path as <code>duckdb_native</code>; the rewrite lives in the transpiler.</td>
+</tr>
+<tr>
+<td><code>duckdb_udf</code></td>
+<td>Lowers to DuckDB SQL that calls a DuckDB UDF / macro we register at engine startup.</td>
+<td>Same DuckDB connection runs the UDF locally; the UDF body owns the BigQuery-specific semantics.</td>
+</tr>
+<tr>
+<td><code>semantic_executor</code></td>
+<td>Runs on a local row/value interpreter that owns exact BigQuery semantics.</td>
+<td>Uses DuckDB only as a row source; expression evaluation, type coercion, and error surfaces are local.</td>
+</tr>
+<tr>
+<td><code>control_op</code></td>
+<td>DDL / metadata / catalog op.</td>
+<td>Bypasses query execution; the storage layer applies the change and emits the BigQuery-shaped response.</td>
+</tr>
+<tr>
+<td><code>local_stub</code></td>
+<td>Deliberate BigQuery-shaped placeholder for a specialized family the emulator does not model end-to-end.</td>
+<td>Function-level stubs (e.g. <code>KEYS.NEW_KEYSET</code>) dispatch through the semantic executor's stub table (<code>backend/engine/semantic/stubs/</code>) and return a fixed-shape sentinel of the documented BigQuery return type. Statement-level stubs (e.g. <code>CREATE MODEL</code>) are pre-dispatched from the coordinator's <code>ExecuteDdl</code> to <code>backend/engine/control/stubs/</code> and return OK without persisting anything; the matching evaluator (<code>ML.PREDICT</code>, ...) stays on <code>unsupported</code> so a downstream call surfaces <code>UNIMPLEMENTED</code>. The two halves together preserve client-library startup-probe compatibility without silently approximating any downstream semantics.</td>
+</tr>
+<tr>
+<td><code>unsupported</code></td>
+<td>Deliberately out of scope locally.</td>
+<td>Returns a BigQuery-shaped <code>UNIMPLEMENTED</code> whose message names the offending family (e.g. <code>family: function:keys.encrypt</code>) and links to this document.</td>
+</tr>
+</tbody>
+</table>
+<p>A few rules the router obeys:</p>
+<ol>
+<li><strong>One route per shape.</strong> A <code>ResolvedAST</code> node kind picks exactly
+   one route. We do not catch DuckDB errors at runtime and retry on a
+   semantic executor — drift between strategies is hidden by silent
+   fallback, and we removed the old <code>FallbackEngine</code> precisely
+   because of that.</li>
+<li><strong>Compositional fallback at lowering time, not runtime.</strong> When the
+   DuckDB fast path can lower most of a query but a leaf node is
+   <code>semantic_executor</code>, the router promotes the surrounding shape to
+   the semantic executor at planning time instead of mixing strategies
+   mid-execution.</li>
+<li><strong>Route labels are observable in tests.</strong> Conformance fixtures may
+   assert which route served a query (see <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md"><code>conformance/README.md</code></a>),
+   so a passing fixture cannot silently drift from <code>duckdb_native</code> to
+   <code>semantic_executor</code>.</li>
+<li><strong><code>unsupported</code> is intentional.</strong> Promoting a row out of
+   <code>unsupported</code> requires a planned route, a landing implementation,
+   and conformance coverage. We never silently approximate.</li>
+</ol>
+<h2 id="specialized-features">Specialized features<a class="headerlink" href="#specialized-features" title="Permanent link">&para;</a></h2>
+<p>A handful of BigQuery feature families are intentionally NOT modeled
+end-to-end by this emulator. The table below is the user-facing
+summary the unsupported error envelope points at. Per-family posture
+(<code>local_impl</code> vs <code>local_stub</code> vs <code>unsupported</code>) is recorded in
+<code>functions.yaml</code> / <code>node_dispositions.yaml</code> and mirrored in
+<code>SHAPE_TRACKER.md</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Posture</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BigQuery ML (<code>ML.PREDICT</code>, <code>ML.FORECAST</code>, <code>ML.EVALUATE</code>)</td>
+<td><code>unsupported</code></td>
+<td><code>UNIMPLEMENTED</code> with <code>family: function:ml.&lt;name&gt;</code> and a link here.</td>
+</tr>
+<tr>
+<td>BigQuery ML <code>CREATE MODEL</code></td>
+<td><code>local_stub</code></td>
+<td>Accepted as metadata-only; returns OK without registering a model. A subsequent <code>ML.PREDICT</code> over the named model still surfaces <code>UNIMPLEMENTED</code> (the family stays unsupported).</td>
+</tr>
+<tr>
+<td>Geography / GIS (<code>ST_*</code>)</td>
+<td><code>local_impl</code> (partial)</td>
+<td>GIS MVP on the semantic executor (<code>backend/engine/semantic/functions/geog_funcs.cc</code>): <code>ST_GEOGPOINT</code>, <code>ST_GEOGFROMTEXT</code>, <code>ST_ASTEXT</code>, <code>ST_DISTANCE</code>, <code>ST_WITHIN</code>, <code>ST_CONTAINS</code>, <code>ST_INTERSECTS</code>. <code>GEOGRAPHY</code> persists as <code>VARCHAR</code> in DuckDB storage; extended casts evaluate on <code>eval_expr_cast_extended.cc</code>. Remaining <code>ST_*</code> (<code>ST_GEOGFROMWKB</code>, aggregates, buffer/simplify family, ...) surface <code>UNIMPLEMENTED</code> with <code>family: function:st_&lt;name&gt;</code>.</td>
+</tr>
+<tr>
+<td>Differential privacy / anonymized aggregation (<code>AnonymizedAggregate*</code>, <code>DifferentialPrivacyAggregate*</code>, ...)</td>
+<td><code>unsupported</code></td>
+<td><code>UNIMPLEMENTED</code>. The DP guarantee depends on noise calibration the emulator cannot honor.</td>
+</tr>
+<tr>
+<td>Approximate aggregation (<code>APPROX_QUANTILES</code>, <code>APPROX_COUNT_DISTINCT</code>, <code>APPROX_TOP_COUNT</code>, <code>APPROX_TOP_SUM</code>)</td>
+<td><code>local_impl</code></td>
+<td>Routes to the semantic executor (<code>backend/engine/semantic/functions/aggregate_specialized.cc</code>). Results are computed exactly (not sketch-approximated); not differential-privacy aggregation (see the DP row above).</td>
+</tr>
+<tr>
+<td>Networking (<code>NET.*</code>)</td>
+<td><code>local_impl</code></td>
+<td>Routes to the semantic executor; implemented in <code>net_funcs.cc</code> (IP parse/mask/trunc, HOST, PUBLIC_SUFFIX, REG_DOMAIN). Pinned by <code>conformance/fixtures/specialized/net_host_reg_domain.yaml</code>.</td>
+</tr>
+<tr>
+<td>Key management (<code>KEYS.NEW_KEYSET</code>, <code>KEYS.KEYSET_LENGTH</code>)</td>
+<td><code>local_stub</code></td>
+<td>Returns a deterministic BigQuery-shaped sentinel (<code>KEYS.NEW_KEYSET</code> -&gt; a fixed <code>BYTES</code> envelope; <code>KEYS.KEYSET_LENGTH</code> -&gt; <code>1</code>). NOT a real Tink keyset.</td>
+</tr>
+<tr>
+<td>Key management (<code>KEYS.ENCRYPT</code>, <code>KEYS.DECRYPT_BYTES</code>)</td>
+<td><code>unsupported</code></td>
+<td>Encryption-bearing entries deliberately fail loudly so a downstream consumer cannot round-trip the stub sentinel into an actual AEAD operation.</td>
+</tr>
+<tr>
+<td>HLL (<code>HLL_COUNT.*</code>)</td>
+<td><code>local_impl</code></td>
+<td>Routes to the semantic executor; <code>hll_funcs.cc</code> implements INIT/MERGE/MERGE_PARTIAL/EXTRACT with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by <code>conformance/fixtures/specialized/hll_count_round_trip.yaml</code>.</td>
+</tr>
+<tr>
+<td>Protobuf shapes (<code>ResolvedMakeProto</code>, <code>ResolvedGetProtoField</code>, ...)</td>
+<td><code>unsupported</code></td>
+<td>The emulator does not model the GoogleSQL proto type surface end-to-end.</td>
+</tr>
+<tr>
+<td>MEASURE / measure functions (<code>AGGREGATE(&lt;measure&gt;)</code>)</td>
+<td><code>unsupported</code></td>
+<td>Measure types require BigQuery's analytical layer the emulator does not model.</td>
+</tr>
+<tr>
+<td>Graph (<code>GRAPH_TABLE</code>, GQL subqueries, <code>ResolvedGraph*Scan</code>, <code>ResolvedCatalogColumnRef</code>)</td>
+<td><code>unsupported</code></td>
+<td>The Spanner-Graph SQL surface and catalog-internal column refs are not part of this emulator's scope.</td>
+</tr>
+<tr>
+<td>Sequences (<code>ResolvedSequence</code>, <code>NEXT VALUE FOR</code>)</td>
+<td><code>unsupported</code></td>
+<td>BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on <code>unsupported</code> to make the gap explicit.</td>
+</tr>
+<tr>
+<td>JavaScript UDFs (<code>CREATE FUNCTION ... LANGUAGE js</code>)</td>
+<td><code>local_impl</code></td>
+<td><code>CREATE FUNCTION ... LANGUAGE js</code> registers through <code>js_udf_registry.cc</code>, persists the DDL in <code>DuckDBStorage</code>, and evaluates scalar bodies at call time on the semantic executor via embedded Duktape (<code>js_udf_runtime.cc</code>) so <code>routines.get</code> round-trips and call-time execution match. Pinned by <code>conformance/fixtures/udf/js_scalar_add.yaml</code>. Table-valued / aggregate JS UDFs remain unsupported.</td>
+</tr>
+<tr>
+<td>Python UDFs (<code>CREATE FUNCTION ... LANGUAGE python</code>)</td>
+<td><code>unsupported</code></td>
+<td>No Python UDF runtime; <code>cw_xml_extract</code> stays in bqutils <code>known_failing/</code> as a documented external-language gap (same disposition as JS UDFs).</td>
+</tr>
+<tr>
+<td>SQL scalar UDFs (<code>CREATE FUNCTION ... AS (...)</code>), including <code>ANY TYPE</code> templated parameters</td>
+<td><code>semantic_executor</code></td>
+<td><code>CREATE FUNCTION</code> registers through the per-project UDF registry (<code>backend/catalog/udf_registry.cc</code>), writes through to <code>DuckDBStorage</code> (<code>__bqemu_routines</code>), and replays into each query's <code>GoogleSqlCatalog</code> (including after engine restart via <code>RehydrateRoutinesFromStorage</code>), shadowing a built-in when the names collide. Templated bodies evaluate on the semantic executor via <code>EvalSqlUdfBody</code>; SQL UDAFs evaluate via <code>EvalSqlUdafBody</code>. SQL TVFs and procedures follow the same persistence path through <code>tvf_registry</code> / <code>procedure_registry</code>. <code>DROP FUNCTION</code> deletes registry + storage rows. Conformance fixtures under <code>conformance/fixtures/udf/</code>.</td>
+</tr>
+<tr>
+<td>Scripting (<code>DECLARE</code>, <code>SET</code>, <code>CALL</code>, <code>BEGIN…END</code> multi-stmt blocks)</td>
+<td><code>semantic_executor</code></td>
+<td>Gateway sends DECLARE/SET/CALL scripts in one engine <code>ExecuteQuery</code> round-trip (<code>script_runner_engine.go</code>); control-flow scripts register a single child job for the final SELECT result. Simple statements (<code>CREATE CONSTANT</code>/<code>SET</code>/<code>CALL</code>/<code>ASSERT</code>/<code>EXECUTE IMMEDIATE</code> literals) run via <code>ExecuteScriptViaAnalyzeNext</code>; scripts with structured control flow (<code>IF</code>/<code>WHILE</code>/<code>LOOP</code>/<code>FOR</code>/<code>EXECUTE IMMEDIATE</code>/<code>EXCEPTION</code>/<code>RAISE</code> in blocks) delegate to <code>googlesql::ScriptExecutor</code> through <code>EmulatorStatementEvaluator</code> when <code>BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING=1</code> (always set once the prebuilt artifact ships <code>//googlesql/scripting:script_executor</code>). <code>@@error.*</code> reads resolve through <code>EvalContext::script_system_variables</code> (populated by the ScriptExecutor during <code>EXCEPTION</code> handlers). Conformance fixtures under <code>conformance/fixtures/scripting/</code>.</td>
+</tr>
+<tr>
+<td><code>LOAD DATA LOCAL &lt;local-uri&gt;</code> / <code>LOAD DATA ... FROM FILES (uris = ['file://...'])</code></td>
+<td><code>control_op</code></td>
+<td>Local CSV/JSON/Parquet readers via DuckDB (<code>RunLoadData</code>); <code>gs://</code> URIs surface unsupported. Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>LOAD DATA &lt;gs://...&gt;</code> (cloud storage)</td>
+<td><code>unsupported</code></td>
+<td>The emulator does not model BigQuery's cloud-storage ingest surface.</td>
+</tr>
+<tr>
+<td><code>EXPORT DATA</code> (local <code>file://</code> URI)</td>
+<td><code>control_op</code></td>
+<td>DuckDB <code>COPY (SELECT ...) TO</code> for CSV/JSON/Parquet; <code>gs://</code> URIs surface unsupported. Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>CREATE MATERIALIZED VIEW</code></td>
+<td><code>control_op</code></td>
+<td>Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by <code>conformance/fixtures/ddl/materialized_view_query.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>INFORMATION_SCHEMA.*</code> reflection views</td>
+<td><code>duckdb_native</code></td>
+<td><code>&lt;dataset&gt;.INFORMATION_SCHEMA.&lt;VIEW&gt;</code> and region-qualified <code>`region-&lt;r&gt;`.INFORMATION_SCHEMA.&lt;VIEW&gt;</code> resolve at analyze time through <code>backend/catalog/info_schema_table.{h,cc}</code> (a <code>VirtualCatalogTable</code>) and materialize from <code>Storage</code> + the routine/view registries: <code>TABLES</code>, <code>COLUMNS</code>, <code>SCHEMATA</code>, <code>VIEWS</code> (view registry), <code>ROUTINES</code> (<code>__bqemu_routines</code>), <code>COLUMN_FIELD_PATHS</code> (recursed STRUCT/ARRAY paths), <code>PARTITIONS</code> / <code>TABLE_STORAGE</code> (<code>Storage::CountRows</code>, single unpartitioned partition; byte columns NULL per the persistence non-goal), and <code>TABLE_OPTIONS</code> / <code>KEY_COLUMN_USAGE</code> (empty — options/constraints are not modeled). <code>JOBS</code> / <code>JOBS_BY_PROJECT</code> are <strong>not</strong> engine-resolved: the gateway rewrites those queries to a snapshot table in <code>`_bqemu_jobs.JOBS`</code> materialized from the in-process job registry (<code>gateway/query/info_schema_jobs.go</code>, <code>gateway/jobs/info_schema.go</code>) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under <code>conformance/fixtures/info_schema/</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The two halves of the <code>local_stub</code> posture are load-bearing:</p>
+<ol>
+<li><strong>BigQuery-shaped placeholder</strong> -- client-library startup probes
+   (e.g. a connector that issues <code>SELECT KEYS.NEW_KEYSET(...)</code> to
+   confirm the dialect understands the namespace) succeed against the
+   emulator without forcing the user to disable their probe.</li>
+<li><strong>No silent approximation downstream</strong> -- the call site that would
+   actually consume the stub value (<code>KEYS.ENCRYPT(...)</code>, <code>ML.PREDICT(
+   MODEL &lt;id&gt;, ...)</code>) stays on <code>unsupported</code> so a misuse fails loudly
+   rather than emitting a plausible-looking-but-fake answer.</li>
+</ol>
+<p>When the unsupported route surfaces an envelope, the message names the
+offending family (e.g. <code>family: function:keys.encrypt</code>, <code>family:
+function:ml.predict</code>, <code>family: ResolvedSequenceStmt</code>) so a user landing
+on this document can find the matching row in the table above without
+running the route classifier in their head.</p>
+<h2 id="what-this-means-in-practice">What this means in practice<a class="headerlink" href="#what-this-means-in-practice" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>New feature work has a route, not "a transpiler row."</strong> Identify
+   the right local strategy (DuckDB native, DuckDB rewrite, DuckDB
+   UDF, semantic executor, control op), land the implementation, and
+   update the shape tracker row in the same commit.</p>
+</li>
+<li>
+<p><strong>DML / DDL routing is closed for in-scope GoogleSQL shapes.</strong>
+   Remaining deliberate gaps are <code>unsupported</code> families documented in
+   <a href="./"><code>ENGINE_POLICY.md</code></a> (graph/GQL, broad
+   proto surface, <code>ML.*</code>, cloud <code>gs://</code>, ...). Landed on the local DML
+   executor (<code>backend/engine/semantic/dml/</code>): <code>INSERT VALUES</code>, <code>INSERT ...
+   SELECT</code>, scalar and deep-STRUCT <code>UPDATE</code>, proto <code>UpdateConstructor</code>
+   SET expressions (<code>eval_expr_update_constructor.cc</code>), nested <code>(DELETE arr
+   WITH OFFSET ...)</code> in <code>UPDATE SET</code>, <code>UPDATE ... FROM</code>, <code>DELETE</code>, <code>THEN
+   RETURN</code> on INSERT/UPDATE/DELETE (GoogleSQL does not define MERGE <code>THEN
+   RETURN</code>), pipe INSERT (<code>ResolvedPipeInsertScan</code>), <code>ASSERT_ROWS_MODIFIED</code>,
+   and the harder MERGE matrix (<code>WHEN NOT MATCHED BY SOURCE</code>, multi-action
+   sequences via <code>dml_merge.cc</code>). Simple <code>MERGE</code> (<code>WHEN MATCHED</code> + single
+   <code>WHEN NOT MATCHED BY TARGET</code>) stays on the DuckDB fast path.
+   <code>CREATE TABLE</code>, <code>CREATE TABLE AS SELECT</code>, <code>DROP TABLE</code>, <code>ALTER TABLE</code>,
+   <code>CREATE MATERIALIZED VIEW</code> (full refresh), <code>EXPORT DATA</code>, and
+   <code>LOAD DATA</code> (local files) are implemented today on the control-op
+   route.</p>
+</li>
+<li>
+<p><strong>Storage follows the same single-implementation rule.</strong> The
+   in-memory storage backend is gone; every persistent state path
+   goes through <code>DuckDBStorage</code>. Tests that previously used a
+   volatile in-memory store now allocate a temp <code>--data_dir</code> and
+   rely on DuckDB instead.</p>
+</li>
+<li>
+<p><strong>There is no cloud passthrough.</strong> This emulator never forwards
+   query work to the real BigQuery service. Local coverage is the
+   responsibility of the multi-strategy coordinator inside this
+   process, full stop.</p>
+</li>
+</ol>
+<h2 id="implication-for-conformance-fixtures">Implication for conformance fixtures<a class="headerlink" href="#implication-for-conformance-fixtures" title="Permanent link">&para;</a></h2>
+<p>The conformance harness (<code>conformance/cmd/runner</code>,
+<code>conformance/fixtures/*.yaml</code>) runs a single profile today:</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Engine</th>
+<th>Storage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>local</code></td>
+<td>local execution coordinator</td>
+<td>duckdb</td>
+</tr>
+</tbody>
+</table>
+<p>The legacy profile name <code>duckdb</code> refers to the same coordinator
+binary and is accepted by the runner for backwards compatibility
+during the rename. New fixtures should use <code>local</code>.</p>
+<p>Per the policy above:</p>
+<ul>
+<li><strong>Leave <code>profiles:</code> unset</strong> in new fixtures unless you are
+  intentionally targeting a future second profile. Today the default
+  profile set is <code>[local]</code> and the harness runs every fixture against
+  it.</li>
+<li><strong>Seed with <code>sql:</code> <code>INSERT VALUES</code> or <code>rows:</code> setup steps</strong> —
+  <code>INSERT</code> executes through the local DML executor, and <code>rows:</code>
+  steps (which call <code>tabledata.insertAll</code>) remain available for
+  fixtures that want to bypass DML entirely.</li>
+<li><strong>Document <code>unsupported</code> gaps loudly.</strong> If a fixture is blocked on
+  an <code>unsupported</code> shape, leave it out of the suite rather than
+  <code>t.Skip()</code>-ing it; the conformance harness's purpose is to pin what
+  works.</li>
+<li><strong>Route labels are optional.</strong> Fixtures may assert which route
+  served a query alongside the row output (<code>expected.route</code>), and
+  <code>task conformance:routing-matrix</code> reports the observed route for
+  every fixture.</li>
+</ul>
+<h2 id="history">History<a class="headerlink" href="#history" title="Permanent link">&para;</a></h2>
+<p>A previous iteration of the emulator carried two engines
+(ReferenceImpl + DuckDB) bridged by a <code>FallbackEngine</code> wrapper that
+routed DuckDB-uncovered constructs to ReferenceImpl at <strong>runtime</strong>,
+plus an in-memory storage backend for hermetic tests. That layout was
+removed because:</p>
+<ul>
+<li>ReferenceImpl coverage was incomplete (no DDL, partial DML,
+  missing analytics functions) and not actively maintained.</li>
+<li>The runtime fallback bridge made it ambiguous which engine produced
+  any given result; production users reported subtle divergences when
+  fixtures ran on <code>duckdb</code> but tests ran on <code>memory</code>.</li>
+<li>Maintaining two storage backends doubled the test-fixture cost
+  for no production benefit, since <code>docker compose up</code> always
+  used the persistent DuckDB store anyway.</li>
+</ul>
+<p>The removal commit landed with a <code>BREAKING CHANGE:</code> footer noting
+that <code>--engine=reference_impl</code>, <code>--storage=memory</code>, and
+<code>--on_unknown_fn=fallback</code> are gone.</p>
+<p>After that removal, the project briefly described itself as a
+"DuckDB-only" emulator and tried to extend DuckDB coverage by
+promoting every remaining shape to a transpiler row. That framing
+underestimated the BigQuery vs. DuckDB semantic gap and would have
+forced the transpiler to absorb work it is the wrong tool for. The
+current policy — local multi-strategy execution behind a single
+<code>Engine</code> — is the deliberate replacement: DuckDB stays as the fast
+analytical path, and the BigQuery-specific work moves to whichever
+local strategy actually owns it. Route selection happens at
+AST-classification time rather than at runtime error-catch time, so
+it never reintroduces the silent-drift hazard the old
+<code>FallbackEngine</code> had.</p>
+<h2 id="bigquery-storage-grpc-engine-bigquery_emulatorv1">BigQuery Storage gRPC (engine <code>bigquery_emulator.v1.*</code>)<a class="headerlink" href="#bigquery-storage-grpc-engine-bigquery_emulatorv1" title="Permanent link">&para;</a></h2>
+<p>The C++ engine on <code>:9060</code> implements an <strong>internal</strong> Storage Read/Write
+contract (<code>proto/storage_read.proto</code>, <code>proto/storage_write.proto</code>).
+Official client libraries dial the <strong>public</strong> service names
+(<code>google.cloud.bigquery.storage.v1.BigQueryRead</code> /
+<code>BigQueryWrite</code>) and wire formats (Arrow/Avro read pages, proto-descriptor
+row encoding for <code>JsonStreamWriter</code>). The Go gateway shim in
+<code>gateway/handlers/bqstorage/</code> registers those public services on
+<code>:9060</code> and adapts to the engine's internal contract. Java
+<code>WriteBufferedStreamIT</code> and <code>StorageArrowSampleIT</code> pass against the
+local emulator; Connection + DataTransfer ITs remain allowlisted.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Posture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Storage Write <code>COMMITTED</code> / <code>_default</code></td>
+<td>Engine <code>AppendRows</code> commit path; shim decodes public proto rows</td>
+</tr>
+<tr>
+<td>Storage Write <code>BUFFERED</code></td>
+<td>Engine buffered hold + <code>FlushRows</code> / <code>FinalizeWriteStream</code>; shim caches proto descriptors and reuses the emulator <code>BigQueryWriteClient</code> in samples</td>
+</tr>
+<tr>
+<td>Storage Write <code>PENDING</code></td>
+<td>Engine buffered hold + <code>FinalizeWriteStream</code> + <code>BatchCommitWriteStreams</code> through <code>DuckDBStorage::AppendRows</code>; gateway shim forwards public RPCs</td>
+</tr>
+<tr>
+<td>Storage Read sessions</td>
+<td><code>CreateReadSession</code> with projection + analyzer-transpiled <code>row_restriction</code>, multi-stream <code>max_stream_count</code>, and <code>SplitReadStream</code>; public-data tables readable with a caller-scoped parent project</td>
+</tr>
+<tr>
+<td>Storage Read Arrow</td>
+<td>Arrow schema + IPC record batches via gateway shim</td>
+</tr>
+<tr>
+<td>Storage Read Avro</td>
+<td>Arrow read from engine, Avro OCF encoding in gateway shim (<code>gateway/handlers/bqstorage/avro.go</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Set <code>BIGQUERY_STORAGE_GRPC_ENDPOINT</code> (default <code>localhost:9060</code> in
+<code>task thirdparty:*</code>) to reach the gateway gRPC listener. ManagedWriter /
+Storage Read subtests skip when it is unset.</p>
+<p>The same <code>:9060</code> listener multiplexes additional public BigQuery gRPC
+services the Go sample suites exercise:</p>
+<table>
+<thead>
+<tr>
+<th>Public service</th>
+<th>Posture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>google.cloud.bigquery.storage.v1.BigQueryRead</code> / <code>BigQueryWrite</code></td>
+<td>Gateway shim → engine internal Storage Read/Write</td>
+</tr>
+<tr>
+<td><code>google.cloud.bigquery.connection.v1.ConnectionService</code></td>
+<td>Shallow list/create/get stubs (<code>gateway/handlers/bqconnection/</code>)</td>
+</tr>
+<tr>
+<td><code>google.cloud.bigquery.reservation.v1.ReservationService</code></td>
+<td>Empty list stubs (<code>gateway/handlers/bqreservation/</code>)</td>
+</tr>
+<tr>
+<td><code>google.cloud.bigquery.analyticshub.v1.AnalyticsHubService</code></td>
+<td>In-memory exchange/listing CRUD (<code>gateway/handlers/bqanalyticshub/</code>)</td>
+</tr>
+<tr>
+<td><code>google.cloud.bigquery.v2.*</code> (Dataset/Table/Job/Project/Routine)</td>
+<td>Thin gRPC adapters over existing REST/catalog handlers (<code>gateway/handlers/bqv2grpc/</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Set <code>BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT</code> to the same host:port when
+samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
+<code>BIGQUERY_STORAGE_GRPC_ENDPOINT</code> via <code>bqopts.BigQueryV2GRPCClientOptions()</code>.</p>
+<h2 id="google-sheets-external-tables">Google Sheets external tables<a class="headerlink" href="#google-sheets-external-tables" title="Permanent link">&para;</a></h2>
+<p>The emulator does not call the Google Sheets API. Python thirdparty
+samples <code>test_query_external_sheets_*</code> are skipped via
+<code>third_party/python-bigquery-tests/emulator_pytest_skip.py</code> when
+<code>BIGQUERY_EMULATOR_HOST</code> is set. GCS-backed external tables remain in
+scope.</p>
+<h2 id="relational-unnest-lateral-correlated-subqueries">Relational UNNEST / lateral / correlated subqueries<a class="headerlink" href="#relational-unnest-lateral-correlated-subqueries" title="Permanent link">&para;</a></h2>
+<p>These shapes share the semantic executor's per-outer-row evaluation
+frame (<code>backend/engine/semantic/outer_row_eval.{h,cc}</code>). The
+classifier promotes divergent subsets to <code>semantic_executor</code>; the
+fast path keeps the standalone cases on <code>duckdb_native</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Representative SQL</th>
+<th>Route</th>
+<th>Conformance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Standalone UNNEST</td>
+<td><code>SELECT n FROM UNNEST([1,2,3]) AS n</code></td>
+<td><code>duckdb_native</code></td>
+<td>fast-path fixtures</td>
+</tr>
+<tr>
+<td>UNNEST WITH OFFSET</td>
+<td><code>... UNNEST(arr) AS n WITH OFFSET AS idx</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>array_struct/unnest_with_offset.yaml</code></td>
+</tr>
+<tr>
+<td>Multi-array zip</td>
+<td><code>FROM UNNEST(a, b)</code> (<code>array_zip_mode</code>)</td>
+<td><code>semantic_executor</code></td>
+<td><code>array_struct/multi_array_unnest_pad.yaml</code></td>
+</tr>
+<tr>
+<td>Cross-join UNNEST</td>
+<td><code>FROM t, UNNEST(t.arr) AS n</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>array_struct/cross_join_unnest.yaml</code></td>
+</tr>
+<tr>
+<td>LEFT JOIN UNNEST</td>
+<td><code>LEFT JOIN UNNEST(t.arr) AS n ON TRUE</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>array_struct/left_join_unnest.yaml</code></td>
+</tr>
+<tr>
+<td>JOIN USING</td>
+<td><code>INNER JOIN t2 USING (id)</code></td>
+<td><code>duckdb_native</code></td>
+<td><code>fastpath/join_using_inner.yaml</code></td>
+</tr>
+<tr>
+<td>Lateral join scan</td>
+<td><code>... JOIN LATERAL (...)</code> (<code>is_lateral</code>)</td>
+<td><code>semantic_executor</code></td>
+<td>unit tests (<code>MaterializeJoinScan</code>)</td>
+</tr>
+<tr>
+<td>Correlated subquery</td>
+<td><code>EXISTS (SELECT 1 FROM r WHERE r.k = o.k)</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>cte_subquery/subquery_expr_correlated_exists.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="cast-extensions-collate-value-tables-set-op-corresponding">Cast extensions, COLLATE, value tables, set-op CORRESPONDING<a class="headerlink" href="#cast-extensions-collate-value-tables-set-op-corresponding" title="Permanent link">&para;</a></h2>
+<p>These expression / projection edges promote divergent subsets off the
+DuckDB fast path; the semantic executor owns exact BigQuery semantics
+where noted.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Representative SQL</th>
+<th>Route</th>
+<th>Conformance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CAST FORMAT</td>
+<td><code>CAST(DATE '2018-01-30' AS STRING FORMAT 'YYYY')</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/cast_format_date_to_string.yaml</code>, <code>cast_format_parse_date.yaml</code></td>
+</tr>
+<tr>
+<td>CAST AT TIME ZONE</td>
+<td><code>CAST(TIMESTAMP ... AS STRING AT TIME ZONE 'UTC')</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/cast_timestamp_at_timezone.yaml</code></td>
+</tr>
+<tr>
+<td>CAST extended</td>
+<td><code>CAST(ST_GEOGPOINT(...) AS STRING)</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/cast_extended_geography_string.yaml</code></td>
+</tr>
+<tr>
+<td>COLLATE in ORDER BY</td>
+<td><code>ORDER BY name COLLATE 'und:ci'</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/order_by_collate_und_ci.yaml</code></td>
+</tr>
+<tr>
+<td>SELECT AS VALUE</td>
+<td><code>SELECT AS VALUE 42 AS n</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/select_as_value_scalar.yaml</code></td>
+</tr>
+<tr>
+<td>Set-op CORRESPONDING</td>
+<td><code>UNION ALL CORRESPONDING</code></td>
+<td><code>duckdb_native</code> (subset)</td>
+<td><code>setops/set_op_corresponding_union_all.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>Extended-cast shapes that remain out of scope (proto / enum / range-of-proto /
+graph / measure / tokenlist targets) still surface <code>UNIMPLEMENTED</code> on the
+semantic path. Type-modifier casts (<code>STRING(n)</code>, <code>NUMERIC(p,s)</code>, …) evaluate
+on <code>eval_expr_cast.cc</code> (<code>cast_type_modifiers.yaml</code>).</p>
+<h2 id="exact-decimal-numeric-bignumeric">Exact-decimal (<code>NUMERIC</code> / <code>BIGNUMERIC</code>)<a class="headerlink" href="#exact-decimal-numeric-bignumeric" title="Permanent link">&para;</a></h2>
+<p>BigQuery's <code>NUMERIC</code> (<code>DECIMAL(38,9)</code>) and <code>BIGNUMERIC</code>
+(<code>DECIMAL(38,38)</code>) are exact decimals. DuckDB can store and compare
+<code>NUMERIC</code> natively, but it widens some operations to <code>DOUBLE</code> and
+cannot store <code>BIGNUMERIC</code> as a <code>DECIMAL</code> at all (its max precision is
+38, which cannot represent <code>DECIMAL(38,38) &gt;= 1.0</code>), so <code>BIGNUMERIC</code>
+is persisted as <code>VARCHAR</code>. Following the no-silent-approximation rule,
+shapes DuckDB would widen or reject reroute to the semantic executor's
+decimal path (<code>googlesql::NumericValue</code> / <code>BigNumericValue</code>) rather
+than approximating in <code>DOUBLE</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Representative SQL</th>
+<th>Route</th>
+<th>Conformance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SUM</code>/<code>MIN</code>/<code>MAX</code>/<code>COUNT</code> over <code>NUMERIC</code></td>
+<td><code>SUM(amount)</code></td>
+<td><code>duckdb_native</code></td>
+<td><code>aggregate/aggregate_numeric_sum.yaml</code></td>
+</tr>
+<tr>
+<td><code>AVG</code> over <code>NUMERIC</code>/<code>BIGNUMERIC</code></td>
+<td><code>AVG(amount)</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>aggregate/aggregate_numeric_avg.yaml</code></td>
+</tr>
+<tr>
+<td><code>NUMERIC</code>/<code>BIGNUMERIC</code> division</td>
+<td><code>a / b</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/numeric_division.yaml</code></td>
+</tr>
+<tr>
+<td><code>+</code>/<code>-</code>/<code>*</code> over <code>BIGNUMERIC</code></td>
+<td><code>a + b</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>scalar/bignumeric_arithmetic.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>Results encode as exact decimal strings on the wire (no float
+artifacts); <code>arrow_to_bq</code> renders <code>HUGEINT</code>-backed and <code>VARCHAR</code>-backed
+decimals exactly (<code>backend/engine/duckdb/arrow_to_bq_*.cc</code>).</p>
+<h2 id="row-access-and-column-level-security-mvp">Row-access and column-level security (MVP)<a class="headerlink" href="#row-access-and-column-level-security-mvp" title="Permanent link">&para;</a></h2>
+<p>Governance is enforced at <strong>query time</strong> for the synthetic principal
+<code>emulator@bigquery.local</code> (see <code>gateway/middleware/auth.go</code>). The
+emulator does not implement multi-principal IAM; policies are stored
+via REST (<code>rowAccessPolicies.*</code>, <code>tables.*</code> with policy tags / <code>maskKind</code>)
+and applied inside <code>DuckDbExecutor::ExecuteQuery</code>.</p>
+<p><strong>Row-access policies:</strong> predicates for policies whose grantee list is
+empty or includes the synthetic principal are OR-composed and injected
+into table materialization (<code>WHERE</code> on load). Policies targeting only
+other principals do not grant the emulator access.</p>
+<p><strong>Column masking:</strong> policy tags on STRING/BYTES columns default to
+SHA256 masking; explicit <code>maskKind</code> supports NULLIFY, DEFAULT_VALUE,
+and DENIED. DENIED columns surface <code>accessDenied</code> (HTTP 403) when
+selected. Masking runs in the DuckDB row source after the query
+executes (<code>duckdb_executor_security.*</code>).</p>
+<p>Conformance fixtures live under <code>conformance/fixtures/security/</code>.</p>
+<h2 id="cross-references">Cross-references<a class="headerlink" href="#cross-references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md"><code>backend/engine/duckdb/transpiler/SHAPE_TRACKER.md</code></a> — per-node route dispositions (<code>duckdb_native</code>, <code>duckdb_rewrite</code>, <code>duckdb_udf</code>, <code>semantic_executor</code>, <code>control_op</code>, <code>local_stub</code>, <code>unsupported</code>).</li>
+<li><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md"><code>ROADMAP.md</code></a> — work tracking and high-level milestone status.</li>
+<li><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/conformance/README.md"><code>conformance/README.md</code></a> — fixture authoring guide; references this document from its "Contributing a new fixture" section.</li>
+<li><a href="../DEVELOPMENT/#runtime-configuration"><code>DEVELOPMENT.md</code> "Runtime configuration"</a> — the user-facing version of the flag surface this document governs.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../REST_API/" class="md-footer__link md-footer__link--prev" aria-label="Previous: REST API">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                REST API
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../features/support/" class="md-footer__link md-footer__link--next" aria-label="Next: Feature support">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Feature support
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>

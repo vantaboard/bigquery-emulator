@@ -1,0 +1,1502 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/dev/cpp-lint/">
+      
+      
+        <link rel="prev" href="../../DEVELOPMENT/">
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>C++ lint policy - BigQuery Emulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#c-lint-and-formatting-policy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BigQuery Emulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              C++ lint policy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../DOCKER/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../REST_API/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../DEVELOPMENT/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BigQuery Emulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CLIENTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Client libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/multi-language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Languages & tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SEEDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Seeding data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases & install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../REST_API/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ENGINE_POLICY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feature support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture at a glance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commands
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-each-tool-covers" class="md-nav__link">
+    <span class="md-ellipsis">
+      What each tool covers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What each tool covers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#clang-format-task-lintcppformat" class="md-nav__link">
+    <span class="md-ellipsis">
+      clang-format (task lint:cpp:format)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clang-tidy-task-lintcpptidy" class="md-nav__link">
+    <span class="md-ellipsis">
+      clang-tidy (task lint:cpp:tidy)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cppcheck-task-lintcppcppcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      cppcheck (task lint:cpp:cppcheck)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#source-only-checker-task-lintcppsource" class="md-nav__link">
+    <span class="md-ellipsis">
+      Source-only checker (task lint:cpp:source)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thresholds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Thresholds
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#suppressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Suppressions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      CI surface
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-first-party-c-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a new first-party C++ tree
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tooling-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tooling versions
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture at a glance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commands
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-each-tool-covers" class="md-nav__link">
+    <span class="md-ellipsis">
+      What each tool covers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What each tool covers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#clang-format-task-lintcppformat" class="md-nav__link">
+    <span class="md-ellipsis">
+      clang-format (task lint:cpp:format)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clang-tidy-task-lintcpptidy" class="md-nav__link">
+    <span class="md-ellipsis">
+      clang-tidy (task lint:cpp:tidy)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cppcheck-task-lintcppcppcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      cppcheck (task lint:cpp:cppcheck)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#source-only-checker-task-lintcppsource" class="md-nav__link">
+    <span class="md-ellipsis">
+      Source-only checker (task lint:cpp:source)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#thresholds" class="md-nav__link">
+    <span class="md-ellipsis">
+      Thresholds
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#suppressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Suppressions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      CI surface
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-first-party-c-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      Adding a new first-party C++ tree
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tooling-versions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tooling versions
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="c-lint-and-formatting-policy">C++ lint and formatting policy<a class="headerlink" href="#c-lint-and-formatting-policy" title="Permanent link">&para;</a></h1>
+<p>This guide is the developer-facing reference for the C++ lint stack
+that ships with the BigQuery emulator. It covers commands,
+thresholds, and the suppression / baseline policy. The runner
+implementations live in <a href="https://github.com/vantaboard/bigquery-emulator/tree/main/tools/lint/cpp/"><code>tools/lint/cpp/</code></a>;
+the rollout history and rationale live in <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md"><code>ROADMAP.md</code></a>
+and <a href="../../ENGINE_POLICY/"><code>ENGINE_POLICY.md</code></a>.</p>
+<h2 id="architecture-at-a-glance">Architecture at a glance<a class="headerlink" href="#architecture-at-a-glance" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code>                   .clang-format
+                      │
++-----------------+   │   +-----------------------+
+| tools/lint/cpp  | &lt;-+   | .clang-tidy           |
+|   (Go binary)   |       |   (compile-aware)     |
+|                 |       +-----------+-----------+
+|  list           |                   │
+|  check          |       +-----------v-----------+
++--------+--------+       | clang-tidy            |
+         │                +-----------+-----------+
+         │  canonical                 │
+         │  first-party file list     │
+         │                            │
+         v                            v
+   clang-format           clang-tidy / cppcheck
+
+                fast lane (task lint:run — includes cppcheck)
+                slow lane (task lint:cpp:tidy,
+                          task ci:cpp-analysis)
+</code></pre></div>
+<p>The Go binary is the spine: every C++ tool consumes the
+first-party file list it produces, so vendored / generated /
+cached trees can never sneak into a lint run by accident. The
+ownership boundary is pinned by
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/sources_test.go"><code>tools/lint/cpp/sources_test.go</code></a>'s
+<code>TestFilterFirstParty</code> table.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Use case</th>
+<th>Command</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fast pre-commit gate</td>
+<td><code>task lint:run</code></td>
+<td>Go vet, gofmt, clang-format, source-only C++ checks, cppcheck.</td>
+</tr>
+<tr>
+<td>Apply autofixes</td>
+<td><code>task lint:fix</code></td>
+<td>gofmt, clang-format, go vet.</td>
+</tr>
+<tr>
+<td>Format C++ only</td>
+<td><code>task lint:cpp:format</code> / <code>task lint:cpp:format-fix</code></td>
+<td>Reads from <code>tools/lint/cpp list</code>.</td>
+</tr>
+<tr>
+<td>Source-only C++ checks</td>
+<td><code>task lint:cpp:source</code></td>
+<td>File length, banned logging, status anti-patterns.</td>
+</tr>
+<tr>
+<td>clang-tidy (slow)</td>
+<td><code>task lint:cpp:tidy</code></td>
+<td>Requires <code>compile_commands.json</code>.</td>
+</tr>
+<tr>
+<td>Generate compile DB</td>
+<td><code>task lint:cpp:compile-commands</code></td>
+<td>Uses <code>bazel query</code> + <code>bazel aquery</code>; honors <code>GOOGLESQL_SOURCE</code> for <code>--config</code>.</td>
+</tr>
+<tr>
+<td>cppcheck</td>
+<td><code>task lint:cpp:cppcheck</code></td>
+<td>Secondary-analysis lane; also runs inside <code>task lint:run</code>.</td>
+</tr>
+<tr>
+<td>First-party <code>cc_test</code></td>
+<td><code>task lint:cpp:test</code></td>
+<td>Discovers via <code>bazel query</code> (<code>--config</code> aligned with <code>task bazel:test</code>); reuses <code>task bazel:test</code>.</td>
+</tr>
+<tr>
+<td>Match CI locally</td>
+<td><code>task ci:run</code> / <code>task ci:cpp-analysis</code></td>
+<td>Both lanes — fast (blocking) and slow (warning-only).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-each-tool-covers">What each tool covers<a class="headerlink" href="#what-each-tool-covers" title="Permanent link">&para;</a></h2>
+<h3 id="clang-format-task-lintcppformat"><code>clang-format</code> (<code>task lint:cpp:format</code>)<a class="headerlink" href="#clang-format-task-lintcppformat" title="Permanent link">&para;</a></h3>
+<p>Profile: <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-format"><code>.clang-format</code></a> — Google style,
+80-column limit, two-space indent, paren-aligned continuation
+arguments, includes regrouped, namespace closers required. Editor
+format-on-save picks it up via clangd's integration; CI runs the
+dry-run / <code>--Werror</code> variant on every PR.</p>
+<h3 id="clang-tidy-task-lintcpptidy"><code>clang-tidy</code> (<code>task lint:cpp:tidy</code>)<a class="headerlink" href="#clang-tidy-task-lintcpptidy" title="Permanent link">&para;</a></h3>
+<p>Profile: <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-tidy"><code>.clang-tidy</code></a>. Checks pulled from
+four buckets:</p>
+<table>
+<thead>
+<tr>
+<th>Bucket</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Correctness / runtime risk</td>
+<td><code>bugprone-*</code>, <code>clang-analyzer-*</code>, <code>cppcoreguidelines-narrowing-conversions</code>, <code>cppcoreguidelines-init-variables</code></td>
+</tr>
+<tr>
+<td>Complexity</td>
+<td><code>readability-function-size</code> (line/statement/branch/nesting/parameter caps), <code>readability-function-cognitive-complexity</code></td>
+</tr>
+<tr>
+<td>Modernization</td>
+<td><code>modernize-*</code>, <code>performance-*</code>, <code>portability-*</code></td>
+</tr>
+<tr>
+<td>Style maintainability</td>
+<td><code>readability-*</code> (with the noisy ones turned off)</td>
+</tr>
+</tbody>
+</table>
+<p>Header filter: <code>^(backend|binaries|frontend|tools/googlesql-prebuilt/smoke)/.*\.(h|hpp|hh)$</code>.
+Without it, every Abseil / GoogleSQL / gRPC header pulled in by an
+include would emit findings the rule set was never tuned for.</p>
+<p>Posture: every configured check runs as an error
+(<code>WarningsAsErrors: '*'</code> in <code>.clang-tidy</code>, <code>-warnings-as-errors='*'</code>
+on the CLI in <code>task lint:cpp:tidy</code>). A finding fails CI; clear it
+in-tree or scope a <code>// NOLINT(check-name)</code> suppression with a
+reason. The CI job
+(<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a>)
+gates on this lane (no <code>continue-on-error</code>).</p>
+<h3 id="cppcheck-task-lintcppcppcheck"><code>cppcheck</code> (<code>task lint:cpp:cppcheck</code>)<a class="headerlink" href="#cppcheck-task-lintcppcppcheck" title="Permanent link">&para;</a></h3>
+<p>Profile in <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/taskfiles/lint.yml"><code>taskfiles/lint.yml</code></a>:
+<code>--enable=warning,style,performance,portability</code> with
+<code>--inline-suppr</code> and <code>--error-exitcode=1</code>. Runs in the same slow
+CI lane as clang-tidy and is likewise blocking. cppcheck is
+well-positioned to find uninitialised state, bounds issues,
+resource leaks, and null-handling mistakes that the templated
+abstractions in clang-tidy can occasionally miss.</p>
+<h3 id="source-only-checker-task-lintcppsource">Source-only checker (<code>task lint:cpp:source</code>)<a class="headerlink" href="#source-only-checker-task-lintcppsource" title="Permanent link">&para;</a></h3>
+<p>Implemented in <a href="https://github.com/vantaboard/bigquery-emulator/tree/main/tools/lint/cpp/"><code>tools/lint/cpp/</code></a>. Three
+rules:</p>
+<ol>
+<li><strong><code>file-length</code></strong> — first-party <code>.cc</code>/<code>.h</code> files over 500 lines
+   fail. Split the file before landing the change.</li>
+<li><strong><code>banned-logging</code></strong> — <code>std::cout</code>, <code>std::cerr</code>, <code>std::clog</code>,
+   <code>std::printf</code>, <code>std::fprintf</code>, <code>printf</code>, <code>fprintf</code> are banned in
+   production C++. Tests, the <code>tools/googlesql-prebuilt/smoke/</code>
+   binaries, and <code>binaries/emulator_main/main.cc</code> are exempt; one
+   pre-gRPC bootstrap call inside <code>frontend/server/server.cc</code> is
+   suppressed inline (see "Suppressions" below).</li>
+<li><strong><code>status-discarded</code></strong> / <strong><code>statusor-unchecked-value</code></strong> —
+   common engine APIs that return <code>absl::Status</code> (<code>ExecuteDdl</code>,
+   <code>AppendRows</code>, <code>OverwriteRows</code>, <code>DropTable</code>) must capture their
+   result. <code>.value()</code> on a <code>StatusOr&lt;T&gt;</code> without a nearby <code>.ok()</code>
+   guard is reported.</li>
+</ol>
+<p>The same rules are reinforced at the compiler boundary by the
+<code>[[nodiscard]]</code> attributes on the abstract
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/backend/storage/storage.h"><code>Storage</code></a> and
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/engine.h"><code>Engine</code></a> interfaces, and by the
+scoped <code>-Wall -Wextra</code> profile in
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.bazelrc"><code>.bazelrc</code></a> (<code>--per_file_copt</code>).</p>
+<h2 id="thresholds">Thresholds<a class="headerlink" href="#thresholds" title="Permanent link">&para;</a></h2>
+<p>The thresholds below are pinned in code and configuration; bump
+them only with a recorded rationale in the commit message.</p>
+<table>
+<thead>
+<tr>
+<th>Threshold</th>
+<th>Value</th>
+<th>Source</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Whole-file lines (<code>.cc</code>/<code>.h</code>)</td>
+<td>500</td>
+<td><code>tools/lint/cpp</code> source-only checker (<code>-max-lines</code>)</td>
+<td>Mirrors the Go <code>revive</code> <code>file-length-limit</code> and the rollout plan's bar for "split before it gets unscanable".</td>
+</tr>
+<tr>
+<td>Function lines</td>
+<td>80</td>
+<td><code>readability-function-size.LineThreshold</code></td>
+<td>Roughly two screens; matches the Go cyclop rule of thumb.</td>
+</tr>
+<tr>
+<td>Function statements</td>
+<td>60</td>
+<td><code>readability-function-size.StatementThreshold</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Function branches</td>
+<td>12</td>
+<td><code>readability-function-size.BranchThreshold</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Function nesting</td>
+<td>4</td>
+<td><code>readability-function-size.NestingThreshold</code></td>
+<td>Caps the <code>if / for / if / for / if</code> cascade.</td>
+</tr>
+<tr>
+<td>Function parameters</td>
+<td>8</td>
+<td><code>readability-function-size.ParameterThreshold</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Cognitive complexity</td>
+<td>25</td>
+<td><code>readability-function-cognitive-complexity.Threshold</code></td>
+<td>Matches <code>cyclop</code>'s <code>max-complexity: 25</code> in <code>.golangci.yml</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The whole-file cap is enforced by the source-only checker; split
+oversized files rather than suppressing the rule. Per-function
+complexity findings are surfaced by clang-tidy's warning-only lane
+and are expected to be addressed inline.</p>
+<h2 id="suppressions">Suppressions<a class="headerlink" href="#suppressions" title="Permanent link">&para;</a></h2>
+<p>C++ rules that allow inline suppressions (the source-only
+checker's <code>banned-logging</code>, <code>status-discarded</code>, and
+<code>statusor-unchecked-value</code> rules) accept a marker of the form:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span class="c1">// cpp-lint:allow(rule-name) -- one-line reason</span>
+</code></pre></div>
+<p>Format requirements:</p>
+<ul>
+<li>The marker names at least one rule. A bare
+  <code>// cpp-lint:allow</code> (no rule list) does not suppress.</li>
+<li>A <code>--reason</code> body is mandatory. Suppressions without a reason
+  silently fail to apply, surfacing the original finding.</li>
+<li>The marker may sit on the same line as the offending
+  construct or on the line immediately above it. The above-line
+  variant is preferred because clang-format may wrap a long
+  trailing comment over multiple lines (which would split the
+  marker text).</li>
+</ul>
+<p>Examples:</p>
+<div class="language-cpp highlight"><pre><span></span><code><span class="c1">// Same-line trailing marker (works when the marker fits within</span>
+<span class="c1">// the column limit):</span>
+<span class="n">absl</span><span class="o">::</span><span class="n">Status</span><span class="w"> </span><span class="n">ignore_me</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">backend</span><span class="p">.</span><span class="n">AppendRows</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">rows</span><span class="p">);</span><span class="w">  </span><span class="c1">// cpp-lint:allow(status-discarded) -- demo only</span>
+
+<span class="c1">// Above-line marker (preferred for production code; clang-format</span>
+<span class="c1">// cannot wrap the comment off the marker line):</span>
+<span class="c1">// cpp-lint:allow(banned-logging) -- pre-gRPC bootstrap diagnostic; Server::Create has no Status return today</span>
+<span class="n">std</span><span class="o">::</span><span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;[frontend::Server] failed to bind</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</code></pre></div>
+<p>The marker contract is enforced by the source-only checker's
+test suite
+(<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/checks_test.go"><code>tools/lint/cpp/checks_test.go</code></a>).</p>
+<p><code>clang-tidy</code> and <code>cppcheck</code> keep their own suppression mechanisms
+(<code>// NOLINT(check-name)</code> and <code>// cppcheck-suppress</code>, respectively).
+Mirror the same "name a rule + give a reason" discipline when
+using either: a bare <code>NOLINT</code> is rarely the right answer.</p>
+<h2 id="ci-surface">CI surface<a class="headerlink" href="#ci-surface" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>Workflow</th>
+<th>Posture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>build-and-test</code></td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml"><code>ci.yml</code></a></td>
+<td>Required. Includes <code>task lint:run</code> (gofmt, vet, clang-format, source-only C++, cppcheck) and <code>task lint:cpp:test</code>.</td>
+</tr>
+<tr>
+<td><code>cpp-analysis</code></td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml"><code>ci-cpp-analysis.yml</code></a></td>
+<td>Required. Runs <code>task lint:cpp:cppcheck</code>; clang-tidy is wired (<code>task lint:cpp:tidy</code>) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI.</td>
+</tr>
+</tbody>
+</table>
+<p>The local mirror is <code>task ci:run</code>; the analysis lane on its own is
+<code>task ci:cpp-analysis</code>.</p>
+<h2 id="adding-a-new-first-party-c-tree">Adding a new first-party C++ tree<a class="headerlink" href="#adding-a-new-first-party-c-tree" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Add the new top-level directory to
+   <code>firstPartyIncludeRoots</code> in
+   <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/sources.go"><code>tools/lint/cpp/sources.go</code></a>.</li>
+<li>Pin the new path in <code>TestFilterFirstParty</code> so the ownership
+   boundary stays auditable.</li>
+<li>Mirror the path in
+   <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.bazelrc"><code>.bazelrc</code></a>'s <code>--per_file_copt</code> block so
+   <code>-Wall -Wextra</code> apply to the new tree.</li>
+<li>Mirror the path in
+   <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-tidy"><code>.clang-tidy</code></a>'s <code>HeaderFilterRegex</code>.</li>
+<li>Mirror the path in
+   <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/tools/lint/cpp/compile_db.py"><code>tools/lint/cpp/compile_db.py</code></a>'s
+   <code>FIRST_PARTY_PREFIXES</code>.</li>
+</ol>
+<p>The five places must stay in sync; a missing edit usually
+manifests as either silent skipping (lint never sees the new
+files) or a wall of upstream-tree findings (the new files are
+treated as first-party but their includes drag in upstream
+warnings).</p>
+<h2 id="tooling-versions">Tooling versions<a class="headerlink" href="#tooling-versions" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Version</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>clang-format</td>
+<td>18.1.x</td>
+<td><code>apt install clang-format</code> (Ubuntu) or <code>brew install clang-format</code>; pinned by the matching clang-18 toolchain Bazel uses for builds.</td>
+</tr>
+<tr>
+<td>clang-tidy</td>
+<td>18.1.x</td>
+<td><code>apt install clang-tidy</code> (Ubuntu) or <code>brew install llvm</code>.</td>
+</tr>
+<tr>
+<td>cppcheck</td>
+<td>2.13.x</td>
+<td><code>apt install cppcheck</code> (Ubuntu) or <code>brew install cppcheck</code>.</td>
+</tr>
+<tr>
+<td>Bazel</td>
+<td>per <code>mise.toml</code></td>
+<td><code>mise install</code>.</td>
+</tr>
+<tr>
+<td>Go</td>
+<td>per <code>mise.toml</code></td>
+<td><code>mise install</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><code>mise.toml</code> does not pin the clang-* lint tools today because
+they ship outside <code>mise</code>'s tool index. The README's "Local
+development setup" section calls out the manual install step.
+Upgrading the apt-shipped clang-format / clang-tidy / cppcheck
+versions in CI requires bumping the same versions locally;
+otherwise contributors and CI will disagree on formatting output.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../../DEVELOPMENT/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Development setup">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Development setup
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>

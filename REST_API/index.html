@@ -1,0 +1,2172 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/REST_API/">
+      
+      
+        <link rel="prev" href="../RELEASES/">
+      
+      
+        <link rel="next" href="../ENGINE_POLICY/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>REST API - BigQuery Emulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bigquery-v2-rest-api-surface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BigQuery Emulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              REST API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../DOCKER/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../DEVELOPMENT/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BigQuery Emulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../CLIENTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Client libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/multi-language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Languages & tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SEEDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Seeding data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../RELEASES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases & install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#method-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Method summary
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Method summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#projects-bigqueryprojects" class="md-nav__link">
+    <span class="md-ellipsis">
+      Projects (bigquery.projects.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datasets-bigquerydatasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Datasets (bigquery.datasets.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tables-bigquerytables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tables (bigquery.tables.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tabledata-bigquerytabledata" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tabledata (bigquery.tabledata.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jobs-bigqueryjobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Jobs (bigquery.jobs.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queries-synchronous-query-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Queries (synchronous query API)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#models-bigquerymodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Models (bigquery.models.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routines-bigqueryroutines" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routines (bigquery.routines.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#row-access-policies-bigqueryrowaccesspolicies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Row-access policies (bigquery.rowAccessPolicies.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-bigquerymigrationv2alpha" class="md-nav__link">
+    <span class="md-ellipsis">
+      Migration (bigquerymigration.v2alpha)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-transfer-service-bigquerydatatransferv1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Transfer Service (bigquerydatatransfer.v1)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#discovery-and-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      Discovery and health
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routing-notes-go-specifics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routing notes (Go specifics)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-envelope" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error envelope
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sql-dialect" class="md-nav__link">
+    <span class="md-ellipsis">
+      SQL dialect
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#type-wire-encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      Type wire encoding
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-read-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Read API
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Storage Read API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transport-grpc-only-served-by-the-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transport: gRPC-only, served by the engine
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#supported-readoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported ReadOptions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authentication-posture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication posture
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ENGINE_POLICY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../features/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feature support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../DEVELOPMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/cpp-lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#method-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Method summary
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Method summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#projects-bigqueryprojects" class="md-nav__link">
+    <span class="md-ellipsis">
+      Projects (bigquery.projects.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datasets-bigquerydatasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Datasets (bigquery.datasets.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tables-bigquerytables" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tables (bigquery.tables.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tabledata-bigquerytabledata" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tabledata (bigquery.tabledata.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jobs-bigqueryjobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Jobs (bigquery.jobs.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#queries-synchronous-query-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Queries (synchronous query API)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#models-bigquerymodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Models (bigquery.models.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#routines-bigqueryroutines" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routines (bigquery.routines.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#row-access-policies-bigqueryrowaccesspolicies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Row-access policies (bigquery.rowAccessPolicies.*)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migration-bigquerymigrationv2alpha" class="md-nav__link">
+    <span class="md-ellipsis">
+      Migration (bigquerymigration.v2alpha)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-transfer-service-bigquerydatatransferv1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Transfer Service (bigquerydatatransfer.v1)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#discovery-and-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      Discovery and health
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#routing-notes-go-specifics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Routing notes (Go specifics)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-envelope" class="md-nav__link">
+    <span class="md-ellipsis">
+      Error envelope
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sql-dialect" class="md-nav__link">
+    <span class="md-ellipsis">
+      SQL dialect
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#type-wire-encoding" class="md-nav__link">
+    <span class="md-ellipsis">
+      Type wire encoding
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-read-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Read API
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Storage Read API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transport-grpc-only-served-by-the-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transport: gRPC-only, served by the engine
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#supported-readoptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Supported ReadOptions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authentication-posture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication posture
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="bigquery-v2-rest-api-surface">BigQuery v2 REST API surface<a class="headerlink" href="#bigquery-v2-rest-api-surface" title="Permanent link">&para;</a></h1>
+<p>This is the emulator's canonical mapping from the public BigQuery v2 REST
+API to the Go handler that backs each endpoint, derived from the upstream
+documentation under <a href="https://cloud.google.com/bigquery/docs/reference/rest/v2">BigQuery REST v2 reference</a>.</p>
+<p>The goal of this document is operational: when you're staring at a client
+library that's failing against the emulator, you want to know exactly
+which file to open. Keep this in sync with <code>gateway/server.go</code> and the
+gateway-HTTP-surface section of <code>ROADMAP.md</code>.</p>
+<blockquote>
+<p>Status legend: <code>done</code> = end-to-end implemented · <code>wired</code> = route
+registered, returns a structurally-valid stub or 501 · <code>todo</code> = not yet
+in the route table</p>
+</blockquote>
+<h2 id="method-summary">Method summary<a class="headerlink" href="#method-summary" title="Permanent link">&para;</a></h2>
+<p>The emulator targets the BigQuery REST surface served at
+<code>https://bigquery.googleapis.com/bigquery/v2/...</code>. Path templates here
+omit the host and use <code>{x}</code> for path variables.</p>
+<h3 id="projects-bigqueryprojects">Projects (<code>bigquery.projects.*</code>)<a class="headerlink" href="#projects-bigqueryprojects" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>projects.list</code></td>
+<td><code>GET /bigquery/v2/projects</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/projects.go"><code>gateway/handlers/projects.go::ProjectList</code></a></td>
+</tr>
+<tr>
+<td><code>projects.getServiceAccount</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/serviceAccount</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/projects.go"><code>gateway/handlers/projects.go::ProjectGetServiceAccount</code></a></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!NOTE]
+There is <strong>no</strong> <code>GET /bigquery/v2/projects/{projectId}</code> endpoint in the
+public API; an early scaffold registered one and was removed. Use
+<code>projects.list</code> to enumerate projects and resource manager APIs for
+per-project metadata.</p>
+</blockquote>
+<h3 id="datasets-bigquerydatasets">Datasets (<code>bigquery.datasets.*</code>)<a class="headerlink" href="#datasets-bigquerydatasets" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>datasets.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetList</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.insert</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetInsert</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetGet</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.update</code></td>
+<td><code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetUpdate</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.patch</code></td>
+<td><code>PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetPatch</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetDelete</code></a></td>
+</tr>
+<tr>
+<td><code>datasets.undelete</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/datasets.go"><code>gateway/handlers/datasets.go::DatasetUndelete</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="tables-bigquerytables">Tables (<code>bigquery.tables.*</code>)<a class="headerlink" href="#tables-bigquerytables" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tables.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableList</code></a></td>
+</tr>
+<tr>
+<td><code>tables.insert</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableInsert</code></a></td>
+</tr>
+<tr>
+<td><code>tables.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGet</code></a></td>
+</tr>
+<tr>
+<td><code>tables.update</code></td>
+<td><code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableUpdate</code></a></td>
+</tr>
+<tr>
+<td><code>tables.patch</code></td>
+<td><code>PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TablePatch</code></a></td>
+</tr>
+<tr>
+<td><code>tables.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
+<td>done (captures snapshot for undelete)</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableDelete</code></a></td>
+</tr>
+<tr>
+<td><code>tables.getIamPolicy</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGetIamPolicy</code></a></td>
+</tr>
+<tr>
+<td><code>tables.setIamPolicy</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableSetIamPolicy</code></a></td>
+</tr>
+<tr>
+<td><code>tables.testIamPermissions</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableTestIamPermissions</code></a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>External tables:</strong> <code>tables.insert</code> accepts
+<code>externalDataConfiguration</code> (<code>sourceUris</code>, <code>sourceFormat</code>, <code>schema</code>,
+<code>csvOptions</code>, …). Supported GCS formats (<code>CSV</code>, <code>NEWLINE_DELIMITED_JSON</code>,
+<code>PARQUET</code>, …) are fetched via fake-gcs (<code>STORAGE_EMULATOR_HOST</code> /
+<code>FAKE_GCS_PORT</code>, same as LOAD jobs) and materialized into the engine
+catalog at insert time; <code>externalDataConfiguration</code> round-trips through
+the gateway <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go"><code>MetadataStore</code></a> on GET/PATCH/UPDATE.
+<code>type</code> defaults to <code>EXTERNAL</code>. Google Sheets (<code>GOOGLE_SHEETS</code> /
+<code>googleSheetsOptions</code>) returns <strong>501</strong> with a clear message.</p>
+<p>Query-time ephemeral external tables use <code>tableDefinitions</code> on
+<code>jobs.query</code> and <code>configuration.query</code> (jobs.insert). When the query
+omits <code>defaultDataset</code>, definitions are registered under internal dataset
+<code>_bq_external_temp</code> and that dataset is forwarded as
+<code>default_dataset_id</code> so unqualified table ids in SQL resolve.</p>
+<h3 id="tabledata-bigquerytabledata">Tabledata (<code>bigquery.tabledata.*</code>)<a class="headerlink" href="#tabledata-bigquerytabledata" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tabledata.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tabledata.go"><code>gateway/handlers/tabledata.go::TableDataList</code></a></td>
+</tr>
+<tr>
+<td><code>tabledata.insertAll</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tabledata.go"><code>gateway/handlers/tabledata.go::TableDataInsertAll</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="jobs-bigqueryjobs">Jobs (<code>bigquery.jobs.*</code>)<a class="headerlink" href="#jobs-bigqueryjobs" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jobs.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/jobs</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobList</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.insert</code> (metadata)</td>
+<td><code>POST /bigquery/v2/projects/{projectId}/jobs</code></td>
+<td>done (query, LOAD, COPY, EXTRACT)</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobInsert</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.insert</code> (media upload)</td>
+<td><code>POST /upload/bigquery/v2/projects/{projectId}/jobs</code></td>
+<td>done (multipart + resumable LOAD)</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobInsertUpload</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.insert</code> (resumable chunk)</td>
+<td><code>PUT /upload/bigquery/v2/projects/{projectId}/jobs</code></td>
+<td>done (resumable LOAD upload)</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobInsertUpload</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/jobs/{jobId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobGet</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.cancel</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/jobs/{jobId}/cancel</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobCancel</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/jobs/{jobId}/delete</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/jobs.go"><code>gateway/handlers/jobs.go::JobDelete</code></a></td>
+</tr>
+</tbody>
+</table>
+<p>The literal <code>/delete</code> segment after <code>{jobId}</code> is not a typo — that is
+the upstream URL template, see
+<a href="https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/delete"><code>jobs.delete</code> reference</a>.</p>
+<p><strong><code>jobs.list</code> filters:</strong> <code>stateFilter</code> (repeatable <code>pending</code>/<code>running</code>/<code>done</code>),
+<code>minCreationTime</code> / <code>maxCreationTime</code> (epoch ms), <code>parentJobId</code>,
+<code>maxResults</code> (default 50), and opaque <code>pageToken</code> pagination are honored
+against the gateway job registry. <code>allUsers=true</code> returns 501 (no auth
+context).</p>
+<p><strong><code>INFORMATION_SCHEMA.JOBS*</code>:</strong> queries against <code>`region-*`.INFORMATION_SCHEMA.JOBS(_BY_PROJECT)</code>
+are rewritten to <code>`{project}`.`_bqemu_jobs`.`JOBS`</code> with rows
+materialized from the job registry before the engine executes the SQL
+(<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/query/info_schema_jobs.go"><code>gateway/query/info_schema_jobs.go</code></a>).</p>
+<p><strong>COPY / EXTRACT / undelete:</strong> <code>configuration.copy</code> copies rows
+from <code>sourceTable</code> / <code>sourceTables</code> into <code>destinationTable</code>, honoring
+<code>writeDisposition</code> (<code>WRITE_EMPTY</code>, <code>WRITE_TRUNCATE</code>, <code>WRITE_APPEND</code>).
+Live sources prefer engine SQL (<code>CREATE TABLE AS SELECT</code> / <code>UNION ALL</code>);
+snapshot sources (<code>tableId@epoch</code>) and SQL fallbacks use catalog row copy.
+<code>configuration.extract</code> serializes a source table to <code>destinationUris</code>
+(<code>CSV</code>, <code>NEWLINE_DELIMITED_JSON</code>, optional <code>GZIP</code>) via fake-gcs HTTP upload.
+Table undelete (python <code>test_undelete_table</code>, node <code>undeleteTable</code>) is a
+COPY job from a snapshot decorator after <code>tables.delete</code>; there is no
+separate <code>tables.undelete</code> RPC.</p>
+<h3 id="queries-synchronous-query-api">Queries (synchronous query API)<a class="headerlink" href="#queries-synchronous-query-api" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jobs.query</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/queries</code></td>
+<td>done (incl. <code>tableDefinitions</code>)</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/queries.go"><code>gateway/handlers/queries.go::QueryRun</code></a></td>
+</tr>
+<tr>
+<td><code>jobs.getQueryResults</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/queries/{jobId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/queries.go"><code>gateway/handlers/queries.go::QueryGetResults</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="models-bigquerymodels">Models (<code>bigquery.models.*</code>)<a class="headerlink" href="#models-bigquerymodels" title="Permanent link">&para;</a></h3>
+<p>BQML has no trained-model store (inference stays <code>UNIMPLEMENTED</code>), but
+<code>CREATE MODEL</code> DDL registers metadata-only model resources the REST
+surface can list/get/delete for client-library round-trips.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/models.go"><code>gateway/handlers/models.go::ModelList</code></a></td>
+</tr>
+<tr>
+<td><code>models.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/models.go"><code>gateway/handlers/models.go::ModelGet</code></a></td>
+</tr>
+<tr>
+<td><code>models.patch</code></td>
+<td><code>PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/models.go"><code>gateway/handlers/models.go::ModelPatch</code></a></td>
+</tr>
+<tr>
+<td><code>models.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/models/{modelId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/models.go"><code>gateway/handlers/models.go::ModelDelete</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="routines-bigqueryroutines">Routines (<code>bigquery.routines.*</code>)<a class="headerlink" href="#routines-bigqueryroutines" title="Permanent link">&para;</a></h3>
+<p>Routines (UDFs / TVFs / stored procedures) persist in the engine's
+<code>DuckDBStorage</code> catalog (<code>__bqemu_routines</code> in <code>catalog.duckdb</code>) and
+surface through the <code>Catalog.ListRoutines</code> / <code>GetRoutine</code> /
+<code>UpsertRoutine</code> / <code>DeleteRoutine</code> gRPC RPCs. REST
+insert/get/list/update/delete delegates to those RPCs when the gateway
+is wired to <code>emulator_main</code>; the in-memory <a href="https://github.com/vantaboard/bigquery-emulator/tree/main/gateway/routines/"><code>gateway/routines/</code></a>
+store mirrors responses for the synchronous query path.
+<code>CREATE FUNCTION</code> / <code>CREATE PROCEDURE</code> DDL via <code>jobs.query</code> also
+registers routines and surfaces <code>ddlTargetRoutine</code> on the job
+statistics envelope.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>routines.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go"><code>gateway/handlers/routines.go::RoutineList</code></a></td>
+</tr>
+<tr>
+<td><code>routines.insert</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go"><code>gateway/handlers/routines.go::RoutineInsert</code></a></td>
+</tr>
+<tr>
+<td><code>routines.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go"><code>gateway/handlers/routines.go::RoutineGet</code></a></td>
+</tr>
+<tr>
+<td><code>routines.update</code></td>
+<td><code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go"><code>gateway/handlers/routines.go::RoutineUpdate</code></a></td>
+</tr>
+<tr>
+<td><code>routines.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/routines/{routineId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/routines.go"><code>gateway/handlers/routines.go::RoutineDelete</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="row-access-policies-bigqueryrowaccesspolicies">Row-access policies (<code>bigquery.rowAccessPolicies.*</code>)<a class="headerlink" href="#row-access-policies-bigqueryrowaccesspolicies" title="Permanent link">&para;</a></h3>
+<p>Row-level access policies persist in the engine catalog
+(<code>__bqemu_row_access_policies</code>) and round-trip through REST insert/get/list/update/delete.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rowAccessPolicies.list</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go"><code>gateway/handlers/row_access_policies.go::RowAccessPolicyList</code></a></td>
+</tr>
+<tr>
+<td><code>rowAccessPolicies.insert</code></td>
+<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go"><code>gateway/handlers/row_access_policies.go::RowAccessPolicyInsert</code></a></td>
+</tr>
+<tr>
+<td><code>rowAccessPolicies.get</code></td>
+<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go"><code>gateway/handlers/row_access_policies.go::RowAccessPolicyGet</code></a></td>
+</tr>
+<tr>
+<td><code>rowAccessPolicies.update</code></td>
+<td><code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go"><code>gateway/handlers/row_access_policies.go::RowAccessPolicyUpdate</code></a></td>
+</tr>
+<tr>
+<td><code>rowAccessPolicies.delete</code></td>
+<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/rowAccessPolicies/{policyId}</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/row_access_policies.go"><code>gateway/handlers/row_access_policies.go::RowAccessPolicyDelete</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="migration-bigquerymigrationv2alpha">Migration (<code>bigquerymigration.v2alpha</code>)<a class="headerlink" href="#migration-bigquerymigrationv2alpha" title="Permanent link">&para;</a></h3>
+<p>Served from the <strong>same</strong> HTTP listener as the BigQuery v2 surface. The
+official client libraries
+(<code>cloud.google.com/go/bigquery/migration/apiv2alpha</code>,
+<code>google-cloud-bigquery-migration</code> for Python/Node/Java) read
+<code>BIGQUERY_MIGRATION_EMULATOR_HOST</code> and fall back to
+<code>BIGQUERY_EMULATOR_HOST</code>. Routes are registered under both <code>v2alpha</code>
+and <code>v2</code> (alias parity for client compatibility). Workflow metadata is
+held in an in-process store (no AST translator or LRO execution).</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>migration.workflows.list</code></td>
+<td><code>GET /v2alpha/projects/{projectId}/locations/{location}/workflows</code> (also <code>v2</code>)</td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go"><code>gateway/handlers/migration.go::MigrationWorkflowList</code></a></td>
+</tr>
+<tr>
+<td><code>migration.workflows.create</code></td>
+<td><code>POST /v2alpha/projects/{projectId}/locations/{location}/workflows</code> (also <code>v2</code>)</td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go"><code>gateway/handlers/migration.go::MigrationWorkflowCreate</code></a></td>
+</tr>
+<tr>
+<td><code>migration.workflows.get</code></td>
+<td><code>GET /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}</code> (also <code>v2</code>)</td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go"><code>gateway/handlers/migration.go::MigrationWorkflowGet</code></a></td>
+</tr>
+<tr>
+<td><code>migration.workflows.delete</code></td>
+<td><code>DELETE /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}</code> (also <code>v2</code>)</td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go"><code>gateway/handlers/migration.go::MigrationWorkflowDelete</code></a></td>
+</tr>
+<tr>
+<td><code>migration.workflows.start</code></td>
+<td><code>POST /v2alpha/projects/{projectId}/locations/{location}/workflows/{workflowId}:start</code> (also <code>v2</code>)</td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/migration.go"><code>gateway/handlers/migration.go::MigrationWorkflowCustomMethodPOST</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="data-transfer-service-bigquerydatatransferv1">Data Transfer Service (<code>bigquerydatatransfer.v1</code>)<a class="headerlink" href="#data-transfer-service-bigquerydatatransferv1" title="Permanent link">&para;</a></h3>
+<p>Served from the same listener via <code>BIGQUERY_EMULATOR_HOST</code>. No data
+source catalog or transfer config store exists yet, so the standard
+list endpoints return the documented empty page, specific-resource
+gets return 404, and <code>transferConfigs.create</code> returns 501. Both
+project-scoped and location-scoped variants are wired (client
+libraries pick whichever the user's API region demands).</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dataSources.list</code></td>
+<td><code>GET /v1/projects/{projectId}/dataSources</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferDataSourceList</code></a></td>
+</tr>
+<tr>
+<td><code>dataSources.list</code> (regional)</td>
+<td><code>GET /v1/projects/{projectId}/locations/{location}/dataSources</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferDataSourceList</code></a></td>
+</tr>
+<tr>
+<td><code>dataSources.get</code></td>
+<td><code>GET /v1/projects/{projectId}/dataSources/{dataSourceId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferDataSourceGet</code></a></td>
+</tr>
+<tr>
+<td><code>dataSources.get</code> (regional)</td>
+<td><code>GET /v1/projects/{projectId}/locations/{location}/dataSources/{dataSourceId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferDataSourceGet</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.list</code></td>
+<td><code>GET /v1/projects/{projectId}/transferConfigs</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigList</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.list</code> (regional)</td>
+<td><code>GET /v1/projects/{projectId}/locations/{location}/transferConfigs</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigList</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.get</code></td>
+<td><code>GET /v1/projects/{projectId}/transferConfigs/{configId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigGet</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.get</code> (regional)</td>
+<td><code>GET /v1/projects/{projectId}/locations/{location}/transferConfigs/{configId}</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigGet</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.create</code></td>
+<td><code>POST /v1/projects/{projectId}/transferConfigs</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigCreate</code></a></td>
+</tr>
+<tr>
+<td><code>transferConfigs.create</code> (regional)</td>
+<td><code>POST /v1/projects/{projectId}/locations/{location}/transferConfigs</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/data_transfer.go"><code>gateway/handlers/data_transfer.go::DataTransferConfigCreate</code></a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="discovery-and-health">Discovery and health<a class="headerlink" href="#discovery-and-health" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Status</th>
+<th>Handler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovery doc</td>
+<td><code>GET /discovery/v1/apis/bigquery/v2/rest</code></td>
+<td>wired</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/discovery.go"><code>gateway/handlers/discovery.go::Discovery</code></a></td>
+</tr>
+<tr>
+<td>Health (emulator-only)</td>
+<td><code>GET /</code> and <code>GET /healthz</code></td>
+<td>done</td>
+<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/handlers.go"><code>gateway/handlers/handlers.go::Health</code></a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="routing-notes-go-specifics">Routing notes (Go specifics)<a class="headerlink" href="#routing-notes-go-specifics" title="Permanent link">&para;</a></h2>
+<p>Go's <code>net/http</code> ServeMux requires every wildcard path segment to end in
+<code>}</code>. Several BigQuery endpoints use the <a href="https://google.aip.dev/136">AIP-136</a> custom-method
+shape with a <code>:operation</code> suffix on the resource, e.g.
+<code>/datasets/{datasetId}:undelete</code>. The mux can't match <code>:undelete</code> as a
+literal after a wildcard, so we register the parent route
+(<code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}</code>) and use
+a tiny handler-level dispatcher in
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/handlers.go"><code>gateway/handlers/handlers.go::dispatchColonOp</code></a> that reads
+the trailing <code>:op</code> from the captured wildcard. The same trick is used
+for the three <code>tables.*IamPolicy*</code>/<code>tables.testIamPermissions</code>
+endpoints.</p>
+<h2 id="error-envelope">Error envelope<a class="headerlink" href="#error-envelope" title="Permanent link">&para;</a></h2>
+<p>All non-2xx responses use BigQuery's documented JSON shape (see
+<a href="https://cloud.google.com/bigquery/docs/error-messages">error messages doc</a>):</p>
+<div class="language-json highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">404</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Not Found: Dataset myproject:foo&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;notFound&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;global&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;notFound&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Not Found: Dataset myproject:foo&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>reason</code> values used by the emulator and recognized by BigQuery clients
+include <code>notFound</code>, <code>notImplemented</code>, <code>invalid</code>, <code>invalidQuery</code>,
+<code>duplicate</code>, <code>quotaExceeded</code>, <code>accessDenied</code>, <code>stopped</code>. These are a
+subset of the table in the upstream
+<a href="https://cloud.google.com/bigquery/docs/error-messages">error messages doc</a>.</p>
+<h2 id="sql-dialect">SQL dialect<a class="headerlink" href="#sql-dialect" title="Permanent link">&para;</a></h2>
+<p>BigQuery's wire field <code>useLegacySql</code> defaults to <code>true</code> (legacy SQL).
+The emulator executes GoogleSQL via the engine (GoogleSQL's analyzer
+feeding the local execution coordinator). When <code>useLegacySql=true</code>,
+the gateway transpiles a <strong>narrow</strong> subset of legacy SQL used by
+thirdparty samples—bracket table references such as
+<code>[project:dataset.table]</code> and <code>[dataset.table]</code>—into GoogleSQL
+backtick form before forwarding; <code>use_legacy_sql</code> is always cleared on
+the engine RPC. Full legacy SQL dialect (functions, <code>#legacy</code>, JOIN
+variants, etc.) is not supported; unsupported constructs return HTTP
+400 with <code>reason: invalidQuery</code>.</p>
+<ul>
+<li>Treats <code>useLegacySql</code> unset or <code>false</code> as GoogleSQL (the common
+  case).</li>
+<li>Translates bracket table refs when <code>useLegacySql=true</code>, then runs
+  GoogleSQL on the engine.</li>
+</ul>
+<p>Clients that default to legacy via older library versions may still set
+<code>useLegacySql=true</code> for bracket-style samples; for new queries prefer
+<code>useLegacySql=false</code> (GoogleSQL).</p>
+<h2 id="type-wire-encoding">Type wire encoding<a class="headerlink" href="#type-wire-encoding" title="Permanent link">&para;</a></h2>
+<p>For result marshaling, types follow
+<a href="https://cloud.google.com/bigquery/docs/reference/rest/v2/StandardSqlDataType"><code>StandardSqlDataType.TypeKind</code></a>:</p>
+<table>
+<thead>
+<tr>
+<th>TypeKind</th>
+<th>Wire encoding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INT64</code></td>
+<td>decimal string</td>
+</tr>
+<tr>
+<td><code>BOOL</code></td>
+<td>JSON boolean</td>
+</tr>
+<tr>
+<td><code>FLOAT64</code></td>
+<td>JSON number, or string <code>"NaN"</code>/<code>"Infinity"</code>/<code>"-Infinity"</code></td>
+</tr>
+<tr>
+<td><code>STRING</code></td>
+<td>JSON string</td>
+</tr>
+<tr>
+<td><code>BYTES</code></td>
+<td>base64 string (RFC 4648 §4)</td>
+</tr>
+<tr>
+<td><code>TIMESTAMP</code></td>
+<td>RFC 3339 with mandatory <code>Z</code> (e.g. <code>1985-04-12T23:20:50.52Z</code>)</td>
+</tr>
+<tr>
+<td><code>DATE</code></td>
+<td>RFC 3339 full-date (<code>1985-04-12</code>)</td>
+</tr>
+<tr>
+<td><code>TIME</code></td>
+<td>RFC 3339 partial-time (<code>23:20:50.52</code>)</td>
+</tr>
+<tr>
+<td><code>DATETIME</code></td>
+<td>RFC 3339 full-date <code>T</code> partial-time (<code>1985-04-12T23:20:50.52</code>)</td>
+</tr>
+<tr>
+<td><code>GEOGRAPHY</code></td>
+<td>WKT</td>
+</tr>
+<tr>
+<td><code>NUMERIC</code> / <code>BIGNUMERIC</code></td>
+<td>decimal string</td>
+</tr>
+<tr>
+<td><code>JSON</code></td>
+<td>string-encoded JSON</td>
+</tr>
+<tr>
+<td><code>ARRAY</code></td>
+<td>list with element type per <code>arrayElementType</code></td>
+</tr>
+<tr>
+<td><code>STRUCT</code></td>
+<td>list (positional) with element types per <code>structType.fields[i]</code></td>
+</tr>
+<tr>
+<td><code>RANGE&lt;T&gt;</code></td>
+<td>pair <code>[start, end)</code> formatted with the inner type</td>
+</tr>
+</tbody>
+</table>
+<p><code>f</code>/<code>v</code> rows are always strings/objects/arrays at the wire level — even
+<code>INT64</code> arrives as a decimal string. The query-execution row marshalers
+should never emit numeric types as JSON numbers except for <code>FLOAT64</code>.</p>
+<h2 id="storage-read-api">Storage Read API<a class="headerlink" href="#storage-read-api" title="Permanent link">&para;</a></h2>
+<p>The Storage Read API surface implements
+<code>google.cloud.bigquery.storage.v1.BigQueryRead</code>. The
+gRPC service surface and the Avro/Arrow type tables are documented in
+<a href="https://cloud.google.com/bigquery/docs/reference/storage">Storage Read API</a> and the per-method
+RPC reference under <a href="https://cloud.google.com/bigquery/docs/reference/storage/rpc">Storage Read RPC</a>.</p>
+<h3 id="transport-grpc-only-served-by-the-engine">Transport: gRPC-only, served by the engine<a class="headerlink" href="#transport-grpc-only-served-by-the-engine" title="Permanent link">&para;</a></h3>
+<p>The public BigQuery Storage Read API is <strong>gRPC-only</strong> in production —
+the REST surface BigQuery exposes does not proxy it, and the
+<code>google-cloud-bigquery-storage</code> client libraries (Go's
+<code>cloud.google.com/go/bigquery/storage</code>, Python's
+<code>google-cloud-bigquery-storage</code>, Java's
+<code>google-cloud-bigquerystorage</code>) all open a separate gRPC channel to
+<code>bigquerystorage.googleapis.com:443</code>. The emulator follows the same
+shape:</p>
+<ul>
+<li>The <strong>REST gateway</strong> (<code>gateway_main</code>, default <code>:9050</code>) does <strong>not</strong>
+  expose any <code>bigquery_emulator.v1.StorageRead</code> surface. Plan 39
+  intentionally keeps the gateway focused on the REST-only halves of
+  the public API (<code>projects</code>, <code>datasets</code>, <code>tables</code>, <code>jobs</code>,
+  <code>tabledata.list</code>, <code>jobs.query</code>, <code>tabledata.insertAll</code>).</li>
+<li>The <strong>C++ engine</strong> (<code>emulator_main</code>, default <code>:9060</code> via
+  <code>--grpc_port</code> on <code>gateway_main</code> / <code>--host_port</code> on <code>emulator_main</code>)
+  serves <code>bigquery_emulator.v1.StorageRead</code> directly on its gRPC port.
+  <code>task emulator:run-full</code> exposes both ports, so point a Storage Read
+  client at the engine port (<code>localhost:9060</code>) rather than the gateway.</li>
+</ul>
+<p>For programmatic tests, the
+<code>gateway/e2e/storage_read_test.go</code> harness gates a BigQuery Storage
+client off the gateway's <code>engine.Client</code> channel (the same connection
+the gateway uses internally for <code>Catalog</code> and <code>Query</code>). See
+<code>gateway/e2e/catalog_test.go::startEmulatorWithFlags</code> for the full
+plumbing.</p>
+<h3 id="supported-readoptions">Supported <code>ReadOptions</code><a class="headerlink" href="#supported-readoptions" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>row_restriction</code>: a single <code>&lt;column&gt; = &lt;literal&gt;</code> equality clause.
+  Literals support INT64 (<code>id = 42</code>), BOOL (<code>active = true</code>,
+  case-insensitive), and STRING (<code>name = 'ada'</code>, with the SQL <code>''</code>
+  escape for embedded apostrophes). Backtick-quoted column names
+  (<code>`id` = 42</code>) round-trip; bare identifiers are limited to
+  <code>[A-Za-z_][A-Za-z0-9_]*</code>. Anything more complex (range / inequality
+  ops, connectives, IN, NULL, ARRAY / STRUCT columns,
+  FLOAT64 / DATE / NUMERIC literals) is rejected at
+  <code>CreateReadSession</code> time with <code>INVALID_ARGUMENT</code> — the gateway
+  surfaces that as the public Storage Read 400 envelope.</li>
+</ul>
+<p>Pushdown shape:
+  * <strong>Memory backend</strong>: the predicate filters the row vector in C++
+    before <code>offset</code> / <code>row_limit</code> slicing.
+  * <strong>DuckDB backend</strong>: the predicate becomes a <code>WHERE</code> clause on the
+    <code>read_parquet(...)</code> scan, so DuckDB filters before materializing
+    rows.</p>
+<ul>
+<li><code>selected_fields</code>: accepted and echoed on the <code>ReadSession</code> reply,
+  but <strong>not enforced</strong> — every column is returned regardless. Pushing
+  projection into the storage layer is deferred to a future plan.</li>
+</ul>
+<h2 id="authentication-posture">Authentication posture<a class="headerlink" href="#authentication-posture" title="Permanent link">&para;</a></h2>
+<p>The emulator follows <code>cloud-spanner-emulator</code>'s posture: it parses but
+ignores bearer tokens, and the <code>BIGQUERY_EMULATOR_HOST</code> environment
+variable is the canonical client-library override (mirroring
+<code>STORAGE_EMULATOR_HOST</code> and <code>SPANNER_EMULATOR_HOST</code>). Concretely, code
+that targets BigQuery normally:</p>
+<div class="language-go highlight"><pre><span></span><code><span class="nx">client</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">bigquery</span><span class="p">.</span><span class="nx">NewClient</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;test-project&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>is redirected at the emulator with either:</p>
+<div class="language-go highlight"><pre><span></span><code><span class="nx">client</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">bigquery</span><span class="p">.</span><span class="nx">NewClient</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;test-project&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">option</span><span class="p">.</span><span class="nx">WithEndpoint</span><span class="p">(</span><span class="s">&quot;http://localhost:9050&quot;</span><span class="p">),</span>
+<span class="w">    </span><span class="nx">option</span><span class="p">.</span><span class="nx">WithoutAuthentication</span><span class="p">(),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>or by setting <code>BIGQUERY_EMULATOR_HOST=localhost:9050</code> in the
+environment. The README's
+<a href="../CLIENTS/">Client libraries</a>
+documents both forms for end users; this file documents the server-side
+posture.</p>
+<p>Every request passes through
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/middleware/auth.go"><code>gateway/middleware/auth.go::WithAuth</code></a>, which:</p>
+<ul>
+<li>Parses the <code>Authorization</code> header when present (RFC 6750 <code>Bearer</code>
+  tokens have the scheme stripped; other schemes are stored verbatim).</li>
+<li>Attaches a synthetic <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/middleware/auth.go"><code>Principal</code></a> to the request context
+  with <code>Email = "emulator@bigquery.local"</code>, regardless of what the
+  client sent.</li>
+<li>Never short-circuits the response — well-formed, malformed, and
+  absent <code>Authorization</code> headers are all served identically. The
+  emulator never returns 401.</li>
+</ul>
+<p>Handlers that need to know whether the client tried to authenticate
+read the principal via <code>middleware.PrincipalFromContext</code> and inspect
+the <code>Anonymous</code> and <code>Bearer</code> fields.</p>
+<p>The full upstream auth model (ADC, service-account keys, IAM scopes) is
+documented under
+<a href="https://cloud.google.com/bigquery/docs/authentication">BigQuery authentication</a> and is intentionally
+<strong>not</strong> modeled by the emulator.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../RELEASES/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Releases &amp; install">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Releases & install
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../ENGINE_POLICY/" class="md-footer__link md-footer__link--next" aria-label="Next: Engine policy">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Engine policy
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>
