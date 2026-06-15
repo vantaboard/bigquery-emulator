@@ -131,8 +131,8 @@ func parseSheetsExternal(
 		return load.ParsedRows{}, err
 	}
 	skip := skipLeading
-	if cfg.GoogleSheetsOptions != nil && cfg.GoogleSheetsOptions.SkipLeadingRows > 0 {
-		skip = cfg.GoogleSheetsOptions.SkipLeadingRows
+	if cfg.GoogleSheetsOptions != nil && cfg.GoogleSheetsOptions.SkipLeadingRows() > 0 {
+		skip = cfg.GoogleSheetsOptions.SkipLeadingRows()
 	} else if skip == 0 {
 		skip = 1
 	}

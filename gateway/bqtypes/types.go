@@ -393,8 +393,45 @@ func (o *CsvOptions) UnmarshalJSON(data []byte) error {
 
 // GoogleSheetsOptions is the googleSheetsOptions sub-object.
 type GoogleSheetsOptions struct {
-	SkipLeadingRows int    `json:"skipLeadingRows,omitempty"`
 	Range           string `json:"range,omitempty"`
+	skipLeadingRows int
+}
+
+// SkipLeadingRows returns the number of leading sheet rows to skip.
+func (o *GoogleSheetsOptions) SkipLeadingRows() int {
+	if o == nil {
+		return 0
+	}
+	return o.skipLeadingRows
+}
+
+// UnmarshalJSON accepts skipLeadingRows as JSON number or decimal string.
+func (o *GoogleSheetsOptions) UnmarshalJSON(data []byte) error {
+	type alias GoogleSheetsOptions
+	var raw struct {
+		alias
+		SkipLeadingRows any `json:"skipLeadingRows,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*o = GoogleSheetsOptions(raw.alias)
+	if raw.SkipLeadingRows == nil {
+		return nil
+	}
+	switch v := raw.SkipLeadingRows.(type) {
+	case float64:
+		o.skipLeadingRows = int(v)
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("googleSheetsOptions.skipLeadingRows: %w", err)
+		}
+		o.skipLeadingRows = n
+	default:
+		return fmt.Errorf("googleSheetsOptions.skipLeadingRows: unsupported type %T", v)
+	}
+	return nil
 }
 
 // ViewDefinition is the BigQuery REST view sub-object. See

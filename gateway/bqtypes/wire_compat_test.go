@@ -54,3 +54,34 @@ func TestUnmarshalWriteDispositionArray(t *testing.T) {
 		t.Fatalf("writeDisposition = %q, want WRITE_APPEND", wd)
 	}
 }
+
+func TestGoogleSheetsOptionsSkipLeadingRowsString(t *testing.T) {
+	t.Parallel()
+	var opts bqtypes.GoogleSheetsOptions
+	if err := json.Unmarshal([]byte(`{"skipLeadingRows":"1","range":"Sheet1!A1:B2"}`), &opts); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if opts.SkipLeadingRows() != 1 {
+		t.Fatalf("skipLeadingRows = %d, want 1", opts.SkipLeadingRows())
+	}
+	if opts.Range != "Sheet1!A1:B2" {
+		t.Fatalf("range = %q, want Sheet1!A1:B2", opts.Range)
+	}
+}
+
+func TestExternalDataConfigurationGoogleSheetsOptionsString(t *testing.T) {
+	t.Parallel()
+	var cfg bqtypes.ExternalDataConfiguration
+	raw := `{
+	  "sourceFormat": "GOOGLE_SHEETS",
+	  "sourceUris": ["https://docs.google.com/spreadsheets/d/abc/edit"],
+	  "googleSheetsOptions": {"skipLeadingRows": "1"}
+	}`
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if cfg.GoogleSheetsOptions == nil || cfg.GoogleSheetsOptions.SkipLeadingRows() != 1 {
+		t.Fatalf("googleSheetsOptions.skipLeadingRows = %d, want 1",
+			cfg.GoogleSheetsOptions.SkipLeadingRows())
+	}
+}
