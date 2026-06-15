@@ -7,6 +7,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/emulator_builtin_extensions.h"
 #include "backend/catalog/emulator_ml_test_catalog.h"
 #include "backend/catalog/emulator_ml_tvf_extensions.h"
 #include "backend/engine/coordinator/route_classifier.h"
@@ -77,6 +78,7 @@ class RouteClassifierTest : public ::testing::Test {
         });
     catalog_->AddOwnedTable(std::move(arr_table));
     catalog::RegisterEmulatorMlTvfStubs(*catalog_);
+    catalog::RegisterEmulatorKeysStubFunctions(*catalog_);
   }
 
   const ::googlesql::ResolvedStatement* Analyze(absl::string_view sql) {

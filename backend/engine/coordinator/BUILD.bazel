@@ -337,6 +337,7 @@ cc_test(
     ],
     deps = [
         ":route_classifier",
+        "//backend/catalog:emulator_builtin_extensions",
         "//backend/catalog:emulator_ml_tvf_extensions",
         "//backend/engine:disposition",
         "@com_google_absl//absl/status",
