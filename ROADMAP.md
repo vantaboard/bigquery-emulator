@@ -774,8 +774,8 @@ and
   happens internally at AST-classification time, not via a runtime
   flag).
 - ✅ Install / launch flow documented in README §Quickstart,
-  §Install via Docker, §Install via release archive, and
-  §Pointing client libraries at the emulator (`docker run` +
+  docs/DOCKER.md §Install via Docker, docs/RELEASES.md §Install via release
+  archive, and §Pointing client libraries at the emulator (`docker run` +
   `BIGQUERY_EMULATOR_HOST` env-var override). Note: there is **no**
   `gcloud emulators bigquery start` subcommand — gcloud ships
   emulator subgroups only for Firestore and Spanner (plus

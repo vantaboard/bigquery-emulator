@@ -9,10 +9,10 @@ Guides for running, developing, and extending the BigQuery emulator.
 
 | Guide | Contents |
 |-------|----------|
+| [Docker](./DOCKER.md) | **Start here:** GHCR pull/run, then `docker compose` and build notes |
 | [Quickstart](https://github.com/vantaboard/bigquery-emulator/blob/main/README.md#quickstart) | Docker one-liner and local build/run (in the main README) |
-| [Docker](./DOCKER.md) | `docker compose`, plain `docker run`, build notes |
 | [Clients](./CLIENTS.md) | Point official client libraries at the emulator |
-| [Releases](./RELEASES.md) | Tags, archives, GHCR images |
+| [Releases](./RELEASES.md) | Tags, release archives, cut-a-release workflow |
 
 ## Emulator behavior
 

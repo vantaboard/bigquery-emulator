@@ -35,7 +35,8 @@ catalog operations.
     ./bigquery-emulator-gateway --help
     ```
 
-    See [Releases & install](RELEASES.md) for GHCR image tags and versioning.
+    See [Docker → Install via Docker](DOCKER.md#install-via-docker) for GHCR image
+    tags and versioning.
 
 === "Build from source"
 

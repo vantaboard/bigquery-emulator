@@ -50,22 +50,5 @@ flags.
 > builds are out of scope for the preview series. The macOS + linux/arm64 archives
 > still bundle the linux/amd64 engine binary so the layout stays uniform, but
 > you cannot run those engine binaries on a non-linux/amd64 host. The recommended
-> path on macOS or linux/arm64 is the published Docker image (next section).
-
-## Install via Docker
-
-```bash
-docker pull ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-```
-
-Each release publishes four tags to GHCR:
-
-- `vX.Y.Z` — exact version (immutable).
-- `vX.Y` — minor track (moves on patch releases).
-- `vX` — major track (moves on minor + patch releases).
-- `latest` — newest non-pre-release.
-
-Pre-release tags (`v0.0.1-rc1`) skip the `latest` tag promotion so
-`docker pull ...:latest` always lands on a non-pre-release version. The Docker
-image is `linux/amd64` only for the same engine-binary reason as above.
+> path on macOS or linux/arm64 is the published Docker image — see
+> [Docker → Install via Docker](./DOCKER.md#install-via-docker).
