@@ -435,23 +435,17 @@ TEST_F(ControlOpExecutorTest, CreateTableAsSelectExceptRowNumberDedup) {
 
 // --- ANALYZE -------------------------------------------------------------
 
-TEST_F(ControlOpExecutorTest, AnalyzeKnownTableIsNoOpSuccess) {
+TEST_F(ControlOpExecutorTest, AnalyzeKnownTableSurfacesUnimplemented) {
   CreatePeopleTable();
-  // GoogleSQL's `ANALYZE` form takes a comma-separated table list
-  // (no `TABLE` keyword). Today the emulator's storage layer does
-  // not keep optimizer statistics, so the handler verifies the
-  // table exists and returns OK -- that is what this test pins.
   absl::Status s = RunDdl("ANALYZE ds.people");
-  EXPECT_TRUE(s.ok()) << s;
+  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
+  EXPECT_TRUE(absl::StrContains(s.message(), "AnalyzeStmt")) << s;
 }
 
-TEST_F(ControlOpExecutorTest, AnalyzeWithoutTablesSucceeds) {
-  // `ANALYZE` with no target list is a global statistics refresh
-  // hint. The emulator does not keep optimizer statistics, so the
-  // statement is a no-op success regardless of which dataset is in
-  // scope.
+TEST_F(ControlOpExecutorTest, AnalyzeWithoutTablesSurfacesUnimplemented) {
   absl::Status s = RunDdl("ANALYZE");
-  EXPECT_TRUE(s.ok()) << s;
+  EXPECT_EQ(s.code(), absl::StatusCode::kUnimplemented) << s;
+  EXPECT_TRUE(absl::StrContains(s.message(), "AnalyzeStmt")) << s;
 }
 
 }  // namespace

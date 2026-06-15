@@ -110,11 +110,10 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQueryRejectsNullCatalog) {
   EXPECT_EQ(source.status().code(), absl::StatusCode::kFailedPrecondition);
 }
 
-// Pipe-operator DDL control-op routing: pipe EXPORT DATA resolves gs://
-// through the control op (fails when the storage emulator is unreachable);
-// pipe CREATE TABLE materializes the pipe input into a new table.
+// Pipe EXPORT DATA / pipe CREATE TABLE are out of BigQuery scope today;
+// the coordinator routes them through the unsupported executor.
 TEST_F(LocalCoordinatorEngineTest,
-       ExecuteQueryPipeExportDataRoutesToControlOpHandler) {
+       ExecuteQueryPipeExportDataSurfacesUnsupported) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(
@@ -123,23 +122,24 @@ TEST_F(LocalCoordinatorEngineTest,
                   "format = 'CSV')"),
       bundle.catalog.get());
   ASSERT_FALSE(source.ok());
-  EXPECT_EQ(source.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
   EXPECT_TRUE(absl::StrContains(source.status().message(),
-                                "could not fetch gs://b/o.csv"))
+                                "ResolvedPipeExportDataScan"))
       << source.status();
 }
 
 TEST_F(LocalCoordinatorEngineTest,
-       ExecuteQueryPipeCreateTableRoutesToControlOpHandler) {
+       ExecuteQueryPipeCreateTableSurfacesUnsupported) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source = engine_->ExecuteQuery(
       MakeRequest("FROM ds.people |> CREATE TABLE ds.people_copy"),
       bundle.catalog.get());
-  ASSERT_TRUE(source.ok()) << source.status();
-  auto count_or = storage_->CountRows({"proj-test", "ds", "people_copy"});
-  ASSERT_TRUE(count_or.ok()) << count_or.status();
-  EXPECT_EQ(*count_or, 3);
+  ASSERT_FALSE(source.ok());
+  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
+  EXPECT_TRUE(absl::StrContains(source.status().message(),
+                                "ResolvedPipeCreateTableScan"))
+      << source.status();
 }
 
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexBqutilsFixtureUdf) {

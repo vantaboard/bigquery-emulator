@@ -8,6 +8,7 @@
 #include "backend/engine/coordinator/stub_executors.h"
 
 #include <memory>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -48,6 +49,11 @@ class StubExecutorsTest : public ::testing::Test {
         "stub_catalog", type_factory_.get());
     catalog_->AddBuiltinFunctions(
         ::googlesql::BuiltinFunctionOptions::AllReleasedFunctions());
+    auto people = std::make_unique<::googlesql::SimpleTable>(
+        "people",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"name", type_factory_->get_string()}});
+    catalog_->AddOwnedTable(std::move(people));
   }
 
   const ::googlesql::ResolvedStatement* AnalyzeSelect1() {
