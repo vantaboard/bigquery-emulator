@@ -248,7 +248,11 @@ function main() {
       const createSql = prepareSqlxBody(rawSqlx, name);
 
       if (hasLanguageJs(createSql)) {
-        skipped.push({ family, name, reason: "LANGUAGE js" });
+        skipped.push({
+          family,
+          name,
+          reason: "LANGUAGE js (non-scalar UDF unsupported)",
+        });
         continue;
       }
       if (hasDataformTemplate(createSql)) {
@@ -296,10 +300,6 @@ function main() {
       const rawSqlx = fs.readFileSync(sqlxPath, "utf8");
       const createSql = prepareSqlxBody(rawSqlx, name);
 
-      if (hasLanguageJs(createSql)) {
-        skipped.push({ family, name, reason: "LANGUAGE js" });
-        continue;
-      }
       if (hasDataformTemplate(createSql)) {
         skipped.push({ family, name, reason: "Dataform templating (${...})" });
         continue;
