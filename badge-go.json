@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "coverage (go)",
-  "message": "n/a",
-  "color": "lightgrey"
+  "message": "41.3%",
+  "color": "orange"
 }
