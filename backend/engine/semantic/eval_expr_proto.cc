@@ -66,15 +66,16 @@ absl::StatusOr<Value> EvalMakeProtoImpl(
           SemanticErrorReason::kNotImplemented,
           "semantic: MakeProto repeated fields require ARRAY expr");
     }
-    absl::Status applied =
-        proto::SetScalarProtoField(msg.get(), field->field_descriptor(), *value_or);
+    absl::Status applied = proto::SetScalarProtoField(
+        msg.get(), field->field_descriptor(), *value_or);
     if (!applied.ok()) return applied;
   }
   return proto::MessageToProtoValue(*msg, proto_type);
 }
 
 absl::StatusOr<Value> EvalGetProtoFieldImpl(
-    const ::googlesql::ResolvedGetProtoField& node, const EvalContext& ctx,
+    const ::googlesql::ResolvedGetProtoField& node,
+    const EvalContext& ctx,
     const ::googlesql::Type* result_type) {
   if (node.expr() == nullptr) {
     return absl::InvalidArgumentError(
@@ -100,17 +101,17 @@ absl::StatusOr<Value> EvalGetProtoFieldImpl(
   google::protobuf::DynamicMessageFactory factory;
   auto msg_or = proto::CloneProtoMessage(*base_or, &factory);
   if (!msg_or.ok()) return msg_or.status();
-  return proto::ReadProtoFieldValue(
-      **msg_or,
-      node.field_descriptor(),
-      result_type,
-      node.format(),
-      node.default_value(),
-      node.get_has_bit());
+  return proto::ReadProtoFieldValue(**msg_or,
+                                    node.field_descriptor(),
+                                    result_type,
+                                    node.format(),
+                                    node.default_value(),
+                                    node.get_has_bit());
 }
 
 absl::StatusOr<Value> EvalGetProtoOneofImpl(
-    const ::googlesql::ResolvedGetProtoOneof& node, const EvalContext& ctx,
+    const ::googlesql::ResolvedGetProtoOneof& node,
+    const EvalContext& ctx,
     const ::googlesql::Type* result_type) {
   if (node.expr() == nullptr) {
     return absl::InvalidArgumentError(
@@ -146,9 +147,10 @@ absl::StatusOr<Value> EvalGetProtoOneofImpl(
   return Value::String(set_field->name());
 }
 
-absl::Status ApplyReplaceFieldItem(Value* current,
-                                   const ::googlesql::ResolvedReplaceFieldItem& item,
-                                   const EvalContext& ctx) {
+absl::Status ApplyReplaceFieldItem(
+    Value* current,
+    const ::googlesql::ResolvedReplaceFieldItem& item,
+    const EvalContext& ctx) {
   if (item.expr() == nullptr) {
     return absl::InvalidArgumentError(
         "semantic: ReplaceFieldItem has null expr");
@@ -174,6 +176,7 @@ absl::Status ApplyReplaceFieldItem(Value* current,
     auto target_or = proto::MutableMessageAtPath(
         msg, item.proto_field_path(), /*create_missing=*/true);
     if (!target_or.ok()) return target_or.status();
+    google::protobuf::Message* target_msg = *target_or;
     const google::protobuf::FieldDescriptor* leaf =
         item.proto_field_path().back();
     if (value_or->is_null()) {
@@ -182,10 +185,10 @@ absl::Status ApplyReplaceFieldItem(Value* current,
             SemanticErrorReason::kInvalidArgument,
             "semantic: cannot unset required proto field in REPLACE_FIELDS");
       }
-      target_or.value()->GetReflection()->ClearField(target_or.value(), leaf);
+      target_msg->GetReflection()->ClearField(target_msg, leaf);
     } else {
       absl::Status applied =
-          proto::SetScalarProtoField(target_or.value(), leaf, *value_or);
+          proto::SetScalarProtoField(target_msg, leaf, *value_or);
       if (!applied.ok()) return applied;
     }
     auto out = proto::MessageToProtoValue(*msg, proto_type);
@@ -198,8 +201,8 @@ absl::Status ApplyReplaceFieldItem(Value* current,
     *current = *value_or;
     return absl::OkStatus();
   }
-  auto updated = proto::SetStructFieldByPath(*current, item.struct_index_path(),
-                                             *value_or);
+  auto updated = proto::SetStructFieldByPath(
+      *current, item.struct_index_path(), *value_or);
   if (!updated.ok()) return updated.status();
   *current = *std::move(updated);
   return absl::OkStatus();
@@ -242,9 +245,8 @@ absl::StatusOr<Value> EvalFilterFieldImpl(
     return NullOfType(node.type());
   }
   if (base_or->type_kind() != ::googlesql::TYPE_PROTO) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: FILTER_FIELDS base is not PROTO");
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: FILTER_FIELDS base is not PROTO");
   }
   const auto* proto_type = base_or->type()->AsProto();
   if (proto_type == nullptr || proto_type->descriptor() == nullptr) {
@@ -289,7 +291,8 @@ absl::StatusOr<Value> EvalFilterFieldImpl(
 }
 
 absl::StatusOr<Value> EvalGetRowFieldImpl(
-    const ::googlesql::ResolvedGetRowField& node, const EvalContext& ctx,
+    const ::googlesql::ResolvedGetRowField& node,
+    const EvalContext& ctx,
     const ::googlesql::Type* result_type) {
   if (node.expr() == nullptr) {
     return absl::InvalidArgumentError(
@@ -319,9 +322,8 @@ absl::StatusOr<Value> EvalGetRowFieldImpl(
       return base_or->field(i);
     }
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("semantic: GetRowField column '", name,
-                   "' not found in row STRUCT"));
+  return absl::InvalidArgumentError(absl::StrCat(
+      "semantic: GetRowField column '", name, "' not found in row STRUCT"));
 }
 
 }  // namespace
