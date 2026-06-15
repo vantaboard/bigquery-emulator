@@ -27,4 +27,4 @@ def test_query_external_sheets_permanent_table(
         dataset_id
     )
     out, err = capsys.readouterr()
-    assert "There are 2 states with names starting with W in the selected range." in out
+    assert "There are 2 students from home states starting with W in the Class Data sheet." in out

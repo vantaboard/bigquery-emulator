@@ -39,43 +39,49 @@ def query_external_sheets_permanent_table(dataset_id: str) -> None:
     # TODO(developer): Set dataset_id to the ID of the dataset to fetch.
     # dataset_id = "your-project.your_dataset"
 
-    # Configure the external data source.
+    # Configure the external data source (public Google sample sheet, Class Data tab).
     dataset = client.get_dataset(dataset_id)
-    table_id = "us_states"
+    table_id = "class_data"
     schema = [
-        bigquery.SchemaField("name", "STRING"),
-        bigquery.SchemaField("post_abbr", "STRING"),
+        bigquery.SchemaField("Student Name", "STRING"),
+        bigquery.SchemaField("Gender", "STRING"),
+        bigquery.SchemaField("Class Level", "STRING"),
+        bigquery.SchemaField("Home State", "STRING"),
+        bigquery.SchemaField("Major", "STRING"),
+        bigquery.SchemaField("Extracurricular Activity", "STRING"),
     ]
     table = bigquery.Table(dataset.table(table_id), schema=schema)
     external_config = bigquery.ExternalConfig("GOOGLE_SHEETS")
-    # Use a shareable link or grant viewing access to the email address you
-    # used to authenticate with BigQuery (this example Sheet is public).
+    # Public Example Spreadsheet (Class Data tab); matches the emulator fixture
+    # snapshot in gateway/external/fixtures/google_sheets/class_data.csv.
     sheet_url = (
         "https://docs.google.com/spreadsheets"
-        "/d/1i_QCL-7HcSyUZmIbP9E6lO_T5u3HnpLe7dnpHaijg_E/edit?usp=sharing"
+        "/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
     )
     external_config.source_uris = [sheet_url]
     options = external_config.google_sheets_options
     assert options is not None
     options.skip_leading_rows = 1  # Optionally skip header row.
-    options.range = (
-        "us-states!A20:B49"  # Optionally set range of the sheet to query from.
-    )
+    options.range = "Class Data!A1:F31"
     table.external_data_configuration = external_config
 
     # Create a permanent table linked to the Sheets file.
     table = client.create_table(table)  # Make an API request.
 
-    # Example query to find states starting with "W".
-    sql = 'SELECT * FROM `{}.{}` WHERE name LIKE "W%"'.format(dataset_id, table_id)
+    # Example query: students from home states starting with "W" (WI in fixture).
+    sql = (
+        "SELECT * FROM `{}.{}` WHERE `Home State` LIKE 'W%'".format(
+            dataset_id, table_id
+        )
+    )
 
     results = client.query_and_wait(sql)  # Make an API request.
 
     # Wait for the query to complete.
-    w_states = list(results)
+    w_state_students = list(results)
     print(
-        "There are {} states with names starting with W in the selected range.".format(
-            len(w_states)
+        "There are {} students from home states starting with W in the Class Data sheet.".format(
+            len(w_state_students)
         )
     )
     # [END bigquery_query_external_sheets_perm]

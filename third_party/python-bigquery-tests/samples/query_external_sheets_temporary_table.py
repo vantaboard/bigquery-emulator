@@ -38,39 +38,38 @@ def query_external_sheets_temporary_table() -> None:
     client = bigquery.Client(credentials=credentials, project=project)
     # [END bigquery_auth_drive_scope]
 
-    # Configure the external data source and query job.
+    # Configure the external data source and query job (Class Data sample sheet).
     external_config = bigquery.ExternalConfig("GOOGLE_SHEETS")
 
-    # Use a shareable link or grant viewing access to the email address you
-    # used to authenticate with BigQuery (this example Sheet is public).
     sheet_url = (
         "https://docs.google.com/spreadsheets"
-        "/d/1i_QCL-7HcSyUZmIbP9E6lO_T5u3HnpLe7dnpHaijg_E/edit?usp=sharing"
+        "/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
     )
     external_config.source_uris = [sheet_url]
     external_config.schema = [
-        bigquery.SchemaField("name", "STRING"),
-        bigquery.SchemaField("post_abbr", "STRING"),
+        bigquery.SchemaField("Student Name", "STRING"),
+        bigquery.SchemaField("Gender", "STRING"),
+        bigquery.SchemaField("Class Level", "STRING"),
+        bigquery.SchemaField("Home State", "STRING"),
+        bigquery.SchemaField("Major", "STRING"),
+        bigquery.SchemaField("Extracurricular Activity", "STRING"),
     ]
     options = external_config.google_sheets_options
     assert options is not None
     options.skip_leading_rows = 1  # Optionally skip header row.
-    options.range = (
-        "us-states!A20:B49"  # Optionally set range of the sheet to query from.
-    )
-    table_id = "us_states"
+    options.range = "Class Data!A1:F31"
+    table_id = "class_data"
     job_config = bigquery.QueryJobConfig(table_definitions={table_id: external_config})
 
-    # Example query to find states starting with "W".
-    sql = 'SELECT * FROM `{}` WHERE name LIKE "W%"'.format(table_id)
+    sql = 'SELECT * FROM `{}` WHERE `Home State` LIKE "W%"'.format(table_id)
 
     query_job = client.query(sql, job_config=job_config)  # Make an API request.
 
     # Wait for the query to complete.
-    w_states = list(query_job)
+    w_state_students = list(query_job)
     print(
-        "There are {} states with names starting with W in the selected range.".format(
-            len(w_states)
+        "There are {} students from home states starting with W in the Class Data sheet.".format(
+            len(w_state_students)
         )
     )
     # [END bigquery_query_external_sheets_temp]

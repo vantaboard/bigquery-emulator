@@ -19,15 +19,9 @@ _REASON = (
 )
 
 # Module path substrings that are never run against the emulator.
-# samples/tests that require Google Sheets API (no emulator stub).
-# Class Data sample sheet is supported via gateway/external/sheets.go;
-# these samples target a different public sheet (us-states range) — still skipped.
-_SAMPLES_EMULATOR_SKIP: frozenset[str] = frozenset(
-    {
-        "test_query_external_sheets_permanent_table",
-        "test_query_external_sheets_temporary_table",
-    }
-)
+# Class Data Google Sheets samples are supported via gateway/external/sheets.go
+# (fixture snapshot + optional live fetch); see external/google_sheets_class_data.yaml.
+_SAMPLES_EMULATOR_SKIP: frozenset[str] = frozenset()
 
 _MODULE_SKIP_SUBSTRINGS: tuple[str, ...] = (
     "model",
