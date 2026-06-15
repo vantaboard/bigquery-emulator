@@ -1,0 +1,20 @@
+# BUILD file injected into the Apache DataSketches C++ source tarball that
+# `MODULE.bazel`'s `http_archive(name = "datasketches_cpp", ...)` downloads.
+# The library is header-only; consumers include <kll_sketch.hpp>.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "datasketches",
+    hdrs = glob([
+        "common/include/**/*.hpp",
+        "common/include/**/*.h",
+        "kll/include/**/*.hpp",
+    ]),
+    includes = [
+        "common/include",
+        "kll/include",
+    ],
+)

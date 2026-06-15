@@ -185,3 +185,17 @@ http_archive(
         "https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz",
     ],
 )
+
+# Apache DataSketches C++ — header-only KLL quantile sketches for
+# KLL_QUANTILES.* on the semantic executor. Pin/checksum in
+# third_party/datasketches/VERSION.
+http_archive(
+    name = "datasketches_cpp",
+    build_file = "//third_party/datasketches:datasketches.BUILD.bazel",
+    sha256 = "63e6bda660ee9730cc39746de87fd983118c28149e32ff9389fac98b27010a53",
+    strip_prefix = "datasketches-cpp-5.2.0",
+    urls = [
+        "https://github.com/apache/datasketches-cpp/archive/refs/tags/5.2.0.tar.gz",
+        "https://github.com/apache/datasketches-cpp/archive/refs/tags/5.2.0.tar.gz",
+    ],
+)

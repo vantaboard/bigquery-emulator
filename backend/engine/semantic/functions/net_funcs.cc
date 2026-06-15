@@ -15,6 +15,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/hll_funcs.h"
+#include "backend/engine/semantic/functions/kll_funcs.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/net.h"
@@ -355,6 +356,18 @@ std::optional<absl::StatusOr<Value>> DispatchSpecializedScalar(
   if (name == "net.public_suffix") return NetPublicSuffix(args);
   if (name == "net.reg_domain") return NetRegDomain(args);
   if (name == "hll_count.extract") return HllCountExtractScalar(args);
+  if (name == "kll_quantiles.extract_int64") {
+    return KllQuantilesExtractInt64Scalar(args, return_type);
+  }
+  if (name == "kll_quantiles.extract_float64") {
+    return KllQuantilesExtractFloat64Scalar(args, return_type);
+  }
+  if (name == "kll_quantiles.extract_point_int64") {
+    return KllQuantilesExtractPointInt64Scalar(args);
+  }
+  if (name == "kll_quantiles.extract_point_float64") {
+    return KllQuantilesExtractPointFloat64Scalar(args);
+  }
   return std::nullopt;
 }
 

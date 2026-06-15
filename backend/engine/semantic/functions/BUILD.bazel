@@ -219,6 +219,35 @@ cc_test(
 )
 
 cc_library(
+    name = "kll_funcs",
+    srcs = ["kll_funcs.cc"],
+    hdrs = ["kll_funcs.h"],
+    deps = [
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@datasketches_cpp//:datasketches",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "kll_funcs_test",
+    srcs = ["kll_funcs_test.cc"],
+    deps = [
+        ":kll_funcs",
+        "//backend/engine/semantic:error",
+        "//backend/engine/semantic:value",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "hll_funcs",
     srcs = ["hll_funcs.cc"],
     hdrs = ["hll_funcs.h"],
@@ -257,6 +286,7 @@ cc_library(
     hdrs = ["specialized_funcs.h"],
     deps = [
         ":hll_funcs",
+        ":kll_funcs",
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",
         "@com_google_absl//absl/status",

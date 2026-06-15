@@ -3,6 +3,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/hll_funcs.h"
+#include "backend/engine/semantic/functions/kll_funcs.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -140,6 +141,29 @@ absl::StatusOr<Value> EvalAggregateCall(
   }
   if (name == "hll_count.merge_partial") {
     return finish(HllCountMergePartialAggregate(input_column_values));
+  }
+  if (name == "kll_quantiles.init_int64") {
+    return finish(KllQuantilesInitInt64Aggregate(call, input_column_values));
+  }
+  if (name == "kll_quantiles.init_float64") {
+    return finish(KllQuantilesInitFloat64Aggregate(call, input_column_values));
+  }
+  if (name == "kll_quantiles.merge_partial") {
+    return finish(KllQuantilesMergePartialAggregate(input_column_values));
+  }
+  if (name == "kll_quantiles.merge_int64") {
+    return finish(
+        KllQuantilesMergeInt64Aggregate(input_column_values, call.type()));
+  }
+  if (name == "kll_quantiles.merge_float64") {
+    return finish(
+        KllQuantilesMergeFloat64Aggregate(input_column_values, call.type()));
+  }
+  if (name == "kll_quantiles.merge_point_int64") {
+    return finish(KllQuantilesMergePointInt64Aggregate(input_column_values));
+  }
+  if (name == "kll_quantiles.merge_point_float64") {
+    return finish(KllQuantilesMergePointFloat64Aggregate(input_column_values));
   }
   if (name == "array_concat_agg") {
     return finish(ArrayConcatAgg(call, input_column_values, call.type()));
