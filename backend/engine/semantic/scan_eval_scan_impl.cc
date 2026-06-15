@@ -278,21 +278,6 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_TVFSCAN:
       return MaterializeTvfScan(*scan->GetAs<::googlesql::ResolvedTVFScan>(),
                                 ctx);
-    case ::googlesql::RESOLVED_PIPE_IF_SCAN:
-      return MaterializePipeIfScan(
-          *scan->GetAs<::googlesql::ResolvedPipeIfScan>(), ctx);
-    case ::googlesql::RESOLVED_PIPE_TEE_SCAN:
-      return MaterializePipeTeeScan(
-          *scan->GetAs<::googlesql::ResolvedPipeTeeScan>(), ctx);
-    case ::googlesql::RESOLVED_PIPE_FORK_SCAN:
-      return MaterializePipeForkScan(
-          *scan->GetAs<::googlesql::ResolvedPipeForkScan>(), ctx);
-    case ::googlesql::RESOLVED_SUBPIPELINE_INPUT_SCAN:
-      return MaterializeSubpipelineInputScan(
-          *scan->GetAs<::googlesql::ResolvedSubpipelineInputScan>(), ctx);
-    case ::googlesql::RESOLVED_GROUP_ROWS_SCAN:
-      return MaterializeGroupRowsScan(
-          *scan->GetAs<::googlesql::ResolvedGroupRowsScan>(), ctx);
     case ::googlesql::RESOLVED_MATCH_RECOGNIZE_SCAN:
       return MaterializeMatchRecognizeScan(
           *scan->GetAs<::googlesql::ResolvedMatchRecognizeScan>(), ctx);

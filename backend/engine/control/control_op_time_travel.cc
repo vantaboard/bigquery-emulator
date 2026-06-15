@@ -259,7 +259,7 @@ absl::Status RunCloneData(storage::Storage& storage,
       storage, target_storage->storage_table_id(), **source, *as_of_ms);
 }
 
-absl::Status RunUndrop(storage::Storage& storage,
+absl::Status RunUndrop(const storage::Storage& storage,
                        absl::string_view project_id,
                        absl::string_view default_dataset_id,
                        const ::googlesql::ResolvedUndropStmt* stmt) {
@@ -267,35 +267,15 @@ absl::Status RunUndrop(storage::Storage& storage,
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: UNDROP has null stmt");
   }
+  // BigQuery only defines `UNDROP SCHEMA` (and only via DDL); there is
+  // no `UNDROP TABLE` statement (bq dry-run rejects it with "Unexpected
+  // keyword TABLE"). Neither form is implemented locally today.
+  (void)storage;
+  (void)project_id;
+  (void)default_dataset_id;
   const absl::string_view kind = stmt->schema_object_kind();
-  if (kind != "TABLE" && kind != "SCHEMA") {
-    return absl::UnimplementedError(
-        absl::StrCat("control op executor: UNDROP ",
-                     kind,
-                     " is not implemented (TABLE and SCHEMA only)"));
-  }
-  if (kind == "SCHEMA") {
-    return absl::UnimplementedError(
-        "control op executor: UNDROP SCHEMA is not implemented yet; restore "
-        "deleted datasets via datasets.undelete REST when available");
-  }
-  absl::StatusOr<storage::TableId> target =
-      NamePathToTableId(stmt->name_path(), project_id, default_dataset_id);
-  if (!target.ok()) return target.status();
-  std::int64_t deleted_ms = 0;
-  if (stmt->for_system_time_expr() != nullptr) {
-    absl::StatusOr<std::int64_t> as_of_ms =
-        duckdb::internal::EvaluateForSystemTimeAsOfMs(
-            *stmt->for_system_time_expr());
-    if (!as_of_ms.ok()) return as_of_ms.status();
-    deleted_ms = *as_of_ms;
-  }
-  absl::Status restored = storage.RestoreTable(*target, deleted_ms);
-  if (!restored.ok() && stmt->is_if_not_exists() &&
-      restored.code() == absl::StatusCode::kAlreadyExists) {
-    return absl::OkStatus();
-  }
-  return restored;
+  return absl::UnimplementedError(absl::StrCat(
+      "control op executor: UNDROP ", kind, " is not implemented"));
 }
 
 absl::Status RunDropSnapshotTable(

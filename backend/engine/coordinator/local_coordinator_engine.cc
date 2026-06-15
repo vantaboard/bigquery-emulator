@@ -20,8 +20,6 @@
 #include "backend/catalog/udf_registration_catalog.h"
 #include "backend/catalog/udf_registry.h"
 #include "backend/catalog/view_registry.h"
-#include "backend/engine/control/pipe_create_table.h"
-#include "backend/engine/control/pipe_export_data.h"
 #include "backend/engine/control/stubs/create_model.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
@@ -146,23 +144,6 @@ absl::StatusOr<std::unique_ptr<RowSource>> LocalCoordinatorEngine::ExecuteQuery(
     return absl::InternalError(
         "LocalCoordinatorEngine::ExecuteQuery: classifier returned an "
         "unknown disposition");
-  }
-  if (executor == &control_op_executor_) {
-    const ::googlesql::ResolvedScan* body = nullptr;
-    if (stmt->node_kind() == ::googlesql::RESOLVED_QUERY_STMT) {
-      body = stmt->GetAs<::googlesql::ResolvedQueryStmt>()->query();
-    } else if (stmt->node_kind() ==
-               ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT) {
-      body = stmt->GetAs<::googlesql::ResolvedGeneralizedQueryStmt>()->query();
-    }
-    if (body != nullptr) {
-      if (body->node_kind() == ::googlesql::RESOLVED_PIPE_EXPORT_DATA_SCAN) {
-        return control::RunPipeExportData(*storage_, request, *stmt);
-      }
-      if (body->node_kind() == ::googlesql::RESOLVED_PIPE_CREATE_TABLE_SCAN) {
-        return control::RunPipeCreateTable(*storage_, catalog, request, *stmt);
-      }
-    }
   }
   return executor->ExecuteQuery(request, *stmt, catalog);
 }

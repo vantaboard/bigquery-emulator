@@ -592,6 +592,23 @@ hll_count.merge: semantic_executor
 hll_count.merge_partial: semantic_executor
 hll_count.extract: semantic_executor
 
+# KLL_QUANTILES.* are real BigQuery approximate-quantile sketch
+# functions (verified via bq dry-run). Planned for a local semantic
+# executor implementation paralleling HLL_COUNT.*; until the handler
+# lands they surface UNIMPLEMENTED (`status=planned`). See
+# ROADMAP §"KLL quantile sketches".
+kll_quantiles.init_int64: semantic_executor status=planned
+kll_quantiles.init_float64: semantic_executor status=planned
+kll_quantiles.merge_int64: semantic_executor status=planned
+kll_quantiles.merge_float64: semantic_executor status=planned
+kll_quantiles.merge_partial: semantic_executor status=planned
+kll_quantiles.merge_point_int64: semantic_executor status=planned
+kll_quantiles.merge_point_float64: semantic_executor status=planned
+kll_quantiles.extract_int64: semantic_executor status=planned
+kll_quantiles.extract_float64: semantic_executor status=planned
+kll_quantiles.extract_point_int64: semantic_executor status=planned
+kll_quantiles.extract_point_float64: semantic_executor status=planned
+
 # BigQuery ML inference: `local_stub`. There is no local model
 # training / serving surface; these TVFs return schema-correct
 # placeholder rows (NULL predicted / metric / forecast values) so

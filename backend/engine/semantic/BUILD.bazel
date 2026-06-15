@@ -162,24 +162,6 @@ cc_library(
 )
 
 cc_library(
-    name = "proto_helpers",
-    srcs = ["proto_helpers.cc"],
-    hdrs = ["proto_helpers.h"],
-    deps = [
-        ":error",
-        ":value",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
-        "@com_google_protobuf//:protobuf",
-        "@googlesql//googlesql/public:type",
-        "@googlesql//googlesql/public:type_cc_proto",
-        "@googlesql//googlesql/public:value",
-    ],
-)
-
-cc_library(
     name = "expression_column_bindings",
     srcs = ["expression_column_bindings.cc"],
     hdrs = ["expression_column_bindings.h"],
@@ -206,12 +188,10 @@ cc_library(
         "eval_expr_cast_helpers.cc",
         "eval_expr_cast_modifiers.cc",
         "eval_expr_dispatch.cc",
-        "eval_expr_flatten.cc",
         "eval_expr_fn_dispatch.cc",
         "eval_expr_numeric.cc",
         "eval_expr_operators.cc",
         "eval_expr_proto.cc",
-        "eval_expr_update_constructor.cc",
         "eval_udaf.cc",
     ],
     hdrs = [
@@ -223,7 +203,6 @@ cc_library(
         ":error",
         ":frame_stack",
         ":js_udf_runtime",
-        ":proto_helpers",
         ":python_udf_runtime",
         ":system_variables",
         ":value",
@@ -287,8 +266,6 @@ cc_library(
         "scan_eval_materialize_relation_argument.cc",
         "scan_eval_analytic.cc",
         "scan_eval_sample.cc",
-        "scan_eval_pipe.cc",
-        "scan_eval_group_rows.cc",
         "scan_eval_match_recognize.cc",
         "scan_eval_scan_impl.cc",
     ],
@@ -348,37 +325,6 @@ cc_test(
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",
         "@googlesql//googlesql/resolved_ast",
-    ],
-)
-
-cc_test(
-    name = "eval_expr_proto_test",
-    srcs = ["eval_expr_proto_test.cc"],
-    deps = [
-        ":eval_expr",
-        ":scan_eval",
-        ":value",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_protobuf//:protobuf",
-        "@googlesql//googlesql/public:simple_catalog",
-        "@googlesql//googlesql/public:type",
-        "@googlesql//googlesql/public:value",
-        "@googlesql//googlesql/resolved_ast",
-    ],
-)
-
-cc_test(
-    name = "eval_expr_update_constructor_test",
-    srcs = ["eval_expr_update_constructor_test.cc"],
-    deps = [
-        ":eval_expr",
-        ":scan_eval",
-        ":value",
-        "@com_google_googletest//:gtest_main",
-        "@googlesql//googlesql/public:type",
-        "@googlesql//googlesql/public:value",
-        "@googlesql//googlesql/resolved_ast",
-        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -464,11 +410,9 @@ cc_library(
     name = "executor",
     srcs = [
         "executor.cc",
-        "explain_stmt.cc",
     ],
     hdrs = [
         "executor.h",
-        "explain_stmt.h",
     ],
     deps = [
         ":error",

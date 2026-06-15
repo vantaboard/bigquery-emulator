@@ -26,7 +26,6 @@
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
 
 namespace googlesql {
-class ResolvedAnalyzeStmt;
 class ResolvedAlterTableStmt;
 class ResolvedAuxLoadDataStmt;
 class ResolvedCreateMaterializedViewStmt;
@@ -129,10 +128,6 @@ absl::Status RunDropTable(storage::Storage& storage,
                           absl::string_view default_dataset_id,
                           const ::googlesql::ResolvedDropStmt* stmt);
 
-absl::Status RunAnalyze(storage::Storage& storage,
-                        absl::string_view project_id,
-                        const ::googlesql::ResolvedAnalyzeStmt* stmt);
-
 absl::Status RunAlterTable(storage::Storage& storage,
                            absl::string_view project_id,
                            absl::string_view default_dataset_id,
@@ -172,7 +167,7 @@ absl::Status RunCloneData(storage::Storage& storage,
                           absl::string_view default_dataset_id,
                           const ::googlesql::ResolvedCloneDataStmt* stmt);
 
-absl::Status RunUndrop(storage::Storage& storage,
+absl::Status RunUndrop(const storage::Storage& storage,
                        absl::string_view project_id,
                        absl::string_view default_dataset_id,
                        const ::googlesql::ResolvedUndropStmt* stmt);

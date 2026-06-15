@@ -300,7 +300,7 @@ behind each, and the multi-strategy coordinator is the only
   `google.cloud.bigquery.v2.TableSchema` and to DuckDB schema strings
   (`backend/schema/googlesql_to_bq.{h,cc}`)
 - ✅ BigQuery DDL routed to the control-op executor: `CREATE TABLE`,
-  `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`, `ANALYZE`,
+  `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
   `CREATE MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA`
   (local `file://` writers), and `LOAD DATA` (local `file://` readers)
   flow through `backend/engine/control/control_op_executor.{h,cc}` and
@@ -441,7 +441,7 @@ handler.
   anonymized aggregates (**stub**), `SESSION_USER` (**stub**), and the
   real implementations of protobuf /
   sequence AST nodes, MEASURE functions, Python UDFs, `ST_GEOGFROMWKB`,
-  `EXPLAIN`, and cloud-backed external data sources, plus related rows in
+  `KLL_QUANTILES.*`, and cloud-backed external data sources, plus related rows in
   [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
   Graph / GQL (`ResolvedGraph*Scan`) stays `unsupported` and is **not**
   planned.
@@ -563,7 +563,7 @@ public-facing policy.
   [`docs/ENGINE_POLICY.md`](./docs/ENGINE_POLICY.md) for the per-shape
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
-  SELECT`, `DROP TABLE`, `ALTER TABLE`, `ANALYZE`, `CREATE
+  SELECT`, `DROP TABLE`, `ALTER TABLE`, `CREATE
   MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA` (local
   `file://`), and `LOAD DATA` (local `file://`) are wired via
   `ControlOpExecutor`, which mutates `Storage` directly and emits a
@@ -575,9 +575,11 @@ public-facing policy.
   into each query catalog (`sys_calendar` bqutils fixture promoted).
   `CREATE FUNCTION` / `CREATE AGGREGATE FUNCTION` register through
   the UDF registry (next bullet). `FOR SYSTEM_TIME AS OF` table
-  decorators, snapshot clone, and `UNDROP TABLE` route through
-  control ops (`control_op_time_travel.cc`,
-  `duckdb_storage_version_log.*`). Wildcard tables
+  decorators and snapshot clone route through control ops
+  (`control_op_time_travel.cc`, `duckdb_storage_version_log.*`).
+  (`ANALYZE` and `UNDROP TABLE` were removed — neither is a BigQuery
+  statement; `UNDROP SCHEMA` is the only real BigQuery undrop form and
+  is not yet implemented.) Wildcard tables
   (`dataset.prefix_*`) resolve in the virtual catalog with
   `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
   Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA` remain
@@ -813,14 +815,13 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
 | `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `local_impl` | **real** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
-| Protobuf shapes (`ResolvedMakeProto`, ...) | `semantic_executor` | **real** | [Protobuf field access](#protobuf-field-access) |
+| KLL quantile sketches (`KLL_QUANTILES.*`) | `unsupported` | **real** | [KLL quantile sketches](#kll-quantile-sketches) |
 | MEASURE / measure functions | `local_impl` | **real** | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Expression columns (`ResolvedExpressionColumn`) | `semantic_executor` | **real** (landed) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
-| `ResolvedExplainStmt` (`EXPLAIN`) | `semantic_executor` | **real** (landed) | [Statements](#statements) |
 
 > **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
 > NOT planned.** It is effectively a whole second query language and is
@@ -853,16 +854,25 @@ Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
   `bigquery-emulator@local`; pinned by
   `conformance/fixtures/specialized/session_user_stub.yaml`
 
+### KLL quantile sketches
+
+`KLL_QUANTILES.*` are real BigQuery approximate-quantile sketch functions
+(verified via `bq query --dry_run`), complementing the landed
+`HLL_COUNT.*`. They support partial aggregation / re-aggregation across
+`INIT`/`MERGE`/`MERGE_PARTIAL`/`MERGE_POINT`/`EXTRACT`/`EXTRACT_POINT` for
+both `INT64`- and `FLOAT64`-initialized sketches.
+
+- ⏳ `KLL_QUANTILES.*` (`kll_quantiles.*`) — **real** (planned): land on the
+  semantic executor paralleling `HLL_COUNT.*` (`hll_funcs.cc`). Registered
+  `semantic_executor status=planned` in
+  [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml); the
+  engine surfaces `UNIMPLEMENTED` until the handler + conformance fixture
+  land.
+
 ### Deferred AST node dispositions
 
 Rows in
 [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml):
-
-#### Statements
-
-- ✅ `ResolvedExplainStmt` — **real**: single-row route `plan` STRING
-  (`explain_stmt.cc`); pinned by
-  `conformance/fixtures/specialized/explain_select_smoke.yaml`
 
 #### Privacy-preserving aggregates
 
@@ -879,15 +889,17 @@ privacy.
 - ✅ `ResolvedDifferentialPrivacyAggregateScan` — **stub**: same
 - ✅ `ResolvedAggregationThresholdAggregateScan` — **stub**: same
 
-#### Protobuf field access
+#### Protobuf field access — removed (not a BigQuery surface)
 
-- ✅ `ResolvedMakeProto` — construct PROTO from field args (`eval_expr_proto.cc`)
-- ✅ `ResolvedGetProtoField` — scalar read + `has_` presence (`eval_expr_proto.cc`)
-- ✅ `ResolvedGetProtoOneof` — set oneof field name (`eval_expr_proto.cc`)
-- ✅ `ResolvedReplaceField` — `REPLACE_FIELDS` on STRUCT + PROTO (`eval_expr_proto.cc`)
-- ✅ `ResolvedGetRowField` — row STRUCT field by column name (`eval_expr_proto.cc`)
-- ✅ `ResolvedFilterField` / `ResolvedFilterFieldArg` — `FILTER_FIELDS` on PROTO (`eval_expr_proto.cc`)
-- ⏳ Proto-typed CREATE TABLE + googlesql-corpus `load_proto_*` (catalog registration UX)
+PROTO construction / field access and `REPLACE_FIELDS` / `FILTER_FIELDS`
+are **not** reachable in BigQuery PRODUCT_EXTERNAL (verified via
+`bq query --dry_run`: `NEW <proto>` → "Type not found", `REPLACE_FIELDS()`
+→ "is not supported", `FILTER_FIELDS` → "Function not found"). These nodes
+are now `unsupported` and the handlers were removed.
+
+- ✅ `ResolvedGetRowField` — **kept** (`semantic_executor`): value-table /
+  range-variable row field access (`t.f`) IS a real BigQuery shape (bq
+  accepts it); evaluated in `eval_expr_proto.cc`.
 
 #### Catalog / sequence helpers
 

@@ -120,12 +120,6 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           project_id,
           request.default_dataset_id,
           stmt.GetAs<::googlesql::ResolvedDropStmt>());
-    case ::googlesql::RESOLVED_ANALYZE_STMT:
-      return internal::RunAnalyze(
-          *storage_,
-          project_id,
-          stmt.GetAs<::googlesql::ResolvedAnalyzeStmt>());
-
     // Deferred control-op shapes. Each handler returns
     // UNIMPLEMENTED with a focused message that names the missing
     // infrastructure. See docs/ENGINE_POLICY.md for deferred

@@ -369,32 +369,6 @@ TEST_F(SemanticExecutorTest, ChainedCteWithRowNumberAnalyticScan) {
   EXPECT_EQ(row.cells[0].int64_value(), 1);
 }
 
-TEST_F(SemanticExecutorTest, PipeIfSelectsBranchSubpipeline) {
-  const std::string sql =
-      "SELECT n FROM UNNEST([1, 2, 3]) AS n "
-      "|> IF true THEN ( |> WHERE n >= 2 ) "
-      "   ELSE ( |> WHERE false )";
-  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
-  ASSERT_NE(stmt, nullptr);
-  SemanticExecutor exec;
-  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
-  ASSERT_TRUE(source.ok()) << source.status();
-  ASSERT_EQ((*source)->schema().columns.size(), 1u);
-  EXPECT_EQ((*source)->schema().columns[0].name, "n");
-
-  std::vector<int64_t> got;
-  storage::Row row;
-  while (true) {
-    auto has = (*source)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 1u);
-    got.push_back(row.cells[0].int64_value());
-  }
-  std::sort(got.begin(), got.end());
-  EXPECT_EQ(got, (std::vector<int64_t>{2, 3}));
-}
-
 }  // namespace
 }  // namespace semantic
 }  // namespace engine

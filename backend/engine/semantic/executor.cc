@@ -18,7 +18,6 @@
 #include "backend/engine/semantic/dml/dml_executor.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/explain_stmt.h"
 #include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/script/assert_stmt.h"
@@ -188,9 +187,6 @@ absl::StatusOr<std::unique_ptr<RowSource>> SemanticExecutor::ExecuteQuery(
     const ::googlesql::ResolvedStatement& stmt,
     ::googlesql::Catalog* catalog) {
   (void)catalog;
-  if (stmt.node_kind() == ::googlesql::RESOLVED_EXPLAIN_STMT) {
-    return ExecuteExplainStmt(*stmt.GetAs<::googlesql::ResolvedExplainStmt>());
-  }
   if (stmt.node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,

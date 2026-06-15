@@ -50,7 +50,11 @@
 
 # --- Statements --------------------------------------------------------
 ResolvedQueryStmt: duckdb_native
-ResolvedExplainStmt: semantic_executor
+# EXPLAIN is not a BigQuery statement (bq dry-run: "Statement not
+# supported: ExplainStatement"); kept here as `unsupported` so any
+# ResolvedExplainStmt the analyzer might still produce surfaces
+# UNIMPLEMENTED.
+ResolvedExplainStmt: unsupported
 ResolvedCreateTableStmt: control_op
 ResolvedCreateTableAsSelectStmt: control_op
 ResolvedCreateViewStmt: control_op
@@ -82,7 +86,8 @@ ResolvedMultiStmt: semantic_executor
 ResolvedCreateConstantStmt: semantic_executor
 ResolvedAssignmentStmt: semantic_executor
 ResolvedExecuteImmediateStmt: semantic_executor
-ResolvedAnalyzeStmt: control_op
+# ANALYZE is not a BigQuery statement (bq dry-run: syntax error).
+ResolvedAnalyzeStmt: unsupported
 ResolvedAuxLoadDataStmt: control_op
 ResolvedAssertStmt: semantic_executor
 ResolvedExportDataStmt: control_op
@@ -116,15 +121,20 @@ ResolvedRecursiveRefScan: duckdb_rewrite
 ResolvedPivotScan: duckdb_rewrite
 ResolvedUnpivotScan: duckdb_rewrite
 ResolvedMatchRecognizeScan: semantic_executor
-ResolvedGroupRowsScan: semantic_executor
+# WITH GROUP ROWS / GROUP_ROWS() is not a BigQuery feature (bq:
+# "Table-valued function not found: GROUP_ROWS" / syntax error).
+ResolvedGroupRowsScan: unsupported
 ResolvedTVFScan: semantic_executor
 ResolvedRelationArgumentScan: semantic_executor
 ResolvedBarrierScan: semantic_executor
-ResolvedPipeIfScan: semantic_executor
-ResolvedPipeForkScan: semantic_executor
-ResolvedPipeTeeScan: semantic_executor
-ResolvedPipeExportDataScan: control_op
-ResolvedPipeCreateTableScan: control_op
+# Pipe IF / FORK / TEE / EXPORT DATA / CREATE TABLE are not BigQuery
+# pipe operators (bq: "Pipe <OP> not supported"); only pipe INSERT is
+# a real BigQuery pipe DML form (bq accepts the syntax).
+ResolvedPipeIfScan: unsupported
+ResolvedPipeForkScan: unsupported
+ResolvedPipeTeeScan: unsupported
+ResolvedPipeExportDataScan: unsupported
+ResolvedPipeCreateTableScan: unsupported
 ResolvedPipeInsertScan: semantic_executor
 # `ResolvedGraph*Scan` family from SHAPE_TRACKER.md. The graph
 # query (GQL) surface is deliberately out of scope locally; every
@@ -152,19 +162,26 @@ ResolvedAnalyticFunctionCall: duckdb_native
 ResolvedCast: duckdb_native
 ResolvedMakeStruct: duckdb_rewrite
 ResolvedGetStructField: duckdb_rewrite
-ResolvedMakeProto: semantic_executor
-ResolvedGetProtoField: semantic_executor
-ResolvedGetProtoOneof: semantic_executor
-ResolvedReplaceField: semantic_executor
+# PROTO construction / field access and REPLACE_FIELDS are not
+# reachable in BigQuery PRODUCT_EXTERNAL (no user proto types; bq:
+# "Type not found" for NEW proto, "REPLACE_FIELDS() is not supported").
+ResolvedMakeProto: unsupported
+ResolvedGetProtoField: unsupported
+ResolvedGetProtoOneof: unsupported
+ResolvedReplaceField: unsupported
 ResolvedGetJsonField: duckdb_rewrite
+# GetRowField IS reachable (value-table field access `t.f`; bq accepts).
 ResolvedGetRowField: semantic_executor
-ResolvedFlatten: semantic_executor
-ResolvedFlattenedArg: semantic_executor
+# FLATTEN / array-path flatten is not BigQuery (bq: "Function not found:
+# FLATTEN" / "Cannot access field on a value with type ARRAY<...>").
+ResolvedFlatten: unsupported
+ResolvedFlattenedArg: unsupported
 ResolvedSubqueryExpr: duckdb_native
 ResolvedWithExpr: duckdb_native
 ResolvedInlineLambda: unsupported
-ResolvedFilterField: semantic_executor
-ResolvedFilterFieldArg: semantic_executor
+# FILTER_FIELDS is not a BigQuery function (bq: "Function not found").
+ResolvedFilterField: unsupported
+ResolvedFilterFieldArg: unsupported
 # Literals appear inside every lowered expression (e.g. ORDER BY
 # FARM_FINGERPRINT('x')); promoting the whole query to semantic_executor
 # whenever the walker sees a constant breaks analytic/window fast paths.
@@ -176,7 +193,9 @@ ResolvedArgumentRef: semantic_executor
 ResolvedArgumentDef: semantic_executor
 ResolvedCatalogColumnRef: unsupported
 ResolvedExpressionColumn: semantic_executor
-ResolvedUpdateConstructor: semantic_executor
+# Proto UpdateConstructor (proto field UPDATE SET) is unreachable
+# without user proto types in BigQuery PRODUCT_EXTERNAL.
+ResolvedUpdateConstructor: unsupported
 
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native

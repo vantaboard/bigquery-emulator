@@ -429,29 +429,6 @@ absl::Status RunDropTable(storage::Storage& storage,
 // we validate that every named table exists (NOT_FOUND otherwise)
 // and return OK. Callers see the operation succeed without any
 // observable side-effect, which matches the BigQuery posture where
-// `ANALYZE` is a metadata hint the query optimizer is free to
-// ignore. The deeper "actually compute and persist statistics" path
-// is tracked by `docs/ENGINE_POLICY.md`.
-absl::Status RunAnalyze(storage::Storage& storage,
-                        absl::string_view project_id,
-                        const ::googlesql::ResolvedAnalyzeStmt* stmt) {
-  if (stmt == nullptr) {
-    return absl::InternalError(
-        "ControlOpExecutor::ExecuteDdl: ANALYZE has null resolved statement");
-  }
-  for (const auto& target : stmt->table_and_column_index_list()) {
-    if (target == nullptr || target->table() == nullptr) continue;
-    const auto* storage_table =
-        dynamic_cast<const catalog::StorageTable*>(target->table());
-    if (storage_table == nullptr) continue;
-    const storage::TableId& id = storage_table->storage_table_id();
-    auto schema_or = storage.GetSchema(id);
-    if (!schema_or.ok()) return schema_or.status();
-  }
-  (void)project_id;
-  return absl::OkStatus();
-}
-
 }  // namespace internal
 }  // namespace control
 }  // namespace engine

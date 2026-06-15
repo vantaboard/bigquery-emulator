@@ -22,7 +22,7 @@ TEST(NodeDispositionTableTest, LookupReturnsExpectedRows) {
 
   const auto* explain_stmt = LookupNodeDisposition("ResolvedExplainStmt");
   ASSERT_NE(explain_stmt, nullptr);
-  EXPECT_EQ(explain_stmt->disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(explain_stmt->disposition, Disposition::kUnsupported);
 
   const auto* make_struct = LookupNodeDisposition("ResolvedMakeStruct");
   ASSERT_NE(make_struct, nullptr);

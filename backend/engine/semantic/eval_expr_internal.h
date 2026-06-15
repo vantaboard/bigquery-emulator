@@ -97,18 +97,10 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
 absl::StatusOr<Value> EvalExtendedCast(const ::googlesql::ResolvedCast& cast,
                                        Value inner,
                                        const ::googlesql::Type* source);
-absl::StatusOr<Value> EvalUpdateConstructor(
-    const ::googlesql::ResolvedUpdateConstructor& node, const EvalContext& ctx);
-absl::StatusOr<Value> EvalMakeProto(const ::googlesql::ResolvedMakeProto& node,
-                                    const EvalContext& ctx);
-absl::StatusOr<Value> EvalGetProtoField(
-    const ::googlesql::ResolvedGetProtoField& node, const EvalContext& ctx);
-absl::StatusOr<Value> EvalGetProtoOneof(
-    const ::googlesql::ResolvedGetProtoOneof& node, const EvalContext& ctx);
-absl::StatusOr<Value> EvalReplaceField(
-    const ::googlesql::ResolvedReplaceField& node, const EvalContext& ctx);
-absl::StatusOr<Value> EvalFilterField(
-    const ::googlesql::ResolvedFilterField& node, const EvalContext& ctx);
+// Value-table / range-variable row field access (`t.f`); a real
+// BigQuery shape. The proto construction / field-access / REPLACE_FIELDS
+// / FILTER_FIELDS family and FLATTEN were removed because they are not
+// reachable in BigQuery PRODUCT_EXTERNAL (verified via bq dry-run).
 absl::StatusOr<Value> EvalGetRowField(
     const ::googlesql::ResolvedGetRowField& node, const EvalContext& ctx);
 
@@ -117,10 +109,6 @@ absl::StatusOr<Value> DispatchFunctionByName(
     const std::vector<Value>& args,
     const ::googlesql::Type* return_type,
     const EvalContext* ctx = nullptr);
-
-absl::StatusOr<Value> EvalFlatten(const ::googlesql::ResolvedFlatten& flatten,
-                                  const EvalContext& ctx);
-absl::StatusOr<Value> EvalFlattenedArg(const EvalContext& ctx);
 
 }  // namespace eval_expr_internal
 }  // namespace semantic

@@ -103,8 +103,6 @@ namespace {
   // generalized form on top.
   options.mutable_language()->AddSupportedStatementKind(
       ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT);
-  options.mutable_language()->AddSupportedStatementKind(
-      ::googlesql::RESOLVED_EXPLAIN_STMT);
   // Naive TIMESTAMP literals (no timezone suffix) must resolve as UTC
   // to match BigQuery / query port (see window_dense_rank_with_group).
   options.set_default_time_zone(absl::UTCTimeZone());

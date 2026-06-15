@@ -303,12 +303,16 @@ TEST_F(RouteClassifierTest, MatchRecognizeScanPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedMatchRecognizeScan");
 }
 
-TEST_F(RouteClassifierTest, ExplainStatementRoutesToSemanticExecutor) {
+TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
+  // EXPLAIN is not a BigQuery statement (bq dry-run: "Statement not
+  // supported: ExplainStatement"); the analyzer here still parses it
+  // because the test fixture enables all statement kinds, but the
+  // classifier must route it to the deliberate `unsupported` envelope.
   const auto* stmt = Analyze("EXPLAIN SELECT * FROM people");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.disposition, Disposition::kUnsupported);
   EXPECT_EQ(d.offending_node, "ResolvedExplainStmt");
 }
 }  // namespace
