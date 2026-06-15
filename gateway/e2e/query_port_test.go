@@ -3458,6 +3458,89 @@ FROM
 			},
 		},
 
+		// KLL quantile sketches
+		{
+			name: "kll_quantiles.init_int64",
+			query: `
+SELECT STARTS_WITH(LOWER(TO_HEX(KLL_QUANTILES.INIT_INT64(x, 1000))), '12ef81') AS has_magic
+FROM UNNEST([1, 2, 3, 4, 5]) AS x`,
+			expectedRows: [][]any{
+				{true},
+			},
+		},
+		{
+			name: "kll_quantiles.merge_partial",
+			query: `
+SELECT STARTS_WITH(LOWER(TO_HEX(KLL_QUANTILES.MERGE_PARTIAL(kll_sketch))), '12ef81') AS has_magic
+FROM (
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([1, 2, 3]) AS x
+  UNION ALL
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([4, 5]) AS x
+)`,
+			expectedRows: [][]any{
+				{true},
+			},
+		},
+		{
+			name: "kll_quantiles.merge_int64",
+			query: `
+SELECT KLL_QUANTILES.MERGE_INT64(kll_sketch, 2) AS halves
+FROM (
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([1, 2, 3]) AS x
+  UNION ALL
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([4, 5]) AS x
+)`,
+			expectedRows: [][]any{
+				{[]any{int64(1), int64(3), int64(5)}},
+			},
+		},
+		{
+			name: "kll_quantiles.extract_int64",
+			query: `
+SELECT KLL_QUANTILES.EXTRACT_INT64(kll_sketch, 2) AS halves
+FROM (
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([1, 2, 3, 4, 5]) AS x
+)`,
+			expectedRows: [][]any{
+				{[]any{int64(1), int64(3), int64(5)}},
+			},
+		},
+		{
+			name: "kll_quantiles.extract_point_int64",
+			query: `
+SELECT KLL_QUANTILES.EXTRACT_POINT_INT64(kll_sketch, 0.8) AS p80
+FROM (
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+  FROM UNNEST([1, 2, 3, 4, 5]) AS x
+)`,
+			expectedRows: [][]any{
+				{int64(4)},
+			},
+		},
+		{
+			name: "kll_quantiles.init_int64_weight",
+			query: `
+SELECT KLL_QUANTILES.EXTRACT_INT64(kll_sketch, 2) AS halves
+FROM (
+  SELECT KLL_QUANTILES.INIT_INT64(x, 1000, weight => y) AS kll_sketch
+  FROM UNNEST([
+    STRUCT(1 AS x, 1 AS y),
+    STRUCT(2 AS x, 3 AS y),
+    STRUCT(3 AS x, 1 AS y),
+    STRUCT(4 AS x, 1 AS y),
+    STRUCT(5 AS x, 1 AS y)
+  ])
+)`,
+			expectedRows: [][]any{
+				{[]any{int64(1), int64(2), int64(5)}},
+			},
+		},
+
 		{
 			name:         "null",
 			query:        `SELECT NULL`,

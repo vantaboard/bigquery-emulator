@@ -1,0 +1,30 @@
+# kll_quantiles_round_trip: KLL_QUANTILES INIT / MERGE / EXTRACT vectors.
+#
+# Sketches use the emulator-local wire format in `kll_funcs.cc`
+# (Apache DataSketches KLL; not byte-compatible with cloud BigQuery).
+# Vectors match `kll_funcs_test.cc` and gateway e2e `kll_quantiles.*`
+# cases.
+name: specialized_kll_quantiles_round_trip
+description: |
+  KLL_QUANTILES.INIT_INT64 on 1..5 split across two sketches,
+  MERGE_INT64 halves, and MERGE_POINT_INT64 at phi=0.8.
+project_id: proj-specialized-kll-quantiles
+query: |
+  WITH sketches AS (
+    SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+    FROM UNNEST([1, 2, 3]) AS x
+    UNION ALL
+    SELECT KLL_QUANTILES.INIT_INT64(x, 1000) AS kll_sketch
+    FROM UNNEST([4, 5]) AS x
+  )
+  SELECT
+    KLL_QUANTILES.MERGE_INT64(kll_sketch, 2) AS halves,
+    KLL_QUANTILES.MERGE_POINT_INT64(kll_sketch, 0.8) AS p80
+  FROM sketches
+expected:
+  route: semantic_executor
+  schema:
+    - {name: halves, type: INT64, mode: REPEATED}
+    - {name: p80, type: INT64}
+  rows:
+    - {halves: ["1", "3", "5"], p80: "4"}
