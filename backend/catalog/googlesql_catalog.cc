@@ -187,7 +187,6 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
     LOG(ERROR) << "GoogleSqlCatalog: AddBuiltinFunctionsAndTypes failed: " << s;
   }
   RegisterEmulatorBuiltinFunctions(*this);
-  RegisterEmulatorKeysStubFunctions(*this);
   RegisterEmulatorMlTvfStubs(*this);
   ReplayFunctionsIntoCatalog(project_id_, *this);
   ReplayViewsIntoCatalog(project_id_, *this);

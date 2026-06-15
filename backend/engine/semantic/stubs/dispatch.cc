@@ -25,12 +25,12 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   // dispatch key; the route classifier promotes the surrounding
   // query to `kLocalStub` based on the same YAML key, so a hit
   // here corresponds exactly to a `local_stub` row in
-  // `functions.yaml`. All four KEYS.* scalars are registered on the catalog
-  // for analysis; execution is handled here on the semantic stub lane.
+  // `functions.yaml`. Both supported KEYS.* scalars are native GoogleSQL
+  // builtins registered for analysis; execution is handled here on the
+  // semantic stub lane. (BigQuery has no KEYS.ENCRYPT / KEYS.DECRYPT_BYTES;
+  // encryption is the AEAD.* family, which the emulator does not model.)
   if (name == "keys.new_keyset") return KeysNewKeyset(args);
   if (name == "keys.keyset_length") return KeysKeysetLength(args);
-  if (name == "keys.encrypt") return KeysEncrypt(args);
-  if (name == "keys.decrypt_bytes") return KeysDecryptBytes(args);
   if (name == "session_user") {
     if (!args.empty()) {
       return MakeSemanticError(SemanticErrorReason::kInvalidArgument,

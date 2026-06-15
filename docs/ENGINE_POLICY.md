@@ -57,7 +57,7 @@ on a per-node basis.
 | `semantic_executor`  | Runs on a local row/value interpreter that owns exact BigQuery semantics.                                            | Uses DuckDB only as a row source; expression evaluation, type coercion, and error surfaces are local.  |
 | `control_op`         | DDL / metadata / catalog op.                                                                                         | Bypasses query execution; the storage layer applies the change and emits the BigQuery-shaped response. |
 | `local_stub`         | Deliberate BigQuery-shaped placeholder for a specialized family the emulator does not model end-to-end.              | Function-level stubs (e.g. `KEYS.NEW_KEYSET`, `ML.PREDICT`) dispatch through the semantic executor's stub table (`backend/engine/semantic/stubs/`) and return a fixed-shape sentinel or schema-correct placeholder of the documented BigQuery return type. Statement-level stubs (e.g. `CREATE MODEL`) are pre-dispatched from the coordinator's `ExecuteDdl` to `backend/engine/control/stubs/` and return OK without persisting anything. ML inference TVFs (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) are also `local_stub`: they return typed NULL placeholders so the query does not fail — values are explicitly not predictions. |
-| `unsupported`        | Deliberately out of scope locally.                                                                                   | Returns a BigQuery-shaped `UNIMPLEMENTED` whose message names the offending family (e.g. `family: function:keys.encrypt`) and links to this document. |
+| `unsupported`        | Deliberately out of scope locally.                                                                                   | Returns a BigQuery-shaped `UNIMPLEMENTED` whose message names the offending family (e.g. `family: function:array_transform`) and links to this document. |
 
 A few rules the router obeys:
 
@@ -96,7 +96,7 @@ summary the unsupported error envelope points at. Per-family posture
 | Differential privacy / anonymized aggregation (`AnonymizedAggregate*`, `DifferentialPrivacyAggregate*`, ...) | `local_stub`  | Accepted at parse / analyze time; privacy-preserving aggregate scans route to the semantic executor's existing aggregate eval with modifiers stripped (`backend/engine/semantic/scan_eval_aggregate.cc`). Returns the plain underlying aggregate — no noise, no group suppression. NOT differential privacy; see ROADMAP §Privacy-preserving aggregates. |
 | Approximate aggregation (`APPROX_QUANTILES`, `APPROX_COUNT_DISTINCT`, `APPROX_TOP_COUNT`, `APPROX_TOP_SUM`)   | `local_impl`  | Routes to the semantic executor (`backend/engine/semantic/functions/aggregate_specialized.cc`). Results are computed exactly (not sketch-approximated); not differential-privacy aggregation (see the DP row above). |
 | Networking (`NET.*`)                                                                                         | `local_impl`  | Routes to the semantic executor; implemented in `net_funcs.cc` (IP parse/mask/trunc, HOST, PUBLIC_SUFFIX, REG_DOMAIN). Pinned by `conformance/fixtures/specialized/net_host_reg_domain.yaml`. |
-| Key management (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`, `KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`)               | `local_stub`  | Deterministic BigQuery-shaped placeholders (`KEYS.NEW_KEYSET` -> fixed `BYTES` envelope; `KEYS.KEYSET_LENGTH` -> `1`; `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` -> cipher envelope round-trip in `stubs/keys.cc`). NOT real Tink / AEAD. Pinned by `conformance/fixtures/specialized/keys_encrypt_decrypt_stub.yaml`. |
+| Key management (`KEYS.NEW_KEYSET`, `KEYS.KEYSET_LENGTH`)               | `local_stub`  | Deterministic BigQuery-shaped placeholders (`KEYS.NEW_KEYSET` -> fixed `BYTES` envelope; `KEYS.KEYSET_LENGTH` -> `1`; in `stubs/keys.cc`). NOT real Tink. (BigQuery has no `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`; encryption is the `AEAD.*` family, which the emulator does not model.) |
 | `SESSION_USER` (`session_user`)                                                                             | `local_stub`  | Returns the fixed placeholder principal `bigquery-emulator@local` so row/column-policy + audit queries do not fail. NOT an authenticated identity. Pinned by `conformance/fixtures/specialized/session_user_stub.yaml`. |
 | `EXPLAIN` (`ResolvedExplainStmt`)                                                                           | `local_impl`  | Returns a single-row `plan` STRING describing the route disposition chosen for the inner statement (`backend/engine/semantic/explain_stmt.cc`). Pinned by `conformance/fixtures/specialized/explain_select_smoke.yaml`. |
 | HLL (`HLL_COUNT.*`)                                                                                          | `local_impl`  | Routes to the semantic executor; `hll_funcs.cc` implements INIT/MERGE/MERGE_PARTIAL/EXTRACT with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by `conformance/fixtures/specialized/hll_count_round_trip.yaml`. |
@@ -125,7 +125,7 @@ The `local_stub` posture has two flavors:
 2. **No-fail placeholder (deliberate, for families that are not useful
    locally)** -- families the emulator will never model meaningfully
    (BigQuery ML inference, differential-privacy aggregates,
-   `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`, `SESSION_USER`) return a
+   `SESSION_USER`) return a
    deterministic, schema-correct placeholder so a query that references
    them **does not fail**. The product decision here is no-fail, not
    loud-fail: these are explicitly placeholders (documented as such per
@@ -149,8 +149,8 @@ in their head.
    Remaining gaps are tracked in ROADMAP §Planned work (real
    implementations for the proto surface, Python UDFs, `gs://` external
    data, MEASURE, ...; deterministic no-fail stubs for `ML.*`,
-   differential-privacy aggregates, `KEYS.ENCRYPT`/`DECRYPT_BYTES`,
-   `SESSION_USER`). Graph / GQL is the one family that stays
+   differential-privacy aggregates, `SESSION_USER`). Graph / GQL is
+   the one family that stays
    `unsupported` and is **not** planned. Landed on the local DML
    executor (`backend/engine/semantic/dml/`): `INSERT VALUES`, `INSERT ...
    SELECT`, scalar and deep-STRUCT `UPDATE`, proto `UpdateConstructor`

@@ -131,7 +131,12 @@ exp: duckdb_native duckdb_name=EXP
 sign: duckdb_native duckdb_name=SIGN
 greatest: duckdb_native duckdb_name=GREATEST
 least: duckdb_native duckdb_name=LEAST
-pi: duckdb_native duckdb_name=PI
+# `PI()` is a ZetaSQL builtin the analyzer still resolves under
+# EnableMaximumLanguageFeaturesForDevelopment, but BigQuery
+# (PRODUCT_EXTERNAL) has no `PI` function (verified via bq dry-run:
+# "Function not found: PI"). Marked `unsupported` so it surfaces
+# UNIMPLEMENTED instead of executing.
+pi: unsupported
 ln: duckdb_native duckdb_name=LN
 log10: duckdb_native duckdb_name=LOG10
 # BigQuery LOG(X) returns the natural log (LN); DuckDB's bare
@@ -160,7 +165,6 @@ log: duckdb_udf duckdb_name=bq_log
 mod: duckdb_udf duckdb_name=bq_mod
 pow: duckdb_native duckdb_name=POW
 power: duckdb_native duckdb_name=POW
-sqrt_numeric: semantic_executor
 cbrt: duckdb_native duckdb_name=CBRT
 is_inf: duckdb_native duckdb_name=ISINF
 is_nan: duckdb_native duckdb_name=ISNAN
@@ -461,10 +465,6 @@ nullif: duckdb_native duckdb_name=NULLIF
 # via `CASE WHEN cond THEN A ELSE B END`; unit test
 # `IfNullCondFallsThroughToElse` guards the NULL-cond edge case.
 if: duckdb_udf duckdb_name=bq_if
-# BQ ISNULL(x) is the call-form of the `IS NULL` operator. The
-# `bq_isnull` macro pins the contract via `(x IS NULL)`; unit test
-# `IsNullOnNonNullValues` pins the empty-string-is-not-NULL case.
-isnull: duckdb_udf duckdb_name=bq_isnull
 
 # --- Array -------------------------------------------------------------
 array_length: duckdb_native duckdb_name=LEN
@@ -573,16 +573,16 @@ approx_quantiles: semantic_executor
 approx_count_distinct: semantic_executor
 approx_top_count: semantic_executor
 approx_top_sum: semantic_executor
-
-# Inline-lambda array helpers (ARRAY_TRANSFORM / ARRAY_FILTER) evaluate
-# on the semantic executor via `EvalArrayTransform` / `EvalArrayFilter`
-# in `eval_expr_calls.cc`; the transpiler returns "" for inline_lambda
-# argument slots so the route classifier must promote the query.
-array_transform: semantic_executor
-array_filter: semantic_executor
-
 # Internal array subscript helpers (OFFSET/ORDINAL) for semantic path.
 $array_at_offset: semantic_executor
+
+# ARRAY_TRANSFORM / ARRAY_FILTER are ZetaSQL inline-lambda builtins the
+# analyzer still resolves under EnableMaximumLanguageFeaturesForDevelopment,
+# but BigQuery (PRODUCT_EXTERNAL) does not expose them (verified via bq
+# dry-run: "Function not found: ARRAY_TRANSFORM" / "ARRAY_FILTER"). Marked
+# `unsupported` so they surface UNIMPLEMENTED instead of executing.
+array_transform: unsupported
+array_filter: unsupported
 
 # HLL_COUNT.* uses a local sketch wire format (not byte-compatible
 # with cloud BigQuery); see `docs/ENGINE_POLICY.md`. Implemented in
@@ -621,15 +621,11 @@ normalize_and_casefold: semantic_executor
 # emulator does not implement real keysets, but accepting the
 # function call with a deterministic placeholder lets client-
 # library bootstrap probes succeed. The handler lives in
-# `backend/engine/semantic/stubs/keys.{h,cc}`. Encryption /
-# decryption calls (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) stay
-# `unsupported` -- a stub there would silently produce
-# unencrypted bytes a caller might mistake for real ciphertext,
-# which violates the no-silent-approximation rule.
+# `backend/engine/semantic/stubs/keys.{h,cc}`. (BigQuery has no
+# `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`; encryption is the `AEAD.*`
+# family, which the emulator does not model.)
 keys.new_keyset: local_stub
 keys.keyset_length: local_stub
-keys.encrypt: local_stub
-keys.decrypt_bytes: local_stub
 
 # Geography / GIS MVP: WKT-backed GEOGRAPHY values on the semantic
 # executor (WGS84 spherical haversine + planar point-in-polygon for

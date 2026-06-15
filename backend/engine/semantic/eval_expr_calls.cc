@@ -30,122 +30,9 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace semantic {
-namespace eval_expr_internal {
-
-absl::StatusOr<Value> EvalArrayTransform(
-    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
-  const ::googlesql::ResolvedExpr* array_expr = nullptr;
-  const ::googlesql::ResolvedInlineLambda* lambda = nullptr;
-  if (call.generic_argument_list_size() >= 2) {
-    const ::googlesql::ResolvedFunctionArgument* a0 =
-        call.generic_argument_list(0);
-    const ::googlesql::ResolvedFunctionArgument* a1 =
-        call.generic_argument_list(1);
-    if (a0 != nullptr) array_expr = a0->expr();
-    if (a1 != nullptr) lambda = a1->inline_lambda();
-  }
-  if (array_expr == nullptr && call.argument_list_size() >= 1) {
-    array_expr = call.argument_list(0);
-  }
-  if (array_expr == nullptr || lambda == nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: ARRAY_TRANSFORM requires array and inline lambda arguments");
-  }
-  if (lambda->body() == nullptr || lambda->parameter_list_size() < 1) {
-    return absl::InvalidArgumentError(
-        "semantic: ARRAY_TRANSFORM lambda is malformed");
-  }
-  auto array_val = EvalExpr(*array_expr, ctx);
-  if (!array_val.ok()) return array_val.status();
-  if (array_val->is_null()) return Value::Null(call.type());
-  if (!array_val->type()->IsArray()) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "semantic: ARRAY_TRANSFORM first argument must "
-                             "be ARRAY");
-  }
-  const ::googlesql::ArrayType* out_arr =
-      call.type() != nullptr && call.type()->IsArray()
-          ? call.type()->AsArray()
-          : array_val->type()->AsArray();
-  const int param_col_id = lambda->parameter_list(0)->column().column_id();
-  std::vector<Value> out_elems;
-  out_elems.reserve(array_val->num_elements());
-  for (int i = 0; i < array_val->num_elements(); ++i) {
-    ColumnBindings bind;
-    bind.emplace(param_col_id, array_val->element(i));
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &bind;
-    auto mapped = EvalExpr(*lambda->body(), row_ctx);
-    if (!mapped.ok()) return mapped.status();
-    out_elems.push_back(*std::move(mapped));
-  }
-  return Value::Array(out_arr, std::move(out_elems));
-}
-
-absl::StatusOr<Value> EvalArrayFilter(
-    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
-  const ::googlesql::ResolvedExpr* array_expr = nullptr;
-  const ::googlesql::ResolvedInlineLambda* lambda = nullptr;
-  if (call.generic_argument_list_size() >= 2) {
-    const ::googlesql::ResolvedFunctionArgument* a0 =
-        call.generic_argument_list(0);
-    const ::googlesql::ResolvedFunctionArgument* a1 =
-        call.generic_argument_list(1);
-    if (a0 != nullptr) array_expr = a0->expr();
-    if (a1 != nullptr) lambda = a1->inline_lambda();
-  }
-  if (array_expr == nullptr && call.argument_list_size() >= 1) {
-    array_expr = call.argument_list(0);
-  }
-  if (array_expr == nullptr || lambda == nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: ARRAY_FILTER requires array and inline lambda arguments");
-  }
-  if (lambda->body() == nullptr || lambda->parameter_list_size() < 1) {
-    return absl::InvalidArgumentError(
-        "semantic: ARRAY_FILTER lambda is malformed");
-  }
-  auto array_val = EvalExpr(*array_expr, ctx);
-  if (!array_val.ok()) return array_val.status();
-  if (array_val->is_null()) return Value::Null(call.type());
-  if (!array_val->type()->IsArray()) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "semantic: ARRAY_FILTER first argument must "
-                             "be ARRAY");
-  }
-  const ::googlesql::ArrayType* out_arr =
-      call.type() != nullptr && call.type()->IsArray()
-          ? call.type()->AsArray()
-          : array_val->type()->AsArray();
-  const int param_col_id = lambda->parameter_list(0)->column().column_id();
-  std::vector<Value> out_elems;
-  out_elems.reserve(array_val->num_elements());
-  for (int i = 0; i < array_val->num_elements(); ++i) {
-    ColumnBindings bind;
-    bind.emplace(param_col_id, array_val->element(i));
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &bind;
-    auto keep = EvalExpr(*lambda->body(), row_ctx);
-    if (!keep.ok()) return keep.status();
-    if (keep->is_null()) continue;
-    if (keep->type_kind() != ::googlesql::TYPE_BOOL) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: ARRAY_FILTER lambda must return BOOL");
-    }
-    if (keep->bool_value()) {
-      out_elems.push_back(array_val->element(i));
-    }
-  }
-  return Value::Array(out_arr, std::move(out_elems));
-}
-}  // namespace eval_expr_internal
+namespace eval_expr_internal {}  // namespace eval_expr_internal
 
 using eval_expr_internal::DispatchFunctionByName;
-using eval_expr_internal::EvalArrayFilter;
-using eval_expr_internal::EvalArrayTransform;
 using eval_expr_internal::LowerFunctionDispatchName;
 using eval_expr_internal::NullOfType;
 
@@ -383,12 +270,6 @@ absl::StatusOr<Value> EvalFunctionCall(
       args.push_back(*std::move(v));
     }
     return functions::EmuFormatTypeLiteral(args);
-  }
-  if (name == "array_transform") {
-    return EvalArrayTransform(call, ctx);
-  }
-  if (name == "array_filter") {
-    return EvalArrayFilter(call, ctx);
   }
   if (name == "if") {
     return EvalIfLazy(call, ctx);

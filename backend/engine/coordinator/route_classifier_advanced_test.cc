@@ -278,23 +278,6 @@ TEST_F(RouteClassifierTest, KeysFunctionRoutesToLocalStub) {
       << "reason should mention the local-stub route; got: " << d.reason;
 }
 
-TEST_F(RouteClassifierTest, KeysEncryptRoutesToLocalStub) {
-  // `KEYS.ENCRYPT` is registered on the `keys` subcatalog (not stock
-  // builtins) and is a `local_stub` row in `functions.yaml`. Analysis
-  // must resolve the full `KEYS.ENCRYPT` name path and classify to
-  // `kLocalStub` with `function:keys.encrypt` attribution.
-  const auto* stmt = Analyze(
-      "SELECT KEYS.ENCRYPT(KEYS.NEW_KEYSET('AEAD_AES_GCM_256'), "
-      "FROM_BASE64('YWJj'))");
-  ASSERT_NE(stmt, nullptr);
-
-  RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kLocalStub);
-  EXPECT_EQ(d.offending_node, "function:keys.encrypt");
-  EXPECT_NE(d.reason.find("local-stub"), std::string::npos)
-      << "reason should mention the local-stub route; got: " << d.reason;
-}
-
 TEST_F(RouteClassifierTest, LocalStubOutranksSemanticExecutorInSameQuery) {
   // When a `local_stub` function (`KEYS.NEW_KEYSET`) and a
   // `semantic_executor` function (`APPROX_QUANTILES`) appear together,

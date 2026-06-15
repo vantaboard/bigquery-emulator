@@ -46,19 +46,6 @@ class ConditionalMacrosTest : public ::testing::Test {
     return v;
   }
 
-  bool RunBool(const std::string& sql) {
-    ::duckdb_result result;
-    auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
-    EXPECT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: "
-                                   << (::duckdb_result_error(&result) == nullptr
-                                           ? "(no error)"
-                                           : ::duckdb_result_error(&result))
-                                   << " (sql=" << sql << ")";
-    bool v = ::duckdb_value_boolean(&result, 0, 0);
-    ::duckdb_destroy_result(&result);
-    return v;
-  }
-
   bool RunIsNull(const std::string& sql) {
     ::duckdb_result result;
     auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
@@ -94,22 +81,6 @@ TEST_F(ConditionalMacrosTest, IfPreservesNullResults) {
   // The THEN / ELSE arms preserve NULL when chosen.
   EXPECT_TRUE(RunIsNull("SELECT bq_if(TRUE, NULL::BIGINT, 2)"));
   EXPECT_TRUE(RunIsNull("SELECT bq_if(FALSE, 1, NULL::BIGINT)"));
-}
-
-// --- bq_isnull ---------------------------------------------------
-
-TEST_F(ConditionalMacrosTest, IsNullOnNullValue) {
-  EXPECT_TRUE(RunBool("SELECT bq_isnull(NULL::BIGINT)"));
-  EXPECT_TRUE(RunBool("SELECT bq_isnull(NULL::VARCHAR)"));
-}
-
-TEST_F(ConditionalMacrosTest, IsNullOnNonNullValues) {
-  EXPECT_FALSE(RunBool("SELECT bq_isnull(0)"));
-  EXPECT_FALSE(RunBool("SELECT bq_isnull(42)"));
-  // Edge case pinned: empty string is NOT null in BigQuery; a
-  // regression that treated '' as NULL would surface here.
-  EXPECT_FALSE(RunBool("SELECT bq_isnull('')"));
-  EXPECT_FALSE(RunBool("SELECT bq_isnull('hi')"));
 }
 
 }  // namespace

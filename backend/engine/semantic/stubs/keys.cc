@@ -1,12 +1,10 @@
 #include "backend/engine/semantic/stubs/keys.h"
 
 #include <cstdint>
-#include <cstring>
 #include <string>
 #include <vector>
 
 #include "absl/status/statusor.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
@@ -37,7 +35,6 @@ namespace {
 // deterministic so unit tests + client-library probes can pin the
 // returned bytes byte-for-byte.
 constexpr char kKeysetSentinelPrefix[] = "bigquery-emulator:keyset:v1:";
-constexpr char kCipherSentinelPrefix[] = "bigquery-emulator:cipher:v1:";
 
 }  // namespace
 
@@ -97,54 +94,6 @@ absl::StatusOr<Value> KeysKeysetLength(const std::vector<Value>& args) {
   // serialized `google.crypto.tink.Keyset` proto and count the
   // `key` repeated field.
   return Value::Int64(int64_t{1});
-}
-
-absl::StatusOr<Value> KeysEncrypt(const std::vector<Value>& args) {
-  if (args.size() != 2) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        absl::StrCat("semantic stub: KEYS.ENCRYPT expects exactly two BYTES ",
-                     "arguments; got ",
-                     args.size()));
-  }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::NullBytes();
-  }
-  if (args[0].type_kind() != ::googlesql::TYPE_BYTES ||
-      args[1].type_kind() != ::googlesql::TYPE_BYTES) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        "semantic stub: KEYS.ENCRYPT requires BYTES keyset and plaintext");
-  }
-  (void)args[0];
-  return Value::Bytes(
-      absl::StrCat(kCipherSentinelPrefix, args[1].bytes_value()));
-}
-
-absl::StatusOr<Value> KeysDecryptBytes(const std::vector<Value>& args) {
-  if (args.size() != 2) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        absl::StrCat("semantic stub: KEYS.DECRYPT_BYTES expects exactly two ",
-                     "BYTES arguments; got ",
-                     args.size()));
-  }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::NullBytes();
-  }
-  if (args[0].type_kind() != ::googlesql::TYPE_BYTES ||
-      args[1].type_kind() != ::googlesql::TYPE_BYTES) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        "semantic stub: KEYS.DECRYPT_BYTES requires BYTES keyset and "
-        "ciphertext");
-  }
-  (void)args[0];
-  const std::string& ciphertext = args[1].bytes_value();
-  if (absl::StartsWith(ciphertext, kCipherSentinelPrefix)) {
-    return Value::Bytes(ciphertext.substr(strlen(kCipherSentinelPrefix)));
-  }
-  return Value::Bytes("bigquery-emulator:decrypted:v1");
 }
 
 }  // namespace stubs

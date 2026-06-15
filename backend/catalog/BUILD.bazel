@@ -388,21 +388,6 @@ cc_test(
     ],
 )
 
-cc_test(
-    name = "emulator_keys_stub_catalog_test",
-    srcs = ["emulator_keys_stub_catalog_test.cc"],
-    deps = [
-        ":emulator_builtin_extensions",
-        ":googlesql_catalog",
-        "@com_google_googletest//:gtest_main",
-        "@googlesql//googlesql/public:analyzer",
-        "@googlesql//googlesql/public:analyzer_options",
-        "@googlesql//googlesql/public:analyzer_output",
-        "@googlesql//googlesql/public:builtin_function_options",
-        "@googlesql//googlesql/public:simple_catalog",
-    ],
-)
-
 cc_library(
     name = "measure_catalog",
     srcs = ["measure_catalog.cc"],

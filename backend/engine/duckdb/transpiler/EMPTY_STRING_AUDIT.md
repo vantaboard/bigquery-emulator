@@ -388,14 +388,12 @@ match:
 |-------------|-----------------------------------------------------------|-------------|
 | `log` (single + two-arg) | BQ `LOG(x)` == `LN(x)`; DuckDB `LOG(x)` == `LOG10(x)`. Two-arg `LOG(x, base)` needs a polyfill. | `docs/ENGINE_POLICY.md` |
 | `mod` | BQ returns the second arg's type; DuckDB diverges on signed inputs. | `docs/ENGINE_POLICY.md` |
-| `sqrt_numeric` | BQ `SQRT` over NUMERIC needs an explicit cast at the polyfill boundary. | `docs/ENGINE_POLICY.md` |
 | `safe_divide` | BQ returns NULL on /0; DuckDB raises. SAFE semantics are exact. | `docs/ENGINE_POLICY.md` |
 | `safe_negate` | BQ returns NULL on INT64 overflow; DuckDB raises. | `docs/ENGINE_POLICY.md` |
 | `div` | BQ truncates toward zero; DuckDB `/` coerces to FLOAT. | `docs/ENGINE_POLICY.md` |
 | `split`, `regexp_*`, `format`, `contains_substr`, `strpos`, `instr`, `soundex` | BQ RE2 dialect / `%`-FORMAT / locale rules differ from DuckDB regex / PRINTF. | `docs/ENGINE_POLICY.md` |
 | `date_*`, `datetime_*`, `timestamp_*`, `extract`, `format_*`, `parse_*`, `unix_*` | Interval semantics, calendar-week / month-end arithmetic, format-string syntax all diverge. | `docs/ENGINE_POLICY.md` |
 | `if` | BQ has CASE-of equivalence in DuckDB but corner cases differ; needs polyfill rewrite. | `docs/ENGINE_POLICY.md` |
-| `isnull` | BQ has no `IS NULL` function form; the call-form path needs a UDF rewrite. | `docs/ENGINE_POLICY.md` |
 | `countif` | BQ `COUNTIF(b)` lowers to DuckDB `COUNT(*) FILTER (WHERE b)`; needs structural rewrite. | `docs/ENGINE_POLICY.md` |
 
 **Migration list: zero rows.** Every `(planned)` row carries a
@@ -428,7 +426,6 @@ rows flipped from `status=planned duckdb_udf` to ready
 | `mod`       | `numeric/numeric_macros.cc::bq_mod`     | Sign-of-dividend on negatives; raises on Y=0 | `numeric_macros_test::ModSignTracksDividend`, `ModByZeroRaises` |
 | `div`       | `numeric/numeric_macros.cc::bq_div`     | Truncated (not floor) integer division; raises on Y=0 | `numeric_macros_test::DivTruncatesNotFloors`, `DivByZeroRaises` |
 | `if`        | `conditional/conditional_macros.cc::bq_if` | NULL cond falls through to ELSE (not the THEN branch) | `conditional_macros_test::IfNullCondFallsThroughToElse` |
-| `isnull`    | `conditional/conditional_macros.cc::bq_isnull` | Empty string is NOT NULL in BigQuery | `conditional_macros_test::IsNullOnNonNullValues` |
 | `strpos`    | `string/string_macros.cc::bq_strpos`    | 1-based index; missing needle returns 0 (not NULL); empty needle returns 1 | `string_macros_test::StrposReturnsOneBasedIndex`, `StrposMissingNeedleReturnsZero`, `StrposEmptyNeedle` |
 | `countif`   | n/a -- routed `duckdb_native duckdb_name=count_if` (no macro layer; DuckDB v1.5.3's `count_if` matches BQ COUNTIF on NULL / FALSE handling) | NULL inputs are NOT counted (treated as FALSE-like) | `conformance/fixtures/functions/aggregate/function_countif.yaml` (NULL row excluded from the `true_count`) |
 | `log`       | `numeric/numeric_macros.cc::bq_log` (variadic: `bq_log(x)` natural-log, `bq_log(x, base)` base-second per BQ argument order) | `LOG(x)` is BASE-e (not base-10 like DuckDB's bare `log`); `LOG(x, base)` argument order is value-first (DuckDB's `log(b, x)` is base-first) | `numeric_macros_test::LogSingleArgIsNaturalLog`, `LogTwoArgIdentity`, `LogNullPropagation` |
@@ -450,7 +447,6 @@ re-pointed at `docs/ENGINE_POLICY.md` (still
 | `contains_substr` | BigQuery applies Unicode NFKC + case-folding before substring search; DuckDB's `contains` is exact byte-level match and DuckDB v1.5.3 ships no NFKC primitive. |
 | `instr` | BigQuery INSTR is variadic with negative-position semantics; DuckDB's `instr` is 2-arg only. The variadic surface is more naturally implemented in Go. |
 | `soundex` | DuckDB v1.5.3 does not ship a `soundex` scalar function (verified: `SELECT soundex('Robert')` -> Catalog Error). |
-| `sqrt_numeric` | Placeholder row for the case where BigQuery SQRT is called with a NUMERIC argument and the transpiler needs to insert an explicit cast. The current emit path looks up by lowercase function NAME only and never lowers anything to `sqrt_numeric` (the analyzer resolves to `sqrt`). Closing the gap requires signature-aware function dispatch in the transpiler -- a transpiler architecture change, not a thin polyfill macro. |
 | `regexp_extract`, `regexp_extract_all` | BigQuery returns the FIRST capturing group when the regex contains one and falls back to the whole match otherwise; DuckDB always returns the whole match by default and exposes the group via a separate numeric `group` argument. A thin macro cannot introspect the regex pattern to choose the right behavior. The discrimination is a few lines of Go in the semantic executor (parse the regex, count `(...)` groups minus non-capturing `(?:...)`, dispatch to `regexp_extract(..., 1)` or `regexp_extract(..., 0)`). |
 | `format` | Printf-style with BigQuery extensions (`%t` / `%T` type-aware rendering, `%p` parameterized substitution, type-specific ARRAY / STRUCT / JSON format codes, `%E*` extended-year extensions). DuckDB's `printf` / `format` implement only a subset of POSIX printf. The format-spec translation table is more naturally expressed in Go. |
 | `date_add`, `date_sub`, `datetime_add`, `datetime_sub`, `timestamp_add`, `timestamp_sub` | BigQuery's MONTH-END SNAP: `DATE_ADD(DATE '2024-01-31', INTERVAL 1 MONTH) == DATE '2024-02-29'`. DuckDB overflows into the next month. Same snap applies to YEAR additions on Feb 29. Closing the gap requires a CASE-arm rewrite plus timezone-aware variants and is more naturally expressed in Go. |

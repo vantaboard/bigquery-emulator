@@ -18,10 +18,9 @@
 //     deterministic sentinel ("bigquery-emulator:keyset:v1:<key_type>"
 //     ASCII-encoded as BYTES). The sentinel is parseable as BYTES
 //     and round-trips through `BYTES_TO_STRING(...)`, but it is NOT
-//     a Tink keyset; the encryption-bearing peers
-//     (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) are `local_stub` placeholders
-//     on the semantic executor stub lane; they round-trip deterministic
-//     cipher envelopes, NOT real Tink / AEAD.
+//     a Tink keyset. (BigQuery has no `KEYS.ENCRYPT` /
+//     `KEYS.DECRYPT_BYTES`; encryption is the `AEAD.*` family, which
+//     the emulator does not model.)
 //
 //   * `KEYS.KEYSET_LENGTH(keyset BYTES) -> INT64`. BigQuery returns
 //     the number of keys in the serialized keyset; the stub
@@ -68,14 +67,6 @@ absl::StatusOr<Value> KeysNewKeyset(const std::vector<Value>& args);
 // `KEYS.KEYSET_LENGTH(keyset BYTES) -> INT64`. Unconditional `1`
 // for any non-NULL BYTES; see header comment for the contract.
 absl::StatusOr<Value> KeysKeysetLength(const std::vector<Value>& args);
-
-// `KEYS.ENCRYPT(keyset BYTES, plaintext BYTES) -> BYTES`. Deterministic
-// placeholder envelope; NOT real AEAD. NULL propagates to NULL BYTES.
-absl::StatusOr<Value> KeysEncrypt(const std::vector<Value>& args);
-
-// `KEYS.DECRYPT_BYTES(keyset BYTES, ciphertext BYTES) -> BYTES`.
-// Strips the emulator cipher prefix when present; NOT real AEAD.
-absl::StatusOr<Value> KeysDecryptBytes(const std::vector<Value>& args);
 
 }  // namespace stubs
 }  // namespace semantic

@@ -88,8 +88,7 @@ cc_test(
 )
 
 # Conditional family per-UDF tests. Covers `bq_if` (NULL-cond
-# fall-through to the ELSE branch) and `bq_isnull` (empty-string
-# is NOT null in BQ).
+# fall-through to the ELSE branch).
 cc_test(
     name = "conditional_macros_test",
     srcs = ["conditional/conditional_macros_test.cc"],

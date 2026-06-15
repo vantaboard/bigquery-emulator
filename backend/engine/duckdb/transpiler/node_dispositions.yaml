@@ -162,7 +162,7 @@ ResolvedFlatten: semantic_executor
 ResolvedFlattenedArg: semantic_executor
 ResolvedSubqueryExpr: duckdb_native
 ResolvedWithExpr: duckdb_native
-ResolvedInlineLambda: semantic_executor
+ResolvedInlineLambda: unsupported
 ResolvedFilterField: semantic_executor
 ResolvedFilterFieldArg: semantic_executor
 # Literals appear inside every lowered expression (e.g. ORDER BY

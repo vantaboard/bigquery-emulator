@@ -78,7 +78,6 @@ class RouteClassifierTest : public ::testing::Test {
         });
     catalog_->AddOwnedTable(std::move(arr_table));
     catalog::RegisterEmulatorMlTvfStubs(*catalog_);
-    catalog::RegisterEmulatorKeysStubFunctions(*catalog_);
   }
 
   const ::googlesql::ResolvedStatement* Analyze(absl::string_view sql) {

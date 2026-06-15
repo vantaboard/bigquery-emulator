@@ -16,7 +16,7 @@ conformance/fixtures/functions/
 Families today:
 
 - `numeric/` — `bq_mod`, `bq_div`, `bq_log`.
-- `conditional/` — `bq_if`, `bq_isnull`.
+- `conditional/` — `bq_if`.
 - `regex/` — `bq_regexp_contains`, `bq_regexp_replace` (re2-vendored
   thin wrappers; `regexp_extract` / `regexp_extract_all` stay on
   `semantic_executor` because their capture-group semantic needs

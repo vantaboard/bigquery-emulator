@@ -142,28 +142,6 @@ TEST_F(LocalCoordinatorEngineTest, KeysNewKeysetStubReturnsKeysetLengthOne) {
   EXPECT_EQ(row.cells[0].int64_value(), 1);
 }
 
-TEST_F(LocalCoordinatorEngineTest, KeysEncryptDecryptStubRoundTrip) {
-  CatalogBundle bundle = MakeCatalog();
-  auto source = engine_->ExecuteQuery(MakeRequest(R"(
-        WITH ks AS (SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset)
-        SELECT TO_BASE64(
-          KEYS.DECRYPT_BYTES(
-            keyset,
-            KEYS.ENCRYPT(keyset, FROM_BASE64('YWJj'))
-          )
-        ) AS plain
-        FROM ks
-      )"),
-                                      bundle.catalog.get());
-  ASSERT_TRUE(source.ok()) << source.status();
-  storage::Row row;
-  auto has = (*source)->Next(&row);
-  ASSERT_TRUE(has.ok()) << has.status();
-  ASSERT_TRUE(*has);
-  ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kString);
-  EXPECT_EQ(row.cells[0].string_value(), "YWJj");
-}
-
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

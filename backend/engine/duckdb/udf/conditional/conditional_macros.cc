@@ -41,23 +41,6 @@ absl::Status RegisterConditional(::duckdb_connection conn) {
     return s;
   }
 
-  // `bq_isnull(x)` --- BigQuery ISNULL.
-  //
-  // BigQuery ISNULL(X) is the call-form of the `IS NULL` operator:
-  // returns TRUE when X is NULL else FALSE. DuckDB has a bare
-  // `ISNULL(x)` function with identical semantics today; the macro
-  // pins the contract under a name we own.
-  //
-  // Edge cases the unit test pins:
-  //   * `bq_isnull(NULL) == TRUE`.
-  //   * `bq_isnull(0) == FALSE` (a literal zero is NOT null).
-  //   * `bq_isnull('') == FALSE` (empty string is NOT null in BQ).
-  if (auto s = internal::RunMacroDdl(
-          conn, "CREATE OR REPLACE MACRO bq_isnull(x) AS (x IS NULL)");
-      !s.ok()) {
-    return s;
-  }
-
   return absl::OkStatus();
 }
 

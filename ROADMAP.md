@@ -411,7 +411,7 @@ handler.
   (~140 BigQuery functions across math, string, datetime,
   conditional, array, aggregation, window, and BQ-specific
   categories). Polyfill UDF lane (`duckdb_udf`) covers
-  IF/ISNULL/MOD/DIV/LOG, regex wrappers, and unix-epoch helpers;
+  IF/MOD/DIV/LOG, regex wrappers, and unix-epoch helpers;
   interval datetime arithmetic, `FORMAT_*`, and `CONTAINS_SUBSTR`
   route through the semantic executor. `SQRT(NUMERIC)` routes to
   `semantic_executor` via signature-aware dispatch (pinned by
@@ -438,8 +438,8 @@ handler.
   today surface `UNIMPLEMENTED` but are tracked as ⏳ planned work
   (see [Planned work](#planned-work) and the ENGINE_POLICY index table
   there) include BigQuery ML inference (**stub**), differential-privacy /
-  anonymized aggregates (**stub**), `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES`
-  + `SESSION_USER` (**stub**), and the real implementations of protobuf /
+  anonymized aggregates (**stub**), `SESSION_USER` (**stub**), and the
+  real implementations of protobuf /
   sequence AST nodes, MEASURE functions, Python UDFs, `ST_GEOGFROMWKB`,
   `EXPLAIN`, and cloud-backed external data sources, plus related rows in
   [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml).
@@ -811,7 +811,6 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | **stub** | [BigQuery ML](#bigquery-ml) |
 | BigQuery ML `CREATE MODEL` | `local_stub` | stub (stays) | [BigQuery ML](#bigquery-ml) |
 | Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
-| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `local_impl` | **real** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | Protobuf shapes (`ResolvedMakeProto`, ...) | `semantic_executor` | **real** | [Protobuf field access](#protobuf-field-access) |
@@ -850,11 +849,6 @@ Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
 - ✅ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — **real**: 2D WKB POINT → `GEOGRAPHY`
   on the semantic GIS path (`geog_funcs.cc`); pinned by
   `conformance/fixtures/specialized/st_geogfromwkb_point.yaml`
-- ✅ `KEYS.ENCRYPT` (`keys.encrypt`) — **stub**: deterministic cipher
-  envelope (`stubs/keys.cc`); pinned by
-  `conformance/fixtures/specialized/keys_encrypt_decrypt_stub.yaml`
-- ✅ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`) — **stub**: strips the
-  emulator cipher prefix (`stubs/keys.cc`); same fixture
 - ✅ `SESSION_USER` (`session_user`) — **stub**: returns
   `bigquery-emulator@local`; pinned by
   `conformance/fixtures/specialized/session_user_stub.yaml`
