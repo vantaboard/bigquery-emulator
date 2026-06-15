@@ -1194,12 +1194,12 @@ on a per-node basis.</p>
 <tr>
 <td><code>local_stub</code></td>
 <td>Deliberate BigQuery-shaped placeholder for a specialized family the emulator does not model end-to-end.</td>
-<td>Function-level stubs (e.g. <code>KEYS.NEW_KEYSET</code>) dispatch through the semantic executor's stub table (<code>backend/engine/semantic/stubs/</code>) and return a fixed-shape sentinel of the documented BigQuery return type. Statement-level stubs (e.g. <code>CREATE MODEL</code>) are pre-dispatched from the coordinator's <code>ExecuteDdl</code> to <code>backend/engine/control/stubs/</code> and return OK without persisting anything; the matching evaluator (<code>ML.PREDICT</code>, ...) stays on <code>unsupported</code> so a downstream call surfaces <code>UNIMPLEMENTED</code>. The two halves together preserve client-library startup-probe compatibility without silently approximating any downstream semantics.</td>
+<td>Function-level stubs (e.g. <code>KEYS.NEW_KEYSET</code>, <code>ML.PREDICT</code>) dispatch through the semantic executor's stub table (<code>backend/engine/semantic/stubs/</code>) and return a fixed-shape sentinel or schema-correct placeholder of the documented BigQuery return type. Statement-level stubs (e.g. <code>CREATE MODEL</code>) are pre-dispatched from the coordinator's <code>ExecuteDdl</code> to <code>backend/engine/control/stubs/</code> and return OK without persisting anything. ML inference TVFs (<code>ML.PREDICT</code>, <code>ML.FORECAST</code>, <code>ML.EVALUATE</code>) are also <code>local_stub</code>: they return typed NULL placeholders so the query does not fail — values are explicitly not predictions.</td>
 </tr>
 <tr>
 <td><code>unsupported</code></td>
 <td>Deliberately out of scope locally.</td>
-<td>Returns a BigQuery-shaped <code>UNIMPLEMENTED</code> whose message names the offending family (e.g. <code>family: function:keys.encrypt</code>) and links to this document.</td>
+<td>Returns a BigQuery-shaped <code>UNIMPLEMENTED</code> whose message names the offending family (e.g. <code>family: function:array_transform</code>) and links to this document.</td>
 </tr>
 </tbody>
 </table>
@@ -1241,23 +1241,23 @@ summary the unsupported error envelope points at. Per-family posture
 <tbody>
 <tr>
 <td>BigQuery ML (<code>ML.PREDICT</code>, <code>ML.FORECAST</code>, <code>ML.EVALUATE</code>)</td>
-<td><code>unsupported</code></td>
-<td><code>UNIMPLEMENTED</code> with <code>family: function:ml.&lt;name&gt;</code> and a link here.</td>
+<td><code>local_stub</code></td>
+<td>Accepted at parse / analyze time; TVFs evaluate on <code>backend/engine/semantic/stubs/ml.cc</code> and return schema-correct placeholder rows (input pass-through + NULL predicted/metric/forecast columns). ML is not useful locally (no Vertex AI / training / serving); values are explicitly NOT predictions — see ROADMAP §BigQuery ML.</td>
 </tr>
 <tr>
 <td>BigQuery ML <code>CREATE MODEL</code></td>
 <td><code>local_stub</code></td>
-<td>Accepted as metadata-only; returns OK without registering a model. A subsequent <code>ML.PREDICT</code> over the named model still surfaces <code>UNIMPLEMENTED</code> (the family stays unsupported).</td>
+<td>Accepted as metadata-only; returns OK without registering a model. Stays a stub: no model is trained or stored.</td>
 </tr>
 <tr>
 <td>Geography / GIS (<code>ST_*</code>)</td>
 <td><code>local_impl</code> (partial)</td>
-<td>GIS MVP on the semantic executor (<code>backend/engine/semantic/functions/geog_funcs.cc</code>): <code>ST_GEOGPOINT</code>, <code>ST_GEOGFROMTEXT</code>, <code>ST_ASTEXT</code>, <code>ST_DISTANCE</code>, <code>ST_WITHIN</code>, <code>ST_CONTAINS</code>, <code>ST_INTERSECTS</code>. <code>GEOGRAPHY</code> persists as <code>VARCHAR</code> in DuckDB storage; extended casts evaluate on <code>eval_expr_cast_extended.cc</code>. Remaining <code>ST_*</code> (<code>ST_GEOGFROMWKB</code>, aggregates, buffer/simplify family, ...) surface <code>UNIMPLEMENTED</code> with <code>family: function:st_&lt;name&gt;</code>.</td>
+<td>GIS MVP on the semantic executor (<code>backend/engine/semantic/functions/geog_funcs.cc</code>): <code>ST_GEOGPOINT</code>, <code>ST_GEOGFROMTEXT</code>, <code>ST_GEOGFROMWKB</code> (2D WKB POINT), <code>ST_ASTEXT</code>, <code>ST_DISTANCE</code>, <code>ST_WITHIN</code>, <code>ST_CONTAINS</code>, <code>ST_INTERSECTS</code>. <code>GEOGRAPHY</code> persists as <code>VARCHAR</code> in DuckDB storage; extended casts evaluate on <code>eval_expr_cast_extended.cc</code>. Remaining <code>ST_*</code> (aggregates, buffer/simplify family, ...) surface <code>UNIMPLEMENTED</code> with <code>family: function:st_&lt;name&gt;</code>.</td>
 </tr>
 <tr>
 <td>Differential privacy / anonymized aggregation (<code>AnonymizedAggregate*</code>, <code>DifferentialPrivacyAggregate*</code>, ...)</td>
-<td><code>unsupported</code></td>
-<td><code>UNIMPLEMENTED</code>. The DP guarantee depends on noise calibration the emulator cannot honor.</td>
+<td><code>local_stub</code></td>
+<td>Accepted at parse / analyze time; privacy-preserving aggregate scans route to the semantic executor's existing aggregate eval with modifiers stripped (<code>backend/engine/semantic/scan_eval_aggregate.cc</code>). Returns the plain underlying aggregate — no noise, no group suppression. NOT differential privacy; see ROADMAP §Privacy-preserving aggregates.</td>
 </tr>
 <tr>
 <td>Approximate aggregation (<code>APPROX_QUANTILES</code>, <code>APPROX_COUNT_DISTINCT</code>, <code>APPROX_TOP_COUNT</code>, <code>APPROX_TOP_SUM</code>)</td>
@@ -1272,12 +1272,17 @@ summary the unsupported error envelope points at. Per-family posture
 <tr>
 <td>Key management (<code>KEYS.NEW_KEYSET</code>, <code>KEYS.KEYSET_LENGTH</code>)</td>
 <td><code>local_stub</code></td>
-<td>Returns a deterministic BigQuery-shaped sentinel (<code>KEYS.NEW_KEYSET</code> -&gt; a fixed <code>BYTES</code> envelope; <code>KEYS.KEYSET_LENGTH</code> -&gt; <code>1</code>). NOT a real Tink keyset.</td>
+<td>Deterministic BigQuery-shaped placeholders (<code>KEYS.NEW_KEYSET</code> -&gt; fixed <code>BYTES</code> envelope; <code>KEYS.KEYSET_LENGTH</code> -&gt; <code>1</code>; in <code>stubs/keys.cc</code>). NOT real Tink. (BigQuery has no <code>KEYS.ENCRYPT</code> / <code>KEYS.DECRYPT_BYTES</code>; encryption is the <code>AEAD.*</code> family, which the emulator does not model.)</td>
 </tr>
 <tr>
-<td>Key management (<code>KEYS.ENCRYPT</code>, <code>KEYS.DECRYPT_BYTES</code>)</td>
+<td><code>SESSION_USER</code> (<code>session_user</code>)</td>
+<td><code>local_stub</code></td>
+<td>Returns the fixed placeholder principal <code>bigquery-emulator@local</code> so row/column-policy + audit queries do not fail. NOT an authenticated identity. Pinned by <code>conformance/fixtures/specialized/session_user_stub.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>EXPLAIN</code> (<code>ResolvedExplainStmt</code>)</td>
 <td><code>unsupported</code></td>
-<td>Encryption-bearing entries deliberately fail loudly so a downstream consumer cannot round-trip the stub sentinel into an actual AEAD operation.</td>
+<td>Not a BigQuery statement (bq dry-run: "Statement not supported: ExplainStatement"); BigQuery exposes query plans via job statistics / dry run instead. Surfaces <code>UNIMPLEMENTED</code>.</td>
 </tr>
 <tr>
 <td>HLL (<code>HLL_COUNT.*</code>)</td>
@@ -1285,24 +1290,34 @@ summary the unsupported error envelope points at. Per-family posture
 <td>Routes to the semantic executor; <code>hll_funcs.cc</code> implements INIT/MERGE/MERGE_PARTIAL/EXTRACT with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by <code>conformance/fixtures/specialized/hll_count_round_trip.yaml</code>.</td>
 </tr>
 <tr>
-<td>Protobuf shapes (<code>ResolvedMakeProto</code>, <code>ResolvedGetProtoField</code>, ...)</td>
+<td>KLL (<code>KLL_QUANTILES.*</code>)</td>
+<td><code>local_impl</code></td>
+<td>Routes to the semantic executor; <code>kll_funcs.cc</code> implements INIT/MERGE/MERGE_PARTIAL/MERGE_POINT/EXTRACT/EXTRACT_POINT for INT64 and FLOAT64 using Apache DataSketches KLL with a local sketch wire format (not byte-compatible with cloud BigQuery). Pinned by <code>conformance/fixtures/specialized/kll_quantiles_round_trip.yaml</code>.</td>
+</tr>
+<tr>
+<td>Protobuf shapes (<code>ResolvedMakeProto</code>, <code>ResolvedGetProtoField</code>, <code>ReplaceField</code>, <code>FilterField</code>)</td>
 <td><code>unsupported</code></td>
-<td>The emulator does not model the GoogleSQL proto type surface end-to-end.</td>
+<td>Not reachable in BigQuery PRODUCT_EXTERNAL: no user PROTO types (bq: "Type not found" for <code>NEW &lt;proto&gt;</code>), <code>REPLACE_FIELDS()</code> → "is not supported", <code>FILTER_FIELDS</code> → "Function not found". The construct/read/mutate handlers were removed. Row field access (<code>ResolvedGetRowField</code>, value-table <code>t.f</code>) IS a real BigQuery shape and stays <code>semantic_executor</code> (<code>eval_expr_proto.cc</code>).</td>
 </tr>
 <tr>
 <td>MEASURE / measure functions (<code>AGGREGATE(&lt;measure&gt;)</code>)</td>
-<td><code>unsupported</code></td>
-<td>Measure types require BigQuery's analytical layer the emulator does not model.</td>
+<td><code>local_impl</code></td>
+<td>MEASURE-typed columns register through <code>measure_catalog.{h,cc}</code> (<code>bqemu_measure:&lt;expr&gt;:&lt;keys&gt;</code> description marker on table schema); the analyzer's measure rewrite expands <code>AGG(&lt;measure&gt;)</code> into multi-level aggregates on the semantic executor (<code>route_classifier_visitor.cc</code> multi-level promotion, <code>agg</code> in <code>functions.yaml</code>). Pinned by <code>conformance/fixtures/specialized/measure_agg_group_by.yaml</code>. CAST to/from MEASURE stays unsupported on <code>eval_expr_cast_extended.cc</code>.</td>
 </tr>
 <tr>
-<td>Graph (<code>GRAPH_TABLE</code>, GQL subqueries, <code>ResolvedGraph*Scan</code>, <code>ResolvedCatalogColumnRef</code>)</td>
-<td><code>unsupported</code></td>
-<td>The Spanner-Graph SQL surface and catalog-internal column refs are not part of this emulator's scope.</td>
+<td>Graph (<code>GRAPH_TABLE</code>, GQL subqueries, <code>ResolvedGraph*Scan</code>, <code>ResolvedCatalogColumnRef</code> graph-property refs)</td>
+<td><code>unsupported</code> (not planned)</td>
+<td>The GQL surface is effectively a whole second query language (its own analyzer, data model, and pattern grammar) and is <strong>not</strong> worth modeling in a local emulator. Stays <code>unsupported</code>; <strong>not</strong> on the roadmap. The graph use of <code>ResolvedCatalogColumnRef</code> (<code>name</code> set, <code>column</code> null) is out of scope for the same reason. Catalog DDL refs (<code>column</code> set) have no reachable <code>PRODUCT_EXTERNAL</code> SQL today.</td>
 </tr>
 <tr>
 <td>Sequences (<code>ResolvedSequence</code>, <code>NEXT VALUE FOR</code>)</td>
-<td><code>unsupported</code></td>
-<td>BigQuery does not ship general SQL sequences; the analyzer-visible surface is anchored on <code>unsupported</code> to make the gap explicit.</td>
+<td><code>unsupported</code> (not reachable)</td>
+<td>BigQuery <code>PRODUCT_EXTERNAL</code> does not ship general SQL sequences; no local query SQL resolves to <code>ResolvedSequence</code> / <code>NEXT VALUE FOR</code> today. The analyzer node exists for other product modes only — stays <code>unsupported</code> with a sharper envelope rather than a local sequence object.</td>
+</tr>
+<tr>
+<td>Expression columns (<code>ResolvedExpressionColumn</code>)</td>
+<td><code>local_impl</code></td>
+<td><code>AnalyzeExpression</code> column bindings evaluate on the semantic executor via <code>EvalContext::columns_by_name</code> / script variables. Script SET RHS (<code>ExecuteProcedureSet</code>, <code>EvalScalarSegment</code>) registers bindings with <code>AddExpressionColumn</code>. Pinned by <code>eval_expr_expression_column_test</code> and <code>conformance/fixtures/scripting/expression_column_set_increment.yaml</code>.</td>
 </tr>
 <tr>
 <td>JavaScript UDFs (<code>CREATE FUNCTION ... LANGUAGE js</code>)</td>
@@ -1311,8 +1326,8 @@ summary the unsupported error envelope points at. Per-family posture
 </tr>
 <tr>
 <td>Python UDFs (<code>CREATE FUNCTION ... LANGUAGE python</code>)</td>
-<td><code>unsupported</code></td>
-<td>No Python UDF runtime; <code>cw_xml_extract</code> stays in bqutils <code>known_failing/</code> as a documented external-language gap (same disposition as JS UDFs).</td>
+<td><code>local_impl</code></td>
+<td><code>CREATE FUNCTION ... LANGUAGE python</code> registers through <code>python_udf_registry.cc</code>, persists the DDL in <code>DuckDBStorage</code>, and evaluates scalar bodies at call time on the semantic executor via a sandboxed <code>python3</code> subprocess (<code>python_udf_runtime.cc</code>) so <code>routines.get</code> round-trips and call-time execution match. Pinned by <code>conformance/fixtures/udf/python_scalar_add.yaml</code>; <code>cw_xml_extract</code> promoted in bqutils <code>passing/</code>. Table-valued / aggregate Python UDFs and arbitrary <code>packages</code> pip installs remain unsupported.</td>
 </tr>
 <tr>
 <td>SQL scalar UDFs (<code>CREATE FUNCTION ... AS (...)</code>), including <code>ANY TYPE</code> templated parameters</td>
@@ -1327,17 +1342,22 @@ summary the unsupported error envelope points at. Per-family posture
 <tr>
 <td><code>LOAD DATA LOCAL &lt;local-uri&gt;</code> / <code>LOAD DATA ... FROM FILES (uris = ['file://...'])</code></td>
 <td><code>control_op</code></td>
-<td>Local CSV/JSON/Parquet readers via DuckDB (<code>RunLoadData</code>); <code>gs://</code> URIs surface unsupported. Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
+<td>Local CSV/JSON/Parquet readers via DuckDB (<code>RunLoadData</code>). Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
 </tr>
 <tr>
 <td><code>LOAD DATA &lt;gs://...&gt;</code> (cloud storage)</td>
-<td><code>unsupported</code></td>
-<td>The emulator does not model BigQuery's cloud-storage ingest surface.</td>
+<td><code>control_op</code></td>
+<td>Resolves <code>gs://</code> via <code>$data_dir/external/gcs-cache/</code> snapshots or <code>STORAGE_EMULATOR_HOST</code> (fake-gcs).</td>
 </tr>
 <tr>
 <td><code>EXPORT DATA</code> (local <code>file://</code> URI)</td>
 <td><code>control_op</code></td>
-<td>DuckDB <code>COPY (SELECT ...) TO</code> for CSV/JSON/Parquet; <code>gs://</code> URIs surface unsupported. Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
+<td>DuckDB <code>COPY (SELECT ...) TO</code> for CSV/JSON/Parquet. Pinned by <code>conformance/fixtures/ddl/export_load_round_trip.yaml</code>.</td>
+</tr>
+<tr>
+<td><code>EXPORT DATA</code> (<code>gs://</code> URI)</td>
+<td><code>control_op</code></td>
+<td>Writes locally then uploads via fake-gcs when <code>STORAGE_EMULATOR_HOST</code> is set.</td>
 </tr>
 <tr>
 <td><code>CREATE MATERIALIZED VIEW</code></td>
@@ -1351,22 +1371,27 @@ summary the unsupported error envelope points at. Per-family posture
 </tr>
 </tbody>
 </table>
-<p>The two halves of the <code>local_stub</code> posture are load-bearing:</p>
+<p>The <code>local_stub</code> posture has two flavors:</p>
 <ol>
-<li><strong>BigQuery-shaped placeholder</strong> -- client-library startup probes
-   (e.g. a connector that issues <code>SELECT KEYS.NEW_KEYSET(...)</code> to
-   confirm the dialect understands the namespace) succeed against the
-   emulator without forcing the user to disable their probe.</li>
-<li><strong>No silent approximation downstream</strong> -- the call site that would
-   actually consume the stub value (<code>KEYS.ENCRYPT(...)</code>, <code>ML.PREDICT(
-   MODEL &lt;id&gt;, ...)</code>) stays on <code>unsupported</code> so a misuse fails loudly
-   rather than emitting a plausible-looking-but-fake answer.</li>
+<li><strong>Probe placeholder (no downstream consumption)</strong> -- client-library
+   startup probes (e.g. a connector that issues <code>SELECT KEYS.NEW_KEYSET(...)</code>
+   to confirm the dialect understands the namespace) succeed without
+   forcing the user to disable their probe.</li>
+<li><strong>No-fail placeholder (deliberate, for families that are not useful
+   locally)</strong> -- families the emulator will never model meaningfully
+   (BigQuery ML inference, differential-privacy aggregates,
+   <code>SESSION_USER</code>) return a
+   deterministic, schema-correct placeholder so a query that references
+   them <strong>does not fail</strong>. The product decision here is no-fail, not
+   loud-fail: these are explicitly placeholders (documented as such per
+   family above), never real answers. This supersedes the emulator's
+   earlier "consume the stub and fail loudly" stance for these families.</li>
 </ol>
-<p>When the unsupported route surfaces an envelope, the message names the
-offending family (e.g. <code>family: function:keys.encrypt</code>, <code>family:
-function:ml.predict</code>, <code>family: ResolvedSequenceStmt</code>) so a user landing
-on this document can find the matching row in the table above without
-running the route classifier in their head.</p>
+<p>A shape that is genuinely <code>unsupported</code> (e.g. graph / GQL) still surfaces
+an <code>UNIMPLEMENTED</code> envelope naming the offending family (e.g.
+<code>family: ResolvedGraphScan</code>) so a user landing on this document can find
+the matching row in the table above without running the route classifier
+in their head.</p>
 <h2 id="what-this-means-in-practice">What this means in practice<a class="headerlink" href="#what-this-means-in-practice" title="Permanent link">&para;</a></h2>
 <ol>
 <li>
@@ -1377,9 +1402,12 @@ running the route classifier in their head.</p>
 </li>
 <li>
 <p><strong>DML / DDL routing is closed for in-scope GoogleSQL shapes.</strong>
-   Remaining deliberate gaps are <code>unsupported</code> families documented in
-   <a href="./"><code>ENGINE_POLICY.md</code></a> (graph/GQL, broad
-   proto surface, <code>ML.*</code>, cloud <code>gs://</code>, ...). Landed on the local DML
+   Remaining gaps are tracked in ROADMAP §Planned work (real
+   implementations for the proto surface, Python UDFs, <code>gs://</code> external
+   data, MEASURE, ...; deterministic no-fail stubs for <code>ML.*</code>,
+   differential-privacy aggregates, <code>SESSION_USER</code>). Graph / GQL is
+   the one family that stays
+   <code>unsupported</code> and is <strong>not</strong> planned. Landed on the local DML
    executor (<code>backend/engine/semantic/dml/</code>): <code>INSERT VALUES</code>, <code>INSERT ...
    SELECT</code>, scalar and deep-STRUCT <code>UPDATE</code>, proto <code>UpdateConstructor</code>
    SET expressions (<code>eval_expr_update_constructor.cc</code>), nested <code>(DELETE arr
@@ -1564,11 +1592,18 @@ services the Go sample suites exercise:</p>
 samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
 <code>BIGQUERY_STORAGE_GRPC_ENDPOINT</code> via <code>bqopts.BigQueryV2GRPCClientOptions()</code>.</p>
 <h2 id="google-sheets-external-tables">Google Sheets external tables<a class="headerlink" href="#google-sheets-external-tables" title="Permanent link">&para;</a></h2>
-<p>The emulator does not call the Google Sheets API. Python thirdparty
-samples <code>test_query_external_sheets_*</code> are skipped via
-<code>third_party/python-bigquery-tests/emulator_pytest_skip.py</code> when
-<code>BIGQUERY_EMULATOR_HOST</code> is set. GCS-backed external tables remain in
-scope.</p>
+<p>Google Sheets external tables (<code>GOOGLE_SHEETS</code> / <code>googleSheetsOptions</code>) are
+materialized at insert / <code>tableDefinitions</code> time through
+<code>gateway/external/sheets.go</code>. Default mode reads a committed CSV snapshot
+under <code>--data_dir</code> / <code>gateway/external/fixtures/</code> (the public sample sheet
+docId <code>1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms</code>, Class Data tab).
+Opt-in live mode (<code>BIGQUERY_EMULATOR_LIVE_SHEETS=1</code> or per-source entry in
+<code>$data_dir/external_sources.yaml</code>) fetches the link-public CSV export URL
+without credentials. Private sheets still require Sheets API credentials.
+Pinned by <code>conformance/fixtures/external/google_sheets_class_data.yaml</code>.
+Python thirdparty samples <code>test_query_external_sheets_*</code> target a different
+public sheet (<code>1i_QCL-…</code>) and remain skipped until that snapshot is added.
+GCS-backed external tables remain in scope via fake-gcs.</p>
 <h2 id="relational-unnest-lateral-correlated-subqueries">Relational UNNEST / lateral / correlated subqueries<a class="headerlink" href="#relational-unnest-lateral-correlated-subqueries" title="Permanent link">&para;</a></h2>
 <p>These shapes share the semantic executor's per-outer-row evaluation
 frame (<code>backend/engine/semantic/outer_row_eval.{h,cc}</code>). The
@@ -1691,11 +1726,12 @@ graph / measure / tokenlist targets) still surface <code>UNIMPLEMENTED</code> on
 semantic path. Type-modifier casts (<code>STRING(n)</code>, <code>NUMERIC(p,s)</code>, …) evaluate
 on <code>eval_expr_cast.cc</code> (<code>cast_type_modifiers.yaml</code>).</p>
 <h2 id="exact-decimal-numeric-bignumeric">Exact-decimal (<code>NUMERIC</code> / <code>BIGNUMERIC</code>)<a class="headerlink" href="#exact-decimal-numeric-bignumeric" title="Permanent link">&para;</a></h2>
-<p>BigQuery's <code>NUMERIC</code> (<code>DECIMAL(38,9)</code>) and <code>BIGNUMERIC</code>
-(<code>DECIMAL(38,38)</code>) are exact decimals. DuckDB can store and compare
-<code>NUMERIC</code> natively, but it widens some operations to <code>DOUBLE</code> and
-cannot store <code>BIGNUMERIC</code> as a <code>DECIMAL</code> at all (its max precision is
-38, which cannot represent <code>DECIMAL(38,38) &gt;= 1.0</code>), so <code>BIGNUMERIC</code>
+<p>BigQuery's <code>NUMERIC</code> (<code>DECIMAL(38,9)</code> — precision 38, scale 9) and
+<code>BIGNUMERIC</code> (precision ~76.8 digits, scale 38) are exact decimals.
+DuckDB can store and compare <code>NUMERIC</code> natively, but it widens some
+operations to <code>DOUBLE</code> and cannot store <code>BIGNUMERIC</code> as a <code>DECIMAL</code> at
+all (BigQuery's <code>BIGNUMERIC</code> needs ~77 digits of precision, which
+exceeds DuckDB's maximum <code>DECIMAL</code> precision of 38), so <code>BIGNUMERIC</code>
 is persisted as <code>VARCHAR</code>. Following the no-silent-approximation rule,
 shapes DuckDB would widen or reject reroute to the semantic executor's
 decimal path (<code>googlesql::NumericValue</code> / <code>BigNumericValue</code>) rather

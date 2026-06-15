@@ -466,6 +466,25 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#install-via-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install via Docker
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build from source
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build from source">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#quickstart-with-docker-compose" class="md-nav__link">
     <span class="md-ellipsis">
       Quickstart with docker compose
@@ -473,13 +492,18 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#plain-docker-run" class="md-nav__link">
     <span class="md-ellipsis">
       Plain docker run
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -833,6 +857,25 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#install-via-docker" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install via Docker
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build from source
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build from source">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#quickstart-with-docker-compose" class="md-nav__link">
     <span class="md-ellipsis">
       Quickstart with docker compose
@@ -840,13 +883,18 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#plain-docker-run" class="md-nav__link">
     <span class="md-ellipsis">
       Plain docker run
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -870,6 +918,33 @@
 
 
 <h1 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h1>
+<p>The fastest way to get started is the published image on GHCR — no Bazel build,
+no GoogleSQL toolchain. The sections below also cover building the image from
+source when you need a local checkout or custom flags.</p>
+<h2 id="install-via-docker">Install via Docker<a class="headerlink" href="#install-via-docker" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:v0.0.1
+docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:v0.0.1
+</code></pre></div>
+<p>Each release publishes four tags to GHCR:</p>
+<ul>
+<li><code>vX.Y.Z</code> — exact version (immutable).</li>
+<li><code>vX.Y</code> — minor track (moves on patch releases).</li>
+<li><code>vX</code> — major track (moves on minor + patch releases).</li>
+<li><code>latest</code> — newest non-pre-release.</li>
+</ul>
+<p>Pre-release tags (<code>v0.0.1-rc1</code>) skip the <code>latest</code> tag promotion so
+<code>docker pull ...:latest</code> always lands on a non-pre-release version. The Docker
+image is <code>linux/amd64</code> only — upstream GoogleSQL's hermetic LLVM toolchain does
+not yet cross-build cleanly to linux/arm64, and macOS engine builds are out of
+scope for the preview series. See <a href="../RELEASES/">Releases &amp; install</a> for
+release archives when you need a native gateway binary without Docker.</p>
+<p>Verify the emulator is up:</p>
+<div class="language-bash highlight"><pre><span></span><code>curl<span class="w"> </span>-fsS<span class="w"> </span>http://localhost:9050/healthz
+curl<span class="w"> </span>-fsS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:9050/bigquery/v2/projects/test/queries<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;query&quot;:&quot;SELECT 1 AS n&quot;,&quot;useLegacySql&quot;:false}&#39;</span>
+</code></pre></div>
+<h2 id="build-from-source">Build from source<a class="headerlink" href="#build-from-source" title="Permanent link">&para;</a></h2>
 <p>The repo ships a multi-stage <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/Dockerfile"><code>Dockerfile</code></a> that builds both the
 Go gateway and the C++ engine (the canonical Bazel
 <code>//binaries/emulator_main:emulator_main</code> target, which links the full GoogleSQL
@@ -886,8 +961,8 @@ tree (~8K C++ TUs); a first-time <code>docker build</code> on a fresh runner can
 Set <code>DOCKER_BUILDKIT=1</code> (default on Docker Desktop / recent Engine) and let
 the cache do its job.</p>
 </blockquote>
-<h2 id="quickstart-with-docker-compose">Quickstart with <code>docker compose</code><a class="headerlink" href="#quickstart-with-docker-compose" title="Permanent link">&para;</a></h2>
-<p>The fastest path is the top-level <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/docker-compose.yml"><code>docker-compose.yml</code></a>:</p>
+<h3 id="quickstart-with-docker-compose">Quickstart with <code>docker compose</code><a class="headerlink" href="#quickstart-with-docker-compose" title="Permanent link">&para;</a></h3>
+<p>When working from a repo checkout, the top-level <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/docker-compose.yml"><code>docker-compose.yml</code></a> builds and runs the stack locally:</p>
 <div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>--build
 
 <span class="c1"># Liveness:</span>
@@ -909,7 +984,7 @@ docker<span class="w"> </span>compose<span class="w"> </span>down<span class="w"
 <p>The same recipe is wired up as <code>task docker:smoke</code> (see
 <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/taskfiles/docker.yml"><code>taskfiles/docker.yml</code></a>) and runs in CI via
 <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/docker-smoke.yml"><code>.github/workflows/docker-smoke.yml</code></a>.</p>
-<h2 id="plain-docker-run">Plain <code>docker run</code><a class="headerlink" href="#plain-docker-run" title="Permanent link">&para;</a></h2>
+<h3 id="plain-docker-run">Plain <code>docker run</code><a class="headerlink" href="#plain-docker-run" title="Permanent link">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span class="c1"># Build the image. Tag whatever you like; `bigquery-emulator:dev` here.</span>
 docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>bigquery-emulator:dev<span class="w"> </span>.
 
@@ -926,10 +1001,8 @@ forwarded to <code>gateway_main</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>bigquery-emulator:dev<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--log_requests<span class="w"> </span>--hostname<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--http_port<span class="o">=</span><span class="m">9050</span>
 </code></pre></div>
-<p>For the published image without building locally:</p>
-<div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:latest
-</code></pre></div>
-<p>See <a href="../RELEASES/">Releases</a> for version tags and install options.</p>
+<p>For the published image without building locally, use the <a href="#install-via-docker">Install via Docker</a>
+commands above (<code>:latest</code> or a pinned <code>vX.Y.Z</code> tag).</p>
 
 
 

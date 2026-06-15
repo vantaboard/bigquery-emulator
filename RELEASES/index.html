@@ -566,15 +566,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#install-via-docker" class="md-nav__link">
-    <span class="md-ellipsis">
-      Install via Docker
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -841,15 +832,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#install-via-docker" class="md-nav__link">
-    <span class="md-ellipsis">
-      Install via Docker
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -913,22 +895,9 @@ toolchain does not yet cross-build cleanly to linux/arm64, and macOS engine
 builds are out of scope for the preview series. The macOS + linux/arm64 archives
 still bundle the linux/amd64 engine binary so the layout stays uniform, but
 you cannot run those engine binaries on a non-linux/amd64 host. The recommended
-path on macOS or linux/arm64 is the published Docker image (next section).</p>
+path on macOS or linux/arm64 is the published Docker image — see
+<a href="../DOCKER/#install-via-docker">Docker → Install via Docker</a>.</p>
 </blockquote>
-<h2 id="install-via-docker">Install via Docker<a class="headerlink" href="#install-via-docker" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:v0.0.1
-</code></pre></div>
-<p>Each release publishes four tags to GHCR:</p>
-<ul>
-<li><code>vX.Y.Z</code> — exact version (immutable).</li>
-<li><code>vX.Y</code> — minor track (moves on patch releases).</li>
-<li><code>vX</code> — major track (moves on minor + patch releases).</li>
-<li><code>latest</code> — newest non-pre-release.</li>
-</ul>
-<p>Pre-release tags (<code>v0.0.1-rc1</code>) skip the <code>latest</code> tag promotion so
-<code>docker pull ...:latest</code> always lands on a non-pre-release version. The Docker
-image is <code>linux/amd64</code> only for the same engine-binary reason as above.</p>
 
 
 
