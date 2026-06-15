@@ -6,19 +6,19 @@ isProject: true
 todos:
   - id: stub-semantics
     content: "Decide the deterministic placeholder each ML.* call returns so a query does not fail: ML.PREDICT -> input rows passed through with the documented predicted_<label> output column(s) filled with a fixed sentinel/NULL; ML.EVALUATE -> a single metrics row of fixed/NULL values with the documented schema; ML.FORECAST -> the documented forecast schema with sentinel rows. Shapes must match BigQuery's output schema so client libraries parse the result; values are explicitly placeholders, not predictions."
-    status: pending
+    status: completed
   - id: stub-handlers
     content: "Implement the ML.* stubs through the existing function-stub mechanism (backend/engine/semantic/stubs/, the same lane KEYS.NEW_KEYSET uses) and confirm CREATE MODEL stays the metadata-only control stub (backend/engine/control/stubs/create_model.{h,cc}). A predict over an unregistered model name must still produce a clean (non-crashing) result, not a hard error."
-    status: pending
+    status: completed
   - id: routing
     content: "Route classifier: ensure ML.* model-bearing calls dispatch to the stub lane rather than surfacing UNIMPLEMENTED, while keeping the priority order intact (a query mixing a stubbed ML.* with a genuinely unsupported shape still surfaces the unsupported error)."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "Conformance fixtures: CREATE MODEL + ML.PREDICT / ML.EVALUATE return a schema-correct placeholder result (schema_only matching mode) without erroring. Flip ml.predict / ml.forecast / ml.evaluate from unsupported -> local_stub in functions.yaml + SHAPE_TRACKER; update the ENGINE_POLICY ML rows + ROADMAP §BigQuery ML to describe the stub posture."
-    status: pending
+    status: completed
   - id: skip-audit
     content: "Third-party skip audit (run before declaring done). The ML stub means ML.* queries no longer error, so several currently-skipped ML tests may run as schema_only checks. Re-run each suite and unskip what passes: golang `bqtestutil.SkipEmulatorBQML` call sites (third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go); python `model` / `bqml` skip substrings (third_party/python-bigquery-tests/emulator_pytest_skip.py + _SKIP_FIXTURES model_id); node `models.test.js` (third_party/node-bigquery-tests/test/setup.js + EMULATOR.md); java BQML ITs. Keep skips where the test asserts real prediction values (the stub returns placeholders, not predictions) and note why. Update third_party/README.md."
-    status: pending
+    status: completed
 ---
 
 # Expand 02 — BigQuery ML (deterministic stubs)

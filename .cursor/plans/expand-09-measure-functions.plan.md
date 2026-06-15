@@ -18,7 +18,7 @@ todos:
     status: pending
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and bqutils known_failing/ for MEASURE / AGGREGATE(<measure>) fixtures that now pass and promote them; re-run any third-party subtest touching measure columns. Update third_party/README.md only for rows truly unblocked + note anything still failing."
-    status: pending
+    status: completed
 ---
 
 # Expand 09 — Measure functions

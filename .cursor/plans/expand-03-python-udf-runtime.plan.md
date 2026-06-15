@@ -21,7 +21,7 @@ todos:
     status: pending
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done). Re-run each suite and unskip / promote what now passes: promote cw_xml_extract out of bqutils known_failing/ (conformance/thirdparty-fixtures/bigquery_utils/known_failing/community/cw_xml_extract.yaml) into passing/ if the Python runtime evaluates it; drop python LANGUAGE-python UDF skip rows from the client-lane skip matrices (third_party/python-bigquery-tests/emulator_pytest_skip.py and others) that now pass. Keep skips for non-scalar (TVF/aggregate) Python UDFs if those stay deferred + note why. Update third_party/README.md."
-    status: pending
+    status: completed
 ---
 
 # Expand 03 — Python UDF runtime

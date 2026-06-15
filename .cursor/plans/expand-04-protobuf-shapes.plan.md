@@ -24,10 +24,20 @@ todos:
     status: pending
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done). Check whether any currently-skipped or known_failing proto cases now pass and promote them: widen the GoogleSQL `.test` corpus lane (conformance/googlesql-corpus/) with proto cases the implementation covers; sweep the bqutils corpus known_failing/ for proto-shaped fixtures (conformance/thirdparty-fixtures/bigquery_utils/known_failing/); re-run any third-party subtests that touch proto columns. Update third_party/README.md only for rows actually unblocked + note anything still failing."
-    status: pending
+    status: completed
 ---
 
 # Expand 04 — Protobuf field access
+
+## Closeout notes (2026-06)
+
+**bq alignment revision (`6fc21de`):** Proto expression family
+(`MakeProto`, `GetProtoField`, `GetProtoOneof`, `ReplaceField`,
+`FilterField`, `UpdateConstructor`) removed — not reachable in BigQuery
+PRODUCT_EXTERNAL without catalog proto registration. **`ResolvedGetRowField`
+kept** (value-table field access is valid BigQuery). Skip-audit: no bqutils
+or googlesql-corpus proto fixtures to promote; `load_proto_*` vendoring
+blocked until catalog UX lands.
 
 ## Why
 

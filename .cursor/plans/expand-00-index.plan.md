@@ -117,15 +117,17 @@ graph LR
 
 | Plan | Kind | State | Conformance delta | Commits | Notes |
 |------|------|-------|-------------------|---------|-------|
-| 01 | real | landed (partial) | +1 external (google_sheets_class_data); gs:// engine path | e48222e, 6c112c1, 42a2f61 | Sheets + gs:// LOAD/EXPORT + config model; EXTERNAL_QUERY federated reads deferred |
-| 02 | stub | landed | +3 specialized (ml_predict/evaluate/forecast_stub) | 67e9d30, 8ad84ed | ML.* local_stub TVFs; CREATE MODEL stays control stub |
-| 03 | real | landed | +1 udf (python_scalar_add); cw_xml_extract → bqutils passing | 80fb50a, 9e0e1cc, feb104b | Subprocess python3 scalar UDFs; lxml for cw_xml_extract |
-| 04 | real | landed | +1 specialized (replace_fields_struct); +7 unit tests | cc1a169, c6c7378 | Proto AST on semantic executor; catalog descriptor pool deferred |
+| 01 | real | landed (partial) | +1 external (google_sheets_class_data); gs:// engine path | e48222e, 6c112c1, 42a2f61 | Sheets + gs:// LOAD/EXPORT + config model; EXTERNAL_QUERY deferred; skip-audit: Python Sheets samples retargeted to Class Data |
+| 02 | stub | landed | +3 specialized (ml_predict/evaluate/forecast_stub) | 67e9d30, 8ad84ed | ML.* local_stub; skip-audit: BQML client skips kept (stub ≠ real predictions) |
+| 03 | real | landed | +1 udf (python_scalar_add); cw_xml_extract in bqutils passing | 80fb50a, 9e0e1cc, feb104b | Scalar Python UDFs; skip-audit: bqutils sync+triage green (117 passing) |
+| 04 | real | reverted (bq alignment) | GetRowField only (`6fc21de`) | cc1a169, 6fc21de | Proto expr family removed (not BigQuery); skip-audit: no corpus fixtures to promote |
 | 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
-| 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; NOT differential privacy |
-| 07 | real | landed | +1 scripting (expression_column_set_increment) | 693d254 | ExpressionColumn on semantic executor; Sequence + CatalogColumnRef sharpened (unsupported, not reachable) |
-| 08 | mixed | landed | +4 specialized (st_geogfromwkb, explain_select_smoke, keys stub via KEYSET_LENGTH, session_user) | | real: ST_GEOGFROMWKB + EXPLAIN; stub: KEYS + SESSION_USER; KEYS.ENCRYPT analyze segfault — fixture uses KEYSET_LENGTH |
-| 09 | real | landed | +1 specialized (measure_agg_group_by) | | MEASURE catalog + multi-level aggregate eval |
+| 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; skip-audit: no-op (no DP fixtures in corpora) |
+| 07 | real | landed | +1 scripting (expression_column_set_increment) | 693d254 | ExpressionColumn; skip-audit: completed (no client samples) |
+| 08 | mixed | landed (revised) | st_geogfromwkb + session_user + keys NEW_KEYSET/KEYSET_LENGTH | 548a0f9, 936b428, 6fc21de | EXPLAIN + KEYS.ENCRYPT/DECRYPT removed (bq-validated); skip-audit: no bqutils/googlesql fixtures for these shapes |
+| 09 | real | landed | +1 specialized (measure_agg_group_by) | 44ad2a8 | MEASURE catalog; skip-audit: no third-party skip rows |
+
+**Closeout (2026-06):** `task conformance:run` 197/197; `task conformance:bqutils` 117/117; `task conformance:googlesql-corpus` pinned lane green; `task conformance:routing-matrix` deterministic; bq alignment commits `936b428`, `6fc21de`, `e60b2b8`.
 
 ## Bookkeeping per landed plan
 

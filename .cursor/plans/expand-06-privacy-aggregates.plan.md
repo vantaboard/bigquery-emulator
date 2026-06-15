@@ -15,7 +15,7 @@ todos:
     status: pending
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done). The stub makes DP/anonymized/threshold queries succeed (plain aggregate), so check for currently-skipped or known_failing cases that now run: sweep the bqutils corpus known_failing/ (conformance/thirdparty-fixtures/bigquery_utils/known_failing/) and the GoogleSQL `.test` corpus for DP-clause fixtures; re-run any third-party subtest that issues these clauses. Only unskip where the test asserts the query *runs* (not a privacy guarantee); note why for the rest. Update third_party/README.md."
-    status: pending
+    status: completed
 ---
 
 # Expand 06 — Privacy-preserving aggregates (stubs)

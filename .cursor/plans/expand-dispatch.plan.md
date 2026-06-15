@@ -4,28 +4,28 @@ overview: Serialized engine-lane runbook for the expand feature set (plans 01-09
 todos:
   - id: preflight
     content: "Pre-flight before wave 1: confirm main is clean, `task lint:dispositions` green, `task bazel:status` -> `(clean)`, `free -h` available > 4 GiB. Re-read expand-00-index + ROADMAP §Planned work + ENGINE_POLICY §Unsupported families."
-    status: pending
+    status: completed
   - id: wave1-stubs
     content: "Wave 1 — stub warm-up (SERIALIZED): dispatch expand-02-bigquery-ml (ML.* placeholders) -> expand-06-privacy-aggregates (strip DP modifiers, plain aggregate). Cheap no-fail stubs; establishes the stub lane before heavier work. Parent cleanup + expand-00 status update between each."
-    status: pending
+    status: completed
   - id: wave2-external
     content: "Wave 2 — external data (SERIALIZED): dispatch expand-01-external-data-sources (gs:// LOAD/EXPORT, Google Sheets, connections/EXTERNAL_QUERY, tableDefinitions; fixture vs opt-in live config). Touches Go gateway + engine. Parent cleanup + status update after."
-    status: pending
+    status: completed
   - id: wave3-language-surfaces
     content: "Wave 3 — language surfaces (SERIALIZED): dispatch expand-03-python-udf-runtime -> expand-04-protobuf-shapes. Independent but both are multi-week real implementations; run one at a time. Parent cleanup + status update between each."
-    status: pending
+    status: completed
   - id: wave4-catalog-measures
     content: "Wave 4 — catalog + measures (SERIALIZED): dispatch expand-07-sequences-catalog-refs -> expand-09-measure-functions. Parent cleanup + status update between each."
-    status: pending
+    status: completed
   - id: wave5-scalar
     content: "Wave 5 — scalar/statement long tail (SERIALIZED): dispatch expand-08-scalar-statement-long-tail (real: ST_GEOGFROMWKB + EXPLAIN; stub: KEYS encrypt/decrypt + SESSION_USER). Parent cleanup + status update after."
-    status: pending
+    status: completed
   - id: track
     content: "After each subagent returns: run the parent cleanup block (process-hygiene.mdc), flip the matching wave todo here to completed, update the expand-00-index status table (state / conformance delta / commits / notes), verify `task lint:dispositions` green on main, and confirm `task bazel:status` -> `(clean)` before the next dispatch."
-    status: pending
+    status: completed
   - id: closeout
     content: "Closeout when all waves land: final cross-cutting skip audit (each plan's `skip-audit` todo runs per-plan; this is the catch-all). Sweep third-party skip matrices (`third_party/*/emulator_*skip*`, `third_party/README.md`, `node-bigquery-tests/EMULATOR.md`), the bqutils corpus (`conformance/thirdparty-fixtures/bigquery_utils/known_failing/` -> `passing/`), and the GoogleSQL `.test` corpus (`conformance/googlesql-corpus/`) for shapes now unblocked; run `task conformance:routing-matrix`; final `task bazel:shutdown` + `task bazel:status`; mark any remaining ROADMAP §Planned work bullets ✅ or document blockers."
-    status: pending
+    status: completed
 isProject: true
 ---
 

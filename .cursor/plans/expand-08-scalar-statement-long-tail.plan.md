@@ -6,22 +6,22 @@ isProject: true
 todos:
   - id: st-geogfromwkb
     content: "ST_GEOGFROMWKB (REAL implementation): parse WKB bytes into the GEOGRAPHY representation used by geog_funcs.cc (which already does ST_GEOGFROMTEXT / ST_GEOGPOINT / ST_ASTEXT). Reuse the existing GIS value plumbing; flip st_geogfromwkb off unsupported -> local_impl (semantic_executor) in functions.yaml and remove ST_GEOGFROMWKB from the unsupported list in the ENGINE_POLICY Geography row."
-    status: pending
+    status: completed
   - id: explain-stmt
     content: "ResolvedExplainStmt (REAL implementation): EXPLAIN plan introspection. Emit a BigQuery-shaped plan/explain result for the analyzed query (the route classifier + transpiler already produce a plan shape). Flip ResolvedExplainStmt off unsupported in node_dispositions.yaml."
-    status: pending
+    status: cancelled
   - id: keys-stub
     content: "KEYS.ENCRYPT / KEYS.DECRYPT_BYTES (STUB - not a real AEAD): these are not useful locally and should only stop failing. Return a deterministic BigQuery-shaped placeholder through the existing keys stub lane (backend/engine/semantic/stubs/keys.{h,cc}, the same lane as KEYS.NEW_KEYSET): KEYS.ENCRYPT -> a fixed BYTES envelope, KEYS.DECRYPT_BYTES -> a fixed/echoed BYTES value. NOT real encryption. Flip keys.encrypt / keys.decrypt_bytes from unsupported -> local_stub."
-    status: pending
+    status: cancelled
   - id: session-user-stub
     content: "SESSION_USER (STUB): return a deterministic placeholder principal identifier (a fixed emulator principal string, optionally configurable) so row/column-policy + audit queries do not fail. Flip session_user from unsupported -> local_stub."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "Conformance fixtures: ST_GEOGFROMWKB constructor (WKB -> WKT, real), an EXPLAIN smoke (real), KEYS.ENCRYPT/DECRYPT_BYTES round-trip returns a placeholder without erroring (stub), and SESSION_USER returns the placeholder principal (stub). Flip the rows in functions.yaml / node_dispositions.yaml + SHAPE_TRACKER with the correct posture (local_impl for ST_GEOGFROMWKB/EXPLAIN, local_stub for KEYS/SESSION_USER); update ENGINE_POLICY (Key management, Geography, + EXPLAIN/SESSION_USER notes) and ROADMAP §Deferred built-in functions + §Statements."
-    status: pending
+    status: completed
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and bqutils known_failing/ for ST_GEOGFROMWKB / EXPLAIN / KEYS.* / SESSION_USER fixtures now passing and promote them; re-run any third-party subtest touching these. For KEYS.* / SESSION_USER only unskip where the test checks the query *runs* (stub returns a placeholder, not real crypto / identity); note why otherwise. Update third_party/README.md."
-    status: pending
+    status: completed
 ---
 
 # Expand 08 — Scalar + statement long tail
@@ -39,6 +39,16 @@ implementations; two are **stubs** that only need to stop failing:
   encryption is not useful locally, so return a deterministic placeholder
   so the query does not fail.
 - **Stub:** `SESSION_USER` — return a fixed placeholder principal.
+
+## Closeout notes (2026-06)
+
+**bq alignment revision (`936b428`, `6fc21de`):** `EXPLAIN` and
+`KEYS.ENCRYPT`/`KEYS.DECRYPT_BYTES` were removed — not part of BigQuery's
+public SQL surface (bq dry-run validated). Landed fixtures:
+`st_geogfromwkb_point.yaml`, `session_user_stub.yaml`,
+`keys_new_keyset_stub.yaml`, `keys_keyset_length_stub.yaml`. Skip-audit:
+no matching rows in bqutils or googlesql-corpus; third-party matrices
+unchanged for these shapes.
 
 ## The hard part
 

@@ -153,6 +153,22 @@ state are tracked in `ROADMAP.md` and `docs/REST_API.md`.
 | **Differential privacy / anonymization / aggregation threshold** | No dedicated third-party skip matrix entries today. Swept `conformance/thirdparty-fixtures/bigquery_utils/known_failing/` and the GoogleSQL `.test` corpus — no DP-clause fixtures to unskip. Local stubs (`Resolved*AggregateScan` privacy family in `node_dispositions.yaml`) make `WITH DIFFERENTIAL_PRIVACY` / `WITH ANONYMIZATION` / `WITH AGGREGATION_THRESHOLD` queries succeed with the plain aggregate; client samples asserting privacy guarantees would remain skipped if added later. |
 | **Public sample tables** (`bigquery-public-data.samples.shakespeare`, etc.) | The Docker image and `gateway_main --seed-data-file` load minimal fixtures from [`testdata/public-data/bigquery-public-data.yaml`](../testdata/public-data/bigquery-public-data.yaml) (`usa_names`, `samples.shakespeare`, `utility_us.country_code_iso`, `stackoverflow.posts_questions`, etc.). Python skips samples that reference other public tables (`emulator_pytest_skip.py`); Node runs all Mocha files except `models.test.js` (BQML). |
 
+### Expand closeout (2026-06)
+
+Skip-audit sweep after the expand wave + bq alignment removals (`936b428`,
+`6fc21de`):
+
+| Area | Closeout outcome |
+|------|------------------|
+| **BQML** | Skips kept in Python/Go/Node — stubs return NULL placeholders; client samples assert metadata or real predictions. |
+| **DP / anonymization** | No third-party skip rows; no bqutils/googlesql DP fixtures. |
+| **Python scalar UDF** | `cw_xml_extract` in bqutils `passing/`; bqutils sync+triage refreshed upstream SHA (`8c6ade7`); 117/117 passing. |
+| **Proto / MEASURE / KEYS encrypt / EXPLAIN** | No third-party skip rows; proto expr family removed (bq alignment); EXPLAIN/KEYS.ENCRYPT not BigQuery. |
+| **Google Sheets** | Python `test_query_external_sheets_*` retargeted to Class Data docId (`1BxiMVs…`); removed from `_SAMPLES_EMULATOR_SKIP`. Verify with `task thirdparty:python-bigquery-tests` (`-k external_sheets`). |
+| **GCS loads** | Go/Python GCS subtests run when `STORAGE_EMULATOR_HOST` is set (`task thirdparty:fake-gcs-up`); no code skip when env is wired. |
+| **dbt `upload_file`** | Still skipped — engine DDL gaps (`TestSimpleMaterializationsBigQuery` triage); not expand-01 scope. |
+| **googlesql-corpus** | Pinned lane green (85 cases); 7 `engine-bug` triage rows unchanged; expand shapes not in vendored `.test` files. |
+
 ### Emulator stderr (benign vs actionable)
 
 - `dataset location "us-central1" does not match API endpoint location "us-east4"`

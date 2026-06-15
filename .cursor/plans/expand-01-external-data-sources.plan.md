@@ -27,7 +27,7 @@ todos:
     status: pending
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done; never just remove the obvious rows). Re-run each suite the landed surface should unblock and unskip what now passes: python `test_query_external_sheets_permanent_table` / `test_query_external_sheets_temporary_table` + GCS-backed sample loads (third_party/python-bigquery-tests/emulator_pytest_skip.py); golang bqconnection / external-table ITs (third_party/golang-bigquery-tests/bqtestutil/emulator_skip.go + the README coverage matrix); java bigqueryconnection ITs (third_party/java-bigquery-tests, currently UNIMPLEMENTED per README); GCS subtests gated on STORAGE_EMULATOR_HOST. Update third_party/README.md skip matrices + node-bigquery-tests/EMULATOR.md. Leave a written note for any row that still can't run + why."
-    status: pending
+    status: completed
 ---
 
 # Expand 01 — External data sources
