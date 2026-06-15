@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/coordinator/route_classifier_visitor.h"
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -15,6 +16,16 @@ namespace coordinator {
 namespace {
 
 namespace transpiler = ::bigquery_emulator::backend::engine::duckdb::transpiler;
+
+// DML roots marked `semantic_executor` in `node_dispositions.yaml` still
+// need a full AST walk: `VisitResolvedInsertStmt` promotes
+// `INSERT ... SELECT` to DuckDB when the inner scan is transpilable, and
+// `INSERT VALUES` falls back to the YAML disposition via `CheckNodeClass`.
+bool DmlRootNeedsClassifierWalk(absl::string_view root_class) {
+  return root_class == "ResolvedInsertStmt" ||
+         root_class == "ResolvedUpdateStmt" ||
+         root_class == "ResolvedDeleteStmt";
+}
 
 }  // namespace
 
@@ -42,12 +53,14 @@ RouteDecision RouteClassifier::Classify(
       };
     }
     if (root_entry->disposition == Disposition::kSemanticExecutor) {
-      return RouteDecision{
-          Disposition::kSemanticExecutor,
-          RouteClassifierReasonFor(
-              Disposition::kSemanticExecutor, root_class, root_class),
-          root_class,
-      };
+      if (!DmlRootNeedsClassifierWalk(root_class)) {
+        return RouteDecision{
+            Disposition::kSemanticExecutor,
+            RouteClassifierReasonFor(
+                Disposition::kSemanticExecutor, root_class, root_class),
+            root_class,
+        };
+      }
     }
     if (root_entry->disposition == Disposition::kUnsupported) {
       return RouteDecision{
