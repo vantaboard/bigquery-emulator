@@ -226,6 +226,13 @@ absl::Status DuckDBStorage::CreateTable(const TableId& id,
     return absl::OkStatus();
   }
   const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
+  if (physical.columns.empty()) {
+    // Measure-only (or otherwise non-materialized) logical schemas
+    // register metadata through the sidecar only; DuckDB rejects
+    // `CREATE TEMP TABLE t ()` and an empty parquet file would not
+    // round-trip column types anyway.
+    return absl::OkStatus();
+  }
   const std::string tmp_table = "main.__bqemu_mkempty";
   const std::string cols = internal::RenderColumnList(physical);
   const auto create_status = internal::RunSql(
