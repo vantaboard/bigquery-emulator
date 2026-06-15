@@ -2,6 +2,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
 
 namespace bigquery_emulator {
@@ -431,6 +432,7 @@ AS
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 123456);
 }
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

@@ -13,6 +13,8 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
+absl::StatusOr<Value> StGeogFromWkb(const std::vector<Value>& args);
+
 absl::StatusOr<Value> StGeogPoint(const std::vector<Value>& args);
 absl::StatusOr<Value> StGeogFromText(const std::vector<Value>& args);
 absl::StatusOr<Value> StAsText(const std::vector<Value>& args);

@@ -303,16 +303,12 @@ TEST_F(RouteClassifierTest, MatchRecognizeScanPromotesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedMatchRecognizeScan");
 }
 
-TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {
-  // `ResolvedExplainStmt` is statement-level `unsupported`. Pin
-  // that the classifier returns the unsupported route and records
-  // the resolved class name (not a function name) as the
-  // offending node.
+TEST_F(RouteClassifierTest, ExplainStatementRoutesToSemanticExecutor) {
   const auto* stmt = Analyze("EXPLAIN SELECT * FROM people");
   ASSERT_NE(stmt, nullptr);
 
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kUnsupported);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
   EXPECT_EQ(d.offending_node, "ResolvedExplainStmt");
 }
 }  // namespace

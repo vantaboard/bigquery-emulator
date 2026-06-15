@@ -1,0 +1,15 @@
+# session_user_stub: deterministic placeholder principal.
+name: specialized_session_user_stub
+description: |
+  SESSION_USER returns a fixed emulator principal so audit/policy
+  queries do not fail locally.
+project_id: proj-specialized-session-user
+dataset_id: ds_session_user
+setup:
+  - dataset: ds_session_user
+query: |
+  SELECT SESSION_USER() AS principal
+expected:
+  route: local_stub
+  rows:
+    - {principal: "bigquery-emulator@local"}

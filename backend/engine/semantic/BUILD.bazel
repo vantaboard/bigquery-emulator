@@ -282,6 +282,7 @@ cc_library(
         "scan_eval_agg_having.cc",
         "scan_eval_agg_list.cc",
         "scan_eval_aggregate.cc",
+        "scan_eval_measure_multi_level.cc",
         "scan_eval_materialize.cc",
         "scan_eval_materialize_relation_argument.cc",
         "scan_eval_analytic.cc",
@@ -461,8 +462,14 @@ cc_test(
 
 cc_library(
     name = "executor",
-    srcs = ["executor.cc"],
-    hdrs = ["executor.h"],
+    srcs = [
+        "executor.cc",
+        "explain_stmt.cc",
+    ],
+    hdrs = [
+        "executor.h",
+        "explain_stmt.h",
+    ],
     deps = [
         ":error",
         ":eval_expr",
@@ -472,6 +479,8 @@ cc_library(
         ":value",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
+        "//backend/engine:disposition",
+        "//backend/engine/coordinator:route_classifier",
         "//backend/engine/semantic/dml:dml_executor",
         "//backend/engine/semantic/script:assert_stmt",
         "//backend/engine/semantic/script:assignment_stmt",

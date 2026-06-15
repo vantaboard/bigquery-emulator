@@ -68,6 +68,14 @@ absl::StatusOr<Value> KeysNewKeyset(const std::vector<Value>& args);
 // for any non-NULL BYTES; see header comment for the contract.
 absl::StatusOr<Value> KeysKeysetLength(const std::vector<Value>& args);
 
+// `KEYS.ENCRYPT(plaintext BYTES) -> BYTES`. Deterministic placeholder
+// envelope; NOT real AEAD. NULL propagates to NULL BYTES.
+absl::StatusOr<Value> KeysEncrypt(const std::vector<Value>& args);
+
+// `KEYS.DECRYPT_BYTES(ciphertext BYTES) -> BYTES`. Deterministic
+// placeholder round-trip for stub keysets; NOT real AEAD.
+absl::StatusOr<Value> KeysDecryptBytes(const std::vector<Value>& args);
+
 }  // namespace stubs
 }  // namespace semantic
 }  // namespace engine

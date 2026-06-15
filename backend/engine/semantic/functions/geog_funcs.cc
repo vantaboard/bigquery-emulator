@@ -1,6 +1,7 @@
 #include "backend/engine/semantic/functions/geog_funcs.h"
 
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -146,6 +147,69 @@ absl::StatusOr<ParsedGeography> ParseWkt(absl::string_view wkt) {
       "semantic: unsupported geography WKT for MVP");
 }
 
+uint32_t ReadUint32LE(const unsigned char* p) {
+  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+         (static_cast<uint32_t>(p[2]) << 16) |
+         (static_cast<uint32_t>(p[3]) << 24);
+}
+
+uint32_t ReadUint32BE(const unsigned char* p) {
+  return (static_cast<uint32_t>(p[0]) << 24) |
+         (static_cast<uint32_t>(p[1]) << 16) |
+         (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
+}
+
+double ReadDouble(const unsigned char* p, bool little_endian) {
+  double out = 0.0;
+  unsigned char buf[8];
+  if (little_endian) {
+    std::memcpy(buf, p, 8);
+  } else {
+    for (int i = 0; i < 8; ++i) {
+      buf[i] = p[7 - i];
+    }
+  }
+  static_assert(sizeof(double) == 8);
+  std::memcpy(&out, buf, 8);
+  return out;
+}
+
+absl::StatusOr<ParsedGeography> ParseWkbPoint(absl::string_view wkb) {
+  if (wkb.size() < 21) {
+    return absl::InvalidArgumentError("WKB payload too short for POINT");
+  }
+  const auto* data = reinterpret_cast<const unsigned char*>(wkb.data());
+  if (data[0] != 0 && data[0] != 1) {
+    return absl::InvalidArgumentError("invalid WKB byte order");
+  }
+  const bool little_endian = data[0] == 1;
+  const uint32_t raw_type =
+      little_endian ? ReadUint32LE(data + 1) : ReadUint32BE(data + 1);
+  size_t offset = 5;
+  if ((raw_type & 0x20000000u) != 0) {
+    offset += 4;
+  }
+  const uint32_t geom_type = raw_type & 0xffu;
+  if (geom_type != 1u) {
+    return absl::InvalidArgumentError(
+        "semantic: ST_GEOGFROMWKB MVP supports POINT geometries only");
+  }
+  if (wkb.size() < offset + 16) {
+    return absl::InvalidArgumentError("WKB POINT payload truncated");
+  }
+  const double lng = ReadDouble(data + offset, little_endian);
+  const double lat = ReadDouble(data + offset + 8, little_endian);
+  if (lat < -90.0 || lat > 90.0) {
+    return absl::InvalidArgumentError(
+        "ST_GEOGFROMWKB latitude must be between -90 and 90");
+  }
+  ParsedGeography out;
+  out.kind = ParsedGeography::Kind::kPoint;
+  out.point_lng = NormalizeLongitude(lng);
+  out.point_lat = lat;
+  return out;
+}
+
 absl::StatusOr<ParsedGeography> ParseGeographyArg(const Value& v) {
   if (v.is_null()) {
     return absl::InvalidArgumentError("unexpected NULL geography");
@@ -242,6 +306,23 @@ absl::StatusOr<Value> StGeogFromText(const std::vector<Value>& args) {
   }
   return GeographyFromWkt(
       absl::StrCat("POLYGON((", absl::StrJoin(pairs, ", "), "))"));
+}
+
+absl::StatusOr<Value> StGeogFromWkb(const std::vector<Value>& args) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        "semantic: ST_GEOGFROMWKB expects one BYTES argument");
+  }
+  if (args[0].is_null()) {
+    return Value::NullGeography();
+  }
+  if (args[0].type_kind() != ::googlesql::TYPE_BYTES) {
+    return absl::InvalidArgumentError("ST_GEOGFROMWKB expects BYTES WKB");
+  }
+  const std::string& wkb = args[0].bytes_value();
+  auto parsed = ParseWkbPoint(wkb);
+  if (!parsed.ok()) return parsed.status();
+  return GeographyFromWkt(FormatPointWkt(parsed->point_lng, parsed->point_lat));
 }
 
 absl::StatusOr<Value> StAsText(const std::vector<Value>& args) {

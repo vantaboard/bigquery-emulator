@@ -123,6 +123,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   }
   if (name == "st_geogpoint") return StGeogPoint(args);
   if (name == "st_geogfromtext") return StGeogFromText(args);
+  if (name == "st_geogfromwkb") return StGeogFromWkb(args);
   if (name == "st_astext") return StAsText(args);
   if (name == "st_distance") return StDistance(args);
   if (name == "st_within") return StWithin(args);

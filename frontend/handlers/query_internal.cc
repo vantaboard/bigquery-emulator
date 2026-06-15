@@ -257,6 +257,7 @@ backend::engine::QueryRequest ProtoToEngineRequest(
 StatementClass ClassifyStatement(::googlesql::ResolvedNodeKind kind) {
   switch (kind) {
     case ::googlesql::RESOLVED_QUERY_STMT:
+    case ::googlesql::RESOLVED_EXPLAIN_STMT:
     case ::googlesql::RESOLVED_MULTI_STMT:
       return StatementClass::kSelect;
     case ::googlesql::RESOLVED_INSERT_STMT:

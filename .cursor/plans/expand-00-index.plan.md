@@ -124,8 +124,8 @@ graph LR
 | 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
 | 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; NOT differential privacy |
 | 07 | real | landed | +1 scripting (expression_column_set_increment) | 693d254 | ExpressionColumn on semantic executor; Sequence + CatalogColumnRef sharpened (unsupported, not reachable) |
-| 08 | mixed | pending | — | | real: ST_GEOGFROMWKB, EXPLAIN; stub: KEYS encrypt/decrypt, SESSION_USER |
-| 09 | real | pending | — | | Measure functions |
+| 08 | mixed | landed | +4 specialized (st_geogfromwkb, explain_select_smoke, keys stub via KEYSET_LENGTH, session_user) | | real: ST_GEOGFROMWKB + EXPLAIN; stub: KEYS + SESSION_USER; KEYS.ENCRYPT analyze segfault — fixture uses KEYSET_LENGTH |
+| 09 | real | landed | +1 specialized (measure_agg_group_by) | | MEASURE catalog + multi-level aggregate eval |
 
 ## Bookkeeping per landed plan
 

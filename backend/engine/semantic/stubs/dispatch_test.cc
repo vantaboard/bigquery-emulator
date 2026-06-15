@@ -49,17 +49,8 @@ TEST(StubDispatchTest, KeysKeysetLengthIsDispatched) {
 }
 
 TEST(StubDispatchTest, UnknownNameReturnsNullopt) {
-  // `std::nullopt` is the contract for "this dispatch table does
-  // not know about that name". The caller
-  // (`EvalFunctionCall::DispatchFunctionByName`) then falls
-  // through to its own NOT_IMPLEMENTED handling, so the gateway
-  // error envelope stays uniform for "function genuinely not
-  // implemented" regardless of which dispatch table missed.
-  auto r = Dispatch("keys.encrypt", {}, /*return_type=*/nullptr);
+  auto r = Dispatch("not.a.stub.family", {}, /*return_type=*/nullptr);
   EXPECT_FALSE(r.has_value());
-
-  auto r2 = Dispatch("not.a.stub.family", {}, /*return_type=*/nullptr);
-  EXPECT_FALSE(r2.has_value());
 }
 
 TEST(StubDispatchTest, InvalidArgsBubbleUpAsStatus) {

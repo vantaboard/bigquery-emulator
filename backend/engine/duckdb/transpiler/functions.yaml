@@ -503,6 +503,9 @@ string_agg: duckdb_rewrite duckdb_name=STRING_AGG
 # in the per-function conformance fixture under
 # `conformance/fixtures/functions/aggregate/function_countif.yaml`.
 countif: duckdb_native duckdb_name=COUNT_IF
+# AGG(<measure>) expands via the analyzer's measure rewrite into
+# multi-level aggregates; the semantic executor evaluates the result.
+agg: semantic_executor
 logical_and: duckdb_native duckdb_name=BOOL_AND
 logical_or: duckdb_native duckdb_name=BOOL_OR
 bit_and: duckdb_native duckdb_name=BIT_AND
@@ -625,20 +628,20 @@ normalize_and_casefold: semantic_executor
 # which violates the no-silent-approximation rule.
 keys.new_keyset: local_stub
 keys.keyset_length: local_stub
-keys.encrypt: unsupported
-keys.decrypt_bytes: unsupported
+keys.encrypt: local_stub
+keys.decrypt_bytes: local_stub
 
 # Geography / GIS MVP: WKT-backed GEOGRAPHY values on the semantic
 # executor (WGS84 spherical haversine + planar point-in-polygon for
 # predicates). DuckDB `spatial` can close remaining gaps later.
 st_geogpoint: semantic_executor
 st_geogfromtext: semantic_executor
+st_geogfromwkb: semantic_executor
 st_astext: semantic_executor
 st_distance: semantic_executor
 st_within: semantic_executor
 st_contains: semantic_executor
 st_intersects: semantic_executor
-st_geogfromwkb: unsupported
 
 # --- JSON  -------------------------------------------
 # BigQuery JSON extract/query/value functions diverge from DuckDB's
@@ -671,5 +674,5 @@ to_json_string: semantic_executor
 # semantics belong to the procedural scripting executor
 # (`docs/ENGINE_POLICY.md`); it evaluates on the semantic executor.
 generate_uuid: semantic_executor
-session_user: unsupported
+session_user: local_stub
 error: semantic_executor

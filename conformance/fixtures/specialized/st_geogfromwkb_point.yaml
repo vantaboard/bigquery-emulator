@@ -1,0 +1,16 @@
+# st_geogfromwkb_point: WKB POINT (1.0, 2.0) little-endian round-trip.
+name: specialized_st_geogfromwkb_point
+description: |
+  ST_GEOGFROMWKB parses a 2D WKB POINT and ST_ASTEXT renders WKT.
+project_id: proj-specialized-geog-wkb
+dataset_id: ds_geog_wkb
+setup:
+  - dataset: ds_geog_wkb
+query: |
+  SELECT ST_ASTEXT(
+    ST_GEOGFROMWKB(FROM_HEX('0101000000000000000000F03F0000000000000040'))
+  ) AS wkt
+expected:
+  route: semantic_executor
+  rows:
+    - {wkt: "POINT(1 2)"}

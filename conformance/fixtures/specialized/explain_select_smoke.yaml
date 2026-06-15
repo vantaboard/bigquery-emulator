@@ -1,0 +1,25 @@
+# explain_select_smoke: EXPLAIN returns a single-row route plan string.
+name: specialized_explain_select_smoke
+description: |
+  EXPLAIN SELECT routes to the semantic executor and returns the
+  classified disposition for the inner statement.
+project_id: proj-specialized-explain
+dataset_id: ds_explain
+setup:
+  - dataset: ds_explain
+  - table:
+      dataset: ds_explain
+      id: t
+      schema:
+        - {name: x, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_explain
+      table: t
+      rows:
+        - {x: 1}
+query: |
+  EXPLAIN SELECT x FROM ds_explain.t
+expected:
+  route: semantic_executor
+  rows:
+    - {plan: "duckdb_native:ResolvedQueryStmt"}

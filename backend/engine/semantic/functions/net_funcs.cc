@@ -343,7 +343,6 @@ std::optional<absl::StatusOr<Value>> DispatchSpecializedScalar(
     const ::googlesql::Type* return_type) {
   (void)return_type;
   if (name == "error") return ErrorFn(args);
-  if (name == "session_user") return SessionUser(args);
   if (name == "generate_uuid") return GenerateUuid(args);
   if (name == "net.ip_from_string") return NetIpFromString(args);
   if (name == "net.safe_ip_from_string") return NetSafeIpFromString(args);

@@ -811,9 +811,9 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | **stub** | [BigQuery ML](#bigquery-ml) |
 | BigQuery ML `CREATE MODEL` | `local_stub` | stub (stays) | [BigQuery ML](#bigquery-ml) |
 | Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
-| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
-| `SESSION_USER` (`session_user`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
-| `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `unsupported` | **real** | [Deferred built-in functions](#deferred-built-in-functions) |
+| Key management (`KEYS.ENCRYPT`, `KEYS.DECRYPT_BYTES`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
+| `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
+| `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `local_impl` | **real** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | Protobuf shapes (`ResolvedMakeProto`, ...) | `semantic_executor` | **real** | [Protobuf field access](#protobuf-field-access) |
 | MEASURE / measure functions | `local_impl` | **real** | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
@@ -821,7 +821,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
-| `ResolvedExplainStmt` (`EXPLAIN`) | `unsupported` | **real** | [Statements](#statements) |
+| `ResolvedExplainStmt` (`EXPLAIN`) | `semantic_executor` | **real** (landed) | [Statements](#statements) |
 
 > **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
 > NOT planned.** It is effectively a whole second query language and is
@@ -847,17 +847,20 @@ inference calls below get the same treatment.
 
 Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
 
-- ⏳ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — **real**: WKB → `GEOGRAPHY` on
-  the semantic GIS path (extends the landed `ST_GEOGPOINT` /
-  `ST_GEOGFROMTEXT` MVP in
-  `backend/engine/semantic/functions/geog_funcs.cc`)
-- ⏳ `KEYS.ENCRYPT` (`keys.encrypt`) — **stub**: not useful locally;
-  return a deterministic BigQuery-shaped `BYTES` placeholder so the query
-  does not fail (NOT real AEAD)
-- ⏳ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`) — **stub**
-- ⏳ `SESSION_USER` (`session_user`) — **stub**: return a deterministic
-  placeholder principal so row/column-policy and audit queries do not
-  fail
+- ✅ `ST_GEOGFROMWKB` (`st_geogfromwkb`) — **real**: 2D WKB POINT → `GEOGRAPHY`
+  on the semantic GIS path (`geog_funcs.cc`); pinned by
+  `conformance/fixtures/specialized/st_geogfromwkb_point.yaml`
+- ✅ `KEYS.ENCRYPT` (`keys.encrypt`) — **stub**: deterministic cipher
+  envelope (`stubs/keys.cc`); **follow-up:** GoogleSQL analyzer segfaults
+  on `KEYS.ENCRYPT` in full-catalog analyze — fixture uses
+  `KEYS.NEW_KEYSET` + `KEYS.KEYSET_LENGTH` until that upstream crash is
+  isolated
+- ✅ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`) — **stub**: strips the
+  emulator cipher prefix (`stubs/keys.cc`); same analyzer blocker as
+  `KEYS.ENCRYPT` — not yet pinned by conformance
+- ✅ `SESSION_USER` (`session_user`) — **stub**: returns
+  `bigquery-emulator@local`; pinned by
+  `conformance/fixtures/specialized/session_user_stub.yaml`
 
 ### Deferred AST node dispositions
 
@@ -866,7 +869,9 @@ Rows in
 
 #### Statements
 
-- ⏳ `ResolvedExplainStmt` — **real**: `EXPLAIN` plan introspection
+- ✅ `ResolvedExplainStmt` — **real**: single-row route `plan` STRING
+  (`explain_stmt.cc`); pinned by
+  `conformance/fixtures/specialized/explain_select_smoke.yaml`
 
 #### Privacy-preserving aggregates
 

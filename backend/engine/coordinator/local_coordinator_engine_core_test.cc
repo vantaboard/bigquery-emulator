@@ -75,24 +75,25 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteQuerySelectStarRoundTripsViaDuckDb) {
 }
 
 TEST_F(LocalCoordinatorEngineTest,
-       ExecuteQueryUnsupportedFunctionRoutesToUnsupportedStub) {
-  // `SESSION_USER` is `unsupported` in `functions.yaml`. The
-  // classifier promotes the route to `kUnsupported`, the coordinator
-  // dispatches to the `UnsupportedExecutor` stub, and the stub returns
-  // UNIMPLEMENTED with a disposition-aware message that names the
-  // route and points at the policy.
+       ExecuteQuerySessionUserStubReturnsPlaceholder) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto source =
       engine_->ExecuteQuery(MakeRequest("SELECT SESSION_USER() FROM ds.people"),
                             bundle.catalog.get());
-  ASSERT_FALSE(source.ok());
-  EXPECT_EQ(source.status().code(), absl::StatusCode::kUnimplemented);
-  EXPECT_TRUE(absl::StrContains(source.status().message(), "unsupported"))
-      << source.status().message();
-  EXPECT_TRUE(
-      absl::StrContains(source.status().message(), "docs/ENGINE_POLICY.md"))
-      << source.status().message();
+  ASSERT_TRUE(source.ok()) << source.status();
+  int rows_seen = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 1u);
+    ASSERT_FALSE(row.cells[0].is_null());
+    EXPECT_EQ(row.cells[0].string_value(), "bigquery-emulator@local");
+    ++rows_seen;
+  }
+  EXPECT_EQ(rows_seen, 3);
 }
 
 TEST_F(LocalCoordinatorEngineTest,
