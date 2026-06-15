@@ -339,11 +339,12 @@ on `eval_expr_cast.cc` (`cast_type_modifiers.yaml`).
 
 ## Exact-decimal (`NUMERIC` / `BIGNUMERIC`)
 
-BigQuery's `NUMERIC` (`DECIMAL(38,9)`) and `BIGNUMERIC`
-(`DECIMAL(38,38)`) are exact decimals. DuckDB can store and compare
-`NUMERIC` natively, but it widens some operations to `DOUBLE` and
-cannot store `BIGNUMERIC` as a `DECIMAL` at all (its max precision is
-38, which cannot represent `DECIMAL(38,38) >= 1.0`), so `BIGNUMERIC`
+BigQuery's `NUMERIC` (`DECIMAL(38,9)` — precision 38, scale 9) and
+`BIGNUMERIC` (precision ~76.8 digits, scale 38) are exact decimals.
+DuckDB can store and compare `NUMERIC` natively, but it widens some
+operations to `DOUBLE` and cannot store `BIGNUMERIC` as a `DECIMAL` at
+all (BigQuery's `BIGNUMERIC` needs ~77 digits of precision, which
+exceeds DuckDB's maximum `DECIMAL` precision of 38), so `BIGNUMERIC`
 is persisted as `VARCHAR`. Following the no-silent-approximation rule,
 shapes DuckDB would widen or reject reroute to the semantic executor's
 decimal path (`googlesql::NumericValue` / `BigNumericValue`) rather
