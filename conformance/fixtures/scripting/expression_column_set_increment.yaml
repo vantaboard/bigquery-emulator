@@ -1,0 +1,17 @@
+# expression_column_set_increment: SET RHS uses AnalyzeExpression columns.
+name: expression_column_set_increment
+description: |
+  Script SET evaluates its RHS via AnalyzeExpression with expression-column
+  bindings, so self-references like `n + 5` resolve through
+  ResolvedExpressionColumn on the semantic executor.
+project_id: proj-expression-column-set
+query: |
+  BEGIN
+    DECLARE n INT64 DEFAULT 10;
+    SET n = n + 5;
+    SELECT CAST(n AS STRING) AS n;
+  END;
+expected:
+  route: semantic_executor
+  rows:
+    - {n: "15"}

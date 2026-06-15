@@ -815,8 +815,10 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | `SESSION_USER` (`session_user`) | `unsupported` | **stub** | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `unsupported` | **real** | [Deferred built-in functions](#deferred-built-in-functions) |
 | Protobuf shapes (`ResolvedMakeProto`, ...) | `semantic_executor` | **real** | [Protobuf field access](#protobuf-field-access) |
-| MEASURE / measure functions | `unsupported` | **real** | [Measure functions](#measure-functions) |
-| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | **real** | [Catalog / sequence helpers](#catalog--sequence-helpers) |
+| MEASURE / measure functions | `local_impl` | **real** | [Measure functions](#measure-functions) |
+| Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
+| Expression columns (`ResolvedExpressionColumn`) | `semantic_executor` | **real** (landed) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
+| Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
 | `ResolvedExplainStmt` (`EXPLAIN`) | `unsupported` | **real** | [Statements](#statements) |
@@ -898,19 +900,27 @@ from [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). **Real**, but land
 only the shapes a non-graph BigQuery query can actually reach; otherwise
 keep `unsupported` with a sharper envelope.
 
-- ⏳ `ResolvedSequence` — `NEXT VALUE FOR` sequence advancement
-- ⏳ `ResolvedCatalogColumnRef` — catalog-internal column refs (the
-  graph use of this node is out of scope; see [Non-goals](#non-goals))
-- ⏳ `ResolvedExpressionColumn`
+- ⏳ `ResolvedSequence` — no reachable `PRODUCT_EXTERNAL` `CREATE SEQUENCE` /
+  `NEXT VALUE FOR` SQL today; stays `unsupported` with a sharper envelope (see
+  `docs/ENGINE_POLICY.md`)
+- ⏳ `ResolvedCatalogColumnRef` — graph-property refs out of scope; catalog DDL
+  refs have no reachable `PRODUCT_EXTERNAL` consumer today (stays
+  `unsupported`; eval surfaces a sharper envelope if the node appears)
+- ✅ `ResolvedExpressionColumn` — `AnalyzeExpression` bindings on the semantic
+  executor (`expression_column_bindings.{h,cc}`, `eval_expr.cc`); pinned by
+  `expression_column_set_increment.yaml`
 
 ### Measure functions
 
 MEASURE types and `AGGREGATE(<measure>)` from
-[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). Today the analytical
-measure layer surfaces `UNIMPLEMENTED`; planned as a local semantic-executor
-path over the existing aggregate infrastructure.
+[`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). Measure columns register
+via `measure_catalog` (`bqemu_measure:<expr>:<row_keys>` on table schema
+descriptions); `AGG(<measure>)` expands through the analyzer rewrite into
+multi-level aggregates on the semantic executor.
 
-- ⏳ MEASURE type surface and `AGGREGATE(<measure>)` evaluation
+- ✅ MEASURE type surface (`measure_catalog.{h,cc}`) and `AGG(<measure>)`
+  evaluation — pinned by
+  `conformance/fixtures/specialized/measure_agg_group_by.yaml`
 
 ### Python UDFs
 

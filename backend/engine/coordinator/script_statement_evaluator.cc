@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -18,6 +19,7 @@
 #include "backend/engine/coordinator/script_row_iterator.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/expression_column_bindings.h"
 #include "backend/engine/semantic/row_source.h"
 #include "backend/engine/semantic/system_variables.h"
 #include "backend/engine/semantic/value.h"
@@ -403,10 +405,10 @@ EmulatorStatementEvaluator::EvalScalarSegment(
   }
   ::googlesql::AnalyzerOptions options =
       MakeCoordinatorAnalyzerOptions(/*all_statements=*/false);
-  absl::flat_hash_set<std::string> registered;
-  absl::Status registered_status = RegisterScriptVariablesOnCatalogFromDriver(
-      bq_catalog, *driver_, &registered);
-  if (!registered_status.ok()) return registered_status;
+  absl::Status registered =
+      semantic::RegisterExpressionColumnsOnAnalyzerOptions(driver_->variables(),
+                                                           options);
+  if (!registered.ok()) return registered;
 
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyzed =
@@ -420,6 +422,9 @@ EmulatorStatementEvaluator::EvalScalarSegment(
     return absl::InternalError(
         "EmulatorStatementEvaluator::EvalScalarSegment: null resolved expr");
   }
+  absl::flat_hash_map<std::string, ::googlesql::Value> columns_by_name;
+  semantic::PopulateEvalContextExpressionColumns(
+      driver_->variables(), ctx, &columns_by_name);
   absl::StatusOr<semantic::Value> value =
       semantic::EvalExpr(*output->resolved_expr(), ctx);
   if (!value.ok()) return value.status();

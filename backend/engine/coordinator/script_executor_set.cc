@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -13,6 +14,7 @@
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/expression_column_bindings.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_output.h"
@@ -81,6 +83,9 @@ absl::StatusOr<semantic::Value> EvalExpressionScalar(
                                      bq_catalog,
                                      /*all_statements=*/false);
   if (!options.ok()) return options.status();
+  absl::Status registered =
+      semantic::RegisterExpressionColumnsOnAnalyzerOptions(variables, *options);
+  if (!registered.ok()) return registered;
   std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
   absl::Status analyzed =
       ::googlesql::AnalyzeExpression(std::string(expr),
@@ -97,6 +102,9 @@ absl::StatusOr<semantic::Value> EvalExpressionScalar(
   ctx.project_id = request.project_id;
   ctx.script_variables = &variables;
   ctx.arguments = &variables;
+  absl::flat_hash_map<std::string, ::googlesql::Value> columns_by_name;
+  semantic::PopulateEvalContextExpressionColumns(
+      variables, ctx, &columns_by_name);
   return semantic::EvalExpr(*output->resolved_expr(), ctx);
 }
 

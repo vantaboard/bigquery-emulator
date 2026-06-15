@@ -408,6 +408,50 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
     case ::googlesql::RESOLVED_GET_ROW_FIELD:
       return eval_expr_internal::EvalGetRowField(
           *expr.GetAs<::googlesql::ResolvedGetRowField>(), ctx);
+    case ::googlesql::RESOLVED_EXPRESSION_COLUMN: {
+      const auto& col = *expr.GetAs<::googlesql::ResolvedExpressionColumn>();
+      if (ctx.columns_by_name != nullptr) {
+        auto it = ctx.columns_by_name->find(col.name());
+        if (it != ctx.columns_by_name->end()) {
+          return it->second;
+        }
+      }
+      if (ctx.script_variables != nullptr) {
+        absl::StatusOr<Value> bound = ctx.script_variables->Lookup(col.name());
+        if (bound.ok()) return *std::move(bound);
+      }
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          absl::StrCat("semantic: no binding for expression column '",
+                       col.name(),
+                       "'; populate EvalContext::columns_by_name or "
+                       "script_variables before evaluating AnalyzeExpression "
+                       "output"));
+    }
+    case ::googlesql::RESOLVED_CATALOG_COLUMN_REF: {
+      const auto& ref = *expr.GetAs<::googlesql::ResolvedCatalogColumnRef>();
+      if (!ref.name().empty()) {
+        return MakeSemanticError(
+            SemanticErrorReason::kNotImplemented,
+            "semantic: ResolvedCatalogColumnRef graph-property references "
+            "are out of scope locally (Graph / GQL is unsupported and not "
+            "planned; see docs/ENGINE_POLICY.md)");
+      }
+      if (ref.column() == nullptr) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            "semantic: ResolvedCatalogColumnRef has neither catalog column "
+            "nor graph property name");
+      }
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          absl::StrCat(
+              "semantic: ResolvedCatalogColumnRef for catalog column '",
+              ref.column()->Name(),
+              "' is not reachable from PRODUCT_EXTERNAL query SQL "
+              "today; DDL expression contexts remain unsupported "
+              "(see ROADMAP §Catalog / sequence helpers)"));
+    }
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",

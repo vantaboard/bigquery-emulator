@@ -180,6 +180,22 @@ cc_library(
 )
 
 cc_library(
+    name = "expression_column_bindings",
+    srcs = ["expression_column_bindings.cc"],
+    hdrs = ["expression_column_bindings.h"],
+    deps = [
+        ":error",
+        ":frame_stack",
+        ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_library(
     name = "eval_expr",
     srcs = [
         "eval_expr.cc",
@@ -305,15 +321,18 @@ cc_test(
     name = "eval_expr_test",
     srcs = [
         "eval_expr_extended_test.cc",
+        "eval_expr_expression_column_test.cc",
         "eval_expr_test.cc",
         "eval_expr_test_fixture.h",
     ],
     deps = [
         ":error",
         ":eval_expr",
+        ":expression_column_bindings",
         ":frame_stack",
         ":scan_eval",
         ":value",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_googletest//:gtest_main",

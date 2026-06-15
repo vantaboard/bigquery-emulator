@@ -241,6 +241,7 @@ cc_library(
         "//backend/engine/control/stubs:create_model",
         "//backend/engine/duckdb:duckdb_executor",
         "//backend/engine/semantic:executor",
+        "//backend/engine/semantic:expression_column_bindings",
         "//backend/engine/semantic:frame_stack",
         "//backend/engine/semantic:row_source",
         "//backend/engine/semantic:system_variables",

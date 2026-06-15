@@ -175,7 +175,7 @@ ResolvedSequence: unsupported
 ResolvedArgumentRef: semantic_executor
 ResolvedArgumentDef: semantic_executor
 ResolvedCatalogColumnRef: unsupported
-ResolvedExpressionColumn: unsupported
+ResolvedExpressionColumn: semantic_executor
 ResolvedUpdateConstructor: semantic_executor
 
 # --- Per-row metadata / shape helpers ----------------------------------
