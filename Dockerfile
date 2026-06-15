@@ -422,6 +422,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         libssl3t64 \
         libstdc++6 \
+        python3 \
+        python3-lxml \
         tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/*

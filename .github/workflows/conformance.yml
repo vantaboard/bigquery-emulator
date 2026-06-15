@@ -115,6 +115,11 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           head-sha: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Install Python UDF runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-lxml
+
       - name: Run bigquery-utils passing lane
         run: |
           task conformance:bqutils \
