@@ -29,7 +29,12 @@ if ! command -v genhtml >/dev/null 2>&1; then
 fi
 
 mkdir -p "$out_dir"
-if genhtml --ignore-errors empty,source --quiet --output-directory "$out_dir" "$lcov_path"; then
+root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# llvm-cov emits SF paths under /proc/self/cwd/...; remap to the workspace so
+# genhtml can open first-party sources. Ignore missing external/googlesql headers.
+if genhtml --ignore-errors empty,source --synthesize-missing --quiet \
+    --substitute "s|^/proc/self/cwd/|${root}/|" \
+    --output-directory "$out_dir" "$lcov_path"; then
   exit 0
 fi
 

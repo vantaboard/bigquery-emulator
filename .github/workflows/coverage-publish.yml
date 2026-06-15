@@ -194,6 +194,15 @@ jobs:
             echo "::warning::No coverage artifacts found for ${{ github.event.workflow_run.head_sha }}; skipping publish."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
+          # coverage-bazel often finishes before ci on the same SHA.
+          # Publishing cpp-only data to gh-pages briefly overwrote badges
+          # with go=n/a until ci's follow-up publish; defer main publish.
+          publish_main=true
+          if [ "$TRIGGER_NAME" = "coverage-bazel" ] && [ "$has_go" = false ]; then
+            echo "::notice::Deferring gh-pages publish until go-coverage artifact is available from ci."
+            publish_main=false
+          fi
+          echo "publish_main=$publish_main" >> "$GITHUB_OUTPUT"
 
       - name: Build coverage aggregator
         if: steps.inputs.outputs.skip != 'true'
@@ -306,12 +315,14 @@ jobs:
       - name: Stage baseline for gh-pages
         if: |
           steps.inputs.outputs.skip != 'true' &&
+          steps.inputs.outputs.publish_main == 'true' &&
           github.event.workflow_run.head_branch == 'main'
         run: cp summary.json html/baseline.json
 
       - name: Publish to gh-pages
         if: |
           steps.inputs.outputs.skip != 'true' &&
+          steps.inputs.outputs.publish_main == 'true' &&
           github.event.workflow_run.head_branch == 'main'
         uses: peaceiris/actions-gh-pages@v4
         with:

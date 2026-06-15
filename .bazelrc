@@ -205,8 +205,20 @@ coverage --disk_cache=.cache/bazel-disk
 # Clang/llvm coverage: keep the merge action local (remote executors do
 # not always wire per-test .profraw outputs back) and use the native
 # llvm-cov path Bazel expects when --config=clang is active.
+#
+# Without --experimental_generate_llvm_lcov, per-test collection emits
+# raw .profdata that LcovMerger cannot convert to per-line DA records;
+# the combined report then lists SF records with LF:0/LH:0 everywhere
+# (0% cpp, genhtml "no valid records"). GENERATE_LLVM_LCOV=1 (set by
+# the flag below) routes through llvm-cov export -format=lcov instead.
 coverage --strategy=CoverageReport=local
-coverage --action_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
+coverage --experimental_generate_llvm_lcov
+coverage --repo_env=BAZEL_USE_LLVM_NATIVE_COVERAGE=1
+coverage --repo_env=BAZEL_LLVM_COV=/usr/bin/llvm-cov
+coverage --repo_env=BAZEL_LLVM_PROFDATA=/usr/bin/llvm-profdata
+# Skip Bazel's broken in-test LcovMerger (llvm-profdata merge without -sparse
+# on large profraw sets). aggregate_profraw_lcov.sh rebuilds the combined report.
+coverage --test_env=LCOV_MERGER=/usr/bin/true
 coverage --instrumentation_filter=^//backend[/:],^//binaries[/:],^//frontend[/:],^//tools/googlesql-prebuilt/smoke[/:]
 
 # ---------------------------------------------------------------------------

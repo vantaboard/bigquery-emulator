@@ -88,6 +88,16 @@ jobs:
             libgrpc-dev \
             protobuf-compiler-grpc \
             lcov
+          # .bazelrc pins BAZEL_LLVM_{COV,PROFDATA} at unversioned names.
+          # Noble's llvm metapackage may only ship llvm-cov-18, etc.
+          for tool in llvm-cov llvm-profdata; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              ver="$(basename "$(ls -1 /usr/bin/${tool}-* 2>/dev/null | sort -V | tail -1)")"
+              if [ -n "$ver" ]; then
+                sudo ln -sf "/usr/bin/$ver" "/usr/bin/$tool"
+              fi
+            fi
+          done
 
       - name: Restore GoogleSQL prebuilt cache
         uses: actions/cache@v5
@@ -163,6 +173,9 @@ jobs:
           task bazel:coverage \
             TARGETS="${{ steps.targets.outputs.targets }}" \
             COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
+          # Bazel's built-in LCOV merge fails on our GoogleSQL-linked tests; rebuild
+          # from retained profraw files (see .bazelrc: LCOV_MERGER=/usr/bin/true).
+          tools/coverage/aggregate_profraw_lcov.sh bazel-out/_coverage/_coverage_report.dat
 
       # Hand off the LCOV combined report to coverage-publish.yml.
       # That workflow_run-triggered consumer pairs this artifact with

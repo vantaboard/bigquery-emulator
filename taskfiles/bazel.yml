@@ -384,4 +384,8 @@ tasks:
               --action_env=CXX={{.BAZEL_CXX}} \
               {{.COVERAGE_FLAGS}} \
               {{.TARGETS}}
+          tools/coverage/aggregate_profraw_lcov.sh bazel-out/_coverage/_coverage_report.dat || {
+            echo "task bazel:coverage: aggregate_profraw_lcov.sh failed; combined LCOV may be empty." >&2
+            exit 1
+          }
         '

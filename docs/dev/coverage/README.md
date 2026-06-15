@@ -185,6 +185,8 @@ workflow will compute.
 |---------|-------|-----|
 | Badge shows `resource not found` | `badge.json` absent on `gh-pages`, or publish step skipped | Confirm `coverage-publish` ran **Publish to gh-pages** on main; re-run the workflow if needed. Wait ~5 min for shields.io cache. |
 | Badge shows `n/a` | Producer artifact missing for the published SHA | Re-run the failing producer; the next workflow_run will refresh the badge. |
+| C++ badge/HTML shows `0.0%` / "summary only" | Bazel's in-test `llvm-profdata merge` fails on large profraw sets (LF:0/LH:0 combined report) | Ensure `.bazelrc` sets `LCOV_MERGER=/usr/bin/true` and `coverage-bazel` runs `tools/coverage/aggregate_profraw_lcov.sh` after `bazel coverage`. |
+| Go badge `n/a` right after a main push | `coverage-bazel` published before `ci` finished (cpp-only partial) | Wait for the `ci`-triggered `coverage-publish` run, or check the deferral notice in the coverage-bazel publish logs. |
 | Gate reports "Baseline missing" | `gh-pages` branch or its `baseline.json` not yet published | Wait for the first push-to-main publish, or pre-seed via step 1 above. |
 | Gate fails on a PR you expected to pass | Current run dropped > `COVERAGE_TOLERANCE` percentage points | Inspect the step-summary table; either fix the regression or, if the threshold is wrong, tighten/relax `COVERAGE_TOLERANCE` in the workflow. |
 | Pages 404 after enabling | `gh-pages` branch contents still in flight | Wait for the post-merge `coverage-publish` run to finish; GitHub serves the branch on a short delay. |
