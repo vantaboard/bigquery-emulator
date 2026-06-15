@@ -1,6 +1,5 @@
 #include "backend/catalog/emulator_builtin_extensions.h"
 #include "backend/catalog/googlesql_catalog.h"
-
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/builtin_function_options.h"

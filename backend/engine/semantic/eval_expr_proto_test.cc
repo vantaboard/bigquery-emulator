@@ -82,11 +82,11 @@ struct TestPersonProto {
   google::protobuf::DynamicMessageFactory factory;
   std::unique_ptr<google::protobuf::Message> msg(
       factory.GetPrototype(fixture.person_desc)->New());
-  msg->GetReflection()->SetString(msg.get(), fixture.name_field,
-                                  std::string(name));
+  msg->GetReflection()->SetString(
+      msg.get(), fixture.name_field, std::string(name));
   msg->GetReflection()->SetInt64(msg.get(), fixture.id_field, id);
-  msg->GetReflection()->SetString(msg.get(), fixture.email_field,
-                                  std::string(email));
+  msg->GetReflection()->SetString(
+      msg.get(), fixture.email_field, std::string(email));
   return ::googlesql::Value::Proto(fixture.proto_type,
                                    absl::Cord(msg->SerializeAsString()));
 }
@@ -98,14 +98,16 @@ TEST(EvalProtoShapesTest, MakeProtoConstructsScalarFields) {
   std::vector<std::unique_ptr<const ::googlesql::ResolvedMakeProtoField>>
       fields;
   fields.push_back(::googlesql::MakeResolvedMakeProtoField(
-      fixture.name_field, ::googlesql::FieldFormat::DEFAULT_FORMAT,
+      fixture.name_field,
+      ::googlesql::FieldFormat::DEFAULT_FORMAT,
       ::googlesql::MakeResolvedLiteral(::googlesql::Value::String("Ada"))));
   fields.push_back(::googlesql::MakeResolvedMakeProtoField(
-      fixture.id_field, ::googlesql::FieldFormat::DEFAULT_FORMAT,
+      fixture.id_field,
+      ::googlesql::FieldFormat::DEFAULT_FORMAT,
       ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(7))));
 
-  auto node = ::googlesql::MakeResolvedMakeProto(fixture.proto_type,
-                                                 std::move(fields));
+  auto node =
+      ::googlesql::MakeResolvedMakeProto(fixture.proto_type, std::move(fields));
   EvalContext ctx{.project_id = "test"};
   auto result = EvalMakeProto(*node, ctx);
   ASSERT_TRUE(result.ok()) << result.status();
@@ -127,8 +129,11 @@ TEST(EvalProtoShapesTest, GetProtoFieldReadsPresentScalar) {
       BuildPersonProto(fixture, "Grace", 3, "g@example.com"));
 
   auto node = ::googlesql::MakeResolvedGetProtoField(
-      type_factory.get_string(), std::move(base), fixture.name_field,
-      ::googlesql::Value(), /*get_has_bit=*/false,
+      type_factory.get_string(),
+      std::move(base),
+      fixture.name_field,
+      ::googlesql::Value(),
+      /*get_has_bit=*/false,
       ::googlesql::FieldFormat::DEFAULT_FORMAT,
       /*return_default_value_when_unset=*/false);
   EvalContext ctx{.project_id = "test"};
@@ -145,8 +150,11 @@ TEST(EvalProtoShapesTest, GetProtoFieldHasBitReflectsPresence) {
       BuildPersonProto(fixture, "Grace", 3, "g@example.com"));
 
   auto node = ::googlesql::MakeResolvedGetProtoField(
-      type_factory.get_bool(), std::move(base), fixture.name_field,
-      ::googlesql::Value(), /*get_has_bit=*/true,
+      type_factory.get_bool(),
+      std::move(base),
+      fixture.name_field,
+      ::googlesql::Value(),
+      /*get_has_bit=*/true,
       ::googlesql::FieldFormat::DEFAULT_FORMAT,
       /*return_default_value_when_unset=*/false);
   EvalContext ctx{.project_id = "test"};
@@ -174,14 +182,13 @@ TEST(EvalProtoShapesTest, ReplaceFieldMutatesStructLeaf) {
   ::googlesql::TypeFactory type_factory;
   const ::googlesql::StructType* struct_type = nullptr;
   ASSERT_TRUE(type_factory
-                  .MakeStructType(
-                      {{"a", type_factory.get_int64()},
-                       {"b", type_factory.get_string()}},
-                      &struct_type)
+                  .MakeStructType({{"a", type_factory.get_int64()},
+                                   {"b", type_factory.get_string()}},
+                                  &struct_type)
                   .ok());
   auto base = ::googlesql::MakeResolvedLiteral(::googlesql::Value::Struct(
-      struct_type, {::googlesql::Value::Int64(1),
-                    ::googlesql::Value::String("keep")}));
+      struct_type,
+      {::googlesql::Value::Int64(1), ::googlesql::Value::String("keep")}));
 
   std::vector<std::unique_ptr<const ::googlesql::ResolvedReplaceFieldItem>>
       items;
@@ -206,14 +213,16 @@ TEST(EvalProtoShapesTest, FilterFieldIncludesSelectedPaths) {
   auto base = ::googlesql::MakeResolvedLiteral(
       BuildPersonProto(fixture, "Grace", 3, "g@example.com"));
 
-  std::vector<std::unique_ptr<const ::googlesql::ResolvedFilterFieldArg>>
-      args;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedFilterFieldArg>> args;
   args.push_back(::googlesql::MakeResolvedFilterFieldArg(
-      /*include=*/true, std::vector<const google::protobuf::FieldDescriptor*>{
-                            fixture.name_field}));
+      /*include=*/true,
+      std::vector<const google::protobuf::FieldDescriptor*>{
+          fixture.name_field}));
 
   auto node = ::googlesql::MakeResolvedFilterField(
-      fixture.proto_type, std::move(base), std::move(args),
+      fixture.proto_type,
+      std::move(base),
+      std::move(args),
       /*reset_cleared_required_fields=*/false);
   EvalContext ctx{.project_id = "test"};
   auto result = EvalFilterField(*node, ctx);

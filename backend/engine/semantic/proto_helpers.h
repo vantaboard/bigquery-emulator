@@ -46,9 +46,9 @@ absl::StatusOr<Value> SetStructFieldByPath(const Value& root,
                                            absl::Span<const int> field_path,
                                            const Value& leaf);
 
-absl::Status ClearFieldSubtree(google::protobuf::Message* root,
-                               const std::vector<const google::protobuf::FieldDescriptor*>&
-                                   path);
+absl::Status ClearFieldSubtree(
+    google::protobuf::Message* root,
+    const std::vector<const google::protobuf::FieldDescriptor*>& path);
 
 absl::Status CopyFieldSubtree(
     const google::protobuf::Message& src,
@@ -56,11 +56,11 @@ absl::Status CopyFieldSubtree(
     const std::vector<const google::protobuf::FieldDescriptor*>& path);
 
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>> CloneProtoMessage(
-    const Value& proto_value,
-    google::protobuf::DynamicMessageFactory* factory);
+    const Value& proto_value, google::protobuf::DynamicMessageFactory* factory);
 
 absl::StatusOr<Value> MessageToProtoValue(
-    const google::protobuf::Message& msg, const ::googlesql::ProtoType* proto_type);
+    const google::protobuf::Message& msg,
+    const ::googlesql::ProtoType* proto_type);
 
 }  // namespace proto_helpers
 }  // namespace semantic

@@ -6,11 +6,11 @@
 #include <string>
 #include <vector>
 
+#include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "absl/functional/function_ref.h"
 #include "backend/schema/schema.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
@@ -43,8 +43,8 @@ std::optional<MeasureColumnSpec> ParseMeasureColumnSpec(
 // in the sidecar schema returned by `GetSchema`.
 schema::TableSchema StripMeasureColumns(const schema::TableSchema& schema);
 
-using ColumnTypeFn = absl::FunctionRef<
-    absl::StatusOr<const ::googlesql::Type*>(const schema::ColumnSchema&)>;
+using ColumnTypeFn = absl::FunctionRef<absl::StatusOr<const ::googlesql::Type*>(
+    const schema::ColumnSchema&)>;
 
 // Builds `SimpleTable::NameAndType` entries for every non-measure column and
 // returns the matching physical schema (measure columns stripped).

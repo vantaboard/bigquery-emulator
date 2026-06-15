@@ -5,8 +5,8 @@
 #include <utility>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/semantic/error.h"
@@ -71,10 +71,11 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteExplainStmt(
   }
   coordinator::RouteClassifier classifier;
   coordinator::RouteDecision decision = classifier.Classify(*inner);
-  const std::string plan_text = absl::StrCat(
-      DispositionName(decision.disposition), ":",
-      decision.offending_node.empty() ? ResolvedNodeLabel(*inner)
-                                      : decision.offending_node);
+  const std::string plan_text =
+      absl::StrCat(DispositionName(decision.disposition),
+                   ":",
+                   decision.offending_node.empty() ? ResolvedNodeLabel(*inner)
+                                                   : decision.offending_node);
 
   schema::TableSchema output_schema = MakeExplainOutputSchema();
   storage::Row row;

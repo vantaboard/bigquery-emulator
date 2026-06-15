@@ -18,8 +18,7 @@ absl::Status RegisterExpressionColumnsOnAnalyzerOptions(
                        name,
                        "' has no type for AnalyzeExpression registration"));
     }
-    absl::Status added =
-        options.AddExpressionColumn(name, value.type());
+    absl::Status added = options.AddExpressionColumn(name, value.type());
     if (!added.ok()) return added;
   }
   return absl::OkStatus();

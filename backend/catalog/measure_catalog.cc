@@ -77,8 +77,9 @@ absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedExpr>>
 ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr);
 
 absl::StatusOr<std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>>
-ConvertChildExprs(absl::Span<const std::unique_ptr<const ::googlesql::ResolvedExpr>>
-                      children) {
+ConvertChildExprs(
+    absl::Span<const std::unique_ptr<const ::googlesql::ResolvedExpr>>
+        children) {
   std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> converted;
   converted.reserve(children.size());
   for (const auto& child : children) {
@@ -98,11 +99,9 @@ absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedExpr>>
 ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr) {
   switch (expr.node_kind()) {
     case ::googlesql::RESOLVED_EXPRESSION_COLUMN:
-      return ::googlesql::MakeResolvedExpressionColumn(expr.type(),
-                                                       expr.GetAs<
-                                                           ::googlesql::
-                                                               ResolvedExpressionColumn>()
-                                                           ->name());
+      return ::googlesql::MakeResolvedExpressionColumn(
+          expr.type(),
+          expr.GetAs<::googlesql::ResolvedExpressionColumn>()->name());
     case ::googlesql::RESOLVED_COLUMN_REF: {
       const auto* cref = expr.GetAs<::googlesql::ResolvedColumnRef>();
       if (cref == nullptr) {
@@ -120,8 +119,8 @@ ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr) {
       absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedExpr>> input =
           ConvertMeasureExprToExpressionColumns(*cast->expr());
       if (!input.ok()) return input.status();
-      return ::googlesql::MakeResolvedCast(cast->type(), std::move(*input),
-                                           cast->return_null_on_error());
+      return ::googlesql::MakeResolvedCast(
+          cast->type(), std::move(*input), cast->return_null_on_error());
     }
     case ::googlesql::RESOLVED_FUNCTION_CALL: {
       const auto* call = expr.GetAs<::googlesql::ResolvedFunctionCall>();
@@ -129,12 +128,16 @@ ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr) {
         return absl::InternalError(
             "measure_catalog: RESOLVED_FUNCTION_CALL node cast failed");
       }
-      absl::StatusOr<std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>>
+      absl::StatusOr<
+          std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>>
           args = ConvertChildExprs(call->argument_list());
       if (!args.ok()) return args.status();
-      return ::googlesql::MakeResolvedFunctionCall(
-          call->type(), call->function(), call->signature(), std::move(*args),
-          call->error_mode(), call->function_call_info());
+      return ::googlesql::MakeResolvedFunctionCall(call->type(),
+                                                   call->function(),
+                                                   call->signature(),
+                                                   std::move(*args),
+                                                   call->error_mode(),
+                                                   call->function_call_info());
     }
     case ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL: {
       const auto* agg =
@@ -143,7 +146,8 @@ ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr) {
         return absl::InternalError(
             "measure_catalog: RESOLVED_AGGREGATE_FUNCTION_CALL cast failed");
       }
-      absl::StatusOr<std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>>
+      absl::StatusOr<
+          std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>>
           args = ConvertChildExprs(agg->argument_list());
       if (!args.ok()) return args.status();
       std::unique_ptr<const ::googlesql::ResolvedExpr> where_expr;
@@ -154,10 +158,16 @@ ConvertMeasureExprToExpressionColumns(const ::googlesql::ResolvedExpr& expr) {
         where_expr = std::move(*where);
       }
       return ::googlesql::MakeResolvedAggregateFunctionCall(
-          agg->type(), agg->function(), agg->signature(), std::move(*args),
-          agg->error_mode(), agg->distinct(), agg->null_handling_modifier(),
+          agg->type(),
+          agg->function(),
+          agg->signature(),
+          std::move(*args),
+          agg->error_mode(),
+          agg->distinct(),
+          agg->null_handling_modifier(),
           /*having_modifier=*/nullptr,
-          /*order_by_item_list=*/{}, /*limit=*/nullptr);
+          /*order_by_item_list=*/{},
+          /*limit=*/nullptr);
     }
     default:
       return absl::InvalidArgumentError(absl::StrCat(
@@ -196,8 +206,11 @@ absl::StatusOr<std::vector<int>> RowKeyIndicesForTable(
     }
     if (!found) {
       return absl::InvalidArgumentError(
-          absl::StrCat("measure_catalog: row key column '", key_name,
-                       "' is not present on table '", table.Name(), "'"));
+          absl::StrCat("measure_catalog: row key column '",
+                       key_name,
+                       "' is not present on table '",
+                       table.Name(),
+                       "'"));
     }
   }
   return indices;
@@ -288,13 +301,13 @@ absl::StatusOr<const ::googlesql::ResolvedExpr*> ResolveMeasureExpression(
   const ::googlesql::ResolvedExpr* resolved =
       ExtractSingleMeasureExpression(query);
   if (resolved == nullptr) {
-    return absl::InternalError(
-        absl::StrCat("measure_catalog: measure expression analyzed to unsupported "
-                     "scan kind ",
-                     query == nullptr ? "null" : query->node_kind_string()));
+    return absl::InternalError(absl::StrCat(
+        "measure_catalog: measure expression analyzed to unsupported "
+        "scan kind ",
+        query == nullptr ? "null" : query->node_kind_string()));
   }
-  absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedExpr>> catalog_expr =
-      ConvertMeasureExprToExpressionColumns(*resolved);
+  absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedExpr>>
+      catalog_expr = ConvertMeasureExprToExpressionColumns(*resolved);
   if (!catalog_expr.ok()) return catalog_expr.status();
   absl::Status validated = ::googlesql::ValidateMeasureExpression(
       measure_expr, **catalog_expr, language, table.Name());
@@ -319,19 +332,25 @@ absl::Status AddMeasureColumnToTable(
         measure_resolved_exprs) {
   if (table.FindColumnByName(std::string(name)) != nullptr) {
     return absl::AlreadyExistsError(
-        absl::StrCat("measure_catalog: measure column '", name,
-                     "' already exists on table '", table.Name(), "'"));
+        absl::StrCat("measure_catalog: measure column '",
+                     name,
+                     "' already exists on table '",
+                     table.Name(),
+                     "'"));
   }
   absl::StatusOr<const ::googlesql::ResolvedExpr*> resolved_or =
-      ResolveMeasureExpression(expression, table, catalog, type_factory,
-                               language, measure_outputs,
+      ResolveMeasureExpression(expression,
+                               table,
+                               catalog,
+                               type_factory,
+                               language,
+                               measure_outputs,
                                measure_resolved_exprs);
   if (!resolved_or.ok()) return resolved_or.status();
   const ::googlesql::ResolvedExpr* resolved = *resolved_or;
   if (resolved->type() == nullptr) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("measure_catalog: measure expression for '", name,
-                     "' has null type"));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "measure_catalog: measure expression for '", name, "' has null type"));
   }
   const ::googlesql::Type* result_type = resolved->type();
   absl::StatusOr<const ::googlesql::Type*> measure_type_or =
@@ -350,7 +369,9 @@ absl::Status AddMeasureColumnToTable(
       ::googlesql::Column::ExpressionAttributes::Create(
           ::googlesql::Column::ExpressionAttributes::ExpressionKind::
               MEASURE_EXPRESSION,
-          std::string(expression), resolved, row_identity_indices);
+          std::string(expression),
+          resolved,
+          row_identity_indices);
   if (!attrs_or.ok()) return attrs_or.status();
 
   ::googlesql::SimpleColumn::Attributes attrs;
@@ -380,9 +401,15 @@ absl::Status ApplyMeasureColumnsFromSchema(
     } else if (table_row_keys.empty()) {
       table_row_keys = spec->row_key_names;
     }
-    absl::Status added = AddMeasureColumnToTable(
-        table, spec->name, spec->expression, keys, catalog, type_factory,
-        language, measure_outputs, measure_resolved_exprs);
+    absl::Status added = AddMeasureColumnToTable(table,
+                                                 spec->name,
+                                                 spec->expression,
+                                                 keys,
+                                                 catalog,
+                                                 type_factory,
+                                                 language,
+                                                 measure_outputs,
+                                                 measure_resolved_exprs);
     if (!added.ok()) return added;
   }
   if (!table_row_keys.empty()) {

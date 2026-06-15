@@ -35,9 +35,11 @@ absl::StatusOr<Value> ScalarFromReflection(
     case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
       return Value::Int64(reflection->GetInt64(msg, field));
     case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
-      return Value::Int64(static_cast<int64_t>(reflection->GetUInt32(msg, field)));
+      return Value::Int64(
+          static_cast<int64_t>(reflection->GetUInt32(msg, field)));
     case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
-      return Value::Int64(static_cast<int64_t>(reflection->GetUInt64(msg, field)));
+      return Value::Int64(
+          static_cast<int64_t>(reflection->GetUInt64(msg, field)));
     case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
       return Value::Double(reflection->GetDouble(msg, field));
     case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
@@ -61,8 +63,7 @@ absl::StatusOr<Value> ScalarFromReflection(
       }
       const google::protobuf::Message& nested =
           reflection->GetMessage(msg, field);
-      return Value::Proto(proto_type,
-                          absl::Cord(nested.SerializeAsString()));
+      return Value::Proto(proto_type, absl::Cord(nested.SerializeAsString()));
     }
     default:
       return MakeSemanticError(
@@ -167,9 +168,8 @@ absl::StatusOr<google::protobuf::Message*> MutableMessageAtPath(
     const google::protobuf::Reflection* reflection = current->GetReflection();
     if (!reflection->HasField(*current, field)) {
       if (!create_missing) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: missing proto submessage in path");
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 "semantic: missing proto submessage in path");
       }
       current = reflection->MutableMessage(current, field);
     } else {
@@ -214,24 +214,24 @@ absl::StatusOr<Value> ReadProtoFieldValue(
     for (int i = 0; i < count; ++i) {
       switch (field->cpp_type()) {
         case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
-          elements.push_back(Value::Int64(
-              reflection->GetRepeatedInt32(msg, field, i)));
+          elements.push_back(
+              Value::Int64(reflection->GetRepeatedInt32(msg, field, i)));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
-          elements.push_back(Value::Int64(
-              reflection->GetRepeatedInt64(msg, field, i)));
+          elements.push_back(
+              Value::Int64(reflection->GetRepeatedInt64(msg, field, i)));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
-          elements.push_back(Value::String(
-              reflection->GetRepeatedString(msg, field, i)));
+          elements.push_back(
+              Value::String(reflection->GetRepeatedString(msg, field, i)));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
-          elements.push_back(Value::Bool(
-              reflection->GetRepeatedBool(msg, field, i)));
+          elements.push_back(
+              Value::Bool(reflection->GetRepeatedBool(msg, field, i)));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
-          elements.push_back(Value::Double(
-              reflection->GetRepeatedDouble(msg, field, i)));
+          elements.push_back(
+              Value::Double(reflection->GetRepeatedDouble(msg, field, i)));
           break;
         default:
           return MakeSemanticError(
@@ -243,9 +243,8 @@ absl::StatusOr<Value> ReadProtoFieldValue(
   }
   if (!reflection->HasField(msg, field)) {
     if (field->is_required()) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: required proto field is not set");
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: required proto field is not set");
     }
     if (default_value.is_valid()) {
       return default_value;
@@ -357,27 +356,30 @@ absl::Status CopyFieldSubtree(
       switch (field->cpp_type()) {
         case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
           dst_reflection->SetInt32(
-              dst_current, field,
+              dst_current,
+              field,
               src_reflection->GetInt32(*src_current, field));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
           dst_reflection->SetInt64(
-              dst_current, field,
+              dst_current,
+              field,
               src_reflection->GetInt64(*src_current, field));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
           dst_reflection->SetString(
-              dst_current, field,
+              dst_current,
+              field,
               src_reflection->GetString(*src_current, field));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
           dst_reflection->SetBool(
-              dst_current, field,
-              src_reflection->GetBool(*src_current, field));
+              dst_current, field, src_reflection->GetBool(*src_current, field));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
           dst_reflection->SetDouble(
-              dst_current, field,
+              dst_current,
+              field,
               src_reflection->GetDouble(*src_current, field));
           break;
         case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:
@@ -423,7 +425,8 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> CloneProtoMessage(
 }
 
 absl::StatusOr<Value> MessageToProtoValue(
-    const google::protobuf::Message& msg, const ::googlesql::ProtoType* proto_type) {
+    const google::protobuf::Message& msg,
+    const ::googlesql::ProtoType* proto_type) {
   if (proto_type == nullptr) {
     return absl::InternalError("semantic: null ProtoType for serialization");
   }
