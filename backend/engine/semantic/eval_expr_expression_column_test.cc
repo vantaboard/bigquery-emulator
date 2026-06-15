@@ -67,7 +67,8 @@ TEST_F(EvalExprTest, ResolvedExpressionColumnMissingBindingSurfacesError) {
             SemanticErrorReason::kInvalidArgument);
 }
 
-TEST_F(EvalExprTest, ResolvedCatalogColumnRefGraphPropertySurfacesNotImplemented) {
+TEST_F(EvalExprTest,
+       ResolvedCatalogColumnRefGraphPropertySurfacesNotImplemented) {
   std::unique_ptr<::googlesql::ResolvedCatalogColumnRef> ref =
       ::googlesql::MakeResolvedCatalogColumnRef(::googlesql::types::Int64Type(),
                                                 /*column=*/nullptr,

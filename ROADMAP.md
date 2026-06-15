@@ -900,10 +900,10 @@ from [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md). **Real**, but land
 only the shapes a non-graph BigQuery query can actually reach; otherwise
 keep `unsupported` with a sharper envelope.
 
-- ⏳ `ResolvedSequence` — no reachable `PRODUCT_EXTERNAL` `CREATE SEQUENCE` /
+- ✅ `ResolvedSequence` — no reachable `PRODUCT_EXTERNAL` `CREATE SEQUENCE` /
   `NEXT VALUE FOR` SQL today; stays `unsupported` with a sharper envelope (see
   `docs/ENGINE_POLICY.md`)
-- ⏳ `ResolvedCatalogColumnRef` — graph-property refs out of scope; catalog DDL
+- ✅ `ResolvedCatalogColumnRef` — graph-property refs out of scope; catalog DDL
   refs have no reachable `PRODUCT_EXTERNAL` consumer today (stays
   `unsupported`; eval surfaces a sharper envelope if the node appears)
 - ✅ `ResolvedExpressionColumn` — `AnalyzeExpression` bindings on the semantic

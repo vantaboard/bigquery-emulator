@@ -6,19 +6,19 @@ isProject: true
 todos:
   - id: sequences
     content: "ResolvedSequence / NEXT VALUE FOR: BigQuery does not ship general SQL sequences, but the analyzer surfaces the node. Decide between (a) a local sequence object (CREATE/persist a counter in storage, advance on NEXT VALUE FOR) for the cases GoogleSQL can resolve, or (b) keeping it unsupported with a clearer envelope if no real BigQuery SQL reaches it. Land whichever is correct + document."
-    status: pending
+    status: completed
   - id: expression-column
     content: "ResolvedExpressionColumn: the column reference used for standalone expression evaluation contexts (e.g. expression-only analysis, check constraints, computed contexts). Evaluate on the semantic executor by binding the named expression column from the eval context."
-    status: pending
+    status: completed
   - id: catalog-column-ref
     content: "ResolvedCatalogColumnRef: catalog-internal column references. Graph/GQL (the other consumer of this node) is out of scope (unsupported, not planned), so this plan owns the node only for the non-graph catalog-ref cases the analyzer can reach. If no non-graph SQL reaches the node, keep it unsupported with a sharper envelope instead of forcing an implementation."
-    status: pending
+    status: completed
   - id: fixtures-trackers
     content: "Conformance fixtures for whichever shapes land with real SQL coverage (sequence advance if implemented; expression-column eval). Flip the corresponding rows in node_dispositions.yaml + SHAPE_TRACKER; update ROADMAP §Catalog / sequence helpers + the ENGINE_POLICY Sequences row. For any shape that stays unsupported, sharpen the envelope/doc instead of flipping."
-    status: pending
+    status: completed
   - id: skip-audit
     content: "Third-party + conformance skip audit (run before declaring done, for whatever shapes actually land). Sweep the GoogleSQL `.test` corpus (conformance/googlesql-corpus/) and the bqutils known_failing/ corpus for sequence / expression-column / catalog-ref fixtures that now pass and promote them. Re-run any third-party subtest that touches these shapes; update third_party/README.md only for rows truly unblocked. For shapes that stay unsupported, leave a note rather than unskipping."
-    status: pending
+    status: completed
 ---
 
 # Expand 07 — Sequences & catalog column refs

@@ -123,7 +123,7 @@ graph LR
 | 04 | real | landed | +1 specialized (replace_fields_struct); +7 unit tests | cc1a169, c6c7378 | Proto AST on semantic executor; catalog descriptor pool deferred |
 | 05 | — | removed | — | | Graph / GQL — unsupported, not planned |
 | 06 | stub | landed | +3 specialized (anonymized/dp/threshold aggregate_stub) | 8ad84ed | Plain aggregate; NOT differential privacy |
-| 07 | real | landed (partial) | +1 scripting (expression_column_set_increment) | | ExpressionColumn on semantic executor; Sequence + CatalogColumnRef sharpened (unsupported, not reachable) |
+| 07 | real | landed | +1 scripting (expression_column_set_increment) | 693d254 | ExpressionColumn on semantic executor; Sequence + CatalogColumnRef sharpened (unsupported, not reachable) |
 | 08 | mixed | pending | — | | real: ST_GEOGFROMWKB, EXPLAIN; stub: KEYS encrypt/decrypt, SESSION_USER |
 | 09 | real | pending | — | | Measure functions |
 
