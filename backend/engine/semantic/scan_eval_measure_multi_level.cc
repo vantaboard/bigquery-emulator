@@ -1,3 +1,4 @@
+#include <cstring>
 #include <map>
 #include <string>
 #include <utility>
@@ -64,6 +65,7 @@ std::string PlainAggregateNameForPrivacyStub(absl::string_view agg_name) {
     }
   }
   return stripped;
+}
 
 bool IsGrainLockAnyValue(
     const ::googlesql::ResolvedAggregateFunctionCall& inner_agg,
@@ -284,7 +286,6 @@ absl::StatusOr<Value> EvalMultiLevelAggregateForRows(
 
   return FinishAggregateFromArgColumns(agg, arg_columns, outer_input_rows, ctx);
 }
-
 
 }  // namespace scan_eval_internal
 }  // namespace semantic

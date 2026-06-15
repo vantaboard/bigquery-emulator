@@ -9,9 +9,15 @@ namespace catalog {
 
 // Registers emulator-specific scalar functions missing from the
 // stock GoogleSQL builtin set but required for BigQuery parity
-// (e.g. ISNULL, CONTAINS_SUBSTR). Safe to call on every per-query catalog
-// instance; function objects are created once and reused.
+// (e.g. ISNULL, CONTAINS_SUBSTR, KEYS.ENCRYPT / KEYS.DECRYPT_BYTES). Safe to
+// call on every per-query catalog instance; function objects are created once
+// and reused.
 void RegisterEmulatorBuiltinFunctions(::googlesql::SimpleCatalog& catalog);
+
+// Registers `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` on the stock `keys`
+// function-group subcatalog so analysis can resolve the encrypt round-trip
+// before the semantic stub lane executes.
+void RegisterEmulatorKeysStubFunctions(::googlesql::SimpleCatalog& catalog);
 
 }  // namespace catalog
 }  // namespace backend

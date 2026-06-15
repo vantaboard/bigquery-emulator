@@ -1,5 +1,3 @@
-#include "backend/catalog/googlesql_catalog.h"
-
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -9,16 +7,20 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/wildcard_table.h"
 #include "backend/catalog/wildcard_table_util.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
-#include "googlesql/public/simple_table.h"
+#include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
+
+using ::googlesql::SimpleTable;
+using ::googlesql::Type;
 
 absl::StatusOr<const ::googlesql::Table*>
 GoogleSqlCatalog::MaterializeWildcardTable(
@@ -92,7 +94,6 @@ GoogleSqlCatalog::MaterializeWildcardTable(
   keys_.push_back(key);
   return raw;
 }
-
 
 }  // namespace catalog
 }  // namespace backend

@@ -327,6 +327,33 @@ TEST_F(QueryServiceTest, ExecuteQueryDeleteEmitsDmlStats) {
   ASSERT_NE(route, nullptr);
   EXPECT_EQ(route->emulator_route(), "semantic_executor");
 }
+
+TEST_F(QueryServiceTest, ExecuteQueryKeysEncryptDecryptStubRoundTrip) {
+  v1::QueryRequest req = MakeRequest(R"(
+    WITH ks AS (SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset)
+    SELECT TO_BASE64(
+      KEYS.DECRYPT_BYTES(
+        keyset,
+        KEYS.ENCRYPT(keyset, FROM_BASE64('YWJj'))
+      )
+    ) AS plain
+    FROM ks
+  )");
+  MessageCollector collector;
+  ::grpc::Status status = StreamQueryResults(
+      storage_.get(), req, collector.Writer(), engine_.get());
+  ASSERT_TRUE(status.ok()) << status.error_message();
+  const auto& messages = collector.messages();
+  ASSERT_GE(messages.size(), 2u);
+  ASSERT_TRUE(messages[0].has_schema());
+  ASSERT_FALSE(messages[1].has_schema());
+  ASSERT_EQ(messages[1].cells_size(), 1);
+  EXPECT_EQ(messages[1].cells(0).string_value(), "YWJj");
+  const v1::QueryResultRow* route = collector.EmulatorRouteTrailer();
+  ASSERT_NE(route, nullptr);
+  EXPECT_EQ(route->emulator_route(), "local_stub");
+}
+
 }  // namespace
 }  // namespace frontend
 }  // namespace bigquery_emulator

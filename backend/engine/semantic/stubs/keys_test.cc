@@ -5,6 +5,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
 #include "gmock/gmock.h"
@@ -133,6 +134,29 @@ TEST(KeysKeysetLengthTest, RejectsNonBytesArg) {
   auto r = KeysKeysetLength({Value::String("not-bytes")});
   EXPECT_EQ(r.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_THAT(std::string(r.status().message()), HasSubstr("BYTES"));
+}
+
+TEST(KeysEncryptDecryptTest, RoundTripPlaintextThroughCipherPrefix) {
+  auto keyset = KeysNewKeyset({Value::String("AEAD_AES_GCM_256")});
+  ASSERT_TRUE(keyset.ok()) << keyset.status();
+  auto enc = KeysEncrypt({*keyset, Value::Bytes("abc")});
+  ASSERT_TRUE(enc.ok()) << enc.status();
+  EXPECT_TRUE(
+      absl::StartsWith(enc->bytes_value(), "bigquery-emulator:cipher:v1:"));
+  auto dec = KeysDecryptBytes({*keyset, *enc});
+  ASSERT_TRUE(dec.ok()) << dec.status();
+  EXPECT_EQ(dec->bytes_value(), "abc");
+}
+
+TEST(KeysEncryptDecryptTest, NullArgsPropagateToNullBytes) {
+  auto keyset = KeysNewKeyset({Value::String("AEAD_AES_GCM_256")});
+  ASSERT_TRUE(keyset.ok()) << keyset.status();
+  auto enc_null = KeysEncrypt({Value::NullBytes(), Value::Bytes("x")});
+  ASSERT_TRUE(enc_null.ok()) << enc_null.status();
+  EXPECT_TRUE(enc_null->is_null());
+  auto dec_null = KeysDecryptBytes({*keyset, Value::NullBytes()});
+  ASSERT_TRUE(dec_null.ok()) << dec_null.status();
+  EXPECT_TRUE(dec_null->is_null());
 }
 
 }  // namespace

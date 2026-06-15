@@ -851,13 +851,10 @@ Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
   on the semantic GIS path (`geog_funcs.cc`); pinned by
   `conformance/fixtures/specialized/st_geogfromwkb_point.yaml`
 - ✅ `KEYS.ENCRYPT` (`keys.encrypt`) — **stub**: deterministic cipher
-  envelope (`stubs/keys.cc`); **follow-up:** GoogleSQL analyzer segfaults
-  on `KEYS.ENCRYPT` in full-catalog analyze — fixture uses
-  `KEYS.NEW_KEYSET` + `KEYS.KEYSET_LENGTH` until that upstream crash is
-  isolated
+  envelope (`stubs/keys.cc`); pinned by
+  `conformance/fixtures/specialized/keys_encrypt_decrypt_stub.yaml`
 - ✅ `KEYS.DECRYPT_BYTES` (`keys.decrypt_bytes`) — **stub**: strips the
-  emulator cipher prefix (`stubs/keys.cc`); same analyzer blocker as
-  `KEYS.ENCRYPT` — not yet pinned by conformance
+  emulator cipher prefix (`stubs/keys.cc`); same fixture
 - ✅ `SESSION_USER` (`session_user`) — **stub**: returns
   `bigquery-emulator@local`; pinned by
   `conformance/fixtures/specialized/session_user_stub.yaml`

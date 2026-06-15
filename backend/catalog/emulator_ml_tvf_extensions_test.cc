@@ -42,6 +42,21 @@ class EmulatorMlTvfCatalogTest : public ::testing::Test {
   std::unique_ptr<EmulatorMlTestCatalog> catalog_{};
 };
 
+// Mirrors `GoogleSqlCatalog::FindTableValuedFunction` wiring so regressions
+// in the unqualified fallback helper cannot stack-overflow the engine.
+class CatalogWithTvfFallbackOverride : public ::googlesql::SimpleCatalog {
+ public:
+  using ::googlesql::SimpleCatalog::SimpleCatalog;
+
+  absl::Status FindTableValuedFunction(
+      const absl::Span<const std::string>& path,
+      const ::googlesql::TableValuedFunction** function,
+      const FindOptions& options = FindOptions()) override {
+    return FindTableValuedFunctionWithUnqualifiedFallback(
+        *this, path, function, options);
+  }
+};
+
 TEST_F(EmulatorMlTvfCatalogTest, RegistersLookupPathsForMlPredict) {
   const ::googlesql::TableValuedFunction* tvf = nullptr;
   for (const std::vector<std::string> path :
@@ -56,6 +71,25 @@ TEST_F(EmulatorMlTvfCatalogTest, RegistersLookupPathsForMlPredict) {
     }
   }
   FAIL() << "FindTableValuedFunction did not resolve ML.PREDICT";
+}
+
+TEST(EmulatorMlTvfExtensionsTest, TvfFallbackOverrideDoesNotRecurse) {
+  ::googlesql::TypeFactory type_factory;
+  CatalogWithTvfFallbackOverride catalog("test_catalog", &type_factory);
+  ::googlesql::LanguageOptions language;
+  language.EnableMaximumLanguageFeaturesForDevelopment();
+  language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
+  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
+  ASSERT_TRUE(catalog
+                  .AddBuiltinFunctionsAndTypes(
+                      ::googlesql::BuiltinFunctionOptions(language))
+                  .ok());
+  RegisterEmulatorMlTvfStubs(catalog);
+
+  const ::googlesql::TableValuedFunction* tvf = nullptr;
+  ASSERT_TRUE(catalog.FindTableValuedFunction({"ML", "PREDICT"}, &tvf).ok());
+  ASSERT_NE(tvf, nullptr);
+  EXPECT_EQ(tvf->SQLName(), "ML.PREDICT");
 }
 
 TEST_F(EmulatorMlTvfCatalogTest, AnalyzeMlPredictSucceeds) {

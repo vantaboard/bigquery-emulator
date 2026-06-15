@@ -2,18 +2,22 @@
 name: specialized_keys_encrypt_decrypt_stub
 description: |
   KEYS.NEW_KEYSET returns a deterministic sentinel keyset envelope;
-  KEYS.KEYSET_LENGTH reports a single logical key for any BYTES keyset.
-  KEYS.ENCRYPT / KEYS.DECRYPT_BYTES stubs are wired in
-  `backend/engine/semantic/stubs/keys.cc` but are not yet exercised here
-  because the GoogleSQL analyzer segfaults resolving KEYS.ENCRYPT on the
-  full GoogleSqlCatalog path (see coordinator keys tests).
+  KEYS.ENCRYPT / KEYS.DECRYPT_BYTES round-trip plaintext through the
+  emulator cipher prefix on the semantic stub lane (`stubs/keys.cc`).
 project_id: proj-specialized-keys-stub
 dataset_id: ds_keys_stub
 setup:
   - dataset: ds_keys_stub
 query: |
-  SELECT KEYS.KEYSET_LENGTH(KEYS.NEW_KEYSET('AEAD_AES_GCM_256')) AS key_count
+  WITH ks AS (SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset)
+  SELECT TO_BASE64(
+    KEYS.DECRYPT_BYTES(
+      keyset,
+      KEYS.ENCRYPT(keyset, FROM_BASE64('YWJj'))
+    )
+  ) AS plain
+  FROM ks
 expected:
   route: local_stub
   rows:
-    - {key_count: "1"}
+    - {plain: "YWJj"}

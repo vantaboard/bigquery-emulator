@@ -25,8 +25,8 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   // dispatch key; the route classifier promotes the surrounding
   // query to `kLocalStub` based on the same YAML key, so a hit
   // here corresponds exactly to a `local_stub` row in
-  // `functions.yaml`. `KEYS.ENCRYPT` / `KEYS.DECRYPT_BYTES` stay
-  // unsupported and never reach this table.
+  // `functions.yaml`. All four KEYS.* scalars are registered on the catalog
+  // for analysis; execution is handled here on the semantic stub lane.
   if (name == "keys.new_keyset") return KeysNewKeyset(args);
   if (name == "keys.keyset_length") return KeysKeysetLength(args);
   if (name == "keys.encrypt") return KeysEncrypt(args);

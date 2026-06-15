@@ -188,7 +188,7 @@ absl::Status ResolveMlStubModelForAnalysis(
     return absl::InvalidArgumentError("FindModel: output pointer is null");
   }
   *model = nullptr;
-  absl::Status found = catalog.FindModel(path, model, options);
+  absl::Status found = catalog.SimpleCatalog::FindModel(path, model, options);
   if (found.ok() && *model != nullptr) {
     return found;
   }
@@ -211,13 +211,15 @@ absl::Status FindTableValuedFunctionWithUnqualifiedFallback(
         "FindTableValuedFunction: output pointer is null");
   }
   *function = nullptr;
-  absl::Status found = catalog.FindTableValuedFunction(path, function, options);
+  absl::Status found =
+      catalog.SimpleCatalog::FindTableValuedFunction(path, function, options);
   if (found.ok() && *function != nullptr) {
     return found;
   }
   if (path.size() >= 2) {
     const std::vector<std::string> unqualified = {path.back()};
-    return catalog.FindTableValuedFunction(unqualified, function, options);
+    return catalog.SimpleCatalog::FindTableValuedFunction(
+        unqualified, function, options);
   }
   return found;
 }

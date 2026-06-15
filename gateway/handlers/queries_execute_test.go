@@ -15,7 +15,44 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// assertExecuteForwarding pins the engine RPC arguments the gateway
+// TestQueryRunExecuteKeysFixtureSQLUnchanged asserts the gateway does
+// not rewrite the KEYS encrypt round-trip fixture before forwarding.
+func TestQueryRunExecuteKeysFixtureSQLUnchanged(t *testing.T) {
+	const keysFixtureSQL = "WITH ks AS (SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS keyset)\n" +
+		"SELECT TO_BASE64(\n" +
+		"  KEYS.DECRYPT_BYTES(\n" +
+		"    keyset,\n" +
+		"    KEYS.ENCRYPT(keyset, FROM_BASE64('YWJj'))\n" +
+		"  )\n" +
+		") AS plain\n" +
+		"FROM ks"
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return nil, status.Error(codes.InvalidArgument, "stop after capture")
+		},
+	}
+	body := `{"query":` + mustJSON(t, keysFixtureSQL) + `,"useLegacySql":false}`
+	rec := runQueryWithDeps(t, "proj-specialized-keys-stub", Dependencies{Query: fake}, body)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastExecuteQuery == nil {
+		t.Fatal("Query.ExecuteQuery was not called")
+	}
+	if got := fake.lastExecuteQuery.GetSql(); got != keysFixtureSQL {
+		t.Fatalf("sql forwarded = %q, want %q", got, keysFixtureSQL)
+	}
+}
+
+func mustJSON(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return string(b)
+}
+
 // must derive from the inbound /queries body. Hoisted out of the
 // caller test to keep its cyclomatic complexity below the cyclop cap.
 func assertExecuteForwarding(t *testing.T, fake *fakeQueryClient) {
