@@ -54,7 +54,7 @@ jobs:
           head-sha: ${{ github.event.workflow_run.head_sha }}
 
       - name: Pull goccy emulator image
-        run: docker pull ghcr.io/goccy/bigquery-emulator:0.7.2
+        run: docker pull ghcr.io/goccy/bigquery-emulator:0.8.1
 
       - name: Run benchmarks
         env:

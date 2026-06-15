@@ -5,7 +5,7 @@ Compares query latency and correctness across three targets:
 | Target | Backend |
 |--------|---------|
 | **vantaboard** (this repo) | Native GoogleSQL + DuckDB via `emulator_main` |
-| **goccy** | [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator) Docker image (`0.7.2`) |
+| **goccy** | [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator) Docker image (`0.8.1`) |
 | **BigQuery** | Real BigQuery via ADC (golden baseline only) |
 
 ## Quick start
@@ -85,7 +85,7 @@ Per-case skips:
 
 ```yaml
 skip_targets: [goccy]
-skip_reason: "goccy 0.7.2 hangs on CTAS with CAST(id AS FLOAT64)/N at 100k rows"
+skip_reason: "upstream goccy bug (document why in the case YAML)"
 ```
 
 The pass/fail **gate applies only to vantaboard**. Goccy numbers are competitive evidence, not CI failures.

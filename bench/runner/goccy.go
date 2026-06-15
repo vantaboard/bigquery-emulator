@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const defaultGoccyImage = "ghcr.io/goccy/bigquery-emulator:0.7.2"
+const defaultGoccyImage = "ghcr.io/goccy/bigquery-emulator:0.8.1"
 
 // goccyProject is the single project the goccy container is started
 // with. goccy/bigquery-emulator 404s on any other project id, so every

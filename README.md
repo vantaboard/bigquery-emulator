@@ -107,7 +107,7 @@ The engine binary discovery defaults to looking for `emulator_main` next to
 The [`bench/`](./bench/) harness compares query latency and correctness
 across three backends: this emulator (vantaboard), the
 [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator)
-Docker image (`0.7.2`), and committed BigQuery golden baselines. Run
+Docker image (`0.8.1`), and committed BigQuery golden baselines. Run
 locally with `task bench:run`; see [`bench/README.md`](./bench/README.md)
 for case format, baseline capture, phase timing, and profiling.
 

@@ -49,7 +49,7 @@ The [bench harness](https://github.com/vantaboard/bigquery-emulator/blob/main/be
 compares query latency and **correctness outcomes** across three backends:
 
 - **vantaboard** — this emulator
-- **goccy** — [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator) Docker `0.7.2`
+- **goccy** — [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator) Docker `0.8.1`
 - **BigQuery** — committed golden baselines
 
 The support matrix chart is a heatmap of benchmark case outcomes

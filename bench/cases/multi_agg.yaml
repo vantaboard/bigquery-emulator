@@ -1,7 +1,5 @@
 name: multi_agg
 tags: [duckdb, aggregate]
-skip_targets: [goccy]
-skip_reason: "goccy 0.7.2 hangs on CTAS with CAST(id AS FLOAT64) at 150k rows"
 setup:
   - sql: |
       CREATE TABLE {{ds}}.t AS
