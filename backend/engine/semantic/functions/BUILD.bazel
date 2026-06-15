@@ -221,7 +221,10 @@ cc_test(
 cc_library(
     name = "kll_funcs",
     srcs = ["kll_funcs.cc"],
-    hdrs = ["kll_funcs.h"],
+    hdrs = [
+        "kll_funcs.h",
+        "kll_sketch_internal.h",
+    ],
     deps = [
         "//backend/engine/semantic:error",
         "//backend/engine/semantic:value",

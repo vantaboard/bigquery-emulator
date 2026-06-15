@@ -26,12 +26,10 @@ absl::StatusOr<Value> KllQuantilesInitFloat64Values(
     const std::vector<Value>* weights = nullptr);
 
 absl::StatusOr<Value> KllQuantilesExtractInt64Scalar(
-    const std::vector<Value>& args,
-    const ::googlesql::Type* return_type);
+    const std::vector<Value>& args, const ::googlesql::Type* return_type);
 
 absl::StatusOr<Value> KllQuantilesExtractFloat64Scalar(
-    const std::vector<Value>& args,
-    const ::googlesql::Type* return_type);
+    const std::vector<Value>& args, const ::googlesql::Type* return_type);
 
 absl::StatusOr<Value> KllQuantilesExtractPointInt64Scalar(
     const std::vector<Value>& args);

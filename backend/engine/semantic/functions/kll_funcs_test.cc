@@ -42,8 +42,8 @@ TEST(KllFuncsTest, ExtractInt64HalvesOnSmallSet) {
   auto sketch = InitInt64({1, 2, 3, 4, 5});
   ASSERT_TRUE(sketch.ok()) << sketch.status();
 
-  auto halves = KllQuantilesExtractInt64Scalar(
-      {*sketch, Value::Int64(2)}, Int64ArrayType());
+  auto halves = KllQuantilesExtractInt64Scalar({*sketch, Value::Int64(2)},
+                                               Int64ArrayType());
   ASSERT_TRUE(halves.ok()) << halves.status();
   ASSERT_TRUE(halves->type()->IsArray());
   ASSERT_EQ(halves->elements().size(), 3u);
@@ -67,13 +67,12 @@ TEST(KllFuncsTest, MergePartialRoundTrip) {
   ASSERT_TRUE(sketch_a.ok()) << sketch_a.status();
   ASSERT_TRUE(sketch_b.ok()) << sketch_b.status();
 
-  auto merged = KllQuantilesMergePartialAggregate(
-      {{*sketch_a, *sketch_b}});
+  auto merged = KllQuantilesMergePartialAggregate({{*sketch_a, *sketch_b}});
   ASSERT_TRUE(merged.ok()) << merged.status();
   EXPECT_FALSE(merged->is_null());
 
-  auto halves = KllQuantilesExtractInt64Scalar(
-      {*merged, Value::Int64(2)}, Int64ArrayType());
+  auto halves = KllQuantilesExtractInt64Scalar({*merged, Value::Int64(2)},
+                                               Int64ArrayType());
   ASSERT_TRUE(halves.ok()) << halves.status();
   EXPECT_EQ(halves->elements()[0].int64_value(), 1);
   EXPECT_EQ(halves->elements()[2].int64_value(), 5);
@@ -95,17 +94,21 @@ TEST(KllFuncsTest, MergeInt64AggregateReturnsHalves) {
 }
 
 TEST(KllFuncsTest, InitWithWeightSkewsMedian) {
-  std::vector<Value> inputs = {Value::Int64(1), Value::Int64(2),
-                               Value::Int64(3), Value::Int64(4),
+  std::vector<Value> inputs = {Value::Int64(1),
+                               Value::Int64(2),
+                               Value::Int64(3),
+                               Value::Int64(4),
                                Value::Int64(5)};
-  std::vector<Value> weights = {Value::Int64(1), Value::Int64(3),
-                                Value::Int64(1), Value::Int64(1),
+  std::vector<Value> weights = {Value::Int64(1),
+                                Value::Int64(3),
+                                Value::Int64(1),
+                                Value::Int64(1),
                                 Value::Int64(1)};
   auto sketch = KllQuantilesInitInt64Values(inputs, 1000, &weights);
   ASSERT_TRUE(sketch.ok()) << sketch.status();
 
-  auto halves = KllQuantilesExtractInt64Scalar(
-      {*sketch, Value::Int64(2)}, Int64ArrayType());
+  auto halves = KllQuantilesExtractInt64Scalar({*sketch, Value::Int64(2)},
+                                               Int64ArrayType());
   ASSERT_TRUE(halves.ok()) << halves.status();
   EXPECT_EQ(halves->elements()[0].int64_value(), 1);
   EXPECT_EQ(halves->elements()[1].int64_value(), 2);
