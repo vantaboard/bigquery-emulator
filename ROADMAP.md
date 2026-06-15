@@ -815,7 +815,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
 | `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `local_impl` | **real** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
-| KLL quantile sketches (`KLL_QUANTILES.*`) | `unsupported` | **real** | [KLL quantile sketches](#kll-quantile-sketches) |
+| KLL quantile sketches (`KLL_QUANTILES.*`) | `local_impl` | **real** (landed) | [KLL quantile sketches](#kll-quantile-sketches) |
 | MEASURE / measure functions | `local_impl` | **real** | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Expression columns (`ResolvedExpressionColumn`) | `semantic_executor` | **real** (landed) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
@@ -862,12 +862,11 @@ Rows in [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml):
 `INIT`/`MERGE`/`MERGE_PARTIAL`/`MERGE_POINT`/`EXTRACT`/`EXTRACT_POINT` for
 both `INT64`- and `FLOAT64`-initialized sketches.
 
-- ⏳ `KLL_QUANTILES.*` (`kll_quantiles.*`) — **real** (planned): land on the
-  semantic executor paralleling `HLL_COUNT.*` (`hll_funcs.cc`). Registered
-  `semantic_executor status=planned` in
-  [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml); the
-  engine surfaces `UNIMPLEMENTED` until the handler + conformance fixture
-  land.
+- ✅ `KLL_QUANTILES.*` (`kll_quantiles.*`) — **real** (landed): semantic
+  executor via [`kll_funcs.cc`](./backend/engine/semantic/functions/kll_funcs.cc)
+  (Apache DataSketches KLL + emulator-local wire format; not byte-compatible
+  with cloud BigQuery). Pinned by
+  [`conformance/fixtures/specialized/kll_quantiles_round_trip.yaml`](./conformance/fixtures/specialized/kll_quantiles_round_trip.yaml).
 
 ### Deferred AST node dispositions
 
