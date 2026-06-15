@@ -18,6 +18,7 @@
 #include "backend/catalog/emulator_builtin_extensions.h"
 #include "backend/catalog/emulator_ml_tvf_extensions.h"
 #include "backend/catalog/info_schema_table.h"
+#include "backend/catalog/measure_catalog.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/tvf_registry.h"
@@ -271,7 +272,7 @@ absl::Status GoogleSqlCatalog::FindTable(
                      " segments"));
   }
 
-  absl::MutexLock lock(&mu_);
+  absl::ReleasableMutexLock lock(&mu_);
   if (!info_schema_view.empty()) {
     absl::StatusOr<const ::googlesql::Table*> resolved =
         MaterializeInfoSchemaView(project_id, dataset_id, info_schema_view);
@@ -286,10 +287,57 @@ absl::Status GoogleSqlCatalog::FindTable(
     *table = *resolved;
     return absl::OkStatus();
   }
-  absl::StatusOr<const ::googlesql::Table*> resolved =
-      MaterializeTable(project_id, dataset_id, table_id);
-  if (!resolved.ok()) return resolved.status();
-  *table = *resolved;
+
+  const std::string key = CacheKey(project_id, dataset_id, table_id);
+  for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
+    if (keys_[i] == key) {
+      *table = tables_[i].get();
+      return absl::OkStatus();
+    }
+  }
+
+  storage::TableId storage_id{
+      std::string(project_id), std::string(dataset_id), std::string(table_id)};
+  absl::StatusOr<schema::TableSchema> schema_or =
+      storage_->GetSchema(storage_id);
+  if (!schema_or.ok()) {
+    const ::googlesql::Table* registered_view =
+        FindProjectView(project_id, dataset_id, table_id);
+    if (registered_view != nullptr) {
+      registered_view_keys_.push_back(key);
+      registered_views_.push_back(registered_view);
+      *table = registered_view;
+      return absl::OkStatus();
+    }
+    return schema_or.status();
+  }
+
+  absl::StatusOr<MaterializedTableBuild> built =
+      MaterializeTablePhysical(project_id, dataset_id, table_id);
+  if (!built.ok()) return built.status();
+  StorageTable* storage_table = built->table;
+  schema::TableSchema logical_schema = std::move(built->logical_schema);
+
+  lock.Release();
+
+  absl::Status measures =
+      ApplyMeasureColumnsFromSchema(*storage_table,
+                                    logical_schema,
+                                    *this,
+                                    *type_factory_,
+                                    MakeCatalogLanguageOptions(),
+                                    measure_outputs_,
+                                    measure_resolved_exprs_);
+  if (!measures.ok()) {
+    absl::MutexLock relock(&mu_);
+    if (!keys_.empty() && keys_.back() == key) {
+      keys_.pop_back();
+      tables_.pop_back();
+    }
+    return measures;
+  }
+
+  *table = storage_table;
   return absl::OkStatus();
 }
 
@@ -326,18 +374,17 @@ absl::Status GoogleSqlCatalog::FindProcedure(
   return found;
 }
 
-absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
-    absl::string_view project_id,
-    absl::string_view dataset_id,
-    absl::string_view table_id) {
+absl::StatusOr<GoogleSqlCatalog::MaterializedTableBuild>
+GoogleSqlCatalog::MaterializeTablePhysical(absl::string_view project_id,
+                                           absl::string_view dataset_id,
+                                           absl::string_view table_id) {
   const std::string key = CacheKey(project_id, dataset_id, table_id);
   for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
-    if (keys_[i] == key) return tables_[i].get();
-  }
-  for (std::vector<std::string>::size_type i = 0;
-       i < registered_view_keys_.size();
-       ++i) {
-    if (registered_view_keys_[i] == key) return registered_views_[i];
+    if (keys_[i] == key) {
+      MaterializedTableBuild built;
+      built.table = static_cast<StorageTable*>(tables_[i].get());
+      return built;
+    }
   }
 
   storage::TableId id{
@@ -349,31 +396,35 @@ absl::StatusOr<const ::googlesql::Table*> GoogleSqlCatalog::MaterializeTable(
     if (registered_view != nullptr) {
       registered_view_keys_.push_back(key);
       registered_views_.push_back(registered_view);
-      return registered_view;
+      return absl::NotFoundError(
+          "MaterializeTablePhysical called for registered view");
     }
     return table_schema.status();
   }
 
   std::vector<SimpleTable::NameAndType> columns;
-  columns.reserve(table_schema->columns.size());
-  for (const schema::ColumnSchema& column : table_schema->columns) {
-    absl::StatusOr<const Type*> column_type =
-        ToGoogleSqlType(column, type_factory_);
-    if (!column_type.ok()) return column_type.status();
-    columns.emplace_back(column.name, *column_type);
-  }
+  schema::TableSchema physical_schema;
+  absl::StatusOr<std::vector<SimpleTable::NameAndType>> physical_columns_or =
+      BuildPhysicalNameAndTypes(*table_schema,
+                                &physical_schema,
+                                [this](const schema::ColumnSchema& column) {
+                                  return ToGoogleSqlType(column, type_factory_);
+                                });
+  if (!physical_columns_or.ok()) return physical_columns_or.status();
+  columns = std::move(*physical_columns_or);
 
-  // The fully-qualified `project.dataset.table` path is what
-  // GoogleSQL prints in error messages; SimpleTable's
-  // `set_full_name` carries that through.
   const std::string full_name =
       absl::StrCat(project_id, ".", dataset_id, ".", table_id);
   auto storage_table = std::make_unique<StorageTable>(
-      table_id, full_name, columns, *table_schema, id, storage_);
-  const ::googlesql::Table* raw = storage_table.get();
+      table_id, full_name, columns, physical_schema, id, storage_);
+  StorageTable* raw = storage_table.get();
   tables_.push_back(std::move(storage_table));
   keys_.push_back(key);
-  return raw;
+
+  MaterializedTableBuild built;
+  built.table = raw;
+  built.logical_schema = std::move(*table_schema);
+  return built;
 }
 
 absl::StatusOr<const ::googlesql::Table*>
@@ -408,79 +459,6 @@ GoogleSqlCatalog::MaterializeInfoSchemaView(absl::string_view project_id,
                                                       type_factory_);
   const ::googlesql::Table* raw = info_table.get();
   tables_.push_back(std::move(info_table));
-  keys_.push_back(key);
-  return raw;
-}
-
-absl::StatusOr<const ::googlesql::Table*>
-GoogleSqlCatalog::MaterializeWildcardTable(
-    absl::string_view project_id,
-    absl::string_view dataset_id,
-    absl::string_view wildcard_table_id) {
-  const std::string key = CacheKey(project_id, dataset_id, wildcard_table_id);
-  for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
-    if (keys_[i] == key) return tables_[i].get();
-  }
-
-  storage::DatasetId ds_id{std::string(project_id), std::string(dataset_id)};
-  absl::StatusOr<std::vector<storage::TableId>> listed =
-      storage_->ListTables(ds_id);
-  if (!listed.ok()) return listed.status();
-
-  std::vector<storage::TableId> matched;
-  matched.reserve(listed->size());
-  for (const storage::TableId& id : *listed) {
-    if (TableMatchesWildcard(id.table_id, wildcard_table_id)) {
-      matched.push_back(id);
-    }
-  }
-  if (matched.empty()) {
-    return absl::NotFoundError(absl::StrCat("No tables match wildcard '",
-                                            wildcard_table_id,
-                                            "' in dataset ",
-                                            dataset_id));
-  }
-
-  std::sort(matched.begin(),
-            matched.end(),
-            [](const storage::TableId& a, const storage::TableId& b) {
-              return a.table_id < b.table_id;
-            });
-
-  absl::StatusOr<schema::TableSchema> union_schema =
-      UnifyWildcardTableSchemas(storage_, matched);
-  if (!union_schema.ok()) return union_schema.status();
-
-  absl::StatusOr<std::vector<WildcardColumnMap>> column_maps =
-      BuildWildcardColumnMaps(storage_, matched, *union_schema);
-  if (!column_maps.ok()) return column_maps.status();
-
-  std::vector<SimpleTable::NameAndType> columns;
-  columns.reserve(union_schema->columns.size());
-  for (const schema::ColumnSchema& column : union_schema->columns) {
-    absl::StatusOr<const Type*> column_type =
-        ToGoogleSqlType(column, type_factory_);
-    if (!column_type.ok()) return column_type.status();
-    columns.emplace_back(column.name, *column_type);
-  }
-
-  const std::string table_prefix = WildcardTablePrefix(wildcard_table_id);
-  storage::TableId wildcard_id{std::string(project_id),
-                               std::string(dataset_id),
-                               std::string(wildcard_table_id)};
-  const std::string full_name =
-      absl::StrCat(project_id, ".", dataset_id, ".", wildcard_table_id);
-  auto wildcard = std::make_unique<WildcardTable>(wildcard_table_id,
-                                                  full_name,
-                                                  wildcard_id,
-                                                  table_prefix,
-                                                  std::move(*column_maps),
-                                                  std::move(*union_schema),
-                                                  columns,
-                                                  storage_,
-                                                  type_factory_);
-  const ::googlesql::Table* raw = wildcard.get();
-  tables_.push_back(std::move(wildcard));
   keys_.push_back(key);
   return raw;
 }

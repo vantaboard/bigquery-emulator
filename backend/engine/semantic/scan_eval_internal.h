@@ -100,6 +100,18 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializePipeForkScan(
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeGroupRowsScan(
     const ::googlesql::ResolvedGroupRowsScan& scan, const EvalContext& ctx);
 std::string GroupKeyFingerprint(const std::vector<Value>& keys);
+std::string PlainAggregateNameForPrivacyStub(absl::string_view agg_name);
+absl::StatusOr<Value> FinishAggregateFromArgColumns(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const std::vector<std::vector<Value>>& arg_columns,
+    const std::vector<ColumnBindings>& input_rows,
+    EvalContext& ctx);
+absl::StatusOr<Value> EvalMultiLevelAggregateForRows(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
 absl::StatusOr<Value> EvalAggregateForRows(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const ::googlesql::ResolvedScan* input_scan,

@@ -225,8 +225,9 @@ absl::Status DuckDBStorage::CreateTable(const TableId& id,
   if (schema.columns.empty()) {
     return absl::OkStatus();
   }
+  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
   const std::string tmp_table = "main.__bqemu_mkempty";
-  const std::string cols = internal::RenderColumnList(schema);
+  const std::string cols = internal::RenderColumnList(physical);
   const auto create_status = internal::RunSql(
       impl_.get(),
       absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", cols));

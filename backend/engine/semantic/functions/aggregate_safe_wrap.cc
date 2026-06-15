@@ -93,6 +93,9 @@ absl::StatusOr<Value> EvalAggregateCall(
   if (name == "sum") {
     return finish(SumAggregate(call, input_column_values));
   }
+  if (name == "agg") {
+    return finish(SumAggregate(call, input_column_values));
+  }
   if (name == "avg") {
     return finish(AvgAggregate(call, input_column_values));
   }

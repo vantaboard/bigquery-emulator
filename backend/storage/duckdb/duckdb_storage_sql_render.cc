@@ -7,6 +7,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/catalog/measure_catalog.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/row_restriction.h"
@@ -20,6 +21,11 @@ namespace duckdb {
 namespace internal {
 
 namespace fs = std::filesystem;
+
+schema::TableSchema ParquetStorageSchema(const schema::TableSchema& logical) {
+  return catalog::StripMeasureColumns(logical);
+}
+
 // Builds the parenthesized column list / type list for a CREATE TABLE
 // or COPY ... TO statement against the given schema.
 std::string RenderColumnList(const schema::TableSchema& schema) {

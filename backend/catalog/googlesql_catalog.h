@@ -65,6 +65,7 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/simple_catalog.h"
@@ -92,6 +93,7 @@ inline ::googlesql::LanguageOptions MakeCatalogLanguageOptions() {
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
   language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
+  language.EnableLanguageFeature(::googlesql::FEATURE_ENABLE_MEASURES);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   language.SetSupportsAllStatementKinds();
@@ -185,7 +187,12 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   // so repeated lookups during the same analysis pass return the
   // same pointer. The returned pointer is owned by the cache and
   // stays valid for the lifetime of the catalog.
-  absl::StatusOr<const ::googlesql::Table*> MaterializeTable(
+  struct MaterializedTableBuild {
+    StorageTable* table = nullptr;
+    schema::TableSchema logical_schema;
+  };
+
+  absl::StatusOr<MaterializedTableBuild> MaterializeTablePhysical(
       absl::string_view project_id,
       absl::string_view dataset_id,
       absl::string_view table_id) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
@@ -226,6 +233,12 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
   std::vector<std::string> registered_view_keys_ ABSL_GUARDED_BY(mu_){};
   std::vector<const ::googlesql::Table*> registered_views_
       ABSL_GUARDED_BY(mu_){};
+  // Holds analyzer outputs for measure column expressions so resolved
+  // pointers on `SimpleTable` columns stay valid for the catalog lifetime.
+  std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
+      measure_outputs_ ABSL_GUARDED_BY(mu_){};
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>>
+      measure_resolved_exprs_ ABSL_GUARDED_BY(mu_){};
 };
 
 }  // namespace catalog

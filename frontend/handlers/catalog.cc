@@ -12,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/catalog/measure_catalog.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 
@@ -318,6 +319,23 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   return ::grpc::Status::OK;
 }
 
+backend::storage::Row PhysicalRowFromLogicalSchema(
+    const backend::schema::TableSchema& logical, backend::storage::Row row) {
+  if (row.cells.size() != logical.columns.size()) {
+    return row;
+  }
+  backend::storage::Row physical;
+  physical.cells.reserve(logical.columns.size());
+  for (size_t i = 0; i < logical.columns.size(); ++i) {
+    if (backend::catalog::ParseMeasureColumnSpec(logical.columns[i])
+            .has_value()) {
+      continue;
+    }
+    physical.cells.push_back(std::move(row.cells[i]));
+  }
+  return physical;
+}
+
 ::grpc::Status CatalogService::InsertRows(
     ::grpc::ServerContext* /*context*/,
     const v1::InsertRowsRequest* request,
@@ -330,6 +348,11 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return v;
   }
   const auto id = TableIdFromProto(request->table());
+  absl::StatusOr<backend::schema::TableSchema> schema_or =
+      storage_->GetSchema(id);
+  if (!schema_or.ok()) {
+    return AbslToGrpcStatus(schema_or.status());
+  }
   std::vector<backend::storage::Row> rows;
   rows.reserve(request->rows_size());
   for (const auto& proto_row : request->rows()) {
@@ -338,7 +361,7 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     for (const auto& cell : proto_row.cells()) {
       row.cells.push_back(CellToValue(cell));
     }
-    rows.push_back(std::move(row));
+    rows.push_back(PhysicalRowFromLogicalSchema(*schema_or, std::move(row)));
   }
   return AbslToGrpcStatus(storage_->AppendRows(id, absl::MakeSpan(rows)));
 }

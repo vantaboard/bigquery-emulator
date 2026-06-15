@@ -141,8 +141,9 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   auto schema_or = internal::ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
+  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
   auto valid = internal::ValidateRowsShape(
-      "AppendRows", id, rows, schema.columns.size());
+      "AppendRows", id, rows, physical.columns.size());
   if (!valid.ok()) return valid;
 
   const std::string parquet_path = TableParquetPath(id);
@@ -155,7 +156,7 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // 1. Stage a fresh temp table with the explicit column schema.
   // CREATE OR REPLACE TEMP TABLE coerces a stale row from an
   // interrupted previous run if any.
-  const std::string col_list = internal::RenderColumnList(schema);
+  const std::string col_list = internal::RenderColumnList(physical);
   auto status = internal::RunSql(
       impl_.get(),
       absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", col_list));
@@ -167,7 +168,7 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // we treat the table as empty.
   std::error_code ec;
   if (fs::exists(parquet_path, ec)) {
-    const std::string select_cols = internal::RenderColumnIdentList(schema);
+    const std::string select_cols = internal::RenderColumnIdentList(physical);
     status = internal::RunSql(
         impl_.get(),
         absl::StrCat("INSERT INTO ",
@@ -187,7 +188,7 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   // for the whole batch. The literal renderer raises on shape
   // mismatches; on error we tear down the temp table and bail
   // without touching the parquet file.
-  auto insert_or = internal::BuildBatchInsertSql(tmp_table, rows, schema);
+  auto insert_or = internal::BuildBatchInsertSql(tmp_table, rows, physical);
   if (!insert_or.ok()) {
     internal::TryDropTempTable(impl_.get(), tmp_table);
     return insert_or.status();
@@ -220,8 +221,9 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   auto schema_or = internal::ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
+  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
   auto valid = internal::ValidateRowsShape(
-      "OverwriteRows", id, rows, schema.columns.size());
+      "OverwriteRows", id, rows, physical.columns.size());
   if (!valid.ok()) return valid;
 
   const std::string parquet_path = TableParquetPath(id);
@@ -232,14 +234,14 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   // do NOT carry over existing rows (unlike AppendRows) -- this is the
   // overwrite contract: replace the parquet file with whatever the
   // caller hands us, including the empty-vector case.
-  const std::string col_list = internal::RenderColumnList(schema);
+  const std::string col_list = internal::RenderColumnList(physical);
   auto status = internal::RunSql(
       impl_.get(),
       absl::StrCat("CREATE OR REPLACE TEMP TABLE ", tmp_table, " ", col_list));
   if (!status.ok()) return status;
 
   if (!rows.empty()) {
-    auto insert_or = internal::BuildBatchInsertSql(tmp_table, rows, schema);
+    auto insert_or = internal::BuildBatchInsertSql(tmp_table, rows, physical);
     if (!insert_or.ok()) {
       internal::TryDropTempTable(impl_.get(), tmp_table);
       return insert_or.status();
@@ -348,6 +350,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   auto schema_or = internal::ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
+  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
 
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
@@ -359,7 +362,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
   // Explicit projection: ScanRows promises rows in column-list
   // order regardless of how the parquet file laid them out (the
   // file is written by us, but a user could hand-edit it).
-  const std::string select_cols = internal::RenderColumnIdentList(schema);
+  const std::string select_cols = internal::RenderColumnIdentList(physical);
   const std::string sql =
       absl::StrCat("SELECT ",
                    select_cols,
@@ -367,7 +370,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::ScanRows(
                    internal::EscapeStringLiteralInner(parquet_path),
                    "')");
   auto status = internal::ExecuteSelect(
-      impl_.get(), sql, schema, "ScanRows", id, parquet_path, &rows);
+      impl_.get(), sql, physical, "ScanRows", id, parquet_path, &rows);
   if (!status.ok()) return status;
   return std::unique_ptr<RowIterator>(
       new internal::VectorRowIterator(std::move(rows)));

@@ -55,6 +55,7 @@ namespace {
   language.EnableLanguageFeature(::googlesql::FEATURE_CREATE_SNAPSHOT_TABLE);
   language.EnableLanguageFeature(::googlesql::FEATURE_CLONE_DATA);
   language.EnableLanguageFeature(::googlesql::FEATURE_REMOTE_MODEL);
+  language.EnableLanguageFeature(::googlesql::FEATURE_ENABLE_MEASURES);
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
   ::googlesql::AnalyzerOptions options(language);
@@ -91,6 +92,7 @@ namespace {
   // plan dispositions explicitly target the pipe forms, so the
   // rewriter is off here.
   options.disable_rewrite(::googlesql::REWRITE_GENERALIZED_QUERY_STMT);
+  options.enable_rewrite(::googlesql::REWRITE_MEASURE_TYPE);
   // Permit the analyzer to produce `ResolvedGeneralizedQueryStmt`
   // alongside the default `ResolvedQueryStmt`. With the rewriter
   // disabled (above), this is the only statement kind that
@@ -101,6 +103,8 @@ namespace {
   // generalized form on top.
   options.mutable_language()->AddSupportedStatementKind(
       ::googlesql::RESOLVED_GENERALIZED_QUERY_STMT);
+  options.mutable_language()->AddSupportedStatementKind(
+      ::googlesql::RESOLVED_EXPLAIN_STMT);
   // Naive TIMESTAMP literals (no timezone suffix) must resolve as UTC
   // to match BigQuery / query port (see window_dense_rank_with_group).
   options.set_default_time_zone(absl::UTCTimeZone());

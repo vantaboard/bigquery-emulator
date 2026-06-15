@@ -3,6 +3,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
@@ -38,49 +39,6 @@ absl::StatusOr<Value> EvalAggregateForRows(
     EvalContext& ctx);
 
 namespace {
-
-// Privacy-preserving aggregate scans are `local_stub`: strip internal
-// `$differential_privacy_*` / `$anon_*` dispatch names to the plain
-// aggregate the semantic executor already implements.
-std::string PlainAggregateNameForPrivacyStub(absl::string_view agg_name) {
-  std::string stripped(agg_name);
-  if (absl::StartsWith(stripped, "$differential_privacy_")) {
-    stripped.erase(0, strlen("$differential_privacy_"));
-  } else if (absl::StartsWith(stripped, "$anon_")) {
-    stripped.erase(0, strlen("$anon_"));
-  } else {
-    return std::string(agg_name);
-  }
-  static constexpr absl::string_view kReportSuffixes[] = {
-      "_with_report_json",
-      "_with_report_proto",
-      "_report_json",
-      "_report_proto",
-  };
-  for (absl::string_view suffix : kReportSuffixes) {
-    if (absl::EndsWith(stripped, suffix)) {
-      stripped.erase(stripped.size() - suffix.size());
-      break;
-    }
-  }
-  if (stripped == "count_star" || absl::StartsWith(stripped, "count_star")) {
-    return "$count_star";
-  }
-  static constexpr absl::string_view kTypeSuffixes[] = {
-      "_double_array",
-      "_int64",
-      "_uint64",
-      "_double",
-      "_numeric",
-  };
-  for (absl::string_view suffix : kTypeSuffixes) {
-    if (absl::EndsWith(stripped, suffix)) {
-      stripped.erase(stripped.size() - suffix.size());
-      break;
-    }
-  }
-  return stripped;
-}
 
 // BigFrames routes lazy aggregates through `ResolvedDeferredComputedColumn`.
 // The value expression may be a bare aggregate or `$with_side_effects(value,
@@ -150,6 +108,10 @@ absl::StatusOr<Value> EvalAggregateForRows(
     if (!filtered_or.ok()) return filtered_or.status();
     effective_rows = std::move(*filtered_or);
   }
+  if (agg.group_by_list_size() > 0 || agg.group_by_aggregate_list_size() > 0) {
+    return EvalMultiLevelAggregateForRows(
+        agg, input_scan, input_rows, effective_rows, ctx);
+  }
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(agg.argument_list_size()));
   absl::flat_hash_map<std::string, Value> row_columns_by_name;
@@ -183,23 +145,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
   if (agg_name == "$count_star") {
     return Value::Int64(static_cast<int64_t>(effective_rows.size()));
   }
-  if (agg.function() != nullptr &&
-      absl::AsciiStrToLower(agg.function()->Name()) == "array_agg") {
-    return EvalArrayAgg(agg, arg_columns, input_rows, ctx);
-  }
-  if (agg.function() != nullptr &&
-      absl::AsciiStrToLower(agg.function()->Name()) == "string_agg") {
-    return EvalStringAgg(agg, arg_columns, input_rows, ctx);
-  }
-  if (agg.function() != nullptr &&
-      agg.function()->GetGroup() ==
-          ::googlesql::SQLFunction::kSQLFunctionGroup &&
-      agg.function()->IsAggregate()) {
-    const auto* sql_fn =
-        static_cast<const ::googlesql::SQLFunction*>(agg.function());
-    return EvalSqlUdafBody(agg, *sql_fn, arg_columns, row_indices, ctx);
-  }
-  return functions::EvalAggregateCall(agg, arg_columns);
+  return FinishAggregateFromArgColumns(agg, arg_columns, input_rows, ctx);
 }
 
 absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(

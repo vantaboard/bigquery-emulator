@@ -41,6 +41,14 @@ RouteDecision RouteClassifier::Classify(
           root_class,
       };
     }
+    if (root_entry->disposition == Disposition::kSemanticExecutor) {
+      return RouteDecision{
+          Disposition::kSemanticExecutor,
+          RouteClassifierReasonFor(
+              Disposition::kSemanticExecutor, root_class, root_class),
+          root_class,
+      };
+    }
     if (root_entry->disposition == Disposition::kUnsupported) {
       return RouteDecision{
           Disposition::kUnsupported,

@@ -64,6 +64,10 @@ std::string RenderDatasetMetaJson(absl::string_view location);
 
 absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json);
 
+// Parquet files store only non-measure columns; measure metadata stays in the
+// sidecar schema returned by `GetSchema`.
+schema::TableSchema ParquetStorageSchema(const schema::TableSchema& logical);
+
 std::string QuoteIdent(absl::string_view ident);
 
 std::string EscapeStringLiteralInner(absl::string_view s);

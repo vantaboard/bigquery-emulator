@@ -43,6 +43,7 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   auto schema_or = internal::ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
+  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
 
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;
@@ -56,16 +57,17 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   // projected schema is what `ExecuteSelect` decodes against, so the
   // `Row.cells` vector matches the projected column order exactly.
   // An empty list means "all columns".
-  schema::TableSchema effective_schema = schema;
+  schema::TableSchema effective_schema = physical;
   std::string select_cols;
   if (!filter.selected_fields.empty()) {
-    auto projected_or = internal::ProjectSchema(schema, filter.selected_fields);
+    auto projected_or =
+        internal::ProjectSchema(physical, filter.selected_fields);
     if (!projected_or.ok()) return projected_or.status();
     effective_schema = std::move(*projected_or);
-    select_cols =
-        internal::RenderSelectedColumnIdentList(schema, filter.selected_fields);
+    select_cols = internal::RenderSelectedColumnIdentList(
+        physical, filter.selected_fields);
   } else {
-    select_cols = internal::RenderColumnIdentList(schema);
+    select_cols = internal::RenderColumnIdentList(physical);
   }
 
   // ORDER BY a stable row identifier so OFFSET / LIMIT yield

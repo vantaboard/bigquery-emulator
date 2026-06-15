@@ -389,6 +389,37 @@ cc_test(
 )
 
 cc_library(
+    name = "measure_catalog",
+    srcs = ["measure_catalog.cc"],
+    hdrs = ["measure_catalog.h"],
+    deps = [
+        "//backend/schema",
+        "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "measure_catalog_test",
+    srcs = ["measure_catalog_test.cc"],
+    deps = [
+        ":measure_catalog",
+        "//backend/schema",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "table_governance",
     srcs = ["table_governance.cc"],
     hdrs = ["table_governance.h"],
@@ -405,12 +436,16 @@ cc_library(
 
 cc_library(
     name = "googlesql_catalog",
-    srcs = ["googlesql_catalog.cc"],
+    srcs = [
+        "googlesql_catalog.cc",
+        "googlesql_catalog_wildcard.cc",
+    ],
     hdrs = ["googlesql_catalog.h"],
     deps = [
         ":emulator_builtin_extensions",
         ":emulator_ml_tvf_extensions",
         ":info_schema_table",
+        ":measure_catalog",
         ":storage_table",
         ":procedure_registry",
         ":tvf_registry",

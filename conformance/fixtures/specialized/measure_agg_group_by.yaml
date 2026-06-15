@@ -1,0 +1,41 @@
+# measure_agg_group_by: MEASURE column + AGG(measure) over GROUP BY.
+#
+# Measure columns are declared via the catalog description marker
+# `bqemu_measure:<expr>:<row_keys>` (no CREATE TABLE MEASURE DDL in
+# PRODUCT_EXTERNAL). The analyzer rewrites AGG(measure) into
+# multi-level aggregates evaluated on the semantic executor.
+name: specialized_measure_agg_group_by
+description: |
+  Table carries a MEASURE(total_sales) = SUM(amount) at store_id grain.
+  AGG(total_sales) rolls up to region_id via GROUP BY.
+project_id: proj-specialized-measure-agg
+dataset_id: ds_measure_agg
+setup:
+  - dataset: ds_measure_agg
+  - table:
+      dataset: ds_measure_agg
+      id: sales
+      schema:
+        - {name: store_id, type: INT64, mode: REQUIRED}
+        - {name: region_id, type: INT64, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+        - name: total_sales
+          type: INT64
+          description: "bqemu_measure:SUM(amount):store_id"
+  - rows:
+      dataset: ds_measure_agg
+      table: sales
+      rows:
+        - {store_id: 1, region_id: 10, amount: 100}
+        - {store_id: 1, region_id: 10, amount: 50}
+        - {store_id: 2, region_id: 20, amount: 200}
+query: |
+  SELECT region_id, AGG(total_sales) AS region_total
+  FROM ds_measure_agg.sales
+  GROUP BY region_id
+  ORDER BY region_id
+expected:
+  route: semantic_executor
+  rows:
+    - {region_id: "10", region_total: "150"}
+    - {region_id: "20", region_total: "200"}

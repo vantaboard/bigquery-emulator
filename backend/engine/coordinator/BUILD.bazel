@@ -288,10 +288,12 @@ cc_test(
     name = "local_coordinator_engine_test",
     srcs = [
         "local_coordinator_engine_core_test.cc",
+        "local_coordinator_engine_measure_keys_test.cc",
         "local_coordinator_engine_semantic_test.cc",
         "local_coordinator_engine_test_fixture.h",
     ],
     deps = [
+        ":local_coordinator_analyze",
         ":local_coordinator_engine",
         "//backend/catalog:googlesql_catalog",
         "//backend/engine",
