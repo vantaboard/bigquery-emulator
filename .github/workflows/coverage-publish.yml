@@ -244,6 +244,8 @@ jobs:
             --label="coverage (go)" --out=html/badge-go.json
           /tmp/coverage badge --in=summary.json --field=cpp \
             --label="coverage (cpp)" --out=html/badge-cpp.json
+          tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          go run ./tools/release badge --version="$tag" --out=html/badge-release.json
           cp summary.json html/summary.json
 
       # `lcov` is needed for `genhtml`. Skip the install step when
@@ -298,6 +300,7 @@ jobs:
                 <li><a href="../badge.json">badge.json</a> &mdash; combined</li>
                 <li><a href="../badge-go.json">badge-go.json</a> &mdash; Go suite</li>
                 <li><a href="../badge-cpp.json">badge-cpp.json</a> &mdash; C++ engine</li>
+                <li><a href="../badge-release.json">badge-release.json</a> &mdash; latest release</li>
               </ul>
               <h2>Raw data</h2>
               <ul>

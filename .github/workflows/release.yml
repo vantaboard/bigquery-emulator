@@ -397,6 +397,26 @@ jobs:
             printf -- '- artifact SHA-256: %s\n' "${GSQ_SHA:-?}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Generate release badge JSON
+        env:
+          REL_TAG: ${{ inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p gh-pages-publish
+          go run ./tools/release badge --version="$REL_TAG" --out=gh-pages-publish/badge-release.json
+
+      - name: Publish release badge to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-publish
+          publish_branch: gh-pages
+          enable_jekyll: false
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: "chore(release): publish badge for ${{ inputs.ref || github.ref_name }}"
+
       - name: Release Bazel daemon
         if: always()
         run: timeout 60 bazel shutdown || true
