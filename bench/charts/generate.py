@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import seaborn as sns
 
 
@@ -22,13 +21,8 @@ OUTCOMES = {
 }
 
 EXPECTED_TARGETS = ("emulator", "goccy")
-DEFAULT_RATIO_THRESHOLD = 1.5
-RATIO_Y_CAP = 10.0
-LOG_FLOOR_MS = 0.05
 LOG_AXIS_FLOOR_MS = 0.02
 SKIPPED_MARKER_MS = 0.15
-SKIPPED_RATIO_Y = 0.03
-RATIO_AXIS_FLOOR = 0.008
 
 
 def _save_chart(fig: plt.Figure, out: Path) -> None:
@@ -47,28 +41,6 @@ def _legend_outside(
     if not handles:
         return
     fig.legend(handles, labels, loc=loc, **kwargs)
-
-
-def _legend_outside_right(
-    fig: plt.Figure,
-    ax: plt.Axes,
-    *,
-    margin: float = 0.24,
-    **kwargs,
-) -> None:
-    """Legend in a right margin strip so it does not overlap a centered title."""
-    handles, labels = ax.get_legend_handles_labels()
-    if not handles:
-        return
-    fig.subplots_adjust(right=1.0 - margin)
-    fig.legend(
-        handles,
-        labels,
-        loc="center left",
-        bbox_to_anchor=(1.0 - margin + 0.01, 0.5),
-        borderaxespad=0,
-        **kwargs,
-    )
 
 
 def _legend_below(
@@ -157,163 +129,6 @@ def _goccy_wall_ms(row: dict | None) -> float:
     return ms if ms > 0 else math.nan
 
 
-def _ratio_vs_bq(numerator_ms: float, bq_ms: float | None) -> float:
-    if bq_ms is None or bq_ms <= 0:
-        return math.nan
-    if numerator_ms != numerator_ms or numerator_ms <= 0:
-        return math.nan
-    return numerator_ms / max(bq_ms, 1)
-
-
-def _emulator_cases(results: dict) -> list[str]:
-    return sorted({r["case_name"] for r in results["results"] if r["target"] == "emulator"})
-
-
-def _plot_capped_ratio_scatter(
-    ax: plt.Axes,
-    x_positions: list[int],
-    ratios: list[float],
-    *,
-    cap: float,
-    color: str,
-    marker: str,
-    label: str,
-    zorder: int = 3,
-) -> None:
-    xs, ys = [], []
-    for xi, ratio in zip(x_positions, ratios):
-        if ratio != ratio:
-            continue
-        xs.append(xi)
-        ys.append(min(ratio, cap))
-        if ratio > cap:
-            ax.annotate(
-                f"{ratio:.0f}×",
-                (xi, cap),
-                textcoords="offset points",
-                xytext=(0, 6),
-                ha="center",
-                fontsize=7,
-                color=color,
-            )
-    if xs:
-        ax.scatter(xs, ys, color=color, marker=marker, s=36, label=label, zorder=zorder)
-
-
-def _plot_skipped_markers(
-    ax: plt.Axes,
-    x_positions: list[int],
-    *,
-    y: float,
-    label: str,
-) -> None:
-    if not x_positions:
-        return
-    ax.scatter(
-        x_positions,
-        [y] * len(x_positions),
-        marker="x",
-        color=OUTCOMES["skipped"],
-        s=40,
-        linewidths=1.5,
-        label=label,
-        zorder=2,
-        clip_on=False,
-    )
-
-
-def _configure_ratio_axes(ax: plt.Axes, labels: list[str], *, title: str, ylabel: str) -> None:
-    ax.set_yscale("log")
-    ax.set_ylim(bottom=RATIO_AXIS_FLOOR)
-    ax.axhline(DEFAULT_RATIO_THRESHOLD, color="red", linestyle="--", label=f"threshold ({DEFAULT_RATIO_THRESHOLD}×)")
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-
-
-def ratio_vantaboard_chart(results: dict, baseline: dict, out: Path) -> None:
-    """Gate-relevant vantaboard server time vs BigQuery job duration."""
-    cases = _emulator_cases(results)
-    emu = {r["case_name"]: r for r in results["results"] if r["target"] == "emulator"}
-    bq = baseline.get("cases", {})
-
-    labels, ratios = [], []
-    for case in cases:
-        bq_ms = _bq_latency_ms(bq.get(case))
-        if bq_ms is None or bq_ms <= 0:
-            continue
-        labels.append(case)
-        ratios.append(_ratio_vs_bq(_emu_server_ms(emu.get(case)), bq_ms))
-
-    fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 5))
-    x = list(range(len(labels)))
-    _plot_capped_ratio_scatter(
-        ax,
-        x,
-        ratios,
-        cap=RATIO_Y_CAP,
-        color="#1f77b4",
-        marker="o",
-        label="vantaboard / BQ (server)",
-    )
-    _configure_ratio_axes(
-        ax,
-        labels,
-        title=f"Vantaboard latency ratio vs BigQuery (capped at {RATIO_Y_CAP:.0f}×, log scale)",
-        ylabel="ratio vs BigQuery execution p50",
-    )
-    _legend_outside_right(fig, ax)
-    _save_chart(fig, out)
-
-
-def ratio_goccy_chart(results: dict, baseline: dict, out: Path) -> None:
-    """Competitive context: goccy wall-clock vs BigQuery server duration."""
-    cases = _emulator_cases(results)
-    goccy = {r["case_name"]: r for r in results["results"] if r["target"] == "goccy"}
-    bq = baseline.get("cases", {})
-
-    labels, ratios, skipped_x = [], [], []
-    for case in cases:
-        bq_ms = _bq_latency_ms(bq.get(case))
-        if bq_ms is None or bq_ms <= 0:
-            continue
-        labels.append(case)
-        xi = len(labels) - 1
-        row = goccy.get(case)
-        if row and row.get("outcome") == "ok":
-            ratios.append(_ratio_vs_bq(_goccy_wall_ms(row), bq_ms))
-        else:
-            ratios.append(math.nan)
-            skipped_x.append(xi)
-
-    fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.6), 5))
-    x = list(range(len(labels)))
-    _plot_capped_ratio_scatter(
-        ax,
-        x,
-        ratios,
-        cap=RATIO_Y_CAP,
-        color="#ff7f0e",
-        marker="s",
-        label="goccy / BQ (wall vs server)",
-    )
-    _plot_skipped_markers(
-        ax,
-        skipped_x,
-        y=SKIPPED_RATIO_Y,
-        label="goccy skipped",
-    )
-    _configure_ratio_axes(
-        ax,
-        labels,
-        title=f"Goccy latency ratio vs BigQuery (capped at {RATIO_Y_CAP:.0f}×, log scale)",
-        ylabel="ratio vs BigQuery execution p50",
-    )
-    _legend_outside_right(fig, ax)
-    _save_chart(fig, out)
-
-
 def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     cases = sorted({r["case_name"] for r in results["results"]})
     emu = {r["case_name"]: r for r in results["results"] if r["target"] == "emulator"}
@@ -364,28 +179,6 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
         title += f" (missing: {', '.join(missing)} — run task bench:run)"
     ax.set_title(title)
     _legend_outside(fig, ax)
-    _save_chart(fig, out)
-
-
-def support_matrix(results: dict, out: Path) -> None:
-    cases = sorted({r["case_name"] for r in results["results"]})
-    targets = sorted({r["target"] for r in results["results"]})
-    lookup = {(r["case_name"], r["target"]): r.get("outcome", "error") for r in results["results"]}
-
-    fig, ax = plt.subplots(figsize=(max(8, len(targets) * 2), max(6, len(cases) * 0.35)))
-    ax.imshow([[0] * len(targets)] * len(cases), aspect="auto")
-    for i, case in enumerate(cases):
-        for j, target in enumerate(targets):
-            outcome = lookup.get((case, target), "error")
-            ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color=OUTCOMES.get(outcome, "#ccc")))
-            ax.text(j, i, outcome[:3], ha="center", va="center", fontsize=8, color="white")
-    ax.set_xticks(range(len(targets)))
-    ax.set_xticklabels(targets)
-    ax.set_yticks(range(len(cases)))
-    ax.set_yticklabels(cases)
-    ax.set_title("Support / correctness matrix")
-    legend_handles = [Patch(facecolor=color, label=label) for label, color in OUTCOMES.items()]
-    ax.legend(handles=legend_handles, loc="upper left", bbox_to_anchor=(1.02, 1), borderaxespad=0)
     _save_chart(fig, out)
 
 
@@ -453,9 +246,6 @@ def main() -> None:
         print(f"warning: results missing targets {missing}; run task bench:run for full charts")
 
     comparison_chart(results, baseline, out_dir / "comparison.svg")
-    ratio_vantaboard_chart(results, baseline, out_dir / "ratio.svg")
-    ratio_goccy_chart(results, baseline, out_dir / "ratio_goccy.svg")
-    support_matrix(results, out_dir / "support_matrix.svg")
     phases_chart(results, out_dir / "phases.svg")
 
     if args.history:

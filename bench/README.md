@@ -118,9 +118,7 @@ task bench:profile CASE=agg_group_by_100k MODE=heap  # heaptrack output
 
 - `task bench:charts` — matplotlib/seaborn SVGs in `bench/charts/out/`:
   - `comparison.svg` — log-scale latency bars (× marks where goccy skipped a case)
-  - `ratio.svg` — vantaboard server time / BQ job duration (gate-relevant; log scale, capped at 10×)
-  - `ratio_goccy.svg` — goccy wall time / BQ job duration (competitive context; skips marked)
-  - `support_matrix.svg`, `phases.svg`
+  - `phases.svg` — stacked p50 engine phase timings for vantaboard cases
 - Re-run `task bench:run` after engine changes so `engine_p50` / `total_engine` populate results
 - Committed `bench/charts/out/*.svg` snapshots are embedded in the root
   [`README.md`](../README.md); CI on `main` refreshes them after each run

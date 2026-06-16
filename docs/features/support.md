@@ -52,14 +52,9 @@ compares query latency and **correctness outcomes** across three backends:
 - **goccy** — [goccy/bigquery-emulator](https://github.com/goccy/bigquery-emulator) Docker `0.8.1`
 - **BigQuery** — committed golden baselines
 
-The support matrix chart is a heatmap of benchmark case outcomes
-(`ok`, `error`, `wrong_result`, `timeout`, `skipped`) per target — not
-a SQL function coverage table.
-
-![Benchmark support matrix](https://vantaboard.github.io/bigquery-emulator/bench/support_matrix.svg)
-
-Live charts also publish to
-[gh-pages `bench/`](https://vantaboard.github.io/bigquery-emulator/bench/).
+Per-case outcomes (`ok`, `error`, `wrong_result`, `timeout`, `skipped`) are
+recorded in `bench/results.json`. Latency and phase charts are embedded in the
+root [README](https://github.com/vantaboard/bigquery-emulator#benchmarks).
 Regenerate locally with `task bench:run` then `task bench:charts`.
 
 ## Conformance fixtures
