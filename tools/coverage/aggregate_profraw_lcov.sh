@@ -36,10 +36,35 @@ if ! command -v lcov >/dev/null 2>&1; then
   exit 1
 fi
 
-testlogs="$(bazel info bazel-testlogs 2>/dev/null)" || {
-  echo "aggregate_profraw_lcov.sh: bazel info bazel-testlogs failed" >&2
-  exit 1
+# Prefer the workspace bazel-testlogs symlink so aggregation still works when
+# the Bazel daemon exits after a long coverage run (CI hit this after ~80 min).
+resolve_testlogs() {
+  local candidate=""
+  if [ -e "$root/bazel-testlogs" ]; then
+    candidate="$(readlink -f "$root/bazel-testlogs" 2>/dev/null || true)"
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+  if command -v bazel >/dev/null 2>&1; then
+    local bazel_args=()
+    if [ -n "${BAZEL_CONFIG:-}" ]; then
+      bazel_args+=(--config="$BAZEL_CONFIG")
+    fi
+    candidate="$(bazel "${bazel_args[@]}" info bazel-testlogs 2>/dev/null || true)"
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  fi
+  return 1
 }
+
+if ! testlogs="$(resolve_testlogs)"; then
+  echo "aggregate_profraw_lcov.sh: could not resolve bazel-testlogs (symlink missing and bazel info failed)" >&2
+  exit 1
+fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT

@@ -170,12 +170,11 @@ jobs:
             local|source) gsq_cfg=googlesql-source ;;
           esac
           echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          # task bazel:coverage runs aggregate_profraw_lcov.sh after coverage
+          # (see .bazelrc: LCOV_MERGER=/usr/bin/true).
           task bazel:coverage \
             TARGETS="${{ steps.targets.outputs.targets }}" \
             COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
-          # Bazel's built-in LCOV merge fails on our GoogleSQL-linked tests; rebuild
-          # from retained profraw files (see .bazelrc: LCOV_MERGER=/usr/bin/true).
-          tools/coverage/aggregate_profraw_lcov.sh bazel-out/_coverage/_coverage_report.dat
 
       # Hand off the LCOV combined report to coverage-publish.yml.
       # That workflow_run-triggered consumer pairs this artifact with
