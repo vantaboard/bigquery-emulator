@@ -1,0 +1,454 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - backend/engine/duckdb/transpiler/transpiler_emit_setops_test.cc</title>
+  <link rel="stylesheet" type="text/css" href="../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../index.html">top level</a> - <a href="index.html">backend/engine/duckdb/transpiler</a> - transpiler_emit_setops_test.cc<span style="font-size: 80%;"> (source / <a href="transpiler_emit_setops_test.cc.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">99.2&nbsp;%</td>
+            <td class="headerCovTableEntry">239</td>
+            <td class="headerCovTableEntry">237</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-16 22:19:03</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">14</td>
+          </tr>
+                  <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #include &quot;backend/engine/duckdb/transpiler/transpiler_test_fixture.h&quot;</span>
+<span id="L2"><span class="lineNum">       2</span>              : </span>
+<span id="L3"><span class="lineNum">       3</span>              : namespace bigquery_emulator {</span>
+<span id="L4"><span class="lineNum">       4</span>              : namespace backend {</span>
+<span id="L5"><span class="lineNum">       5</span>              : namespace engine {</span>
+<span id="L6"><span class="lineNum">       6</span>              : namespace duckdb {</span>
+<span id="L7"><span class="lineNum">       7</span>              : namespace transpiler {</span>
+<span id="L8"><span class="lineNum">       8</span>              : </span>
+<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanUnionAll) {</span></span>
+<span id="L10"><span class="lineNum">      10</span>              :   // BigQuery `&lt;lhs&gt; UNION ALL &lt;rhs&gt;` analyzes to a</span>
+<span id="L11"><span class="lineNum">      11</span>              :   // `ResolvedSetOperationScan` whose `op_type=UNION_ALL`,</span>
+<span id="L12"><span class="lineNum">      12</span>              :   // `column_match_mode=BY_POSITION`, and two</span>
+<span id="L13"><span class="lineNum">      13</span>              :   // `ResolvedSetOperationItem`s. GoogleSQL takes the parent</span>
+<span id="L14"><span class="lineNum">      14</span>              :   // column's name from the leftmost input's column (`id` here), so</span>
+<span id="L15"><span class="lineNum">      15</span>              :   // the LHS item's projection collapses (`&quot;id&quot;` -&gt; `&quot;id&quot;`) and the</span>
+<span id="L16"><span class="lineNum">      16</span>              :   // RHS item renames `order_id` to `id` to land on the parent's</span>
+<span id="L17"><span class="lineNum">      17</span>              :   // column name.</span>
+<span id="L18"><span class="lineNum">      18</span>              :   //</span>
+<span id="L19"><span class="lineNum">      19</span>              :   // The analyzer wraps each `SELECT &lt;col&gt; FROM &lt;table&gt;` arm in a</span>
+<span id="L20"><span class="lineNum">      20</span>              :   // ResolvedProjectScan over the ResolvedTableScan (because the</span>
+<span id="L21"><span class="lineNum">      21</span>              :   // selected columns are a subset of the table's full column list),</span>
+<span id="L22"><span class="lineNum">      22</span>              :   // which is why the per-arm SQL has the extra `(SELECT ... FROM</span>
+<span id="L23"><span class="lineNum">      23</span>              :   // (SELECT ... FROM ...))` nesting -- the outer SELECT is the</span>
+<span id="L24"><span class="lineNum">      24</span>              :   // set-op item's projection, the middle SELECT is the analyzer's</span>
+<span id="L25"><span class="lineNum">      25</span>              :   // ProjectScan, and the inner SELECT is the TableScan.</span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT id FROM people UNION ALL SELECT order_id FROM orders&quot;);</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT *, 1 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, &quot;</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :             &quot;\&quot;name\&quot; FROM \&quot;people\&quot;))) UNION ALL SELECT *, 2 AS &quot;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot; FROM (SELECT \&quot;order_id\&quot; AS \&quot;id\&quot; FROM &quot;</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot; FROM (SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM &quot;</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :             &quot;\&quot;orders\&quot;)))) ORDER BY \&quot;__bq_union_ord\&quot;&quot;);</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L42"><span class="lineNum">      42</span>              : </span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanUnionDistinct) {</span></span>
+<span id="L44"><span class="lineNum">      44</span>              :   // `UNION DISTINCT` lowers to DuckDB's bare `UNION` (DuckDB's</span>
+<span id="L45"><span class="lineNum">      45</span>              :   // default duplicate-handling on `UNION` is DISTINCT, matching the</span>
+<span id="L46"><span class="lineNum">      46</span>              :   // BigQuery semantics). The per-item projection shape is the same</span>
+<span id="L47"><span class="lineNum">      47</span>              :   // as UNION ALL because the duplicate-handling is the only</span>
+<span id="L48"><span class="lineNum">      48</span>              :   // difference between the two ops.</span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people UNION DISTINCT SELECT order_id FROM orders&quot;);</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, \&quot;name\&quot; &quot;</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           1 :             &quot;FROM \&quot;people\&quot;))&quot;</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :             &quot; UNION &quot;</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;order_id\&quot; AS \&quot;id\&quot; FROM (SELECT \&quot;order_id\&quot; FROM &quot;</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;))&quot;);</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L64"><span class="lineNum">      64</span>              : </span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanIntersectDistinct) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>              :   // `INTERSECT DISTINCT` lowers to DuckDB's bare `INTERSECT` (also</span>
+<span id="L67"><span class="lineNum">      67</span>              :   // DISTINCT by default). Same item shape as UNION; only the</span>
+<span id="L68"><span class="lineNum">      68</span>              :   // keyword between items changes. The output column name comes</span>
+<span id="L69"><span class="lineNum">      69</span>              :   // from the leftmost input's column.</span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people INTERSECT DISTINCT SELECT order_id FROM orders&quot;);</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, \&quot;name\&quot; &quot;</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 :             &quot;FROM \&quot;people\&quot;))&quot;</span></span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">           1 :             &quot; INTERSECT &quot;</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;order_id\&quot; AS \&quot;id\&quot; FROM (SELECT \&quot;order_id\&quot; FROM &quot;</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;))&quot;);</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L85"><span class="lineNum">      85</span>              : </span>
+<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanExceptDistinct) {</span></span>
+<span id="L87"><span class="lineNum">      87</span>              :   // `EXCEPT DISTINCT` lowers to DuckDB's bare `EXCEPT` (DISTINCT by</span>
+<span id="L88"><span class="lineNum">      88</span>              :   // default). BigQuery's EXCEPT DISTINCT semantics (row R in LHS at</span>
+<span id="L89"><span class="lineNum">      89</span>              :   // least once and absent from RHS) match DuckDB's bag-difference</span>
+<span id="L90"><span class="lineNum">      90</span>              :   // followed by DISTINCT.</span>
+<span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people EXCEPT DISTINCT SELECT order_id FROM orders&quot;);</span></span>
+<span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">           1 :             &quot;SELECT * FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM &quot;</span></span>
+<span id="L101"><span class="lineNum">     101</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM \&quot;people\&quot;)) EXCEPT SELECT &quot;</span></span>
+<span id="L102"><span class="lineNum">     102</span> <span class="tlaGNC">           1 :             &quot;\&quot;order_id\&quot; AS \&quot;id\&quot; FROM (SELECT \&quot;order_id\&quot; FROM &quot;</span></span>
+<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;))) ORDER BY 1&quot;);</span></span>
+<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L105"><span class="lineNum">     105</span>              : </span>
+<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanIdenticalArmsBothCollapse) {</span></span>
+<span id="L107"><span class="lineNum">     107</span>              :   // When both arms expose the same column name as the parent's</span>
+<span id="L108"><span class="lineNum">     108</span>              :   // output column, the per-item AS aliases collapse on both sides.</span>
+<span id="L109"><span class="lineNum">     109</span>              :   // Identical-arm `SELECT id FROM people UNION ALL SELECT id FROM</span>
+<span id="L110"><span class="lineNum">     110</span>              :   // people` is the smallest input that exercises the both-side</span>
+<span id="L111"><span class="lineNum">     111</span>              :   // collapse path -- both items project `&quot;id&quot;` onto the parent's</span>
+<span id="L112"><span class="lineNum">     112</span>              :   // `id` column, so neither projection needs an AS keyword. This</span>
+<span id="L113"><span class="lineNum">     113</span>              :   // pins the symmetric-collapse path that the per-arm-rename tests</span>
+<span id="L114"><span class="lineNum">     114</span>              :   // above leave only half-covered.</span>
+<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L116"><span class="lineNum">     116</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT id FROM people UNION ALL SELECT id FROM people&quot;);</span></span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT *, 1 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, &quot;</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 :             &quot;\&quot;name\&quot; FROM \&quot;people\&quot;))) UNION ALL SELECT *, 2 AS &quot;</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM &quot;</span></span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM \&quot;people\&quot;)))) ORDER BY &quot;</span></span>
+<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot;&quot;);</span></span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L131"><span class="lineNum">     131</span>              : </span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanMultiColumnPreservesOrder) {</span></span>
+<span id="L133"><span class="lineNum">     133</span>              :   // Two-column UNION ALL. The LHS exposes `id, name`; the RHS</span>
+<span id="L134"><span class="lineNum">     134</span>              :   // (`SELECT order_id, CAST(amount AS STRING) FROM orders`)</span>
+<span id="L135"><span class="lineNum">     135</span>              :   // renames both columns to land on the LHS-named output columns</span>
+<span id="L136"><span class="lineNum">     136</span>              :   // (`id`, `name`). The test pins that the per-item projections</span>
+<span id="L137"><span class="lineNum">     137</span>              :   // honor positional column matching even when each column needs a</span>
+<span id="L138"><span class="lineNum">     138</span>              :   // different rename direction.</span>
+<span id="L139"><span class="lineNum">     139</span>              :   //</span>
+<span id="L140"><span class="lineNum">     140</span>              :   // The analyzer assigns column IDs across the whole query and</span>
+<span id="L141"><span class="lineNum">     141</span>              :   // hands the synthesized computed-column name through them; the</span>
+<span id="L142"><span class="lineNum">     142</span>              :   // CAST in the RHS lands as `$col2` (slot 2 in the overall</span>
+<span id="L143"><span class="lineNum">     143</span>              :   // computed-column ordering), not `$col1`. The set-op item</span>
+<span id="L144"><span class="lineNum">     144</span>              :   // renames both onto the parent's `id` / `name`.</span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 :       &quot;SELECT id, name FROM people UNION ALL &quot;</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           1 :       &quot;SELECT order_id, CAST(amount AS STRING) FROM orders&quot;);</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L153"><span class="lineNum">     153</span> <span class="tlaGNC">           1 :   EXPECT_EQ(</span></span>
+<span id="L154"><span class="lineNum">     154</span> <span class="tlaGNC">           1 :       t.EmitSetOperationScan(</span></span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">           1 :           scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">           1 :       &quot;SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM (SELECT *, 1 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :       &quot;(SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM (SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM &quot;</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 :       &quot;\&quot;people\&quot;)) UNION ALL SELECT *, 2 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">           1 :       &quot;(SELECT \&quot;order_id\&quot; AS \&quot;id\&quot;, \&quot;$col2\&quot; AS \&quot;name\&quot; FROM (SELECT &quot;</span></span>
+<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 :       &quot;\&quot;order_id\&quot;, CAST(\&quot;amount\&quot; AS VARCHAR) AS \&quot;$col2\&quot; FROM (SELECT &quot;</span></span>
+<span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">           1 :       &quot;\&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;)))) ORDER BY &quot;</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :       &quot;\&quot;__bq_union_ord\&quot;&quot;);</span></span>
+<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L164"><span class="lineNum">     164</span>              : </span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanThreeArmFlattening) {</span></span>
+<span id="L166"><span class="lineNum">     166</span>              :   // BigQuery / GoogleSQL flattens same-op chains so a three-way</span>
+<span id="L167"><span class="lineNum">     167</span>              :   // `UNION ALL` lands as a single `ResolvedSetOperationScan` with</span>
+<span id="L168"><span class="lineNum">     168</span>              :   // three items, not a tree. The emit joins all three items with</span>
+<span id="L169"><span class="lineNum">     169</span>              :   // the keyword.</span>
+<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people UNION ALL SELECT order_id FROM orders &quot;</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :       &quot;UNION ALL SELECT amount FROM orders&quot;);</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 :   const auto* set_op = scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;();</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 :   ASSERT_EQ(set_op-&gt;input_item_list_size(), 3);</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(set_op),</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT *, 1 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, &quot;</span></span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :             &quot;\&quot;name\&quot; FROM \&quot;people\&quot;))) UNION ALL SELECT *, 2 AS &quot;</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot; FROM (SELECT \&quot;order_id\&quot; AS \&quot;id\&quot; FROM &quot;</span></span>
+<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot; FROM (SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM &quot;</span></span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :             &quot;\&quot;orders\&quot;))) UNION ALL SELECT *, 3 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;amount\&quot; AS \&quot;id\&quot; FROM (SELECT \&quot;amount\&quot; FROM &quot;</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;)))) ORDER BY &quot;</span></span>
+<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot;&quot;);</span></span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L191"><span class="lineNum">     191</span>              : </span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanNestedDifferentOps) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>              :   // Mixing operators (UNION ALL outside, INTERSECT DISTINCT inside)</span>
+<span id="L194"><span class="lineNum">     194</span>              :   // forces the analyzer to nest: the outer UNION ALL has one</span>
+<span id="L195"><span class="lineNum">     195</span>              :   // TableScan-y item plus one SetOperationScan item. The emit</span>
+<span id="L196"><span class="lineNum">     196</span>              :   // composes recursively -- each item's child scan goes through</span>
+<span id="L197"><span class="lineNum">     197</span>              :   // `EmitScan`, which dispatches back to `EmitSetOperationScan`</span>
+<span id="L198"><span class="lineNum">     198</span>              :   // for the inner set-op.</span>
+<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people UNION ALL &quot;</span></span>
+<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           1 :       &quot;(SELECT order_id FROM orders INTERSECT DISTINCT &quot;</span></span>
+<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">           1 :       &quot;SELECT amount FROM orders)&quot;);</span></span>
+<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L208"><span class="lineNum">     208</span>              :   // The inner INTERSECT's parent column name is `order_id` (the</span>
+<span id="L209"><span class="lineNum">     209</span>              :   // leftmost input's column), and the outer UNION ALL renames it</span>
+<span id="L210"><span class="lineNum">     210</span>              :   // onto its own parent column `id` for the second arm.</span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">           1 :             &quot;SELECT \&quot;id\&quot; FROM (SELECT *, 1 AS \&quot;__bq_union_ord\&quot; FROM &quot;</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot; FROM (SELECT \&quot;id\&quot;, &quot;</span></span>
+<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 :             &quot;\&quot;name\&quot; FROM \&quot;people\&quot;))) UNION ALL SELECT *, 2 AS &quot;</span></span>
+<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot; FROM (SELECT \&quot;order_id\&quot; AS \&quot;id\&quot; FROM &quot;</span></span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           1 :             &quot;(SELECT \&quot;order_id\&quot; FROM (SELECT \&quot;order_id\&quot; FROM (SELECT &quot;</span></span>
+<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :             &quot;\&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;)) INTERSECT SELECT &quot;</span></span>
+<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :             &quot;\&quot;amount\&quot; AS \&quot;order_id\&quot; FROM (SELECT \&quot;amount\&quot; FROM (SELECT &quot;</span></span>
+<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           1 :             &quot;\&quot;order_id\&quot;, \&quot;amount\&quot; FROM \&quot;orders\&quot;))))) ORDER BY &quot;</span></span>
+<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           1 :             &quot;\&quot;__bq_union_ord\&quot;&quot;);</span></span>
+<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L223"><span class="lineNum">     223</span>              : </span>
+<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanFallsBackOnUnloweredChild) {</span></span>
+<span id="L225"><span class="lineNum">     225</span>              :   // If any child scan returns &quot;&quot; the whole set-op emit must</span>
+<span id="L226"><span class="lineNum">     226</span>              :   // propagate the empty string. `BIT_COUNT` is on the</span>
+<span id="L227"><span class="lineNum">     227</span>              :   // `semantic_executor` route in the YAML disposition table so the</span>
+<span id="L228"><span class="lineNum">     228</span>              :   // right-hand ProjectScan's computed column emit returns &quot;&quot; -&gt;</span>
+<span id="L229"><span class="lineNum">     229</span>              :   // ProjectScan returns &quot;&quot; -&gt; set-op item returns &quot;&quot; -&gt; set-op</span>
+<span id="L230"><span class="lineNum">     230</span>              :   // scan returns &quot;&quot;.</span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people UNION ALL SELECT BIT_COUNT(amount) FROM orders&quot;);</span></span>
+<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(</span></span>
+<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;()),</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           1 :             &quot;&quot;);</span></span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L242"><span class="lineNum">     242</span>              : </span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanUnionAllDuplicateBehaviorContrast) {</span></span>
+<span id="L244"><span class="lineNum">     244</span>              :   // Execution-style contrast between UNION ALL and UNION DISTINCT</span>
+<span id="L245"><span class="lineNum">     245</span>              :   // on the *same* input shape. We assert on the SQL strings (this</span>
+<span id="L246"><span class="lineNum">     246</span>              :   // fixture does not have a running DuckDB connection) so a</span>
+<span id="L247"><span class="lineNum">     247</span>              :   // regression in either keyword choice surfaces here. The</span>
+<span id="L248"><span class="lineNum">     248</span>              :   // expected duplicate behavior is documented in</span>
+<span id="L249"><span class="lineNum">     249</span>              :   // `ResolvedSetOperationScan`'s comment block in</span>
+<span id="L250"><span class="lineNum">     250</span>              :   // `resolved_ast.h` (UNION ALL keeps all rows, UNION DISTINCT</span>
+<span id="L251"><span class="lineNum">     251</span>              :   // dedupes); DuckDB's `UNION ALL` and `UNION` (DISTINCT by</span>
+<span id="L252"><span class="lineNum">     252</span>              :   // default) match that contract.</span>
+<span id="L253"><span class="lineNum">     253</span>              :   //</span>
+<span id="L254"><span class="lineNum">     254</span>              :   // We compute each side's SQL fully and discard the analyzer's</span>
+<span id="L255"><span class="lineNum">     255</span>              :   // output before re-`Analyze`-ing for the next side. The fixture</span>
+<span id="L256"><span class="lineNum">     256</span>              :   // `last_output_` slot is single-shot (the second `Analyze` call</span>
+<span id="L257"><span class="lineNum">     257</span>              :   // would otherwise free the first AST out from under us), so the</span>
+<span id="L258"><span class="lineNum">     258</span>              :   // strings are the durable artifact we compare across the two</span>
+<span id="L259"><span class="lineNum">     259</span>              :   // emits.</span>
+<span id="L260"><span class="lineNum">     260</span> <span class="tlaGNC">           1 :   std::string sql_all;</span></span>
+<span id="L261"><span class="lineNum">     261</span> <span class="tlaGNC">           1 :   {</span></span>
+<span id="L262"><span class="lineNum">     262</span> <span class="tlaGNC">           1 :     const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L263"><span class="lineNum">     263</span> <span class="tlaGNC">           1 :         Analyze(&quot;SELECT id FROM people UNION ALL SELECT id FROM people&quot;);</span></span>
+<span id="L264"><span class="lineNum">     264</span> <span class="tlaGNC">           1 :     ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L265"><span class="lineNum">     265</span> <span class="tlaGNC">           1 :     const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L266"><span class="lineNum">     266</span> <span class="tlaGNC">           1 :     ASSERT_NE(scan, nullptr);</span></span>
+<span id="L267"><span class="lineNum">     267</span> <span class="tlaGNC">           1 :     ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L268"><span class="lineNum">     268</span> <span class="tlaGNC">           1 :     TestTranspiler t;</span></span>
+<span id="L269"><span class="lineNum">     269</span> <span class="tlaGNC">           1 :     sql_all = t.EmitSetOperationScan(</span></span>
+<span id="L270"><span class="lineNum">     270</span> <span class="tlaGNC">           1 :         scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;());</span></span>
+<span id="L271"><span class="lineNum">     271</span> <span class="tlaGNC">           1 :   }</span></span>
+<span id="L272"><span class="lineNum">     272</span> <span class="tlaUNC tlaBgUNC">           0 :   std::string sql_distinct;</span></span>
+<span id="L273"><span class="lineNum">     273</span> <span class="tlaGNC tlaBgGNC">           1 :   {</span></span>
+<span id="L274"><span class="lineNum">     274</span> <span class="tlaGNC">           1 :     const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">           1 :         Analyze(&quot;SELECT id FROM people UNION DISTINCT SELECT id FROM people&quot;);</span></span>
+<span id="L276"><span class="lineNum">     276</span> <span class="tlaGNC">           1 :     ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L277"><span class="lineNum">     277</span> <span class="tlaGNC">           1 :     const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L278"><span class="lineNum">     278</span> <span class="tlaGNC">           1 :     ASSERT_NE(scan, nullptr);</span></span>
+<span id="L279"><span class="lineNum">     279</span> <span class="tlaGNC">           1 :     ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L280"><span class="lineNum">     280</span> <span class="tlaGNC">           1 :     TestTranspiler t;</span></span>
+<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">           1 :     sql_distinct = t.EmitSetOperationScan(</span></span>
+<span id="L282"><span class="lineNum">     282</span> <span class="tlaGNC">           1 :         scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;());</span></span>
+<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">           1 :   }</span></span>
+<span id="L284"><span class="lineNum">     284</span> <span class="tlaUNC tlaBgUNC">           0 :   EXPECT_NE(sql_all, sql_distinct);</span></span>
+<span id="L285"><span class="lineNum">     285</span> <span class="tlaGNC tlaBgGNC">           1 :   EXPECT_NE(sql_all.find(&quot; UNION ALL &quot;), std::string::npos);</span></span>
+<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">           1 :   EXPECT_EQ(sql_all.find(&quot; UNION DISTINCT &quot;), std::string::npos);</span></span>
+<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">           1 :   EXPECT_EQ(sql_distinct.find(&quot; UNION ALL &quot;), std::string::npos);</span></span>
+<span id="L288"><span class="lineNum">     288</span>              :   // The bare ` UNION ` keyword (with spaces on both sides) needs</span>
+<span id="L289"><span class="lineNum">     289</span>              :   // to land in the distinct emit; we deliberately do NOT match a</span>
+<span id="L290"><span class="lineNum">     290</span>              :   // substring `UNION` because that would also match `UNION ALL`.</span>
+<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql_distinct.find(&quot; UNION &quot;), std::string::npos);</span></span>
+<span id="L292"><span class="lineNum">     292</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L293"><span class="lineNum">     293</span>              : </span>
+<span id="L294"><span class="lineNum">     294</span>              : // Helper: synthesize a `ResolvedSetOperationScan` directly so the</span>
+<span id="L295"><span class="lineNum">     295</span>              : // fallback paths can be exercised without depending on the</span>
+<span id="L296"><span class="lineNum">     296</span>              : // analyzer producing the matching surface SQL. Each &quot;arm&quot; of the</span>
+<span id="L297"><span class="lineNum">     297</span>              : // set operation is a fresh `ResolvedSingleRowScan` so the inner</span>
+<span id="L298"><span class="lineNum">     298</span>              : // emit composes onto `SELECT 1`. The parent's `column_list` is</span>
+<span id="L299"><span class="lineNum">     299</span>              : // left empty so the per-item projection lands on `SELECT *`,</span>
+<span id="L300"><span class="lineNum">     300</span>              : // which keeps the fallback assertions focused on the</span>
+<span id="L301"><span class="lineNum">     301</span>              : // kind/mode-bail behavior of `EmitSetOperationScan` rather than</span>
+<span id="L302"><span class="lineNum">     302</span>              : // the per-item projection logic.</span>
+<span id="L303"><span class="lineNum">     303</span>              : std::unique_ptr&lt;::googlesql::ResolvedSetOperationScan&gt; MakeTestSetOperationScan(</span>
+<span id="L304"><span class="lineNum">     304</span>              :     ::googlesql::ResolvedSetOperationScan::SetOperationType op_type,</span>
+<span id="L305"><span class="lineNum">     305</span>              :     ::googlesql::ResolvedSetOperationScan::SetOperationColumnMatchMode</span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">           2 :         match_mode) {</span></span>
+<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           2 :   std::vector&lt;std::unique_ptr&lt;const ::googlesql::ResolvedSetOperationItem&gt;&gt;</span></span>
+<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           2 :       items;</span></span>
+<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           2 :   items.push_back(::googlesql::MakeResolvedSetOperationItem(</span></span>
+<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           2 :       ::googlesql::MakeResolvedSingleRowScan(),</span></span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           2 :       /*output_column_list=*/{}));</span></span>
+<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">           2 :   items.push_back(::googlesql::MakeResolvedSetOperationItem(</span></span>
+<span id="L313"><span class="lineNum">     313</span> <span class="tlaGNC">           2 :       ::googlesql::MakeResolvedSingleRowScan(),</span></span>
+<span id="L314"><span class="lineNum">     314</span> <span class="tlaGNC">           2 :       /*output_column_list=*/{}));</span></span>
+<span id="L315"><span class="lineNum">     315</span> <span class="tlaGNC">           2 :   auto scan = ::googlesql::MakeResolvedSetOperationScan(</span></span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">           2 :       /*column_list=*/{}, op_type, std::move(items));</span></span>
+<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">           2 :   scan-&gt;set_column_match_mode(match_mode);</span></span>
+<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">           2 :   scan-&gt;set_column_propagation_mode(</span></span>
+<span id="L319"><span class="lineNum">     319</span> <span class="tlaGNC">           2 :       ::googlesql::ResolvedSetOperationScan::STRICT);</span></span>
+<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">           2 :   return scan;</span></span>
+<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">           2 : }</span></span>
+<span id="L322"><span class="lineNum">     322</span>              : </span>
+<span id="L323"><span class="lineNum">     323</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanCorrespondingEmitsKeyword) {</span></span>
+<span id="L324"><span class="lineNum">     324</span>              :   // `CORRESPONDING` uses the analyzer's per-item `output_column_list`</span>
+<span id="L325"><span class="lineNum">     325</span>              :   // mapping; `EmitSetOperationItem` projects each arm before the keyword.</span>
+<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">           1 :       &quot;SELECT x, y FROM (SELECT 1 AS x, 'a' AS y UNION ALL CORRESPONDING &quot;</span></span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">           1 :       &quot;SELECT 'b' AS y, 2 AS x)&quot;);</span></span>
+<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_SET_OPERATION_SCAN);</span></span>
+<span id="L333"><span class="lineNum">     333</span> <span class="tlaGNC">           1 :   const auto* set_op = scan-&gt;GetAs&lt;::googlesql::ResolvedSetOperationScan&gt;();</span></span>
+<span id="L334"><span class="lineNum">     334</span> <span class="tlaGNC">           1 :   ASSERT_EQ(set_op-&gt;column_match_mode(),</span></span>
+<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">           1 :             ::googlesql::ResolvedSetOperationScan::CORRESPONDING);</span></span>
+<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">           1 :   const std::string sql = t.EmitSetOperationScan(set_op);</span></span>
+<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(sql.empty());</span></span>
+<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot; UNION ALL &quot;), std::string::npos);</span></span>
+<span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;\&quot;x\&quot;&quot;), std::string::npos);</span></span>
+<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;\&quot;y\&quot;&quot;), std::string::npos);</span></span>
+<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L343"><span class="lineNum">     343</span>              : </span>
+<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanIntersectAllEmitsKeyword) {</span></span>
+<span id="L345"><span class="lineNum">     345</span>              :   // `INTERSECT_ALL` (DuckDB-native extension; not in BQ surface</span>
+<span id="L346"><span class="lineNum">     346</span>              :   // SQL) emits the matching `INTERSECT ALL` keyword. The standard</span>
+<span id="L347"><span class="lineNum">     347</span>              :   // SQL bag semantics (`min(m, n)`) match the GoogleSQL</span>
+<span id="L348"><span class="lineNum">     348</span>              :   // `INTERSECT_ALL` contract per `resolved_ast.h`, so the lowered</span>
+<span id="L349"><span class="lineNum">     349</span>              :   // SQL preserves the analyzer's intent.</span>
+<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">           1 :   auto scan = MakeTestSetOperationScan(</span></span>
+<span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">           1 :       ::googlesql::ResolvedSetOperationScan::INTERSECT_ALL,</span></span>
+<span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">           1 :       ::googlesql::ResolvedSetOperationScan::BY_POSITION);</span></span>
+<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L354"><span class="lineNum">     354</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(scan.get()),</span></span>
+<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">           1 :             &quot;SELECT * FROM (SELECT 1) INTERSECT ALL SELECT * FROM (SELECT 1)&quot;);</span></span>
+<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L357"><span class="lineNum">     357</span>              : </span>
+<span id="L358"><span class="lineNum">     358</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSetOperationScanExceptAllEmitsKeyword) {</span></span>
+<span id="L359"><span class="lineNum">     359</span>              :   // `EXCEPT_ALL` similarly emits `EXCEPT ALL`. DuckDB has shipped</span>
+<span id="L360"><span class="lineNum">     360</span>              :   // `EXCEPT ALL` with standard SQL bag-difference semantics</span>
+<span id="L361"><span class="lineNum">     361</span>              :   // (`max(m - n, 0)`) since v0.10; the GoogleSQL contract is the</span>
+<span id="L362"><span class="lineNum">     362</span>              :   // same.</span>
+<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">           1 :   auto scan = MakeTestSetOperationScan(</span></span>
+<span id="L364"><span class="lineNum">     364</span> <span class="tlaGNC">           1 :       ::googlesql::ResolvedSetOperationScan::EXCEPT_ALL,</span></span>
+<span id="L365"><span class="lineNum">     365</span> <span class="tlaGNC">           1 :       ::googlesql::ResolvedSetOperationScan::BY_POSITION);</span></span>
+<span id="L366"><span class="lineNum">     366</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L367"><span class="lineNum">     367</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitSetOperationScan(scan.get()),</span></span>
+<span id="L368"><span class="lineNum">     368</span> <span class="tlaGNC">           1 :             &quot;SELECT * FROM (SELECT * FROM (SELECT 1) EXCEPT ALL SELECT * &quot;</span></span>
+<span id="L369"><span class="lineNum">     369</span> <span class="tlaGNC">           1 :             &quot;FROM (SELECT 1)) ORDER BY 1&quot;);</span></span>
+<span id="L370"><span class="lineNum">     370</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L371"><span class="lineNum">     371</span>              : </span>
+<span id="L372"><span class="lineNum">     372</span>              : // --- Sample scan -------------------------------------------------------</span>
+<span id="L373"><span class="lineNum">     373</span>              : </span>
+<span id="L374"><span class="lineNum">     374</span>              : }  // namespace transpiler</span>
+<span id="L375"><span class="lineNum">     375</span>              : }  // namespace duckdb</span>
+<span id="L376"><span class="lineNum">     376</span>              : }  // namespace engine</span>
+<span id="L377"><span class="lineNum">     377</span>              : }  // namespace backend</span>
+<span id="L378"><span class="lineNum">     378</span>              : }  // namespace bigquery_emulator</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

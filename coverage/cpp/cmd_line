@@ -1,0 +1,1 @@
+genhtml --ignore-errors empty,source --synthesize-missing --quiet --substitute s|^/proc/self/cwd/|/home/runner/work/bigquery-emulator/bigquery-emulator/| --output-directory html/coverage/cpp artifacts/cpp/_coverage_report.dat

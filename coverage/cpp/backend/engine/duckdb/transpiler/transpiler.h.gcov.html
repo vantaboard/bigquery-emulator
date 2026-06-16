@@ -1,0 +1,493 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - backend/engine/duckdb/transpiler/transpiler.h</title>
+  <link rel="stylesheet" type="text/css" href="../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../index.html">top level</a> - <a href="index.html">backend/engine/duckdb/transpiler</a> - transpiler.h<span style="font-size: 80%;"> (source / <a href="transpiler.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">3</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-16 22:19:03</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
+          </tr>
+                  <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
+<span id="L2"><span class="lineNum">       2</span>              : #define BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
+<span id="L3"><span class="lineNum">       3</span>              : </span>
+<span id="L4"><span class="lineNum">       4</span>              : // DuckDB transpiler.</span>
+<span id="L5"><span class="lineNum">       5</span>              : //</span>
+<span id="L6"><span class="lineNum">       6</span>              : // `Transpiler` walks a GoogleSQL `ResolvedAST` produced by</span>
+<span id="L7"><span class="lineNum">       7</span>              : // `googlesql::AnalyzeStatement` (see</span>
+<span id="L8"><span class="lineNum">       8</span>              : // `backend/engine/duckdb/duckdb_engine.cc`) and</span>
+<span id="L9"><span class="lineNum">       9</span>              : // emits a DuckDB-flavored SQL string the DuckDB C++ client can</span>
+<span id="L10"><span class="lineNum">      10</span>              : // execute. The visitor's emit set grows one shape at a time per the</span>
+<span id="L11"><span class="lineNum">      11</span>              : // `SHAPE_TRACKER.md` file in this directory, mirroring the</span>
+<span id="L12"><span class="lineNum">      12</span>              : // cloud-spanner-emulator shape-tracker approach.</span>
+<span id="L13"><span class="lineNum">      13</span>              : //</span>
+<span id="L14"><span class="lineNum">      14</span>              : // The class inherits from `googlesql::ResolvedASTVisitor` so future</span>
+<span id="L15"><span class="lineNum">      15</span>              : // plans can either override `VisitResolved*` directly (for nodes</span>
+<span id="L16"><span class="lineNum">      16</span>              : // that need to recurse into children with non-default ordering) or</span>
+<span id="L17"><span class="lineNum">      17</span>              : // route through the per-shape `Emit*` helpers declared here. The</span>
+<span id="L18"><span class="lineNum">      18</span>              : // SHAPE_TRACKER rows whose disposition lowers through DuckDB</span>
+<span id="L19"><span class="lineNum">      19</span>              : // (`duckdb_native` / `duckdb_rewrite` / `duckdb_udf`) correspond to</span>
+<span id="L20"><span class="lineNum">      20</span>              : // an `Emit*` that returns DuckDB-flavored SQL; rows on the other</span>
+<span id="L21"><span class="lineNum">      21</span>              : // dispositions (`semantic_executor` / `control_op` / `local_stub` /</span>
+<span id="L22"><span class="lineNum">      22</span>              : // `unsupported`) bottom out at the empty string and the route</span>
+<span id="L23"><span class="lineNum">      23</span>              : // classifier in `backend/engine/coordinator/` dispatches them to</span>
+<span id="L24"><span class="lineNum">      24</span>              : // the matching executor (or surfaces a BigQuery-shaped</span>
+<span id="L25"><span class="lineNum">      25</span>              : // `UNIMPLEMENTED` for `unsupported`).</span>
+<span id="L26"><span class="lineNum">      26</span>              : //</span>
+<span id="L27"><span class="lineNum">      27</span>              : // Implemented baseline (top-level SELECT, the `transpiler-select-core`</span>
+<span id="L28"><span class="lineNum">      28</span>              : // plan):</span>
+<span id="L29"><span class="lineNum">      29</span>              : //</span>
+<span id="L30"><span class="lineNum">      30</span>              : // * `EmitQueryStmt` lowers the root statement: it walks `query()` for</span>
+<span id="L31"><span class="lineNum">      31</span>              : //   the relational tree, then renames each physical column through</span>
+<span id="L32"><span class="lineNum">      32</span>              : //   the `output_column_list()` mapping so the user-visible alias</span>
+<span id="L33"><span class="lineNum">      33</span>              : //   lands on the outermost SELECT.</span>
+<span id="L34"><span class="lineNum">      34</span>              : // * `EmitProjectScan` wraps `input_scan()` and projects the</span>
+<span id="L35"><span class="lineNum">      35</span>              : //   `column_list()` schema, picking each column out of the matching</span>
+<span id="L36"><span class="lineNum">      36</span>              : //   `expr_list()` entry (computed) or referencing it by name</span>
+<span id="L37"><span class="lineNum">      37</span>              : //   (pass-through). When `expr_list()` is empty and `column_list()`</span>
+<span id="L38"><span class="lineNum">      38</span>              : //   is a permutation of `input_scan()-&gt;column_list()` by column id,</span>
+<span id="L39"><span class="lineNum">      39</span>              : //   the wrap is elided so the redundant</span>
+<span id="L40"><span class="lineNum">      40</span>              : //   `SELECT * FROM (SELECT * FROM ...)` layer the analyzer always</span>
+<span id="L41"><span class="lineNum">      41</span>              : //   inserts above a TableScan does not stack onto every scan emit.</span>
+<span id="L42"><span class="lineNum">      42</span>              : // * `EmitSingleRowScan` emits `SELECT 1` so a `ProjectScan` over</span>
+<span id="L43"><span class="lineNum">      43</span>              : //   `SingleRowScan` (the analyzer's &quot;no FROM clause&quot; shape) composes</span>
+<span id="L44"><span class="lineNum">      44</span>              : //   as a derived table.</span>
+<span id="L45"><span class="lineNum">      45</span>              : // * `EmitComputedColumn` lowers `column := expr` to</span>
+<span id="L46"><span class="lineNum">      46</span>              : //   `&lt;expr&gt; AS &quot;&lt;resolved-column-name&gt;&quot;`.</span>
+<span id="L47"><span class="lineNum">      47</span>              : // * `EmitOutputColumn` renders the final alias mapping</span>
+<span id="L48"><span class="lineNum">      48</span>              : //   (`&lt;column-name&gt; AS &lt;output-name&gt;`, collapsed when the names</span>
+<span id="L49"><span class="lineNum">      49</span>              : //   match).</span>
+<span id="L50"><span class="lineNum">      50</span>              : //</span>
+<span id="L51"><span class="lineNum">      51</span>              : // Earlier plans (`transpiler-emit-scans` etc.) cover the other</span>
+<span id="L52"><span class="lineNum">      52</span>              : // `done` rows in `SHAPE_TRACKER.md` (TableScan, FilterScan, JoinScan,</span>
+<span id="L53"><span class="lineNum">      53</span>              : // AggregateScan, OrderByScan, LimitOffsetScan, AnalyticScan, ...).</span>
+<span id="L54"><span class="lineNum">      54</span>              : //</span>
+<span id="L55"><span class="lineNum">      55</span>              : // Set operations + sampling (`transpiler-setops-sample`) layer two</span>
+<span id="L56"><span class="lineNum">      56</span>              : // more scan kinds onto the dispatcher:</span>
+<span id="L57"><span class="lineNum">      57</span>              : //</span>
+<span id="L58"><span class="lineNum">      58</span>              : // * `EmitSetOperationScan` lowers `UNION ALL`, `UNION DISTINCT`,</span>
+<span id="L59"><span class="lineNum">      59</span>              : //   `INTERSECT DISTINCT`, `EXCEPT DISTINCT` (and the DuckDB-native</span>
+<span id="L60"><span class="lineNum">      60</span>              : //   `INTERSECT ALL` / `EXCEPT ALL` extensions that match standard</span>
+<span id="L61"><span class="lineNum">      61</span>              : //   SQL bag semantics) by routing each `ResolvedSetOperationItem`</span>
+<span id="L62"><span class="lineNum">      62</span>              : //   through a private `EmitSetOperationItem` helper. The helper</span>
+<span id="L63"><span class="lineNum">      63</span>              : //   honors BigQuery's column-name propagation by projecting each</span>
+<span id="L64"><span class="lineNum">      64</span>              : //   item's `output_column_list(i)` onto the parent's</span>
+<span id="L65"><span class="lineNum">      65</span>              : //   `column_list(i)` name.</span>
+<span id="L66"><span class="lineNum">      66</span>              : // * `EmitSampleScan` lowers BigQuery `TABLESAMPLE` to DuckDB's</span>
+<span id="L67"><span class="lineNum">      67</span>              : //   `USING SAMPLE` for the `SYSTEM` / `BERNOULLI` (PERCENT) and</span>
+<span id="L68"><span class="lineNum">      68</span>              : //   `RESERVOIR` (ROWS) shapes whose semantics match. Weight columns,</span>
+<span id="L69"><span class="lineNum">      69</span>              : //   stratify (`PARTITION BY`) lists, and repeatable seeds stay on</span>
+<span id="L70"><span class="lineNum">      70</span>              : //   the empty-string fallback for now.</span>
+<span id="L71"><span class="lineNum">      71</span>              : //</span>
+<span id="L72"><span class="lineNum">      72</span>              : // Expression-core (`transpiler-expression-core`) layers four scalar</span>
+<span id="L73"><span class="lineNum">      73</span>              : // shapes on top of the baseline:</span>
+<span id="L74"><span class="lineNum">      74</span>              : //</span>
+<span id="L75"><span class="lineNum">      75</span>              : // * `EmitParameter` lowers `@&lt;name&gt;` and positional `?` parameters</span>
+<span id="L76"><span class="lineNum">      76</span>              : //   to DuckDB `$N` placeholders and accumulates a `ParameterRef`</span>
+<span id="L77"><span class="lineNum">      77</span>              : //   per unique slot in `parameter_order()` so the engine can copy</span>
+<span id="L78"><span class="lineNum">      78</span>              : //   values across in bind order.</span>
+<span id="L79"><span class="lineNum">      79</span>              : // * `EmitCast` lowers `CAST(&lt;expr&gt; AS &lt;type&gt;)` (and `SAFE_CAST(...)`</span>
+<span id="L80"><span class="lineNum">      80</span>              : //   -&gt; `TRY_CAST(...)`) for every type kind that `types.h` exposes a</span>
+<span id="L81"><span class="lineNum">      81</span>              : //   first-class DuckDB analog for. Format / time-zone / extended /</span>
+<span id="L82"><span class="lineNum">      82</span>              : //   type-modifier shapes stay on the fallback.</span>
+<span id="L83"><span class="lineNum">      83</span>              : // * `EmitFunctionArgument` routes a `ResolvedFunctionArgument`</span>
+<span id="L84"><span class="lineNum">      84</span>              : //   through the `expr()` slot it wraps; non-expression slots</span>
+<span id="L85"><span class="lineNum">      85</span>              : //   (scan / model / lambda / ...) stay on the fallback.</span>
+<span id="L86"><span class="lineNum">      86</span>              : // * `EmitWithExpr` lowers `WITH(&lt;a&gt; AS &lt;expr&gt;, ...) &lt;body&gt;` to a</span>
+<span id="L87"><span class="lineNum">      87</span>              : //   DuckDB scalar subquery that exposes each binding as a column on</span>
+<span id="L88"><span class="lineNum">      88</span>              : //   an inner SELECT and then projects the body off it, preserving</span>
+<span id="L89"><span class="lineNum">      89</span>              : //   GoogleSQL's once-per-row evaluation semantics.</span>
+<span id="L90"><span class="lineNum">      90</span>              : //</span>
+<span id="L91"><span class="lineNum">      91</span>              : // `Transpile` is the public entry point: it accepts the root</span>
+<span id="L92"><span class="lineNum">      92</span>              : // `ResolvedQueryStmt` (or any subtree) and returns the lowered</span>
+<span id="L93"><span class="lineNum">      93</span>              : // DuckDB SQL. `DuckDBEngine::ExecuteQuery` (in `duckdb_engine.cc`)</span>
+<span id="L94"><span class="lineNum">      94</span>              : // treats an empty transpilation as &quot;not yet supported&quot; and surfaces</span>
+<span id="L95"><span class="lineNum">      95</span>              : // UNIMPLEMENTED to the gateway through the engine's empty-string</span>
+<span id="L96"><span class="lineNum">      96</span>              : // contract.</span>
+<span id="L97"><span class="lineNum">      97</span>              : //</span>
+<span id="L98"><span class="lineNum">      98</span>              : // Threading: a `Transpiler` instance is *not* thread-safe — it</span>
+<span id="L99"><span class="lineNum">      99</span>              : // carries a per-traversal accumulator. The engine constructs a</span>
+<span id="L100"><span class="lineNum">     100</span>              : // fresh `Transpiler` per `ExecuteQuery` call so cross-query state</span>
+<span id="L101"><span class="lineNum">     101</span>              : // is not an issue.</span>
+<span id="L102"><span class="lineNum">     102</span>              : </span>
+<span id="L103"><span class="lineNum">     103</span>              : #include &lt;string&gt;</span>
+<span id="L104"><span class="lineNum">     104</span>              : #include &lt;vector&gt;</span>
+<span id="L105"><span class="lineNum">     105</span>              : </span>
+<span id="L106"><span class="lineNum">     106</span>              : #include &quot;absl/container/flat_hash_map.h&quot;</span>
+<span id="L107"><span class="lineNum">     107</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
+<span id="L108"><span class="lineNum">     108</span>              : #include &quot;googlesql/resolved_ast/resolved_ast.h&quot;</span>
+<span id="L109"><span class="lineNum">     109</span>              : #include &quot;googlesql/resolved_ast/resolved_ast_visitor.h&quot;</span>
+<span id="L110"><span class="lineNum">     110</span>              : #include &quot;googlesql/resolved_ast/resolved_node.h&quot;</span>
+<span id="L111"><span class="lineNum">     111</span>              : </span>
+<span id="L112"><span class="lineNum">     112</span>              : namespace bigquery_emulator {</span>
+<span id="L113"><span class="lineNum">     113</span>              : namespace backend {</span>
+<span id="L114"><span class="lineNum">     114</span>              : namespace engine {</span>
+<span id="L115"><span class="lineNum">     115</span>              : namespace duckdb {</span>
+<span id="L116"><span class="lineNum">     116</span>              : namespace transpiler {</span>
+<span id="L117"><span class="lineNum">     117</span>              : </span>
+<span id="L118"><span class="lineNum">     118</span>              : class Transpiler : public ::googlesql::ResolvedASTVisitor {</span>
+<span id="L119"><span class="lineNum">     119</span>              :  public:</span>
+<span id="L120"><span class="lineNum">     120</span>              :   // Bind metadata for one DuckDB `$N` placeholder emitted by the</span>
+<span id="L121"><span class="lineNum">     121</span>              :   // transpiler. The accumulator is exposed through</span>
+<span id="L122"><span class="lineNum">     122</span>              :   // `parameter_order()` so the engine can copy GoogleSQL</span>
+<span id="L123"><span class="lineNum">     123</span>              :   // `Value`s into DuckDB's bind buffer in placeholder-numerical</span>
+<span id="L124"><span class="lineNum">     124</span>              :   // order.</span>
+<span id="L125"><span class="lineNum">     125</span>              :   //</span>
+<span id="L126"><span class="lineNum">     126</span>              :   // Exactly one of {`name`, `position`} carries the GoogleSQL</span>
+<span id="L127"><span class="lineNum">     127</span>              :   // identity:</span>
+<span id="L128"><span class="lineNum">     128</span>              :   //   * Named parameter: `name` is the analyzer-lowercased</span>
+<span id="L129"><span class="lineNum">     129</span>              :   //     identifier (e.g. &quot;@CustomerId&quot; -&gt; &quot;customerid&quot;); `position`</span>
+<span id="L130"><span class="lineNum">     130</span>              :   //     is 0.</span>
+<span id="L131"><span class="lineNum">     131</span>              :   //   * Positional parameter: `name` is empty; `position` is the</span>
+<span id="L132"><span class="lineNum">     132</span>              :   //     1-based GoogleSQL position the analyzer assigned.</span>
+<span id="L133"><span class="lineNum">     133</span>              :   // Either way the entry's index in `parameter_order()` is the</span>
+<span id="L134"><span class="lineNum">     134</span>              :   // 0-based DuckDB placeholder slot (slot `i` is `$&lt;i+1&gt;`), so</span>
+<span id="L135"><span class="lineNum">     135</span>              :   // multiple references to the same named parameter share one slot.</span>
+<span id="L136"><span class="lineNum">     136</span>              :   struct ParameterRef {</span>
+<span id="L137"><span class="lineNum">     137</span>              :     std::string name;</span>
+<span id="L138"><span class="lineNum">     138</span>              :     int position = 0;</span>
+<span id="L139"><span class="lineNum">     139</span>              :   };</span>
+<span id="L140"><span class="lineNum">     140</span>              : </span>
+<span id="L141"><span class="lineNum">     141</span>              :   Transpiler();</span>
+<span id="L142"><span class="lineNum">     142</span>              :   ~Transpiler() override;</span>
+<span id="L143"><span class="lineNum">     143</span>              : </span>
+<span id="L144"><span class="lineNum">     144</span>              :   Transpiler(const Transpiler&amp;) = delete;</span>
+<span id="L145"><span class="lineNum">     145</span>              :   Transpiler&amp; operator=(const Transpiler&amp;) = delete;</span>
+<span id="L146"><span class="lineNum">     146</span>              : </span>
+<span id="L147"><span class="lineNum">     147</span>              :   // Lower the resolved AST rooted at `node` (typically a</span>
+<span id="L148"><span class="lineNum">     148</span>              :   // `ResolvedQueryStmt`) into a DuckDB SQL string.</span>
+<span id="L149"><span class="lineNum">     149</span>              :   //</span>
+<span id="L150"><span class="lineNum">     150</span>              :   // Returns the DuckDB SQL for any shape covered by the per-shape</span>
+<span id="L151"><span class="lineNum">     151</span>              :   // `Emit*` methods below; an empty string means &quot;transpiler cannot</span>
+<span id="L152"><span class="lineNum">     152</span>              :   // lower this shape yet&quot; and callers treat that as a signal for</span>
+<span id="L153"><span class="lineNum">     153</span>              :   // the engine to surface UNIMPLEMENTED.</span>
+<span id="L154"><span class="lineNum">     154</span>              :   //</span>
+<span id="L155"><span class="lineNum">     155</span>              :   // Safe to call with a null `node`; returns the empty string in</span>
+<span id="L156"><span class="lineNum">     156</span>              :   // that case.</span>
+<span id="L157"><span class="lineNum">     157</span>              :   std::string Transpile(const ::googlesql::ResolvedNode* node);</span>
+<span id="L158"><span class="lineNum">     158</span>              : </span>
+<span id="L159"><span class="lineNum">     159</span>              :   // Lower a relational `ResolvedScan` subtree to DuckDB SQL. Used by</span>
+<span id="L160"><span class="lineNum">     160</span>              :   // CTAS and other control-op paths that already have a scan root.</span>
+<span id="L161"><span class="lineNum">     161</span>              :   std::string TranspileScan(const ::googlesql::ResolvedScan* scan);</span>
+<span id="L162"><span class="lineNum">     162</span>              : </span>
+<span id="L163"><span class="lineNum">     163</span>              :   // Lower CTAS / INSERT ... SELECT inner queries with the same</span>
+<span id="L164"><span class="lineNum">     164</span>              :   // `query_output_column_names_` + outer projection path as</span>
+<span id="L165"><span class="lineNum">     165</span>              :   // `EmitQueryStmt`, keyed on the analyzer's output column lists.</span>
+<span id="L166"><span class="lineNum">     166</span>              :   std::string EmitCtasSelect(</span>
+<span id="L167"><span class="lineNum">     167</span>              :       const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt);</span>
+<span id="L168"><span class="lineNum">     168</span>              :   std::string EmitInsertSelect(const ::googlesql::ResolvedInsertStmt* stmt);</span>
+<span id="L169"><span class="lineNum">     169</span>              : </span>
+<span id="L170"><span class="lineNum">     170</span>              :   // Bind-order accumulator for the GoogleSQL parameters encountered</span>
+<span id="L171"><span class="lineNum">     171</span>              :   // during the most recent traversal. Slot `i` (0-based) is the</span>
+<span id="L172"><span class="lineNum">     172</span>              :   // parameter the transpiler emitted as `$&lt;i+1&gt;`. The engine reads</span>
+<span id="L173"><span class="lineNum">     173</span>              :   // this back to copy values into DuckDB's bind buffer; named</span>
+<span id="L174"><span class="lineNum">     174</span>              :   // parameters that appear multiple times in the SQL share a single</span>
+<span id="L175"><span class="lineNum">     175</span>              :   // slot (see `EmitParameter`), so the vector contains one entry per</span>
+<span id="L176"><span class="lineNum">     176</span>              :   // unique placeholder, not one per textual reference.</span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC tlaBgGNC">          14 :   const std::vector&lt;ParameterRef&gt;&amp; parameter_order() const {</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">          14 :     return parameter_order_;</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">          14 :   }</span></span>
+<span id="L180"><span class="lineNum">     180</span>              : </span>
+<span id="L181"><span class="lineNum">     181</span>              :  protected:</span>
+<span id="L182"><span class="lineNum">     182</span>              :   // ---------------------------------------------------------------</span>
+<span id="L183"><span class="lineNum">     183</span>              :   // Per-shape Emit hooks.</span>
+<span id="L184"><span class="lineNum">     184</span>              :   //</span>
+<span id="L185"><span class="lineNum">     185</span>              :   // Each hook returns the DuckDB SQL fragment for one ResolvedAST</span>
+<span id="L186"><span class="lineNum">     186</span>              :   // node kind. Hooks for `duckdb_native` / `duckdb_rewrite` /</span>
+<span id="L187"><span class="lineNum">     187</span>              :   // `duckdb_udf` rows in `SHAPE_TRACKER.md` emit DuckDB SQL; hooks</span>
+<span id="L188"><span class="lineNum">     188</span>              :   // for the other dispositions (`semantic_executor` / `control_op`</span>
+<span id="L189"><span class="lineNum">     189</span>              :   // / `local_stub` / `unsupported`) still return the empty string</span>
+<span id="L190"><span class="lineNum">     190</span>              :   // and the route classifier dispatches the surrounding query to</span>
+<span id="L191"><span class="lineNum">     191</span>              :   // the matching executor instead. Group them roughly by node</span>
+<span id="L192"><span class="lineNum">     192</span>              :   // category so the file diff for &quot;add scan emit&quot; / &quot;add expr emit&quot;</span>
+<span id="L193"><span class="lineNum">     193</span>              :   // stays focused.</span>
+<span id="L194"><span class="lineNum">     194</span>              :   //</span>
+<span id="L195"><span class="lineNum">     195</span>              :   // The list below is *not* exhaustive — it tracks the node kinds</span>
+<span id="L196"><span class="lineNum">     196</span>              :   // for which DuckDB has a sensible analog. Node kinds whose</span>
+<span id="L197"><span class="lineNum">     197</span>              :   // SHAPE_TRACKER disposition is owned by another executor (graph /</span>
+<span id="L198"><span class="lineNum">     198</span>              :   // ML / pivot / DML / DDL / ...) get their disposition in the</span>
+<span id="L199"><span class="lineNum">     199</span>              :   // tracker without an `Emit*` here; the visitor's `DefaultVisit`</span>
+<span id="L200"><span class="lineNum">     200</span>              :   // falls through to &quot;no DuckDB lowering&quot; and the route classifier</span>
+<span id="L201"><span class="lineNum">     201</span>              :   // routes the query elsewhere.</span>
+<span id="L202"><span class="lineNum">     202</span>              :   // ---------------------------------------------------------------</span>
+<span id="L203"><span class="lineNum">     203</span>              : </span>
+<span id="L204"><span class="lineNum">     204</span>              :   // Statements -----------------------------------------------------</span>
+<span id="L205"><span class="lineNum">     205</span>              :   virtual std::string EmitQueryStmt(const ::googlesql::ResolvedQueryStmt* node);</span>
+<span id="L206"><span class="lineNum">     206</span>              : </span>
+<span id="L207"><span class="lineNum">     207</span>              :   // Scans ----------------------------------------------------------</span>
+<span id="L208"><span class="lineNum">     208</span>              :   virtual std::string EmitProjectScan(</span>
+<span id="L209"><span class="lineNum">     209</span>              :       const ::googlesql::ResolvedProjectScan* node);</span>
+<span id="L210"><span class="lineNum">     210</span>              :   virtual std::string EmitTableScan(const ::googlesql::ResolvedTableScan* node);</span>
+<span id="L211"><span class="lineNum">     211</span>              :   virtual std::string EmitSingleRowScan(</span>
+<span id="L212"><span class="lineNum">     212</span>              :       const ::googlesql::ResolvedSingleRowScan* node);</span>
+<span id="L213"><span class="lineNum">     213</span>              :   virtual std::string EmitFilterScan(</span>
+<span id="L214"><span class="lineNum">     214</span>              :       const ::googlesql::ResolvedFilterScan* node);</span>
+<span id="L215"><span class="lineNum">     215</span>              :   virtual std::string EmitJoinScan(const ::googlesql::ResolvedJoinScan* node);</span>
+<span id="L216"><span class="lineNum">     216</span>              :   virtual std::string EmitArrayScan(const ::googlesql::ResolvedArrayScan* node);</span>
+<span id="L217"><span class="lineNum">     217</span>              :   virtual std::string EmitAggregateScan(</span>
+<span id="L218"><span class="lineNum">     218</span>              :       const ::googlesql::ResolvedAggregateScan* node);</span>
+<span id="L219"><span class="lineNum">     219</span>              :   virtual std::string EmitSetOperationScan(</span>
+<span id="L220"><span class="lineNum">     220</span>              :       const ::googlesql::ResolvedSetOperationScan* node);</span>
+<span id="L221"><span class="lineNum">     221</span>              :   virtual std::string EmitOrderByScan(</span>
+<span id="L222"><span class="lineNum">     222</span>              :       const ::googlesql::ResolvedOrderByScan* node);</span>
+<span id="L223"><span class="lineNum">     223</span>              :   virtual std::string EmitLimitOffsetScan(</span>
+<span id="L224"><span class="lineNum">     224</span>              :       const ::googlesql::ResolvedLimitOffsetScan* node);</span>
+<span id="L225"><span class="lineNum">     225</span>              :   virtual std::string EmitAnalyticScan(</span>
+<span id="L226"><span class="lineNum">     226</span>              :       const ::googlesql::ResolvedAnalyticScan* node);</span>
+<span id="L227"><span class="lineNum">     227</span>              :   virtual std::string EmitSampleScan(</span>
+<span id="L228"><span class="lineNum">     228</span>              :       const ::googlesql::ResolvedSampleScan* node);</span>
+<span id="L229"><span class="lineNum">     229</span>              :   virtual std::string EmitWithScan(const ::googlesql::ResolvedWithScan* node);</span>
+<span id="L230"><span class="lineNum">     230</span>              :   virtual std::string EmitWithRefScan(</span>
+<span id="L231"><span class="lineNum">     231</span>              :       const ::googlesql::ResolvedWithRefScan* node);</span>
+<span id="L232"><span class="lineNum">     232</span>              :   // PIVOT / UNPIVOT lower through conditional-aggregation / UNION ALL</span>
+<span id="L233"><span class="lineNum">     233</span>              :   // rewrites the BigQuery analyzer hands us as `ResolvedPivotScan`</span>
+<span id="L234"><span class="lineNum">     234</span>              :   // and `ResolvedUnpivotScan`. See the per-shape comments on</span>
+<span id="L235"><span class="lineNum">     235</span>              :   // `EmitPivotScan` and `EmitUnpivotScan` for the lowering rules.</span>
+<span id="L236"><span class="lineNum">     236</span>              :   virtual std::string EmitPivotScan(const ::googlesql::ResolvedPivotScan* node);</span>
+<span id="L237"><span class="lineNum">     237</span>              :   virtual std::string EmitUnpivotScan(</span>
+<span id="L238"><span class="lineNum">     238</span>              :       const ::googlesql::ResolvedUnpivotScan* node);</span>
+<span id="L239"><span class="lineNum">     239</span>              :   // Recursive CTE lowering. `EmitRecursiveScan` lowers the anchor +</span>
+<span id="L240"><span class="lineNum">     240</span>              :   // recursive terms inside a `ResolvedWithEntry` whose</span>
+<span id="L241"><span class="lineNum">     241</span>              :   // `with_subquery()` is a `ResolvedRecursiveScan` (i.e. the entry</span>
+<span id="L242"><span class="lineNum">     242</span>              :   // is the recursive side of a `WITH RECURSIVE` block);</span>
+<span id="L243"><span class="lineNum">     243</span>              :   // `EmitRecursiveRefScan` renames the per-CTE anchor names back to</span>
+<span id="L244"><span class="lineNum">     244</span>              :   // the per-ref column names so the recursive arm's scans compose</span>
+<span id="L245"><span class="lineNum">     245</span>              :   // like every other scan emit.</span>
+<span id="L246"><span class="lineNum">     246</span>              :   virtual std::string EmitRecursiveScan(</span>
+<span id="L247"><span class="lineNum">     247</span>              :       const ::googlesql::ResolvedRecursiveScan* node);</span>
+<span id="L248"><span class="lineNum">     248</span>              :   virtual std::string EmitRecursiveRefScan(</span>
+<span id="L249"><span class="lineNum">     249</span>              :       const ::googlesql::ResolvedRecursiveRefScan* node);</span>
+<span id="L250"><span class="lineNum">     250</span>              : </span>
+<span id="L251"><span class="lineNum">     251</span>              :   // Expressions ----------------------------------------------------</span>
+<span id="L252"><span class="lineNum">     252</span>              :   virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);</span>
+<span id="L253"><span class="lineNum">     253</span>              :   virtual std::string EmitParameter(const ::googlesql::ResolvedParameter* node);</span>
+<span id="L254"><span class="lineNum">     254</span>              :   virtual std::string EmitColumnRef(const ::googlesql::ResolvedColumnRef* node);</span>
+<span id="L255"><span class="lineNum">     255</span>              :   virtual std::string EmitFunctionCall(</span>
+<span id="L256"><span class="lineNum">     256</span>              :       const ::googlesql::ResolvedFunctionCall* node);</span>
+<span id="L257"><span class="lineNum">     257</span>              :   virtual std::string EmitAggregateFunctionCall(</span>
+<span id="L258"><span class="lineNum">     258</span>              :       const ::googlesql::ResolvedAggregateFunctionCall* node);</span>
+<span id="L259"><span class="lineNum">     259</span>              :   virtual std::string EmitAnalyticFunctionCall(</span>
+<span id="L260"><span class="lineNum">     260</span>              :       const ::googlesql::ResolvedAnalyticFunctionCall* node);</span>
+<span id="L261"><span class="lineNum">     261</span>              :   virtual std::string EmitCast(const ::googlesql::ResolvedCast* node);</span>
+<span id="L262"><span class="lineNum">     262</span>              :   virtual std::string EmitMakeStruct(</span>
+<span id="L263"><span class="lineNum">     263</span>              :       const ::googlesql::ResolvedMakeStruct* node);</span>
+<span id="L264"><span class="lineNum">     264</span>              :   virtual std::string EmitGetStructField(</span>
+<span id="L265"><span class="lineNum">     265</span>              :       const ::googlesql::ResolvedGetStructField* node);</span>
+<span id="L266"><span class="lineNum">     266</span>              :   // BigQuery `&lt;json&gt;.&lt;field&gt;` lowers through DuckDB's `-&gt;` operator</span>
+<span id="L267"><span class="lineNum">     267</span>              :   // when the result type is JSON (the common case for chained</span>
+<span id="L268"><span class="lineNum">     268</span>              :   // `&lt;json&gt;.a.b` access) and through `-&gt;&gt;` when the analyzer</span>
+<span id="L269"><span class="lineNum">     269</span>              :   // resolves the return as a scalar (rare today; reserved for</span>
+<span id="L270"><span class="lineNum">     270</span>              :   // analyzer-driven coercion). See the `EmitGetJsonField` body for</span>
+<span id="L271"><span class="lineNum">     271</span>              :   // the deliberate choice between `-&gt;` / `-&gt;&gt;` and</span>
+<span id="L272"><span class="lineNum">     272</span>              :   // `json_extract` / `json_extract_string`.</span>
+<span id="L273"><span class="lineNum">     273</span>              :   virtual std::string EmitGetJsonField(</span>
+<span id="L274"><span class="lineNum">     274</span>              :       const ::googlesql::ResolvedGetJsonField* node);</span>
+<span id="L275"><span class="lineNum">     275</span>              :   virtual std::string EmitSubqueryExpr(</span>
+<span id="L276"><span class="lineNum">     276</span>              :       const ::googlesql::ResolvedSubqueryExpr* node);</span>
+<span id="L277"><span class="lineNum">     277</span>              :   virtual std::string EmitWithExpr(const ::googlesql::ResolvedWithExpr* node);</span>
+<span id="L278"><span class="lineNum">     278</span>              : </span>
+<span id="L279"><span class="lineNum">     279</span>              :   // Function-argument wrapper --------------------------------------</span>
+<span id="L280"><span class="lineNum">     280</span>              :   // `ResolvedFunctionArgument` carries one of {expr, scan, model,</span>
+<span id="L281"><span class="lineNum">     281</span>              :   // connection, descriptor, lambda, sequence, graph}. Today we</span>
+<span id="L282"><span class="lineNum">     282</span>              :   // route through the `expr()` slot so callers that walk</span>
+<span id="L283"><span class="lineNum">     283</span>              :   // `generic_argument_list` can treat a wrapped scalar argument as a</span>
+<span id="L284"><span class="lineNum">     284</span>              :   // first-class expression. Every other slot stays on the</span>
+<span id="L285"><span class="lineNum">     285</span>              :   // empty-string fallback (no caller proves the corresponding</span>
+<span id="L286"><span class="lineNum">     286</span>              :   // function-argument syntax lowers cleanly to DuckDB yet).</span>
+<span id="L287"><span class="lineNum">     287</span>              :   virtual std::string EmitFunctionArgument(</span>
+<span id="L288"><span class="lineNum">     288</span>              :       const ::googlesql::ResolvedFunctionArgument* node);</span>
+<span id="L289"><span class="lineNum">     289</span>              : </span>
+<span id="L290"><span class="lineNum">     290</span>              :   // Column / output shape ------------------------------------------</span>
+<span id="L291"><span class="lineNum">     291</span>              :   virtual std::string EmitOutputColumn(</span>
+<span id="L292"><span class="lineNum">     292</span>              :       const ::googlesql::ResolvedOutputColumn* node);</span>
+<span id="L293"><span class="lineNum">     293</span>              :   virtual std::string EmitComputedColumn(</span>
+<span id="L294"><span class="lineNum">     294</span>              :       const ::googlesql::ResolvedComputedColumn* node);</span>
+<span id="L295"><span class="lineNum">     295</span>              : </span>
+<span id="L296"><span class="lineNum">     296</span>              :  private:</span>
+<span id="L297"><span class="lineNum">     297</span>              :   // Dispatch a `ResolvedExpr` to the matching `Emit*` method based on</span>
+<span id="L298"><span class="lineNum">     298</span>              :   // its `node_kind()`. Returns the empty string for any expression</span>
+<span id="L299"><span class="lineNum">     299</span>              :   // kind whose `Emit*` still returns `&quot;&quot;` -- the engine treats an</span>
+<span id="L300"><span class="lineNum">     300</span>              :   // empty fragment the same way `Transpile()` does and surfaces</span>
+<span id="L301"><span class="lineNum">     301</span>              :   // UNIMPLEMENTED to the gateway.</span>
+<span id="L302"><span class="lineNum">     302</span>              :   std::string EmitExpr(const ::googlesql::ResolvedExpr* expr);</span>
+<span id="L303"><span class="lineNum">     303</span>              : </span>
+<span id="L304"><span class="lineNum">     304</span>              :   // Dispatch a `ResolvedScan` to the matching `Emit*` method. Same</span>
+<span id="L305"><span class="lineNum">     305</span>              :   // empty-string-as-fallback contract as `EmitExpr`.</span>
+<span id="L306"><span class="lineNum">     306</span>              :   std::string EmitScan(const ::googlesql::ResolvedScan* scan);</span>
+<span id="L307"><span class="lineNum">     307</span>              : </span>
+<span id="L308"><span class="lineNum">     308</span>              :   // Lower one `ResolvedWindowFrameExpr` (PRECEDING / CURRENT ROW /</span>
+<span id="L309"><span class="lineNum">     309</span>              :   // FOLLOWING). Used by `EmitAnalyticScan` for the inner ROWS / RANGE</span>
+<span id="L310"><span class="lineNum">     310</span>              :   // BETWEEN ... AND ... clause; returns the empty string when the</span>
+<span id="L311"><span class="lineNum">     311</span>              :   // bound is malformed or when an offset bound carries an expression</span>
+<span id="L312"><span class="lineNum">     312</span>              :   // we cannot lower yet, so the caller can propagate the empty-string</span>
+<span id="L313"><span class="lineNum">     313</span>              :   // contract.</span>
+<span id="L314"><span class="lineNum">     314</span>              :   std::string EmitFrameBound(const ::googlesql::ResolvedWindowFrameExpr* expr);</span>
+<span id="L315"><span class="lineNum">     315</span>              : </span>
+<span id="L316"><span class="lineNum">     316</span>              :   // Per-clause helpers for `EmitAnalyticScan`. Each returns:</span>
+<span id="L317"><span class="lineNum">     317</span>              :   //   * `&quot;&quot;` when the clause is legally absent (e.g. no PARTITION BY)</span>
+<span id="L318"><span class="lineNum">     318</span>              :   //   * `kAnalyticBail` when the shape is not yet lowerable and the</span>
+<span id="L319"><span class="lineNum">     319</span>              :   //     caller must abandon the analytic emit and let the engine</span>
+<span id="L320"><span class="lineNum">     320</span>              :   //     surface UNIMPLEMENTED.</span>
+<span id="L321"><span class="lineNum">     321</span>              :   //   * the SQL fragment otherwise.</span>
+<span id="L322"><span class="lineNum">     322</span>              :   // The bail sentinel keeps the helpers' empty-string-as-fallback</span>
+<span id="L323"><span class="lineNum">     323</span>              :   // contract from colliding with the legitimate &quot;clause omitted&quot;</span>
+<span id="L324"><span class="lineNum">     324</span>              :   // value.</span>
+<span id="L325"><span class="lineNum">     325</span>              :   static constexpr absl::string_view kAnalyticBail =</span>
+<span id="L326"><span class="lineNum">     326</span>              :       &quot;\x01&quot;</span>
+<span id="L327"><span class="lineNum">     327</span>              :       &quot;bail&quot;;</span>
+<span id="L328"><span class="lineNum">     328</span>              :   std::string BuildPartitionClause(</span>
+<span id="L329"><span class="lineNum">     329</span>              :       const ::googlesql::ResolvedWindowPartitioning* p);</span>
+<span id="L330"><span class="lineNum">     330</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o);</span>
+<span id="L331"><span class="lineNum">     331</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o,</span>
+<span id="L332"><span class="lineNum">     332</span>              :                                bool bigquery_null_defaults,</span>
+<span id="L333"><span class="lineNum">     333</span>              :                                bool append_input_rn);</span>
+<span id="L334"><span class="lineNum">     334</span>              :   std::string BuildFrameClause(const ::googlesql::ResolvedWindowFrame* wf);</span>
+<span id="L335"><span class="lineNum">     335</span>              :   std::string BuildAnalyticProjection(</span>
+<span id="L336"><span class="lineNum">     336</span>              :       const ::googlesql::ResolvedComputedColumnBase* col,</span>
+<span id="L337"><span class="lineNum">     337</span>              :       absl::string_view partition_clause,</span>
+<span id="L338"><span class="lineNum">     338</span>              :       absl::string_view order_clause);</span>
+<span id="L339"><span class="lineNum">     339</span>              :   void CaptureAnalyticOutputOrder(</span>
+<span id="L340"><span class="lineNum">     340</span>              :       const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
+<span id="L341"><span class="lineNum">     341</span>              : </span>
+<span id="L342"><span class="lineNum">     342</span>              :   // Lower one `ResolvedSetOperationItem` into a derived-table SELECT</span>
+<span id="L343"><span class="lineNum">     343</span>              :   // that projects `parent-&gt;column_list()` in order. Each</span>
+<span id="L344"><span class="lineNum">     344</span>              :   // `output_column_list[i]` names the column the item's child scan</span>
+<span id="L345"><span class="lineNum">     345</span>              :   // exposes for the parent's `column_list(i)` slot, so we wrap the</span>
+<span id="L346"><span class="lineNum">     346</span>              :   // child scan as `FROM (&lt;scan&gt;)` and project `&quot;&lt;output_i&gt;&quot; AS</span>
+<span id="L347"><span class="lineNum">     347</span>              :   // &quot;&lt;parent_i&gt;&quot;` (collapsed when the names already match). Returns</span>
+<span id="L348"><span class="lineNum">     348</span>              :   // the empty string when the child scan cannot lower or the</span>
+<span id="L349"><span class="lineNum">     349</span>              :   // output/parent column counts disagree, so callers propagate the</span>
+<span id="L350"><span class="lineNum">     350</span>              :   // empty-string fallback contract.</span>
+<span id="L351"><span class="lineNum">     351</span>              :   std::string EmitSetOperationItem(</span>
+<span id="L352"><span class="lineNum">     352</span>              :       const ::googlesql::ResolvedSetOperationItem* item,</span>
+<span id="L353"><span class="lineNum">     353</span>              :       const ::googlesql::ResolvedSetOperationScan* parent);</span>
+<span id="L354"><span class="lineNum">     354</span>              : </span>
+<span id="L355"><span class="lineNum">     355</span>              :   // Look up (or assign) the DuckDB `$N` slot for a named GoogleSQL</span>
+<span id="L356"><span class="lineNum">     356</span>              :   // parameter. The first reference appends a new `ParameterRef` to</span>
+<span id="L357"><span class="lineNum">     357</span>              :   // `parameter_order_`; subsequent references reuse the same slot</span>
+<span id="L358"><span class="lineNum">     358</span>              :   // so a query like `WHERE @x AND @x` carries only one bind value.</span>
+<span id="L359"><span class="lineNum">     359</span>              :   // The returned slot is 1-based to match DuckDB's `$1` notation.</span>
+<span id="L360"><span class="lineNum">     360</span>              :   int LookupOrAssignNamedParameter(absl::string_view name);</span>
+<span id="L361"><span class="lineNum">     361</span>              : </span>
+<span id="L362"><span class="lineNum">     362</span>              :   // Append a new positional `ParameterRef` and return its 1-based</span>
+<span id="L363"><span class="lineNum">     363</span>              :   // slot. Positional GoogleSQL parameters are referentially distinct</span>
+<span id="L364"><span class="lineNum">     364</span>              :   // every time they appear, so we never dedupe them.</span>
+<span id="L365"><span class="lineNum">     365</span>              :   int AssignPositionalParameter(int analyzer_position);</span>
+<span id="L366"><span class="lineNum">     366</span>              : </span>
+<span id="L367"><span class="lineNum">     367</span>              :   // Bind-order accumulator. Each entry is a `ParameterRef` whose</span>
+<span id="L368"><span class="lineNum">     368</span>              :   // index `i` is the 0-based DuckDB placeholder slot (slot `i` is</span>
+<span id="L369"><span class="lineNum">     369</span>              :   // `$&lt;i+1&gt;`). Named parameter lookups go through</span>
+<span id="L370"><span class="lineNum">     370</span>              :   // `name_to_slot_` for dedup; positional ones always append.</span>
+<span id="L371"><span class="lineNum">     371</span>              :   std::vector&lt;ParameterRef&gt; parameter_order_;</span>
+<span id="L372"><span class="lineNum">     372</span>              :   absl::flat_hash_map&lt;std::string, int&gt; name_to_slot_;</span>
+<span id="L373"><span class="lineNum">     373</span>              : </span>
+<span id="L374"><span class="lineNum">     374</span>              :   // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes</span>
+<span id="L375"><span class="lineNum">     375</span>              :   // one entry per recursive CTE before lowering its body; the</span>
+<span id="L376"><span class="lineNum">     376</span>              :   // matching `EmitRecursiveRefScan` reads the back of the stack to</span>
+<span id="L377"><span class="lineNum">     377</span>              :   // discover the DuckDB-side CTE name and the analyzer-stable</span>
+<span id="L378"><span class="lineNum">     378</span>              :   // anchor column names the recursive arm references. Non-recursive</span>
+<span id="L379"><span class="lineNum">     379</span>              :   // entries do not touch the stack so a non-recursive CTE nested</span>
+<span id="L380"><span class="lineNum">     380</span>              :   // inside a recursive arm still sees the outer recursive context</span>
+<span id="L381"><span class="lineNum">     381</span>              :   // through the stack.</span>
+<span id="L382"><span class="lineNum">     382</span>              :   struct RecursiveCteContext {</span>
+<span id="L383"><span class="lineNum">     383</span>              :     std::string cte_name;</span>
+<span id="L384"><span class="lineNum">     384</span>              :     std::vector&lt;std::string&gt; column_names;</span>
+<span id="L385"><span class="lineNum">     385</span>              :   };</span>
+<span id="L386"><span class="lineNum">     386</span>              :   std::vector&lt;RecursiveCteContext&gt; recursive_cte_stack_;</span>
+<span id="L387"><span class="lineNum">     387</span>              : </span>
+<span id="L388"><span class="lineNum">     388</span>              :   // Set when the immediately-wrapped scan emit is a JOIN that projects</span>
+<span id="L389"><span class="lineNum">     389</span>              :   // analyzer columns under `__bq_j_&lt;column_id&gt;` aliases.</span>
+<span id="L390"><span class="lineNum">     390</span>              :   bool join_output_uses_id_aliases_ = false;</span>
+<span id="L391"><span class="lineNum">     391</span>              : </span>
+<span id="L392"><span class="lineNum">     392</span>              :   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST</span>
+<span id="L393"><span class="lineNum">     393</span>              :   // ordinality or an explicit row_number() stamp).</span>
+<span id="L394"><span class="lineNum">     394</span>              :   bool input_has_rn_column_ = false;</span>
+<span id="L395"><span class="lineNum">     395</span>              :   // Set when the final query needs ORDER BY using `__bq_input_rn` /</span>
+<span id="L396"><span class="lineNum">     396</span>              :   // analytic output order (window queries only).</span>
+<span id="L397"><span class="lineNum">     397</span>              :   bool input_rn_ordering_ = false;</span>
+<span id="L398"><span class="lineNum">     398</span>              :   // Final ORDER BY keys derived from the first analytic group's</span>
+<span id="L399"><span class="lineNum">     399</span>              :   // PARTITION BY / ORDER BY spec (BigQuery result ordering).</span>
+<span id="L400"><span class="lineNum">     400</span>              :   std::vector&lt;std::string&gt; output_order_items_;</span>
+<span id="L401"><span class="lineNum">     401</span>              :   // True when the user-visible SELECT list includes `__bq_input_rn`.</span>
+<span id="L402"><span class="lineNum">     402</span>              :   bool output_includes_input_rn_ = false;</span>
+<span id="L403"><span class="lineNum">     403</span>              :   // Suppresses appending `__bq_input_rn` to ProjectScan output when</span>
+<span id="L404"><span class="lineNum">     404</span>              :   // lowering the inner scan of a subquery expression (IN/SCALAR/...).</span>
+<span id="L405"><span class="lineNum">     405</span>              :   bool suppress_rn_in_project_ = false;</span>
+<span id="L406"><span class="lineNum">     406</span>              :   // User-visible output column names from `ResolvedQueryStmt`; used to</span>
+<span id="L407"><span class="lineNum">     407</span>              :   // decide whether PARTITION BY keys belong in the final ORDER BY.</span>
+<span id="L408"><span class="lineNum">     408</span>              :   std::vector&lt;std::string&gt; query_output_column_names_;</span>
+<span id="L409"><span class="lineNum">     409</span>              : };</span>
+<span id="L410"><span class="lineNum">     410</span>              : </span>
+<span id="L411"><span class="lineNum">     411</span>              : }  // namespace transpiler</span>
+<span id="L412"><span class="lineNum">     412</span>              : }  // namespace duckdb</span>
+<span id="L413"><span class="lineNum">     413</span>              : }  // namespace engine</span>
+<span id="L414"><span class="lineNum">     414</span>              : }  // namespace backend</span>
+<span id="L415"><span class="lineNum">     415</span>              : }  // namespace bigquery_emulator</span>
+<span id="L416"><span class="lineNum">     416</span>              : </span>
+<span id="L417"><span class="lineNum">     417</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
