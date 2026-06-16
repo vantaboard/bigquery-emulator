@@ -36385,20 +36385,20 @@ func (s *Store) New(req SeedRequest) *Operation <span class="cov7" title="8">{
 
 // Get returns a snapshot of the operation with the given ID.
 // Returns nil when no such operation exists.
-func (s *Store) Get(id string) *Operation <span class="cov8" title="12">{
+func (s *Store) Get(id string) *Operation <span class="cov8" title="13">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
         if !ok </span><span class="cov3" title="2">{
                 return nil
         }</span>
-        <span class="cov8" title="10">return cloneOperation(op)</span>
+        <span class="cov8" title="11">return cloneOperation(op)</span>
 }
 
 // MarkRunning records that the orchestrator has started processing
 // the operation. No-op (returns false) when the operation doesn't
 // exist or has already left PENDING.
-func (s *Store) MarkRunning(id string) bool <span class="cov7" title="7">{
+func (s *Store) MarkRunning(id string) bool <span class="cov6" title="7">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
@@ -36445,7 +36445,7 @@ func (s *Store) MarkFailed(id, errMsg string) bool <span class="cov3" title="2">
 // The struct is small and Result is repointed (we never mutate a
 // Result after passing it through MarkResult), so a shallow copy is
 // sufficient.
-func cloneOperation(op *Operation) *Operation <span class="cov10" title="18">{
+func cloneOperation(op *Operation) *Operation <span class="cov10" title="19">{
         cp := *op
         return &amp;cp
 }</span>
@@ -36993,7 +36993,7 @@ func PublicDataRefsFullySeeded(text string) bool <span class="cov5" title="10">{
         for _, t := range SeededPublicTables </span><span class="cov10" title="70">{
                 seeded[t] = struct{}{}
         }</span>
-        <span class="cov5" title="10">for ref := range refs </span><span class="cov5" title="10">{
+        <span class="cov5" title="10">for ref := range refs </span><span class="cov6" title="11">{
                 if _, ok := seeded[ref]; !ok </span><span class="cov2" title="2">{
                         return false
                 }</span>
