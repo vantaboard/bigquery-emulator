@@ -141,7 +141,7 @@
 				
 				<option value="file42">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/sql_type_kind.go (34.4%)</option>
 				
-				<option value="file43">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/types.go (15.7%)</option>
+				<option value="file43">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/types.go (24.8%)</option>
 				
 				<option value="file44">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire.go (61.6%)</option>
 				
@@ -1387,7 +1387,7 @@ import (
         "time"
 )
 
-const defaultGoccyImage = "ghcr.io/goccy/bigquery-emulator:0.7.2"
+const defaultGoccyImage = "ghcr.io/goccy/bigquery-emulator:0.8.1"
 
 // goccyProject is the single project the goccy container is started
 // with. goccy/bigquery-emulator 404s on any other project id, so every
@@ -8920,7 +8920,7 @@ func (t *Table) SetOmitEmptyLabelsOnWire(v bool) <span class="cov0" title="0">{
 
 // UnmarshalJSON accepts expirationTime as a decimal string or JSON number and
 // labels values of JSON null (label delete).
-func (t *Table) UnmarshalJSON(data []byte) error <span class="cov8" title="1">{
+func (t *Table) UnmarshalJSON(data []byte) error <span class="cov1" title="1">{
         type alias Table
         var raw struct {
                 alias
@@ -8931,30 +8931,30 @@ func (t *Table) UnmarshalJSON(data []byte) error <span class="cov8" title="1">{
         if err := json.Unmarshal(data, &amp;raw); err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="1">*t = Table(raw.alias)
-        if raw.ExpirationTime != nil </span><span class="cov8" title="1">{
+        <span class="cov1" title="1">*t = Table(raw.alias)
+        if raw.ExpirationTime != nil </span><span class="cov1" title="1">{
                 var ts MillisTimestamp
                 if err := json.Unmarshal(raw.ExpirationTime, &amp;ts); err != nil </span><span class="cov0" title="0">{
                         return fmt.Errorf("expirationTime: %w", err)
                 }</span>
-                <span class="cov8" title="1">t.ExpirationTime = ts</span>
+                <span class="cov1" title="1">t.ExpirationTime = ts</span>
         }
-        <span class="cov8" title="1">patch, err := parseLabelsJSON(raw.Labels)
+        <span class="cov1" title="1">patch, err := parseLabelsJSON(raw.Labels)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="1">if patch.present </span><span class="cov0" title="0">{
+        <span class="cov1" title="1">if patch.present </span><span class="cov0" title="0">{
                 t.Labels = ResourceLabels(patch.values)
                 t.labelsWire = labelsWireState{present: true, delete: patch.delete}
         }</span>
-        <span class="cov8" title="1">if raw.DefaultCollation != nil </span><span class="cov0" title="0">{
+        <span class="cov1" title="1">if raw.DefaultCollation != nil </span><span class="cov0" title="0">{
                 t.defaultCollationWire.present = true
                 t.DefaultCollationSet = true
                 if err := json.Unmarshal(raw.DefaultCollation, &amp;t.DefaultCollation); err != nil </span><span class="cov0" title="0">{
                         return fmt.Errorf("defaultCollation: %w", err)
                 }</span>
         }
-        <span class="cov8" title="1">return nil</span>
+        <span class="cov1" title="1">return nil</span>
 }
 
 // MarshalJSON emits labels:{} by default; omits labels when empty after a
@@ -9047,8 +9047,45 @@ func (o *CsvOptions) UnmarshalJSON(data []byte) error <span class="cov0" title="
 
 // GoogleSheetsOptions is the googleSheetsOptions sub-object.
 type GoogleSheetsOptions struct {
-        SkipLeadingRows int    `json:"skipLeadingRows,omitempty"`
         Range           string `json:"range,omitempty"`
+        skipLeadingRows int
+}
+
+// SkipLeadingRows returns the number of leading sheet rows to skip.
+func (o *GoogleSheetsOptions) SkipLeadingRows() int <span class="cov10" title="2">{
+        if o == nil </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov10" title="2">return o.skipLeadingRows</span>
+}
+
+// UnmarshalJSON accepts skipLeadingRows as JSON number or decimal string.
+func (o *GoogleSheetsOptions) UnmarshalJSON(data []byte) error <span class="cov10" title="2">{
+        type alias GoogleSheetsOptions
+        var raw struct {
+                alias
+                SkipLeadingRows any `json:"skipLeadingRows,omitempty"`
+        }
+        if err := json.Unmarshal(data, &amp;raw); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov10" title="2">*o = GoogleSheetsOptions(raw.alias)
+        if raw.SkipLeadingRows == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov10" title="2">switch v := raw.SkipLeadingRows.(type) </span>{
+        case float64:<span class="cov0" title="0">
+                o.skipLeadingRows = int(v)</span>
+        case string:<span class="cov10" title="2">
+                n, err := strconv.Atoi(v)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("googleSheetsOptions.skipLeadingRows: %w", err)
+                }</span>
+                <span class="cov10" title="2">o.skipLeadingRows = n</span>
+        default:<span class="cov0" title="0">
+                return fmt.Errorf("googleSheetsOptions.skipLeadingRows: unsupported type %T", v)</span>
+        }
+        <span class="cov10" title="2">return nil</span>
 }
 
 // ViewDefinition is the BigQuery REST view sub-object. See
@@ -16917,8 +16954,8 @@ func parseSheetsExternal(
                 return load.ParsedRows{}, err
         }</span>
         <span class="cov8" title="1">skip := skipLeading
-        if cfg.GoogleSheetsOptions != nil &amp;&amp; cfg.GoogleSheetsOptions.SkipLeadingRows &gt; 0 </span><span class="cov0" title="0">{
-                skip = cfg.GoogleSheetsOptions.SkipLeadingRows
+        if cfg.GoogleSheetsOptions != nil &amp;&amp; cfg.GoogleSheetsOptions.SkipLeadingRows() &gt; 0 </span><span class="cov0" title="0">{
+                skip = cfg.GoogleSheetsOptions.SkipLeadingRows()
         }</span> else<span class="cov8" title="1"> if skip == 0 </span><span class="cov8" title="1">{
                 skip = 1
         }</span>
@@ -36348,20 +36385,20 @@ func (s *Store) New(req SeedRequest) *Operation <span class="cov7" title="8">{
 
 // Get returns a snapshot of the operation with the given ID.
 // Returns nil when no such operation exists.
-func (s *Store) Get(id string) *Operation <span class="cov8" title="13">{
+func (s *Store) Get(id string) *Operation <span class="cov8" title="12">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
         if !ok </span><span class="cov3" title="2">{
                 return nil
         }</span>
-        <span class="cov8" title="11">return cloneOperation(op)</span>
+        <span class="cov8" title="10">return cloneOperation(op)</span>
 }
 
 // MarkRunning records that the orchestrator has started processing
 // the operation. No-op (returns false) when the operation doesn't
 // exist or has already left PENDING.
-func (s *Store) MarkRunning(id string) bool <span class="cov6" title="7">{
+func (s *Store) MarkRunning(id string) bool <span class="cov7" title="7">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
@@ -36408,7 +36445,7 @@ func (s *Store) MarkFailed(id, errMsg string) bool <span class="cov3" title="2">
 // The struct is small and Result is repointed (we never mutate a
 // Result after passing it through MarkResult), so a shallow copy is
 // sufficient.
-func cloneOperation(op *Operation) *Operation <span class="cov10" title="19">{
+func cloneOperation(op *Operation) *Operation <span class="cov10" title="18">{
         cp := *op
         return &amp;cp
 }</span>
@@ -36956,7 +36993,7 @@ func PublicDataRefsFullySeeded(text string) bool <span class="cov5" title="10">{
         for _, t := range SeededPublicTables </span><span class="cov10" title="70">{
                 seeded[t] = struct{}{}
         }</span>
-        <span class="cov5" title="10">for ref := range refs </span><span class="cov6" title="11">{
+        <span class="cov5" title="10">for ref := range refs </span><span class="cov5" title="10">{
                 if _, ok := seeded[ref]; !ok </span><span class="cov2" title="2">{
                         return false
                 }</span>
@@ -40188,12 +40225,12 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
         <span class="cov1" title="2">scanner := bufio.NewScanner(strings.NewReader(string(out)))
         scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
         var files []string
-        for scanner.Scan() </span><span class="cov8" title="10014">{
+        for scanner.Scan() </span><span class="cov8" title="10016">{
                 line := strings.TrimSpace(scanner.Text())
                 if line == "" </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov8" title="10014">files = append(files, line)</span>
+                <span class="cov8" title="10016">files = append(files, line)</span>
         }
         <span class="cov1" title="2">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("scan ls-files: %w", err)
@@ -40206,7 +40243,7 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
 // the ownership boundary cannot drift silently.
 func filterFirstParty(all []string) []string <span class="cov2" title="5">{
         var out []string
-        for _, p := range all </span><span class="cov8" title="10047">{
+        for _, p := range all </span><span class="cov8" title="10049">{
                 // Normalise forward slashes early. `git ls-files` always
                 // uses `/` on every platform git supports, but a stray
                 // backslash from a hand-built test fixture or a Windows
@@ -40214,7 +40251,7 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
                 // so replace backslashes directly. (filepath.ToSlash is
                 // a no-op on linux.)
                 p = strings.ReplaceAll(p, `\`, "/")
-                if !hasCPPExtension(p) </span><span class="cov8" title="9174">{
+                if !hasCPPExtension(p) </span><span class="cov8" title="9176">{
                         continue</span>
                 }
                 <span class="cov6" title="873">if !underAnyPrefix(p, firstPartyIncludeRoots) </span><span class="cov2" title="10">{
@@ -40237,13 +40274,13 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
 // case-sensitive because every first-party file in this repo
 // already uses lowercase extensions and the surrounding tooling
 // (clang-format, clang-tidy) follows the same convention.
-func hasCPPExtension(path string) bool <span class="cov8" title="10047">{
-        for _, ext := range firstPartyExtensions </span><span class="cov10" title="56748">{
+func hasCPPExtension(path string) bool <span class="cov8" title="10049">{
+        for _, ext := range firstPartyExtensions </span><span class="cov10" title="56760">{
                 if strings.HasSuffix(path, ext) </span><span class="cov6" title="873">{
                         return true
                 }</span>
         }
-        <span class="cov8" title="9174">return false</span>
+        <span class="cov8" title="9176">return false</span>
 }
 
 // underAnyPrefix returns true when `path` lives under at least one
