@@ -219,6 +219,10 @@ coverage --repo_env=BAZEL_LLVM_PROFDATA=/usr/bin/llvm-profdata
 # Skip Bazel's broken in-test LcovMerger (llvm-profdata merge without -sparse
 # on large profraw sets). aggregate_profraw_lcov.sh rebuilds the combined report.
 coverage --test_env=LCOV_MERGER=/usr/bin/true
+# Materialize per-test coverage trees when disk/action cache restores partial outputs.
+coverage --experimental_fetch_all_coverage_outputs
+# Never reuse a prior `bazel test` result — cached runs carry no profraws.
+coverage --nocache_test_results
 coverage --instrumentation_filter=^//backend[/:],^//binaries[/:],^//frontend[/:],^//tools/googlesql-prebuilt/smoke[/:]
 
 # ---------------------------------------------------------------------------
