@@ -335,11 +335,10 @@ tasks:
       Honors BAZEL_JOBS, BAZEL_MEM_MB, BAZEL_CC, BAZEL_CXX, GOOGLESQL_SOURCE
       (default `prebuilt`; consumes the published GoogleSQL artifact from
       .cache/googlesql-prebuilt/ so coverage runs share the same disk-cache
-      ABI lane as the engine build). Emits a single combined lcov report at
-      `bazel-out/_coverage/_coverage_report.dat` via `--combined_report=lcov`,
-      which the in-repo `tools/coverage` summarizer (run via
-      `task coverage:summarize`) ingests directly. Releases the Bazel
-      daemon on SIGINT/SIGTERM cancellation, but keeps it warm after
+      ABI lane as the engine build). Bazel also emits a combined lcov stub at
+      `bazel-out/_coverage/_coverage_report.dat`; aggregate_profraw_lcov.sh
+      rebuilds a writable report at `.cache/coverage/_coverage_report.dat`
+      for `task coverage:*` and CI upload. Releases the Bazel daemon
       normal success/failure (warm-daemon-per-plan; end-of-plan
       shutdown is the caller's responsibility — see
       `.cursor/rules/process-hygiene.mdc`).
@@ -385,7 +384,7 @@ tasks:
               {{.COVERAGE_FLAGS}} \
               {{.TARGETS}}
           BAZEL_CONFIG={{.GOOGLESQL_SOURCE}} \
-            tools/coverage/aggregate_profraw_lcov.sh bazel-out/_coverage/_coverage_report.dat || {
+            tools/coverage/aggregate_profraw_lcov.sh .cache/coverage/_coverage_report.dat || {
             echo "task bazel:coverage: aggregate_profraw_lcov.sh failed; combined LCOV may be empty." >&2
             exit 1
           }

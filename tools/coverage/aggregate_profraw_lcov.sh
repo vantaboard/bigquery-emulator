@@ -176,5 +176,6 @@ if [ "$merged_any" = false ] || [ -z "$combined" ] || [ ! -s "$combined" ]; then
 fi
 
 mkdir -p "$(dirname "$out")"
+rm -f "$out"
 cp "$combined" "$out"
 echo "aggregate_profraw_lcov.sh: wrote $out"

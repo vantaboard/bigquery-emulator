@@ -7,7 +7,7 @@
 #
 # Runs `bazel coverage` over every first-party `cc_test` target discovered
 # via a scoped `bazel query` (see the Enumerate step). The aggregated lcov
-# report at `bazel-out/_coverage/_coverage_report.dat` is uploaded as the
+# report at `.cache/coverage/_coverage_report.dat` is uploaded as the
 # `cpp-bazel-coverage` workflow artifact, which
 # `.github/workflows/coverage-publish.yml` aggregates with the
 # `go-coverage` artifact from ci.yml and publishes to the
@@ -187,7 +187,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: cpp-bazel-coverage
-          path: bazel-out/_coverage/_coverage_report.dat
+          path: .cache/coverage/_coverage_report.dat
           if-no-files-found: error
           retention-days: 14
 

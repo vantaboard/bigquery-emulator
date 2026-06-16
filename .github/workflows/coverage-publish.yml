@@ -171,6 +171,7 @@ jobs:
           [ -f artifacts/go/coverage.out ] && has_go=true
           for candidate in \
             artifacts/cpp/_coverage_report.dat \
+            artifacts/cpp/.cache/coverage/_coverage_report.dat \
             artifacts/cpp/bazel-out/_coverage/_coverage_report.dat; do
             if [ -f "$candidate" ]; then
               lcov_path="$candidate"

@@ -119,6 +119,10 @@ third_party/**/.flattened-pom.xml
 # bazel:cache:clear` to reclaim space.
 /.cache/bazel-disk/
 
+# Writable combined C++ LCOV from `task bazel:coverage` /
+# `aggregate_profraw_lcov.sh` (Bazel's bazel-out copy is read-only).
+/.cache/coverage/
+
 # Clang-tidy compilation database produced by
 # `task lint:cpp:compile-commands` (and consumed by `task lint:cpp:tidy`).
 # Regenerated from `bazel aquery`; the file path list embeds absolute

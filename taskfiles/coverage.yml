@@ -8,7 +8,7 @@
 # Pipeline shape:
 #
 #   coverage:go    -> writes coverage.out
-#   bazel:coverage -> writes bazel-out/_coverage/_coverage_report.dat
+#   bazel:coverage -> writes .cache/coverage/_coverage_report.dat
 #   coverage:summarize -> writes coverage.summary.json
 #   coverage:badge -> writes badge*.json (optional; CI does this)
 #   coverage:html  -> writes html/{go.html,cpp/index.html}
@@ -21,7 +21,7 @@ version: "3"
 
 vars:
   GO_PROFILE: "coverage.out"
-  LCOV_PROFILE: "bazel-out/_coverage/_coverage_report.dat"
+  LCOV_PROFILE: ".cache/coverage/_coverage_report.dat"
   SUMMARY: "coverage.summary.json"
   BASELINE: "coverage.baseline.json"
   HTML_DIR: "coverage.html"
