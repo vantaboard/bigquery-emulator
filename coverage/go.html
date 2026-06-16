@@ -415,6 +415,10 @@
 				
 				<option value="file179">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/sources.go (73.5%)</option>
 				
+				<option value="file180">github.com/vantaboard/bigquery-emulator/tools/release/badge.go (83.3%)</option>
+				
+				<option value="file181">github.com/vantaboard/bigquery-emulator/tools/release/main.go (31.6%)</option>
+				
 				</select>
 			</div>
 			<div id="legend">
@@ -40225,12 +40229,12 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
         <span class="cov1" title="2">scanner := bufio.NewScanner(strings.NewReader(string(out)))
         scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
         var files []string
-        for scanner.Scan() </span><span class="cov8" title="10010">{
+        for scanner.Scan() </span><span class="cov8" title="10016">{
                 line := strings.TrimSpace(scanner.Text())
                 if line == "" </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov8" title="10010">files = append(files, line)</span>
+                <span class="cov8" title="10016">files = append(files, line)</span>
         }
         <span class="cov1" title="2">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("scan ls-files: %w", err)
@@ -40243,7 +40247,7 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
 // the ownership boundary cannot drift silently.
 func filterFirstParty(all []string) []string <span class="cov2" title="5">{
         var out []string
-        for _, p := range all </span><span class="cov8" title="10043">{
+        for _, p := range all </span><span class="cov8" title="10049">{
                 // Normalise forward slashes early. `git ls-files` always
                 // uses `/` on every platform git supports, but a stray
                 // backslash from a hand-built test fixture or a Windows
@@ -40251,7 +40255,7 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
                 // so replace backslashes directly. (filepath.ToSlash is
                 // a no-op on linux.)
                 p = strings.ReplaceAll(p, `\`, "/")
-                if !hasCPPExtension(p) </span><span class="cov8" title="9170">{
+                if !hasCPPExtension(p) </span><span class="cov8" title="9176">{
                         continue</span>
                 }
                 <span class="cov6" title="873">if !underAnyPrefix(p, firstPartyIncludeRoots) </span><span class="cov2" title="10">{
@@ -40274,13 +40278,13 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
 // case-sensitive because every first-party file in this repo
 // already uses lowercase extensions and the surrounding tooling
 // (clang-format, clang-tidy) follows the same convention.
-func hasCPPExtension(path string) bool <span class="cov8" title="10043">{
-        for _, ext := range firstPartyExtensions </span><span class="cov10" title="56724">{
+func hasCPPExtension(path string) bool <span class="cov8" title="10049">{
+        for _, ext := range firstPartyExtensions </span><span class="cov10" title="56760">{
                 if strings.HasSuffix(path, ext) </span><span class="cov6" title="873">{
                         return true
                 }</span>
         }
-        <span class="cov8" title="9170">return false</span>
+        <span class="cov8" title="9176">return false</span>
 }
 
 // underAnyPrefix returns true when `path` lives under at least one
@@ -40421,6 +40425,154 @@ func readFile(path string) ([]byte, error) <span class="cov0" title="0">{
         //nolint:gosec // Paths come from the first-party source lister, which is itself tested.
         return os.ReadFile(path)
 }</span>
+</pre>
+		
+		<pre class="file" id="file180" style="display: none">package main
+
+import (
+        "encoding/json"
+        "fmt"
+        "io"
+        "os"
+        "strings"
+)
+
+const (
+        missingMessage = "n/a"
+        colorBlue      = "blue"
+        colorOrange    = "orange"
+        colorLightgrey = "lightgrey"
+)
+
+type badgeJSON struct {
+        SchemaVersion int    `json:"schemaVersion"`
+        Label         string `json:"label"`
+        Message       string `json:"message"`
+        Color         string `json:"color"`
+}
+
+func badgeMessage(version string) string <span class="cov8" title="4">{
+        version = strings.TrimSpace(version)
+        if version == "" </span><span class="cov4" title="2">{
+                return missingMessage
+        }</span>
+        <span class="cov4" title="2">return version</span>
+}
+
+func badgeColor(version string) string <span class="cov10" title="5">{
+        version = strings.TrimSpace(version)
+        if version == "" </span><span class="cov1" title="1">{
+                return colorLightgrey
+        }</span>
+        <span class="cov8" title="4">if isPreRelease(version) </span><span class="cov4" title="2">{
+                return colorOrange
+        }</span>
+        <span class="cov4" title="2">return colorBlue</span>
+}
+
+func isPreRelease(tag string) bool <span class="cov8" title="4">{
+        tag = strings.TrimPrefix(tag, "v")
+        return strings.Contains(tag, "-")
+}</span>
+
+func runBadge(args []string, stdout, stderr io.Writer) error <span class="cov1" title="1">{
+        fs := flagSet("badge", stderr)
+        version := fs.String("version", "", "release tag to render (empty renders n/a)")
+        out := fs.String("out", "", "output badge JSON path (default: stdout)")
+        label := fs.String("label", "release", "badge label")
+        if err := fs.Parse(args); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">payload := badgeJSON{
+                SchemaVersion: 1,
+                Label:         *label,
+                Message:       badgeMessage(*version),
+                Color:         badgeColor(*version),
+        }
+        return emitBadge(&amp;payload, *out, stdout)</span>
+}
+
+func emitBadge(b *badgeJSON, outPath string, stdout io.Writer) error <span class="cov1" title="1">{
+        buf, err := json.MarshalIndent(b, "", "  ")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("marshal badge: %w", err)
+        }</span>
+        <span class="cov1" title="1">buf = append(buf, '\n')
+
+        if outPath == "" </span><span class="cov0" title="0">{
+                _, err = stdout.Write(buf)
+                return err
+        }</span>
+        //nolint:gosec // 0o644 is the right mode for a CI-published JSON artifact.
+        <span class="cov1" title="1">if err := os.WriteFile(outPath, buf, 0o644); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("write %q: %w", outPath, err)
+        }</span>
+        <span class="cov1" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file181" style="display: none">// Command release emits shields.io endpoint JSON for the README
+// release badge. The gh-pages pipeline publishes badge-release.json
+// so the badge does not depend on shields.io's shared GitHub API
+// token pool.
+package main
+
+import (
+        "errors"
+        "flag"
+        "fmt"
+        "io"
+        "os"
+)
+
+const cmdBadge = "badge"
+
+var errUsage = errors.New("usage error")
+
+func run(args []string, stdout, stderr io.Writer) error <span class="cov8" title="1">{
+        if len(args) &lt; 1 </span><span class="cov0" title="0">{
+                usage(stderr)
+                return errUsage
+        }</span>
+        <span class="cov8" title="1">switch args[0] </span>{
+        case cmdBadge:<span class="cov8" title="1">
+                return runBadge(args[1:], stdout, stderr)</span>
+        case "-h", "--help", "help":<span class="cov0" title="0">
+                usage(stdout)
+                return nil</span>
+        default:<span class="cov0" title="0">
+                _, _ = fmt.Fprintf(stderr, "release: unknown subcommand %q\n\n", args[0])
+                usage(stderr)
+                return errUsage</span>
+        }
+}
+
+func usage(w io.Writer) <span class="cov0" title="0">{
+        _, _ = fmt.Fprint(w, `release - gh-pages badge JSON for the README release shield.
+
+Subcommands:
+  badge  Emit shields.io endpoint JSON for the latest semver release tag.
+
+Run "release badge -h" for flags.
+`)
+}</span>
+
+func flagSet(name string, stderr io.Writer) *flag.FlagSet <span class="cov8" title="1">{
+        fs := flag.NewFlagSet(name, flag.ContinueOnError)
+        fs.SetOutput(stderr)
+        return fs
+}</span>
+
+func main() <span class="cov0" title="0">{
+        if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil </span><span class="cov0" title="0">{
+                if errors.Is(err, errUsage) </span><span class="cov0" title="0">{
+                        os.Exit(2)
+                }</span>
+                <span class="cov0" title="0">_, _ = fmt.Fprintf(os.Stderr, "release: %v\n", err)
+                os.Exit(1)</span>
+        }
+}
 </pre>
 		
 		</div>
