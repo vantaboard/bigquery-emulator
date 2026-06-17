@@ -93,6 +93,16 @@ namespace {
   // rewriter is off here.
   options.disable_rewrite(::googlesql::REWRITE_GENERALIZED_QUERY_STMT);
   options.enable_rewrite(::googlesql::REWRITE_MEASURE_TYPE);
+  // Inline SQL views at analyze time. The engine has no execution-time
+  // view handling: a registered view (see `catalog/view_registry`) is
+  // returned from `GoogleSqlCatalog::FindTable` as a `SimpleSQLView`,
+  // and unless this rewrite expands `SELECT ... FROM v` into the view's
+  // stored query, the resulting `ResolvedTableScan` points at a table
+  // that has no rows in storage -- so reads silently return nothing.
+  // This rewrite is off in `DefaultRewrites()`, so enable it explicitly
+  // (mirrors production BigQuery, where querying a view runs its
+  // definition).
+  options.enable_rewrite(::googlesql::REWRITE_INLINE_SQL_VIEWS);
   // Permit the analyzer to produce `ResolvedGeneralizedQueryStmt`
   // alongside the default `ResolvedQueryStmt`. With the rewriter
   // disabled (above), this is the only statement kind that

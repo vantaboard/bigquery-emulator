@@ -215,6 +215,49 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {
   EXPECT_EQ(seen, want);
 }
 
+// Regression for the recidiviz-fork report: "querying the view itself
+// returned nothing". Creating a view registers it as a SimpleSQLView;
+// reading from it must inline the view's definition (REWRITE_INLINE_
+// SQL_VIEWS) so the underlying base-table rows flow through. Without
+// the rewrite the view scan resolves to a storage table that does not
+// exist and the read silently yields zero rows.
+TEST_F(LocalCoordinatorEngineTest, ExecuteQueryReadsRowsThroughView) {
+  CreatePeopleTable();
+  CatalogBundle ddl_bundle = MakeCatalog();
+  auto created = engine_->ExecuteDdl(
+      MakeRequest("CREATE VIEW ds.people_view AS "
+                  "SELECT id, name FROM ds.people WHERE id >= 2"),
+      ddl_bundle.catalog.get());
+  ASSERT_TRUE(created.ok()) << created;
+
+  // Fresh catalog for the read, exactly like a separate query RPC: the
+  // view must be discoverable via the (global) view registry and its
+  // definition inlined, not read back from storage.
+  CatalogBundle read_bundle = MakeCatalog();
+  auto source =
+      engine_->ExecuteQuery(MakeRequest("SELECT id, name FROM ds.people_view"),
+                            read_bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  const schema::TableSchema& s = (*source)->schema();
+  ASSERT_EQ(s.columns.size(), 2u);
+  EXPECT_EQ(s.columns[0].name, "id");
+  EXPECT_EQ(s.columns[1].name, "name");
+
+  std::vector<std::pair<int64_t, std::string>> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
+  }
+  std::sort(seen.begin(), seen.end());
+  std::vector<std::pair<int64_t, std::string>> want = {{2, "linus"},
+                                                       {3, "grace"}};
+  EXPECT_EQ(seen, want);
+}
+
 TEST_F(LocalCoordinatorEngineTest, ExecuteDdlDropTableRemovesStorage) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
