@@ -471,8 +471,17 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O - http://localhost:9050/healthz >/dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/usr/local/bin/bigquery-emulator-gateway"]
-# Default: gateway + engine (the engine runs the DuckDB engine + DuckDB
-# storage; there is no other runtime today). `--copy_engine_stderr`
-# surfaces engine logs on the container's stderr so a `docker logs`
-# diagnoses the engine subprocess too.
-CMD ["--http_port=9050", "--grpc_port=9060", "--copy_engine_stderr", "--data-dir=/var/lib/bigquery-emulator", "--seed-data-file=/opt/bigquery-emulator/testdata/public-data/bigquery-public-data.yaml"]
+# Operational defaults live in the entrypoint shim
+# (`docker/gateway_main.sh`), NOT here. Docker REPLACES the whole `CMD`
+# the moment a caller passes any argument to `docker run`, so baking
+# `--data-dir` / `--seed-data-file` into `CMD` meant a single user flag
+# (e.g. `--project-id=foo`) silently dropped the persistent data dir and
+# the bundled seed — looking like "CLI args aren't respected". The shim
+# now injects `--hostname=0.0.0.0`, `--data-dir`, and `--seed-data-file`
+# only when the caller did not already supply them, so user flags
+# augment the defaults instead of wiping them. The remaining engine
+# defaults (`--http_port=9050`, `--grpc_port=9060`, `--copy_engine_stderr`)
+# already match gateway_main's built-in defaults (see `defaultConfig` in
+# binaries/gateway_main/cli.go), so an empty CMD reproduces the prior
+# behavior while staying override-safe.
+CMD []

@@ -95,13 +95,30 @@ curl -sS http://localhost:9050/healthz
 curl -sS http://localhost:9050/bigquery/v2/projects/test/datasets
 ```
 
-To override container defaults, pass extra flags after the image name — they are
-forwarded to `gateway_main`:
+### Passing CLI flags
+
+Any flags you put after the image name are forwarded to `gateway_main`. This
+works for both the locally-built and the published image:
 
 ```bash
-docker run --rm -p 9050:9050 bigquery-emulator:dev \
-    --log_requests --hostname=0.0.0.0 --http_port=9050
+docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:latest \
+    --log_requests --http_port=9050 --project-id=my-project
 ```
+
+The entrypoint shim (`docker/gateway_main.sh`) injects three operational
+defaults — `--hostname=0.0.0.0`, `--data-dir=/var/lib/bigquery-emulator`, and
+`--seed-data-file=<bundled public data>` — but **only when you don't pass that
+flag yourself**. So your flags *augment* the defaults instead of replacing them;
+pass `--data-dir=...` or `--seed-data-file=...` (or `--seed-yaml=...`) to
+override, and the rest of the baked-in defaults stay intact.
+
+> **Heads up — flag names differ from `goccy/bigquery-emulator`.** This fork
+> uses `--project-id` (not `--project`), `--http_port` / `--http-port` (not
+> `--port`), and `--seed-data-file` / `--seed-yaml` (not `--data-from-yaml`).
+> Passing an unknown flag makes `gateway_main` exit on a parse error, so the
+> container appears to ignore your arguments. Run
+> `docker run --rm ghcr.io/vantaboard/bigquery-emulator:latest --help` to see
+> the full flag surface. See [Seeding & CLI flags](./SEEDING.md) for details.
 
 For the published image without building locally, use the [Install via Docker](#install-via-docker)
 commands above (`:latest` or a pinned `vX.Y.Z` tag).
