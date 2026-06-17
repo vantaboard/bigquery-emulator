@@ -264,6 +264,32 @@ TEST_F(ControlOpExecutorTest, CreateTableOneSegmentUsesDefaultDataset) {
   ASSERT_TRUE(schema.ok()) << schema.status();
 }
 
+// Regression for the recidiviz-fork report: `CREATE OR REPLACE TABLE
+// `ds.t`` arrives from the analyzer as a single dotted name-path
+// segment ("ds.t"). Production BigQuery splits the backtick-quoted
+// path into dataset/table; the engine must too, instead of rejecting
+// it as a bogus one-segment name with "no defaultDataset".
+TEST_F(ControlOpExecutorTest, CreateTableBacktickDatasetQualifiedPath) {
+  absl::Status s = RunDdl("CREATE OR REPLACE TABLE `ds.t` (id INT64)");
+  ASSERT_TRUE(s.ok()) << s;
+  auto schema = storage_->GetSchema({"proj-test", "ds", "t"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 1u);
+  EXPECT_EQ(schema->columns[0].name, "id");
+}
+
+// A fully backtick-quoted `project.dataset.table` path likewise lands
+// as one dotted segment; it must split into all three components and
+// override the default project.
+TEST_F(ControlOpExecutorTest, CreateTableBacktickFullyQualifiedPath) {
+  absl::Status s =
+      RunDdl("CREATE TABLE `proj-test.fresh_ds.t` (id INT64, name STRING)");
+  ASSERT_TRUE(s.ok()) << s;
+  auto schema = storage_->GetSchema({"proj-test", "fresh_ds", "t"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 2u);
+}
+
 TEST_F(ControlOpExecutorTest, CreateOrReplaceTableReplacesExisting) {
   ASSERT_TRUE(RunDdl("CREATE TABLE ds.t (id INT64)").ok());
   absl::Status second =

@@ -12,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/create_function_util.h"
@@ -49,33 +50,46 @@ namespace internal {
 // use `default_dataset_id` when set (BigQuery `defaultDataset` on
 // jobs.query). Two-segment paths default the project; three-segment
 // paths override it.
+//
+// BigQuery accepts a fully backtick-quoted path -- `CREATE TABLE
+// `ds.t`` or `CREATE TABLE `proj.ds.t`` -- where the analyzer hands
+// back the whole dotted string as a *single* name-path segment. The
+// read path (GoogleSqlCatalog::FindTable) already splits these so a
+// `SELECT * FROM `ds.t`` resolves to dataset/table; DDL targets must
+// split identically or `CREATE OR REPLACE TABLE `ds.t`` is rejected as
+// a bogus single-segment name. Flatten a single dotted segment into
+// its component identifiers before applying the 1/2/3-segment rules.
 absl::StatusOr<storage::TableId> NamePathToTableId(
     const std::vector<std::string>& name_path,
     absl::string_view default_project_id,
     absl::string_view default_dataset_id) {
-  if (name_path.size() == 1) {
+  std::vector<std::string> segments = name_path;
+  if (segments.size() == 1 && absl::StrContains(segments[0], '.')) {
+    segments = absl::StrSplit(segments[0], '.');
+  }
+  if (segments.size() == 1) {
     if (default_dataset_id.empty()) {
       return absl::InvalidArgumentError(absl::StrCat(
           "control op executor: DDL target name must be <dataset>.<table> or "
           "<project>.<dataset>.<table>; got 1 segment (",
-          name_path[0],
+          segments[0],
           ") with no defaultDataset in the query request"));
     }
     return storage::TableId{std::string(default_project_id),
                             std::string(default_dataset_id),
-                            name_path[0]};
+                            segments[0]};
   }
-  if (name_path.size() == 2) {
+  if (segments.size() == 2) {
     return storage::TableId{
-        std::string(default_project_id), name_path[0], name_path[1]};
+        std::string(default_project_id), segments[0], segments[1]};
   }
-  if (name_path.size() == 3) {
-    return storage::TableId{name_path[0], name_path[1], name_path[2]};
+  if (segments.size() == 3) {
+    return storage::TableId{segments[0], segments[1], segments[2]};
   }
   return absl::InvalidArgumentError(absl::StrCat(
       "control op executor: DDL target name must be <dataset>.<table> or "
       "<project>.<dataset>.<table>; got ",
-      name_path.size(),
+      segments.size(),
       " segments"));
 }
 
