@@ -1039,12 +1039,9 @@ compares query latency and <strong>correctness outcomes</strong> across three ba
 <li><strong>goccy</strong> — <a href="https://github.com/goccy/bigquery-emulator">goccy/bigquery-emulator</a> Docker <code>0.8.1</code></li>
 <li><strong>BigQuery</strong> — committed golden baselines</li>
 </ul>
-<p>The support matrix chart is a heatmap of benchmark case outcomes
-(<code>ok</code>, <code>error</code>, <code>wrong_result</code>, <code>timeout</code>, <code>skipped</code>) per target — not
-a SQL function coverage table.</p>
-<p><img alt="Benchmark support matrix" src="https://vantaboard.github.io/bigquery-emulator/bench/support_matrix.svg" /></p>
-<p>Live charts also publish to
-<a href="https://vantaboard.github.io/bigquery-emulator/bench/">gh-pages <code>bench/</code></a>.
+<p>Per-case outcomes (<code>ok</code>, <code>error</code>, <code>wrong_result</code>, <code>timeout</code>, <code>skipped</code>) are
+recorded in <code>bench/results.json</code>. Latency and phase charts are embedded in the
+root <a href="https://github.com/vantaboard/bigquery-emulator#benchmarks">README</a>.
 Regenerate locally with <code>task bench:run</code> then <code>task bench:charts</code>.</p>
 <h2 id="conformance-fixtures">Conformance fixtures<a class="headerlink" href="#conformance-fixtures" title="Permanent link">&para;</a></h2>
 <p>YAML fixtures under

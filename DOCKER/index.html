@@ -502,6 +502,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#passing-cli-flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      Passing CLI flags
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -893,6 +902,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#passing-cli-flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      Passing CLI flags
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -996,11 +1014,29 @@ docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </
 curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:9050/healthz
 curl<span class="w"> </span>-sS<span class="w"> </span>http://localhost:9050/bigquery/v2/projects/test/datasets
 </code></pre></div>
-<p>To override container defaults, pass extra flags after the image name — they are
-forwarded to <code>gateway_main</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>bigquery-emulator:dev<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span>--log_requests<span class="w"> </span>--hostname<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--http_port<span class="o">=</span><span class="m">9050</span>
+<h3 id="passing-cli-flags">Passing CLI flags<a class="headerlink" href="#passing-cli-flags" title="Permanent link">&para;</a></h3>
+<p>Any flags you put after the image name are forwarded to <code>gateway_main</code>. This
+works for both the locally-built and the published image:</p>
+<div class="language-bash highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-p<span class="w"> </span><span class="m">9050</span>:9050<span class="w"> </span>ghcr.io/vantaboard/bigquery-emulator:latest<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--log_requests<span class="w"> </span>--http_port<span class="o">=</span><span class="m">9050</span><span class="w"> </span>--project-id<span class="o">=</span>my-project
 </code></pre></div>
+<p>The entrypoint shim (<code>docker/gateway_main.sh</code>) injects three operational
+defaults — <code>--hostname=0.0.0.0</code>, <code>--data-dir=/var/lib/bigquery-emulator</code>, and
+<code>--seed-data-file=&lt;bundled public data&gt;</code> — but <strong>only when you don't pass that
+flag yourself</strong>. So your flags <em>augment</em> the defaults instead of replacing them;
+pass <code>--data-dir=...</code> or <code>--seed-data-file=...</code> (or <code>--seed-yaml=...</code>) to
+override, and the rest of the baked-in defaults stay intact.</p>
+<blockquote>
+<p><strong>Coming from <code>goccy/bigquery-emulator</code>?</strong> The canonical flag names differ
+(<code>--project-id</code>, <code>--http_port</code> / <code>--http-port</code>, <code>--seed-data-file</code> /
+<code>--seed-yaml</code>), but the gateway also accepts the goccy spellings as aliases:
+<code>--project</code> → <code>--project-id</code>, <code>--port</code> → <code>--http-port</code>, and
+<code>--data-from-yaml</code> → <code>--seed-data-file</code>. Any <em>other</em> unknown flag still makes
+<code>gateway_main</code> exit on a parse error, so the container appears to ignore your
+arguments — run
+<code>docker run --rm ghcr.io/vantaboard/bigquery-emulator:latest --help</code> to see
+the full flag surface. See <a href="../SEEDING/">Seeding &amp; CLI flags</a> for details.</p>
+</blockquote>
 <p>For the published image without building locally, use the <a href="#install-via-docker">Install via Docker</a>
 commands above (<code>:latest</code> or a pinned <code>vX.Y.Z</code> tag).</p>
 
