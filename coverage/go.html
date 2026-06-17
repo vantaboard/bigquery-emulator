@@ -2467,6 +2467,17 @@ func freePort() (int, error) <span class="cov0" title="0">{
 // while letting operators copy invocation snippets straight from the
 // upstream documentation.
 //
+// A handful of flags additionally accept the names the widely-used
+// goccy/bigquery-emulator exposes, so invocation snippets written for
+// that emulator keep working here without rewriting:
+//
+//   - `--port`           -&gt; alias for `--http-port`
+//   - `--project`        -&gt; alias for `--project-id`
+//   - `--data-from-yaml` -&gt; alias for `--seed-data-file`
+//
+// These are pure aliases onto the same Config fields; the canonical
+// names above remain the primary, `--help`-documented spelling.
+//
 // # Environment-variable fallbacks
 //
 // Three settings honor environment variables when the CLI flag is
@@ -2591,7 +2602,7 @@ type envLookup func(key string) (string, bool)
 // wires every supported flag (including hyphen/underscore aliases)
 // onto a one-shot FlagSet, and applyEnvFallbacks fills in missing
 // values from the operator's environment after the FlagSet wins.
-func parseArgs(argv []string, errOut io.Writer, getenv envLookup) (Config, error) <span class="cov6" title="29">{
+func parseArgs(argv []string, errOut io.Writer, getenv envLookup) (Config, error) <span class="cov6" title="30">{
         if getenv == nil </span><span class="cov0" title="0">{
                 // Test-friendly default that never reads the real env, so
                 // parseArgs is deterministic when callers don't pass a
@@ -2599,7 +2610,7 @@ func parseArgs(argv []string, errOut io.Writer, getenv envLookup) (Config, error
                 getenv = noEnv
         }</span>
 
-        <span class="cov6" title="29">cfg := defaultConfig()
+        <span class="cov6" title="30">cfg := defaultConfig()
         fs := flag.NewFlagSet("gateway_main", flag.ContinueOnError)
         fs.SetOutput(errOut)
 
@@ -2609,12 +2620,12 @@ func parseArgs(argv []string, errOut io.Writer, getenv envLookup) (Config, error
         if err := fs.Parse(argv); err != nil </span><span class="cov1" title="1">{
                 return Config{}, fmt.Errorf("parse flags: %w", err)
         }</span>
-        <span class="cov6" title="28">cfg.VersionRequested = versionFlag
+        <span class="cov6" title="29">cfg.VersionRequested = versionFlag
 
         if err := validatePorts(cfg); err != nil </span><span class="cov3" title="4">{
                 return Config{}, err
         }</span>
-        <span class="cov6" title="24">applyEnvFallbacks(&amp;cfg, getenv)
+        <span class="cov6" title="25">applyEnvFallbacks(&amp;cfg, getenv)
         return cfg, nil</span>
 }
 
@@ -2627,7 +2638,7 @@ func noEnv(string) (string, bool) <span class="cov0" title="0">{ return "", fals
 // defaultConfig returns the seed Config parseArgs starts from. Pulled
 // out so the defaults are visible in one place (and so tests that
 // drive parseArgs directly can assert against the same baseline).
-func defaultConfig() Config <span class="cov6" title="29">{
+func defaultConfig() Config <span class="cov6" title="30">{
         return Config{
                 ListenHost:       "localhost",
                 HTTPPort:         9050,
@@ -2641,10 +2652,10 @@ func defaultConfig() Config <span class="cov6" title="29">{
 // underscore aliases) onto fs. Split out from parseArgs purely so
 // the parser body stays under the funlen budget; nothing else
 // invokes it.
-func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) <span class="cov6" title="29">{
+func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) <span class="cov6" title="30">{
         registerString(fs, &amp;cfg.ListenHost, []string{"listen-host", "hostname"},
                 "Hostname for the emulator servers.")
-        registerInt(fs, &amp;cfg.HTTPPort, []string{"http-port", "http_port"},
+        registerInt(fs, &amp;cfg.HTTPPort, []string{"http-port", "http_port", "port"},
                 "Port on which to run the BigQuery REST gateway.")
         registerInt(fs, &amp;cfg.GRPCPort, []string{"grpc-port", "grpc_port"},
                 "Port on which to run the internal engine gRPC server.")
@@ -2667,7 +2678,7 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) <span class
                 "Log every REST request and response.")
         registerBool(fs, &amp;cfg.Debug, []string{"debug"},
                 "Enable verbose lifecycle logging.")
-        registerString(fs, &amp;cfg.DefaultProjectID, []string{"project-id", "project_id"},
+        registerString(fs, &amp;cfg.DefaultProjectID, []string{"project-id", "project_id", "project"},
                 "Default BigQuery project clients are assumed to act against.")
         registerString(fs, &amp;cfg.DefaultDatasetLocation, []string{"default-dataset-location"},
                 "Default BigQuery location stamped on datasets created without an "+
@@ -2680,7 +2691,7 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) <span class
                 []string{"seed-api-seed-token"},
                 "Required value for the X-BigQuery-Emulator-Seed-Token header on every "+
                         "seed request. Falls back to $BIGQUERY_EMULATOR_SEED_TOKEN.")
-        registerStringSlice(fs, &amp;cfg.SeedFiles, []string{"seed-data-file", "seed-yaml"},
+        registerStringSlice(fs, &amp;cfg.SeedFiles, []string{"seed-data-file", "seed-yaml", "data-from-yaml"},
                 "YAML seed-data file to apply once the engine reports SERVING (repeatable).")
         registerBool(fs, versionFlag, []string{"version"},
                 "Print version information (semver + git commit + build date + Go toolchain) and exit.")
@@ -2689,41 +2700,41 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) <span class
 // validatePorts rejects out-of-range HTTP/gRPC ports or the case
 // where both happen to be the same. Pulled out of parseArgs so the
 // branch is testable and parseArgs stays short.
-func validatePorts(cfg Config) error <span class="cov6" title="28">{
+func validatePorts(cfg Config) error <span class="cov6" title="29">{
         if cfg.HTTPPort &lt;= 0 || cfg.HTTPPort &gt; 65535 </span><span class="cov2" title="2">{
                 return fmt.Errorf("invalid --http-port %d: must be in 1..65535", cfg.HTTPPort)
         }</span>
-        <span class="cov6" title="26">if cfg.GRPCPort &lt;= 0 || cfg.GRPCPort &gt; 65535 </span><span class="cov1" title="1">{
+        <span class="cov6" title="27">if cfg.GRPCPort &lt;= 0 || cfg.GRPCPort &gt; 65535 </span><span class="cov1" title="1">{
                 return fmt.Errorf("invalid --grpc-port %d: must be in 1..65535", cfg.GRPCPort)
         }</span>
-        <span class="cov6" title="25">if cfg.HTTPPort == cfg.GRPCPort </span><span class="cov1" title="1">{
+        <span class="cov6" title="26">if cfg.HTTPPort == cfg.GRPCPort </span><span class="cov1" title="1">{
                 return fmt.Errorf("--http-port and --grpc-port must differ (both %d)", cfg.HTTPPort)
         }</span>
-        <span class="cov6" title="24">return nil</span>
+        <span class="cov6" title="25">return nil</span>
 }
 
 // applyEnvFallbacks walks the documented flag &gt; env &gt; nothing
 // precedence. Mutates cfg in place. Each env-var name is checked in
 // the documented order so the precedence stays observable from the
 // source.
-func applyEnvFallbacks(cfg *Config, getenv envLookup) <span class="cov6" title="24">{
-        if cfg.DataDir == "" </span><span class="cov6" title="20">{
+func applyEnvFallbacks(cfg *Config, getenv envLookup) <span class="cov6" title="25">{
+        if cfg.DataDir == "" </span><span class="cov6" title="21">{
                 if v, ok := getenv("BIGQUERY_EMULATOR_DATA_DIR"); ok </span><span class="cov1" title="1">{
                         cfg.DataDir = v
                 }</span>
         }
-        <span class="cov6" title="24">if cfg.InitialDataDir == "" </span><span class="cov6" title="23">{
+        <span class="cov6" title="25">if cfg.InitialDataDir == "" </span><span class="cov6" title="24">{
                 for _, key := range []string{
                         "BIGQUERY_EMULATOR_INITIAL_DATA_DIR",
                         "EMULATOR_INITIAL_DATA_DIR",
-                } </span><span class="cov7" title="45">{
+                } </span><span class="cov7" title="47">{
                         if v, ok := getenv(key); ok &amp;&amp; v != "" </span><span class="cov2" title="2">{
                                 cfg.InitialDataDir = v
                                 break</span>
                         }
                 }
         }
-        <span class="cov6" title="24">if cfg.SeedAPISeedToken == "" </span><span class="cov6" title="23">{
+        <span class="cov6" title="25">if cfg.SeedAPISeedToken == "" </span><span class="cov6" title="24">{
                 if v, ok := getenv("BIGQUERY_EMULATOR_SEED_TOKEN"); ok </span><span class="cov1" title="1">{
                         cfg.SeedAPISeedToken = v
                 }</span>
@@ -2777,12 +2788,12 @@ func (c Config) engineCLIArgs() []string <span class="cov2" title="3">{
 // `names`, all pointing at the same target. The first name in the
 // slice owns the description that shows up in `--help`; aliases get
 // a "(alias for --&lt;first&gt;)" stub so the help output stays scannable.
-func registerString(fs *flag.FlagSet, target *string, names []string, desc string) <span class="cov10" title="203">{
+func registerString(fs *flag.FlagSet, target *string, names []string, desc string) <span class="cov10" title="210">{
         if len(names) == 0 </span><span class="cov0" title="0">{
                 return
         }</span>
-        <span class="cov10" title="203">fs.StringVar(target, names[0], *target, desc)
-        for _, alias := range names[1:] </span><span class="cov9" title="116">{
+        <span class="cov10" title="210">fs.StringVar(target, names[0], *target, desc)
+        for _, alias := range names[1:] </span><span class="cov9" title="150">{
                 fs.StringVar(target, alias, *target, "(alias for --"+names[0]+")")
         }</span>
 }
@@ -2790,12 +2801,12 @@ func registerString(fs *flag.FlagSet, target *string, names []string, desc strin
 // registerInt is the integer twin of registerString. It uses
 // stringTarget under the hood so a malformed value writes an error
 // to the FlagSet's output and ParseError surfaces to the caller.
-func registerInt(fs *flag.FlagSet, target *int, names []string, desc string) <span class="cov7" title="58">{
+func registerInt(fs *flag.FlagSet, target *int, names []string, desc string) <span class="cov7" title="60">{
         if len(names) == 0 </span><span class="cov0" title="0">{
                 return
         }</span>
-        <span class="cov7" title="58">fs.IntVar(target, names[0], *target, desc)
-        for _, alias := range names[1:] </span><span class="cov7" title="58">{
+        <span class="cov7" title="60">fs.IntVar(target, names[0], *target, desc)
+        for _, alias := range names[1:] </span><span class="cov8" title="90">{
                 fs.IntVar(target, alias, *target, "(alias for --"+names[0]+")")
         }</span>
 }
@@ -2803,12 +2814,12 @@ func registerInt(fs *flag.FlagSet, target *int, names []string, desc string) <sp
 // registerBool is the boolean twin of registerString. Bool flags
 // uniquely accept the `--name` (no value) and `--name=true` /
 // `--name=false` forms; both aliases inherit that behavior.
-func registerBool(fs *flag.FlagSet, target *bool, names []string, desc string) <span class="cov10" title="203">{
+func registerBool(fs *flag.FlagSet, target *bool, names []string, desc string) <span class="cov10" title="210">{
         if len(names) == 0 </span><span class="cov0" title="0">{
                 return
         }</span>
-        <span class="cov10" title="203">fs.BoolVar(target, names[0], *target, desc)
-        for _, alias := range names[1:] </span><span class="cov8" title="87">{
+        <span class="cov10" title="210">fs.BoolVar(target, names[0], *target, desc)
+        for _, alias := range names[1:] </span><span class="cov8" title="90">{
                 fs.BoolVar(target, alias, *target, "(alias for --"+names[0]+")")
         }</span>
 }
@@ -2817,13 +2828,13 @@ func registerBool(fs *flag.FlagSet, target *bool, names []string, desc string) <
 // name in `names`. The Go std flag package has no built-in repeat
 // support, so we install a tiny flag.Value that appends to the
 // target slice on every Set.
-func registerStringSlice(fs *flag.FlagSet, target *[]string, names []string, desc string) <span class="cov6" title="29">{
+func registerStringSlice(fs *flag.FlagSet, target *[]string, names []string, desc string) <span class="cov6" title="30">{
         if len(names) == 0 </span><span class="cov0" title="0">{
                 return
         }</span>
-        <span class="cov6" title="29">value := stringSliceValue{target: target}
+        <span class="cov6" title="30">value := stringSliceValue{target: target}
         fs.Var(&amp;value, names[0], desc)
-        for _, alias := range names[1:] </span><span class="cov6" title="29">{
+        for _, alias := range names[1:] </span><span class="cov7" title="60">{
                 fs.Var(&amp;value, alias, "(alias for --"+names[0]+")")
         }</span>
 }
@@ -2836,18 +2847,18 @@ type stringSliceValue struct {
         target *[]string
 }
 
-func (s *stringSliceValue) String() string <span class="cov7" title="60">{
-        if s == nil || s.target == nil </span><span class="cov2" title="2">{
+func (s *stringSliceValue) String() string <span class="cov8" title="93">{
+        if s == nil || s.target == nil </span><span class="cov2" title="3">{
                 return ""
         }</span>
-        <span class="cov7" title="58">return strings.Join(*s.target, ",")</span>
+        <span class="cov8" title="90">return strings.Join(*s.target, ",")</span>
 }
 
-func (s *stringSliceValue) Set(v string) error <span class="cov4" title="7">{
+func (s *stringSliceValue) Set(v string) error <span class="cov4" title="9">{
         if s == nil || s.target == nil </span><span class="cov0" title="0">{
                 return errors.New("stringSliceValue: nil target")
         }</span>
-        <span class="cov4" title="7">*s.target = append(*s.target, v)
+        <span class="cov4" title="9">*s.target = append(*s.target, v)
         return nil</span>
 }
 </pre>
