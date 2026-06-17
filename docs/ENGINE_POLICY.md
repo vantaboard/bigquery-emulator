@@ -160,8 +160,9 @@ in their head.
    RETURN` on INSERT/UPDATE/DELETE (GoogleSQL does not define MERGE `THEN
    RETURN`), pipe INSERT (`ResolvedPipeInsertScan`), `ASSERT_ROWS_MODIFIED`,
    and the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`, multi-action
-   sequences via `dml_merge.cc`). Simple `MERGE` (`WHEN MATCHED` + single
-   `WHEN NOT MATCHED BY TARGET`) stays on the DuckDB fast path.
+   sequences via `dml_merge.cc`). All `MERGE` statements route through the
+   semantic executor (`dml_merge.cc`); the DuckDB verbatim-SQL MERGE path
+   is retired.
    `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
    `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
    `LOAD DATA` (local files) are implemented today on the control-op

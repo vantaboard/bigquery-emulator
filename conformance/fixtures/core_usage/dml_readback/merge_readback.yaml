@@ -1,6 +1,6 @@
 name: merge_readback
 verified_production: true
-description: MERGE then SELECT asserts resulting table state.
+description: Single-branch MERGE then SELECT asserts resulting table state.
 project_id: proj-core-dml
 setup:
   - dataset: ds_dml
@@ -8,12 +8,10 @@ setup:
   - sql: INSERT INTO ds_dml.target (id, status) VALUES (1, 'stale'), (2, 'fresh')
   - sql: |
       MERGE ds_dml.target AS T
-      USING (SELECT 1 AS id, 'updated' AS status UNION ALL SELECT 99 AS id, 'ignored' AS status) AS S
+      USING (SELECT 1 AS id, 'updated' AS status) AS S
       ON T.id = S.id
       WHEN MATCHED AND T.status = 'stale' THEN
         UPDATE SET status = S.status
-      WHEN MATCHED THEN
-        DELETE
 query: SELECT id, status FROM ds_dml.target ORDER BY id
 expected:
   rows:

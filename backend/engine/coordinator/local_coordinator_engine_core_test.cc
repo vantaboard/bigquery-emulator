@@ -140,8 +140,8 @@ TEST_F(LocalCoordinatorEngineTest,
 //
 // These pin the through-the-coordinator behavior of every shape
 // the legacy `DuckDBEngine` used to own end-to-end. MERGE
-// classifies to `kDuckdbNative` and dispatches through the
-// `DuckDbExecutor`; CREATE TABLE / CTAS / DROP TABLE classify to
+// classifies to `kSemanticExecutor` and dispatches through
+// `dml_merge.cc`; CREATE TABLE / CTAS / DROP TABLE classify to
 // `kControlOp` and dispatch through
 // `backend/engine/control/control_op_executor.cc`; ALTER TABLE
 // classifies to `kControlOp` and dispatches through
