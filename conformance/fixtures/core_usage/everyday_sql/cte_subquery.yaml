@@ -1,0 +1,21 @@
+name: cte_subquery
+verified_production: true
+description: WITH clause CTE referenced in the main query.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.items (id INT64, qty INT64)
+  - rows:
+      dataset: ds_sql
+      table: items
+      rows:
+        - {id: 1, qty: 2}
+        - {id: 2, qty: 5}
+query: |
+  WITH big AS (
+    SELECT id FROM ds_sql.items WHERE qty >= 3
+  )
+  SELECT id FROM big ORDER BY id
+expected:
+  rows:
+    - {id: "2"}

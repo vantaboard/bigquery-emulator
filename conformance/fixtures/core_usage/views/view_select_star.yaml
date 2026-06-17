@@ -1,0 +1,17 @@
+name: view_select_star
+verified_production: true
+description: SELECT * from a view propagates base-table columns.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.items (sku STRING, qty INT64)
+  - rows:
+      dataset: ds_views
+      table: items
+      rows:
+        - {sku: a, qty: 3}
+  - sql: CREATE VIEW ds_views.items_v AS SELECT * FROM ds_views.items
+query: SELECT * FROM ds_views.items_v
+expected:
+  rows:
+    - {sku: a, qty: "3"}

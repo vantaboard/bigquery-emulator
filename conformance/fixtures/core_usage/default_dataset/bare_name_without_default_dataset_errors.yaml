@@ -1,0 +1,12 @@
+name: bare_name_without_default_dataset_errors
+verified_production: true
+description: Bare table name without defaultDataset errors like production.
+project_id: proj-core-default
+setup:
+  - dataset: ds_default
+  - sql: CREATE TABLE ds_default.items (id INT64)
+query: SELECT id FROM items
+expected:
+  error:
+    code: 400
+    message_contains: Table not found

@@ -1,0 +1,14 @@
+name: ctas_or_replace
+verified_production: true
+description: CREATE OR REPLACE TABLE AS SELECT replaces prior table contents.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: CREATE TABLE ds_ddl.t (n INT64)
+  - sql: INSERT INTO ds_ddl.t (n) VALUES (99)
+  - sql: CREATE OR REPLACE TABLE ds_ddl.t AS SELECT 1 AS n UNION ALL SELECT 2 AS n
+query: SELECT n FROM ds_ddl.t ORDER BY n
+expected:
+  rows:
+    - {n: "1"}
+    - {n: "2"}

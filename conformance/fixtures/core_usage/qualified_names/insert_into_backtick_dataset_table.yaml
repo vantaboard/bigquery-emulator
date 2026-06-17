@@ -1,0 +1,13 @@
+name: insert_into_backtick_dataset_table
+verified_production: true
+description: INSERT INTO `dataset.table` with backtick-qualified target.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE `ds_main.dest` (id INT64)
+  - sql: INSERT INTO `ds_main.dest` (id) VALUES (7), (8)
+query: SELECT id FROM `ds_main.dest` ORDER BY id
+expected:
+  rows:
+    - {id: "7"}
+    - {id: "8"}

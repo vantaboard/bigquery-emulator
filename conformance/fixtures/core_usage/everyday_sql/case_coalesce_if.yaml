@@ -1,0 +1,24 @@
+name: case_coalesce_if
+verified_production: true
+description: CASE, COALESCE, and IF expressions evaluate as in production.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.t (a INT64, b INT64)
+  - rows:
+      dataset: ds_sql
+      table: t
+      rows:
+        - {a: 1, b: null}
+        - {a: 2, b: 5}
+query: |
+  SELECT
+    CASE WHEN a = 1 THEN 'one' ELSE 'other' END AS c,
+    COALESCE(b, 0) AS co,
+    IF(a > 1, 'gt', 'le') AS iff
+  FROM ds_sql.t
+  ORDER BY a
+expected:
+  rows:
+    - {c: one, co: "0", iff: le}
+    - {c: other, co: "5", iff: gt}

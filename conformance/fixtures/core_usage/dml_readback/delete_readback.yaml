@@ -1,0 +1,14 @@
+name: delete_readback
+verified_production: true
+description: DELETE then SELECT asserts remaining rows.
+project_id: proj-core-dml
+setup:
+  - dataset: ds_dml
+  - sql: CREATE TABLE ds_dml.items (id INT64)
+  - sql: INSERT INTO ds_dml.items (id) VALUES (1), (2), (3)
+  - sql: DELETE FROM ds_dml.items WHERE id = 2
+query: SELECT id FROM ds_dml.items ORDER BY id
+expected:
+  rows:
+    - {id: "1"}
+    - {id: "3"}

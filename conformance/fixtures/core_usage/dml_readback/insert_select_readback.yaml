@@ -1,0 +1,19 @@
+name: insert_select_readback
+verified_production: true
+description: INSERT SELECT then SELECT asserts post-state rows.
+project_id: proj-core-dml
+setup:
+  - dataset: ds_dml
+  - sql: CREATE TABLE ds_dml.src (id INT64)
+  - sql: CREATE TABLE ds_dml.dest (id INT64)
+  - rows:
+      dataset: ds_dml
+      table: src
+      rows:
+        - {id: 10}
+        - {id: 20}
+  - sql: INSERT INTO ds_dml.dest SELECT id FROM ds_dml.src WHERE id >= 15
+query: SELECT id FROM ds_dml.dest ORDER BY id
+expected:
+  rows:
+    - {id: "20"}

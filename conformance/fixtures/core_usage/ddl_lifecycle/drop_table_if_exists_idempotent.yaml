@@ -1,0 +1,13 @@
+name: drop_table_if_exists_idempotent
+verified_production: true
+description: DROP TABLE IF EXISTS succeeds even when the table is already gone.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: CREATE TABLE ds_ddl.ephemeral (x INT64)
+  - sql: DROP TABLE ds_ddl.ephemeral
+  - sql: DROP TABLE IF EXISTS ds_ddl.ephemeral
+query: SELECT 1 AS ok
+expected:
+  rows:
+    - {ok: "1"}

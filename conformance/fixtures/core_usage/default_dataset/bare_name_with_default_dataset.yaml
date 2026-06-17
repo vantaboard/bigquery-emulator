@@ -1,0 +1,17 @@
+name: bare_name_with_default_dataset
+verified_production: true
+description: Bare table name resolves when request defaultDataset is set.
+project_id: proj-core-default
+default_dataset: ds_default
+setup:
+  - dataset: ds_default
+  - sql: CREATE TABLE ds_default.items (id INT64)
+  - rows:
+      dataset: ds_default
+      table: items
+      rows:
+        - {id: 7}
+query: SELECT id FROM items ORDER BY id
+expected:
+  rows:
+    - {id: "7"}

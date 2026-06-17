@@ -1,0 +1,12 @@
+name: create_or_replace_table_schema
+verified_production: true
+description: CREATE OR REPLACE TABLE (non-AS) changes schema; existing rows padded with NULL.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: CREATE TABLE ds_ddl.people (id INT64, name STRING)
+  - sql: INSERT INTO ds_ddl.people (id, name) VALUES (1, 'ada')
+  - sql: CREATE OR REPLACE TABLE ds_ddl.people (id INT64, name STRING, active BOOL)
+query: SELECT id, name, active FROM ds_ddl.people
+expected:
+  rows: []

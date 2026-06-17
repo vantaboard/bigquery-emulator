@@ -1,0 +1,13 @@
+name: alter_add_column_readback
+verified_production: true
+description: ALTER TABLE ADD COLUMN pads existing rows with NULL.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: CREATE TABLE ds_ddl.people (id INT64, name STRING)
+  - sql: INSERT INTO ds_ddl.people (id, name) VALUES (1, 'ada')
+  - sql: ALTER TABLE ds_ddl.people ADD COLUMN age INT64
+query: SELECT id, name, age FROM ds_ddl.people
+expected:
+  rows:
+    - {id: "1", name: ada, age: null}

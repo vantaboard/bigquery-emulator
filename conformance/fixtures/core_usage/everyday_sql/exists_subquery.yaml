@@ -1,0 +1,31 @@
+name: exists_subquery
+verified_production: true
+description: EXISTS correlated subquery filters parent rows.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.orders (id INT64, customer_id INT64)
+  - sql: CREATE TABLE ds_sql.customers (id INT64, active BOOL)
+  - rows:
+      dataset: ds_sql
+      table: orders
+      rows:
+        - {id: 1, customer_id: 10}
+        - {id: 2, customer_id: 20}
+  - rows:
+      dataset: ds_sql
+      table: customers
+      rows:
+        - {id: 10, active: true}
+        - {id: 20, active: false}
+query: |
+  SELECT o.id
+  FROM ds_sql.orders o
+  WHERE EXISTS (
+    SELECT 1 FROM ds_sql.customers c
+    WHERE c.id = o.customer_id AND c.active
+  )
+  ORDER BY o.id
+expected:
+  rows:
+    - {id: "1"}

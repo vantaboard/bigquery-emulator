@@ -1,0 +1,15 @@
+name: scalar_functions
+verified_production: true
+description: Common string, date, timestamp, and JSON scalar functions.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+query: |
+  SELECT
+    UPPER('abc') AS up,
+    FORMAT_DATE('%Y-%m', DATE '2020-01-15') AS ym,
+    UNIX_SECONDS(TIMESTAMP '1970-01-01 00:00:01 UTC') AS ts_sec,
+    JSON_VALUE(JSON '{"k":"v"}', '$.k') AS jv
+expected:
+  rows:
+    - {up: ABC, ym: "2020-01", ts_sec: "1", jv: v}

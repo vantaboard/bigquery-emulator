@@ -1,0 +1,20 @@
+name: unnest_array
+verified_production: true
+description: UNNEST expands an array column into rows.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.arrays (id INT64, tags ARRAY<STRING>)
+  - rows:
+      dataset: ds_sql
+      table: arrays
+      rows:
+        - {id: 1, tags: [a, b]}
+query: |
+  SELECT id, tag
+  FROM ds_sql.arrays, UNNEST(tags) AS tag
+  ORDER BY id, tag
+expected:
+  rows:
+    - {id: "1", tag: a}
+    - {id: "1", tag: b}

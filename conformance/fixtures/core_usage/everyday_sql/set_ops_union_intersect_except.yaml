@@ -1,0 +1,37 @@
+name: set_ops_union_intersect_except
+verified_production: true
+description: UNION, INTERSECT, and EXCEPT combine row sets as in production.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.a (n INT64)
+  - sql: CREATE TABLE ds_sql.b (n INT64)
+  - rows:
+      dataset: ds_sql
+      table: a
+      rows:
+        - {n: 1}
+        - {n: 2}
+  - rows:
+      dataset: ds_sql
+      table: b
+      rows:
+        - {n: 2}
+        - {n: 3}
+query: |
+  (
+    SELECT n FROM ds_sql.a
+    INTERSECT DISTINCT
+    SELECT n FROM ds_sql.b
+  )
+  UNION ALL
+  (
+    SELECT n FROM ds_sql.a
+    EXCEPT DISTINCT
+    SELECT n FROM ds_sql.b
+  )
+  ORDER BY n
+expected:
+  rows:
+    - {n: "1"}
+    - {n: "2"}

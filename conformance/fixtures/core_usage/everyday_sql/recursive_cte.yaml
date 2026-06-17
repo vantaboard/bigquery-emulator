@@ -1,0 +1,18 @@
+name: recursive_cte
+verified_production: true
+description: Recursive CTE generates a sequence (production semantics).
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+query: |
+  WITH RECURSIVE seq AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM seq WHERE n < 3
+  )
+  SELECT n FROM seq ORDER BY n
+expected:
+  rows:
+    - {n: "1"}
+    - {n: "2"}
+    - {n: "3"}

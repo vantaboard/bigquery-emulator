@@ -1,0 +1,17 @@
+name: view_backtick_qualified_name
+verified_production: true
+description: Read a view using a backtick-quoted dataset.view name.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.src (n INT64)
+  - rows:
+      dataset: ds_views
+      table: src
+      rows:
+        - {n: 42}
+  - sql: CREATE VIEW ds_views.v AS SELECT n FROM ds_views.src
+query: SELECT n FROM `ds_views.v`
+expected:
+  rows:
+    - {n: "42"}

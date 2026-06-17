@@ -1,0 +1,27 @@
+name: view_over_join
+verified_production: true
+description: View defined over a JOIN returns joined rows on read.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.orders (id INT64, customer_id INT64)
+  - sql: CREATE TABLE ds_views.customers (id INT64, name STRING)
+  - rows:
+      dataset: ds_views
+      table: orders
+      rows:
+        - {id: 1, customer_id: 10}
+  - rows:
+      dataset: ds_views
+      table: customers
+      rows:
+        - {id: 10, name: ada}
+  - sql: |
+      CREATE VIEW ds_views.order_names AS
+      SELECT o.id AS order_id, c.name AS customer_name
+      FROM ds_views.orders o
+      JOIN ds_views.customers c ON o.customer_id = c.id
+query: SELECT order_id, customer_name FROM ds_views.order_names
+expected:
+  rows:
+    - {order_id: "1", customer_name: ada}

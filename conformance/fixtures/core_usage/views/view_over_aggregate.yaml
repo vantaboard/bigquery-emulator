@@ -1,0 +1,24 @@
+name: view_over_aggregate
+verified_production: true
+description: View defined over GROUP BY returns aggregated rows on read.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.sales (region STRING, amount INT64)
+  - rows:
+      dataset: ds_views
+      table: sales
+      rows:
+        - {region: east, amount: 5}
+        - {region: east, amount: 7}
+        - {region: west, amount: 3}
+  - sql: |
+      CREATE VIEW ds_views.totals AS
+      SELECT region, SUM(amount) AS total
+      FROM ds_views.sales
+      GROUP BY region
+query: SELECT region, total FROM ds_views.totals ORDER BY region
+expected:
+  rows:
+    - {region: east, total: "12"}
+    - {region: west, total: "3"}

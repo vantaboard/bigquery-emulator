@@ -1,0 +1,17 @@
+name: scripting_declare_set_if
+verified_production: true
+description: Scripting DECLARE/SET/IF branch returns computed scalar.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+query: |
+  DECLARE n INT64 DEFAULT 2;
+  SET n = n + 3;
+  IF n > 4 THEN
+    SELECT n AS result;
+  ELSE
+    SELECT 0 AS result;
+  END IF;
+expected:
+  rows:
+    - {result: "5"}

@@ -1,0 +1,20 @@
+name: view_create_or_replace
+verified_production: true
+description: CREATE OR REPLACE VIEW redefines the view shape and rows.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.scores (player STRING, pts INT64)
+  - rows:
+      dataset: ds_views
+      table: scores
+      rows:
+        - {player: ada, pts: 10}
+        - {player: linus, pts: 20}
+  - sql: CREATE VIEW ds_views.top AS SELECT player FROM ds_views.scores WHERE pts >= 15
+  - sql: CREATE OR REPLACE VIEW ds_views.top AS SELECT player, pts FROM ds_views.scores WHERE pts >= 10
+query: SELECT player, pts FROM ds_views.top ORDER BY pts
+expected:
+  rows:
+    - {player: ada, pts: "10"}
+    - {player: linus, pts: "20"}

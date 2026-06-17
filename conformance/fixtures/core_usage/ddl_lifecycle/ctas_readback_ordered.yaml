@@ -1,0 +1,14 @@
+name: ctas_readback_ordered
+verified_production: true
+description: CREATE TABLE AS SELECT then read-back with ORDER BY.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: |
+      CREATE TABLE ds_ddl.out AS
+      SELECT 2 AS n UNION ALL SELECT 1 AS n
+query: SELECT n FROM ds_ddl.out ORDER BY n
+expected:
+  rows:
+    - {n: "1"}
+    - {n: "2"}

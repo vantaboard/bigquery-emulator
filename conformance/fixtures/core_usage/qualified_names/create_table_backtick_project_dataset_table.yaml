@@ -1,0 +1,12 @@
+name: create_table_backtick_project_dataset_table
+verified_production: true
+description: CREATE TABLE `project.dataset.table` three-part name.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE `proj-core-qualified.ds_main.fq` (k STRING)
+  - sql: INSERT INTO `proj-core-qualified.ds_main.fq` (k) VALUES ('ok')
+query: SELECT k FROM `proj-core-qualified.ds_main.fq`
+expected:
+  rows:
+    - {k: ok}

@@ -1,0 +1,13 @@
+name: bare_name_ddl_with_default_dataset
+verified_production: true
+description: Bare-name CREATE TABLE resolves with request defaultDataset.
+project_id: proj-core-default
+default_dataset: ds_default
+setup:
+  - dataset: ds_default
+  - sql: CREATE TABLE items (id INT64, name STRING)
+  - sql: INSERT INTO items (id, name) VALUES (1, 'ada')
+query: SELECT id, name FROM items
+expected:
+  rows:
+    - {id: "1", name: ada}

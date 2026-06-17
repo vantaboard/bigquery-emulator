@@ -1,0 +1,16 @@
+name: mixed_quoted_and_backtick_same_table
+verified_production: true
+description: Unquoted ds.t and backtick `ds.t` reference the same table.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE ds_main.dual (a INT64, b INT64)
+  - rows:
+      dataset: ds_main
+      table: dual
+      rows:
+        - {a: 1, b: 2}
+query: SELECT t1.a, t2.b FROM ds_main.dual t1 JOIN `ds_main.dual` t2 ON t1.a = t2.a
+expected:
+  rows:
+    - {a: "1", b: "2"}

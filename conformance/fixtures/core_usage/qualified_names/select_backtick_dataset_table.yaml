@@ -1,0 +1,16 @@
+name: select_backtick_dataset_table
+verified_production: true
+description: SELECT FROM `dataset.table` backtick-qualified name.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE ds_main.items (id INT64, name STRING)
+  - rows:
+      dataset: ds_main
+      table: items
+      rows:
+        - {id: 1, name: ada}
+query: SELECT id, name FROM `ds_main.items`
+expected:
+  rows:
+    - {id: "1", name: ada}

@@ -1,0 +1,21 @@
+name: view_select_rows
+verified_production: true
+description: |
+  CREATE VIEW then SELECT rows from the view. Regression shape for
+  view-inlining on read (views must return rows, not an empty set).
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.people (id INT64, name STRING)
+  - rows:
+      dataset: ds_views
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+  - sql: CREATE VIEW ds_views.people_v AS SELECT id, name FROM ds_views.people
+query: SELECT id, name FROM ds_views.people_v ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: ada}
+    - {id: "2", name: linus}

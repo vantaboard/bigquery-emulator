@@ -1,0 +1,16 @@
+name: insert_values_readback
+verified_production: true
+description: INSERT VALUES then SELECT asserts post-state rows.
+project_id: proj-core-dml
+setup:
+  - dataset: ds_dml
+  - sql: CREATE TABLE ds_dml.people (id INT64, name STRING)
+  - sql: |
+      INSERT INTO ds_dml.people (id, name) VALUES
+        (1, 'ada'),
+        (2, 'linus')
+query: SELECT id, name FROM ds_dml.people ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: ada}
+    - {id: "2", name: linus}

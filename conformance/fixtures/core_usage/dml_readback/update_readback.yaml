@@ -1,0 +1,14 @@
+name: update_readback
+verified_production: true
+description: UPDATE then SELECT asserts mutated rows.
+project_id: proj-core-dml
+setup:
+  - dataset: ds_dml
+  - sql: CREATE TABLE ds_dml.scores (player STRING, pts INT64)
+  - sql: INSERT INTO ds_dml.scores (player, pts) VALUES ('ada', 10), ('linus', 5)
+  - sql: UPDATE ds_dml.scores SET pts = pts + 5 WHERE player = 'linus'
+query: SELECT player, pts FROM ds_dml.scores ORDER BY player
+expected:
+  rows:
+    - {player: ada, pts: "10"}
+    - {player: linus, pts: "10"}

@@ -1,0 +1,28 @@
+name: left_join
+verified_production: true
+description: LEFT JOIN preserves left rows with NULLs for non-matches.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.a (id INT64)
+  - sql: CREATE TABLE ds_sql.b (id INT64, v INT64)
+  - rows:
+      dataset: ds_sql
+      table: a
+      rows:
+        - {id: 1}
+        - {id: 2}
+  - rows:
+      dataset: ds_sql
+      table: b
+      rows:
+        - {id: 1, v: 9}
+query: |
+  SELECT a.id, b.v
+  FROM ds_sql.a a
+  LEFT JOIN ds_sql.b b ON a.id = b.id
+  ORDER BY a.id
+expected:
+  rows:
+    - {id: "1", v: "9"}
+    - {id: "2", v: null}

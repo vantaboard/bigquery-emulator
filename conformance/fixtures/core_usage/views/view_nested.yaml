@@ -1,0 +1,19 @@
+name: view_nested
+verified_production: true
+description: View-of-a-view inlines through both layers on read.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.base (id INT64, label STRING)
+  - rows:
+      dataset: ds_views
+      table: base
+      rows:
+        - {id: 1, label: alpha}
+        - {id: 2, label: beta}
+  - sql: CREATE VIEW ds_views.inner_v AS SELECT id, label FROM ds_views.base WHERE id > 1
+  - sql: CREATE VIEW ds_views.outer_v AS SELECT id, UPPER(label) AS label FROM ds_views.inner_v
+query: SELECT id, label FROM ds_views.outer_v
+expected:
+  rows:
+    - {id: "2", label: BETA}

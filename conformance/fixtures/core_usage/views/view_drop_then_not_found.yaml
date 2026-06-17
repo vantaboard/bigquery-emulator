@@ -1,0 +1,14 @@
+name: view_drop_then_not_found
+verified_production: true
+description: DROP VIEW removes the view; a follow-up SELECT errors.
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.t (x INT64)
+  - sql: CREATE VIEW ds_views.v AS SELECT x FROM ds_views.t
+  - sql: DROP VIEW ds_views.v
+query: SELECT x FROM ds_views.v
+expected:
+  error:
+    code: 400
+    message_contains: Table not found

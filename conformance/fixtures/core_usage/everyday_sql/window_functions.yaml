@@ -1,0 +1,27 @@
+name: window_functions
+verified_production: true
+description: ROW_NUMBER, RANK, and SUM OVER return expected window results.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.scores (player STRING, pts INT64)
+  - rows:
+      dataset: ds_sql
+      table: scores
+      rows:
+        - {player: ada, pts: 10}
+        - {player: linus, pts: 10}
+        - {player: grace, pts: 5}
+query: |
+  SELECT
+    player,
+    ROW_NUMBER() OVER (ORDER BY pts DESC, player) AS rn,
+    RANK() OVER (ORDER BY pts DESC) AS rk,
+    SUM(pts) OVER () AS total
+  FROM ds_sql.scores
+  ORDER BY rn
+expected:
+  rows:
+    - {player: ada, rn: "1", rk: "1", total: "25"}
+    - {player: linus, rn: "2", rk: "1", total: "25"}
+    - {player: grace, rn: "3", rk: "3", total: "25"}

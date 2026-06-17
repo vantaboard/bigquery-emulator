@@ -1,0 +1,28 @@
+name: inner_join
+verified_production: true
+description: INNER JOIN returns matching rows from both sides.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.a (id INT64, label STRING)
+  - sql: CREATE TABLE ds_sql.b (id INT64, score INT64)
+  - rows:
+      dataset: ds_sql
+      table: a
+      rows:
+        - {id: 1, label: x}
+        - {id: 2, label: y}
+  - rows:
+      dataset: ds_sql
+      table: b
+      rows:
+        - {id: 1, score: 10}
+        - {id: 3, score: 30}
+query: |
+  SELECT a.id, a.label, b.score
+  FROM ds_sql.a a
+  INNER JOIN ds_sql.b b ON a.id = b.id
+  ORDER BY a.id
+expected:
+  rows:
+    - {id: "1", label: x, score: "10"}

@@ -1,0 +1,13 @@
+name: create_table_if_not_exists_noop
+verified_production: true
+description: CREATE TABLE IF NOT EXISTS is a no-op when the table already exists.
+project_id: proj-core-ddl
+setup:
+  - dataset: ds_ddl
+  - sql: CREATE TABLE ds_ddl.keep (id INT64)
+  - sql: INSERT INTO ds_ddl.keep (id) VALUES (5)
+  - sql: CREATE TABLE IF NOT EXISTS ds_ddl.keep (id INT64, extra STRING)
+query: SELECT id FROM ds_ddl.keep
+expected:
+  rows:
+    - {id: "5"}

@@ -1,0 +1,24 @@
+name: create_or_replace_table_backtick_qualified
+verified_production: true
+description: |
+  Chris's exact regression shape: CREATE OR REPLACE TABLE
+  `dataset.table` AS SELECT with backtick-qualified sources.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE ds_main.src (id INT64, inserted_at INT64)
+  - rows:
+      dataset: ds_main
+      table: src
+      rows:
+        - {id: 1, inserted_at: 10}
+        - {id: 1, inserted_at: 20}
+  - sql: |
+      CREATE OR REPLACE TABLE `ds_main.src_dedup` AS
+      SELECT * EXCEPT(rn) FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn FROM `ds_main.src`
+      ) WHERE rn = 1
+query: SELECT id, inserted_at FROM `ds_main.src_dedup` ORDER BY id
+expected:
+  rows:
+    - {id: "1", inserted_at: "20"}

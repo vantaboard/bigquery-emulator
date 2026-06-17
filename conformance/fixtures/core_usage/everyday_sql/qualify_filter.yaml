@@ -1,0 +1,21 @@
+name: qualify_filter
+verified_production: true
+description: QUALIFY filters window-function results post-evaluation.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.scores (player STRING, pts INT64)
+  - rows:
+      dataset: ds_sql
+      table: scores
+      rows:
+        - {player: ada, pts: 10}
+        - {player: linus, pts: 10}
+        - {player: grace, pts: 5}
+query: |
+  SELECT player, pts
+  FROM ds_sql.scores
+  QUALIFY ROW_NUMBER() OVER (ORDER BY pts DESC, player) = 1
+expected:
+  rows:
+    - {player: ada, pts: "10"}

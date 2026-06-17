@@ -1,0 +1,12 @@
+name: create_table_backtick_dataset_table
+verified_production: true
+description: CREATE TABLE `dataset.table` then read rows.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE `ds_main.new_items` (id INT64, name STRING)
+  - sql: INSERT INTO `ds_main.new_items` (id, name) VALUES (1, 'ada')
+query: SELECT id, name FROM `ds_main.new_items`
+expected:
+  rows:
+    - {id: "1", name: ada}

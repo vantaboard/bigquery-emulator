@@ -1,0 +1,23 @@
+name: group_by_having
+verified_production: true
+description: GROUP BY with HAVING filters aggregated groups.
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.sales (region STRING, amount INT64)
+  - rows:
+      dataset: ds_sql
+      table: sales
+      rows:
+        - {region: east, amount: 5}
+        - {region: east, amount: 7}
+        - {region: west, amount: 3}
+query: |
+  SELECT region, SUM(amount) AS total
+  FROM ds_sql.sales
+  GROUP BY region
+  HAVING SUM(amount) > 10
+  ORDER BY region
+expected:
+  rows:
+    - {region: east, total: "12"}

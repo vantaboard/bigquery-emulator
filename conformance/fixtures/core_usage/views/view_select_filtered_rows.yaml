@@ -1,0 +1,22 @@
+name: view_select_filtered_rows
+verified_production: true
+description: |
+  View with WHERE filter returns only matching rows (exact regression
+  shape from the view-read bug report).
+project_id: proj-core-views
+setup:
+  - dataset: ds_views
+  - sql: CREATE TABLE ds_views.people (id INT64, name STRING)
+  - rows:
+      dataset: ds_views
+      table: people
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
+  - sql: CREATE VIEW ds_views.people_v AS SELECT id, name FROM ds_views.people WHERE id >= 2
+query: SELECT id, name FROM ds_views.people_v ORDER BY id
+expected:
+  rows:
+    - {id: "2", name: linus}
+    - {id: "3", name: grace}

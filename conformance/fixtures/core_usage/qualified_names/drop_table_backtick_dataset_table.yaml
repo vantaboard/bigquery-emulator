@@ -1,0 +1,13 @@
+name: drop_table_backtick_dataset_table
+verified_production: true
+description: DROP TABLE `dataset.table` then SELECT errors not-found.
+project_id: proj-core-qualified
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE `ds_main.tmp` (x INT64)
+  - sql: DROP TABLE `ds_main.tmp`
+query: SELECT x FROM `ds_main.tmp`
+expected:
+  error:
+    code: 400
+    message_contains: Table not found
