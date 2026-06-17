@@ -1,15 +1,12 @@
 name: truncate_readback
 verified_production: true
-description: |
-  TRUNCATE TABLE clears rows but keeps schema; follow-up SELECT is empty.
-  If TRUNCATE is not yet implemented, DELETE FROM ... WHERE TRUE is the
-  production-equivalent read-back shape for an empty table.
+description: TRUNCATE TABLE clears rows but keeps schema; follow-up SELECT is empty.
 project_id: proj-core-dml
 setup:
   - dataset: ds_dml
   - sql: CREATE TABLE ds_dml.log (id INT64, msg STRING)
   - sql: INSERT INTO ds_dml.log (id, msg) VALUES (1, 'a'), (2, 'b')
-  - sql: DELETE FROM ds_dml.log WHERE TRUE
+  - sql: TRUNCATE TABLE ds_dml.log
 query: SELECT id, msg FROM ds_dml.log ORDER BY id
 expected:
   rows: []

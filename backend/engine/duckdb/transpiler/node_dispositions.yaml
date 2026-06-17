@@ -81,6 +81,7 @@ ResolvedInsertStmt: semantic_executor
 ResolvedUpdateStmt: semantic_executor
 ResolvedDeleteStmt: semantic_executor
 ResolvedMergeStmt: semantic_executor
+ResolvedTruncateStmt: control_op
 ResolvedCallStmt: semantic_executor
 ResolvedMultiStmt: semantic_executor
 ResolvedCreateConstantStmt: semantic_executor

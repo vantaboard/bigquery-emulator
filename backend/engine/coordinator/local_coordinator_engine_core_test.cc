@@ -186,6 +186,23 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(by_id[4], "rust");
 }
 
+TEST_F(LocalCoordinatorEngineTest, ExecuteDmlTruncateClearsRowsAndReturnsStats) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto result = engine_->ExecuteDml(
+      MakeRequest("TRUNCATE TABLE ds.people"), bundle.catalog.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.deleted_row_count, 3);
+  EXPECT_EQ(result->stats.inserted_row_count, 0);
+  EXPECT_EQ(result->stats.updated_row_count, 0);
+  auto count = storage_->CountRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(count.ok()) << count.status();
+  EXPECT_EQ(*count, 0);
+  auto schema = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  EXPECT_EQ(schema->columns.size(), 2u);
+}
+
 TEST_F(LocalCoordinatorEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();

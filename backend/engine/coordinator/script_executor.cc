@@ -156,7 +156,8 @@ absl::Status ExecuteOneScriptStatement(
     case ::googlesql::RESOLVED_INSERT_STMT:
     case ::googlesql::RESOLVED_UPDATE_STMT:
     case ::googlesql::RESOLVED_DELETE_STMT:
-    case ::googlesql::RESOLVED_MERGE_STMT: {
+    case ::googlesql::RESOLVED_MERGE_STMT:
+    case ::googlesql::RESOLVED_TRUNCATE_STMT: {
       absl::StatusOr<DmlResult> result = engine.ExecuteDml(request, catalog);
       if (!result.ok()) return result.status();
       return absl::OkStatus();

@@ -21,6 +21,7 @@
 #include "backend/catalog/udf_registry.h"
 #include "backend/catalog/view_registry.h"
 #include "backend/engine/control/stubs/create_model.h"
+#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/coordinator/executor.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/route_classifier.h"
@@ -180,6 +181,14 @@ absl::StatusOr<DmlResult> LocalCoordinatorEngine::ExecuteDml(
       AnalyzeStatementImpl(request, catalog, /*all_statements=*/true);
   if (!output.ok()) return output.status();
   const ::googlesql::ResolvedStatement* stmt = (*output)->resolved_statement();
+  if (stmt->node_kind() == ::googlesql::RESOLVED_TRUNCATE_STMT) {
+    absl::StatusOr<int64_t> deleted = control::internal::RunTruncateTable(
+        *storage_, stmt->GetAs<::googlesql::ResolvedTruncateStmt>());
+    if (!deleted.ok()) return deleted.status();
+    DmlResult result;
+    result.stats.deleted_row_count = *deleted;
+    return result;
+  }
   Executor* executor = RouteFor(*stmt);
   if (executor == nullptr) {
     return absl::InternalError(

@@ -120,6 +120,12 @@ absl::Status ControlOpExecutor::ExecuteDdl(
           project_id,
           request.default_dataset_id,
           stmt.GetAs<::googlesql::ResolvedDropStmt>());
+    case ::googlesql::RESOLVED_TRUNCATE_STMT: {
+      absl::StatusOr<int64_t> deleted = internal::RunTruncateTable(
+          *storage_, stmt.GetAs<::googlesql::ResolvedTruncateStmt>());
+      if (!deleted.ok()) return deleted.status();
+      return absl::OkStatus();
+    }
     // Deferred control-op shapes. Each handler returns
     // UNIMPLEMENTED with a focused message that names the missing
     // infrastructure. See docs/ENGINE_POLICY.md for deferred

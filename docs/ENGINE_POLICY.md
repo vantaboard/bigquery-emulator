@@ -164,7 +164,7 @@ in their head.
    semantic executor (`dml_merge.cc`); the DuckDB verbatim-SQL MERGE path
    is retired.
    `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
-   `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
+   `TRUNCATE TABLE`, `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
    `LOAD DATA` (local files) are implemented today on the control-op
    route.
 
