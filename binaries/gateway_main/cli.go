@@ -16,6 +16,17 @@
 // while letting operators copy invocation snippets straight from the
 // upstream documentation.
 //
+// A handful of flags additionally accept the names the widely-used
+// goccy/bigquery-emulator exposes, so invocation snippets written for
+// that emulator keep working here without rewriting:
+//
+//   - `--port`           -> alias for `--http-port`
+//   - `--project`        -> alias for `--project-id`
+//   - `--data-from-yaml` -> alias for `--seed-data-file`
+//
+// These are pure aliases onto the same Config fields; the canonical
+// names above remain the primary, `--help`-documented spelling.
+//
 // # Environment-variable fallbacks
 //
 // Three settings honor environment variables when the CLI flag is
@@ -193,7 +204,7 @@ func defaultConfig() Config {
 func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 	registerString(fs, &cfg.ListenHost, []string{"listen-host", "hostname"},
 		"Hostname for the emulator servers.")
-	registerInt(fs, &cfg.HTTPPort, []string{"http-port", "http_port"},
+	registerInt(fs, &cfg.HTTPPort, []string{"http-port", "http_port", "port"},
 		"Port on which to run the BigQuery REST gateway.")
 	registerInt(fs, &cfg.GRPCPort, []string{"grpc-port", "grpc_port"},
 		"Port on which to run the internal engine gRPC server.")
@@ -216,7 +227,7 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 		"Log every REST request and response.")
 	registerBool(fs, &cfg.Debug, []string{"debug"},
 		"Enable verbose lifecycle logging.")
-	registerString(fs, &cfg.DefaultProjectID, []string{"project-id", "project_id"},
+	registerString(fs, &cfg.DefaultProjectID, []string{"project-id", "project_id", "project"},
 		"Default BigQuery project clients are assumed to act against.")
 	registerString(fs, &cfg.DefaultDatasetLocation, []string{"default-dataset-location"},
 		"Default BigQuery location stamped on datasets created without an "+
@@ -229,7 +240,7 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 		[]string{"seed-api-seed-token"},
 		"Required value for the X-BigQuery-Emulator-Seed-Token header on every "+
 			"seed request. Falls back to $BIGQUERY_EMULATOR_SEED_TOKEN.")
-	registerStringSlice(fs, &cfg.SeedFiles, []string{"seed-data-file", "seed-yaml"},
+	registerStringSlice(fs, &cfg.SeedFiles, []string{"seed-data-file", "seed-yaml", "data-from-yaml"},
 		"YAML seed-data file to apply once the engine reports SERVING (repeatable).")
 	registerBool(fs, versionFlag, []string{"version"},
 		"Print version information (semver + git commit + build date + Go toolchain) and exit.")

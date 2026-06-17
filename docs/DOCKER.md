@@ -112,11 +112,13 @@ flag yourself**. So your flags *augment* the defaults instead of replacing them;
 pass `--data-dir=...` or `--seed-data-file=...` (or `--seed-yaml=...`) to
 override, and the rest of the baked-in defaults stay intact.
 
-> **Heads up — flag names differ from `goccy/bigquery-emulator`.** This fork
-> uses `--project-id` (not `--project`), `--http_port` / `--http-port` (not
-> `--port`), and `--seed-data-file` / `--seed-yaml` (not `--data-from-yaml`).
-> Passing an unknown flag makes `gateway_main` exit on a parse error, so the
-> container appears to ignore your arguments. Run
+> **Coming from `goccy/bigquery-emulator`?** The canonical flag names differ
+> (`--project-id`, `--http_port` / `--http-port`, `--seed-data-file` /
+> `--seed-yaml`), but the gateway also accepts the goccy spellings as aliases:
+> `--project` → `--project-id`, `--port` → `--http-port`, and
+> `--data-from-yaml` → `--seed-data-file`. Any *other* unknown flag still makes
+> `gateway_main` exit on a parse error, so the container appears to ignore your
+> arguments — run
 > `docker run --rm ghcr.io/vantaboard/bigquery-emulator:latest --help` to see
 > the full flag surface. See [Seeding & CLI flags](./SEEDING.md) for details.
 

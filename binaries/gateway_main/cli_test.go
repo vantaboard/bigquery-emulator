@@ -180,6 +180,33 @@ func TestParseArgs_HyphenAndUnderscoreAliases(t *testing.T) {
 	}
 }
 
+// TestParseArgs_GoccyAliases pins the goccy/bigquery-emulator
+// compatibility aliases: invocation snippets written for that emulator
+// (`--port`, `--project`, `--data-from-yaml`) must map onto the same
+// Config fields as this fork's canonical flag names.
+func TestParseArgs_GoccyAliases(t *testing.T) {
+	cfg, err := parseArgs([]string{
+		"--project=goccy-proj",
+		"--port=18050",
+		"--data-from-yaml=seed-a.yaml",
+		"--data-from-yaml=seed-b.yaml",
+	}, &bytes.Buffer{}, emptyEnv)
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+
+	if cfg.DefaultProjectID != "goccy-proj" {
+		t.Errorf("--project: DefaultProjectID=%q, want goccy-proj", cfg.DefaultProjectID)
+	}
+	if cfg.HTTPPort != 18050 {
+		t.Errorf("--port: HTTPPort=%d, want 18050", cfg.HTTPPort)
+	}
+	want := []string{"seed-a.yaml", "seed-b.yaml"}
+	if !reflect.DeepEqual(cfg.SeedFiles, want) {
+		t.Errorf("--data-from-yaml: SeedFiles=%v, want %v", cfg.SeedFiles, want)
+	}
+}
+
 // TestParseArgs_EnvFallbacks pins the documented env-var defaults:
 // flag > env > nothing. A flag value, even a deliberate empty string
 // via `--flag=`, must NOT trigger the env fallback (stable
