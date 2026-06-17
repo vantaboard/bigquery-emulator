@@ -1,0 +1,27 @@
+---
+description: Hand-authored core_usage conformance fixtures must not be bootstrapped from emulator output
+alwaysApply: false
+---
+# Core usage conformance fixtures — baseline integrity
+
+The `conformance/fixtures/core_usage/` family (and any fixture with
+`verified_production: true`) exercises everyday BigQuery client patterns with
+**hand-authored** `expected.rows` / `expected.error` values derived from
+production BigQuery semantics.
+
+## Rules
+
+1. **Never use `task conformance:update-baselines`** (or `--update-baselines`) to
+   author or "fix" fixtures under `core_usage/` or any fixture marked
+   `verified_production: true`. The runner and task refuse these rewrites.
+2. When a fixture misbehaves, validate the SQL against production BigQuery with
+   the `bq` CLI first (see `.cursor/rules/conformance-bq-validation.mdc`).
+3. Use `bq` output rows as the source of truth for `expected:` blocks.
+4. Omit `expected.route` on core_usage fixtures — they assert behavior, not
+   internal routing disposition.
+
+## Why
+
+`update-baselines` captures the emulator's *current* output. A bug such as
+"views return zero rows" gets frozen as `expected: []` and becomes invisible in
+CI forever.

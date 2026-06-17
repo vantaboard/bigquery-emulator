@@ -40,18 +40,26 @@ func DoRequest(ctx context.Context, url string, body []byte) (int, []byte, error
 }
 
 func postQuery(ctx context.Context, baseURL, sql string) (int, []byte, error) {
-	queryBody, err := marshalJobsQueryBody(sql)
+	return postQueryWithDefaultDataset(ctx, baseURL, sql, "")
+}
+
+func postQueryWithDefaultDataset(ctx context.Context, baseURL, sql, defaultDataset string) (int, []byte, error) {
+	queryBody, err := marshalJobsQueryBody(sql, defaultDataset)
 	if err != nil {
 		return 0, nil, err
 	}
 	return doRequest(ctx, baseURL+"/queries", queryBody)
 }
 
-func marshalJobsQueryBody(sql string) ([]byte, error) {
-	queryBody, err := json.Marshal(map[string]any{
+func marshalJobsQueryBody(sql, defaultDataset string) ([]byte, error) {
+	body := map[string]any{
 		"query":        sql,
 		"useLegacySql": false,
-	})
+	}
+	if defaultDataset != "" {
+		body["defaultDataset"] = map[string]string{"datasetId": defaultDataset}
+	}
+	queryBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal query: %w", err)
 	}

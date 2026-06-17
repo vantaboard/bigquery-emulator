@@ -2,12 +2,36 @@ package runner
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"gopkg.in/yaml.v3"
 )
+
+// ErrBaselineUpdateForbidden is returned when --update-baselines targets
+// a hand-authored fixture that must not be bootstrapped from emulator output.
+var ErrBaselineUpdateForbidden = errors.New(
+	"update-baselines refused: protected fixture (see .cursor/rules/conformance-core-usage.mdc)")
+
+// BaselineUpdateForbidden reports whether --update-baselines must refuse
+// to rewrite this fixture.
+func (fx *Fixture) BaselineUpdateForbidden() bool {
+	if fx.VerifiedProduction {
+		return true
+	}
+	return strings.Contains(filepath.ToSlash(fx.Path), "/core_usage/")
+}
+
+func refuseBaselineUpdate(fx *Fixture) error {
+	if fx.BaselineUpdateForbidden() {
+		return ErrBaselineUpdateForbidden
+	}
+	return nil
+}
 
 // rewriteFixtureRows captures the gateway's QueryResponse rows back
 // into the fixture's `expected.rows` block and writes the YAML to
@@ -20,6 +44,9 @@ import (
 // are dropped -- the trade-off is documented in
 // `conformance/README.md`.
 func rewriteFixtureRows(fx *Fixture, body []byte) error {
+	if err := refuseBaselineUpdate(fx); err != nil {
+		return err
+	}
 	var run bqtypes.QueryResponse
 	if err := json.Unmarshal(body, &run); err != nil {
 		return fmt.Errorf("decode QueryResponse for baseline: %w", err)
@@ -46,6 +73,9 @@ func rewriteFixtureRows(fx *Fixture, body []byte) error {
 // envelope's top-level `error.message` (or the first per-error
 // `errors[].message` if the top-level field is empty).
 func rewriteFixtureError(fx *Fixture, status int, body []byte) error {
+	if err := refuseBaselineUpdate(fx); err != nil {
+		return err
+	}
 	var env struct {
 		Error struct {
 			Message string `json:"message"`

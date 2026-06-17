@@ -13,7 +13,7 @@ import (
 // runSetupStep dispatches one setup step to the matching helper.
 // Errors bubble up unchanged; the caller wraps them with the step
 // index for the diff message.
-func runSetupStep(ctx context.Context, base string, step SetupStep) error {
+func runSetupStep(ctx context.Context, base string, step SetupStep, defaultDataset string) error {
 	switch {
 	case step.Dataset != "":
 		return setupDataset(ctx, base, step.Dataset)
@@ -22,7 +22,7 @@ func runSetupStep(ctx context.Context, base string, step SetupStep) error {
 	case step.Rows != nil:
 		return setupRows(ctx, base, step.Rows)
 	case strings.TrimSpace(step.SQL) != "":
-		return setupSQL(ctx, base, step.SQL)
+		return setupSQL(ctx, base, step.SQL, defaultDataset)
 	case step.RowAccessPolicy != nil:
 		return setupRowAccessPolicy(ctx, base, step.RowAccessPolicy)
 	case step.ColumnGovernance != nil:
@@ -134,8 +134,8 @@ func setupRows(ctx context.Context, base string, rs *RowsSetup) error {
 // setupSQL runs an arbitrary statement through the gateway's
 // `/queries` endpoint. Used for setup phases that do not fit the
 // dataset/table/rows shape (e.g. preparing a temp UDF).
-func setupSQL(ctx context.Context, base, sql string) error {
-	queryBody, err := marshalJobsQueryBody(sql)
+func setupSQL(ctx context.Context, base, sql, defaultDataset string) error {
+	queryBody, err := marshalJobsQueryBody(sql, defaultDataset)
 	if err != nil {
 		return err
 	}

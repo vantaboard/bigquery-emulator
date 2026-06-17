@@ -66,6 +66,17 @@ type Fixture struct {
 	// as a SELECT after the mutation so the diff stays declarative.
 	Query string `yaml:"query"`
 
+	// DefaultDataset is an optional request-level default dataset ID
+	// sent as `defaultDataset.datasetId` on jobs.query. Unblocks bare
+	// table names (`SELECT * FROM t`) matching production BigQuery
+	// client behavior.
+	DefaultDataset string `yaml:"default_dataset,omitempty"`
+
+	// VerifiedProduction marks fixtures whose expected rows/errors were
+	// hand-authored from production BigQuery semantics. The runner
+	// refuses --update-baselines rewrites on such fixtures.
+	VerifiedProduction bool `yaml:"verified_production,omitempty"`
+
 	// Expected pins either the expected row set or the expected
 	// HTTP error envelope. Exactly one of the two must be set.
 	Expected Expectation `yaml:"expected"`

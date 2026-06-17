@@ -126,6 +126,17 @@ tasks:
           --output "{{.OUTPUT}}" \
           --profile duckdb \
           $OUTPUT_FILE_FLAG
+        # core_usage fixtures (`conformance/fixtures/core_usage/`) pin
+        # everyday client patterns (views, backtick names, default
+        # dataset, DML read-back) with production-validated expected
+        # rows. Hand-authored — never bootstrap via update-baselines.
+        # shellcheck disable=SC2086  # intentional word-split for repeated flags
+        go run ./conformance/cmd/runner \
+          --fixtures conformance/fixtures/core_usage \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          --profile duckdb \
+          $OUTPUT_FILE_FLAG
 
   run-fixture:
     desc: Run a single fixture (FIXTURE=path/to/fixture.yaml). Honors PROFILE.
@@ -253,6 +264,13 @@ tasks:
         if [ -n "{{.FIXTURE}}" ]; then
           TARGET="{{.FIXTURE}}"
         fi
+        case "$TARGET" in
+          *core_usage*)
+            echo "task conformance:update-baselines refuses conformance/fixtures/core_usage/ (hand-authored production-validated expected rows)." >&2
+            echo "See .cursor/rules/conformance-core-usage.mdc" >&2
+            exit 2
+            ;;
+        esac
         PROFILE_FLAGS=""
         if [ -n "{{.PROFILE}}" ]; then
           for p in $(echo "{{.PROFILE}}" | tr ',' ' '); do
