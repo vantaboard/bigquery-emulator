@@ -137,6 +137,7 @@ func runGateway(cfg Config) error {
 		CopyEngineStderr:       cfg.CopyEngineStderr,
 		LogRequests:            cfg.LogRequests,
 		DefaultProjectID:       cfg.DefaultProjectID,
+		DefaultDatasetID:       cfg.DefaultDatasetID,
 		DefaultDatasetLocation: cfg.DefaultDatasetLocation,
 		EnableSeedAPI:          cfg.EnableSeedAPI,
 		SeedAPIAllowRemote:     cfg.SeedAPIAllowRemote,

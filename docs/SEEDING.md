@@ -274,6 +274,7 @@ canonical reference:
 | `--log-requests`               | `--log_requests`              | Log every REST request and response.                                             |
 | `--debug`                      |                               | Verbose lifecycle logging.                                                       |
 | `--project-id`                 | `--project_id`                | Default project for seeding and YAML loader fallbacks.                           |
+| `--dataset`                    | `--dataset-id`, `--dataset_id`| Server-level default dataset for unqualified table names (see below).            |
 | `--default-dataset-location`   |                               | Default location stamped on datasets without an explicit one.                    |
 | `--enable-seed-api`            |                               | Register the production seed REST endpoints (see §3).                            |
 | `--seed-api-allow-remote`      |                               | Allow non-loopback callers to hit the seed API.                                  |
@@ -290,3 +291,25 @@ flag is empty):
 | `BIGQUERY_EMULATOR_INITIAL_DATA_DIR`   | `--initial-data-dir`             |
 | `EMULATOR_INITIAL_DATA_DIR`            | `--initial-data-dir` (legacy)    |
 | `BIGQUERY_EMULATOR_SEED_TOKEN`         | `--seed-api-seed-token`          |
+
+## Default dataset resolution
+
+The emulator resolves table names the same way production BigQuery does:
+
+- **Fully-qualified names** — `` `project.dataset.table` `` or
+  `dataset.table` — resolve directly. A path wrapped entirely in
+  backticks (`` `ds_main.profiles` ``) is split on the dots into its
+  component identifiers, so it behaves identically whether you write
+  `` `ds_main.profiles` ``, `` `ds_main`.`profiles` ``, or
+  `ds_main.profiles`. This applies to reads (`FROM`) **and** DDL targets
+  (`CREATE [OR REPLACE] TABLE`, `DROP TABLE`, `ALTER TABLE`, CTAS, …).
+- **Unqualified names** — a bare `table` (no dots) needs a default
+  dataset to resolve. The default is taken, in order, from:
+  1. the request's own `defaultDataset` (set by the client library,
+     e.g. `QueryJobConfig(default_dataset=...)`); then
+  2. the server-level `--dataset` flag.
+
+  With neither set, a bare table name errors exactly like production
+  BigQuery does when no default dataset is configured. Use `--dataset`
+  when your client doesn't set one but your SQL still references bare
+  table names.

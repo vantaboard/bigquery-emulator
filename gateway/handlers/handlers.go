@@ -85,6 +85,14 @@ type Dependencies struct {
 	// to resolve external source fixture/local/live modes.
 	DataDir string
 
+	// DefaultDatasetID is the server-level fallback dataset used to
+	// resolve unqualified (single-segment) table names when a query or
+	// job does not carry its own `defaultDataset`. Mirrors setting
+	// `default_dataset` on a production BigQuery client/job. Empty
+	// means no fallback, so bare table names error exactly like
+	// production BigQuery with no default dataset configured.
+	DefaultDatasetID string
+
 	// ExternalSources configures per-source fixture|local|live resolution.
 	// Nil uses package defaults (GCS local, Sheets fixture).
 	ExternalSources *sourceconfig.Config

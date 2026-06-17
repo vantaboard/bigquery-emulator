@@ -10,6 +10,10 @@ import (
 // DepsOptions carries gateway-level settings threaded into handler deps.
 type DepsOptions struct {
 	DataDir string
+
+	// DefaultDatasetID is the server-level fallback dataset for
+	// unqualified table names (see Dependencies.DefaultDatasetID).
+	DefaultDatasetID string
 }
 
 // BuildDependencies constructs the shared handler dependency bundle used by
@@ -29,14 +33,15 @@ func BuildDependenciesWith(eng *engine.Client, opts DepsOptions) Dependencies {
 		}
 	}
 	deps := Dependencies{
-		Jobs:            jobs.NewRegistry(),
-		Metadata:        NewMetadataStore(),
-		Snapshots:       NewSnapshotStore(),
-		Routines:        NewRoutineStore(),
-		Models:          NewModelStore(),
-		Sessions:        NewSessionStore(),
-		DataDir:         opts.DataDir,
-		ExternalSources: extCfg,
+		Jobs:             jobs.NewRegistry(),
+		Metadata:         NewMetadataStore(),
+		Snapshots:        NewSnapshotStore(),
+		Routines:         NewRoutineStore(),
+		Models:           NewModelStore(),
+		Sessions:         NewSessionStore(),
+		DataDir:          opts.DataDir,
+		DefaultDatasetID: opts.DefaultDatasetID,
+		ExternalSources:  extCfg,
 	}
 	if eng != nil {
 		deps.Catalog = eng.Catalog

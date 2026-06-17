@@ -18,10 +18,7 @@ func queryDefaultDatasetForExecute(
 	projectID string,
 	req *bqtypes.QueryRequest,
 ) (string, bool) {
-	defaultDataset := ""
-	if req.DefaultDataset != nil {
-		defaultDataset = req.DefaultDataset.DatasetID
-	}
+	defaultDataset := resolveDefaultDataset(deps, req.DefaultDataset)
 	defaultDataset, extErr := prepareQueryExternalTables(
 		r.Context(), deps, projectID, req.TableDefinitions, defaultDataset)
 	if writeExternalTableError(w, extErr) {

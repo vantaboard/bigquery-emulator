@@ -150,6 +150,16 @@ func TestParseArgs_HyphenAndUnderscoreAliases(t *testing.T) {
 			},
 		},
 		{
+			checkName: "dataset-id",
+			hyphen:    []string{"--dataset-id=ds_main"},
+			underbar:  []string{"--dataset_id=ds_main"},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DefaultDatasetID != "ds_main" {
+					t.Errorf("DefaultDatasetID=%q, want ds_main", cfg.DefaultDatasetID)
+				}
+			},
+		},
+		{
 			checkName: "seed-data-file/seed-yaml",
 			hyphen:    []string{"--seed-data-file=a.yaml", "--seed-data-file=b.yaml"},
 			underbar:  []string{"--seed-yaml=a.yaml", "--seed-yaml=b.yaml"},
@@ -204,6 +214,19 @@ func TestParseArgs_GoccyAliases(t *testing.T) {
 	want := []string{"seed-a.yaml", "seed-b.yaml"}
 	if !reflect.DeepEqual(cfg.SeedFiles, want) {
 		t.Errorf("--data-from-yaml: SeedFiles=%v, want %v", cfg.SeedFiles, want)
+	}
+}
+
+// TestParseArgs_DefaultDataset pins the canonical `--dataset` spelling
+// (the primary, --help-documented name) and confirms it lands on the
+// same Config field as the `--dataset-id` / `--dataset_id` aliases.
+func TestParseArgs_DefaultDataset(t *testing.T) {
+	cfg, err := parseArgs([]string{"--dataset=ds_main"}, &bytes.Buffer{}, emptyEnv)
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if cfg.DefaultDatasetID != "ds_main" {
+		t.Errorf("--dataset: DefaultDatasetID=%q, want ds_main", cfg.DefaultDatasetID)
 	}
 }
 

@@ -425,7 +425,7 @@ func runSyncScriptQueryInsert(
 	if cfg.Query.UseLegacySQL != nil {
 		useLegacy = *cfg.Query.UseLegacySQL
 	}
-	defaultDataset := defaultDatasetID(cfg.Query.DefaultDataset)
+	defaultDataset := resolveDefaultDataset(deps, cfg.Query.DefaultDataset)
 
 	out, err := runScriptStatements(
 		r.Context(), deps, r, projectID, parent, posted, cfg,

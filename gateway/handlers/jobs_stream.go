@@ -80,3 +80,16 @@ func defaultDatasetID(ref *bqtypes.DatasetReference) string {
 	}
 	return ref.DatasetID
 }
+
+// resolveDefaultDataset picks the effective default dataset for a
+// query/job: the request's own `defaultDataset` wins, and when it is
+// absent the gateway falls back to the server-level default
+// (`--dataset`). This mirrors a production BigQuery client that sets
+// `default_dataset` once and omits it on individual requests. An empty
+// result means no default (bare table names error like production).
+func resolveDefaultDataset(deps Dependencies, ref *bqtypes.DatasetReference) string {
+	if ds := defaultDatasetID(ref); ds != "" {
+		return ds
+	}
+	return deps.DefaultDatasetID
+}

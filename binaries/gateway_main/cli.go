@@ -106,6 +106,15 @@ type Config struct {
 	// Maps to `--project-id` / `--project_id`.
 	DefaultProjectID string
 
+	// DefaultDatasetID is the server-level fallback dataset used to
+	// resolve unqualified (single-segment) table names when a query
+	// or job does not carry its own `defaultDataset`. This mirrors
+	// setting `default_dataset` on a production BigQuery client/job so
+	// `SELECT * FROM t` / `CREATE TABLE t (...)` resolve to
+	// `<project>.<DefaultDatasetID>.t`. Maps to `--dataset` /
+	// `--dataset-id` / `--dataset_id`.
+	DefaultDatasetID string
+
 	// DefaultDatasetLocation is the BigQuery location stamped on
 	// datasets created without an explicit location. Maps to
 	// `--default-dataset-location`.
@@ -229,6 +238,10 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 		"Enable verbose lifecycle logging.")
 	registerString(fs, &cfg.DefaultProjectID, []string{"project-id", "project_id", "project"},
 		"Default BigQuery project clients are assumed to act against.")
+	registerString(fs, &cfg.DefaultDatasetID, []string{"dataset", "dataset-id", "dataset_id"},
+		"Default dataset used to resolve unqualified table names when a "+
+			"query/job does not set its own defaultDataset (e.g. SELECT * FROM t). "+
+			"Mirrors default_dataset on a production BigQuery client.")
 	registerString(fs, &cfg.DefaultDatasetLocation, []string{"default-dataset-location"},
 		"Default BigQuery location stamped on datasets created without an "+
 			"explicit location (e.g. US, EU).")

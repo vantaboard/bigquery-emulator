@@ -116,13 +116,11 @@ func runQueryDryRun(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	projectID := r.PathValue("projectId")
 
 	// Pass a defaultDataset hint to the engine when the client set
-	// `defaultDataset` in the QueryRequest. The wire field on the
-	// engine side carries the dataset id only -- the project comes
+	// `defaultDataset` in the QueryRequest, falling back to the
+	// server-level `--dataset` default otherwise. The wire field on
+	// the engine side carries the dataset id only -- the project comes
 	// from `project_id`, which is always taken from the URL.
-	defaultDataset := ""
-	if req.DefaultDataset != nil {
-		defaultDataset = req.DefaultDataset.DatasetID
-	}
+	defaultDataset := resolveDefaultDataset(deps, req.DefaultDataset)
 	defaultDataset, extErr := prepareQueryExternalTables(
 		r.Context(), deps, projectID, req.TableDefinitions, defaultDataset)
 	if writeExternalTableError(w, extErr) {

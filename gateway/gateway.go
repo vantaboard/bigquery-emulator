@@ -76,6 +76,14 @@ type Options struct {
 	// fallback project. Mirrors `--project-id` on gateway_main.
 	DefaultProjectID string
 
+	// DefaultDatasetID is the server-level fallback dataset used to
+	// resolve unqualified table names when a query/job does not carry
+	// its own `defaultDataset`. Mirrors setting `default_dataset` on a
+	// production BigQuery client/job. Empty means no fallback (bare
+	// table names error, exactly like production with no default set).
+	// Mirrors `--dataset` on gateway_main.
+	DefaultDatasetID string
+
 	// DefaultDatasetLocation is the BigQuery location used as the
 	// fallback when a dataset is created without an explicit location
 	// (US, EU, regional). Mirrors `--default-dataset-location`.
@@ -207,7 +215,8 @@ func (g *Gateway) Run() error {
 	}
 
 	deps := handlers.BuildDependenciesWith(g.engineClient, handlers.DepsOptions{
-		DataDir: g.opts.DataDir,
+		DataDir:          g.opts.DataDir,
+		DefaultDatasetID: g.opts.DefaultDatasetID,
 	})
 
 	if err := g.startStorageGRPC(ctx, deps); err != nil {
