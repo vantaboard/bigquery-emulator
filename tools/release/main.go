@@ -1,5 +1,5 @@
 // Command release emits shields.io endpoint JSON for the README
-// release badge. The gh-pages pipeline publishes badge-release.json
+// release badge. The release workflow publishes badge-release.json
 // so the badge does not depend on shields.io's shared GitHub API
 // token pool.
 package main
