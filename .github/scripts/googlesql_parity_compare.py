@@ -46,6 +46,23 @@ INFRA_NOTE_MARKERS = (
 )
 
 
+def _resolve_report(results_dir: pathlib.Path, name: str) -> pathlib.Path | None:
+    """Find a conformance JSON report under results_dir.
+
+    upload-artifact@v6 nests files under workspace paths when an absolute
+    path (e.g. /tmp/googlesql-validate.json) is mixed with repo-root globs.
+    Prefer a direct child match, then fall back to the shallowest rglob hit.
+    """
+    direct = results_dir / name
+    if direct.is_file():
+        return direct
+    matches = [p for p in results_dir.rglob(name) if p.is_file()]
+    if not matches:
+        return None
+    matches.sort(key=lambda p: len(p.parts))
+    return matches[0]
+
+
 def _load_report(path: pathlib.Path) -> dict | None:
     if not path.is_file():
         return None
@@ -324,8 +341,10 @@ def main(argv: list[str]) -> int:
     parity_diffs: list[tuple[str, list[str]]] = []
 
     def diff_pair(label: str, prebuilt_name: str, source_name: str) -> None:
-        p = _load_report(args.prebuilt_results_dir / prebuilt_name)
-        s = _load_report(args.source_results_dir / source_name)
+        p_path = _resolve_report(args.prebuilt_results_dir, prebuilt_name)
+        s_path = _resolve_report(args.source_results_dir, source_name)
+        p = _load_report(p_path) if p_path is not None else None
+        s = _load_report(s_path) if s_path is not None else None
         notes, diffs = _diff_reports(
             p,
             s,

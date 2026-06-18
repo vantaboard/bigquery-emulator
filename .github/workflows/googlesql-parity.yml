@@ -243,14 +243,27 @@ jobs:
             OUTPUT=json \
             OUTPUT_FILE=conformance-duckdb-prebuilt.json
 
+      - name: Stage prebuilt-mode results for upload
+        if: always()
+        # upload-artifact@v6 nests every file under full workspace paths when
+        # an absolute path (e.g. /tmp/...) is mixed with repo-root globs; stage
+        # into a flat dir so the comparator finds conformance-*.json at the
+        # artifact root.
+        run: |
+          set -euo pipefail
+          rm -rf parity-upload-prebuilt
+          mkdir -p parity-upload-prebuilt
+          cp conformance-*-prebuilt.json parity-upload-prebuilt/ 2>/dev/null || true
+          if [ -f /tmp/googlesql-validate.json ]; then
+            cp /tmp/googlesql-validate.json parity-upload-prebuilt/
+          fi
+
       - name: Upload prebuilt-mode results
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: parity-prebuilt-results
-          path: |
-            conformance-*-prebuilt.json
-            /tmp/googlesql-validate.json
+          path: parity-upload-prebuilt/
           if-no-files-found: warn
           retention-days: 14
 
