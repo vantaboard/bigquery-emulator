@@ -10,6 +10,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"google.golang.org/grpc"
 )
 
 // TestTableMetadataRequirePartitionFilterRoundTrip pins the table-level
@@ -66,6 +67,11 @@ func TestTableInsertViewRoundTrips(t *testing.T) {
 					Fields: []*enginepb.FieldSchema{{Name: "x", Type: sqlTypeINT64}},
 				},
 			}, nil
+		},
+		// The view is registered through the engine's CREATE OR REPLACE
+		// VIEW path; the runner drains an (empty) result stream.
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return &fakeQueryResultStream{}, nil
 		},
 	}
 	store := NewMetadataStore()

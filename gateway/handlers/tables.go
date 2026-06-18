@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -183,19 +184,34 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if !populateViewSchema(w, deps, r, projectID, &t) {
 			return
 		}
-		if t.ExternalDataConfiguration != nil {
+		switch {
+		case t.View != nil && t.View.Query != "":
+			// A logical view must be registered in the engine's view
+			// registry (the same path CREATE VIEW DDL takes) so reads
+			// inline its stored definition. Registering an empty backing
+			// table instead — as the generic branch below does — shadows
+			// the view in the engine catalog (FindTable resolves storage
+			// before the view registry), so SELECT ... FROM <view>
+			// silently returns zero rows. This is the REST-API analogue
+			// of the CREATE-VIEW-on-read fix.
+			if !insertLogicalView(w, r, deps, projectID, datasetID, tableID, t.View.Query) {
+				return
+			}
+		case t.ExternalDataConfiguration != nil:
 			if !insertExternalTable(w, r, deps, projectID, datasetID, tableID, &t) {
 				return
 			}
-		} else if _, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
-			Table: &enginepb.TableRef{
-				ProjectId: projectID,
-				DatasetId: datasetID,
-				TableId:   tableID,
-			},
-			Schema: schemaToProto(t.Schema),
-		}); grpcToHTTPError(w, err) {
-			return
+		default:
+			if _, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
+				Table: &enginepb.TableRef{
+					ProjectId: projectID,
+					DatasetId: datasetID,
+					TableId:   tableID,
+				},
+				Schema: schemaToProto(t.Schema),
+			}); grpcToHTTPError(w, err) {
+				return
+			}
 		}
 		if t.DefaultCollation != "" {
 			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
@@ -286,6 +302,53 @@ func populateViewSchema(
 	return true
 }
 
+// insertLogicalView registers a REST-created logical view in the
+// engine by issuing a `CREATE OR REPLACE VIEW` statement — the same
+// path `CREATE VIEW` DDL takes. That lands the view in the engine's
+// view registry so a later `SELECT ... FROM <view>` has its stored
+// definition inlined at analyze time and returns the base rows. The
+// alternative (registering an empty backing table) shadows the view in
+// the engine catalog and makes reads return nothing.
+//
+// Each name component is backtick-quoted independently so project IDs
+// with hyphens (and other names that are not bare identifiers) resolve
+// as a three-part `project.dataset.view` path rather than a single
+// dotted identifier. Returns false (after writing an HTTP error) when
+// registration fails.
+func insertLogicalView(
+	w http.ResponseWriter,
+	r *http.Request,
+	deps Dependencies,
+	projectID, datasetID, tableID, viewQuery string,
+) bool {
+	if deps.Query == nil {
+		writeError(w, http.StatusNotImplemented, reasonInternalError,
+			"engine query client is not configured for view registration")
+		return false
+	}
+	ddl := fmt.Sprintf("CREATE OR REPLACE VIEW `%s`.`%s`.`%s` AS\n%s",
+		projectID, datasetID, tableID, viewQuery)
+	stream, err := deps.Query.ExecuteQuery(r.Context(), &enginepb.QueryRequest{
+		ProjectId: projectID,
+		Sql:       ddl,
+	})
+	if err == nil && stream == nil {
+		err = fmt.Errorf("engine returned no result stream for view registration")
+	}
+	if err == nil {
+		_, _, _, _, _, _, err = drainSyncStream(stream)
+	}
+	if err != nil {
+		if queryGRPCToHTTPError(w, err) {
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, reasonInternalError,
+			"Could not register view: "+err.Error())
+		return false
+	}
+	return true
+}
+
 // inferTableSchemaFromQuery runs the MV definition query through the
 // engine DryRun RPC and returns the analyzed output schema as REST
 // TableSchema. Returns (nil, nil) when Query client is nil or sql is
@@ -328,7 +391,19 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 				TableId:   tableID,
 			},
 		})
-		if grpcToHTTPError(w, err) {
+		if err != nil {
+			// A logical view has no backing storage table, so the
+			// engine's DescribeTable returns NotFound. Serve it from
+			// the REST metadata overlay recorded at tables.insert
+			// instead of 404 so a `create_table(view)` + `get_table`
+			// round-trip keeps working (the view rows still come from
+			// the query path, which inlines the registered definition).
+			if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok && overlay.View != nil {
+				writeJSON(w, http.StatusOK,
+					tableResource(projectID, datasetID, tableID, overlay))
+				return
+			}
+			grpcToHTTPError(w, err)
 			return
 		}
 		t := bqtypes.Table{Schema: normalizeRESTTableSchema(schemaFromProto(resp.GetSchema()))}

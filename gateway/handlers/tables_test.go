@@ -10,6 +10,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -141,6 +142,69 @@ func TestTableInsertMaterializedViewInfersSchema(t *testing.T) {
 	}
 	if got.MaterializedView == nil || got.MaterializedView.Query == "" {
 		t.Errorf("materializedView not round-tripped: %+v", got.MaterializedView)
+	}
+}
+
+// TestTableInsertLogicalViewRegistersInEngine asserts a REST insert
+// with a view.query body registers the view through the engine's
+// CREATE OR REPLACE VIEW path (so reads inline its definition) instead
+// of registering an empty backing table that would shadow the view and
+// make SELECT return zero rows. This is the regression Chris reported:
+// "querying the view itself ... returned nothing".
+func TestTableInsertLogicalViewRegistersInEngine(t *testing.T) {
+	fakeCat := &fakeCatalogClient{}
+	fakeQuery := &fakeQueryClient{
+		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
+			return &enginepb.DryRunResponse{
+				Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{
+						{Name: "id", Type: sqlTypeINT64},
+						{Name: "name", Type: sqlTypeSTRING},
+					},
+				},
+			}, nil
+		},
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return &fakeQueryResultStream{}, nil
+		},
+	}
+	body := `{
+        "tableReference":{"tableId":"v1"},
+        "view":{"query":"SELECT id, name FROM ` + testDatasetID + `.people"}
+    }`
+	req := newTableReq(http.MethodPost, "", body)
+	rec := httptest.NewRecorder()
+	TableInsert(Dependencies{Catalog: fakeCat, Query: fakeQuery})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	// The defining query must reach the engine as a CREATE OR REPLACE
+	// VIEW statement (the view-registry path), not a RegisterTable call.
+	if fakeQuery.lastExecuteQuery == nil {
+		t.Fatal("Query.ExecuteQuery was not called for logical view insert")
+	}
+	gotSQL := fakeQuery.lastExecuteQuery.GetSql()
+	if !strings.Contains(strings.ToUpper(gotSQL), "CREATE OR REPLACE VIEW") {
+		t.Errorf("ExecuteQuery SQL = %q, want a CREATE OR REPLACE VIEW", gotSQL)
+	}
+	if !strings.Contains(gotSQL, "SELECT id, name FROM "+testDatasetID+".people") {
+		t.Errorf("ExecuteQuery SQL missing the view definition: %q", gotSQL)
+	}
+	if fakeCat.lastRegisterTable != nil {
+		t.Fatal("Catalog.RegisterTable must not be called for a logical view " +
+			"(an empty backing table would shadow the view on read)")
+	}
+
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got.Type != "VIEW" {
+		t.Errorf("type = %q, want VIEW", got.Type)
+	}
+	if got.View == nil || got.View.Query == "" {
+		t.Errorf("view not round-tripped: %+v", got.View)
 	}
 }
 
