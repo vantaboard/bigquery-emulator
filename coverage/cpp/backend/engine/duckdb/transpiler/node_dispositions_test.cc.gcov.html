@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-17 01:33:19</td>
+            <td class="headerValue">2026-06-18 04:03:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -111,10 +111,10 @@
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 :       Disposition::kUnsupported,</span></span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 :   };</span></span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 :   std::set&lt;Disposition&gt; seen;</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         116 :   for (const auto&amp; view : internal::AllNodeDispositions()) {</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         116 :     ASSERT_NE(view.entry, nullptr);</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">         116 :     seen.insert(view.entry-&gt;disposition);</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">         116 :   }</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         117 :   for (const auto&amp; view : internal::AllNodeDispositions()) {</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         117 :     ASSERT_NE(view.entry, nullptr);</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">         117 :     seen.insert(view.entry-&gt;disposition);</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">         117 :   }</span></span>
 <span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           6 :   for (Disposition d : kNodeApplicable) {</span></span>
 <span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           6 :     SCOPED_TRACE(DispositionToString(d));</span></span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          12 :     EXPECT_NE(seen.find(d), seen.end())</span></span>
@@ -128,15 +128,15 @@
 <span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           1 : TEST(NodeDispositionTableTest, UnsupportedAndLocalStubRowsExist) {</span></span>
 <span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           1 :   int unsupported_rows = 0;</span></span>
 <span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           1 :   int local_stub_rows = 0;</span></span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">         116 :   for (const auto&amp; view : internal::AllNodeDispositions()) {</span></span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         116 :     ASSERT_NE(view.entry, nullptr);</span></span>
-<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         116 :     if (view.entry-&gt;disposition == Disposition::kUnsupported) {</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">         117 :   for (const auto&amp; view : internal::AllNodeDispositions()) {</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         117 :     ASSERT_NE(view.entry, nullptr);</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         117 :     if (view.entry-&gt;disposition == Disposition::kUnsupported) {</span></span>
 <span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          29 :       unsupported_rows++;</span></span>
 <span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">          29 :     }</span></span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">         116 :     if (view.entry-&gt;disposition == Disposition::kLocalStub) {</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">         117 :     if (view.entry-&gt;disposition == Disposition::kLocalStub) {</span></span>
 <span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           4 :       local_stub_rows++;</span></span>
 <span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           4 :     }</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         116 :   }</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         117 :   }</span></span>
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :   EXPECT_GT(unsupported_rows, 0);</span></span>
 <span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :   EXPECT_GT(local_stub_rows, 0);</span></span>
 <span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 : }</span></span>

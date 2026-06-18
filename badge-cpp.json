@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "coverage (cpp)",
-  "message": "n/a",
-  "color": "lightgrey"
+  "message": "49.8%",
+  "color": "orange"
 }
