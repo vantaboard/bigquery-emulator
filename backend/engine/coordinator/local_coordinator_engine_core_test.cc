@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
+#include <set>
 #include <utility>
 
 #include "absl/status/status.h"
@@ -155,13 +157,13 @@ TEST_F(LocalCoordinatorEngineTest,
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto result = engine_->ExecuteDml(
-      MakeRequest("MERGE INTO ds.people T USING ("
+      MakeRequest("MERGE ds.people AS T USING ("
                   "  SELECT 2 AS id, 'linus-updated' AS name "
                   "  UNION ALL "
-                  "  SELECT 4 AS id, 'rust' AS name) S "
+                  "  SELECT 4 AS id, 'rust' AS name) AS S "
                   "ON T.id = S.id "
                   "WHEN MATCHED THEN UPDATE SET name = S.name "
-                  "WHEN NOT MATCHED THEN INSERT (id, name) "
+                  "WHEN NOT MATCHED BY TARGET THEN INSERT (id, name) "
                   "VALUES (S.id, S.name)"),
       bundle.catalog.get());
   ASSERT_TRUE(result.ok()) << result.status();
@@ -186,11 +188,37 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(by_id[4], "rust");
 }
 
-TEST_F(LocalCoordinatorEngineTest, ExecuteDmlTruncateClearsRowsAndReturnsStats) {
+TEST_F(LocalCoordinatorEngineTest, ExecuteDmlMergeSingleBranchUpdatesStorage) {
   CreatePeopleTable();
   CatalogBundle bundle = MakeCatalog();
   auto result = engine_->ExecuteDml(
-      MakeRequest("TRUNCATE TABLE ds.people"), bundle.catalog.get());
+      MakeRequest("MERGE ds.people AS T USING ("
+                  "  SELECT 2 AS id, 'linus-updated' AS name) AS S "
+                  "ON T.id = S.id "
+                  "WHEN MATCHED THEN UPDATE SET name = S.name"),
+      bundle.catalog.get());
+  ASSERT_TRUE(result.ok()) << result.status();
+  EXPECT_EQ(result->stats.updated_row_count, 1);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::map<int64_t, std::string> by_id;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    by_id[row.cells[0].int64_value()] = row.cells[1].string_value();
+  }
+  EXPECT_EQ(by_id[2], "linus-updated");
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteDmlTruncateClearsRowsAndReturnsStats) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto result = engine_->ExecuteDml(MakeRequest("TRUNCATE TABLE ds.people"),
+                                    bundle.catalog.get());
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_EQ(result->stats.deleted_row_count, 3);
   EXPECT_EQ(result->stats.inserted_row_count, 0);
@@ -201,6 +229,61 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDmlTruncateClearsRowsAndReturnsStats) 
   auto schema = storage_->GetSchema({"proj-test", "ds", "people"});
   ASSERT_TRUE(schema.ok()) << schema.status();
   EXPECT_EQ(schema->columns.size(), 2u);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       FullOuterJoinSameNameColumnsNullPadUnmatched) {
+  schema::TableSchema one_col;
+  schema::ColumnSchema k;
+  k.name = "k";
+  k.type = schema::ColumnType::kString;
+  k.mode = schema::ColumnMode::kNullable;
+  one_col.columns.push_back(k);
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "a"}, one_col).ok());
+  ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "b"}, one_col).ok());
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "a"},
+                               {storage::Row{{storage::Value::String("x")}}})
+                  .ok());
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "b"},
+                               {storage::Row{{storage::Value::String("y")}}})
+                  .ok());
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT a.k AS ak, b.k AS bk FROM ds.a a "
+                  "FULL OUTER JOIN ds.b b ON a.k = b.k ORDER BY ak, bk"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  struct Row {
+    std::optional<std::string> ak;
+    std::optional<std::string> bk;
+  };
+  std::vector<Row> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    Row out;
+    if (!row.cells[0].is_null()) out.ak = row.cells[0].string_value();
+    if (!row.cells[1].is_null()) out.bk = row.cells[1].string_value();
+    seen.push_back(std::move(out));
+  }
+  ASSERT_EQ(seen.size(), 2u);
+  auto row_key = [](const Row& r) { return std::make_pair(r.ak, r.bk); };
+  std::set<std::pair<std::optional<std::string>, std::optional<std::string>>>
+      expected = {{std::optional<std::string>("x"), std::nullopt},
+                  {std::nullopt, std::optional<std::string>("y")}};
+  std::set<std::pair<std::optional<std::string>, std::optional<std::string>>>
+      actual;
+  for (const Row& r : seen) {
+    actual.insert(row_key(r));
+  }
+  EXPECT_EQ(actual, expected);
 }
 
 TEST_F(LocalCoordinatorEngineTest, ExecuteDdlCreateTableAsSelectRoundTrips) {

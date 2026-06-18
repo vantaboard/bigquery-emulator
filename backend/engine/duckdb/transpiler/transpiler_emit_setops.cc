@@ -214,6 +214,7 @@ std::string Transpiler::EmitOrderByScan(
   // pass for collations lands separately, so we fall back when it
   // is set.
   if (node == nullptr) return "";
+  const bool input_id_aliases = join_output_uses_id_aliases_;
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
   std::vector<std::string> items;
@@ -234,8 +235,31 @@ std::string Transpiler::EmitOrderByScan(
   // outer QueryStmt wrap.
   output_order_items_.clear();
   input_rn_ordering_ = false;
-  return absl::StrCat(
-      "SELECT * FROM (", input, ") ORDER BY ", absl::StrJoin(items, ", "));
+  std::string projection = "*";
+  const ::googlesql::ResolvedScan* input_scan = node->input_scan();
+  const bool join_passthrough_input =
+      input_scan != nullptr &&
+      (input_scan->node_kind() == ::googlesql::RESOLVED_JOIN_SCAN ||
+       (input_scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN &&
+        input_scan->GetAs<::googlesql::ResolvedProjectScan>()->expr_list_size() ==
+            0));
+  if (input_id_aliases && join_passthrough_input &&
+      input_scan->column_list_size() > 0) {
+    std::vector<std::string> cols;
+    cols.reserve(input_scan->column_list_size());
+    for (int i = 0; i < input_scan->column_list_size(); ++i) {
+      cols.push_back(internal::JoinColumnIdAlias(
+          input_scan->column_list(i).column_id()));
+    }
+    projection = absl::StrJoin(cols, ", ");
+    join_output_uses_id_aliases_ = true;
+  }
+  return absl::StrCat("SELECT ",
+                      projection,
+                      " FROM (",
+                      input,
+                      ") ORDER BY ",
+                      absl::StrJoin(items, ", "));
 }
 
 std::string Transpiler::EmitLimitOffsetScan(

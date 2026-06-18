@@ -1,0 +1,30 @@
+name: full_join
+verified_production: true
+description: |
+  FULL OUTER JOIN null-pads unmatched sides when both inputs share the
+  same column name (production BigQuery semantics).
+project_id: proj-core-sql
+setup:
+  - dataset: ds_sql
+  - sql: CREATE TABLE ds_sql.a (k STRING)
+  - sql: CREATE TABLE ds_sql.b (k STRING)
+  - rows:
+      dataset: ds_sql
+      table: a
+      rows:
+        - {k: x}
+  - rows:
+      dataset: ds_sql
+      table: b
+      rows:
+        - {k: y}
+query: |
+  SELECT a.k AS ak, b.k AS bk
+  FROM ds_sql.a a
+  FULL OUTER JOIN ds_sql.b b ON a.k = b.k
+  ORDER BY ak, bk
+expected:
+  match: unordered
+  rows:
+    - {ak: x, bk: null}
+    - {ak: null, bk: y}

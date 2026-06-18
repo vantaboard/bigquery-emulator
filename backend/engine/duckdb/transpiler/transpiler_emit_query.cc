@@ -334,8 +334,8 @@ std::string Transpiler::EmitProjectScan(
   }
 
   if (input_id_aliases) {
-    // Computed projections replace join column aliases with new output
-    // names; downstream OrderByScan / QueryStmt must reference those names.
+    // Passthrough ProjectScan keeps join id aliases for downstream
+    // OrderByScan / QueryStmt; computed projections expose user names.
     join_output_uses_id_aliases_ = node->expr_list_size() == 0;
   }
 
