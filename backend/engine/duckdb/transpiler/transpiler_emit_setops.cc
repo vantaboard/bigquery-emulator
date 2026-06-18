@@ -241,15 +241,15 @@ std::string Transpiler::EmitOrderByScan(
       input_scan != nullptr &&
       (input_scan->node_kind() == ::googlesql::RESOLVED_JOIN_SCAN ||
        (input_scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN &&
-        input_scan->GetAs<::googlesql::ResolvedProjectScan>()->expr_list_size() ==
-            0));
+        input_scan->GetAs<::googlesql::ResolvedProjectScan>()
+                ->expr_list_size() == 0));
   if (input_id_aliases && join_passthrough_input &&
       input_scan->column_list_size() > 0) {
     std::vector<std::string> cols;
     cols.reserve(input_scan->column_list_size());
     for (int i = 0; i < input_scan->column_list_size(); ++i) {
-      cols.push_back(internal::JoinColumnIdAlias(
-          input_scan->column_list(i).column_id()));
+      cols.push_back(
+          internal::JoinColumnIdAlias(input_scan->column_list(i).column_id()));
     }
     projection = absl::StrJoin(cols, ", ");
     join_output_uses_id_aliases_ = true;
