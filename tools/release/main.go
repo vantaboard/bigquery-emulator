@@ -12,7 +12,10 @@ import (
 	"os"
 )
 
-const cmdBadge = "badge"
+const (
+	cmdBadge       = "badge"
+	cmdReadmeBadge = "readme-badge"
+)
 
 var errUsage = errors.New("usage error")
 
@@ -24,6 +27,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case cmdBadge:
 		return runBadge(args[1:], stdout, stderr)
+	case cmdReadmeBadge:
+		return runReadmeBadge(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return nil
@@ -38,9 +43,10 @@ func usage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `release - gh-pages badge JSON for the README release shield.
 
 Subcommands:
-  badge  Emit shields.io endpoint JSON for the latest semver release tag.
+  badge        Emit shields.io endpoint JSON for the latest semver release tag.
+  readme-badge Patch README.md shields.io cache buster (&v=...) for the release badge.
 
-Run "release badge -h" for flags.
+Run "release badge -h" or "release readme-badge -h" for flags.
 `)
 }
 

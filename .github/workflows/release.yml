@@ -417,6 +417,28 @@ jobs:
           user_email: 41898282+github-actions[bot]@users.noreply.github.com
           commit_message: "chore(release): publish badge for ${{ inputs.ref || github.ref_name }}"
 
+      - name: Bump README release badge cache buster
+        # shields.io caches endpoint badge images by URL; bump &v= on main
+        # whenever a release publishes fresh badge-release.json on gh-pages.
+        env:
+          REL_TAG: ${{ inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          cache_ver="${REL_TAG#v}"
+          go run ./tools/release readme-badge --version="$REL_TAG" --readme=README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tmp="$(mktemp)"
+          cp README.md "$tmp"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp "$tmp" README.md
+          git add README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(release): bump README release badge cache buster to ${cache_ver} [skip ci]"
+            git push origin main
+          fi
+
       - name: Release Bazel daemon
         if: always()
         run: timeout 60 bazel shutdown || true
