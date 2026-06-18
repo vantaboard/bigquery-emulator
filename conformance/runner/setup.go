@@ -59,6 +59,7 @@ func setupTable(ctx context.Context, base string, t *TableSetup) error {
 			Fields []bqtypes.TableFieldSchema `json:"fields"`
 		} `json:"schema,omitempty"`
 		ExternalDataConfiguration *bqtypes.ExternalDataConfiguration `json:"externalDataConfiguration,omitempty"`
+		View                      *bqtypes.ViewDefinition            `json:"view,omitempty"`
 	}{}
 	tableBody.TableReference = bqtypes.TableReference{
 		ProjectID: projectIDFromBase(base),
@@ -71,6 +72,9 @@ func setupTable(ctx context.Context, base string, t *TableSetup) error {
 			SourceURIs:   append([]string(nil), t.External.SourceURIs...),
 			Autodetect:   t.External.Autodetect,
 		}
+	}
+	if t.View != nil {
+		tableBody.View = &bqtypes.ViewDefinition{Query: t.View.Query}
 	}
 	if len(t.Schema) > 0 {
 		tableBody.Schema = &struct {

@@ -136,12 +136,17 @@ type RowsSetup struct {
 
 // TableSetup describes a table to create via REST. The schema is the
 // usual BigQuery TableFieldSchema shape. When External is set the
-// runner POSTs an external table (Google Sheets, GCS, ...).
+// runner POSTs an external table (Google Sheets, GCS, ...). When View
+// is set the runner POSTs a logical view (a `view.query` body, the
+// shape the Python/Java/Go clients send for `create_table(Table)` with
+// a view definition) so fixtures can exercise the REST view-creation
+// path distinctly from `CREATE VIEW` DDL.
 type TableSetup struct {
 	Dataset  string              `yaml:"dataset"`
 	ID       string              `yaml:"id"`
 	Schema   []SchemaColumn      `yaml:"schema,omitempty"`
 	External *ExternalTableSetup `yaml:"external,omitempty"`
+	View     *ViewTableSetup     `yaml:"view,omitempty"`
 }
 
 // ExternalTableSetup is the externalDataConfiguration block for setup.
@@ -151,6 +156,14 @@ type ExternalTableSetup struct {
 	Autodetect   bool     `yaml:"autodetect,omitempty"`
 }
 
+// ViewTableSetup is the `view` block for a tables.insert setup step.
+// Only the defining query is modeled; the emulator infers the view
+// schema from it (matching production BigQuery, which lets clients
+// omit the schema on a view insert).
+type ViewTableSetup struct {
+	Query string `yaml:"query"`
+}
+
 func (t *TableSetup) validate() error {
 	if t.Dataset == "" {
 		return errors.New("table.dataset is required")
@@ -158,11 +171,14 @@ func (t *TableSetup) validate() error {
 	if t.ID == "" {
 		return errors.New("table.id is required")
 	}
-	if len(t.Schema) == 0 && t.External == nil {
-		return errors.New("table.schema must list at least one column (or set table.external)")
+	if len(t.Schema) == 0 && t.External == nil && t.View == nil {
+		return errors.New("table.schema must list at least one column (or set table.external / table.view)")
 	}
 	if t.External != nil && t.External.SourceFormat == "" {
 		return errors.New("table.external.source_format is required")
+	}
+	if t.View != nil && strings.TrimSpace(t.View.Query) == "" {
+		return errors.New("table.view.query is required")
 	}
 	return nil
 }

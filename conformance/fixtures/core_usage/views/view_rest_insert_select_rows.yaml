@@ -1,0 +1,38 @@
+name: view_rest_insert_select_rows
+verified_production: true
+description: |
+  Reproduces the follow-up view bug report: a view created through the
+  REST tables.insert API (a `view.query` body — the shape the BigQuery
+  Python/Java/Go clients and the recidiviz fork send for
+  `create_table(Table)` with a view definition), NOT via CREATE VIEW DDL.
+
+  The defining query returns rows when run directly, but querying the
+  view returns nothing because the REST insert path registered an empty
+  backing table that shadowed the view in the engine catalog. Querying a
+  REST-created view must run its definition and return the base rows,
+  matching production BigQuery.
+project_id: proj-core-views
+setup:
+  - dataset: ds_main
+  - sql: CREATE TABLE ds_main.profiles_staging (id INT64, inserted_at TIMESTAMP, name STRING)
+  - rows:
+      dataset: ds_main
+      table: profiles_staging
+      rows:
+        - {id: 1, inserted_at: "2026-01-01T00:00:00Z", name: old-ada}
+        - {id: 1, inserted_at: "2026-02-01T00:00:00Z", name: new-ada}
+        - {id: 2, inserted_at: "2026-01-15T00:00:00Z", name: linus}
+  - table:
+      dataset: ds_main
+      id: profiles_dedup
+      view:
+        query: |
+          SELECT * EXCEPT(rn) FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn
+            FROM ds_main.profiles_staging
+          ) WHERE rn = 1
+query: SELECT id, name FROM ds_main.profiles_dedup ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: new-ada}
+    - {id: "2", name: linus}
