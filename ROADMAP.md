@@ -404,6 +404,11 @@ handler.
   cross-joined `FROM t, UNNEST(t.arr)` — pinned by
   `conformance/fixtures/array_struct/`. `JOIN USING` stays on
   `duckdb_native` (`conformance/fixtures/fastpath/join_using_inner.yaml`).
+  FULL OUTER JOIN null-pads unmatched sides on `duckdb_native`; the
+  transpiler emits per-side `__bq_j_<column_id>` aliases so duplicate
+  column names on both inputs bind independently (pinned by
+  `conformance/fixtures/fastpath/scan_join_full.yaml` and
+  `conformance/fixtures/core_usage/everyday_sql/full_join.yaml`).
   Lateral `ResolvedJoinScan` (`is_lateral`) evaluates per outer row on
   the semantic executor.
 - ✅ Built-in function mapping table — sourced from
@@ -544,13 +549,18 @@ public-facing policy.
 
 ## DML / DDL
 
-- ✅ DML routed by shape. Simple `MERGE` (`WHEN MATCHED` + single
-  `WHEN NOT MATCHED BY TARGET`) lowers through the DuckDB fast path;
-  the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`,
-  multi-action sequences) routes through the storage-aware local DML
-  executor (`backend/engine/semantic/dml/dml_merge.cc`). `INSERT
+- ✅ DML routed by shape. All `MERGE` statements — including
+  single-branch `WHEN MATCHED` / `WHEN NOT MATCHED BY TARGET` shapes
+  and the full matrix (`WHEN NOT MATCHED BY SOURCE`, multi-action
+  sequences) — route through the storage-aware local DML executor
+  (`backend/engine/semantic/dml/dml_merge.cc`). The DuckDB
+  verbatim-SQL MERGE path is retired: DuckDB cannot parse BigQuery MERGE
+  surface syntax (`MERGE table AS T`, `WHEN MATCHED AND …`). `INSERT
   VALUES`, `INSERT ... SELECT`, scalar- and deep-STRUCT `SET`
   `UPDATE`, proto `UpdateConstructor` SET, `UPDATE ... FROM`, `DELETE`,
+  `TRUNCATE TABLE` (via `RunTruncateTable` in
+  `control_op_ddl.cc` with a coordinator `ExecuteDml` bridge that
+  returns `dmlStats.deletedRowCount`),
   `THEN RETURN` on INSERT/UPDATE/DELETE (GoogleSQL does not define
   MERGE `THEN RETURN`), and `ASSERT_ROWS_MODIFIED` route through the
   semantic DML executor and populate `numDmlAffectedRows` correctly.
@@ -622,8 +632,8 @@ public-facing policy.
   `conformance/fixtures/udf/python_scalar_add.yaml`). See
   [Python UDFs](#python-udfs). Non-scalar JS / Python UDFs remain unsupported.
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
-  local DML executor lands (INSERT, UPDATE, DELETE, semantic MERGE
-  matrix, `THEN RETURN`) plus the DuckDB simple-MERGE path. The
+  local DML executor lands (INSERT, UPDATE, DELETE, TRUNCATE, all MERGE
+  shapes, `THEN RETURN`). The
   gateway folds `dmlStats` into the legacy aggregate
   (inserted + updated + deleted) per the BigQuery REST contract.
   Pipe INSERT populates stats via the same DML executor path.
@@ -822,6 +832,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
+| `UNDROP SCHEMA` | `unsupported` | **real** | [DML / DDL](#dml--ddl) (`RunUndrop` today) |
 
 > **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
 > NOT planned.** It is effectively a whole second query language and is
@@ -1081,10 +1092,10 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     and conditional branches on `WHEN MATCHED`, `WHEN NOT MATCHED BY
     SOURCE`, and `WHEN NOT MATCHED BY TARGET`. DuckDB's `INSERT ... ON
     CONFLICT` plus separate `UPDATE` / `DELETE` statements doesn't cover
-    the full matrix. The easy shapes route `duckdb_native` /
-    `duckdb_rewrite` today; the harder branches will route through the
-    `docs/ENGINE_POLICY.md` semantic path so we don't have to
-    pretend DuckDB SQL can model them.
+    the full matrix, and DuckDB cannot parse BigQuery MERGE surface
+    syntax (`MERGE table AS T`, `WHEN MATCHED AND …`). All MERGE shapes
+    route through the semantic DML executor (`dml_merge.cc`); see
+    [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md).
   - **Deep STRUCT mutations.** `UPDATE t SET s.a.b = ...` is well-defined
     in BigQuery but DuckDB's struct field updates are limited.
     Anything past a single-level rewrite routes through the

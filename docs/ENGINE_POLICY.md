@@ -115,6 +115,7 @@ summary the unsupported error envelope points at. Per-family posture
 | `EXPORT DATA` (local `file://` URI)                                                                          | `control_op`  | DuckDB `COPY (SELECT ...) TO` for CSV/JSON/Parquet. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
 | `EXPORT DATA` (`gs://` URI)                                                                                  | `control_op`  | Writes locally then uploads via fake-gcs when `STORAGE_EMULATOR_HOST` is set. |
 | `CREATE MATERIALIZED VIEW`                                                                                   | `control_op`  | Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by `conformance/fixtures/ddl/materialized_view_query.yaml`. |
+| `UNDROP SCHEMA`                                                                                              | `unsupported` (planned) | BigQuery's only undrop form (`UNDROP SCHEMA ...`). `RunUndrop` surfaces `UNIMPLEMENTED` today; `UNDROP TABLE` is not a BigQuery statement. See ROADMAP §DML / DDL. |
 | `INFORMATION_SCHEMA.*` reflection views                                                                      | `duckdb_native` | `<dataset>.INFORMATION_SCHEMA.<VIEW>` and region-qualified `` `region-<r>`.INFORMATION_SCHEMA.<VIEW> `` resolve at analyze time through `backend/catalog/info_schema_table.{h,cc}` (a `VirtualCatalogTable`) and materialize from `Storage` + the routine/view registries: `TABLES`, `COLUMNS`, `SCHEMATA`, `VIEWS` (view registry), `ROUTINES` (`__bqemu_routines`), `COLUMN_FIELD_PATHS` (recursed STRUCT/ARRAY paths), `PARTITIONS` / `TABLE_STORAGE` (`Storage::CountRows`, single unpartitioned partition; byte columns NULL per the persistence non-goal), and `TABLE_OPTIONS` / `KEY_COLUMN_USAGE` (empty — options/constraints are not modeled). `JOBS` / `JOBS_BY_PROJECT` are **not** engine-resolved: the gateway rewrites those queries to a snapshot table in `` `_bqemu_jobs.JOBS` `` materialized from the in-process job registry (`gateway/query/info_schema_jobs.go`, `gateway/jobs/info_schema.go`) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under `conformance/fixtures/info_schema/`. |
 
 The `local_stub` posture has two flavors:
@@ -162,9 +163,13 @@ in their head.
    and the harder MERGE matrix (`WHEN NOT MATCHED BY SOURCE`, multi-action
    sequences via `dml_merge.cc`). All `MERGE` statements route through the
    semantic executor (`dml_merge.cc`); the DuckDB verbatim-SQL MERGE path
-   is retired.
+   is retired. `TRUNCATE TABLE` clears rows via `RunTruncateTable`
+   (`CountRows` + `OverwriteRows` empty) on the control-op route; the
+   gateway posts TRUNCATE on the DML path, so the coordinator
+   `ExecuteDml` bridge calls `RunTruncateTable` and returns
+   `dmlStats.deletedRowCount`.
    `CREATE TABLE`, `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
-   `TRUNCATE TABLE`, `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
+   `CREATE MATERIALIZED VIEW` (full refresh), `EXPORT DATA`, and
    `LOAD DATA` (local files) are implemented today on the control-op
    route.
 
@@ -315,9 +320,27 @@ fast path keeps the standalone cases on `duckdb_native`.
 | Multi-array zip | `FROM UNNEST(a, b)` (`array_zip_mode`) | `semantic_executor` | `array_struct/multi_array_unnest_pad.yaml` |
 | Cross-join UNNEST | `FROM t, UNNEST(t.arr) AS n` | `semantic_executor` | `array_struct/cross_join_unnest.yaml` |
 | LEFT JOIN UNNEST | `LEFT JOIN UNNEST(t.arr) AS n ON TRUE` | `semantic_executor` | `array_struct/left_join_unnest.yaml` |
+| INNER / LEFT / RIGHT / FULL / CROSS join | `FROM a JOIN b ON a.k = b.k` | `duckdb_native` (subset) | `fastpath/scan_join_*` |
+| FULL OUTER JOIN (duplicate column names) | `SELECT a.k, b.k FROM a FULL JOIN b ON a.k = b.k` | `duckdb_native` | `core_usage/everyday_sql/full_join.yaml`, `fastpath/scan_join_full.yaml` |
 | JOIN USING | `INNER JOIN t2 USING (id)` | `duckdb_native` | `fastpath/join_using_inner.yaml` |
 | Lateral join scan | `... JOIN LATERAL (...)` (`is_lateral`) | `semantic_executor` | unit tests (`MaterializeJoinScan`) |
 | Correlated subquery | `EXISTS (SELECT 1 FROM r WHERE r.k = o.k)` | `semantic_executor` | `cte_subquery/subquery_expr_correlated_exists.yaml` |
+
+When both join inputs expose the same column name, the transpiler emits
+per-side `__bq_j_<column_id>` aliases at join time and keeps them visible
+through passthrough `ProjectScan` / `OrderByScan` wrappers so unmatched
+FULL OUTER JOIN rows null-pad the missing side instead of self-matching
+the surviving column.
+
+## DML statement routing
+
+| Statement | Route | Handler / notes | Conformance |
+|---|---|---|---|
+| `INSERT` (`VALUES` / `SELECT`) | `semantic_executor` | `dml_insert.cc`; inner `SELECT` may promote to `duckdb_native` | `core_usage/dml_readback/insert_*` |
+| `UPDATE` / `DELETE` | `semantic_executor` | `dml_mutate.cc`; nested array DELETE in `UPDATE SET` | `core_usage/dml_readback/update_readback.yaml`, `delete_readback.yaml` |
+| `MERGE` (all branches) | `semantic_executor` | `dml_merge.cc`; DuckDB verbatim-SQL MERGE path retired | `dml/merge_*`, `core_usage/dml_readback/merge_readback.yaml` |
+| `TRUNCATE TABLE` | `control_op` (+ DML bridge) | `RunTruncateTable`; coordinator `ExecuteDml` returns `deletedRowCount` | `core_usage/dml_readback/truncate_readback.yaml` |
+| Pipe INSERT (`|> INSERT`) | `semantic_executor` | `ResolvedPipeInsertScan` via `ExecuteDml` | `ResolvedPipeInsertScan` unit coverage |
 
 ## Cast extensions, COLLATE, value tables, set-op CORRESPONDING
 
