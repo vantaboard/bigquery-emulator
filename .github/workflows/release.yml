@@ -425,14 +425,11 @@ jobs:
         run: |
           set -euo pipefail
           cache_ver="${REL_TAG#v}"
-          go run ./tools/release readme-badge --version="$REL_TAG" --readme=README.md
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          tmp="$(mktemp)"
-          cp README.md "$tmp"
           git fetch origin main
           git checkout -B main origin/main
-          cp "$tmp" README.md
+          go run ./tools/release readme-badge --version="$REL_TAG" --readme=README.md
           git add README.md
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): bump README release badge cache buster to ${cache_ver} [skip ci]"
