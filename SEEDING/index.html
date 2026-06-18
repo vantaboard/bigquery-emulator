@@ -663,6 +663,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#default-dataset-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Default dataset resolution
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1072,6 +1081,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#default-dataset-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Default dataset resolution
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1394,6 +1412,11 @@ canonical reference:</p>
 <td>Default project for seeding and YAML loader fallbacks.</td>
 </tr>
 <tr>
+<td><code>--dataset</code></td>
+<td><code>--dataset-id</code>, <code>--dataset_id</code></td>
+<td>Server-level default dataset for unqualified table names (see below).</td>
+</tr>
+<tr>
 <td><code>--default-dataset-location</code></td>
 <td></td>
 <td>Default location stamped on datasets without an explicit one.</td>
@@ -1453,6 +1476,26 @@ flag is empty):</p>
 </tr>
 </tbody>
 </table>
+<h2 id="default-dataset-resolution">Default dataset resolution<a class="headerlink" href="#default-dataset-resolution" title="Permanent link">&para;</a></h2>
+<p>The emulator resolves table names the same way production BigQuery does:</p>
+<ul>
+<li><strong>Fully-qualified names</strong> — <code>`project.dataset.table`</code> or
+  <code>dataset.table</code> — resolve directly. A path wrapped entirely in
+  backticks (<code>`ds_main.profiles`</code>) is split on the dots into its
+  component identifiers, so it behaves identically whether you write
+  <code>`ds_main.profiles`</code>, <code>`ds_main`.`profiles`</code>, or
+  <code>ds_main.profiles</code>. This applies to reads (<code>FROM</code>) <strong>and</strong> DDL targets
+  (<code>CREATE [OR REPLACE] TABLE</code>, <code>DROP TABLE</code>, <code>ALTER TABLE</code>, CTAS, …).</li>
+<li><strong>Unqualified names</strong> — a bare <code>table</code> (no dots) needs a default
+  dataset to resolve. The default is taken, in order, from:</li>
+<li>the request's own <code>defaultDataset</code> (set by the client library,
+     e.g. <code>QueryJobConfig(default_dataset=...)</code>); then</li>
+<li>the server-level <code>--dataset</code> flag.</li>
+</ul>
+<p>With neither set, a bare table name errors exactly like production
+  BigQuery does when no default dataset is configured. Use <code>--dataset</code>
+  when your client doesn't set one but your SQL still references bare
+  table names.</p>
 
 
 

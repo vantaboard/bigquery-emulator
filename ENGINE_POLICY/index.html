@@ -735,6 +735,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dml-statement-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      DML statement routing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cast-extensions-collate-value-tables-set-op-corresponding" class="md-nav__link">
     <span class="md-ellipsis">
       Cast extensions, COLLATE, value tables, set-op CORRESPONDING
@@ -1007,6 +1016,15 @@
   <a href="#relational-unnest-lateral-correlated-subqueries" class="md-nav__link">
     <span class="md-ellipsis">
       Relational UNNEST / lateral / correlated subqueries
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dml-statement-routing" class="md-nav__link">
+    <span class="md-ellipsis">
+      DML statement routing
     </span>
   </a>
   
@@ -1365,6 +1383,11 @@ summary the unsupported error envelope points at. Per-family posture
 <td>Full-refresh materialization at creation only (no incremental refresh). Stored as a regular table; reads use the existing table-scan path. Pinned by <code>conformance/fixtures/ddl/materialized_view_query.yaml</code>.</td>
 </tr>
 <tr>
+<td><code>UNDROP SCHEMA</code></td>
+<td><code>unsupported</code> (planned)</td>
+<td>BigQuery's only undrop form (<code>UNDROP SCHEMA ...</code>). <code>RunUndrop</code> surfaces <code>UNIMPLEMENTED</code> today; <code>UNDROP TABLE</code> is not a BigQuery statement. See ROADMAP §DML / DDL.</td>
+</tr>
+<tr>
 <td><code>INFORMATION_SCHEMA.*</code> reflection views</td>
 <td><code>duckdb_native</code></td>
 <td><code>&lt;dataset&gt;.INFORMATION_SCHEMA.&lt;VIEW&gt;</code> and region-qualified <code>`region-&lt;r&gt;`.INFORMATION_SCHEMA.&lt;VIEW&gt;</code> resolve at analyze time through <code>backend/catalog/info_schema_table.{h,cc}</code> (a <code>VirtualCatalogTable</code>) and materialize from <code>Storage</code> + the routine/view registries: <code>TABLES</code>, <code>COLUMNS</code>, <code>SCHEMATA</code>, <code>VIEWS</code> (view registry), <code>ROUTINES</code> (<code>__bqemu_routines</code>), <code>COLUMN_FIELD_PATHS</code> (recursed STRUCT/ARRAY paths), <code>PARTITIONS</code> / <code>TABLE_STORAGE</code> (<code>Storage::CountRows</code>, single unpartitioned partition; byte columns NULL per the persistence non-goal), and <code>TABLE_OPTIONS</code> / <code>KEY_COLUMN_USAGE</code> (empty — options/constraints are not modeled). <code>JOBS</code> / <code>JOBS_BY_PROJECT</code> are <strong>not</strong> engine-resolved: the gateway rewrites those queries to a snapshot table in <code>`_bqemu_jobs.JOBS`</code> materialized from the in-process job registry (<code>gateway/query/info_schema_jobs.go</code>, <code>gateway/jobs/info_schema.go</code>) so tooling can introspect job metadata without faking engine storage. Conformance fixtures under <code>conformance/fixtures/info_schema/</code>.</td>
@@ -1415,8 +1438,13 @@ in their head.</p>
    RETURN</code> on INSERT/UPDATE/DELETE (GoogleSQL does not define MERGE <code>THEN
    RETURN</code>), pipe INSERT (<code>ResolvedPipeInsertScan</code>), <code>ASSERT_ROWS_MODIFIED</code>,
    and the harder MERGE matrix (<code>WHEN NOT MATCHED BY SOURCE</code>, multi-action
-   sequences via <code>dml_merge.cc</code>). Simple <code>MERGE</code> (<code>WHEN MATCHED</code> + single
-   <code>WHEN NOT MATCHED BY TARGET</code>) stays on the DuckDB fast path.
+   sequences via <code>dml_merge.cc</code>). All <code>MERGE</code> statements route through the
+   semantic executor (<code>dml_merge.cc</code>); the DuckDB verbatim-SQL MERGE path
+   is retired. <code>TRUNCATE TABLE</code> clears rows via <code>RunTruncateTable</code>
+   (<code>CountRows</code> + <code>OverwriteRows</code> empty) on the control-op route; the
+   gateway posts TRUNCATE on the DML path, so the coordinator
+   <code>ExecuteDml</code> bridge calls <code>RunTruncateTable</code> and returns
+   <code>dmlStats.deletedRowCount</code>.
    <code>CREATE TABLE</code>, <code>CREATE TABLE AS SELECT</code>, <code>DROP TABLE</code>, <code>ALTER TABLE</code>,
    <code>CREATE MATERIALIZED VIEW</code> (full refresh), <code>EXPORT DATA</code>, and
    <code>LOAD DATA</code> (local files) are implemented today on the control-op
@@ -1650,6 +1678,18 @@ fast path keeps the standalone cases on <code>duckdb_native</code>.</p>
 <td><code>array_struct/left_join_unnest.yaml</code></td>
 </tr>
 <tr>
+<td>INNER / LEFT / RIGHT / FULL / CROSS join</td>
+<td><code>FROM a JOIN b ON a.k = b.k</code></td>
+<td><code>duckdb_native</code> (subset)</td>
+<td><code>fastpath/scan_join_*</code></td>
+</tr>
+<tr>
+<td>FULL OUTER JOIN (duplicate column names)</td>
+<td><code>SELECT a.k, b.k FROM a FULL JOIN b ON a.k = b.k</code></td>
+<td><code>duckdb_native</code></td>
+<td><code>core_usage/everyday_sql/full_join.yaml</code>, <code>fastpath/scan_join_full.yaml</code></td>
+</tr>
+<tr>
 <td>JOIN USING</td>
 <td><code>INNER JOIN t2 USING (id)</code></td>
 <td><code>duckdb_native</code></td>
@@ -1666,6 +1706,54 @@ fast path keeps the standalone cases on <code>duckdb_native</code>.</p>
 <td><code>EXISTS (SELECT 1 FROM r WHERE r.k = o.k)</code></td>
 <td><code>semantic_executor</code></td>
 <td><code>cte_subquery/subquery_expr_correlated_exists.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>When both join inputs expose the same column name, the transpiler emits
+per-side <code>__bq_j_&lt;column_id&gt;</code> aliases at join time and keeps them visible
+through passthrough <code>ProjectScan</code> / <code>OrderByScan</code> wrappers so unmatched
+FULL OUTER JOIN rows null-pad the missing side instead of self-matching
+the surviving column.</p>
+<h2 id="dml-statement-routing">DML statement routing<a class="headerlink" href="#dml-statement-routing" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Statement</th>
+<th>Route</th>
+<th>Handler / notes</th>
+<th>Conformance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INSERT</code> (<code>VALUES</code> / <code>SELECT</code>)</td>
+<td><code>semantic_executor</code></td>
+<td><code>dml_insert.cc</code>; inner <code>SELECT</code> may promote to <code>duckdb_native</code></td>
+<td><code>core_usage/dml_readback/insert_*</code></td>
+</tr>
+<tr>
+<td><code>UPDATE</code> / <code>DELETE</code></td>
+<td><code>semantic_executor</code></td>
+<td><code>dml_mutate.cc</code>; nested array DELETE in <code>UPDATE SET</code></td>
+<td><code>core_usage/dml_readback/update_readback.yaml</code>, <code>delete_readback.yaml</code></td>
+</tr>
+<tr>
+<td><code>MERGE</code> (all branches)</td>
+<td><code>semantic_executor</code></td>
+<td><code>dml_merge.cc</code>; DuckDB verbatim-SQL MERGE path retired</td>
+<td><code>dml/merge_*</code>, <code>core_usage/dml_readback/merge_readback.yaml</code></td>
+</tr>
+<tr>
+<td><code>TRUNCATE TABLE</code></td>
+<td><code>control_op</code> (+ DML bridge)</td>
+<td><code>RunTruncateTable</code>; coordinator <code>ExecuteDml</code> returns <code>deletedRowCount</code></td>
+<td><code>core_usage/dml_readback/truncate_readback.yaml</code></td>
+</tr>
+<tr>
+<td>Pipe INSERT (<code>|&gt; INSERT</code>)</td>
+<td><code>semantic_executor</code></td>
+<td><code>ResolvedPipeInsertScan</code> via <code>ExecuteDml</code></td>
+<td><code>ResolvedPipeInsertScan</code> unit coverage</td>
 </tr>
 </tbody>
 </table>
