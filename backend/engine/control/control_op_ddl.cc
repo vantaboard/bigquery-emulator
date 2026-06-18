@@ -437,8 +437,7 @@ absl::Status RunDropTable(storage::Storage& storage,
 }
 
 absl::StatusOr<int64_t> RunTruncateTable(
-    storage::Storage& storage,
-    const ::googlesql::ResolvedTruncateStmt* stmt) {
+    storage::Storage& storage, const ::googlesql::ResolvedTruncateStmt* stmt) {
   if (stmt == nullptr) {
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: TRUNCATE has null resolved statement");
@@ -454,10 +453,10 @@ absl::StatusOr<int64_t> RunTruncateTable(
   const auto* storage_table =
       dynamic_cast<const catalog::StorageTable*>(stmt->table_scan()->table());
   if (storage_table == nullptr) {
-    return absl::FailedPreconditionError(absl::StrCat(
-        "control op executor: TRUNCATE target '",
-        stmt->table_scan()->table()->FullName(),
-        "' is not backed by storage"));
+    return absl::FailedPreconditionError(
+        absl::StrCat("control op executor: TRUNCATE target '",
+                     stmt->table_scan()->table()->FullName(),
+                     "' is not backed by storage"));
   }
   const storage::TableId& id = storage_table->storage_table_id();
   absl::StatusOr<schema::TableSchema> schema = storage.GetSchema(id);

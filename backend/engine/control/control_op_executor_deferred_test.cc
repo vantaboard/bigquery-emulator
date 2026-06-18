@@ -18,6 +18,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/control/control_op_executor.h"
+#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
@@ -197,6 +198,37 @@ TEST_F(ControlOpExecutorDeferredTest, ExportDataWritesLocalCsv) {
   std::string line;
   ASSERT_TRUE(std::getline(in, line));
   EXPECT_EQ(line, "id,name");
+}
+
+TEST_F(ControlOpExecutorDeferredTest, TruncateTableClearsRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
+  ::googlesql::TypeFactory type_factory;
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
+  absl::Status analyze =
+      ::googlesql::AnalyzeStatement("TRUNCATE TABLE ds.people",
+                                    options,
+                                    bundle.catalog.get(),
+                                    &type_factory,
+                                    &output);
+  ASSERT_TRUE(analyze.ok()) << analyze;
+  ASSERT_NE(output, nullptr);
+  ASSERT_NE(output->resolved_statement(), nullptr);
+  const auto* truncate =
+      output->resolved_statement()->GetAs<::googlesql::ResolvedTruncateStmt>();
+  ASSERT_NE(truncate, nullptr);
+  absl::StatusOr<int64_t> deleted =
+      internal::RunTruncateTable(*storage_, truncate);
+  ASSERT_TRUE(deleted.ok()) << deleted.status();
+  EXPECT_EQ(*deleted, 3);
+  absl::StatusOr<std::int64_t> after =
+      storage_->CountRows({"proj-test", "ds", "people"});
+  ASSERT_TRUE(after.ok()) << after.status();
+  EXPECT_EQ(*after, 0);
+  auto schema = storage_->GetSchema({"proj-test", "ds", "people"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  EXPECT_EQ(schema->columns.size(), 2u);
 }
 
 }  // namespace

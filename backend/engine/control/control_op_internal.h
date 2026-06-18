@@ -129,8 +129,7 @@ absl::Status RunDropTable(storage::Storage& storage,
                           const ::googlesql::ResolvedDropStmt* stmt);
 
 absl::StatusOr<int64_t> RunTruncateTable(
-    storage::Storage& storage,
-    const ::googlesql::ResolvedTruncateStmt* stmt);
+    storage::Storage& storage, const ::googlesql::ResolvedTruncateStmt* stmt);
 
 absl::Status RunAlterTable(storage::Storage& storage,
                            absl::string_view project_id,

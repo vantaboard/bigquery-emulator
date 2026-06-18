@@ -253,13 +253,14 @@ absl::StatusOr<DmlStats> ExecuteMerge(
             ctx.columns = nullptr;
             continue;
           }
-          ctx.columns = nullptr;
           if (when->action_type() != ::googlesql::ResolvedMergeWhen::INSERT) {
+            ctx.columns = nullptr;
             return absl::InternalError(
                 "semantic/dml: NOT MATCHED BY TARGET requires INSERT");
           }
           if (when->insert_row() == nullptr ||
               when->insert_column_list().empty()) {
+            ctx.columns = nullptr;
             return absl::InternalError(
                 "semantic/dml: MERGE INSERT clause missing row/columns");
           }
@@ -269,6 +270,7 @@ absl::StatusOr<DmlStats> ExecuteMerge(
             const int idx =
                 IndexOfColumn(schema, when->insert_column_list(c).name());
             if (idx < 0) {
+              ctx.columns = nullptr;
               return absl::InternalError(
                   absl::StrCat("semantic/dml: MERGE INSERT column '",
                                when->insert_column_list(c).name(),
@@ -278,6 +280,7 @@ absl::StatusOr<DmlStats> ExecuteMerge(
           }
           auto built =
               BuildInsertRow(*when->insert_row(), column_idx, schema, ctx);
+          ctx.columns = nullptr;
           if (!built.ok()) return built.status();
           inserts.push_back(*std::move(built));
           src.acted = true;
