@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -49,6 +51,52 @@ func SaveReport(path string, r RunReport) error {
 		return err
 	}
 	return os.WriteFile(path, append(raw, '\n'), 0o644) //nolint:gosec // 0o644 is fine for benchmark output JSON
+}
+
+// MergeReport overlays fresh benchmark results onto an existing report,
+// replacing any (case_name, target) rows that appear in the fresh run and
+// preserving everything else. This makes partial reruns (e.g.
+// --case create_view_100k) update only the cases that ran instead of
+// discarding the rest of bench/results.json.
+func MergeReport(existing, fresh RunReport) RunReport {
+	out := existing
+	out.Timestamp = fresh.Timestamp
+	if fresh.CommitSHA != "" {
+		out.CommitSHA = fresh.CommitSHA
+	}
+	if fresh.Host != "" {
+		out.Host = fresh.Host
+	}
+	if fresh.GoccyImage != "" {
+		out.GoccyImage = fresh.GoccyImage
+	}
+	if len(fresh.Targets) > 0 {
+		out.Targets = fresh.Targets
+	}
+
+	freshKeys := make(map[string]struct{}, len(fresh.Results))
+	for _, r := range fresh.Results {
+		freshKeys[resultKey(r)] = struct{}{}
+	}
+	kept := make([]CaseResult, 0, len(existing.Results))
+	for _, r := range existing.Results {
+		if _, replace := freshKeys[resultKey(r)]; replace {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	out.Results = append(kept, fresh.Results...)
+	slices.SortFunc(out.Results, func(a, b CaseResult) int {
+		if c := strings.Compare(a.CaseName, b.CaseName); c != 0 {
+			return c
+		}
+		return strings.Compare(string(a.Target), string(b.Target))
+	})
+	return out
+}
+
+func resultKey(r CaseResult) string {
+	return r.CaseName + "\x00" + string(r.Target)
 }
 
 // LoadReport reads a results JSON file.

@@ -9,7 +9,7 @@ vars:
 
 tasks:
   run:
-    desc: Run benchmarks (vantaboard + goccy by default) and print report
+    desc: Run benchmarks (vantaboard + goccy by default) and print report; set CASE=name to rerun one case and merge it into bench/results.json
     cmds:
       - |
         set -eo pipefail
@@ -18,6 +18,9 @@ tasks:
           task emulator:build-engine:bazel
         fi
         ARGS=(--target=all --json-out "{{.BENCH_JSON}}")
+        if [ -n "${CASE:-}" ]; then
+          ARGS+=(--case="${CASE}")
+        fi
         if [ -n "${BENCH_EXTRA_ARGS:-}" ]; then
           # shellcheck disable=SC2206
           EXTRA=(${BENCH_EXTRA_ARGS})

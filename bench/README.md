@@ -17,6 +17,9 @@ task emulator:build-engine:bazel
 # Run vantaboard + goccy benchmarks and charts
 task bench:run
 
+# Rerun one case after a fix (merges into bench/results.json, regenerates charts)
+CASE=create_view_100k task bench:run
+
 # Compare vantaboard against committed BigQuery baseline (emulator only;
 # does not rewrite bench/results.json — use bench:run for goccy charts)
 task bench:compare

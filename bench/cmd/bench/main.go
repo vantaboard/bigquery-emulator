@@ -132,8 +132,19 @@ func writeRunOutputs(
 	}
 	runner.PrintTextReport(os.Stdout, report, baseline)
 	if cfg.jsonOut != "" {
-		if err := runner.SaveReport(cfg.jsonOut, report); err != nil {
+		toSave := report
+		// Partial rerun: merge into existing results so other cases stay intact.
+		if cfg.caseFilter != "" {
+			if existing, loadErr := runner.LoadReport(cfg.jsonOut); loadErr == nil {
+				toSave = runner.MergeReport(existing, report)
+			}
+		}
+		if err := runner.SaveReport(cfg.jsonOut, toSave); err != nil {
 			return err
+		}
+		if cfg.caseFilter != "" {
+			_, _ = fmt.Fprintf(os.Stdout, "merged results into %s (%d rows)\n",
+				cfg.jsonOut, len(toSave.Results))
 		}
 	}
 	if !cfg.capture {
