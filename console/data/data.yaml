@@ -42,14 +42,14 @@ datasets:
           - { name: metadata, type: JSON }
           - { name: event_timestamp, type: TIMESTAMP }
         rows:
-          - event_id: evt_001
+          - event_id: "evt_001"
             user_id: 123
-            event_type: page_view
+            event_type: "page_view"
             metadata: '{"page": "/home", "device": "mobile"}'
             event_timestamp: "2023-01-01T10:30:00"
-          - event_id: evt_002
+          - event_id: "evt_002"
             user_id: 456
-            event_type: purchase
+            event_type: "purchase"
             metadata: '{"amount": 99.99, "product_id": "prod_123"}'
             event_timestamp: "2023-01-02T15:45:00"
   - id: products_dataset
@@ -67,46 +67,32 @@ datasets:
               - { name: dimensions, type: STRING }
               - { name: color, type: STRING }
         rows:
-          - product_id: P001
-            name: Ergonomic Chair
+          - product_id: "P001"
+            name: "Ergonomic Chair"
             price: 299.99
-            categories: [furniture, office]
+            categories: ["furniture", "office"]
             specs:
               weight: 12.5
-              dimensions: 60x55x115cm
-              color: black
-          - product_id: P002
-            name: Standing Desk
+              dimensions: "60x55x115cm"
+              color: "black"
+          - product_id: "P002"
+            name: "Standing Desk"
             price: 499.99
-            categories: [furniture, office, premium]
+            categories: ["furniture", "office", "premium"]
             specs:
               weight: 35.0
-              dimensions: 120x60x75cm
-              color: oak
+              dimensions: "120x60x75cm"
+              color: "oak"
   - id: sales_dataset
     tables:
       - id: transactions
         schema:
           - { name: transaction_id, type: STRING, mode: REQUIRED }
           - { name: customer_id, type: INT64 }
-          - name: items
-            type: STRUCT
-            mode: REPEATED
-            fields:
-              - { name: product_id, type: STRING }
-              - { name: quantity, type: INT64 }
-              - { name: unit_price, type: FLOAT64 }
           - { name: total_amount, type: NUMERIC }
-          - { name: purchase_date, type: DATETIME }
+          - { name: purchase_date, type: TIMESTAMP }
         rows:
-          - transaction_id: T001
+          - transaction_id: "T001"
             customer_id: 1001
-            items:
-              - product_id: P001
-                quantity: 2
-                unit_price: 299.99
-              - product_id: P002
-                quantity: 1
-                unit_price: 499.99
             total_amount: 1099.97
-            purchase_date: "2023-03-15 14:30:00"
+            purchase_date: "2023-03-15T14:30:00"
