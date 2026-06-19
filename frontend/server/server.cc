@@ -38,7 +38,9 @@ void HandleSignal(int /*signo*/) {
 // It owns:
 //   * a `CatalogService`, `QueryService`, `SqlToolsService`,
 //     `StorageReadService`, and `StorageWriteService` implementation
-//     `bigquery_emulator.v1.*` gRPC services defined in
+//     of the `bigquery_emulator.v1.*` gRPC services defined in
+//     `proto/emulator.proto`, `proto/storage_read.proto`, and
+//     `proto/storage_write.proto`, and
 //   * the default `grpc.health.v1.Health` service that ServerBuilder
 //     registers when EnableDefaultHealthCheckService(true) is called.
 //
