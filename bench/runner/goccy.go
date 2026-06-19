@@ -132,7 +132,7 @@ func (t *GoccyTarget) restart(ctx context.Context) error {
 func (t *GoccyTarget) SetupCase(ctx context.Context, c Case, dataset string) error {
 	setup, _ := c.Substitute(dataset, goccyProject)
 	t.client.ProjectID = goccyProject
-	setupTimeout := c.QueryTimeout(time.Duration(defaultTimeoutMS) * time.Millisecond)
+	setupTimeout := c.QueryTimeoutForTarget(TargetGoccy, time.Duration(defaultTimeoutMS)*time.Millisecond)
 	if err := t.client.CreateDataset(ctx, dataset); err != nil {
 		return err
 	}

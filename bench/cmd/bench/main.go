@@ -30,7 +30,8 @@ func main() {
 			os.Getenv("BENCH_SKIP_GOCCY") == "1",
 			"skip goccy target when --target=all",
 		)
-		quiet = flag.Bool("quiet", false, "suppress per-case progress logging on stderr")
+		quiet       = flag.Bool("quiet", false, "suppress per-case progress logging on stderr")
+		timeoutFlag = flag.Duration("timeout", 0, "per-query wall cap when case YAML does not raise it (default 60s)")
 	)
 	flag.Parse()
 	if err := run(context.Background(), config{
@@ -46,6 +47,7 @@ func main() {
 		engineBin:    *engineBin,
 		skipGoccy:    *skipGoccy,
 		quiet:        *quiet,
+		timeout:      *timeoutFlag,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "bench: %v\n", err)
 		os.Exit(1)
@@ -65,6 +67,7 @@ type config struct {
 	engineBin    string
 	skipGoccy    bool
 	quiet        bool
+	timeout      time.Duration
 }
 
 func run(ctx context.Context, cfg config) error {
@@ -89,6 +92,7 @@ func run(ctx context.Context, cfg config) error {
 		CasesDir:   cfg.casesDir,
 		CaseFilter: cfg.caseFilter,
 		Targets:    targets,
+		Timeout:    cfg.timeout,
 		Baseline:   baseline,
 		Compare:    cfg.compare,
 		Progress:   progress,

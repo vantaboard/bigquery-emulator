@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -221,7 +222,7 @@ func runCase(
 	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
 		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
 	_, query := c.Substitute(dsRef, project)
-	caseTimeout := c.QueryTimeout(timeout)
+	caseTimeout := c.QueryTimeoutForTarget(target.Name(), timeout)
 
 	samples, execSamples, queueSamples, slotSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
 		ctx, opts, target, c, query, caseTimeout)
@@ -273,7 +274,7 @@ func runQueryIterations(
 		res, err := target.RunQuery(ctx, c, query, timeout)
 		last = res
 		if err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
+			if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
 				outcome = OutcomeTimeout
 				lastErr = "timeout"
 				break
