@@ -1,5 +1,7 @@
 name: join_hash_2m
 tags: [duckdb, join, heavy]
+skip_targets: [goccy]
+skip_reason: "2M-row hash join exceeds practical goccy bench timeout"
 setup:
   - sql: |
       CREATE TABLE {{ds}}.a AS
