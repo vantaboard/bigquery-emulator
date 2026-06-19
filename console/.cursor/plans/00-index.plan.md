@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: m1-03
     content: Execute m1-03-routing-workspace-breadcrumbs.plan.md (routing, multi-tab workspace, persistence, breadcrumbs); verify e2e + manual reload.
-    status: pending
+    status: completed
   - id: m2-01
     content: Execute m2-01-dataset-detail-page.plan.md (dataset Overview + Details + Insights placeholder); verify.
     status: pending
