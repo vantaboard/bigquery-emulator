@@ -1,0 +1,16 @@
+name: agg_high_card_2m
+tags: [duckdb, aggregate, heavy]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 500000) AS k, CAST(id AS FLOAT64) / 7 AS v
+      FROM UNNEST(GENERATE_ARRAY(1, 2000000)) AS id
+query: |
+  SELECT k, COUNT(*) AS cnt, SUM(v) AS total
+  FROM {{ds}}.t
+  GROUP BY k
+  ORDER BY k
+  LIMIT 1000
+iterations: 5
+warmup: 1
+max_ms: 120000

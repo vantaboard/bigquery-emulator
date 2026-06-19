@@ -1,0 +1,17 @@
+name: window_partition_1m
+tags: [duckdb, analytic, heavy]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.t AS
+      SELECT id, MOD(id, 1000) AS k FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS id
+query: |
+  SELECT k, rn FROM (
+    SELECT k, ROW_NUMBER() OVER (PARTITION BY k ORDER BY id) AS rn
+    FROM {{ds}}.t
+  )
+  WHERE rn <= 3
+  ORDER BY k, rn
+  LIMIT 500
+iterations: 5
+warmup: 1
+max_ms: 120000

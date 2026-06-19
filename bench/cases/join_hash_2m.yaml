@@ -1,0 +1,16 @@
+name: join_hash_2m
+tags: [duckdb, join, heavy]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.a AS
+      SELECT id, MOD(id, 200000) AS k FROM UNNEST(GENERATE_ARRAY(1, 2000000)) AS id
+  - sql: |
+      CREATE TABLE {{ds}}.b AS
+      SELECT k, k * 2 AS v FROM UNNEST(GENERATE_ARRAY(0, 199999)) AS k
+query: |
+  SELECT COUNT(*) AS cnt, SUM(v) AS total
+  FROM {{ds}}.a
+  JOIN {{ds}}.b USING (k)
+iterations: 5
+warmup: 1
+max_ms: 180000

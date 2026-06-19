@@ -39,6 +39,13 @@ max_ms: 180000  # optional; query wall cap when above 30s default (also baseline
 
 `{{ds}}` is substituted per target (emulator dataset id, or `project.dataset` on BigQuery).
 
+Cases tagged `heavy` (e.g. `join_hash_2m`, `agg_high_card_2m`, `order_by_1m`,
+`window_partition_1m`) build 1M–2M row tables so engine quality — not fixed
+per-query overhead — dominates the result. They use fewer `iterations` and a
+raised `max_ms` so slower targets (notably goccy) can finish. Capture a fresh
+BigQuery baseline (`task bench:baseline`) after adding heavy cases so they are
+gated and charted.
+
 ## BigQuery golden baseline
 
 Capture requires ADC and a billing project:
