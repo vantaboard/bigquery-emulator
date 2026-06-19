@@ -51,3 +51,6 @@ matching family directory.
   CURRENT_*).
 * Land the fixture in the same commit as any disposition or
   transpiler change it pins.
+* When adding a bench case whose setup SQL introduces a new analyzer
+  AST shape, land a matching fastpath fixture here first so CI pins
+  it before release.

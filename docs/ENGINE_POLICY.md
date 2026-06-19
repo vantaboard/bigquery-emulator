@@ -315,10 +315,11 @@ fast path keeps the standalone cases on `duckdb_native`.
 
 | Family | Representative SQL | Route | Conformance |
 |---|---|---|---|
-| Standalone UNNEST | `SELECT n FROM UNNEST([1,2,3]) AS n` | `duckdb_native` | fast-path fixtures |
+| Standalone UNNEST | `SELECT n FROM UNNEST([1,2,3]) AS n` | `duckdb_native` | `fastpath/scan_array_unnest.yaml` |
+| Standalone UNNEST cross product | `FROM UNNEST(a) CROSS JOIN UNNEST(b)` (nested `ArrayScan` chain) | `duckdb_native` | `fastpath/scan_array_unnest_cross_join.yaml`, `scan_array_unnest_cross_join_three.yaml`, `ctas_unnest_cross_join.yaml` |
 | UNNEST WITH OFFSET | `... UNNEST(arr) AS n WITH OFFSET AS idx` | `semantic_executor` | `array_struct/unnest_with_offset.yaml` |
 | Multi-array zip | `FROM UNNEST(a, b)` (`array_zip_mode`) | `semantic_executor` | `array_struct/multi_array_unnest_pad.yaml` |
-| Cross-join UNNEST | `FROM t, UNNEST(t.arr) AS n` | `semantic_executor` | `array_struct/cross_join_unnest.yaml` |
+| Cross-join UNNEST (table column) | `FROM t, UNNEST(t.arr) AS n` | `duckdb_native` | `array_struct/cross_join_unnest.yaml` |
 | LEFT JOIN UNNEST | `LEFT JOIN UNNEST(t.arr) AS n ON TRUE` | `semantic_executor` | `array_struct/left_join_unnest.yaml` |
 | INNER / LEFT / RIGHT / FULL / CROSS join | `FROM a JOIN b ON a.k = b.k` | `duckdb_native` (subset) | `fastpath/scan_join_*` |
 | FULL OUTER JOIN (duplicate column names) | `SELECT a.k, b.k FROM a FULL JOIN b ON a.k = b.k` | `duckdb_native` | `core_usage/everyday_sql/full_join.yaml`, `fastpath/scan_join_full.yaml` |

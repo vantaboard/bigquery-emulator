@@ -1,0 +1,25 @@
+# scan_array_unnest_cross_join: nested standalone UNNEST cross product.
+#
+# BigQuery analyzes `UNNEST(a) CROSS JOIN UNNEST(b)` as a chain of nested
+# single-array ResolvedArrayScan nodes (outer input_scan = inner ArrayScan),
+# not ResolvedJoinScan and not multi-array zip (array_zip_mode). The DuckDB
+# transpiler lowers this via EmitUnnestCrossProductScan.
+name: scan_array_unnest_cross_join
+description: |
+  Explicit CROSS JOIN of two standalone UNNEST(GENERATE_ARRAY) relations.
+  Verifies cartesian product row count and column bindings on duckdb_native.
+project_id: proj-fastpath-array-unnest-cross-join
+query: |
+  SELECT n, m
+    FROM UNNEST(GENERATE_ARRAY(1, 3)) AS n
+    CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m
+   ORDER BY n, m
+expected:
+  route: duckdb_native
+  rows:
+    - {n: "1", m: "1"}
+    - {n: "1", m: "2"}
+    - {n: "2", m: "1"}
+    - {n: "2", m: "2"}
+    - {n: "3", m: "1"}
+    - {n: "3", m: "2"}

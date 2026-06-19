@@ -116,8 +116,13 @@ lint:dispositions`) catches that before main.
   classifier `VisitResolvedArrayScan` promotes to
   `kSemanticExecutor` for any of these.
 * **L573** `input_scan != nullptr && input_scan->node_kind != SingleRow`
-  -- the lateral cross-join shape (`FROM t, UNNEST(t.arr)`).
-  Same plan ownership; same follow-up action.
+  -- two distinct shapes share this gate:
+  (1) correlated table UNNEST (`FROM t, UNNEST(t.arr)` — array expr is
+  a column ref; lowers via `EmitCorrelatedArrayScan`), and
+  (2) nested standalone UNNEST cross product (`UNNEST(a) CROSS JOIN
+  UNNEST(b)` — chain of single-array scans with literal array exprs;
+  lowers via `EmitUnnestCrossProductScan`). Zip / offset / outer still
+  belong to `semantic_executor`.
 * **L576** -- propagation.
 
 ### `EmitAggregateScan` (L583-643)

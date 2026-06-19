@@ -1,0 +1,34 @@
+# ctas_unnest_cross_join: CTAS over nested UNNEST cross product subquery.
+#
+# Same analyzer AST as scan_array_unnest_cross_join (nested ArrayScan chain)
+# but exercised through control-op CREATE TABLE AS SELECT. Scaled-down shape
+# of the bench heavy-case setup (agg_high_card_2m / join_hash_2m).
+name: ctas_unnest_cross_join
+description: |
+  CREATE TABLE AS SELECT over a subquery whose FROM is two standalone UNNEST
+  relations cross-joined. Must materialize declared columns only.
+project_id: proj-fastpath-ctas-unnest-cross-join
+dataset_id: ds_fastpath_ctas_unnest_cross_join
+setup:
+  - dataset: ds_fastpath_ctas_unnest_cross_join
+  - sql: |
+      CREATE TABLE ds_fastpath_ctas_unnest_cross_join.out AS
+      SELECT id, MOD(id, 7) AS k
+      FROM (
+        SELECT n + (m - 1) * 10 AS id
+        FROM UNNEST(GENERATE_ARRAY(1, 3)) AS n
+        CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m
+      )
+query: |
+  SELECT id, k
+    FROM ds_fastpath_ctas_unnest_cross_join.out
+   ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1", k: "1"}
+    - {id: "2", k: "2"}
+    - {id: "3", k: "3"}
+    - {id: "11", k: "4"}
+    - {id: "12", k: "5"}
+    - {id: "13", k: "6"}

@@ -3,11 +3,12 @@
 # The transpiler covers the standalone `UNNEST(<arr>)` shape
 # (`array_expr_list_size==1` AND no `array_offset_column` AND no
 # `join_expr` AND no `array_zip_mode` AND `is_outer==false` AND
-# `input_scan` is null/SingleRow). This emits
-# `SELECT unnest(<arr>) AS "<col>"`. The cross-joined
-# `FROM t, UNNEST(t.arr)` and `WITH OFFSET` shapes belong to the
-# semantic executor (see `docs/ENGINE_POLICY.md`)
-# and are intentionally NOT exercised here.
+# `input_scan` is null/SingleRow). Explicit `CROSS JOIN UNNEST(...)`
+# of standalone arrays is a different AST (nested ArrayScan chain) —
+# see `scan_array_unnest_cross_join.yaml`. Correlated `FROM t,
+# UNNEST(t.arr)` uses `input_scan` + column-ref array expr — see
+# `array_struct/cross_join_unnest.yaml`. Multi-array zip and
+# `WITH OFFSET` belong to the semantic executor.
 name: scan_array_unnest
 description: |
   Standalone UNNEST of a literal STRING ARRAY. Verifies the

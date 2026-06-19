@@ -1,0 +1,27 @@
+# scan_array_unnest_cross_join_three: three-way nested UNNEST cross product.
+#
+# Analyzer produces a three-deep chain of single-array ResolvedArrayScan
+# nodes (c over b over a). Pins the iterative merge path in
+# EmitUnnestCrossProductScan for chains longer than two.
+name: scan_array_unnest_cross_join_three
+description: |
+  Three standalone UNNEST relations cross-joined. Verifies 2×2×2 = 8 rows
+  and column bindings on duckdb_native.
+project_id: proj-fastpath-array-unnest-cross-join-three
+query: |
+  SELECT a, b, c
+    FROM UNNEST(GENERATE_ARRAY(1, 2)) AS a
+    CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS b
+    CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS c
+   ORDER BY a, b, c
+expected:
+  route: duckdb_native
+  rows:
+    - {a: "1", b: "1", c: "1"}
+    - {a: "1", b: "1", c: "2"}
+    - {a: "1", b: "2", c: "1"}
+    - {a: "1", b: "2", c: "2"}
+    - {a: "2", b: "1", c: "1"}
+    - {a: "2", b: "1", c: "2"}
+    - {a: "2", b: "2", c: "1"}
+    - {a: "2", b: "2", c: "2"}
