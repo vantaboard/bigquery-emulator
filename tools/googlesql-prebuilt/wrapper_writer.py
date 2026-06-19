@@ -140,6 +140,8 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
             "@com_google_protobuf//:protobuf",
         ],
     ),
+    (
+        "function",
         [
             "function.h",
             "function_signature.h",
@@ -173,6 +175,8 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
             "@com_google_absl//absl/strings",
         ],
     ),
+    (
+        "language_options",
         ["language_options.h"],
         None,
         ["@com_google_absl//absl/container:flat_hash_set"],
@@ -188,6 +192,8 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
             "@com_google_protobuf//:protobuf",
         ],
     ),
+    (
+        "parse_resume_location",
         ["parse_resume_location.h", "parse_resume_location.pb.h"],
         None,
         ["@com_google_protobuf//:protobuf"],
