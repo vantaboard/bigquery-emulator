@@ -370,6 +370,7 @@ export function ExplorerPage() {
                                     <li key={p}>
                                         <button
                                             type="button"
+                                            data-testid={`project-${p}`}
                                             className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5"
                                             onClick={() => void onToggleProject(p)}
                                         >
@@ -388,6 +389,7 @@ export function ExplorerPage() {
                                                         <li key={dk}>
                                                             <button
                                                                 type="button"
+                                                                data-testid={`dataset-${d}`}
                                                                 className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5"
                                                                 onClick={() => void onToggleDataset(p, d)}
                                                             >
@@ -409,6 +411,7 @@ export function ExplorerPage() {
                                                                             <li key={t}>
                                                                                 <button
                                                                                     type="button"
+                                                                                    data-testid={`table-${t}`}
                                                                                     className={cn(
                                                                                         'flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5',
                                                                                         active && 'bg-blue-600/30',
@@ -494,6 +497,7 @@ export function ExplorerPage() {
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
+                                                data-testid="run-query"
                                                 className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                                                 disabled={runMutation.isPending}
                                                 onClick={onRun}
@@ -526,6 +530,7 @@ export function ExplorerPage() {
                                         <button
                                             key={id}
                                             type="button"
+                                            data-testid={id === 'results' ? 'results-tab' : undefined}
                                             className={cn(
                                                 '-mb-px border-b-2 px-3 py-2',
                                                 activeTab === id

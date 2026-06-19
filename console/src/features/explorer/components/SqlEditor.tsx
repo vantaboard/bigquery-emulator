@@ -12,6 +12,7 @@ interface SqlEditorProps {
 
 export function SqlEditor({ value, onChange, className, readOnly }: SqlEditorProps) {
     return (
+        <div data-testid="sql-editor">
         <CodeMirror
             value={value}
             height="220px"
@@ -25,5 +26,6 @@ export function SqlEditor({ value, onChange, className, readOnly }: SqlEditorPro
                 foldGutter: false,
             }}
         />
+        </div>
     );
 }

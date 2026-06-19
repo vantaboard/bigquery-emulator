@@ -1,0 +1,11 @@
+project_id: local-project
+datasets:
+  - id: test-dataset
+    tables:
+      - id: table_a
+        schema:
+          - { name: id, type: INT64, mode: REQUIRED }
+          - { name: name, type: STRING }
+        rows:
+          - { id: 1, name: alice }
+          - { id: 2, name: bob }

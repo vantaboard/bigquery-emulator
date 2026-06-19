@@ -34,6 +34,11 @@ vendor/
 /build
 node_modules/
 
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
 
 # Air live reload (github.com/air-verse/air)
 tmp/

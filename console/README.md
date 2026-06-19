@@ -56,6 +56,22 @@ For a static build that talks to the API on another origin, set **`VITE_API_URL`
 
 For the Vantaboard emulator image, use **`docker-compose.local.yaml`** to override the `bigquery` service.
 
+## E2E testing
+
+End-to-end tests use a dedicated Compose stack with the pinned Vantaboard emulator **`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`** (not goccy):
+
+```bash
+npm install
+npm run test:e2e          # starts stack, runs Playwright, tears down
+npm run test:e2e:ui       # Playwright UI mode (stack must be up)
+npm run e2e:up            # start stack only (UI on 8080; emulator is internal to Compose)
+npm run e2e:down          # stop stack and remove volumes
+```
+
+The E2E stack is defined in **`docker-compose.e2e.yaml`**. It runs **`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`** for BigQuery REST plus a small **`explorer-api` bridge** (see **`e2e/explorer-bridge/`**) that implements the UI’s **`/api/*`** contract — v0.3.1 does not expose those routes natively. Seed data lives in **`e2e/fixtures/seed.yaml`**. CI runs the same suite via **`.github/workflows/e2e.yml`**.
+
+The default **`docker compose up`** (base file) still uses the goccy image for local Docker demos.
+
 ## Environment (explorer API in bigquery-emulator)
 
 | Variable | Purpose |
@@ -73,11 +89,12 @@ For the Vantaboard emulator image, use **`docker-compose.local.yaml`** to overri
 | `npm run build` | Typecheck + production bundle |
 | `npm run preview` | Preview production build |
 | `npm run test` | Vitest |
+| `npm run test:e2e` | Playwright against Docker Compose stack |
 | `npm run lint` | ESLint |
 
 ## CI
 
-GitHub Actions builds and pushes the **nginx + static UI** Docker image (see `.github/workflows/docker-build.yml`).
+GitHub Actions builds and pushes the **nginx + static UI** Docker image (see `.github/workflows/docker-build.yml`) and runs **Playwright E2E tests** (see `.github/workflows/e2e.yml`).
 
 ## License
 

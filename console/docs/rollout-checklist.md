@@ -17,6 +17,7 @@
 ## Docker
 
 - `docker compose up` exposes the UI on **8080** (nginx) and proxies **`/api`** to **`http://bigquery:9050`** inside the Compose network.
+- Automated E2E: `npm run test:e2e` (see [README](../README.md#e2e-testing)).
 
 ## Regression notes
 
