@@ -69,7 +69,12 @@ Comparisons and the pass/fail gate use **server-side** latency on both sides whe
 
 BQ `execution_p50_ms` excludes queue time (`creationTime → startTime`) and all client-side overhead. It matches the console Duration column, not "time from click to results."
 
-Goccy has no `total_engine` phase; goccy chart bars use HTTP wall-clock only.
+Goccy has no `total_engine` phase; goccy chart bars use HTTP wall-clock only. For an
+apples-to-apples emulator comparison the `comparison.svg` chart also plots
+**vantaboard (wall)** — the emulator's `latency.p50` HTTP round-trip — directly
+against **goccy (wall)**. The `vantaboard (total_engine)` bar (engine-only,
+excludes HTTP) is kept alongside so engine cost is still visible; the pass/fail
+gate continues to use `total_engine`, not wall.
 
 ## Outcomes
 
@@ -117,7 +122,7 @@ task bench:profile CASE=agg_group_by_100k MODE=heap  # heaptrack output
 ## Charts & CI
 
 - `task bench:charts` — matplotlib/seaborn SVGs in `bench/charts/out/`:
-  - `comparison.svg` — log-scale latency bars (× marks where goccy skipped a case)
+  - `comparison.svg` — log-scale latency bars: vantaboard wall, vantaboard total_engine, goccy wall, BQ job duration (× marks where goccy skipped a case)
   - `phases.svg` — stacked p50 engine phase timings for vantaboard cases
 - Re-run `task bench:run` after engine changes so `engine_p50` / `total_engine` populate results
 - Committed `bench/charts/out/*.svg` snapshots are embedded in the root
