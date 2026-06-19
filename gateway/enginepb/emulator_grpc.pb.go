@@ -908,3 +908,217 @@ var Query_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "emulator.proto",
 }
+
+const (
+	SqlTools_Format_FullMethodName   = "/bigquery_emulator.v1.SqlTools/Format"
+	SqlTools_Parse_FullMethodName    = "/bigquery_emulator.v1.SqlTools/Parse"
+	SqlTools_Tokenize_FullMethodName = "/bigquery_emulator.v1.SqlTools/Tokenize"
+	SqlTools_Complete_FullMethodName = "/bigquery_emulator.v1.SqlTools/Complete"
+)
+
+// SqlToolsClient is the client API for SqlTools service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SqlToolsClient interface {
+	Format(ctx context.Context, in *FormatSqlRequest, opts ...grpc.CallOption) (*FormatSqlResponse, error)
+	Parse(ctx context.Context, in *ParseSqlRequest, opts ...grpc.CallOption) (*ParseSqlResponse, error)
+	Tokenize(ctx context.Context, in *TokenizeSqlRequest, opts ...grpc.CallOption) (*TokenizeSqlResponse, error)
+	Complete(ctx context.Context, in *CompleteSqlRequest, opts ...grpc.CallOption) (*CompleteSqlResponse, error)
+}
+
+type sqlToolsClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSqlToolsClient(cc grpc.ClientConnInterface) SqlToolsClient {
+	return &sqlToolsClient{cc}
+}
+
+func (c *sqlToolsClient) Format(ctx context.Context, in *FormatSqlRequest, opts ...grpc.CallOption) (*FormatSqlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FormatSqlResponse)
+	err := c.cc.Invoke(ctx, SqlTools_Format_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqlToolsClient) Parse(ctx context.Context, in *ParseSqlRequest, opts ...grpc.CallOption) (*ParseSqlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ParseSqlResponse)
+	err := c.cc.Invoke(ctx, SqlTools_Parse_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqlToolsClient) Tokenize(ctx context.Context, in *TokenizeSqlRequest, opts ...grpc.CallOption) (*TokenizeSqlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TokenizeSqlResponse)
+	err := c.cc.Invoke(ctx, SqlTools_Tokenize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqlToolsClient) Complete(ctx context.Context, in *CompleteSqlRequest, opts ...grpc.CallOption) (*CompleteSqlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompleteSqlResponse)
+	err := c.cc.Invoke(ctx, SqlTools_Complete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SqlToolsServer is the server API for SqlTools service.
+// All implementations should embed UnimplementedSqlToolsServer
+// for forward compatibility.
+type SqlToolsServer interface {
+	Format(context.Context, *FormatSqlRequest) (*FormatSqlResponse, error)
+	Parse(context.Context, *ParseSqlRequest) (*ParseSqlResponse, error)
+	Tokenize(context.Context, *TokenizeSqlRequest) (*TokenizeSqlResponse, error)
+	Complete(context.Context, *CompleteSqlRequest) (*CompleteSqlResponse, error)
+}
+
+// UnimplementedSqlToolsServer should be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSqlToolsServer struct{}
+
+func (UnimplementedSqlToolsServer) Format(context.Context, *FormatSqlRequest) (*FormatSqlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Format not implemented")
+}
+func (UnimplementedSqlToolsServer) Parse(context.Context, *ParseSqlRequest) (*ParseSqlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Parse not implemented")
+}
+func (UnimplementedSqlToolsServer) Tokenize(context.Context, *TokenizeSqlRequest) (*TokenizeSqlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Tokenize not implemented")
+}
+func (UnimplementedSqlToolsServer) Complete(context.Context, *CompleteSqlRequest) (*CompleteSqlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Complete not implemented")
+}
+func (UnimplementedSqlToolsServer) testEmbeddedByValue() {}
+
+// UnsafeSqlToolsServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SqlToolsServer will
+// result in compilation errors.
+type UnsafeSqlToolsServer interface {
+	mustEmbedUnimplementedSqlToolsServer()
+}
+
+func RegisterSqlToolsServer(s grpc.ServiceRegistrar, srv SqlToolsServer) {
+	// If the following call panics, it indicates UnimplementedSqlToolsServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SqlTools_ServiceDesc, srv)
+}
+
+func _SqlTools_Format_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FormatSqlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqlToolsServer).Format(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SqlTools_Format_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqlToolsServer).Format(ctx, req.(*FormatSqlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqlTools_Parse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ParseSqlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqlToolsServer).Parse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SqlTools_Parse_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqlToolsServer).Parse(ctx, req.(*ParseSqlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqlTools_Tokenize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TokenizeSqlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqlToolsServer).Tokenize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SqlTools_Tokenize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqlToolsServer).Tokenize(ctx, req.(*TokenizeSqlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqlTools_Complete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteSqlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqlToolsServer).Complete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SqlTools_Complete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqlToolsServer).Complete(ctx, req.(*CompleteSqlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SqlTools_ServiceDesc is the grpc.ServiceDesc for SqlTools service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SqlTools_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "bigquery_emulator.v1.SqlTools",
+	HandlerType: (*SqlToolsServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Format",
+			Handler:    _SqlTools_Format_Handler,
+		},
+		{
+			MethodName: "Parse",
+			Handler:    _SqlTools_Parse_Handler,
+		},
+		{
+			MethodName: "Tokenize",
+			Handler:    _SqlTools_Tokenize_Handler,
+		},
+		{
+			MethodName: "Complete",
+			Handler:    _SqlTools_Complete_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "emulator.proto",
+}

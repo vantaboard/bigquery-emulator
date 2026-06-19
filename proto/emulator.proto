@@ -402,3 +402,83 @@ message Array {
 message Struct {
   repeated Cell fields = 1;
 }
+
+// ---------------------------------------------------------------------------
+// SqlTools service
+//
+// Parser, formatter, tokenizer, and catalog-aware completion for downstream
+// UIs and linters. Not part of the public BigQuery REST surface; exposed
+// via gateway `/api/emulator/sql/*` when enabled.
+// ---------------------------------------------------------------------------
+
+service SqlTools {
+  rpc Format(FormatSqlRequest) returns (FormatSqlResponse);
+  rpc Parse(ParseSqlRequest) returns (ParseSqlResponse);
+  rpc Tokenize(TokenizeSqlRequest) returns (TokenizeSqlResponse);
+  rpc Complete(CompleteSqlRequest) returns (CompleteSqlResponse);
+}
+
+message SqlDiagnostic {
+  int32 line = 1;
+  int32 column = 2;
+  string message = 3;
+  string severity = 4;
+}
+
+message FormatSqlRequest {
+  string sql = 1;
+  // When true, use strict FormatSql (strips comments). Default is lenient.
+  bool strict = 2;
+  int32 line_length_limit = 3;
+  int32 indentation_spaces = 4;
+}
+
+message FormatSqlResponse {
+  string formatted_sql = 1;
+  repeated SqlDiagnostic diagnostics = 2;
+}
+
+message ParseSqlRequest {
+  string sql = 1;
+}
+
+message ParseSqlResponse {
+  repeated SqlDiagnostic diagnostics = 1;
+  repeated string statement_kinds = 2;
+}
+
+message TokenizeSqlRequest {
+  string sql = 1;
+  bool include_comments = 2;
+}
+
+message SqlToken {
+  string kind = 1;
+  string image = 2;
+  int32 start_byte = 3;
+  int32 end_byte = 4;
+}
+
+message TokenizeSqlResponse {
+  repeated SqlToken tokens = 1;
+  repeated SqlDiagnostic diagnostics = 2;
+}
+
+message CompleteSqlRequest {
+  string project_id = 1;
+  string default_dataset_id = 2;
+  string sql = 3;
+  int32 cursor_byte_offset = 4;
+}
+
+message SqlCompletionCandidate {
+  string label = 1;
+  string kind = 2;
+  string insert_text = 3;
+}
+
+message CompleteSqlResponse {
+  repeated SqlCompletionCandidate candidates = 1;
+  int32 replacement_start = 2;
+  int32 replacement_end = 3;
+}

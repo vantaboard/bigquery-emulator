@@ -1000,7 +1000,7 @@ func file_proto_storage_write_proto_init() {
 	if File_proto_storage_write_proto != nil {
 		return
 	}
-	file_proto_emulator_proto_init()
+	file_emulator_proto_init()
 	file_proto_storage_write_proto_msgTypes[3].OneofWrappers = []any{
 		(*AppendRowsResponse_AppendResult_)(nil),
 		(*AppendRowsResponse_ErrorMessage)(nil),

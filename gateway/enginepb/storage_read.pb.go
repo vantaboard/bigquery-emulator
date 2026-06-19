@@ -633,7 +633,7 @@ func file_proto_storage_read_proto_init() {
 	if File_proto_storage_read_proto != nil {
 		return
 	}
-	file_proto_emulator_proto_init()
+	file_emulator_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
