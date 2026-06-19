@@ -1,5 +1,3 @@
-#include "backend/sqltools/sql_tools.h"
-
 #include <algorithm>
 #include <cctype>
 #include <string>
@@ -12,6 +10,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "backend/sqltools/sql_tools.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/parse_resume_location.h"
@@ -445,7 +444,6 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
             });
   return result;
 }
-
 
 }  // namespace sqltools
 }  // namespace backend
