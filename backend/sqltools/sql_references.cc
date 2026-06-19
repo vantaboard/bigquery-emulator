@@ -11,7 +11,6 @@
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/view_registry.h"
 #include "backend/engine/coordinator/sql_preprocess.h"
-#include "googlesql/parser/ast_node.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -39,7 +38,9 @@ class ReferencedTableCollector : public ::googlesql::ResolvedASTVisitor {
     std::string alias;
   };
 
-  const std::vector<Entry>& entries() const { return entries_; }
+  const std::vector<Entry>& entries() const {
+    return entries_;
+  }
 
  private:
   std::vector<Entry> entries_;
@@ -55,8 +56,8 @@ std::vector<CatalogColumnEntry> ColumnsForTable(
     CatalogColumnEntry entry;
     entry.name = std::string(column->Name());
     if (column->GetType() != nullptr) {
-      entry.type = std::string(column->GetType()->TypeName(
-          ::googlesql::PRODUCT_EXTERNAL));
+      entry.type = std::string(
+          column->GetType()->TypeName(::googlesql::PRODUCT_EXTERNAL));
     }
     columns.push_back(std::move(entry));
   }
@@ -105,10 +106,8 @@ ReferencedTable TableToReference(const ::googlesql::Table* table,
     ref.dataset_id = id.dataset_id;
     ref.table_id = id.table_id;
   } else if (table != nullptr) {
-    ParseTableFullName(table->FullName(),
-                       &ref.project_id,
-                       &ref.dataset_id,
-                       &ref.table_id);
+    ParseTableFullName(
+        table->FullName(), &ref.project_id, &ref.dataset_id, &ref.table_id);
     if (ref.project_id.empty()) {
       ref.project_id = std::string(project_id);
     }
@@ -169,7 +168,7 @@ absl::StatusOr<AnalyzeResult> AnalyzeSqlText(
   const ::googlesql::ResolvedStatement* statement =
       output->resolved_statement();
   result.statement_kinds.push_back(
-      ::googlesql::ASTNode::NodeKindToString(statement->node_kind()));
+      ::googlesql::ResolvedNodeKindToString(statement->node_kind()));
 
   ReferencedTableCollector collector;
   const absl::Status visit_status = statement->Accept(&collector);

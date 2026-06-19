@@ -57,13 +57,11 @@ cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@googlesql//googlesql/parser:ast_node",
         "@googlesql//googlesql/public:analyzer",
         "@googlesql//googlesql/public:analyzer_options",
         "@googlesql//googlesql/public:analyzer_output",
-        "@googlesql//googlesql/public:types",
+        "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/resolved_ast:resolved_ast",
-        "@googlesql//googlesql/resolved_ast:resolved_ast_visitor",
     ],
 )
 
@@ -77,5 +75,18 @@ cc_test(
         "@googlesql//googlesql/public:builtin_function_options",
         "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:simple_catalog",
+    ],
+)
+
+cc_test(
+    name = "catalog_names_test",
+    srcs = ["catalog_names_test.cc"],
+    deps = [
+        ":catalog_names",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
     ],
 )

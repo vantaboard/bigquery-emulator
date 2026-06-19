@@ -29,6 +29,13 @@
 # `--hostname=0.0.0.0` via the in-container shim
 # (`docker/gateway_main.sh`), so no env var is required to make the
 # port reachable.
+#
+# SQL Tools API (format/parse/complete/analyze for query-editor UIs) is
+# enabled by default in the container via `docker/gateway_main.sh`
+# (`--enable-sql-tools-api`). For LAN or CI clients that cannot send
+# loopback-only requests, pass through gateway flags on `docker run` or
+# override the service command, e.g. `--sql-tools-api-allow-remote` plus
+# `--sql-tools-api-token=<secret>`. See docs/SQL_TOOLS_API.md.
 
 services:
   bigquery-emulator:
