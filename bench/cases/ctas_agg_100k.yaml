@@ -12,3 +12,6 @@ query: |
   GROUP BY k
 iterations: 10
 warmup: 2
+# Repeated CREATE OR REPLACE TABLE on one object hits BigQuery's per-table
+# metadata-update quota; allow room for backoff retries to clear it.
+max_ms: 120000
