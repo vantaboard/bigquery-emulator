@@ -107,6 +107,41 @@ func TestBuildBaselineFromResults_IncludesSlotMs(t *testing.T) {
 	}
 }
 
+func TestMergeBaseline_PreservesExistingCases(t *testing.T) {
+	t.Parallel()
+	existing := BaselineFile{
+		CapturedAt: time.Unix(0, 0),
+		Project:    "proj",
+		Cases: map[string]BaselineCase{
+			"keep_me":          {ContentHash: "old-keep", ExecutionP50MS: 100, ResultHash: "rk"},
+			"create_view_100k": {ContentHash: "old-view", ExecutionP50MS: 999, ResultHash: "stale"},
+		},
+	}
+	fresh := BuildBaselineFromResults("proj", []CaseResult{{
+		CaseName:     "create_view_100k",
+		Target:       TargetBigQuery,
+		Outcome:      OutcomeOK,
+		ContentHash:  "new-view",
+		ExecutionP50: 120 * time.Millisecond,
+		ResultHash:   "fresh",
+	}})
+
+	merged := MergeBaseline(existing, fresh)
+	if len(merged.Cases) != 2 {
+		t.Fatalf("merged cases = %d, want 2", len(merged.Cases))
+	}
+	if got := merged.Cases["keep_me"]; got.ContentHash != "old-keep" || got.ExecutionP50MS != 100 {
+		t.Fatalf("keep_me was altered: %+v", got)
+	}
+	updated := merged.Cases["create_view_100k"]
+	if updated.ContentHash != "new-view" || updated.ExecutionP50MS != 120 || updated.ResultHash != "fresh" {
+		t.Fatalf("create_view_100k not updated: %+v", updated)
+	}
+	if !merged.CapturedAt.Equal(fresh.CapturedAt) {
+		t.Fatalf("CapturedAt = %v, want fresh %v", merged.CapturedAt, fresh.CapturedAt)
+	}
+}
+
 func TestExtractBQJobMetrics(t *testing.T) {
 	t.Parallel()
 	start := time.Unix(0, 0).Add(2 * time.Second)

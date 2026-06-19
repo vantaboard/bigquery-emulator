@@ -143,6 +143,12 @@ func writeRunOutputs(
 		return errors.New("--project or BENCH_BQ_PROJECT required for capture")
 	}
 	b := runner.BuildBaselineFromResults(cfg.project, report.Results)
+	// Merge into any existing baseline so a partial capture (e.g.
+	// --case create_view_100k) updates only the cases that ran instead of
+	// discarding the rest of the file.
+	if existing, loadErr := runner.LoadBaseline(cfg.baselinePath); loadErr == nil {
+		b = runner.MergeBaseline(existing, b)
+	}
 	if err := runner.SaveBaseline(cfg.baselinePath, b); err != nil {
 		return err
 	}

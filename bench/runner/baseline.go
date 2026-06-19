@@ -84,6 +84,29 @@ func BuildBaselineFromResults(project string, results []CaseResult) BaselineFile
 	return b
 }
 
+// MergeBaseline overlays fresh capture results onto an existing baseline,
+// preserving cases that were not part of this run. This makes partial
+// captures (e.g. --case create_view_100k) update or add only the cases that
+// ran, instead of discarding every other case in the file. The captured-at
+// timestamp and project are taken from the fresh capture.
+func MergeBaseline(existing, fresh BaselineFile) BaselineFile {
+	out := existing
+	if out.Cases == nil {
+		out.Cases = map[string]BaselineCase{}
+	}
+	out.CapturedAt = fresh.CapturedAt
+	if fresh.Project != "" {
+		out.Project = fresh.Project
+	}
+	if fresh.ProjectHash != "" {
+		out.ProjectHash = fresh.ProjectHash
+	}
+	for name, c := range fresh.Cases {
+		out.Cases[name] = c
+	}
+	return out
+}
+
 // CompareToBaseline checks emulator result against golden baseline.
 func CompareToBaseline(c Case, base BaselineCase, r CaseResult) (pass bool, reason string) {
 	if base.ContentHash != "" && base.ContentHash != c.ContentHash {

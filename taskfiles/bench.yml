@@ -28,7 +28,7 @@ tasks:
       - task: cleanup
 
   baseline:
-    desc: Capture BigQuery golden baseline (requires ADC + BENCH_BQ_PROJECT)
+    desc: Capture BigQuery golden baseline (requires ADC + BENCH_BQ_PROJECT; set CASE=name to capture one case and merge it into the existing baseline)
     cmds:
       - |
         set -eo pipefail
@@ -37,12 +37,20 @@ tasks:
           echo "BENCH_BQ_PROJECT is required" >&2
           exit 1
         fi
-        go run ./bench/cmd/bench \
-          --target=bigquery \
-          --project="${BENCH_BQ_PROJECT}" \
-          --capture \
-          --baseline "{{.BENCH_BASELINE}}" \
-          --json-out "{{.BENCH_JSON}}"
+        ARGS=(
+          --target=bigquery
+          --project="${BENCH_BQ_PROJECT}"
+          --capture
+          --baseline "{{.BENCH_BASELINE}}"
+        )
+        if [ -n "${CASE:-}" ]; then
+          # Single-case capture: merge into the existing baseline and do not
+          # overwrite the full results.json that charts depend on.
+          ARGS+=(--case="${CASE}")
+        else
+          ARGS+=(--json-out "{{.BENCH_JSON}}")
+        fi
+        go run ./bench/cmd/bench "${ARGS[@]}"
 
   compare:
     desc: Run emulator benchmarks and compare against committed baseline
