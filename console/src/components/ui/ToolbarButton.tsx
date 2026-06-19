@@ -26,6 +26,7 @@ export interface ToolbarButtonProps {
     onClick?: () => void;
     dropdown?: ToolbarMenuItem[];
     className?: string;
+    testId?: string;
 }
 
 export function ToolbarButton({
@@ -36,6 +37,7 @@ export function ToolbarButton({
     onClick,
     dropdown,
     className,
+    testId,
 }: ToolbarButtonProps) {
     const menuId = useId();
     const rootRef = useRef<HTMLDivElement>(null);
@@ -62,7 +64,13 @@ export function ToolbarButton({
 
     if (!dropdown?.length) {
         return (
-            <button type="button" className={baseClass} disabled={disabled} onClick={onClick}>
+            <button
+                type="button"
+                className={baseClass}
+                disabled={disabled}
+                data-testid={testId}
+                onClick={onClick}
+            >
                 <Icon className="size-4 shrink-0" />
                 {label}
             </button>
