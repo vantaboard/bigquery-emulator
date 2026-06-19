@@ -13,10 +13,15 @@ async function selectTable(page: Page) {
         dataset.click(),
     ]);
     const table = page.getByTestId('table-table_a');
-    await Promise.all([
-        page.waitForResponse((r) => r.url().includes('/tables/table_a') && r.ok()),
-        table.click(),
-    ]);
+    await table.click();
+    await expect(page.getByTestId('table-tab-page')).toBeVisible();
+}
+
+async function openQueryFromTable(page: Page) {
+    await selectTable(page);
+    await expect(page.getByTestId('table-tab-page')).toBeVisible();
+    await page.getByTestId('open-query-from-table').click();
+    await expect(page.getByTestId('sql-editor')).toBeVisible();
 }
 
 test.describe('BigQuery Explorer', () => {
@@ -30,15 +35,15 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByTestId('project-local-project')).toContainText('local-project');
     });
 
-    test('navigates the resource tree and shows table metadata', async ({ page }) => {
+    test('navigates the resource tree and opens a table resource tab', async ({ page }) => {
         await selectTable(page);
-        await expect(page.getByRole('button', { name: 'Table info' })).toHaveClass(/border-blue-500/);
-        await expect(page.getByRole('cell', { name: 'local-project.test-dataset.table_a' })).toBeVisible();
-        await expect(page.getByText('Rows', { exact: true })).toBeVisible();
+        await expect(page.getByTestId('breadcrumbs')).toContainText('local-project');
+        await expect(page.getByTestId('breadcrumbs')).toContainText('table_a');
+        await expect(page.getByTestId('table-tab-page')).toBeVisible();
     });
 
     test('runs a query and shows results', async ({ page }) => {
-        await selectTable(page);
+        await openQueryFromTable(page);
         await page.getByTestId('run-query').click();
         await page.waitForResponse((r) => r.url().includes('/queries') && r.ok());
         await expect(page.getByTestId('results-tab')).toHaveClass(/border-blue-500/);
@@ -48,7 +53,7 @@ test.describe('BigQuery Explorer', () => {
     });
 
     test('formats SQL without error', async ({ page }) => {
-        await selectTable(page);
+        await openQueryFromTable(page);
         const editor = page.getByTestId('sql-editor').locator('.cm-content');
         const before = (await editor.textContent()) ?? '';
         await page.getByRole('button', { name: 'Format SQL' }).click();
@@ -59,7 +64,7 @@ test.describe('BigQuery Explorer', () => {
 
     test('share URL restores selection and query', async ({ page, context }) => {
         await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-        await selectTable(page);
+        await openQueryFromTable(page);
         await page.getByRole('button', { name: 'Share' }).click();
         const sharedUrl = await page.evaluate(async () => navigator.clipboard.readText());
         expect(sharedUrl).toContain('project=local-project');
@@ -69,9 +74,20 @@ test.describe('BigQuery Explorer', () => {
         const fresh = await context.newPage();
         await fresh.goto(sharedUrl);
         await expect(fresh.getByTestId('project-local-project')).toBeVisible();
-        await expect(fresh.getByRole('cell', { name: 'local-project.test-dataset.table_a' })).toBeVisible();
+        await expect(fresh.getByTestId('sql-editor')).toBeVisible();
         const editor = fresh.getByTestId('sql-editor').locator('.cm-content');
         await expect(editor).toContainText('SELECT');
         await expect(editor).toContainText('table_a');
+    });
+
+    test('opens multiple tabs and restores session after reload', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('new-query-tab').click();
+        await expect(page.getByRole('tab', { name: 'table_a' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
+
+        await page.reload();
+        await expect(page.getByRole('tab', { name: 'table_a' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
     });
 });

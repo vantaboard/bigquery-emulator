@@ -35,6 +35,7 @@ export function TabBar({ tabs, activeId, onChange, onClose, variant = 'underline
                             type="button"
                             role="tab"
                             aria-selected={active}
+                            data-testid={tab.testId}
                             className={cn(
                                 variant === 'underline' && '-mb-px border-b-2 px-3 py-2',
                                 variant === 'underline' &&

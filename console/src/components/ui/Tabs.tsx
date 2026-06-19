@@ -5,6 +5,7 @@ export interface TabItem {
     label: ReactNode;
     badge?: ReactNode;
     closable?: boolean;
+    testId?: string;
 }
 
 export type TabVariant = 'underline' | 'workspace';
