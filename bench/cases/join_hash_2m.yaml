@@ -3,7 +3,12 @@ tags: [duckdb, join, heavy]
 setup:
   - sql: |
       CREATE TABLE {{ds}}.a AS
-      SELECT id, MOD(id, 200000) AS k FROM UNNEST(GENERATE_ARRAY(1, 2000000)) AS id
+      SELECT id, MOD(id, 200000) AS k
+      FROM (
+        SELECT n + (m - 1) * 1000000 AS id
+        FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS n
+        CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m
+      )
   - sql: |
       CREATE TABLE {{ds}}.b AS
       SELECT k, k * 2 AS v FROM UNNEST(GENERATE_ARRAY(0, 199999)) AS k
