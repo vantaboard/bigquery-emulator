@@ -135,6 +135,15 @@ type Config struct {
 	// empty.
 	SeedAPISeedToken string
 
+	// EnableSqlToolsAPI registers POST /api/emulator/sql/* routes.
+	EnableSqlToolsAPI bool
+
+	// SqlToolsAPIAllowRemote allows non-loopback SQL tools callers.
+	SqlToolsAPIAllowRemote bool
+
+	// SqlToolsAPISeedToken protects remote SQL tools access.
+	SqlToolsAPISeedToken string
+
 	// SeedFiles is the repeatable list of YAML seed-data files to
 	// apply once the engine is SERVING. Maps to `--seed-data-file`
 	// / `--seed-yaml`.
@@ -255,6 +264,14 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 			"seed request. Falls back to $BIGQUERY_EMULATOR_SEED_TOKEN.")
 	registerStringSlice(fs, &cfg.SeedFiles, []string{"seed-data-file", "seed-yaml", "data-from-yaml"},
 		"YAML seed-data file to apply once the engine reports SERVING (repeatable).")
+	registerBool(fs, &cfg.EnableSqlToolsAPI, []string{"enable-sql-tools-api"},
+		"Register POST /api/emulator/sql/* parser/formatter/completion routes.")
+	registerBool(fs, &cfg.SqlToolsAPIAllowRemote, []string{"sql-tools-api-allow-remote"},
+		"Allow non-loopback callers to invoke the SQL tools API.")
+	registerString(fs, &cfg.SqlToolsAPISeedToken,
+		[]string{"sql-tools-api-token"},
+		"Required value for the X-BigQuery-Emulator-SqlTools-Token header on every "+
+			"SQL tools request. Falls back to $BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN.")
 	registerBool(fs, versionFlag, []string{"version"},
 		"Print version information (semver + git commit + build date + Go toolchain) and exit.")
 }
@@ -299,6 +316,11 @@ func applyEnvFallbacks(cfg *Config, getenv envLookup) {
 	if cfg.SeedAPISeedToken == "" {
 		if v, ok := getenv("BIGQUERY_EMULATOR_SEED_TOKEN"); ok {
 			cfg.SeedAPISeedToken = v
+		}
+	}
+	if cfg.SqlToolsAPISeedToken == "" {
+		if v, ok := getenv("BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN"); ok {
+			cfg.SqlToolsAPISeedToken = v
 		}
 	}
 }

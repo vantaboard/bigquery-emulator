@@ -10,6 +10,7 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers/datatransfer"
 	"github.com/vantaboard/bigquery-emulator/gateway/middleware"
 	"github.com/vantaboard/bigquery-emulator/gateway/seed"
+	"github.com/vantaboard/bigquery-emulator/gateway/sqltools"
 )
 
 // NewServer returns the HTTP handler tree implementing the BigQuery REST
@@ -43,6 +44,7 @@ func NewServer(opts Options, deps handlers.Dependencies, eng *engine.Client) htt
 	mountMigration(mux, deps)
 	mountDataTransfer(mux)
 	mountSeedAPI(mux, opts, eng)
+	mountSqlToolsAPI(mux, opts, eng)
 
 	return wrapMiddleware(opts, mux)
 }
@@ -247,6 +249,20 @@ func mountSeedAPI(mux *http.ServeMux, opts Options, eng *engine.Client) {
 		},
 		Store:  seed.NewStore(),
 		Runner: runner,
+	})
+}
+
+// mountSqlToolsAPI registers POST /api/emulator/sql/* when enabled.
+func mountSqlToolsAPI(mux *http.ServeMux, opts Options, eng *engine.Client) {
+	if !opts.EnableSqlToolsAPI {
+		return
+	}
+	sqltools.RegisterRoutes(mux, sqltools.HandlerDeps{
+		Access: sqltools.AccessConfig{
+			AllowRemote: opts.SqlToolsAPIAllowRemote,
+			Token:       opts.SqlToolsAPISeedToken,
+		},
+		Client: eng,
 	})
 }
 

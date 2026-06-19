@@ -112,6 +112,17 @@ type Options struct {
 	// gateway/seedfile for the schema.
 	SeedFiles []string
 
+	// EnableSqlToolsAPI registers POST /api/emulator/sql/{format,parse,
+	// tokenize,complete} for downstream UIs. Off by default.
+	EnableSqlToolsAPI bool
+
+	// SqlToolsAPIAllowRemote allows non-loopback callers when true.
+	SqlToolsAPIAllowRemote bool
+
+	// SqlToolsAPISeedToken requires matching header
+	// X-BigQuery-Emulator-SqlTools-Token when non-empty.
+	SqlToolsAPISeedToken string
+
 	// DataDir is the persistent storage root the engine uses for
 	// the DuckDB catalog + table data. Mirrors `--data-dir`; the
 	// gateway passes it through via `--data_dir` in EngineArgs.

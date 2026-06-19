@@ -42,6 +42,7 @@ type Client struct {
 
 	Catalog      enginepb.CatalogClient
 	Query        enginepb.QueryClient
+	SqlTools     enginepb.SqlToolsClient
 	StorageRead  enginepb.StorageReadClient
 	StorageWrite enginepb.StorageWriteClient
 	Health       healthpb.HealthClient
@@ -72,6 +73,7 @@ func Dial(address string) (*Client, error) {
 		conn:         conn,
 		Catalog:      enginepb.NewCatalogClient(conn),
 		Query:        enginepb.NewQueryClient(conn),
+		SqlTools:     enginepb.NewSqlToolsClient(conn),
 		StorageRead:  enginepb.NewStorageReadClient(conn),
 		StorageWrite: enginepb.NewStorageWriteClient(conn),
 		Health:       healthpb.NewHealthClient(conn),

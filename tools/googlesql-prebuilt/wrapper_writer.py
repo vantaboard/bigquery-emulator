@@ -132,7 +132,14 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         ["@com_google_absl//absl/status:statusor"],
     ),
     (
-        "function",
+        "formatter_options",
+        ["formatter_options.h"],
+        None,
+        [
+            "@com_google_absl//absl/strings",
+            "@com_google_protobuf//:protobuf",
+        ],
+    ),
         [
             "function.h",
             "function_signature.h",
@@ -157,13 +164,30 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
         ],
     ),
     (
-        "language_options",
+        "lenient_formatter",
+        ["lenient_formatter.h"],
+        None,
+        [
+            "@com_google_absl//absl/status",
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+        ],
+    ),
         ["language_options.h"],
         None,
         ["@com_google_absl//absl/container:flat_hash_set"],
     ),
     (
-        "parse_resume_location",
+        "parse_helpers",
+        ["parse_helpers.h", "parse_tokens.h"],
+        None,
+        [
+            "@com_google_absl//absl/status",
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+            "@com_google_protobuf//:protobuf",
+        ],
+    ),
         ["parse_resume_location.h", "parse_resume_location.pb.h"],
         None,
         ["@com_google_protobuf//:protobuf"],
@@ -191,6 +215,15 @@ PUBLIC_WRAPPERS: list[tuple[str, list[str], str | None, list[str]]] = [
             "@com_google_absl//absl/status:statusor",
             "@com_google_absl//absl/synchronization",
             "@com_google_protobuf//:protobuf",
+        ],
+    ),
+    (
+        "sql_formatter",
+        ["sql_formatter.h"],
+        None,
+        [
+            "@com_google_absl//absl/status",
+            "@com_google_absl//absl/strings",
         ],
     ),
     (

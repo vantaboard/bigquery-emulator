@@ -523,11 +523,15 @@ stage_bazel() {
         //googlesql/public:evaluator
         //googlesql/public:evaluator_base
         //googlesql/public:evaluator_table_iterator
+        //googlesql/public:formatter_options
         //googlesql/public:function
         //googlesql/public:language_options
+        //googlesql/public:lenient_formatter
+        //googlesql/public:parse_helpers
         //googlesql/public:parse_resume_location
         //googlesql/public:options_cc_proto
         //googlesql/public:simple_catalog
+        //googlesql/public:sql_formatter
         //googlesql/public:type
         //googlesql/public:value
         //googlesql/resolved_ast
