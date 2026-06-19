@@ -43,6 +43,11 @@ async function openQueryFromTable(page: Page) {
     await expect(page.getByTestId('sql-editor')).toBeVisible();
 }
 
+async function openTableSchemaTab(page: Page) {
+    await selectTable(page);
+    await expect(page.getByTestId('table-tab-schema')).toBeVisible();
+}
+
 test.describe('BigQuery Explorer', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto('/');
@@ -59,6 +64,58 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByTestId('breadcrumbs')).toContainText('local-project');
         await expect(page.getByTestId('breadcrumbs')).toContainText('table_a');
         await expect(page.getByTestId('table-tab-page')).toBeVisible();
+        await expect(page.getByTestId('table-tab-schema')).toBeVisible();
+    });
+
+    test('table Schema tab lists fields and Copy as JSON works', async ({ page, context }) => {
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        await openTableSchemaTab(page);
+        await expect(page.getByTestId('schema-field-id')).toBeVisible();
+        await expect(page.getByTestId('schema-field-name')).toBeVisible();
+
+        const copyMenu = page.getByTestId('table-tab-schema').locator('button[aria-haspopup="menu"]');
+        await copyMenu.click();
+        await page.getByRole('menuitem', { name: 'Copy as JSON' }).click();
+
+        const copied = await page.evaluate(async () => navigator.clipboard.readText());
+        const parsed = JSON.parse(copied) as { name: string }[];
+        expect(parsed.some((field) => field.name === 'id')).toBe(true);
+        expect(parsed.some((field) => field.name === 'name')).toBe(true);
+    });
+
+    test('table Details tab shows info and storage', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('table-resource-tab-details').click();
+        const details = page.getByTestId('table-tab-details');
+        await expect(details).toBeVisible();
+        await expect(details).toContainText('Table ID');
+        await expect(details).toContainText('table_a');
+        await expect(page.getByTestId('table-storage-info')).toBeVisible();
+        await expect(details).toContainText('Number of rows');
+    });
+
+    test('table Preview tab shows paginated rows or fallback note', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('table-resource-tab-preview').click();
+        await expect(page.getByTestId('table-tab-preview')).toBeVisible();
+        const fallback = page.getByTestId('table-preview-fallback-note');
+        const alice = page.getByRole('cell', { name: 'alice' });
+        await expect(fallback.or(alice)).toBeVisible();
+        if (await alice.isVisible()) {
+            await expect(page.getByRole('cell', { name: 'bob' })).toBeVisible();
+            await expect(page.getByTestId('table-preview-page-size')).toBeVisible();
+        }
+    });
+
+    test('table Query toolbar opens a persisted query tab', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('open-query-from-table').click();
+        await expect(page.getByTestId('sql-editor')).toBeVisible();
+        const editor = page.getByTestId('sql-editor').locator('.cm-content');
+        await expect(editor).toContainText('SELECT');
+        await expect(editor).toContainText('table_a');
+        await expect(editor).toContainText('LIMIT 1000');
+        await expect(page.getByRole('tab', { name: 'table_a' })).toHaveCount(2);
     });
 
     test('opens a dataset from the sidebar and shows Overview', async ({ page }) => {
