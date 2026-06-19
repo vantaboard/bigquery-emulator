@@ -430,16 +430,16 @@ Runs inside the multi-tab workspace.
 | Capability | Status | Notes |
 |------------|--------|-------|
 | Run query | **Done** | `POST .../queries` |
-| Format SQL | **Done** | `sql-formatter` BigQuery dialect |
+| Format SQL | **Done** today → **Planned** upgrade | Today: `sql-formatter`. Target: emulator `POST /api/emulator/sql/format` when SQL Tools enabled; client fallback otherwise |
 | Syntax highlighting | **Done** | CodeMirror `@codemirror/lang-sql` |
-| Parser-based auto-completion | Planned | Projects, datasets, tables, views, columns, UDFs |
-| Real-time syntax errors | Planned | Parser diagnostics in editor gutter |
+| Parser-based auto-completion | Planned | Primary: `POST /api/emulator/sql/complete` (catalog-aware). Fallback: REST schema + `@codemirror/lang-sql` |
+| Real-time syntax errors | Planned | `POST /api/emulator/sql/parse` diagnostics in editor gutter (debounced) |
 | Results table | **Done** | [ResultsTable.tsx](src/features/explorer/components/ResultsTable.tsx) |
 | JSON results | **Done** | [JsonViewer.tsx](src/features/explorer/components/JsonViewer.tsx) |
-| Reference panel | Planned | Side panel showing table schema while editing |
-| Tools menu | Planned | Toggle parser completion, translation settings |
+| Reference panel | Planned | REST schema for tab-bound resource; optional `POST /api/emulator/sql/analyze` when upstream ships |
+| Tools menu | Planned | Toggle emulator parser vs client fallback; strict vs lenient format |
 
-Auto-completion requires a fetched resource catalog (projects, datasets, tables, views, routines) and column metadata from schema endpoints, wired into CodeMirror completion in [SqlEditor.tsx](src/features/explorer/components/SqlEditor.tsx).
+When the emulator runs with `--enable-sql-tools-api`, wire format/parse/complete from [SqlEditor.tsx](src/features/explorer/components/SqlEditor.tsx) via a typed client ([`src/lib/sqlTools.ts`](src/lib/sqlTools.ts), planned in M4). Vite/nginx proxy `/api/emulator` to the gateway alongside `/bigquery`. Against real BigQuery or when SQL Tools is disabled, fall back to a slim REST-backed catalog and `sql-formatter`.
 
 ---
 
@@ -498,6 +498,10 @@ The UI targets the real BigQuery REST contract. Gaps in [bigquery-emulator](http
 | Saved queries | Server-backed saved query objects (optional) | Save query (versioned) |
 | Replicas | Cross-region replica metadata | Dataset Details → Replicas |
 | External ingestion | GCS, S3, Azure, Drive, Bigtable sources | Create Table modal sources |
+| SQL Tools API | Opt-in `POST /api/emulator/sql/{format,parse,complete}`; `--enable-sql-tools-api` | M4 query editor (format, lint, completion) |
+| SQL Tools — completion depth | Routines in `/complete`; in-scope column completion; `project.dataset.table` qualified names; diagnostic byte spans | M4/M5 autocompletion parity |
+| SQL Tools — analyze | `POST /api/emulator/sql/analyze` returning referenced tables from AST | M4 reference panel (SQL-inferred schema) |
+| SQL Tools — ops | Capabilities probe; empty-SQL completion; offset unit documented (UTF-8 bytes vs editor UTF-16) | M4 editor integration, e2e |
 
 When implementing a UI feature, file an issue or PR against the emulator for any missing behavior rather than hiding the UI control.
 
@@ -531,15 +535,16 @@ When implementing a UI feature, file an issue or PR against the emulator for any
 
 ### M4 — Query workspace upgrades
 
-- Parser-based auto-completion catalog
-- Real-time syntax diagnostics
+- SQL Tools client + proxy (`/api/emulator/sql/*`) with REST/sql-formatter fallback
+- Parser-based auto-completion and real-time syntax diagnostics
+- Tools menu (emulator parser vs client fallback; strict format)
 - Save as view / Save query / Save query (Classic)
 - Reference side panel
 
 ### M5 — Routines and external sources
 
 - Routines sub-tab and sidebar integration
-- Routine autocompletion in SQL editor
+- Routine autocompletion via SQL Tools `/complete` (when upstream adds routines) + REST fallback
 - External source ingestion flows (GCS, S3, Azure, Drive, Bigtable)
 
 ### Upstream emulator work (parallel track)

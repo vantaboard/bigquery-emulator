@@ -7,6 +7,9 @@ services:
     volumes:
       - ./data/data.yaml:/data/seed.yaml:ro
     command: ["--project-id=local-project", "--seed-data-file=/data/seed.yaml"]
+    # When using an emulator release with SQL Tools API, add:
+    #   "--enable-sql-tools-api", "--sql-tools-api-allow-remote"
+    # (--sql-tools-api-allow-remote is required in Compose: nginx is not loopback.)
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9050/healthz | grep -q ok"]
       interval: 5s

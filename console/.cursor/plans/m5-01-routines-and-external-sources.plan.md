@@ -12,7 +12,7 @@ todos:
     content: Add routine creation (CREATE FUNCTION / CREATE PROCEDURE) via modal and/or editor
     status: pending
   - id: routine-autocomplete
-    content: Feed routines into the M4 completion catalog so UDFs autocomplete in queries
+    content: Ensure routines appear in SQL Tools /complete when upstream adds them; extend REST fallback catalog
     status: pending
   - id: external-sources
     content: Finish external-source ingestion in Create Table modal (GCS/S3/Azure/Drive/Bigtable) end to end
@@ -27,7 +27,7 @@ isProject: false
 
 ## Dependencies
 
-- [`m2-01-dataset-detail-page.plan.md`](m2-01-dataset-detail-page.plan.md) (Routines sub-tab scaffold), [`m3-01-create-table-modal.plan.md`](m3-01-create-table-modal.plan.md) (Create Table sources), [`m4-01-query-workspace-upgrades.plan.md`](m4-01-query-workspace-upgrades.plan.md) (completion catalog).
+- [`m2-01-dataset-detail-page.plan.md`](m2-01-dataset-detail-page.plan.md) (Routines sub-tab scaffold), [`m3-01-create-table-modal.plan.md`](m3-01-create-table-modal.plan.md) (Create Table sources), [`m4-01-query-workspace-upgrades.plan.md`](m4-01-query-workspace-upgrades.plan.md) (SQL Tools editor integration + REST fallback).
 - Index: [`00-index.plan.md`](00-index.plan.md)
 - Roadmap: [`ROADMAP.md`](../../ROADMAP.md) → Routines (UDFs) + Create Table external sources.
 
@@ -42,7 +42,7 @@ Make routines first-class and finish external ingestion so the Create Table sour
 - **Listing**: full Routines sub-tab on the dataset page (from `explorerQueries.routines`); also surface routines under each dataset in the sidebar tree.
 - **Detail view**: routine page/panel showing routine type, language, arguments, return type, and the definition body (read-only code block) via `explorerQueries.routine`.
 - **Creation**: create UDFs/procedures through a modal (name, type, args, return type, body) and/or directly via `CREATE FUNCTION` / `CREATE PROCEDURE` in a query tab; submit via `submitJob`/query and refresh.
-- **Autocompletion**: register routines in the M4 completion catalog so UDF names suggest in the editor.
+- **Autocompletion**: routines appear via SQL Tools `/complete` when upstream adds them; extend the M4 REST fallback catalog otherwise.
 
 ### External sources (Create Table)
 

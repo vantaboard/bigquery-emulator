@@ -26,6 +26,15 @@ todos:
   - id: external-ingest
     content: Upstream — external source ingestion (GCS/S3/Azure/Drive/Bigtable)
     status: pending
+  - id: sql-tools-api
+    content: Upstream — SQL Tools API shipped and enabled in default releases (format/parse/complete)
+    status: pending
+  - id: sql-tools-completion
+    content: Upstream — SQL Tools completion depth (routines, in-scope columns, qualified names, diagnostic spans)
+    status: pending
+  - id: sql-tools-analyze
+    content: Upstream — POST /api/emulator/sql/analyze (referenced tables from AST for reference panel)
+    status: pending
 isProject: false
 ---
 
@@ -58,6 +67,10 @@ UI features are **never descoped** because the emulator lacks support. Build to 
 | 11 | Saved queries | Server-backed saved query objects (optional) | Save query (versioned) | m4-01 |
 | 12 | Replicas | Cross-region replica metadata | Dataset Details → Replicas | m2-01 |
 | 13 | External ingestion | GCS, S3, Azure, Drive, Bigtable sources | Create Table sources | m3-01, m5-01 |
+| 14 | SQL Tools API | Opt-in routes `POST /api/emulator/sql/{format,parse,complete}`; gateway flag `--enable-sql-tools-api` | M4 format/lint/completion | m4-01 |
+| 15 | SQL Tools — completion | Routines in `/complete`; in-scope column completion; `project.dataset.table` names; diagnostic byte spans | M4/M5 autocompletion | m4-01, m5-01 |
+| 16 | SQL Tools — analyze | `POST /api/emulator/sql/analyze` → referenced table paths | M4 reference panel (SQL-inferred) | m4-01 |
+| 17 | SQL Tools — ops | Capabilities probe; empty-SQL completion; UTF-8 byte offset contract documented | M4 editor integration, e2e | m4-01 |
 
 ## Process
 

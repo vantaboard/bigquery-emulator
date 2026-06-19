@@ -21,6 +21,10 @@ export default defineConfig(({ mode }) => {
                     target: proxyTarget,
                     changeOrigin: true,
                 },
+                '/api/emulator': {
+                    target: proxyTarget,
+                    changeOrigin: true,
+                },
             },
         },
         test: {

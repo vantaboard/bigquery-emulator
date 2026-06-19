@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: m2-01
     content: Execute m2-01-dataset-detail-page.plan.md (dataset Overview + Details + Insights placeholder); verify.
-    status: pending
+    status: completed
   - id: m2-02
     content: Execute m2-02-table-detail-page.plan.md (Schema read, Details, Preview, Query button, Unplanned tabs); verify.
     status: pending
@@ -24,7 +24,7 @@ todos:
     content: Execute m3-02-copy-delete-snapshot-schema.plan.md (Copy, Delete, Snapshot, Edit Schema); verify.
     status: pending
   - id: m4-01
-    content: Execute m4-01-query-workspace-upgrades.plan.md (autocompletion, diagnostics, save, reference panel); verify.
+    content: Execute m4-01-query-workspace-upgrades.plan.md (SQL Tools client, autocompletion, diagnostics, save, reference panel); verify.
     status: pending
   - id: m5-01
     content: Execute m5-01-routines-and-external-sources.plan.md (routines sub-tab, autocompletion, external ingestion); verify.

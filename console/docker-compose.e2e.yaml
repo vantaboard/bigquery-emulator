@@ -7,6 +7,8 @@ services:
     volumes:
       - ./e2e/fixtures/seed.yaml:/data/seed.yaml:ro
     command: ["--project-id=local-project", "--seed-data-file=/data/seed.yaml"]
+    # When using an emulator release with SQL Tools API, add:
+    #   "--enable-sql-tools-api", "--sql-tools-api-allow-remote"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9050/healthz | grep -q ok"]
       interval: 5s

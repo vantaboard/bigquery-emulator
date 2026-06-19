@@ -15,7 +15,8 @@
 
 ## Docker
 
-- `docker compose up` exposes the UI on **8080** (nginx) and proxies **`/bigquery`** to **`http://bigquery:9050`** inside the Compose network.
+- `docker compose up` exposes the UI on **8080** (nginx) and proxies **`/bigquery`** and **`/api/emulator`** to **`http://bigquery:9050`** inside the Compose network.
+- Enable SQL Tools on the emulator service once a release image includes it (see comments in `docker-compose.yaml`).
 - Automated E2E: `npm run test:e2e` (see [README](../README.md#e2e-testing)).
 
 ## Regression notes

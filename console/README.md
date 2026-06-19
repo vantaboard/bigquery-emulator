@@ -2,7 +2,7 @@
 
 React + TypeScript web UI for exploring BigQuery (emulator or real), modeled after a slim [Vite](https://vitejs.dev/) + [TanStack Query](https://tanstack.com/query) setup similar to internal Prospero web apps.
 
-There is **no Go code in this repository**. The UI talks to the **BigQuery REST API** (`/bigquery/v2/*`) served by [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) on the default HTTP port **9050**.
+There is **no Go code in this repository**. The UI talks to the **BigQuery REST API** (`/bigquery/v2/*`) served by [`bigquery-emulator`](https://github.com/vantaboard/bigquery-emulator) on the default HTTP port **9050**. When the emulator runs with `--enable-sql-tools-api`, the query editor (M4) also uses the **SQL Tools API** (`/api/emulator/sql/*`) for format, parse, and completion.
 
 ## Features
 
@@ -22,6 +22,7 @@ See [docs/api-contract.md](./docs/api-contract.md) and [docs/rollout-checklist.m
 
 ```bash
 docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:v0.3.1
+# SQL Tools API (upcoming release): add --enable-sql-tools-api
 # or from a local checkout: task emulator:run-full
 ```
 
@@ -34,7 +35,7 @@ cp .env.example .env   # optional: tune VITE_PROXY_TARGET, VITE_DEFAULT_PROJECT
 npm run dev
 ```
 
-[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/bigquery`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:9050`).
+[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/bigquery`** and **`/api/emulator`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:9050`).
 
 ## Production build
 
@@ -47,7 +48,7 @@ For a static build that talks to the API on another origin, set **`VITE_API_URL`
 
 ## Docker
 
-`docker compose up` runs [`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`](https://github.com/vantaboard/bigquery-emulator) as **`bigquery`** and the static UI (**`bq-ui`**) on **8080**. Nginx proxies **`/bigquery`** to **`http://bigquery:9050`**. Sample data is loaded from **`data/data.yaml`**.
+`docker compose up` runs [`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`](https://github.com/vantaboard/bigquery-emulator) as **`bigquery`** and the static UI (**`bq-ui`**) on **8080**. Nginx proxies **`/bigquery`** and **`/api/emulator`** to **`http://bigquery:9050`**. Sample data is loaded from **`data/data.yaml`**. Enable SQL Tools on the emulator service once a release image includes it (see comments in `docker-compose.yaml`).
 
 ## E2E testing
 
@@ -67,9 +68,10 @@ The E2E stack is defined in **`docker-compose.e2e.yaml`**. Seed data lives in **
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_PROXY_TARGET` | Dev: Vite proxy target for `/bigquery` (default `http://127.0.0.1:9050`) |
+| `VITE_PROXY_TARGET` | Dev: Vite proxy target for `/bigquery` and `/api/emulator` (default `http://127.0.0.1:9050`) |
 | `VITE_API_URL` | Optional absolute API base for production builds (empty = same origin) |
 | `VITE_DEFAULT_PROJECT` | Include this project in the sidebar when it has datasets but is missing from `GET /bigquery/v2/projects` |
+| `VITE_SQL_TOOLS_TOKEN` | Optional: `X-BigQuery-Emulator-SqlTools-Token` for remote SQL Tools access when the emulator requires a token |
 
 ## Development scripts
 
