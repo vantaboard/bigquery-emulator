@@ -20,10 +20,20 @@ import (
 // (CREATE OR REPLACE TABLE/VIEW on the same object) trip BigQuery's
 // per-table metadata-update quota, which only clears over several seconds;
 // backoff spreads retries until the window reopens.
+//
+// bqAttemptTimeout caps a single submission attempt. The BigQuery client
+// retries jobRateLimitExceeded *internally* on the call's context until that
+// context is done (see runWithRetryExplicit in the client), so without a
+// per-attempt cap the client's own retry consumes the entire per-query
+// deadline and our backoff loop never runs (the "0 retries" symptom). Capping
+// each attempt hands control back to this loop while still leaving the client's
+// short internal backoff intact within the slice. It must exceed the slowest
+// legitimate query/setup in the suite (a few seconds) by a wide margin.
 var (
-	bqBaseBackoff = 1 * time.Second
-	bqMaxBackoff  = 32 * time.Second
-	bqMaxRetries  = 8
+	bqBaseBackoff    = 1 * time.Second
+	bqMaxBackoff     = 32 * time.Second
+	bqMaxRetries     = 8
+	bqAttemptTimeout = 30 * time.Second
 )
 
 // isNotFound reports whether err is a BigQuery 404 (dataset absent).
@@ -244,21 +254,36 @@ func isRateLimitErr(err error) bool {
 // retryOnRateLimit runs fn, retrying rate-limit/quota/backend errors with
 // exponential backoff and full jitter until success, a non-retryable error,
 // the retry budget is exhausted, or ctx expires.
+//
+// Each attempt runs against a sub-context capped at bqAttemptTimeout so the
+// BigQuery client's internal retryer cannot consume the whole parent deadline
+// before this loop gets to back off (context.WithTimeout also caps at the
+// parent's own deadline, so we never exceed the per-query budget).
 func retryOnRateLimit(
 	ctx context.Context,
 	fn func(context.Context) (*bigquery.Job, error),
 ) (*bigquery.Job, error) {
 	backoff := bqBaseBackoff
 	for attempt := 0; ; attempt++ {
-		job, err := fn(ctx)
+		attemptCtx, cancel := context.WithTimeout(ctx, bqAttemptTimeout)
+		job, err := fn(attemptCtx)
+		cancel()
 		if err == nil {
 			return job, nil
 		}
+		// A capped attempt that timed out on the rate-limit reason is still a
+		// rate-limit error worth backing off on; isRateLimitErr matches the
+		// reason text the client leaves in the wrapped deadline error.
 		if !isRateLimitErr(err) {
 			return nil, err
 		}
 		if attempt >= bqMaxRetries {
-			return nil, fmt.Errorf("rate limit: exhausted %d retries: %w", bqMaxRetries, err)
+			return nil, fmt.Errorf("rate limit: exhausted %d attempts: %w", attempt+1, err)
+		}
+		// Parent deadline/cancellation reached: no budget left to back off.
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, fmt.Errorf("rate limit: parent context done after %d attempts: %w (last error: %v)",
+				attempt+1, cerr, err)
 		}
 		// Full jitter: wait in [0, backoff] to avoid synchronized retries.
 		wait := time.Duration(rand.Int63n(int64(backoff) + 1)) //nolint:gosec // jitter, not crypto
@@ -266,8 +291,8 @@ func retryOnRateLimit(
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, fmt.Errorf("rate limit backoff aborted after %d retries: %w (last error: %v)",
-				attempt, ctx.Err(), err)
+			return nil, fmt.Errorf("rate limit: backoff aborted after %d attempts: %w (last error: %v)",
+				attempt+1, ctx.Err(), err)
 		case <-timer.C:
 		}
 		if backoff < bqMaxBackoff {

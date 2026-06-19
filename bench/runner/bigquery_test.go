@@ -116,6 +116,38 @@ func TestRetryOnRateLimitExhausted(t *testing.T) {
 	}
 }
 
+// TestRetryOnRateLimitCapsAttemptContext guards the fix for the "0 retries"
+// bug: each attempt must run against a bounded sub-context so the BigQuery
+// client's internal retryer cannot consume the whole parent budget. With a
+// deadline-free parent, the per-attempt context must still carry a deadline
+// no later than bqAttemptTimeout from now.
+func TestRetryOnRateLimitCapsAttemptContext(t *testing.T) {
+	withFastBackoff(t)
+	prev := bqAttemptTimeout
+	bqAttemptTimeout = 250 * time.Millisecond
+	t.Cleanup(func() { bqAttemptTimeout = prev })
+
+	var gotDeadline bool
+	var remaining time.Duration
+	_, err := retryOnRateLimit(context.Background(), func(ctx context.Context) (*bigquery.Job, error) {
+		dl, ok := ctx.Deadline()
+		gotDeadline = ok
+		if ok {
+			remaining = time.Until(dl)
+		}
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gotDeadline {
+		t.Fatal("attempt context had no deadline; client retry could run unbounded")
+	}
+	if remaining <= 0 || remaining > bqAttemptTimeout {
+		t.Fatalf("attempt deadline = %v, want in (0, %v]", remaining, bqAttemptTimeout)
+	}
+}
+
 func TestRetryOnRateLimitContextCancel(t *testing.T) {
 	withFastBackoff(t)
 	ctx, cancel := context.WithCancel(context.Background())
