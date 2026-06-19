@@ -1,5 +1,6 @@
 #include "frontend/handlers/catalog.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -7,12 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/measure_catalog.h"
+#include "backend/catalog/view_registry.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 
@@ -290,11 +293,32 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   if (!tables_or.ok()) {
     return AbslToGrpcStatus(tables_or.status());
   }
+  // Physical storage tables plus the logical views registered for this
+  // dataset. Views live in the view registry (not storage), so a dataset
+  // whose only objects are views would otherwise list as empty. BigQuery
+  // surfaces views in tables.list alongside tables, and
+  // INFORMATION_SCHEMA.TABLES already folds them in via ListProjectViews;
+  // mirror that here so the REST tables.list stays consistent.
+  std::vector<std::string> table_ids;
+  absl::flat_hash_set<std::string> seen;
   for (const auto& tid : *tables_or) {
+    if (seen.insert(tid.table_id).second) {
+      table_ids.push_back(tid.table_id);
+    }
+  }
+  for (const auto& view :
+       backend::catalog::ListProjectViews(id.project_id, id.dataset_id)) {
+    if (seen.insert(view.view_name).second) {
+      table_ids.push_back(view.view_name);
+    }
+  }
+  // Keep the documented contract: deterministic, ascending table_id order.
+  std::sort(table_ids.begin(), table_ids.end());
+  for (const auto& table_id : table_ids) {
     auto* ref = response->add_tables();
-    ref->set_project_id(tid.project_id);
-    ref->set_dataset_id(tid.dataset_id);
-    ref->set_table_id(tid.table_id);
+    ref->set_project_id(id.project_id);
+    ref->set_dataset_id(id.dataset_id);
+    ref->set_table_id(table_id);
   }
   return ::grpc::Status::OK;
 }
