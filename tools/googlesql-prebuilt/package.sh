@@ -705,7 +705,8 @@ PY
             --local_resources=memory="$memory_mb" \
             --action_env=CC=/usr/bin/clang \
             --action_env=CXX=/usr/bin/clang++ \
-            --features=pic \
+            --features=pic,-layering_check \
+            --host_features=-layering_check \
             --copt=-O2 \
             --copt=-fPIC \
             --copt=-fno-omit-frame-pointer \
