@@ -123,6 +123,25 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "sqltools_handler",
+    srcs = ["sqltools.cc"],
+    hdrs = ["sqltools.h"],
+    deps = [
+        ":query_internal",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/sqltools:catalog_names",
+        "//backend/sqltools:sql_tools",
+        "//backend/storage",
+        "//proto:emulator_cc_grpc",
+        "//proto:emulator_cc_proto",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/status:statusor",
+        "@googlesql//googlesql/public:formatter_options",
+        "@googlesql//googlesql/public:simple_catalog",
+    ],
+)
+
 cc_test(
     name = "query_handler_test",
     srcs = [

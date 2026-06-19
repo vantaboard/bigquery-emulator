@@ -18,6 +18,7 @@
 #include "frontend/handlers/query.h"
 #include "frontend/handlers/storage_read.h"
 #include "frontend/handlers/storage_write.h"
+#include "frontend/handlers/sqltools.h"
 
 namespace bigquery_emulator {
 namespace frontend {
@@ -35,11 +36,9 @@ void HandleSignal(int /*signo*/) {
 // GrpcServer hosts the real `grpc::Server` for the emulator engine.
 //
 // It owns:
-//   * a `CatalogService`, `QueryService`, `StorageReadService`, and
-//     `StorageWriteService` implementation of the
+//   * a `CatalogService`, `QueryService`, `SqlToolsService`,
+//     `StorageReadService`, and `StorageWriteService` implementation
 //     `bigquery_emulator.v1.*` gRPC services defined in
-//     `proto/emulator.proto`, `proto/storage_read.proto`, and
-//     `proto/storage_write.proto`, and
 //   * the default `grpc.health.v1.Health` service that ServerBuilder
 //     registers when EnableDefaultHealthCheckService(true) is called.
 //
@@ -56,6 +55,7 @@ class GrpcServer final : public Server {
   GrpcServer(std::unique_ptr<::grpc::Server> server,
              std::unique_ptr<CatalogService> catalog,
              std::unique_ptr<QueryService> query,
+             std::unique_ptr<SqlToolsService> sqltools,
              std::unique_ptr<StorageReadService> storage_read,
              std::unique_ptr<StorageWriteService> storage_write,
              std::string host,
@@ -63,6 +63,7 @@ class GrpcServer final : public Server {
       : server_(std::move(server)),
         catalog_(std::move(catalog)),
         query_(std::move(query)),
+        sqltools_(std::move(sqltools)),
         storage_read_(std::move(storage_read)),
         storage_write_(std::move(storage_write)),
         host_(std::move(host)),
@@ -102,6 +103,7 @@ class GrpcServer final : public Server {
   std::unique_ptr<::grpc::Server> server_{};
   std::unique_ptr<CatalogService> catalog_{};
   std::unique_ptr<QueryService> query_{};
+  std::unique_ptr<SqlToolsService> sqltools_{};
   std::unique_ptr<StorageReadService> storage_read_{};
   std::unique_ptr<StorageWriteService> storage_write_{};
   std::string host_{};
@@ -148,6 +150,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
 
   auto catalog = std::make_unique<CatalogService>(options.storage);
   auto query = std::make_unique<QueryService>(options.storage, options.engine);
+  auto sqltools = std::make_unique<SqlToolsService>(options.storage);
   auto storage_read = std::make_unique<StorageReadService>(options.storage);
   auto storage_write = std::make_unique<StorageWriteService>(options.storage);
 
@@ -157,6 +160,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
       options.server_address, ::grpc::InsecureServerCredentials(), &bound_port);
   builder.RegisterService(catalog.get());
   builder.RegisterService(query.get());
+  builder.RegisterService(sqltools.get());
   builder.RegisterService(storage_read.get());
   builder.RegisterService(storage_write.get());
 
@@ -180,6 +184,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
     health_service->SetServingStatus("", true);
     health_service->SetServingStatus("bigquery_emulator.v1.Catalog", true);
     health_service->SetServingStatus("bigquery_emulator.v1.Query", true);
+    health_service->SetServingStatus("bigquery_emulator.v1.SqlTools", true);
     health_service->SetServingStatus("bigquery_emulator.v1.StorageRead", true);
     health_service->SetServingStatus("bigquery_emulator.v1.StorageWrite", true);
   }
@@ -192,6 +197,7 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
   auto server = std::make_unique<GrpcServer>(std::move(grpc_server),
                                              std::move(catalog),
                                              std::move(query),
+                                             std::move(sqltools),
                                              std::move(storage_read),
                                              std::move(storage_write),
                                              std::move(host),
