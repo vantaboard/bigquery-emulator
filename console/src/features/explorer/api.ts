@@ -1,19 +1,47 @@
 import { apiClient } from '@/lib/api';
 import {
     datasetIdsFromList,
+    datasetMetadataFromBq,
+    jobRefFromBq,
     projectIdsFromList,
     queryResponseFromBq,
+    routineFromBq,
+    routineIdsFromList,
+    tableDataFromBq,
     tableIdsFromList,
     tableMetadataFromBq,
+    type BqDataset,
     type BqDatasetList,
+    type BqJob,
     type BqProjectList,
     type BqQueryResponse,
+    type BqRoutine,
+    type BqRoutineList,
     type BqTable,
+    type BqTableData,
     type BqTableList,
 } from '@/lib/bqRest';
-import type { ExplorerConfig, QueryResponse, TableMetadata } from '@/types/api';
+import type {
+    DatasetMetadata,
+    ExplorerConfig,
+    JobRef,
+    JobSubmitConfig,
+    QueryResponse,
+    RoutineMetadata,
+    TableDataPage,
+    TableMetadata,
+    TableSchemaField,
+} from '@/types/api';
 
 const defaultProject = import.meta.env.VITE_DEFAULT_PROJECT?.trim() ?? '';
+
+function datasetPath(projectId: string, datasetId: string): string {
+    return `/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}`;
+}
+
+function tablePath(projectId: string, datasetId: string, tableId: string): string {
+    return `${datasetPath(projectId, datasetId)}/tables/${encodeURIComponent(tableId)}`;
+}
 
 export const explorerQueries = {
     config: async (): Promise<ExplorerConfig> => ({
@@ -51,9 +79,7 @@ export const explorerQueries = {
     },
 
     tableSchema: async (projectId: string, datasetId: string, tableId: string): Promise<TableMetadata> => {
-        const table = await apiClient.get<BqTable>(
-            `/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}/tables/${encodeURIComponent(tableId)}`,
-        );
+        const table = await apiClient.get<BqTable>(tablePath(projectId, datasetId, tableId));
         return tableMetadataFromBq(projectId, datasetId, tableId, table);
     },
 
@@ -63,6 +89,88 @@ export const explorerQueries = {
             { query, useLegacySql: false },
         );
         return queryResponseFromBq(data);
+    },
+
+    datasetMetadata: async (projectId: string, datasetId: string): Promise<DatasetMetadata> => {
+        const data = await apiClient.get<BqDataset>(datasetPath(projectId, datasetId));
+        return datasetMetadataFromBq(projectId, datasetId, data);
+    },
+
+    routines: async (projectId: string, datasetId: string): Promise<string[]> => {
+        const data = await apiClient.get<BqRoutineList>(`${datasetPath(projectId, datasetId)}/routines`);
+        return routineIdsFromList(data);
+    },
+
+    routine: async (
+        projectId: string,
+        datasetId: string,
+        routineId: string,
+    ): Promise<RoutineMetadata> => {
+        const data = await apiClient.get<BqRoutine>(
+            `${datasetPath(projectId, datasetId)}/routines/${encodeURIComponent(routineId)}`,
+        );
+        return routineFromBq(projectId, datasetId, routineId, data);
+    },
+
+    tableData: async (
+        projectId: string,
+        datasetId: string,
+        tableId: string,
+        opts: { maxResults?: number; pageToken?: string } = {},
+    ): Promise<TableDataPage> => {
+        const table = await apiClient.get<BqTable>(tablePath(projectId, datasetId, tableId));
+        const meta = tableMetadataFromBq(projectId, datasetId, tableId, table);
+
+        const params = new URLSearchParams();
+        if (opts.maxResults !== undefined) params.set('maxResults', String(opts.maxResults));
+        if (opts.pageToken) params.set('pageToken', opts.pageToken);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+
+        const data = await apiClient.get<BqTableData>(`${tablePath(projectId, datasetId, tableId)}/data${qs}`);
+        return tableDataFromBq(data, meta.schema);
+    },
+
+    patchTableSchema: async (
+        projectId: string,
+        datasetId: string,
+        tableId: string,
+        fields: TableSchemaField[],
+    ): Promise<TableMetadata> => {
+        const body = {
+            schema: {
+                fields: fields.map((f) => ({
+                    name: f.name,
+                    type: f.type,
+                    mode: f.mode,
+                    ...(f.description ? { description: f.description } : {}),
+                })),
+            },
+        };
+        const table = await apiClient.patch<BqTable>(tablePath(projectId, datasetId, tableId), body);
+        return tableMetadataFromBq(projectId, datasetId, tableId, table);
+    },
+
+    deleteTable: async (projectId: string, datasetId: string, tableId: string): Promise<void> => {
+        await apiClient.del(tablePath(projectId, datasetId, tableId));
+    },
+
+    deleteDataset: async (projectId: string, datasetId: string): Promise<void> => {
+        await apiClient.del(datasetPath(projectId, datasetId));
+    },
+
+    submitJob: async (projectId: string, jobConfig: JobSubmitConfig): Promise<JobRef> => {
+        const data = await apiClient.post<BqJob>(
+            `/bigquery/v2/projects/${encodeURIComponent(projectId)}/jobs`,
+            jobConfig,
+        );
+        return jobRefFromBq(data);
+    },
+
+    getJob: async (projectId: string, jobId: string): Promise<JobRef> => {
+        const data = await apiClient.get<BqJob>(
+            `/bigquery/v2/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}`,
+        );
+        return jobRefFromBq(data);
     },
 
     createEmulatorProject: async (_id: string): Promise<{ id: string }> => {
