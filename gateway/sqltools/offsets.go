@@ -1,6 +1,7 @@
 package sqltools
 
 import (
+	"math"
 	"strings"
 	"unicode/utf16"
 
@@ -46,19 +47,29 @@ func codeUnitToUtf8ByteOffset(sql string, codeUnit int) int {
 	return len(string(utf16.Decode(units[:codeUnit])))
 }
 
+func int32FromInt(v int) int32 {
+	if v > int(math.MaxInt32) {
+		return math.MaxInt32
+	}
+	if v < int(math.MinInt32) {
+		return math.MinInt32
+	}
+	return int32(v)
+}
+
 func convertCursorToUTF8(sql string, unit string, cursor int32) int32 {
 	if normalizeOffsetUnit(unit) != offsetUnitUTF16 {
 		return cursor
 	}
-	return int32(codeUnitToUtf8ByteOffset(sql, int(cursor)))
+	return int32FromInt(codeUnitToUtf8ByteOffset(sql, int(cursor)))
 }
 
 func convertReplacementFromUTF8(sql string, unit string, start, end int32) (int32, int32) {
 	if normalizeOffsetUnit(unit) != offsetUnitUTF16 {
 		return start, end
 	}
-	return int32(utf8ByteOffsetToCodeUnit(sql, int(start))),
-		int32(utf8ByteOffsetToCodeUnit(sql, int(end)))
+	return int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(start))),
+		int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(end)))
 }
 
 type diagnosticWire struct {
@@ -87,10 +98,10 @@ func diagnosticFromProto(sql string, unit string, diag *enginepb.SqlDiagnostic) 
 	}
 	if normalizeOffsetUnit(unit) == offsetUnitUTF16 && sql != "" {
 		if out.StartByte >= 0 {
-			out.StartUTF16 = int32(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
+			out.StartUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
 		}
 		if out.EndByte >= 0 {
-			out.EndUTF16 = int32(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
+			out.EndUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
 		}
 	}
 	return out
@@ -113,8 +124,8 @@ func tokenFromProto(sql string, unit string, tok *enginepb.SqlToken) tokenWire {
 		EndByte:   tok.GetEndByte(),
 	}
 	if normalizeOffsetUnit(unit) == offsetUnitUTF16 && sql != "" {
-		out.StartUTF16 = int32(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
-		out.EndUTF16 = int32(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
+		out.StartUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
+		out.EndUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
 	}
 	return out
 }

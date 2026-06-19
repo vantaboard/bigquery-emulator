@@ -50,7 +50,7 @@ func TestSQLToolsCapabilities_RegisteredWhenEnabled(t *testing.T) {
 func TestSQLToolsRoutes_RemoteCallerDeniedWithoutAllow(t *testing.T) {
 	srv := NewServer(Options{EnableSQLToolsAPI: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/emulator/sql/capabilities", nil)
-	req.RemoteAddr = "10.0.0.5:1234"
+	req.RemoteAddr = testRemoteLANAddr
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {

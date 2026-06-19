@@ -60,7 +60,7 @@ func TestSeedRoutes_RemoteCallerDeniedWithoutAllow(t *testing.T) {
 	srv := NewServer(Options{EnableSeedAPI: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/emulator/seed",
 		strings.NewReader(`{"source":{"project":"p"}}`))
-	req.RemoteAddr = "10.0.0.5:1234"
+	req.RemoteAddr = testRemoteLANAddr
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
@@ -75,7 +75,7 @@ func TestSeedRoutes_AllowRemoteFlag(t *testing.T) {
 	srv := NewServer(Options{EnableSeedAPI: true, SeedAPIAllowRemote: true}, handlers.BuildDependencies(nil), nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/emulator/seed",
 		strings.NewReader(`{"source":{"project":"p"}}`))
-	req.RemoteAddr = "10.0.0.5:1234"
+	req.RemoteAddr = testRemoteLANAddr
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotImplemented {
