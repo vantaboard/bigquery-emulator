@@ -176,6 +176,18 @@ func cellFromJSONForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
 	if f == nil {
 		return ValueToCell(v)
 	}
+	if isRepeatedFieldMode(f.GetMode()) {
+		arr, ok := v.([]any)
+		if !ok {
+			return ValueToCell(v)
+		}
+		elemSchema := repeatedElementSchema(f)
+		out := &enginepb.Array{Elements: make([]*enginepb.Cell, 0, len(arr))}
+		for _, el := range arr {
+			out.Elements = append(out.Elements, cellFromJSONForField(elemSchema, el))
+		}
+		return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: out}}
+	}
 	if isStructFieldType(f.GetType()) {
 		m, ok := v.(map[string]any)
 		if !ok {
@@ -193,6 +205,22 @@ func cellFromJSONForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
 		return &enginepb.Cell{Value: &enginepb.Cell_StructValue{StructValue: st}}
 	}
 	return ValueToCell(v)
+}
+
+func isRepeatedFieldMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), bqModeRepeated)
+}
+
+func repeatedElementSchema(f *enginepb.FieldSchema) *enginepb.FieldSchema {
+	if f == nil {
+		return nil
+	}
+	return &enginepb.FieldSchema{
+		Name:        f.GetName(),
+		Type:        f.GetType(),
+		Description: f.GetDescription(),
+		Fields:      f.GetFields(),
+	}
 }
 
 func isStructFieldType(t string) bool {

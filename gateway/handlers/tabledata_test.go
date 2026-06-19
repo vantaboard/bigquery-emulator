@@ -145,6 +145,52 @@ func TestTableDataInsertAllMissingFieldsBecomeNull(t *testing.T) {
 	}
 }
 
+// TestTableDataInsertAllRepeatedStruct maps REPEATED STRUCT elements
+// by field name so JSON subfields land on the correct slot.
+func TestTableDataInsertAllRepeatedStruct(t *testing.T) {
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{
+			Name: "structarr",
+			Type: sqlTypeSTRUCT,
+			Mode: sqlModeRepeated,
+			Fields: []*enginepb.FieldSchema{
+				{Name: "key", Type: sqlTypeSTRING},
+				{Name: "value", Type: sqlTypeJSON},
+			},
+		},
+	}}
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+	}
+	body := `{"rows":[{"json":{"structarr":[{"key":"profile","value":"{\"age\": 10}"}]}}]}`
+	req := newTabledataReq(http.MethodPost, testTableID, "insertAll", body)
+	rec := httptest.NewRecorder()
+	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastInsertRows == nil {
+		t.Fatal("Catalog.InsertRows was not called")
+	}
+	arr := fake.lastInsertRows.GetRows()[0].GetCells()[0].GetArray()
+	if arr == nil || len(arr.GetElements()) != 1 {
+		t.Fatalf("structarr cell: %+v", fake.lastInsertRows.GetRows()[0].GetCells()[0])
+	}
+	st := arr.GetElements()[0].GetStructValue()
+	if st == nil || len(st.GetFields()) != 2 {
+		t.Fatalf("struct element: %+v", arr.GetElements()[0])
+	}
+	if got := st.GetFields()[0].GetStringValue(); got != "profile" {
+		t.Errorf("key=%q, want profile", got)
+	}
+	if got := st.GetFields()[1].GetStringValue(); got != `{"age": 10}` {
+		t.Errorf("value=%q, want {\"age\": 10}", got)
+	}
+}
+
 // TestTableDataInsertAllEmptyRowsSkipsRPC short-circuits an empty
 // insertAll body to a success envelope without ever calling InsertRows.
 func TestTableDataInsertAllEmptyRowsSkipsRPC(t *testing.T) {

@@ -74,7 +74,22 @@ func decodeInsertAllBody(w http.ResponseWriter, r *http.Request) (bqtypes.TableD
 // come back out shape-preserved. Typing tightens later via the
 // resolved AST.
 func jsonCellForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
-	if f != nil && isJSONStructFieldType(f.GetType()) {
+	if f == nil {
+		return jsonToCell(v)
+	}
+	if isJSONRepeatedFieldMode(f.GetMode()) {
+		arr, ok := v.([]any)
+		if !ok {
+			return jsonToCell(v)
+		}
+		elemSchema := jsonRepeatedElementSchema(f)
+		out := &enginepb.Array{Elements: make([]*enginepb.Cell, 0, len(arr))}
+		for _, el := range arr {
+			out.Elements = append(out.Elements, jsonCellForField(elemSchema, el))
+		}
+		return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: out}}
+	}
+	if isJSONStructFieldType(f.GetType()) {
 		m, ok := v.(map[string]any)
 		if !ok {
 			return jsonToCell(v)
@@ -95,9 +110,25 @@ func jsonCellForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {
 	return jsonToCell(v)
 }
 
+func isJSONRepeatedFieldMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), sqlModeRepeated)
+}
+
+func jsonRepeatedElementSchema(f *enginepb.FieldSchema) *enginepb.FieldSchema {
+	if f == nil {
+		return nil
+	}
+	return &enginepb.FieldSchema{
+		Name:        f.GetName(),
+		Type:        f.GetType(),
+		Description: f.GetDescription(),
+		Fields:      f.GetFields(),
+	}
+}
+
 func isJSONStructFieldType(t string) bool {
 	switch strings.ToUpper(strings.TrimSpace(t)) {
-	case "STRUCT", "RECORD":
+	case sqlTypeSTRUCT, sqlTypeRECORD:
 		return true
 	default:
 		return false

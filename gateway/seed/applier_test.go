@@ -192,6 +192,53 @@ func TestCatalogApplier_NilClientGivesUsefulError(t *testing.T) {
 	}
 }
 
+// TestCatalogApplier_InsertRows_RepeatedStruct maps REPEATED STRUCT
+// elements by field name so JSON subfields land on the correct slot.
+func TestCatalogApplier_InsertRows_RepeatedStruct(t *testing.T) {
+	fake := &fakeCatalogClient{}
+	a := NewCatalogApplier(fake)
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{
+			Name: "structarr",
+			Type: bqTypeStruct,
+			Mode: bqModeRepeated,
+			Fields: []*enginepb.FieldSchema{
+				{Name: "key", Type: bqTypeString},
+				{Name: "value", Type: bqTypeJSON},
+			},
+		},
+	}}
+	rows := []map[string]any{
+		{
+			"structarr": []any{
+				map[string]any{"key": "profile", "value": `{"age": 10}`},
+			},
+		},
+	}
+	ref := TableRef{ProjectID: "p", DatasetID: "d", TableID: "t"}
+	if _, err := a.InsertRows(context.Background(), ref, schema, rows); err != nil {
+		t.Fatalf("InsertRows: %v", err)
+	}
+	got := fake.lastInsertRows.GetRows()
+	if len(got) != 1 {
+		t.Fatalf("len(rows)=%d, want 1", len(got))
+	}
+	arr := got[0].GetCells()[0].GetArray()
+	if arr == nil || len(arr.GetElements()) != 1 {
+		t.Fatalf("structarr cell: %+v", got[0].GetCells()[0])
+	}
+	st := arr.GetElements()[0].GetStructValue()
+	if st == nil || len(st.GetFields()) != 2 {
+		t.Fatalf("struct element: %+v", arr.GetElements()[0])
+	}
+	if got := st.GetFields()[0].GetStringValue(); got != "profile" {
+		t.Errorf("key=%q, want profile", got)
+	}
+	if got := st.GetFields()[1].GetStringValue(); got != `{"age": 10}` {
+		t.Errorf("value=%q, want {\"age\": 10}", got)
+	}
+}
+
 // TestValueToCell_Conversions pins the JSON->Cell mapping the
 // YAML loader and orchestrator both depend on. We assert on the
 // wire payload directly so a refactor that swaps the variant tag

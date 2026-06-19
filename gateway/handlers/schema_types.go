@@ -9,6 +9,10 @@ const (
 	sqlTypeFLOAT64   = "FLOAT64"
 	sqlTypeTIMESTAMP = "TIMESTAMP"
 	sqlTypeBOOL      = "BOOL"
+	sqlTypeJSON      = "JSON"
+	sqlTypeSTRUCT    = "STRUCT"
+	sqlTypeRECORD    = "RECORD"
 	sqlModeNullable  = "NULLABLE"
 	sqlModeRequired  = "REQUIRED"
+	sqlModeRepeated  = "REPEATED"
 )
