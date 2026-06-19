@@ -132,11 +132,14 @@ func (t *GoccyTarget) restart(ctx context.Context) error {
 func (t *GoccyTarget) SetupCase(ctx context.Context, c Case, dataset string) error {
 	setup, _ := c.Substitute(dataset, goccyProject)
 	t.client.ProjectID = goccyProject
+	setupTimeout := c.QueryTimeout(time.Duration(defaultTimeoutMS) * time.Millisecond)
 	if err := t.client.CreateDataset(ctx, dataset); err != nil {
 		return err
 	}
 	for _, sql := range setup {
-		status, body, err := t.client.PostQuery(ctx, sql)
+		setupCtx, cancel := context.WithTimeout(ctx, setupTimeout)
+		status, body, err := t.client.PostQuery(setupCtx, sql)
+		cancel()
 		if err != nil {
 			return err
 		}
@@ -153,7 +156,11 @@ func (t *GoccyTarget) RunQuery(ctx context.Context, c Case, sql string, timeout 
 		timeout = time.Duration(defaultTimeoutMS) * time.Millisecond
 	}
 	return timedQuery(ctx, func(ctx context.Context) (QueryResult, error) {
-		status, body, err := t.client.PostQuery(ctx, sql)
+		timedSQL, err := prepareGoccyDDLQuery(ctx, t.client, sql)
+		if err != nil {
+			return QueryResult{Error: err.Error()}, err
+		}
+		status, body, err := t.client.PostQuery(ctx, timedSQL)
 		if err != nil {
 			return QueryResult{Error: err.Error()}, err
 		}

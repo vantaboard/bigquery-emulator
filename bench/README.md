@@ -51,15 +51,18 @@ gated and charted.
 
 > **`GENERATE_ARRAY` cap:** BigQuery rejects a single `GENERATE_ARRAY` that
 > produces more than 1,048,576 elements (`Error 400: ... produced too many
-> elements`). To build >1M-row tables, `CROSS JOIN` two smaller
-> `UNNEST(GENERATE_ARRAY(...))` sources (see `join_hash_2m`) instead of one
-> giant array.
+> elements`). To build >1M-row tables, use two setup steps — `CREATE TABLE AS
+> SELECT` for the first million rows, then `INSERT INTO ... SELECT` for the
+> rest — instead of one giant array or a `CROSS JOIN` subquery inside CTAS (the
+> latter does not transpile on the vantaboard engine).
 
 Cases tagged `ddl` / `view` exercise metadata + materialization paths that pure
 `SELECT` cases miss: `view_agg_100k` queries *through* a view, `ctas_agg_100k`
 times a `CREATE OR REPLACE TABLE ... AS SELECT`, and `create_view_100k` times a
 `CREATE OR REPLACE VIEW`. DDL statements return no rows, so their result hash is
-the empty-set hash on every target.
+the empty-set hash on every target. goccy 0.8.1 does not honor `CREATE OR
+REPLACE` on repeated runs; the goccy target runs an untimed `DROP ... IF
+EXISTS` preamble before each timed `CREATE` so iterations stay idempotent.
 
 ## BigQuery golden baseline
 
