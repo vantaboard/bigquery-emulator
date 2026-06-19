@@ -15,7 +15,6 @@
 #include "backend/catalog/create_view_util.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
-#include "googlesql/public/simple_catalog.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -88,17 +87,6 @@ absl::Status RegisterProjectView(
   bucket.views.push_back(RegisteredViewEntry{
       dataset_id, std::string(create_view_stmt.sql()), std::move(*view_or)});
   return absl::OkStatus();
-}
-
-void ReplayViewsIntoCatalog(absl::string_view project_id,
-                            ::googlesql::SimpleCatalog& catalog) {
-  absl::MutexLock lock(&mu);
-  auto it = by_project.find(std::string(project_id));
-  if (it == by_project.end()) return;
-  for (const RegisteredViewEntry& entry : it->second.views) {
-    if (entry.view == nullptr) continue;
-    catalog.AddTable(entry.view.get());
-  }
 }
 
 const ::googlesql::Table* FindProjectView(absl::string_view project_id,

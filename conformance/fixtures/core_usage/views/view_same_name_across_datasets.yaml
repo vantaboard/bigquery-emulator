@@ -1,0 +1,37 @@
+name: view_same_name_across_datasets
+verified_production: true
+description: |
+  Reproduces the multi-tenant crash report: two datasets each define a view
+  with the same unqualified name (`profiles`). BigQuery scopes view names to
+  their dataset, so both views coexist and each resolves independently. The
+  emulator previously replayed every project view into the analysis catalog
+  by its bare name, so the second `profiles` tripped a duplicate-key CHECK
+  (`map_util.h: duplicate value: profiles`) and aborted the engine on the
+  next query/dry-run.
+project_id: proj-core-views
+setup:
+  - dataset: ds_shared
+  - sql: CREATE TABLE ds_shared.people (id INT64, inserted_at TIMESTAMP, name STRING)
+  - rows:
+      dataset: ds_shared
+      table: people
+      rows:
+        - {id: 1, inserted_at: "2026-01-01T00:00:00Z", name: tenant-a-old}
+        - {id: 1, inserted_at: "2026-02-01T00:00:00Z", name: tenant-a-new}
+        - {id: 2, inserted_at: "2026-01-15T00:00:00Z", name: tenant-a-linus}
+  - dataset: ds_tenant_a
+  - dataset: ds_tenant_b
+  - sql: |
+      CREATE VIEW ds_tenant_a.profiles AS
+      SELECT * EXCEPT(rn) FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn
+        FROM ds_shared.people
+      ) WHERE rn = 1
+  - sql: |
+      CREATE VIEW ds_tenant_b.profiles AS
+      SELECT id, name FROM ds_shared.people WHERE id = 2
+query: SELECT id, name FROM ds_tenant_a.profiles ORDER BY id
+expected:
+  rows:
+    - {id: "1", name: tenant-a-new}
+    - {id: "2", name: tenant-a-linus}

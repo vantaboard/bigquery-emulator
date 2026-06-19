@@ -8,7 +8,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "googlesql/public/analyzer_output.h"
-#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -38,9 +38,6 @@ absl::Status RegisterProjectView(
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
     std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output,
     ::googlesql::TypeFactory* type_factory);
-
-void ReplayViewsIntoCatalog(absl::string_view project_id,
-                            ::googlesql::SimpleCatalog& catalog);
 
 // Returns a registry-owned view matching `dataset_id.view_name` in
 // `project_id`, or nullptr when no such view is registered.

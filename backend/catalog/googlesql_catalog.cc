@@ -189,7 +189,14 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
   RegisterEmulatorBuiltinFunctions(*this);
   RegisterEmulatorMlTvfStubs(*this);
   ReplayFunctionsIntoCatalog(project_id_, *this);
-  ReplayViewsIntoCatalog(project_id_, *this);
+  // NOTE: views are intentionally NOT eagerly replayed into the catalog.
+  // `SimpleCatalog::AddTable` keys tables by their bare name, but BigQuery
+  // scopes view names to their dataset, so two datasets are free to define
+  // a view with the same name (e.g. a per-tenant `profiles` view). Replaying
+  // them all by bare name tripped a duplicate-key CHECK in AddTable and
+  // aborted the engine. View references resolve lazily and dataset-scoped
+  // through `FindProjectView` in `FindTable` below, which is the only path
+  // the analyzer takes for this fully-overridden catalog.
   ReplayTvfsIntoCatalog(project_id_, *this);
   ReplayProceduresIntoCatalog(project_id_, *this);
 }
