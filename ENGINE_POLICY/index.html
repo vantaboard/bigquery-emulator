@@ -1651,7 +1651,13 @@ fast path keeps the standalone cases on <code>duckdb_native</code>.</p>
 <td>Standalone UNNEST</td>
 <td><code>SELECT n FROM UNNEST([1,2,3]) AS n</code></td>
 <td><code>duckdb_native</code></td>
-<td>fast-path fixtures</td>
+<td><code>fastpath/scan_array_unnest.yaml</code></td>
+</tr>
+<tr>
+<td>Standalone UNNEST cross product</td>
+<td><code>FROM UNNEST(a) CROSS JOIN UNNEST(b)</code> (nested <code>ArrayScan</code> chain)</td>
+<td><code>duckdb_native</code></td>
+<td><code>fastpath/scan_array_unnest_cross_join.yaml</code>, <code>scan_array_unnest_cross_join_three.yaml</code>, <code>ctas_unnest_cross_join.yaml</code></td>
 </tr>
 <tr>
 <td>UNNEST WITH OFFSET</td>
@@ -1666,9 +1672,9 @@ fast path keeps the standalone cases on <code>duckdb_native</code>.</p>
 <td><code>array_struct/multi_array_unnest_pad.yaml</code></td>
 </tr>
 <tr>
-<td>Cross-join UNNEST</td>
+<td>Cross-join UNNEST (table column)</td>
 <td><code>FROM t, UNNEST(t.arr) AS n</code></td>
-<td><code>semantic_executor</code></td>
+<td><code>duckdb_native</code></td>
 <td><code>array_struct/cross_join_unnest.yaml</code></td>
 </tr>
 <tr>
