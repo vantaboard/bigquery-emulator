@@ -51,10 +51,10 @@ gated and charted.
 
 > **`GENERATE_ARRAY` cap:** BigQuery rejects a single `GENERATE_ARRAY` that
 > produces more than 1,048,576 elements (`Error 400: ... produced too many
-> elements`). To build >1M-row tables, use two setup steps — `CREATE TABLE AS
-> SELECT` for the first million rows, then `INSERT INTO ... SELECT` for the
-> rest — instead of one giant array or a `CROSS JOIN` subquery inside CTAS (the
-> latter does not transpile on the vantaboard engine).
+> elements`). The heavy 2M-row cases build tables with a `CROSS JOIN` of two
+> `UNNEST(GENERATE_ARRAY(1, 1000000))` relations inside a CTAS subquery (2×1M
+> rows). That pattern is valid on BigQuery and is transpiled on the vantaboard
+> engine.
 
 Cases tagged `ddl` / `view` exercise metadata + materialization paths that pure
 `SELECT` cases miss: `view_agg_100k` queries *through* a view, `ctas_agg_100k`

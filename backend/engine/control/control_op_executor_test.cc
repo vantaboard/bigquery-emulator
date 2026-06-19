@@ -398,6 +398,38 @@ TEST_F(ControlOpExecutorTest, CreateTableAsSelectUnnestNarrowsToOutputSchema) {
   EXPECT_EQ(rows, 3);
 }
 
+TEST_F(ControlOpExecutorTest, CreateTableAsSelectCrossJoinUnnestSubquery) {
+  // Bench heavy-case setup: CTAS over a subquery whose FROM is two
+  // standalone UNNEST relations cross-joined (BigQuery's >1M-row
+  // GENERATE_ARRAY pattern).
+  absl::Status s = RunDdl(
+      "CREATE TABLE ds.cross_join_ctas AS "
+      "SELECT id, MOD(id, 7) AS k "
+      "FROM ("
+      "  SELECT n + (m - 1) * 10 AS id "
+      "  FROM UNNEST(GENERATE_ARRAY(1, 3)) AS n "
+      "  CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m"
+      ")");
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto schema = storage_->GetSchema({"proj-test", "ds", "cross_join_ctas"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 2u);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "cross_join_ctas"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  int rows = 0;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    ++rows;
+  }
+  EXPECT_EQ(rows, 6);
+}
+
 TEST_F(ControlOpExecutorTest, CreateTableAsSelectExceptRowNumberDedup) {
   schema::TableSchema src_schema;
   schema::ColumnSchema id;

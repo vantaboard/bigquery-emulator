@@ -305,6 +305,12 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // empty-string-as-fallback contract as `EmitExpr`.
   std::string EmitScan(const ::googlesql::ResolvedScan* scan);
 
+  // Lower explicit `CROSS JOIN UNNEST(...) CROSS JOIN UNNEST(...)` shapes
+  // the analyzer represents either as a multi-array `ResolvedArrayScan`
+  // without `array_zip_mode`, or as a chain of nested single-array scans.
+  std::string EmitUnnestCrossProductScan(
+      const ::googlesql::ResolvedArrayScan* node);
+
   // Lower one `ResolvedWindowFrameExpr` (PRECEDING / CURRENT ROW /
   // FOLLOWING). Used by `EmitAnalyticScan` for the inner ROWS / RANGE
   // BETWEEN ... AND ... clause; returns the empty string when the

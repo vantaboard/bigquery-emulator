@@ -296,6 +296,29 @@ TEST_F(TranspilerTest, TranspileUnnestArrayBenchShape) {
   EXPECT_NE(sql.find("\"cnt\""), std::string::npos) << sql;
 }
 
+TEST_F(TranspilerTest, TranspileCrossJoinUnnestSelect) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n "
+      "CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "cross join unnest select must transpile";
+  EXPECT_NE(sql.find("CROSS JOIN"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileCrossJoinUnnestComputedSelect) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT n + (m - 1) * 1000000 AS id "
+      "FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n "
+      "CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "computed cross join unnest must transpile";
+  EXPECT_NE(sql.find("CROSS JOIN"), std::string::npos) << sql;
+}
+
 }  // namespace transpiler
 }  // namespace duckdb
 }  // namespace engine

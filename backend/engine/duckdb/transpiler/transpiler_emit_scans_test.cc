@@ -58,6 +58,28 @@ TEST_F(TranspilerTest, EmitFilterScanWithCoalescePredicateLowers) {
 
 // --- Join ---------------------------------------------------------------
 
+TEST_F(TranspilerTest, EmitJoinScanCrossJoinTwoUnnests) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n "
+      "CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m");
+  ASSERT_NE(stmt, nullptr);
+  const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
+  ASSERT_NE(scan, nullptr);
+  // Explicit CROSS JOIN of standalone UNNESTs chains into nested
+  // single-array ResolvedArrayScan nodes (outer over inner).
+  ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
+  const auto* arr = scan->GetAs<::googlesql::ResolvedArrayScan>();
+  ASSERT_NE(arr, nullptr);
+  ASSERT_EQ(arr->array_expr_list_size(), 1);
+  ASSERT_NE(arr->input_scan(), nullptr);
+  ASSERT_EQ(arr->input_scan()->node_kind(), ::googlesql::RESOLVED_ARRAY_SCAN);
+  TestTranspiler t;
+  std::string sql = t.EmitArrayScan(arr);
+  ASSERT_FALSE(sql.empty()) << "multi-array cross unnest must emit";
+  EXPECT_NE(sql.find("CROSS JOIN"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("unnest("), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, EmitJoinScanCrossJoinFromImplicit) {
   // `FROM people, orders` analyzes to a ResolvedJoinScan with
   // INNER + null `join_expr`. The emit lowers it to DuckDB's

@@ -244,6 +244,15 @@ TEST_F(RouteClassifierTest, CorrelatedColumnUnnestWithOffsetStaysSemantic) {
   EXPECT_EQ(d.offending_node, "ResolvedArrayScan(array_offset_column)");
 }
 
+TEST_F(RouteClassifierTest, CrossJoinStandaloneUnnestsStayOnDuckDbNative) {
+  const auto* stmt = Analyze(
+      "SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n "
+      "CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
+}
+
 TEST_F(RouteClassifierTest, UnnestArrayBenchShapeRoutesToDuckDbNative) {
   const auto* stmt = Analyze(
       "SELECT COUNT(*) AS cnt, SUM(x) AS total FROM arr_table, "

@@ -209,8 +209,7 @@ absl::Status RouteClassifierVisitor::VisitResolvedArrayScan(
     } else if (node->is_outer()) {
       MaybePromote(Disposition::kSemanticExecutor,
                    "ResolvedArrayScan(is_outer=true)");
-    } else if (node->array_zip_mode() != nullptr ||
-               node->array_expr_list_size() > 1) {
+    } else if (node->array_zip_mode() != nullptr) {
       MaybePromote(Disposition::kSemanticExecutor,
                    "ResolvedArrayScan(array_zip_mode)");
     } else if (node->join_expr() != nullptr) {
