@@ -1,17 +1,36 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function selectTable(page: Page) {
+async function expandProject(page: Page) {
     const project = page.getByTestId('project-local-project');
     await expect(project).toBeVisible();
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/bigquery/v2/projects/local-project/datasets') && r.ok()),
         project.click(),
     ]);
-    const dataset = page.getByTestId('dataset-test-dataset');
+}
+
+async function expandDataset(page: Page) {
+    await expandProject(page);
+    const toggle = page.getByTestId('dataset-toggle-test-dataset');
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
+        toggle.click(),
+    ]);
+}
+
+async function openDataset(page: Page) {
+    await expandProject(page);
+    const dataset = page.getByTestId('dataset-test-dataset');
+    await Promise.all([
+        page.waitForResponse((r) => r.url().includes('/datasets/test-dataset') && r.ok()),
         dataset.click(),
     ]);
+    await expect(page.getByTestId('dataset-tab-page')).toBeVisible();
+    await expect(page.getByTestId('dataset-tab-overview')).toBeVisible();
+}
+
+async function selectTable(page: Page) {
+    await expandDataset(page);
     const table = page.getByTestId('table-table_a');
     await table.click();
     await expect(page.getByTestId('table-tab-page')).toBeVisible();
@@ -40,6 +59,30 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByTestId('breadcrumbs')).toContainText('local-project');
         await expect(page.getByTestId('breadcrumbs')).toContainText('table_a');
         await expect(page.getByTestId('table-tab-page')).toBeVisible();
+    });
+
+    test('opens a dataset from the sidebar and shows Overview', async ({ page }) => {
+        await openDataset(page);
+        await expect(page.getByTestId('breadcrumbs')).toContainText('test-dataset');
+        await expect(page.getByTestId('dataset-overview-tables')).toBeVisible();
+        await expect(page.getByRole('link', { name: 'table_a' })).toBeVisible();
+    });
+
+    test('dataset Details tab shows dataset info fields', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('dataset-resource-tab-details').click();
+        const details = page.getByTestId('dataset-tab-details');
+        await expect(details).toBeVisible();
+        await expect(details).toContainText('Dataset ID');
+        await expect(details).toContainText('Data location');
+        await expect(details).toContainText('test-dataset');
+    });
+
+    test('dataset Insights tab shows Unplanned placeholder', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('dataset-resource-tab-insights').click();
+        await expect(page.getByTestId('dataset-tab-insights')).toBeVisible();
+        await expect(page.getByText('Dataset insights are not planned yet.')).toBeVisible();
     });
 
     test('runs a query and shows results', async ({ page }) => {
